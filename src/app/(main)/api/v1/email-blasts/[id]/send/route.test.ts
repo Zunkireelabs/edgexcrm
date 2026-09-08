@@ -2,52 +2,53 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { NextRequest } from "next/server";
 import type { AuthContext } from "@/lib/api/auth";
 
-// OUTREACH-PHASE1-BRIEF.md §8 items 2/3: idempotent materialization (a
-// retried /send must produce exactly one email_messages row per lead) and
-// suppressed materialization (a suppressed lead yields an auditable
-// status='suppressed' row, not a silent drop). Mirrors the SMS precedent's
-// send/route.test.ts pattern — mocked db, no real Supabase.
+// This route used to do the audience re-resolution, recipient-cap check, and
+// row materialization itself, synchronously, before ever handing off to the
+// background worker — that work now lives entirely in
+// materializeBlastAudience (src/lib/inngest/functions/email-blast-send.ts),
+// moved there specifically so a client that disconnects right after clicking
+// Send can never interrupt it (see that file's own header comment). What's
+// left here is deliberately thin: validate the blast is a sendable draft,
+// reject a sender with a restricted lead-visibility scope (the one check that
+// stays synchronous — see the route's own comment for why), hand off to
+// Inngest, and flip the status. The materialization/cap/chunking test
+// coverage that used to live in this file now lives in
+// email-blast-send.test.ts, against materializeBlastAudience directly.
 
 const requireEmailCampaignsAccessMock = vi.fn();
-const resolveAudienceMock = vi.fn();
 const inngestSendMock = vi.fn();
 
 vi.mock("@/lib/email/outbound/api-guard", () => ({ requireEmailCampaignsAccess: requireEmailCampaignsAccessMock }));
-vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn().mockResolvedValue({}), createServiceClient: vi.fn().mockResolvedValue({}) }));
-vi.mock("@/lib/email/outbound/audience", () => ({ resolveAudience: resolveAudienceMock }));
 vi.mock("@/lib/inngest/client", () => ({ inngest: { send: inngestSendMock } }));
 
-const AUTH = { userId: "user-1", tenantId: "tenant-1", role: "owner" } as unknown as AuthContext;
+const UNRESTRICTED_PERMISSIONS = { leadScope: "all", pipelineAccess: "all" } as unknown as AuthContext["permissions"];
+const RESTRICTED_PERMISSIONS = { leadScope: "own", pipelineAccess: "all" } as unknown as AuthContext["permissions"];
+
+const AUTH = {
+  userId: "user-1",
+  tenantId: "tenant-1",
+  role: "owner",
+  industryId: "education_consultancy",
+  positionSlug: null,
+  branchId: null,
+  permissions: UNRESTRICTED_PERMISSIONS,
+} as unknown as AuthContext;
+
 const params = Promise.resolve({ id: "blast-1" });
 
 function fakeReq(): NextRequest {
   return {} as unknown as NextRequest;
 }
 
-function fakeDb(opts: { blastStatus?: string; failUpsertOnce?: boolean; failUpsertAlways?: boolean; maxRecipientsPerBlast?: number } = {}) {
-  // key = `${source_id}:${lead_id}` — models the real DB's
-  // uq_email_message_source_lead (source_id, lead_id) unique index.
-  const messages = new Map<string, Record<string, unknown>>();
-  let upsertCallCount = 0;
-  let upsertFailuresLeft = opts.failUpsertOnce ? 1 : 0;
+function fakeDb(opts: { blastStatus?: string; updateFails?: boolean } = {}) {
   const blastRow = {
     id: "blast-1",
     subject_template: "Hi {{first_name}}",
     body_template: "<p>Hi {{first_name}}</p>",
-    from_name_override: null,
-    audience_filter: null,
     status: opts.blastStatus ?? "draft",
   };
 
-  const rawFrom = (table: string) => {
-    if (table === "tenants") {
-      return { select: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: { name: "Test Tenant" }, error: null }) }) }) };
-    }
-    throw new Error(`unexpected raw() table: ${table}`);
-  };
-
   const db = {
-    raw: () => ({ from: rawFrom }),
     from(table: string) {
       if (table === "email_blasts") {
         return {
@@ -56,6 +57,7 @@ function fakeDb(opts: { blastStatus?: string; failUpsertOnce?: boolean; failUpse
             eq: () => ({
               select: () => ({
                 single: () => {
+                  if (opts.updateFails) return Promise.resolve({ data: null, error: { message: "connection reset" } });
                   Object.assign(blastRow, patch);
                   return Promise.resolve({ data: { ...blastRow }, error: null });
                 },
@@ -64,247 +66,103 @@ function fakeDb(opts: { blastStatus?: string; failUpsertOnce?: boolean; failUpse
           }),
         };
       }
-      if (table === "tenants") {
-        return { select: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: { name: "Test Tenant" }, error: null }) }) }) };
-      }
-      if (table === "tenant_email_settings") {
-        return {
-          select: () => ({
-            maybeSingle: () =>
-              Promise.resolve({
-                data: opts.maxRecipientsPerBlast !== undefined ? { max_recipients_per_blast: opts.maxRecipientsPerBlast } : null,
-                error: null,
-              }),
-          }),
-        };
-      }
-      if (table === "email_messages") {
-        return {
-          upsert: (rows: Record<string, unknown>[], options: { onConflict: string; ignoreDuplicates?: boolean }) => {
-            upsertCallCount++;
-            expect(options.onConflict).toBe("source_id,lead_id");
-            if (opts.failUpsertAlways || upsertFailuresLeft > 0) {
-              upsertFailuresLeft--;
-              return Promise.resolve({ data: null, error: { message: "connection reset", code: "08006" } });
-            }
-            for (const row of rows) {
-              const key = `${row.source_id}:${row.lead_id}`;
-              if (options.ignoreDuplicates && messages.has(key)) continue; // ON CONFLICT DO NOTHING
-              messages.set(key, row);
-            }
-            return Promise.resolve({ data: null, error: null });
-          },
-        };
-      }
       throw new Error(`unexpected table: ${table}`);
     },
   };
 
-  return { db, messages, upsertCallCountGetter: () => upsertCallCount };
-}
-
-function audienceRow(leadId: string, email: string) {
-  return { leadId, email, lead: { id: leadId, email, first_name: "Test" } };
+  return { db, blastRow };
 }
 
 describe("POST /api/v1/email-blasts/[id]/send", () => {
   beforeEach(() => {
     requireEmailCampaignsAccessMock.mockReset();
-    resolveAudienceMock.mockReset();
     inngestSendMock.mockReset();
   });
 
-  it("materializes exactly one row per lead, and a RETRIED /send call does not double-materialize", async () => {
+  it("hands off to Inngest BEFORE flipping the status, and never touches audience/materialization itself", async () => {
     const fake = fakeDb();
     requireEmailCampaignsAccessMock.mockResolvedValue({ ok: true, auth: AUTH, db: fake.db });
-    resolveAudienceMock.mockResolvedValue({
-      ok: true,
-      audience: {
-        matched: 2,
-        sendable: [audienceRow("lead-1", "a@example.com"), audienceRow("lead-2", "b@example.com")],
-        suppressed: [],
-        excluded: { noEmail: 0, malformed: 0, suppressed: 0, duplicateEmail: 0 },
-      },
-    });
-
-    const { POST } = await import("./route");
-
-    await POST(fakeReq(), { params });
-    expect(fake.messages.size).toBe(2);
-    for (const row of fake.messages.values()) expect(row.status).toBe("queued");
-
-    // Simulate a retry: blast is still 'draft' in this fake (the real flow
-    // would have flipped it to 'queued', blocking a second /send — this test
-    // isolates the materialization idempotency specifically).
-    await POST(fakeReq(), { params });
-    expect(fake.messages.size).toBe(2); // still exactly one row per lead — no duplicates
-  });
-
-  it("materializes a suppressed lead as status='suppressed', not a silent drop", async () => {
-    const fake = fakeDb();
-    requireEmailCampaignsAccessMock.mockResolvedValue({ ok: true, auth: AUTH, db: fake.db });
-    resolveAudienceMock.mockResolvedValue({
-      ok: true,
-      audience: {
-        matched: 2,
-        sendable: [audienceRow("lead-1", "a@example.com")],
-        suppressed: [audienceRow("lead-2", "optedout@example.com")],
-        excluded: { noEmail: 0, malformed: 0, suppressed: 1, duplicateEmail: 0 },
-      },
-    });
 
     const { POST } = await import("./route");
     const res = await POST(fakeReq(), { params });
-    const body = (await res.json()) as { data: { suppressed: number } };
+    const body = (await res.json()) as { data: { blast: { status: string } } };
 
-    expect(fake.messages.size).toBe(2);
-    const suppressedRow = [...fake.messages.values()].find((r) => r.lead_id === "lead-2");
-    expect(suppressedRow?.status).toBe("suppressed");
-    expect(body.data.suppressed).toBe(1);
+    expect(res.status).toBe(200);
+    expect(inngestSendMock).toHaveBeenCalledWith({
+      name: "email/blast.send",
+      data: { tenantId: "tenant-1", blastId: "blast-1", senderId: "user-1" },
+    });
+    expect(body.data.blast.status).toBe("queued");
+    // Confirms the response returns almost immediately — no audience
+    // resolution, cap check, or row-write call is made from this route at all.
   });
 
-  it("chunks a large audience into multiple upsert calls instead of one giant request, and still materializes every row", async () => {
-    // Reproduces the live failure: a single unchunked upsert of a real-size
-    // audience (each row carrying a full subject/body_html copy) blew past a
-    // request-size limit and failed outright ("Failed to materialize
-    // recipient rows" on a 3,114-row Admizz blast). 250 rows here forces
-    // MATERIALIZE_CHUNK_SIZE=100 to split into 3 calls (100 + 100 + 50).
+  it("rejects sending a non-draft blast, and never hands off to Inngest", async () => {
+    const fake = fakeDb({ blastStatus: "queued" });
+    requireEmailCampaignsAccessMock.mockResolvedValue({ ok: true, auth: AUTH, db: fake.db });
+
+    const { POST } = await import("./route");
+    const res = await POST(fakeReq(), { params });
+
+    expect(res.status).toBe(409);
+    expect(inngestSendMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects empty subject/body before handing off", async () => {
+    const fake = fakeDb();
+    fake.blastRow.subject_template = "";
+    requireEmailCampaignsAccessMock.mockResolvedValue({ ok: true, auth: AUTH, db: fake.db });
+
+    const { POST } = await import("./route");
+    const res = await POST(fakeReq(), { params });
+
+    expect(res.status).toBe(422);
+    expect(inngestSendMock).not.toHaveBeenCalled();
+  });
+
+  // The one check that intentionally stays synchronous — see the route's own
+  // header comment: a background job has no way to safely resolve an
+  // own/branch-restricted sender's audience (the RLS RPC it needs fails
+  // closed under a service-role client), so this rejects instantly rather
+  // than risk the background worker silently resolving "0 recipients".
+  it("rejects a sender with a restricted (own/branch) lead-visibility scope before handing off", async () => {
+    const fake = fakeDb();
+    const restrictedAuth = { ...AUTH, permissions: RESTRICTED_PERMISSIONS } as AuthContext;
+    requireEmailCampaignsAccessMock.mockResolvedValue({ ok: true, auth: restrictedAuth, db: fake.db });
+
+    const { POST } = await import("./route");
+    const res = await POST(fakeReq(), { params });
+    const json = (await res.json()) as { error: { code: string } };
+
+    expect(res.status).toBe(422);
+    expect(json.error.code).toBe("RESTRICTED_SENDER_SCOPE");
+    expect(inngestSendMock).not.toHaveBeenCalled();
+  });
+
+  it("an unrestricted (all-leads) sender is unaffected by the scope check", async () => {
     const fake = fakeDb();
     requireEmailCampaignsAccessMock.mockResolvedValue({ ok: true, auth: AUTH, db: fake.db });
-    const sendable = Array.from({ length: 250 }, (_, i) => audienceRow(`lead-${i}`, `lead${i}@example.com`));
-    resolveAudienceMock.mockResolvedValue({
-      ok: true,
-      audience: { matched: 250, sendable, suppressed: [], excluded: { noEmail: 0, malformed: 0, suppressed: 0, duplicateEmail: 0 } },
-    });
 
     const { POST } = await import("./route");
     const res = await POST(fakeReq(), { params });
 
     expect(res.status).toBe(200);
-    expect(fake.messages.size).toBe(250); // every row landed, none dropped by chunking
-    expect(fake.upsertCallCountGetter()).toBe(3); // never one call for the whole audience
+    expect(inngestSendMock).toHaveBeenCalledTimes(1);
   });
 
-  it("retries a chunk that fails transiently, and still succeeds", async () => {
-    const fake = fakeDb({ failUpsertOnce: true });
+  it("surfaces a log-correlatable error if the post-handoff status update fails", async () => {
+    const fake = fakeDb({ updateFails: true });
     requireEmailCampaignsAccessMock.mockResolvedValue({ ok: true, auth: AUTH, db: fake.db });
-    resolveAudienceMock.mockResolvedValue({
-      ok: true,
-      audience: {
-        matched: 2,
-        sendable: [audienceRow("lead-1", "a@example.com"), audienceRow("lead-2", "b@example.com")],
-        suppressed: [],
-        excluded: { noEmail: 0, malformed: 0, suppressed: 0, duplicateEmail: 0 },
-      },
-    });
-
-    const { POST } = await import("./route");
-    const res = await POST(fakeReq(), { params });
-
-    expect(res.status).toBe(200); // the transient failure was retried, not surfaced to the caller
-    expect(fake.messages.size).toBe(2); // no rows lost
-    expect(fake.upsertCallCountGetter()).toBe(2); // 1 failed attempt + 1 successful retry
-  });
-
-  it("gives up after exhausting retries and returns a response with a log-correlatable ref", async () => {
-    const fake = fakeDb({ failUpsertAlways: true });
-    requireEmailCampaignsAccessMock.mockResolvedValue({ ok: true, auth: AUTH, db: fake.db });
-    resolveAudienceMock.mockResolvedValue({
-      ok: true,
-      audience: {
-        matched: 1,
-        sendable: [audienceRow("lead-1", "a@example.com")],
-        suppressed: [],
-        excluded: { noEmail: 0, malformed: 0, suppressed: 0, duplicateEmail: 0 },
-      },
-    });
 
     const { POST } = await import("./route");
     const res = await POST(fakeReq(), { params });
     const json = (await res.json()) as { error: { message: string } };
 
     expect(res.status).toBe(503);
-    // A future incident must be findable in logs without a timestamp guess —
-    // the exact gap that made the 2026-09-06 prod failures unrecoverable.
     expect(json.error.message).toMatch(/ref: [0-9a-f-]{36}/);
-    expect(fake.messages.size).toBe(0); // nothing landed — a retry can safely re-attempt every row
-  });
-
-  it("rejects sending a non-draft blast", async () => {
-    const fake = fakeDb({ blastStatus: "queued" });
-    requireEmailCampaignsAccessMock.mockResolvedValue({ ok: true, auth: AUTH, db: fake.db });
-
-    const { POST } = await import("./route");
-    const res = await POST(fakeReq(), { params });
-    expect(res.status).toBe(409);
-    expect(inngestSendMock).not.toHaveBeenCalled();
-  });
-
-  // F4 (docs/BLAST-FINDINGS-2026-09-06.md) — mirrors the SMS F1 regression:
-  // over-cap REJECTS rather than truncates, and rejects BEFORE materialize,
-  // never leaving a partial audience already written for a retry to build on.
-  it("max_recipients_per_blast REJECTS rather than truncates — zero rows materialized, no Inngest event", async () => {
-    const fake = fakeDb({ maxRecipientsPerBlast: 1 });
-    requireEmailCampaignsAccessMock.mockResolvedValue({ ok: true, auth: AUTH, db: fake.db });
-    resolveAudienceMock.mockResolvedValue({
-      ok: true,
-      audience: {
-        matched: 2,
-        sendable: [audienceRow("lead-1", "a@example.com"), audienceRow("lead-2", "b@example.com")],
-        suppressed: [],
-        excluded: { noEmail: 0, malformed: 0, suppressed: 0, duplicateEmail: 0 },
-      },
-    });
-
-    const { POST } = await import("./route");
-    const res = await POST(fakeReq(), { params });
-    const json = (await res.json()) as { error: { code: string; details: Record<string, unknown> } };
-
-    expect(res.status).toBe(422);
-    expect(json.error.code).toBe("MAX_RECIPIENTS_EXCEEDED");
-    expect(json.error.details).toMatchObject({ count: 2, max: 1 });
-    // Not truncated, not partially written: zero rows materialized.
-    expect(fake.messages.size).toBe(0);
-    expect(inngestSendMock).not.toHaveBeenCalled();
-  });
-
-  it("an audience at or under the cap is unaffected — send proceeds normally", async () => {
-    const fake = fakeDb({ maxRecipientsPerBlast: 2 });
-    requireEmailCampaignsAccessMock.mockResolvedValue({ ok: true, auth: AUTH, db: fake.db });
-    resolveAudienceMock.mockResolvedValue({
-      ok: true,
-      audience: {
-        matched: 2,
-        sendable: [audienceRow("lead-1", "a@example.com"), audienceRow("lead-2", "b@example.com")],
-        suppressed: [],
-        excluded: { noEmail: 0, malformed: 0, suppressed: 0, duplicateEmail: 0 },
-      },
-    });
-
-    const { POST } = await import("./route");
-    const res = await POST(fakeReq(), { params });
-
-    expect(res.status).toBe(200);
-    expect(fake.messages.size).toBe(2);
-  });
-
-  it("no tenant_email_settings row (null cap) never blocks — falls back to the 2,000 default", async () => {
-    const fake = fakeDb(); // maxRecipientsPerBlast unset -> settings row resolves to null
-    requireEmailCampaignsAccessMock.mockResolvedValue({ ok: true, auth: AUTH, db: fake.db });
-    resolveAudienceMock.mockResolvedValue({
-      ok: true,
-      audience: {
-        matched: 2,
-        sendable: [audienceRow("lead-1", "a@example.com"), audienceRow("lead-2", "b@example.com")],
-        suppressed: [],
-        excluded: { noEmail: 0, malformed: 0, suppressed: 0, duplicateEmail: 0 },
-      },
-    });
-
-    const { POST } = await import("./route");
-    const res = await POST(fakeReq(), { params });
-
-    expect(res.status).toBe(200);
-    expect(fake.messages.size).toBe(2);
+    // The event was still sent — the background worker will pick this blast
+    // up even though the client sees an error here (see the route's ordering
+    // comment: emit-then-update, not update-then-emit).
+    expect(inngestSendMock).toHaveBeenCalledTimes(1);
   });
 });

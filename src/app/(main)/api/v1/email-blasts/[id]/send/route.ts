@@ -1,12 +1,9 @@
 import { NextRequest } from "next/server";
 import { requireEmailCampaignsAccess } from "@/lib/email/outbound/api-guard";
-import { apiSuccess, apiNotFound, apiConflict, apiError, apiValidationError, apiServiceUnavailable } from "@/lib/api/response";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { resolveAudience, type AudienceRow } from "@/lib/email/outbound/audience";
-import { composeRecipientEmail } from "@/lib/email/outbound/compose";
-import { materializeInChunks } from "@/lib/outbound/materialize-chunks";
+import { apiSuccess, apiNotFound, apiConflict, apiError, apiValidationError } from "@/lib/api/response";
+import { leadQueryScope } from "@/lib/api/permissions";
+import { POSITION_ROUTE_MAP } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
 import { inngest } from "@/lib/inngest/client";
-import { EMPTY_TREE, type FilterTree } from "@/lib/filters/types";
 import { createRequestLogger } from "@/lib/logger";
 
 interface RouteParams {
@@ -17,39 +14,36 @@ interface BlastRow {
   id: string;
   subject_template: string;
   body_template: string;
-  from_name_override: string | null;
-  audience_filter: FilterTree | null;
   status: string;
 }
 
-// Each row upserted here carries a full copy of the rendered subject +
-// body_html, unlike SMS's short message bodies or suppression.ts's bare email
-// strings — so the same "don't put the whole audience in one request" problem
-// suppression.ts hit (see its CHUNK_SIZE comment) shows up here at a much
-// smaller row count. A single unchunked upsert of a few thousand real-size
-// HTML emails is tens of MB in one request and fails outright (observed
-// live on a 3,114-row Admizz blast — "Failed to materialize recipient
-// rows"). 100 keeps each request's payload small regardless of template
-// size or audience size; ON CONFLICT DO NOTHING makes re-running any
-// chunk (including a retry after a partial failure) safe.
-const MATERIALIZE_CHUNK_SIZE = 100;
-
-// Mirrors tenant_email_settings.max_recipients_per_blast's own DB default
-// (migration 228) — used only if the settings row doesn't exist yet for this
-// tenant (lazily created, same posture as tenant_sms_settings).
-const DEFAULT_MAX_RECIPIENTS_PER_BLAST = 2000;
-
-// POST /api/v1/email-blasts/[id]/send — OUTREACH-PHASE1-BRIEF.md §5. Order is
-// fixed and load-bearing, mirroring sms/blasts/[id]/send: re-resolve ->
-// enforce recipient cap -> materialize rows -> emit event. Do not reorder —
-// the cap check must run before materialize (F4, docs/BLAST-FINDINGS-2026-09-06.md),
-// the same ordering lesson F1 already fixed for SMS.
+// POST /api/v1/email-blasts/[id]/send — the ONLY thing this route does now is
+// validate + hand off. Everything that used to run here synchronously
+// (re-resolving the audience, the recipient-cap check, and materializing
+// every email_messages row) now runs as steps inside the Inngest worker
+// (materializeBlastAudience, src/lib/inngest/functions/email-blast-send.ts) —
+// moved there specifically so a client that disconnects (navigates away,
+// closes the tab, a proxy timeout) the instant after clicking Send can never
+// interrupt anything. Before this change, that slow work sat BEFORE the
+// Inngest handoff, inside the HTTP request itself — the exact window where a
+// dropped connection could leave a blast never actually queued. Now the
+// handoff is the first thing that happens after these cheap, synchronous
+// checks, so there is no such window regardless of audience size.
 //
-// Unlike SMS, materialization uses a plain upsert with
-// onConflict: "source_id,lead_id" — email_messages.uq_email_message_source_lead
-// is NOT partial (migration 211's deliberate amendment, precisely so this
-// route can rely on ON CONFLICT DO NOTHING instead of SMS's "check existing
-// rows, insert only the delta" workaround its partial index forces).
+// One synchronous check intentionally stays here rather than moving to the
+// background: whether the sender has full (unrestricted) lead-visibility
+// scope. resolveAudience's own/branch-scope branch requires a real
+// user-authenticated (RLS) Supabase client to call the
+// leads_visible_to_user() SECURITY DEFINER RPC — that RPC fails CLOSED
+// (silently returns zero rows) if called with a service-role client instead,
+// which is all a background job has (no live session/cookies to rebuild a
+// real user client from). Rather than risk a background job silently
+// resolving "0 recipients" for a branch/own-scoped sender, this check rejects
+// instantly at click time — the same instant-error UX the empty-audience and
+// over-cap checks used to have — and only unrestricted (owner/admin-typical)
+// senders proceed. Today's UI only allows owner/admin to reach Send at all
+// (canSendEmail), so in practice this never fires; it exists as a safety net
+// for whenever the Positions/RBAC "leadScope" a position lower than that.
 export async function POST(_request: NextRequest, { params }: RouteParams) {
   const requestId = crypto.randomUUID();
   const log = createRequestLogger({ requestId, method: "POST", path: "/api/v1/email-blasts/[id]/send" });
@@ -61,7 +55,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
 
   const { data: blast, error: fetchError } = await db
     .from("email_blasts")
-    .select("id, subject_template, body_template, from_name_override, audience_filter, status")
+    .select("id, subject_template, body_template, status")
     .eq("id", id)
     .maybeSingle();
   if (fetchError || !blast) return apiNotFound("Email blast");
@@ -74,111 +68,51 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
     return apiValidationError({ body: ["Blast subject and body must not be empty before sending"] });
   }
 
-  // 1. Re-resolve the audience server-side. Never trust a client-supplied count.
-  const userClient = await createClient();
-  const service = await createServiceClient();
-  const audienceResult = await resolveAudience(auth, blastRow.audience_filter ?? EMPTY_TREE, { user: userClient, service, db });
-  if (!audienceResult.ok) {
-    return apiError("VALIDATION_ERROR", "Audience filter is no longer valid", 422, audienceResult.errors);
-  }
-  const { audience } = audienceResult;
-
-  if (audience.sendable.length === 0 && audience.suppressed.length === 0) {
-    return apiError("EMPTY_AUDIENCE", "No sendable recipients matched this blast's audience filter", 422);
-  }
-
-  // 2. Enforce max_recipients_per_blast BEFORE any compose/materialize — same
-  // ordering lesson as F1 (docs/BLAST-F1-F2-FIX-BRIEF.md): reject with the
-  // count, never truncate, and reject before a single row is written so a
-  // rejected call can never leave a partial audience already materialized
-  // for a later retry to build on top of.
-  const { data: settingsRow } = await db.from("tenant_email_settings").select("max_recipients_per_blast").maybeSingle();
-  const maxRecipientsPerBlast =
-    (settingsRow as { max_recipients_per_blast?: number } | null)?.max_recipients_per_blast ?? DEFAULT_MAX_RECIPIENTS_PER_BLAST;
-  if (audience.sendable.length > maxRecipientsPerBlast) {
+  const poolSlug =
+    auth.industryId === "education_consultancy" && auth.positionSlug && auth.branchId
+      ? (POSITION_ROUTE_MAP[auth.positionSlug] ?? null)
+      : null;
+  const scope = leadQueryScope(auth.permissions, auth.userId, auth.branchId, poolSlug);
+  if (scope.restrictToSelf || scope.branchId) {
     return apiError(
-      "MAX_RECIPIENTS_EXCEEDED",
-      `Audience (${audience.sendable.length}) exceeds the ${maxRecipientsPerBlast}-recipient cap for this tenant`,
-      422,
-      { count: audience.sendable.length, max: maxRecipientsPerBlast }
+      "RESTRICTED_SENDER_SCOPE",
+      "Only a sender with full (unrestricted) lead access can send a blast — this account's lead visibility is scoped.",
+      422
     );
   }
 
-  // tenants has no tenant_id column (it IS the tenant) — see the identical
-  // comment in the /preview route.
-  const { data: tenantRow } = await db.raw().from("tenants").select("name").eq("id", auth.tenantId).maybeSingle();
-  const tenantName = (tenantRow as { name?: string } | null)?.name;
-
-  // 3. Materialize ALL intended email_messages rows up front — queued for
-  // sendable, suppressed for the DNC-list rows (an auditable record of who
-  // was NOT emailed, not a silent skip). ignoreDuplicates makes a retried
-  // call a safe no-op per lead.
-  function toRow(row: AudienceRow, status: "queued" | "suppressed") {
-    const composed = composeRecipientEmail(blastRow.subject_template, blastRow.body_template, row.lead, tenantName);
-    return {
-      lead_id: row.leadId,
-      source: "blast" as const,
-      source_id: id,
-      to_email: row.email,
-      to_email_stored: row.lead.email != null ? String(row.lead.email) : null,
-      subject: composed.subject,
-      body_html: composed.bodyHtml,
-      status,
-    };
-  }
-
-  const newRows = [...audience.sendable.map((r) => toRow(r, "queued")), ...audience.suppressed.map((r) => toRow(r, "suppressed"))];
-
-  // Chunking alone isn't sufficient — it shipped once already (2026-09-01)
-  // and still failed outright on a live 3,118-row blast, with no way to tell
-  // why and no way to resume short of re-clicking Send. Retrying a single
-  // failed chunk (most failures at this scale are transient — a pooler
-  // recycle, a momentary PostgREST blip) and logging exactly which chunk
-  // failed and the real DB error are what chunking by itself didn't provide.
-  // See src/lib/outbound/materialize-chunks.ts.
-  const materializeResult = await materializeInChunks(
-    newRows,
-    async (chunk) => db.from("email_messages").upsert(chunk, { onConflict: "source_id,lead_id", ignoreDuplicates: true }),
-    {
-      chunkSize: MATERIALIZE_CHUNK_SIZE,
-      onRetry: ({ chunkIndex, attempt, error }) =>
-        log.warn({ blastId: id, chunkIndex, attempt, err: error }, "Retrying email_messages chunk after a transient failure"),
-    }
-  );
-  if (!materializeResult.ok) {
-    log.error(
-      { err: materializeResult.error, blastId: id, chunkIndex: materializeResult.failedChunkIndex, chunkSize: materializeResult.failedChunkSize },
-      "Failed to materialize email_messages rows"
-    );
-    // requestId lets this exact failure be found in logs without a timestamp
-    // guess — the gap that made the 2026-09-06 incidents unrecoverable.
-    return apiServiceUnavailable(`Failed to materialize recipient rows (ref: ${requestId})`);
-  }
-
-  // 4. Emit the Inngest event, set status='queued'. sendQueuedEmailBatch
-  // (Phase 0) enforces tenant_email_settings.daily_send_cap on its own — the
-  // worker (email-blast-send.ts) is what turns a blown cap into 'throttled'
-  // and resumes automatically; this route never rejects for being over cap.
-  await inngest.send({ name: "email/blast.send", data: { tenantId: auth.tenantId, blastId: id } });
+  // Hand off to the background FIRST — before any slow work — then flip the
+  // blast out of 'draft' so the UI switches from the composer to the (now
+  // live-polling) blast detail view. Order matters: emitting the event before
+  // the status update means a crash between the two still leaves a 'draft'
+  // blast an Inngest event was already sent for, which is a safe, re-visible
+  // failure (nothing silently lost) rather than the reverse (a 'queued' blast
+  // no event was ever sent for, which would hang forever with no worker
+  // coming to claim it).
+  // senderId: the person actually clicking Send right now, not necessarily
+  // who drafted the blast — materializeBlastAudience resolves permissions
+  // against THIS id, never blast.created_by (nullable, wiped on account
+  // deletion; also just the wrong person when someone other than the
+  // drafter is the one sending). See that function's header comment.
+  await inngest.send({ name: "email/blast.send", data: { tenantId: auth.tenantId, blastId: id, senderId: auth.userId } });
 
   const { data: updated, error: updateError } = await db
     .from("email_blasts")
-    .update({
-      status: "queued",
-      recipients_total: audience.sendable.length + audience.suppressed.length,
-      recipients_suppressed: audience.suppressed.length,
-      started_at: new Date().toISOString(),
-    })
+    .update({ status: "queued", started_at: new Date().toISOString() })
     .eq("id", id)
     .select("*")
     .single();
 
   if (updateError) {
-    log.error({ err: updateError, blastId: id }, "Failed to update blast status after send");
-    return apiServiceUnavailable("Blast was queued but its status could not be updated — check email_blasts directly");
+    log.error({ err: updateError, blastId: id }, "Failed to update blast status after handing off to the background worker");
+    return apiError(
+      "SERVICE_UNAVAILABLE",
+      `Blast was queued for background send but its status could not be updated — check email_blasts directly (ref: ${requestId})`,
+      503
+    );
   }
 
-  log.info({ blastId: id, sendable: audience.sendable.length, suppressed: audience.suppressed.length }, "email blast queued for send");
+  log.info({ blastId: id }, "email blast handed off to the background worker");
 
-  return apiSuccess({ blast: updated, queued: audience.sendable.length, suppressed: audience.suppressed.length });
+  return apiSuccess({ blast: updated });
 }
