@@ -108,14 +108,20 @@ export function ProjectCockpitPage({ projectId, role, currentUserId, tenantSlug,
             </TabsList>
             <TabsContent value="overview" className="flex flex-col gap-4 mt-4">
               {aiPreviewEnabled && <AiSummaryCard />}
+              <TasksSummaryCard
+                projectId={projectId}
+                projectName={project.name}
+                currentUserId={currentUserId}
+                onViewAllTasks={() => setActiveTab("tasks")}
+              />
               <BriefEditor project={project} canManageProjects={canManageProjects} onSave={(brief) => updateProject({ brief })} />
               <QualifyPanel project={project} canManageProjects={canManageProjects} onQualify={qualifyProject} />
-              <TasksSummaryCard projectId={projectId} onViewAllTasks={() => setActiveTab("tasks")} />
             </TabsContent>
             <TabsContent value="delivery" className="mt-4">
               <DeliveryTab
                 projectId={projectId}
                 canManageProjects={canManageProjects}
+                currency={project.currency ?? "NPR"}
                 onProjectChanged={refetch}
                 onEventRecorded={refetchEvents}
               />
@@ -142,7 +148,13 @@ export function ProjectCockpitPage({ projectId, role, currentUserId, tenantSlug,
         </div>
 
         <aside className="space-y-4 lg:sticky lg:top-4 self-start">
-          {project.is_billable && <BillableSummary projectId={projectId} canManageBilling={canManageBilling} />}
+          {project.is_billable && (
+            <BillableSummary
+              projectId={projectId}
+              canManageBilling={canManageBilling}
+              currency={project.currency ?? "NPR"}
+            />
+          )}
           {canManageBilling && project.is_billable && (
             <InvoicesPanel projectId={projectId} currency={project.currency ?? "NPR"} />
           )}

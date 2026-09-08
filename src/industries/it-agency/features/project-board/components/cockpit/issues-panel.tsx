@@ -37,13 +37,15 @@ interface IssuesPanelProps {
   issues: ProjectIssue[];
   loading: boolean;
   canManageProjects: boolean;
+  /** Open the create form on mount (triggered from the Delivery empty state). */
+  startExpanded?: boolean;
   onCreate: (payload: Record<string, unknown>) => Promise<boolean>;
   onResolve: (issueId: string) => Promise<boolean>;
   onPromoteToChangeRequest: (issue: ProjectIssue) => void;
 }
 
-export function IssuesPanel({ issues, loading, canManageProjects, onCreate, onResolve, onPromoteToChangeRequest }: IssuesPanelProps) {
-  const [adding, setAdding] = useState(false);
+export function IssuesPanel({ issues, loading, canManageProjects, startExpanded, onCreate, onResolve, onPromoteToChangeRequest }: IssuesPanelProps) {
+  const [adding, setAdding] = useState(Boolean(startExpanded) && canManageProjects);
   const [title, setTitle] = useState("");
   const [kind, setKind] = useState<IssueKind>("query");
   const [severity, setSeverity] = useState<IssueSeverity>("medium");

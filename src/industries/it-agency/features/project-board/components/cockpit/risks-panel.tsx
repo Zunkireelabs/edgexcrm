@@ -44,12 +44,14 @@ interface RisksPanelProps {
   loading: boolean;
   canManageProjects: boolean;
   team: TeamMember[];
+  /** Open the create form on mount (triggered from the Delivery empty state). */
+  startExpanded?: boolean;
   onCreate: (payload: Record<string, unknown>) => Promise<boolean>;
   onUpdate: (riskId: string, patch: Record<string, unknown>) => Promise<boolean>;
 }
 
-export function RisksPanel({ risks, loading, canManageProjects, team, onCreate, onUpdate }: RisksPanelProps) {
-  const [adding, setAdding] = useState(false);
+export function RisksPanel({ risks, loading, canManageProjects, team, startExpanded, onCreate, onUpdate }: RisksPanelProps) {
+  const [adding, setAdding] = useState(Boolean(startExpanded) && canManageProjects);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [probability, setProbability] = useState<RiskLevel>("medium");
