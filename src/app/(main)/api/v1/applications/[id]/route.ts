@@ -153,16 +153,24 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     return apiError("DB_ERROR", "Failed to update application", 500);
   }
 
+  // Stage-move bookkeeping fields (stage_id + the status/stage_changed_at this
+  // route derives from it above) get their own dedicated "application.
+  // stage_changed" audit-log row below — they must NOT also count toward the
+  // generic "application.updated" one, or a plain drag-a-card action (which
+  // touches exactly these 3 fields and nothing else) writes TWO audit_logs
+  // rows for one action: "Updated 3 fields" right next to "Stage changed to
+  // X" in the Activity tab. isStageMove is true for that common case — the
+  // generic audit-log write is skipped entirely then. A request that
+  // changes stage_id ALONGSIDE an unrelated field (e.g. notes) in the same
+  // PATCH still gets both rows, but the generic one's `patch` only reflects
+  // the genuinely-separate field(s), so its own "Updated N fields" count
+  // isn't inflated by bookkeeping it doesn't actually describe.
+  const STAGE_BOOKKEEPING_FIELDS = new Set(["stage_id", "status", "stage_changed_at"]);
+  const isStageMove = patch.stage_id !== undefined;
+  const nonStageFields = Object.fromEntries(Object.entries(patch).filter(([k]) => !STAGE_BOOKKEEPING_FIELDS.has(k)));
+  const nonStageFieldKeys = Object.keys(nonStageFields);
+
   const events: Promise<unknown>[] = [
-    createAuditLog({
-      tenantId: auth.tenantId,
-      userId: auth.userId,
-      action: "application.updated",
-      entityType: "application",
-      entityId: id,
-      changes: { patch: { old: existingRow, new: patch } },
-      requestId,
-    }),
     emitEvent({
       tenantId: auth.tenantId,
       type: "application.updated",
@@ -173,7 +181,23 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     }),
   ];
 
-  if (patch.stage_id !== undefined) {
+  if (!isStageMove || nonStageFieldKeys.length > 0) {
+    events.push(
+      createAuditLog({
+        tenantId: auth.tenantId,
+        userId: auth.userId,
+        action: "application.updated",
+        entityType: "application",
+        entityId: id,
+        changes: isStageMove
+          ? { patch: { old: existingRow, new: nonStageFields } }
+          : { patch: { old: existingRow, new: patch } },
+        requestId,
+      })
+    );
+  }
+
+  if (isStageMove) {
     events.push(
       // Distinct audit_logs row (not just the generic application.updated one
       // above) so the Activity tab's dedicated stage_changed rendering — which
