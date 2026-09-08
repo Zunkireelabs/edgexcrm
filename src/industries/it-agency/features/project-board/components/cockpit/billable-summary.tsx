@@ -10,15 +10,19 @@ import {
   calculateMargin,
 } from "../../../time-tracking/lib/totals";
 import { formatMinutes } from "../../../time-tracking/hooks/use-time-entries";
+import { CURRENCIES } from "@/lib/currency";
 import type { TimeEntry } from "@/types/database";
 
 interface BillableSummaryProps {
   projectId: string;
   // Cost/margin exposes staff-cost information — admin/owner only.
   canManageBilling: boolean;
+  /** Project currency, threaded from the cockpit — amounts render in it. */
+  currency?: string | null;
 }
 
-export function BillableSummary({ projectId, canManageBilling }: BillableSummaryProps) {
+export function BillableSummary({ projectId, canManageBilling, currency }: BillableSummaryProps) {
+  const sym = CURRENCIES[currency ?? "NPR"] ?? currency ?? "NPR";
   const [entries, setEntries] = useState<TimeEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -61,19 +65,19 @@ export function BillableSummary({ projectId, canManageBilling }: BillableSummary
           </div>
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">Billable amount</span>
-            <span className="font-medium tabular-nums">${billableAmount.toFixed(2)}</span>
+            <span className="font-medium tabular-nums">{sym} {billableAmount.toFixed(2)}</span>
           </div>
           {canManageBilling && (
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Cost</span>
-              <span className="font-medium tabular-nums">${costAmount.toFixed(2)}</span>
+              <span className="font-medium tabular-nums">{sym} {costAmount.toFixed(2)}</span>
             </div>
           )}
           {canManageBilling && (
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Margin</span>
               <span className={`font-medium tabular-nums ${negativeMargin ? "text-destructive" : ""}`}>
-                ${margin.toFixed(2)}
+                {sym} {margin.toFixed(2)}
                 {marginPct != null && (
                   <span className="text-xs font-normal ml-1">({(marginPct * 100).toFixed(0)}%)</span>
                 )}

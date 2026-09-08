@@ -148,7 +148,13 @@ export function ProjectCockpitPage({ projectId, role, currentUserId, tenantSlug,
         </div>
 
         <aside className="space-y-4 lg:sticky lg:top-4 self-start">
-          {project.is_billable && <BillableSummary projectId={projectId} canManageBilling={canManageBilling} />}
+          {project.is_billable && (
+            <BillableSummary
+              projectId={projectId}
+              canManageBilling={canManageBilling}
+              currency={project.currency ?? "NPR"}
+            />
+          )}
           {canManageBilling && project.is_billable && (
             <InvoicesPanel projectId={projectId} currency={project.currency ?? "NPR"} />
           )}

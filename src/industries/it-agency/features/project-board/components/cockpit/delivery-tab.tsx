@@ -67,6 +67,10 @@ export function DeliveryTab({ projectId, canManageProjects, currency, onProjectC
   }
 
   function handlePromoteToChangeRequest(issue: ProjectIssue) {
+    // Pin the panel open first: Phase 6 unmounts empty panels, and prefill
+    // consumption nulls crPrefill on the same tick the panel mounts — without a
+    // pendingAdd entry the panel (and the prefilled form) unmounts again.
+    requestAdd("change");
     setCrPrefill({ title: `Scope change: ${issue.title}`, originIssueId: issue.id });
   }
 

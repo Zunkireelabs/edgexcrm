@@ -5,7 +5,7 @@ import { Plus, Check, X, Play, Send, Undo2, RotateCcw, Loader2 } from "lucide-re
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatMoney } from "@/lib/currency";
+import { formatMoney, CURRENCIES } from "@/lib/currency";
 import type { MilestoneStatus, ProjectMilestone } from "@/types/database";
 
 const STATUS_CONFIG: Record<MilestoneStatus, { label: string; className: string }> = {
@@ -92,7 +92,7 @@ export function MilestonesPanel({ milestones, loading, canManageProjects, curren
               <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="flex-1" />
               <Input
                 type="number"
-                placeholder="Amount (optional)"
+                placeholder={`Amount (${CURRENCIES[currency ?? "NPR"] ?? currency}, optional)`}
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 className="flex-1"
