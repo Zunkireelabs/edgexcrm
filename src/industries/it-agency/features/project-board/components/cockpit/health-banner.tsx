@@ -20,6 +20,22 @@ export function HealthBanner({ project }: HealthBannerProps) {
   const pctComplete = project.pct_complete ?? 0;
   const actualMinutes = project.actual_minutes ?? 0;
   const estimateMinutes = project.current_estimate_minutes ?? 0;
+
+  // "Not started" — a project has signal only once it has been qualified or has
+  // logged time. Without either, an explicit human judgement (health_override)
+  // still outranks the rule; absent that, don't assert a RAG state nobody set.
+  const hasSignal = project.qualified_at != null || actualMinutes > 0;
+  if (!hasSignal && !project.health_override) {
+    return (
+      <div className="rounded-lg border bg-slate-50 px-4 py-2.5">
+        <span className="text-sm font-semibold text-slate-600">Not started</span>
+        {project.health_note && (
+          <p className="mt-1 text-xs text-muted-foreground">{project.health_note}</p>
+        )}
+      </div>
+    );
+  }
+
   const cfg = HEALTH_CONFIG[health];
   const Icon = cfg.icon;
 

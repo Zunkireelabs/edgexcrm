@@ -5,6 +5,7 @@ import { Plus, Check, X, Play, Send, Undo2, RotateCcw, Loader2 } from "lucide-re
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatMoney } from "@/lib/currency";
 import type { MilestoneStatus, ProjectMilestone } from "@/types/database";
 
 const STATUS_CONFIG: Record<MilestoneStatus, { label: string; className: string }> = {
@@ -32,14 +33,18 @@ interface MilestonesPanelProps {
   milestones: ProjectMilestone[];
   loading: boolean;
   canManageProjects: boolean;
+  /** Project currency, threaded from the cockpit; milestone amounts render in it. */
+  currency?: string | null;
+  /** Open the create form on mount (triggered from the Delivery empty state). */
+  startExpanded?: boolean;
   onCreate: (payload: Record<string, unknown>) => Promise<boolean>;
   onAccept: (milestoneId: string) => Promise<boolean>;
   onReject: (milestoneId: string) => Promise<boolean>;
   onTransition: (milestoneId: string, to: string) => Promise<boolean>;
 }
 
-export function MilestonesPanel({ milestones, loading, canManageProjects, onCreate, onAccept, onReject, onTransition }: MilestonesPanelProps) {
-  const [adding, setAdding] = useState(false);
+export function MilestonesPanel({ milestones, loading, canManageProjects, currency, startExpanded, onCreate, onAccept, onReject, onTransition }: MilestonesPanelProps) {
+  const [adding, setAdding] = useState(Boolean(startExpanded) && canManageProjects);
   const [title, setTitle] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [amount, setAmount] = useState("");
@@ -87,7 +92,7 @@ export function MilestonesPanel({ milestones, loading, canManageProjects, onCrea
               <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="flex-1" />
               <Input
                 type="number"
-                placeholder="Amount ($, optional)"
+                placeholder="Amount (optional)"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 className="flex-1"
@@ -118,7 +123,7 @@ export function MilestonesPanel({ milestones, loading, canManageProjects, onCrea
                 <p className="text-sm text-foreground truncate">{m.title}</p>
                 <p className="text-xs text-muted-foreground">
                   {m.due_date && `Due ${m.due_date}`}
-                  {m.amount != null && ` · $${m.amount.toLocaleString()}`}
+                  {m.amount != null && ` · ${formatMoney(m.amount, currency ?? undefined)}`}
                 </p>
                 {m.status === "rejected" && m.rejection_reason && (
                   <p className="text-xs text-red-600 mt-0.5">{m.rejection_reason}</p>
