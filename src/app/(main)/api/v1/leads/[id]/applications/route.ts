@@ -76,7 +76,33 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     .order("created_at", { ascending: true });
 
   if (error) return apiError("DB_ERROR", "Failed to fetch applications", 500);
-  return apiSuccess(data ?? []);
+
+  const apps = (data ?? []) as unknown as Record<string, unknown>[];
+
+  // Attach each application's Notes-tab thread (application_notes) so the lead's
+  // unified Activity feed (activities-panel.tsx) can surface them tagged by
+  // application — separate plain query rather than a resource-embed, since an
+  // embed here would need its own SELECT grant (see CLAUDE.md embed gotcha).
+  const appIds = apps.map((a) => a.id as string);
+  if (appIds.length > 0) {
+    const { data: notesData } = await db
+      .from("application_notes")
+      .select("id, application_id, content, user_id, user_email, created_at")
+      .in("application_id", appIds)
+      .order("created_at", { ascending: true });
+    const notesByApp = new Map<string, Record<string, unknown>[]>();
+    for (const note of (notesData ?? []) as unknown as Record<string, unknown>[]) {
+      const appId = note.application_id as string;
+      const bucket = notesByApp.get(appId) ?? [];
+      bucket.push(note);
+      notesByApp.set(appId, bucket);
+    }
+    for (const app of apps) {
+      app.application_notes = notesByApp.get(app.id as string) ?? [];
+    }
+  }
+
+  return apiSuccess(apps);
 }
 
 // POST /api/v1/leads/:id/applications — lead is already a prospect; no promote needed
