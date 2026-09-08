@@ -34,9 +34,16 @@ interface BlastRow {
 // chunk (including a retry after a partial failure) safe.
 const MATERIALIZE_CHUNK_SIZE = 100;
 
+// Mirrors tenant_email_settings.max_recipients_per_blast's own DB default
+// (migration 228) — used only if the settings row doesn't exist yet for this
+// tenant (lazily created, same posture as tenant_sms_settings).
+const DEFAULT_MAX_RECIPIENTS_PER_BLAST = 2000;
+
 // POST /api/v1/email-blasts/[id]/send — OUTREACH-PHASE1-BRIEF.md §5. Order is
 // fixed and load-bearing, mirroring sms/blasts/[id]/send: re-resolve ->
-// materialize rows -> emit event. Do not reorder.
+// enforce recipient cap -> materialize rows -> emit event. Do not reorder —
+// the cap check must run before materialize (F4, docs/BLAST-FINDINGS-2026-09-06.md),
+// the same ordering lesson F1 already fixed for SMS.
 //
 // Unlike SMS, materialization uses a plain upsert with
 // onConflict: "source_id,lead_id" — email_messages.uq_email_message_source_lead
@@ -80,12 +87,29 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
     return apiError("EMPTY_AUDIENCE", "No sendable recipients matched this blast's audience filter", 422);
   }
 
+  // 2. Enforce max_recipients_per_blast BEFORE any compose/materialize — same
+  // ordering lesson as F1 (docs/BLAST-F1-F2-FIX-BRIEF.md): reject with the
+  // count, never truncate, and reject before a single row is written so a
+  // rejected call can never leave a partial audience already materialized
+  // for a later retry to build on top of.
+  const { data: settingsRow } = await db.from("tenant_email_settings").select("max_recipients_per_blast").maybeSingle();
+  const maxRecipientsPerBlast =
+    (settingsRow as { max_recipients_per_blast?: number } | null)?.max_recipients_per_blast ?? DEFAULT_MAX_RECIPIENTS_PER_BLAST;
+  if (audience.sendable.length > maxRecipientsPerBlast) {
+    return apiError(
+      "MAX_RECIPIENTS_EXCEEDED",
+      `Audience (${audience.sendable.length}) exceeds the ${maxRecipientsPerBlast}-recipient cap for this tenant`,
+      422,
+      { count: audience.sendable.length, max: maxRecipientsPerBlast }
+    );
+  }
+
   // tenants has no tenant_id column (it IS the tenant) — see the identical
   // comment in the /preview route.
   const { data: tenantRow } = await db.raw().from("tenants").select("name").eq("id", auth.tenantId).maybeSingle();
   const tenantName = (tenantRow as { name?: string } | null)?.name;
 
-  // 2. Materialize ALL intended email_messages rows up front — queued for
+  // 3. Materialize ALL intended email_messages rows up front — queued for
   // sendable, suppressed for the DNC-list rows (an auditable record of who
   // was NOT emailed, not a silent skip). ignoreDuplicates makes a retried
   // call a safe no-op per lead.
@@ -131,7 +155,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
     return apiServiceUnavailable(`Failed to materialize recipient rows (ref: ${requestId})`);
   }
 
-  // 3. Emit the Inngest event, set status='queued'. sendQueuedEmailBatch
+  // 4. Emit the Inngest event, set status='queued'. sendQueuedEmailBatch
   // (Phase 0) enforces tenant_email_settings.daily_send_cap on its own — the
   // worker (email-blast-send.ts) is what turns a blown cap into 'throttled'
   // and resumes automatically; this route never rejects for being over cap.

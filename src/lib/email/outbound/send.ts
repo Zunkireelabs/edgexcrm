@@ -7,6 +7,7 @@ import { getOrCreateUnsubscribeToken, unsubscribeUrl, injectUnsubscribe } from "
 import { buildBulkEmailHeaders } from "./headers";
 import { getDailyCapStatus } from "./cap";
 import { acquireResendRateLimitSlot } from "./rate-limit";
+import { getEmailTransportMode, sendStubEmail } from "./transport";
 import { mapWithConcurrency } from "@/lib/sms/concurrency";
 import { logger } from "@/lib/logger";
 
@@ -179,9 +180,16 @@ export async function sendQueuedEmailBatch(
   // Step 4: sender resolution — already live, do not reimplement.
   const sender = await resolveTenantSender(tenantId);
 
-  const resend = getResendClient();
-  if (!resend) {
-    throw new Error("sendQueuedEmailBatch: RESEND_API_KEY not configured.");
+  // F3 (docs/BLAST-FINDINGS-2026-09-06.md) — fail-closed transport seam.
+  // Defaults to "stub" everywhere except real production; RESEND_API_KEY is
+  // only required, and only ever touched, when transportMode === "resend".
+  const transportMode = getEmailTransportMode();
+  let resend: ReturnType<typeof getResendClient> = null;
+  if (transportMode === "resend") {
+    resend = getResendClient();
+    if (!resend) {
+      throw new Error("sendQueuedEmailBatch: RESEND_API_KEY not configured.");
+    }
   }
 
   let sent = 0;
@@ -220,10 +228,24 @@ export async function sendQueuedEmailBatch(
       .eq("id", msg.id);
 
     try {
+      // Stub transport: record the call and mark 'sent' immediately, no
+      // network call, no rate-limit pacing (nothing to pace against a
+      // provider that was never called). This is what makes it safe to run
+      // blast-scale Section 4 at 16,000 recipients for the first time.
+      if (transportMode === "stub") {
+        const { data } = sendStubEmail({ to: guarded.to, from: sender.from, subject: guarded.subject, html: bodyWithFooter });
+        sent += 1;
+        await db
+          .from("email_messages")
+          .update({ status: "sent", provider_message_id: data.id, sent_at: new Date().toISOString() })
+          .eq("id", msg.id);
+        return;
+      }
+
       let rateLimitRetries = 0;
       for (;;) {
         await acquireResendRateLimitSlot();
-        const { data, error: sendError } = await resend.emails.send({
+        const { data, error: sendError } = await resend!.emails.send({
           from: sender.from,
           ...(sender.replyTo ? { replyTo: sender.replyTo } : {}),
           to: guarded.to,
