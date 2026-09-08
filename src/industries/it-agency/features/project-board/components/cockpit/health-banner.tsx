@@ -21,9 +21,10 @@ export function HealthBanner({ project }: HealthBannerProps) {
   const actualMinutes = project.actual_minutes ?? 0;
   const estimateMinutes = project.current_estimate_minutes ?? 0;
 
-  // "Not started" — a project has signal only once it has been qualified or has
-  // logged time. Without either, an explicit human judgement (health_override)
-  // still outranks the rule; absent that, don't assert a RAG state nobody set.
+  // "Not started" — a project has signal only once it has been qualified, has
+  // logged time, or has task progress. Without any of those, an explicit human
+  // judgement (health_override) still outranks the rule; absent that, don't
+  // assert a RAG state nobody set.
   const hasSignal = project.qualified_at != null || actualMinutes > 0 || pctComplete > 0;
   if (!hasSignal && !project.health_override) {
     return (
