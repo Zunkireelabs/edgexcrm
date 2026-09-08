@@ -184,6 +184,35 @@ When closing a session, push this block's content into a new dated session entry
 
 ---
 
+## it_agency Delivery — Phase 6 "Cockpit progressive disclosure" — 2026-09-08
+
+**Branch:** `feature/it-agency-phase6-cockpit` (no migration, presentation-layer only). Closes the six-phase delivery round (1–5 all live on prod). **Stop at review — Opus verifies, Sadin merges.**
+
+**Why this round existed — read-only prod probe, 2026-09-08.** Measured the delivery surface for every `it_agency` tenant: **10 projects, all Zunkiree Labs, ~4 months of history.**
+
+| Signal | Prod reality |
+|---|---|
+| Milestones | **0, across all ten projects** |
+| Tasks | 20 total (6 on the busiest, 0 on two) |
+| Time entries | 12 total, 10 of them on two projects |
+| Internal projects (mig 224) | 0 — every project has an `account_id` |
+| Activity | nothing created 2026-07-07 → 2026-09-08 |
+
+The project names are real client work (CMS TNC website, BathroomFort, Fifa World Cup 2026 campaign page, UK Education Expo). The work is real; it is not being run in EdgeX. Zero milestones is load-bearing — milestones feed the approvals inbox, the lifecycle state machine, milestone-triggered invoicing and part of the health engine, all shipped, all with no input rows. **Conclusion the round acted on: the cockpit has a demand problem, not a layout one. Phase 6 = subtraction/deferral, no new capabilities.**
+
+**Five changes:**
+1. `HealthBanner` — neutral **"Not started"** strip (no RAG icon, no progress bar, no `0%/0.0h` cluster) until a project has signal (`qualified_at != null` OR `actual_minutes > 0`). `health_override` still wins. Was: green **"On track"** as the first thing on every brand-new project's page — a fact nobody established.
+2. Overview tab reordered to `AiSummaryCard → TasksSummaryCard → BriefEditor → QualifyPanel` (Qualify was third, above the tasks). `TasksSummaryCard` gets a header **"+ New task"** reusing the shipped `TaskCreateDialog` with the project locked.
+3. `QualifyPanel` unqualified branch → collapsed neutral one-liner **"Set a baseline (optional)"** + "Set baseline" button expanding the unchanged six-field form in place; immutability warning moved to helper text at the submit button; non-manager copy corrected from the false "before work starts" to "No baseline set. An admin can add one to enable budget and variance tracking."
+4. `DeliveryTab` — **one** empty state ("No delivery records yet. Add one when the project needs it.") with four add buttons when milestones/issues/risks/CRs are all empty; once any is non-empty it renders the 2×2 grid but omits still-empty panels, which stay one-click addable from ghost buttons in the tab header. New optional `startExpanded` prop on the four panels lifts their existing create form — no create logic duplicated.
+5. Currency — three hardcoded `$` (`qualify-panel.tsx` budget label + qualified-summary row, `milestones-panel.tsx` amount) now use `formatMoney(amount, project.currency)`; currency threaded `ProjectCockpitPage → DeliveryTab → MilestonesPanel`. Zunkiree bills in NPR ("Rs.").
+
+**Verified on local dev** (local Supabase, `admin@edgex.local` on the it_agency "EdgeX agency" tenant): brand-new project shows "Not started" + tasks-first + working "+ New task" + collapsed baseline offer; Delivery tab shows the single empty state with four buttons; adding a milestone (Rs. 50,000) collapses to the milestones panel alone with the other three addable from the header; qualifying (baseline 120h, budget NPR 800,000) restores the exact green "On track" banner and renders **Rs. 8,00,000** in the qualified summary. Gates green: `npm run lint` (0 errors), `npx tsc --noEmit`, `npm run test` (2012 passed), `npm run build`. Nothing reachable before the round is unreachable after it.
+
+**Docs:** FEATURE-CATALOG `project-board` row + FEATURE-ROADMAP (Phase 6 → shipped; Tier 0–4 lines + RAID "R" corrected from stale "pending merge" / "next pick"); brief committed on the branch, to be archived to `docs/archive/features/` on merge.
+
+---
+
 ## it_agency Delivery — Phase 4 "My Work" on Home — 2026-09-07
 
 **Branch `feature/home-my-work`, PR to stage, no migration. Not merged — stopped at review per process (stage needs a second human's approval).**

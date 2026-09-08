@@ -31,6 +31,8 @@ interface ChangeRequestsPanelProps {
   canManageProjects: boolean;
   prefill: ChangeRequestPrefill | null;
   onPrefillConsumed: () => void;
+  /** Open the create form on mount (triggered from the Delivery empty state). */
+  startExpanded?: boolean;
   onCreate: (payload: Record<string, unknown>) => Promise<boolean>;
   onApprove: (id: string, clientApproved: boolean) => Promise<boolean>;
   onReject: (id: string) => Promise<boolean>;
@@ -42,11 +44,12 @@ export function ChangeRequestsPanel({
   canManageProjects,
   prefill,
   onPrefillConsumed,
+  startExpanded,
   onCreate,
   onApprove,
   onReject,
 }: ChangeRequestsPanelProps) {
-  const [adding, setAdding] = useState(false);
+  const [adding, setAdding] = useState(Boolean(startExpanded) && canManageProjects);
   const [title, setTitle] = useState("");
   const [classification, setClassification] = useState<ChangeRequestClassification>("new_scope");
   const [deltaHours, setDeltaHours] = useState("");
