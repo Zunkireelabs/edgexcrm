@@ -1,6 +1,8 @@
 import { validate, required, maxLength, optionalMaxLength, isIn } from "@/lib/api/validation";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { NotificationTypes, createNotificationsExcept } from "@/lib/notifications";
+import { notifyTaskAssigned } from "@/lib/tasks/dispatch-notify";
+import { logger } from "@/lib/logger";
 import type { AuthContext } from "@/lib/api/auth";
 import type { ScopedClient } from "@/lib/supabase/scoped";
 
@@ -54,6 +56,9 @@ export type CreateTaskOutcome = CreateTaskOk | CreateTaskValidationError | Creat
 export interface CreateTaskCoreActor {
   tenantId: string;
   defaultAssigneeId: string;
+  /** For the assignment email (dispatch loop). Absent for agent-approved writes. */
+  actorEmail?: string | null;
+  industryId?: string | null;
 }
 
 /**
@@ -218,6 +223,17 @@ export async function createTaskCore(
         link,
       },
     ]);
+    notifyTaskAssigned(
+      {
+        db,
+        log: logger,
+        tenantId,
+        actorUserId: defaultAssigneeId,
+        actorEmail: actor.actorEmail ?? null,
+        industryId: actor.industryId,
+      },
+      { taskId: task.id as string, taskTitle: task.title as string, assigneeUserId: assigneeId, taskPath: link },
+    );
     notified = true;
   }
 
@@ -231,5 +247,15 @@ export async function createTaskForUser(
   input: CreateTaskInput,
   opts: { requestId?: string } = {},
 ): Promise<CreateTaskOutcome> {
-  return createTaskCore(db, { tenantId: auth.tenantId, defaultAssigneeId: auth.userId }, input, opts);
+  return createTaskCore(
+    db,
+    {
+      tenantId: auth.tenantId,
+      defaultAssigneeId: auth.userId,
+      actorEmail: auth.email ?? null,
+      industryId: auth.industryId,
+    },
+    input,
+    opts,
+  );
 }

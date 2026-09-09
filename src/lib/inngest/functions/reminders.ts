@@ -1,5 +1,9 @@
 import { inngest } from "@/lib/inngest/client";
-import { runTaskReminders, runOutreachDraftReminders } from "@/lib/inngest/jobs/reminders";
+import {
+  runTaskReminders,
+  runOutreachDraftReminders,
+  runProjectTaskReminders,
+} from "@/lib/inngest/jobs/reminders";
 
 // Durable replacement for the reminders-run GitHub-Actions cron. Each scan is its own step.run,
 // so it retries independently and is memoized across retries (a completed scan never re-notifies).
@@ -9,7 +13,8 @@ export const remindersScan = inngest.createFunction(
   { id: "ops-reminders-scan", triggers: [{ cron: "*/15 * * * *" }] },
   async ({ step }) => {
     const tasks = await step.run("task-reminders", () => runTaskReminders());
+    const projectTasks = await step.run("project-task-reminders", () => runProjectTaskReminders());
     const outreach = await step.run("outreach-drafts", () => runOutreachDraftReminders());
-    return { tasks, outreach };
+    return { tasks, projectTasks, outreach };
   },
 );
