@@ -10,6 +10,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { BlastContentPreviewDialog } from "./blast-content-preview-dialog";
 import { emailBlastGet, emailBlastSend, EmailBlastApiError } from "../lib/api-client";
 import type { EmailBlastRecipientRow, EmailBlastRow, EmailBlastStatus } from "../lib/types";
 
@@ -50,6 +51,7 @@ const RECIPIENT_STATUS_BADGE: Record<string, "default" | "secondary" | "outline"
 
 export function BlastDetail({ blast, canSendEmail, onRefresh }: BlastDetailProps) {
   const [cancelling, setCancelling] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [recipients, setRecipients] = useState<EmailBlastRecipientRow[]>([]);
@@ -116,7 +118,16 @@ export function BlastDetail({ blast, canSendEmail, onRefresh }: BlastDetailProps
             <h1 className="text-xl font-semibold">{blast.name}</h1>
             <Badge variant={STATUS_BADGE[blast.status]}>{blast.status.replace(/_/g, " ")}</Badge>
           </div>
-          <p className="text-sm text-muted-foreground mt-1 max-w-xl truncate">{blast.subject_template}</p>
+          <div className="mt-1 flex items-center gap-2">
+            <p className="max-w-xl truncate text-sm text-muted-foreground">{blast.subject_template}</p>
+            <button
+              type="button"
+              onClick={() => setPreviewOpen(true)}
+              className="shrink-0 text-xs font-medium text-primary underline-offset-2 hover:underline"
+            >
+              Preview email
+            </button>
+          </div>
         </div>
         {canSendEmail && CANCELLABLE_STATUSES.has(blast.status) && (
           <Button variant="destructive" onClick={handleCancel} disabled={cancelling}>
@@ -124,6 +135,8 @@ export function BlastDetail({ blast, canSendEmail, onRefresh }: BlastDetailProps
           </Button>
         )}
       </div>
+
+      <BlastContentPreviewDialog open={previewOpen} onOpenChange={setPreviewOpen} blastId={blast.id} />
 
       {blast.status === "throttled" && (
         <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">

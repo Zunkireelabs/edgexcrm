@@ -1,13 +1,26 @@
 import { inngest } from "@/lib/inngest/client";
 import { scopedClientForTenant } from "@/lib/supabase/scoped";
+import { createServiceClient } from "@/lib/supabase/server";
 import { fetchAllRows, type PageResult } from "@/lib/supabase/paginate";
 import { sendQueuedEmailBatch } from "@/lib/email/outbound/send";
+import { buildUserAuthContext } from "@/lib/api/auth";
+import { leadQueryScope } from "@/lib/api/permissions";
+import { POSITION_ROUTE_MAP } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
+import { resolveAudience, type AudienceRow } from "@/lib/email/outbound/audience";
+import { composeRecipientEmail } from "@/lib/email/outbound/compose";
+import { materializeInChunks } from "@/lib/outbound/materialize-chunks";
+import { EMPTY_TREE, type FilterTree } from "@/lib/filters/types";
 import { logger } from "@/lib/logger";
 
 // Durable send worker for an email blast — OUTREACH-PHASE1-BRIEF.md §5/§6.
-// The /api/v1/email-blasts/[id]/send route materializes rows and emits
-// email/blast.send; this function is the ONLY thing that ever calls
-// sendQueuedEmailBatch for a blast (no second send path). Mirrors
+// The /api/v1/email-blasts/[id]/send route does only cheap, synchronous
+// validation and then emits email/blast.send; THIS function is what
+// re-resolves the audience, enforces the recipient cap, materializes every
+// email_messages row (materializeBlastAudience, below), and is the ONLY
+// thing that ever calls sendQueuedEmailBatch for a blast (no second send
+// path). Moving materialization here (out of the HTTP request) is what makes
+// "click Send, then leave the page" safe regardless of audience size — see
+// materializeBlastAudience's own header comment for why. Mirrors
 // sms-blast-send.ts's shape — there is no email precedent to mirror instead,
 // email had no Inngest function before this phase.
 
@@ -183,6 +196,149 @@ export async function finalizeEmailBlast(
   return { finalStatus, sent, failed, cancelled, suppressed };
 }
 
+// Mirrors the identical constant that used to live in send/route.ts — a
+// single unchunked upsert of a few thousand real-size HTML emails is tens of
+// MB in one request and fails outright (observed live on a 3,114-row Admizz
+// blast). 100 keeps each chunk small regardless of template/audience size.
+const MATERIALIZE_CHUNK_SIZE = 100;
+
+// Mirrors tenant_email_settings.max_recipients_per_blast's own DB default
+// (migration 228) — used only if the settings row doesn't exist yet for this
+// tenant (lazily created, same posture as tenant_sms_settings).
+const DEFAULT_MAX_RECIPIENTS_PER_BLAST = 2000;
+
+interface BlastContentRow {
+  subject_template: string;
+  body_template: string;
+  from_name_override: string | null;
+  audience_filter: FilterTree | null;
+}
+
+export type MaterializeAudienceOutcome = { ok: true; sendable: number; suppressed: number } | { ok: false; error: string };
+
+// Everything that used to run synchronously inside send/route.ts's HTTP
+// handler before it fired the Inngest event — re-resolve the audience,
+// enforce the recipient cap, and materialize every email_messages row — now
+// runs here instead, as a single step inside the durable worker. This is the
+// piece of work that used to sit BEFORE the background handoff, in the exact
+// window a client disconnecting (navigation, closed tab, proxy timeout)
+// could interrupt; moving it to AFTER the handoff (this file) is what makes
+// "click Send, then leave" safe regardless of audience size. Called from a
+// single `step.run` in emailBlastSend below — its own internal DB writes
+// (materializeInChunks) are already idempotent (ON CONFLICT DO NOTHING), so a
+// step retry after a transient failure safely re-attempts only what didn't
+// land, exactly as send/route.ts's version did.
+//
+// Re-resolves permissions via buildUserAuthContext(senderId) rather than
+// trusting anything captured at click time — same "never trust a
+// client-supplied count" posture the old route comment documented, just
+// re-derived from a passed-in user id instead of a live session.
+// `senderId` is send/route.ts's OWN authenticated auth.userId at click time
+// (carried through event.data, NOT read back off blast.created_by): the
+// person who actually clicks Send is not always who drafted the blast, and
+// created_by is nullable — it's wiped to NULL if that original drafter's
+// account is later deleted (ON DELETE SET NULL, migration 214). Resolving
+// against created_by would silently re-scope (or outright fail) a send based
+// on the wrong person's — or nobody's — permissions.
+//
+// Deliberately refuses (rather than silently under-resolving) when the
+// sender's lead-visibility scope is restricted (own/branch) — see the
+// matching comment in send/route.ts's synchronous pre-check for why: this
+// function only has a service-role client available, and the RLS RPC that
+// scope requires fails closed (zero rows) under one. send/route.ts already
+// rejects that case instantly at click time, before ever emitting the event
+// this function responds to — this is a second, defense-in-depth check, not
+// the primary guard.
+export async function materializeBlastAudience(tenantId: string, blastId: string, senderId: string): Promise<MaterializeAudienceOutcome> {
+  const db = await scopedClientForTenant(tenantId);
+
+  const { data: blastData } = await db
+    .from("email_blasts")
+    .select("subject_template, body_template, from_name_override, audience_filter")
+    .eq("id", blastId)
+    .maybeSingle();
+  const blast = blastData as unknown as BlastContentRow | null;
+  if (!blast) return { ok: false, error: "blast not found at materialize time" };
+
+  const auth = await buildUserAuthContext(senderId, tenantId);
+  if (!auth) return { ok: false, error: "could not resolve the sender's permissions for this tenant" };
+
+  const poolSlug =
+    auth.industryId === "education_consultancy" && auth.positionSlug && auth.branchId
+      ? (POSITION_ROUTE_MAP[auth.positionSlug] ?? null)
+      : null;
+  const scope = leadQueryScope(auth.permissions, auth.userId, auth.branchId, poolSlug);
+  if (scope.restrictToSelf || scope.branchId) {
+    return { ok: false, error: "sender has a restricted lead-visibility scope — cannot safely resolve audience in the background" };
+  }
+
+  const service = await createServiceClient();
+  // Unrestricted scope confirmed above, so the own/branch RLS-RPC branch of
+  // resolveAudience can never actually be reached — passing the service
+  // client for both `user` and `service` is safe here (see this function's
+  // header comment for why a real RLS client isn't available at all).
+  const audienceResult = await resolveAudience(auth, blast.audience_filter ?? EMPTY_TREE, { user: service, service, db });
+  if (!audienceResult.ok) {
+    return { ok: false, error: `audience filter is no longer valid: ${JSON.stringify(audienceResult.errors)}` };
+  }
+  const { audience } = audienceResult;
+
+  if (audience.sendable.length === 0 && audience.suppressed.length === 0) {
+    return { ok: false, error: "no sendable recipients matched this blast's audience filter" };
+  }
+
+  const { data: settingsRow } = await db.from("tenant_email_settings").select("max_recipients_per_blast").maybeSingle();
+  const maxRecipientsPerBlast =
+    (settingsRow as { max_recipients_per_blast?: number } | null)?.max_recipients_per_blast ?? DEFAULT_MAX_RECIPIENTS_PER_BLAST;
+  if (audience.sendable.length > maxRecipientsPerBlast) {
+    return {
+      ok: false,
+      error: `audience (${audience.sendable.length}) exceeds the ${maxRecipientsPerBlast}-recipient cap for this tenant`,
+    };
+  }
+
+  // tenants has no tenant_id column (it IS the tenant) — see the identical
+  // comment in the /preview route.
+  const { data: tenantRow } = await db.raw().from("tenants").select("name").eq("id", tenantId).maybeSingle();
+  const tenantName = (tenantRow as { name?: string } | null)?.name;
+
+  function toRow(row: AudienceRow, status: "queued" | "suppressed") {
+    const composed = composeRecipientEmail(blast!.subject_template, blast!.body_template, row.lead, tenantName);
+    return {
+      lead_id: row.leadId,
+      source: "blast" as const,
+      source_id: blastId,
+      to_email: row.email,
+      to_email_stored: row.lead.email != null ? String(row.lead.email) : null,
+      subject: composed.subject,
+      body_html: composed.bodyHtml,
+      status,
+    };
+  }
+
+  const newRows = [...audience.sendable.map((r) => toRow(r, "queued")), ...audience.suppressed.map((r) => toRow(r, "suppressed"))];
+
+  const materializeResult = await materializeInChunks(
+    newRows,
+    async (chunk) => db.from("email_messages").upsert(chunk, { onConflict: "source_id,lead_id", ignoreDuplicates: true }),
+    { chunkSize: MATERIALIZE_CHUNK_SIZE }
+  );
+  if (!materializeResult.ok) {
+    return {
+      ok: false,
+      error: `failed to materialize recipient rows at chunk ${materializeResult.failedChunkIndex}: ${materializeResult.error?.message}`,
+    };
+  }
+
+  await db
+    .from("email_blasts")
+    .update({ recipients_total: audience.sendable.length + audience.suppressed.length, recipients_suppressed: audience.suppressed.length })
+    .eq("id", blastId)
+    .neq("status", "cancelled");
+
+  return { ok: true, sendable: audience.sendable.length, suppressed: audience.suppressed.length };
+}
+
 export const emailBlastSend = inngest.createFunction(
   {
     id: "email-blast-send",
@@ -193,7 +349,12 @@ export const emailBlastSend = inngest.createFunction(
     concurrency: [{ key: "event.data.tenantId", limit: 1 }],
   },
   async ({ event, step }) => {
-    const { tenantId, blastId } = event.data as { tenantId: string; blastId: string };
+    // senderId: the auth.userId who actually clicked Send (send/route.ts),
+    // carried through here rather than re-derived from blast.created_by — see
+    // materializeBlastAudience's header comment for why. Only present on a
+    // fresh event; a resumed/re-emitted run (throttle cycle) doesn't need it,
+    // since materialize only ever runs once, on the first 'queued' pass.
+    const { tenantId, blastId, senderId } = event.data as { tenantId: string; blastId: string; senderId?: string };
 
     const blast = await step.run("load-blast", async () => {
       const db = await scopedClientForTenant(tenantId);
@@ -226,6 +387,104 @@ export const emailBlastSend = inngest.createFunction(
 
       const outcome = await step.run("finalize-precancelled", () => finalizeEmailBlast(tenantId, blastId));
       return { blastId, ...outcome };
+    }
+
+    // Materialize the audience — ONLY on this blast's first run. A fresh run
+    // can observe the row as EITHER 'draft' or 'queued' here, depending on
+    // which of send/route.ts's own two writes (inngest.send(), then its
+    // status update to 'queued') this step's read happened to race against —
+    // there is no atomicity between them, so neither order is guaranteed.
+    // Both states mean the same thing: this is a fresh send, not a resume.
+    // A resumed run after a throttle cycle re-enters here with status
+    // 'throttled' (set by mark-throttled below, before the resume event is
+    // ever re-emitted) and must NOT re-resolve/re-materialize: the audience
+    // was already snapshotted on the first run, and re-running this every
+    // cycle would waste a full audience resolution and risk silently growing
+    // recipients_total if new leads started matching the filter in between
+    // cycles — the loop below only ever sends rows already materialized as
+    // 'queued', by design. See the confirm-queued step below for how the row
+    // is normalized to 'queued' before mark-sending runs, regardless of
+    // which of 'draft'/'queued' was observed here.
+    if (blast.status === "queued" || blast.status === "draft") {
+      // senderId is always present on the fresh event that sets 'queued'
+      // (send/route.ts always includes it) — this guard exists only so a
+      // malformed/hand-fired event fails loudly as a real error instead of
+      // materializeBlastAudience crashing on an undefined userId.
+      if (!senderId) {
+        await step.run("mark-failed-no-sender", async () => {
+          const db = await scopedClientForTenant(tenantId);
+          await db
+            .from("email_blasts")
+            .update({ status: "failed", recipients_total: 0, completed_at: new Date().toISOString() })
+            .eq("id", blastId)
+            .neq("status", "cancelled");
+        });
+        logger.error({ tenantId, blastId }, "[email-blast-send] event carried no senderId — blast marked failed");
+        return { blastId, failed: true, reason: "event carried no senderId" };
+      }
+
+      const materializeOutcome = await step.run("materialize-audience", () => materializeBlastAudience(tenantId, blastId, senderId));
+      if (!materializeOutcome.ok) {
+        // .neq("status", "cancelled") (not a blanket update) so a /cancel
+        // that raced this step and already flipped the blast to 'cancelled'
+        // is never overwritten back to 'failed' — same F-1 invariant
+        // finalizeEmailBlast enforces elsewhere in this file. Not
+        // .eq("status","queued"): the row here can legitimately still be
+        // 'draft' (see comment above), so a queued-only filter would
+        // silently no-op and leave the blast stuck instead of marking it
+        // failed.
+        await step.run("mark-failed-no-audience", async () => {
+          const db = await scopedClientForTenant(tenantId);
+          await db
+            .from("email_blasts")
+            .update({ status: "failed", recipients_total: 0, completed_at: new Date().toISOString() })
+            .eq("id", blastId)
+            .neq("status", "cancelled");
+        });
+        logger.error({ tenantId, blastId, error: materializeOutcome.error }, "[email-blast-send] failed to materialize audience — blast marked failed");
+        return { blastId, failed: true, reason: materializeOutcome.error };
+      }
+
+      // Race guard: send/route.ts flips the blast to 'queued' (making
+      // "Cancel blast" clickable) BEFORE this step runs, not after — unlike
+      // the old synchronous-materialize design, a user can now click Cancel
+      // while materialization is still in flight. /cancel only flips
+      // email_messages rows that are ALREADY 'queued' at the moment it runs
+      // (see cancel/route.ts) — rows this step is about to write don't exist
+      // yet at that moment, so /cancel can't see or cancel them, and the send
+      // loop below would otherwise happily send them anyway. Re-checking here
+      // and reclaiming any such rows closes that window.
+      const stillQueued = await step.run("check-not-cancelled-post-materialize", async () => {
+        const db = await scopedClientForTenant(tenantId);
+        const { data } = await db.from("email_blasts").select("status").eq("id", blastId).maybeSingle();
+        return (data as { status?: string } | null)?.status !== "cancelled";
+      });
+      if (!stillQueued) {
+        await step.run("cancel-post-materialize-rows", async () => {
+          const db = await scopedClientForTenant(tenantId);
+          await db.from("email_messages").update({ status: "cancelled" }).eq("source", "blast").eq("source_id", blastId).eq("status", "queued");
+        });
+        const outcome = await step.run("finalize-post-materialize-cancel", () => finalizeEmailBlast(tenantId, blastId));
+        return { blastId, ...outcome };
+      }
+
+      // If load-blast (this run's very first step, above) raced ahead of
+      // send/route.ts's own status-flip and observed 'draft' instead of
+      // 'queued', normalize the row to 'queued' now — before mark-sending
+      // below, whose .in(["queued","throttled"]) filter assumes the row is
+      // never still 'draft' at that point. No-op (skipped entirely) when
+      // send/route.ts already won that race and the row was already
+      // 'queued' at load-blast time — the common case pays nothing extra.
+      if (blast.status === "draft") {
+        await step.run("confirm-queued", async () => {
+          const db = await scopedClientForTenant(tenantId);
+          await db
+            .from("email_blasts")
+            .update({ status: "queued", started_at: new Date().toISOString() })
+            .eq("id", blastId)
+            .eq("status", "draft");
+        });
+      }
     }
 
     // Scheduled send: park the whole run until the requested time.
@@ -291,7 +550,7 @@ export const emailBlastSend = inngest.createFunction(
 
         const resumeAt = await step.run(`compute-resume-${batchIndex}`, () => nextUtcMidnight().toISOString());
         await step.sleepUntil(`throttle-wait-${batchIndex}`, new Date(resumeAt));
-        await step.run(`re-emit-${batchIndex}`, () => inngest.send({ name: "email/blast.send", data: { tenantId, blastId } }));
+        await step.run(`re-emit-${batchIndex}`, () => inngest.send({ name: "email/blast.send", data: { tenantId, blastId, senderId } }));
 
         logger.info({ tenantId, blastId, batchIndex, resumeAt }, "[email-blast-send] daily cap reached — throttled, re-emitted for resume");
         return { blastId, throttled: true, resumeAt, sent: totalSent, failed: totalFailed, suppressed: totalSuppressed };

@@ -18,7 +18,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
+import { EmailPreviewPane } from "./email-preview-pane";
 import type { EmailBlastPreviewResponse } from "../lib/types";
 
 interface SendConfirmDialogProps {
@@ -54,12 +55,6 @@ export function SendConfirmDialog({ open, onOpenChange, preview, sending, error,
   const recipientCount = preview?.audience.sendable ?? 0;
   const matches = typed.trim() === String(recipientCount);
 
-  const samples = preview?.samples ?? [];
-  // Clamp on read so a freshly-built preview with fewer samples can never leave
-  // the switcher pointing past the end (no effect / no reset needed).
-  const clampedIdx = samples.length > 0 ? Math.min(sampleIdx, samples.length - 1) : 0;
-  const activeSample = samples[clampedIdx];
-
   const shownExclusions = preview
     ? (Object.keys(EXCLUSION_LABELS) as (keyof typeof EXCLUSION_LABELS)[]).filter(
         (key) => preview.audience.excluded[key] > 0,
@@ -80,75 +75,7 @@ export function SendConfirmDialog({ open, onOpenChange, preview, sending, error,
           <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
             {/* ── Preview pane (primary content) ───────────────────────── */}
             <section className="flex h-[46vh] shrink-0 flex-col border-b lg:h-auto lg:min-h-0 lg:flex-1 lg:border-b-0 lg:border-r">
-              <div className="shrink-0 space-y-1 border-b bg-muted/30 px-4 py-3 text-xs">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium text-muted-foreground">Preview</span>
-                  {samples.length > 1 && (
-                    <div className="flex items-center gap-1">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6"
-                        disabled={clampedIdx === 0}
-                        onClick={() => setSampleIdx(Math.max(0, clampedIdx - 1))}
-                        aria-label="Previous sample"
-                      >
-                        <ChevronLeft className="h-3.5 w-3.5" />
-                      </Button>
-                      <span className="tabular-nums text-muted-foreground">
-                        Sample {clampedIdx + 1} of {samples.length}
-                      </span>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6"
-                        disabled={clampedIdx >= samples.length - 1}
-                        onClick={() => setSampleIdx(Math.min(samples.length - 1, clampedIdx + 1))}
-                        aria-label="Next sample"
-                      >
-                        <ChevronRight className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <span className="w-14 shrink-0 text-muted-foreground">Subject</span>
-                  <span className="min-w-0 break-words font-medium">{activeSample?.subject || "—"}</span>
-                </div>
-                <div className="flex gap-2">
-                  <span className="w-14 shrink-0 text-muted-foreground">From</span>
-                  <span className="min-w-0 break-words">{preview.sender.from}</span>
-                </div>
-                {preview.sender.replyTo && (
-                  <div className="flex gap-2">
-                    <span className="w-14 shrink-0 text-muted-foreground">Reply-to</span>
-                    <span className="min-w-0 break-words">{preview.sender.replyTo}</span>
-                  </div>
-                )}
-              </div>
-
-              <div className="min-h-0 flex-1 overflow-hidden bg-neutral-100 p-3 dark:bg-neutral-900">
-                {activeSample ? (
-                  <iframe
-                    key={clampedIdx}
-                    sandbox=""
-                    srcDoc={activeSample.bodyHtml}
-                    title={`Email preview — sample ${clampedIdx + 1}`}
-                    className="mx-auto block h-full w-full max-w-[640px] rounded border bg-white shadow-sm"
-                  />
-                ) : (
-                  <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                    No preview available
-                  </div>
-                )}
-              </div>
-
-              <p className="shrink-0 border-t px-4 py-2 text-[11px] leading-snug text-muted-foreground">
-                Structural preview — Gmail / Outlook / Apple Mail may render some CSS differently. Merge fields are
-                filled from a real sendable recipient.
-              </p>
+              <EmailPreviewPane preview={preview} sampleIdx={sampleIdx} onSampleIdxChange={setSampleIdx} />
             </section>
 
             {/* ── Decision pane (never scrolls away) ───────────────────── */}
