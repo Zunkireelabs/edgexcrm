@@ -70,6 +70,74 @@ export async function runTaskReminders(): Promise<{ processed: number; notified:
   return { processed: processedIds.length, notified };
 }
 
+// Project-task due reminders (Round 1, docs/IT-AGENCY-DISPATCH-LOOP-BRIEF.md §2
+// Slice C). tasks.due_date has existed since mig 024 and no scheduled job has
+// ever read it. Notify the assignee once when a task is past due, unfinished and
+// assigned; stamp reminded_at (mig 230) only after confirmed delivery so a
+// notify failure is retried on the next scan. it_agency only — the tenant embed
+// filters at the DB. One reminder per task, ever; no escalation.
+export async function runProjectTaskReminders(): Promise<{ processed: number; notified: number }> {
+  const supabase = await createServiceClient();
+  const nowIso = new Date().toISOString();
+  const todayIso = nowIso.slice(0, 10); // due_date is a DATE
+
+  const { data: due, error } = await supabase
+    .from("tasks")
+    .select("id, tenant_id, title, project_id, assignee_id, tenants!inner(industry_id)")
+    .lt("due_date", todayIso)
+    .neq("status", "done")
+    .not("assignee_id", "is", null)
+    .is("reminded_at", null)
+    .eq("tenants.industry_id", "it_agency")
+    .limit(500);
+
+  if (error) {
+    logger.error({ err: error }, "reminders run: failed to fetch due project tasks");
+    throw error;
+  }
+
+  let notified = 0;
+  const processedIds: string[] = [];
+
+  for (const row of due ?? []) {
+    const r = row as unknown as {
+      id: string;
+      tenant_id: string;
+      title: string;
+      project_id: string | null;
+      assignee_id: string;
+    };
+    try {
+      await createNotification({
+        tenantId: r.tenant_id,
+        userId: r.assignee_id,
+        type: NotificationTypes.TASK_REMINDER,
+        title: "Task reminder",
+        message: r.title,
+        link: r.project_id ? `/projects/${r.project_id}` : "/tasks",
+      });
+      notified++;
+      processedIds.push(r.id); // stamp only after confirmed delivery
+    } catch (err) {
+      logger.error({ err, taskId: r.id }, "reminders run: failed to notify project task");
+      // Row NOT stamped — retried on the next run.
+    }
+  }
+
+  if (processedIds.length > 0) {
+    const { error: stampErr } = await supabase
+      .from("tasks")
+      .update({ reminded_at: nowIso })
+      .in("id", processedIds);
+    if (stampErr) {
+      logger.error({ err: stampErr }, "reminders run: failed to stamp tasks.reminded_at");
+    }
+  }
+
+  logger.info({ processed: processedIds.length, notified }, "project task reminders run complete");
+  return { processed: processedIds.length, notified };
+}
+
 // Outreach drafts that just came due. Notify the draft's owner (assigned_to) once, when a
 // pending draft on an ACTIVE enrollment passes its due_at. notified_at is the fire-once stamp.
 //
