@@ -24,7 +24,7 @@ function fakeReq(): NextRequest {
   return {} as unknown as NextRequest;
 }
 
-function fakeDb(opts: { blastStatus?: string; failUpsertOnce?: boolean; failUpsertAlways?: boolean } = {}) {
+function fakeDb(opts: { blastStatus?: string; failUpsertOnce?: boolean; failUpsertAlways?: boolean; maxRecipientsPerBlast?: number } = {}) {
   // key = `${source_id}:${lead_id}` — models the real DB's
   // uq_email_message_source_lead (source_id, lead_id) unique index.
   const messages = new Map<string, Record<string, unknown>>();
@@ -66,6 +66,17 @@ function fakeDb(opts: { blastStatus?: string; failUpsertOnce?: boolean; failUpse
       }
       if (table === "tenants") {
         return { select: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: { name: "Test Tenant" }, error: null }) }) }) };
+      }
+      if (table === "tenant_email_settings") {
+        return {
+          select: () => ({
+            maybeSingle: () =>
+              Promise.resolve({
+                data: opts.maxRecipientsPerBlast !== undefined ? { max_recipients_per_blast: opts.maxRecipientsPerBlast } : null,
+                error: null,
+              }),
+          }),
+        };
       }
       if (table === "email_messages") {
         return {
@@ -227,5 +238,73 @@ describe("POST /api/v1/email-blasts/[id]/send", () => {
     const res = await POST(fakeReq(), { params });
     expect(res.status).toBe(409);
     expect(inngestSendMock).not.toHaveBeenCalled();
+  });
+
+  // F4 (docs/BLAST-FINDINGS-2026-09-06.md) — mirrors the SMS F1 regression:
+  // over-cap REJECTS rather than truncates, and rejects BEFORE materialize,
+  // never leaving a partial audience already written for a retry to build on.
+  it("max_recipients_per_blast REJECTS rather than truncates — zero rows materialized, no Inngest event", async () => {
+    const fake = fakeDb({ maxRecipientsPerBlast: 1 });
+    requireEmailCampaignsAccessMock.mockResolvedValue({ ok: true, auth: AUTH, db: fake.db });
+    resolveAudienceMock.mockResolvedValue({
+      ok: true,
+      audience: {
+        matched: 2,
+        sendable: [audienceRow("lead-1", "a@example.com"), audienceRow("lead-2", "b@example.com")],
+        suppressed: [],
+        excluded: { noEmail: 0, malformed: 0, suppressed: 0, duplicateEmail: 0 },
+      },
+    });
+
+    const { POST } = await import("./route");
+    const res = await POST(fakeReq(), { params });
+    const json = (await res.json()) as { error: { code: string; details: Record<string, unknown> } };
+
+    expect(res.status).toBe(422);
+    expect(json.error.code).toBe("MAX_RECIPIENTS_EXCEEDED");
+    expect(json.error.details).toMatchObject({ count: 2, max: 1 });
+    // Not truncated, not partially written: zero rows materialized.
+    expect(fake.messages.size).toBe(0);
+    expect(inngestSendMock).not.toHaveBeenCalled();
+  });
+
+  it("an audience at or under the cap is unaffected — send proceeds normally", async () => {
+    const fake = fakeDb({ maxRecipientsPerBlast: 2 });
+    requireEmailCampaignsAccessMock.mockResolvedValue({ ok: true, auth: AUTH, db: fake.db });
+    resolveAudienceMock.mockResolvedValue({
+      ok: true,
+      audience: {
+        matched: 2,
+        sendable: [audienceRow("lead-1", "a@example.com"), audienceRow("lead-2", "b@example.com")],
+        suppressed: [],
+        excluded: { noEmail: 0, malformed: 0, suppressed: 0, duplicateEmail: 0 },
+      },
+    });
+
+    const { POST } = await import("./route");
+    const res = await POST(fakeReq(), { params });
+
+    expect(res.status).toBe(200);
+    expect(fake.messages.size).toBe(2);
+  });
+
+  it("no tenant_email_settings row (null cap) never blocks — falls back to the 2,000 default", async () => {
+    const fake = fakeDb(); // maxRecipientsPerBlast unset -> settings row resolves to null
+    requireEmailCampaignsAccessMock.mockResolvedValue({ ok: true, auth: AUTH, db: fake.db });
+    resolveAudienceMock.mockResolvedValue({
+      ok: true,
+      audience: {
+        matched: 2,
+        sendable: [audienceRow("lead-1", "a@example.com"), audienceRow("lead-2", "b@example.com")],
+        suppressed: [],
+        excluded: { noEmail: 0, malformed: 0, suppressed: 0, duplicateEmail: 0 },
+      },
+    });
+
+    const { POST } = await import("./route");
+    const res = await POST(fakeReq(), { params });
+
+    expect(res.status).toBe(200);
+    expect(fake.messages.size).toBe(2);
   });
 });

@@ -13,6 +13,7 @@ import { scopedClient } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { ensureApplicationPipelineForCountry } from "@/lib/applications/pipeline-resolution";
+import { normalizeCatalogName, findCatalogNameConflict } from "@/lib/leads/catalog-name";
 
 export async function GET(request: NextRequest) {
   const auth = await authenticateRequest();
@@ -54,11 +55,18 @@ export async function POST(request: NextRequest) {
   });
   if (!valid) return apiValidationError(errors);
 
+  const cleanedName = normalizeCatalogName(body.name);
+  if (!cleanedName) return apiValidationError({ name: ["name is required"] });
+
   const db = await scopedClient(auth);
+  if (await findCatalogNameConflict(db, "countries", cleanedName)) {
+    return apiValidationError({ name: ["A country with this name already exists"] });
+  }
+
   const { data, error } = await db
     .from("countries")
     .insert({
-      name: String(body.name).trim(),
+      name: cleanedName,
       description: body.description ? String(body.description).trim() : null,
     })
     .select("id, name, description, is_active, created_at")

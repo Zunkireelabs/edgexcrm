@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { ShieldCheck } from "lucide-react";
+import { ShieldCheck, SlidersHorizontal } from "lucide-react";
+import { formatMoney } from "@/lib/currency";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -48,6 +49,8 @@ export function QualifyPanel({ project, canManageProjects, onQualify }: QualifyP
     project.budget_amount != null ? String(project.budget_amount) : ""
   );
   const [submitting, setSubmitting] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const currencyLabel = project.currency ?? "NPR";
 
   if (project.qualified_at) {
     const baselineHrs = ((project.baseline_estimate_minutes ?? 0) / 60).toFixed(1);
@@ -84,7 +87,7 @@ export function QualifyPanel({ project, canManageProjects, onQualify }: QualifyP
           {project.budget_amount != null && (
             <div className="flex gap-2">
               <span className="text-muted-foreground w-32 flex-shrink-0">Budget</span>
-              <span className="text-foreground">${project.budget_amount.toLocaleString()}</span>
+              <span className="text-foreground">{formatMoney(project.budget_amount, currencyLabel)}</span>
             </div>
           )}
         </CardContent>
@@ -96,9 +99,9 @@ export function QualifyPanel({ project, canManageProjects, onQualify }: QualifyP
     return (
       <Card className="border-amber-200 bg-amber-50/40">
         <CardHeader>
-          <CardTitle className="text-sm">Awaiting qualification</CardTitle>
+          <CardTitle className="text-sm">No baseline set</CardTitle>
           <CardDescription>
-            An admin needs to commit the baseline estimate and Definition of Done before work starts.
+            An admin can add one to enable budget and variance tracking.
           </CardDescription>
         </CardHeader>
       </Card>
@@ -122,13 +125,31 @@ export function QualifyPanel({ project, canManageProjects, onQualify }: QualifyP
 
   const canSubmit = dod.trim().length > 0 && Number(baselineHours) > 0;
 
+  if (!expanded) {
+    return (
+      <Card>
+        <CardContent className="flex items-center justify-between gap-4 p-4">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-foreground">Set a baseline (optional)</p>
+            <p className="text-xs text-muted-foreground">
+              Adds budget tracking, variance and % complete to this project.
+            </p>
+          </div>
+          <Button variant="outline" size="sm" className="flex-shrink-0" onClick={() => setExpanded(true)}>
+            <SlidersHorizontal className="h-3.5 w-3.5 mr-1.5" />
+            Set baseline
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
-    <Card className="border-amber-200 bg-amber-50/40">
+    <Card>
       <CardHeader>
-        <CardTitle className="text-sm">Qualify this project</CardTitle>
+        <CardTitle className="text-sm">Set a baseline</CardTitle>
         <CardDescription>
-          Commit the baseline estimate and Definition of Done before work starts. Once qualified, the
-          baseline is immutable — scope changes flow through change requests.
+          Adds budget tracking, variance and % complete to this project.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -188,7 +209,7 @@ export function QualifyPanel({ project, canManageProjects, onQualify }: QualifyP
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="budget">Budget ($)</Label>
+            <Label htmlFor="budget">Budget ({currencyLabel})</Label>
             <Input
               id="budget"
               type="number"
@@ -200,9 +221,17 @@ export function QualifyPanel({ project, canManageProjects, onQualify }: QualifyP
           </div>
         </div>
 
-        <Button onClick={handleSubmit} disabled={!canSubmit || submitting}>
-          Commit baseline &amp; qualify
-        </Button>
+        <div className="flex items-center gap-3 flex-wrap">
+          <Button onClick={handleSubmit} disabled={!canSubmit || submitting}>
+            Commit baseline &amp; qualify
+          </Button>
+          <Button variant="ghost" onClick={() => setExpanded(false)} disabled={submitting}>
+            Cancel
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Once committed, the baseline is immutable — later scope changes flow through change requests.
+        </p>
       </CardContent>
     </Card>
   );

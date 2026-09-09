@@ -586,4 +586,51 @@ describe("getDestinationFacet — migration 208 'destination' dimension", () => 
       /lead_aggregates source facet failed for tenant tenant-1/,
     );
   });
+
+  // Client dropdown showed "UK" and "🇬🇧 UK" as two separate checkboxes with split
+  // counts (2026-09-07 screenshot report) — migration 208's GROUP BY is on the raw
+  // stored string, so a flag-emoji-decorated value that predates
+  // destination-normalize.ts (or was never backfilled) never merges with its clean
+  // counterpart at the SQL layer. This is the fix: merge client-side.
+  it("merges a flag-emoji-decorated duplicate into its plain counterpart, summing counts", async () => {
+    rpcMock.mockResolvedValue({
+      data: [
+        { dimension: "destination", key: "UK", bucket: "all", cnt: 72 },
+        { dimension: "destination", key: "🇬🇧 UK", bucket: "all", cnt: 4 },
+        { dimension: "destination", key: "India", bucket: "all", cnt: 8 },
+        { dimension: "destination", key: "🇮🇳 India", bucket: "all", cnt: 2 },
+      ],
+      error: null,
+    });
+    const result = await getDestinationFacet({ tenantId: "tenant-1", scope: "all" });
+    expect(result).toEqual([
+      { name: "UK", count: 76 },
+      { name: "India", count: 10 },
+    ]);
+  });
+
+  it("always displays the decoration-stripped spelling, even when the emoji-prefixed variant had the higher count", async () => {
+    rpcMock.mockResolvedValue({
+      data: [
+        { dimension: "destination", key: "🇳🇿 New Zealand", bucket: "all", cnt: 20 },
+        { dimension: "destination", key: "New Zealand", bucket: "all", cnt: 3 },
+      ],
+      error: null,
+    });
+    const result = await getDestinationFacet({ tenantId: "tenant-1", scope: "all" });
+    expect(result).toEqual([{ name: "New Zealand", count: 23 }]);
+  });
+
+  it("case/whitespace-only duplicates merge the same way as decoration-only ones", async () => {
+    rpcMock.mockResolvedValue({
+      data: [
+        { dimension: "destination", key: "usa", bucket: "all", cnt: 5 },
+        { dimension: "destination", key: "USA", bucket: "all", cnt: 11 },
+        { dimension: "destination", key: " USA ", bucket: "all", cnt: 1 },
+      ],
+      error: null,
+    });
+    const result = await getDestinationFacet({ tenantId: "tenant-1", scope: "all" });
+    expect(result).toEqual([{ name: "USA", count: 17 }]);
+  });
 });

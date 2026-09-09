@@ -12,6 +12,7 @@ import { createRequestLogger } from "@/lib/logger";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
+import { normalizeCatalogName, findCatalogNameConflict } from "@/lib/leads/catalog-name";
 
 export async function GET(request: NextRequest) {
   const auth = await authenticateRequest();
@@ -56,7 +57,13 @@ export async function POST(request: NextRequest) {
   });
   if (!valid) return apiValidationError(errors);
 
+  const cleanedName = normalizeCatalogName(body.name);
+  if (!cleanedName) return apiValidationError({ name: ["name is required"] });
+
   const db = await scopedClient(auth);
+  if (await findCatalogNameConflict(db, "study_levels", cleanedName)) {
+    return apiValidationError({ name: ["A study level with this name already exists"] });
+  }
 
   let sortOrder = Number(body.sort_order);
   if (!Number.isFinite(sortOrder)) {
@@ -69,7 +76,7 @@ export async function POST(request: NextRequest) {
   const { data, error } = await db
     .from("study_levels")
     .insert({
-      name: String(body.name).trim(),
+      name: cleanedName,
       sort_order: sortOrder,
     })
     .select("id, name, sort_order, is_active, created_at")

@@ -122,6 +122,20 @@ describe("computeBlastCounts — throttle-branch counter staleness regression", 
     expect(fake.orderCalls.length).toBeGreaterThan(0);
     expect(fake.orderCalls[0]).toEqual({ col: "id", opts: { ascending: true } });
   });
+
+  // F5 (docs/BLAST-FINDINGS-2026-09-06.md) — total is what lets a caller
+  // (finalizeEmailBlast) tell "everyone's accounted for" apart from "some
+  // rows are still 'queued'/'sending' and nobody's noticed."
+  it("total reflects every row regardless of status, including ones no bucket counts ('queued', 'sending')", async () => {
+    const fake = fakeDb("sending", [{ status: "sent" }, { status: "queued" }, { status: "sending" }]);
+    scopedClientForTenantMock.mockResolvedValue(fake.db);
+    const { computeBlastCounts } = await import("./email-blast-send");
+
+    const counts = await computeBlastCounts("tenant-1", "blast-1");
+
+    expect(counts.total).toBe(3);
+    expect(counts.sent + counts.failed + counts.cancelled + counts.suppressed).toBe(1); // only the 'sent' row
+  });
 });
 
 describe("finalizeEmailBlast — F-1 regression (cancel never overwritten)", () => {
@@ -181,5 +195,62 @@ describe("finalizeEmailBlast — F-1 regression (cancel never overwritten)", () 
 
     expect(result.finalStatus).toBe("failed");
     expect(result.sent).toBe(0);
+  });
+});
+
+// F5 (docs/BLAST-FINDINGS-2026-09-06.md) — the real incident: a blast
+// finalized 'sent' with 12,100 of 16,000 rows still 'queued'. Regression
+// coverage for the safety net: finalize must never report a clean 'sent' (or
+// silently drop the shortfall into any other bucket) while rows are still
+// unaccounted for.
+describe("finalizeEmailBlast — F5 regression (never a false 'sent' while rows are unaccounted for)", () => {
+  beforeEach(() => {
+    scopedClientForTenantMock.mockReset();
+  });
+
+  it("rows still 'queued' at finalize time -> partially_failed, never a false 'sent'", async () => {
+    const fake = fakeDb("sending", [{ status: "sent" }, { status: "sent" }, { status: "queued" }]);
+    scopedClientForTenantMock.mockResolvedValue(fake.db);
+    const { finalizeEmailBlast } = await import("./email-blast-send");
+
+    const result = await finalizeEmailBlast("tenant-1", "blast-unaccounted-1");
+
+    expect(result.finalStatus).toBe("partially_failed");
+    expect(result.sent).toBe(2); // the two real successes are still reported accurately
+  });
+
+  it("a row stranded 'sending' at finalize time -> partially_failed, never a false 'sent' (the exact F5 mechanism)", async () => {
+    const fake = fakeDb("sending", Array.from({ length: 9 }, () => ({ status: "sent" })).concat([{ status: "sending" }]));
+    scopedClientForTenantMock.mockResolvedValue(fake.db);
+    const { finalizeEmailBlast } = await import("./email-blast-send");
+
+    const result = await finalizeEmailBlast("tenant-1", "blast-unaccounted-2");
+
+    expect(result.finalStatus).toBe("partially_failed");
+    expect(result.sent).toBe(9);
+  });
+
+  it("everyone accounted for (no queued/sending leftover) still finalizes sent normally — the safety net never fires on a genuinely clean run", async () => {
+    const fake = fakeDb("sending", [{ status: "sent" }, { status: "sent" }, { status: "suppressed" }]);
+    scopedClientForTenantMock.mockResolvedValue(fake.db);
+    const { finalizeEmailBlast } = await import("./email-blast-send");
+
+    const result = await finalizeEmailBlast("tenant-1", "blast-clean");
+
+    expect(result.finalStatus).toBe("sent");
+  });
+
+  it("a cancelled blast with leftover cancelled-but-uncounted rows still finalizes cancelled — the F-1 guarantee takes priority over the unaccounted-for check", async () => {
+    // /cancel only flips 'queued' rows to 'cancelled', never a 'sending' one
+    // — so a cancel racing a crash can leave a 'sending' row behind even on
+    // an intentionally-cancelled blast. That must still resolve to
+    // 'cancelled', not 'partially_failed'.
+    const fake = fakeDb("cancelled", [{ status: "sent" }, { status: "cancelled" }, { status: "sending" }]);
+    scopedClientForTenantMock.mockResolvedValue(fake.db);
+    const { finalizeEmailBlast } = await import("./email-blast-send");
+
+    const result = await finalizeEmailBlast("tenant-1", "blast-cancelled-with-leftover");
+
+    expect(result.finalStatus).toBe("cancelled");
   });
 });
