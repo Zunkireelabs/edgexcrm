@@ -20,6 +20,13 @@ function getDescription(activity: LeadActivity, teamEmails: Record<string, strin
     return "Stage changed";
   }
 
+  if (activity.action === "application.note_added") {
+    const content = changes.note?.new as string | undefined;
+    if (!content) return "Note added";
+    const trimmed = content.length > 140 ? `${content.slice(0, 140)}…` : content;
+    return `Note added: "${trimmed}"`;
+  }
+
   if (activity.action === "application.updated") {
     const patch = changes.patch?.new as Record<string, unknown> | null;
     if (!patch) return "Application updated";

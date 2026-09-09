@@ -41,7 +41,12 @@ const EXEMPT_SITES: Record<string, "rpc-only" | "auth-only"> = {
   "src/app/(main)/api/v1/email-blasts/[id]/preview/route.ts": "rpc-only", // resolveAudience() -> visibleLeadsBase() call site (OUTREACH-PHASE1-BRIEF.md §4)
   "src/app/(main)/api/v1/email-blasts/[id]/audience-count/route.ts": "rpc-only", // resolveAudience() -> visibleLeadsBase() call site
   "src/app/(main)/api/v1/email-blasts/[id]/audience-preview/route.ts": "rpc-only", // resolveAudience() -> visibleLeadsBase() call site
-  "src/app/(main)/api/v1/email-blasts/[id]/send/route.ts": "rpc-only", // resolveAudience() -> visibleLeadsBase() call site
+  // email-blasts/[id]/send/route.ts REMOVED from this list: it no longer calls
+  // resolveAudience() (or createClient() at all) — that moved into the
+  // background worker's materializeBlastAudience (email-blast-send.ts), which
+  // uses buildUserAuthContext() + a service-role client instead, precisely
+  // because a background job has no live session to bind a real
+  // createClient() to. See that function's own header comment.
   "src/app/(main)/api/v1/inbox/conversations/route.ts": "rpc-only", // visibleLeadIdsAmong() -> visibleLeadsBase() call site
   "src/app/(main)/api/v1/inbox/conversations/[id]/route.ts": "rpc-only", // canAccessConversationLead() -> visibleLeadsBase() call site
   "src/app/(main)/api/v1/inbox/conversations/[id]/messages/route.ts": "rpc-only", // canAccessConversationLead() -> visibleLeadsBase() call site

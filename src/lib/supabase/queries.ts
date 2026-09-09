@@ -846,17 +846,42 @@ export async function getLeadSubmissionHistory(
 
 export async function getApplicationActivity(applicationId: string, tenantId: string): Promise<LeadActivity[]> {
   const supabase = await createServiceClient();
-  const { data, error } = await supabase
-    .from("audit_logs")
-    .select("id, action, entity_type, changes, user_id, created_at")
-    .eq("tenant_id", tenantId)
-    .eq("entity_id", applicationId)
-    .eq("entity_type", "application")
-    .order("created_at", { ascending: false })
-    .limit(50);
+  const [logsResult, notesResult] = await Promise.all([
+    supabase
+      .from("audit_logs")
+      .select("id, action, entity_type, changes, user_id, created_at")
+      .eq("tenant_id", tenantId)
+      .eq("entity_id", applicationId)
+      .eq("entity_type", "application")
+      .order("created_at", { ascending: false })
+      .limit(50),
+    // Notes added via the application's own Notes tab (application_notes) don't
+    // generate audit_logs rows — merge them in here so the Activity tab reflects
+    // them too, instead of only ever showing application.created/updated/deleted.
+    supabase
+      .from("application_notes")
+      .select("id, content, user_id, created_at")
+      .eq("tenant_id", tenantId)
+      .eq("application_id", applicationId)
+      .order("created_at", { ascending: false })
+      .limit(50),
+  ]);
 
-  if (error) throw error;
-  return (data as LeadActivity[]) || [];
+  if (logsResult.error) throw logsResult.error;
+  if (notesResult.error) throw notesResult.error;
+
+  const noteActivities: LeadActivity[] = (notesResult.data || []).map((n) => ({
+    id: `note-${n.id}`,
+    action: "application.note_added",
+    entity_type: "application",
+    changes: { note: { old: null, new: n.content } },
+    user_id: n.user_id,
+    created_at: n.created_at,
+  }));
+
+  return [...((logsResult.data as LeadActivity[]) || []), ...noteActivities]
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, 50);
 }
 
 // ── Home-view query helpers ──────────────────────────────────────────────────
