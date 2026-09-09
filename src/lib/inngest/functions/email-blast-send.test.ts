@@ -576,7 +576,7 @@ describe("materializeBlastAudience", () => {
 // the inngest.createFunction mock above) end-to-end with a fake `step` that
 // runs each step.run() callback immediately, to prove the fix actually closes
 // the gap rather than just unit-testing materializeBlastAudience in isolation.
-interface FakeMessageRow {
+interface FakeHandlerMessageRow {
   id: string;
   status: string;
   source: string;
@@ -601,13 +601,13 @@ function makeBlastTable(blast: Record<string, unknown>) {
   };
 }
 
-function makeMessagesTable(messages: FakeMessageRow[]) {
+function makeMessagesTable(messages: FakeHandlerMessageRow[]) {
   return {
     select: (cols: string) => {
-      function node(filters: Array<(r: FakeMessageRow) => boolean>) {
-        const shape = (r: FakeMessageRow) => (cols === "status" ? { status: r.status } : { id: r.id });
+      function node(filters: Array<(r: FakeHandlerMessageRow) => boolean>) {
+        const shape = (r: FakeHandlerMessageRow) => (cols === "status" ? { status: r.status } : { id: r.id });
         return {
-          eq: (col: keyof FakeMessageRow, val: unknown) => node([...filters, (r) => r[col] === val]),
+          eq: (col: keyof FakeHandlerMessageRow, val: unknown) => node([...filters, (r) => r[col] === val]),
           order: () => node(filters),
           limit: (n: number) => Promise.resolve({ data: messages.filter((r) => filters.every((f) => f(r))).slice(0, n).map(shape), error: null }),
           range: (from: number, to: number) =>
@@ -635,7 +635,7 @@ function fakeHandlerDb(initialStatus: string) {
     from_name_override: null,
     audience_filter: null,
   };
-  const messages: FakeMessageRow[] = [];
+  const messages: FakeHandlerMessageRow[] = [];
 
   const db = {
     raw: () => ({
