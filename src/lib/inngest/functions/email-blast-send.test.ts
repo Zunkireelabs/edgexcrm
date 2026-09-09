@@ -8,13 +8,42 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const scopedClientForTenantMock = vi.fn();
 const buildUserAuthContextMock = vi.fn();
 const resolveAudienceMock = vi.fn();
+const sendQueuedEmailBatchMock = vi.fn();
+const inngestSendMock = vi.fn();
+
+// Captures the real emailBlastSend handler (createFunction's second arg)
+// instead of discarding it, so the draft/queued-race regression tests below
+// can invoke the actual orchestration logic end-to-end via a fake `step`.
+let capturedHandler: ((args: { event: { data: unknown }; step: FakeStep }) => Promise<unknown>) | null = null;
 
 vi.mock("@/lib/supabase/scoped", () => ({ scopedClientForTenant: scopedClientForTenantMock }));
 vi.mock("@/lib/supabase/server", () => ({ createServiceClient: vi.fn().mockResolvedValue({}) }));
 vi.mock("@/lib/api/auth", () => ({ buildUserAuthContext: buildUserAuthContextMock }));
 vi.mock("@/lib/email/outbound/audience", () => ({ resolveAudience: resolveAudienceMock }));
-vi.mock("@/lib/email/outbound/send", () => ({ sendQueuedEmailBatch: vi.fn() }));
-vi.mock("@/lib/inngest/client", () => ({ inngest: { createFunction: vi.fn(() => ({})), send: vi.fn() } }));
+vi.mock("@/lib/email/outbound/send", () => ({ sendQueuedEmailBatch: sendQueuedEmailBatchMock }));
+vi.mock("@/lib/inngest/client", () => ({
+  inngest: {
+    createFunction: vi.fn((_config: unknown, handler: typeof capturedHandler) => {
+      capturedHandler = handler;
+      return {};
+    }),
+    send: inngestSendMock,
+  },
+}));
+
+interface FakeStep {
+  run: <T>(name: string, fn: () => T | Promise<T>) => Promise<T>;
+  sleep: (name: string, duration: string) => Promise<void>;
+  sleepUntil: (name: string, date: Date) => Promise<void>;
+}
+
+function fakeStep(): FakeStep {
+  return {
+    run: async (_name, fn) => fn(),
+    sleep: async () => {},
+    sleepUntil: async () => {},
+  };
+}
 
 interface FakeMessageRow {
   status: string;
@@ -305,7 +334,11 @@ function fakeMaterializeDb(opts: { failUpsertOnce?: boolean; failUpsertAlways?: 
           select: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: { ...blastContentRow }, error: null }) }) }),
           update: (patch: Record<string, unknown>) => {
             blastUpdates.push(patch);
-            return { eq: () => Promise.resolve({ data: null, error: null }) };
+            // Chain supports both the .eq("id",..).neq("status","cancelled")
+            // shape (materializeBlastAudience's own recipients_total write)
+            // and a bare .eq("id",..) resolving directly (unused today, kept
+            // for shape-compatibility with other update() callers).
+            return { eq: () => ({ neq: () => Promise.resolve({ data: null, error: null }) }) };
           },
         };
       }
@@ -533,5 +566,164 @@ describe("materializeBlastAudience", () => {
     const result = await materializeBlastAudience("tenant-1", "blast-1", "user-1");
 
     expect(result.ok).toBe(false);
+  });
+});
+
+// emailBlastSend — draft/queued race regression. There's no atomicity between
+// send/route.ts's inngest.send() and its own status update to 'queued', so
+// this run's very first step (load-blast) can observe the row as EITHER
+// 'draft' or 'queued'. These tests exercise the REAL handler (captured via
+// the inngest.createFunction mock above) end-to-end with a fake `step` that
+// runs each step.run() callback immediately, to prove the fix actually closes
+// the gap rather than just unit-testing materializeBlastAudience in isolation.
+interface FakeMessageRow {
+  id: string;
+  status: string;
+  source: string;
+  source_id: string;
+}
+
+function makeBlastTable(blast: Record<string, unknown>) {
+  function updateNode(patch: Record<string, unknown>, filters: Array<() => boolean>) {
+    return {
+      eq: (col: string, val: unknown) => updateNode(patch, [...filters, () => col === "id" || blast[col] === val]),
+      neq: (col: string, val: unknown) => updateNode(patch, [...filters, () => col === "id" || blast[col] !== val]),
+      in: (col: string, vals: unknown[]) => updateNode(patch, [...filters, () => col === "id" || vals.includes(blast[col])]),
+      then: (resolve: (v: { data: null; error: null }) => unknown, reject: (e: unknown) => unknown) => {
+        if (filters.every((f) => f())) Object.assign(blast, patch);
+        return Promise.resolve({ data: null, error: null }).then(resolve, reject);
+      },
+    };
+  }
+  return {
+    select: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: { ...blast }, error: null }) }) }),
+    update: (patch: Record<string, unknown>) => updateNode(patch, []),
+  };
+}
+
+function makeMessagesTable(messages: FakeMessageRow[]) {
+  return {
+    select: (cols: string) => {
+      function node(filters: Array<(r: FakeMessageRow) => boolean>) {
+        const shape = (r: FakeMessageRow) => (cols === "status" ? { status: r.status } : { id: r.id });
+        return {
+          eq: (col: keyof FakeMessageRow, val: unknown) => node([...filters, (r) => r[col] === val]),
+          order: () => node(filters),
+          limit: (n: number) => Promise.resolve({ data: messages.filter((r) => filters.every((f) => f(r))).slice(0, n).map(shape), error: null }),
+          range: (from: number, to: number) =>
+            Promise.resolve({ data: messages.filter((r) => filters.every((f) => f(r))).slice(from, to + 1).map(shape), error: null }),
+        };
+      }
+      return node([]);
+    },
+    upsert: (rows: Record<string, unknown>[]) => {
+      for (const row of rows) {
+        messages.push({ id: `msg-${messages.length}`, status: row.status as string, source: row.source as string, source_id: row.source_id as string });
+      }
+      return Promise.resolve({ data: null, error: null });
+    },
+  };
+}
+
+function fakeHandlerDb(initialStatus: string) {
+  const blast: Record<string, unknown> = {
+    id: "blast-1",
+    status: initialStatus,
+    scheduled_for: null,
+    subject_template: "Hi {{first_name}}",
+    body_template: "<p>Hi {{first_name}}</p>",
+    from_name_override: null,
+    audience_filter: null,
+  };
+  const messages: FakeMessageRow[] = [];
+
+  const db = {
+    raw: () => ({
+      from: (table: string) => {
+        if (table === "tenants") {
+          return { select: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: { name: "Test Tenant" }, error: null }) }) }) };
+        }
+        throw new Error(`unexpected raw() table: ${table}`);
+      },
+    }),
+    from(table: string) {
+      if (table === "email_blasts") return makeBlastTable(blast);
+      if (table === "email_messages") return makeMessagesTable(messages);
+      if (table === "tenant_email_settings") return { select: () => ({ maybeSingle: () => Promise.resolve({ data: null, error: null }) }) };
+      throw new Error(`unexpected table: ${table}`);
+    },
+  };
+  return { db, blast, messages };
+}
+
+describe("emailBlastSend — draft/queued race regression", () => {
+  beforeEach(async () => {
+    scopedClientForTenantMock.mockReset();
+    buildUserAuthContextMock.mockReset();
+    resolveAudienceMock.mockReset();
+    sendQueuedEmailBatchMock.mockReset();
+    inngestSendMock.mockReset();
+    // Ensure the handler is captured — a no-op if an earlier test already
+    // triggered the module's top-level createFunction() call.
+    await import("./email-blast-send");
+  });
+
+  it("load-blast observing 'draft' (the race) still materializes exactly once, and the blast finishes normally instead of getting stuck", async () => {
+    const fake = fakeHandlerDb("draft");
+    scopedClientForTenantMock.mockResolvedValue(fake.db);
+    buildUserAuthContextMock.mockResolvedValue(FULL_AUTH);
+    resolveAudienceMock.mockResolvedValue({
+      ok: true,
+      audience: {
+        matched: 1,
+        sendable: [audienceRow("lead-1", "a@example.com")],
+        suppressed: [],
+        excluded: { noEmail: 0, malformed: 0, suppressed: 0, duplicateEmail: 0 },
+      },
+    });
+    sendQueuedEmailBatchMock.mockImplementation(async (_tenantId: string, ids: string[]) => {
+      for (const id of ids) {
+        const row = fake.messages.find((m) => m.id === id);
+        if (row) row.status = "sent";
+      }
+      return { sent: ids.length, failed: 0, suppressed: 0, throttled: 0 };
+    });
+
+    await capturedHandler!({ event: { data: { tenantId: "tenant-1", blastId: "blast-1", senderId: "user-1" } }, step: fakeStep() });
+
+    // Materialize ran exactly once despite load-blast seeing 'draft', not 'queued'.
+    expect(resolveAudienceMock).toHaveBeenCalledTimes(1);
+    expect(buildUserAuthContextMock).toHaveBeenCalledTimes(1);
+    expect(fake.messages).toHaveLength(1);
+    // The blast finished cleanly — confirm-queued closed the gap instead of
+    // leaving it stuck at 'draft' forever.
+    expect(fake.blast.status).toBe("sent");
+  });
+
+  it("a throttle-resume run (status='throttled') never re-triggers materialize", async () => {
+    const fake = fakeHandlerDb("throttled");
+    scopedClientForTenantMock.mockResolvedValue(fake.db);
+
+    await capturedHandler!({ event: { data: { tenantId: "tenant-1", blastId: "blast-1" } }, step: fakeStep() });
+
+    expect(resolveAudienceMock).not.toHaveBeenCalled();
+    expect(buildUserAuthContextMock).not.toHaveBeenCalled();
+  });
+
+  it("mark-failed-no-audience's .neq(\"status\",\"cancelled\") guard never clobbers a blast cancelled mid-materialize", async () => {
+    const fake = fakeHandlerDb("queued");
+    scopedClientForTenantMock.mockResolvedValue(fake.db);
+    buildUserAuthContextMock.mockResolvedValue(FULL_AUTH);
+    // Simulates /cancel landing at the exact moment materialize is resolving
+    // the audience — by the time mark-failed-no-audience's update runs, the
+    // row is already 'cancelled', not 'queued' or 'draft'.
+    resolveAudienceMock.mockImplementation(async () => {
+      fake.blast.status = "cancelled";
+      return { ok: false, errors: { audience_filter: ["no longer valid"] } };
+    });
+
+    await capturedHandler!({ event: { data: { tenantId: "tenant-1", blastId: "blast-1", senderId: "user-1" } }, step: fakeStep() });
+
+    expect(fake.blast.status).toBe("cancelled"); // never overwritten to 'failed'
   });
 });

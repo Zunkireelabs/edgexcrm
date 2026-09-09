@@ -94,14 +94,26 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
   // against THIS id, never blast.created_by (nullable, wiped on account
   // deletion; also just the wrong person when someone other than the
   // drafter is the one sending). See that function's header comment.
+  //
+  // There's no atomicity between the emit above and the update below, so the
+  // worker can start (and even finish) before this update ever runs — it can
+  // observe 'draft' at its own load-blast step (handled on that side by
+  // treating 'draft' as an equivalent fresh-run signal and a later
+  // confirm-queued step, see email-blast-send.ts), or it can race AHEAD and
+  // advance the blast past 'draft' entirely before this write lands. The
+  // .eq("status","draft") + maybeSingle() below guards the second case: if
+  // zero rows match, the worker already won and this update is not needed —
+  // return its current (worker-advanced) state instead of clobbering it back
+  // to 'queued'.
   await inngest.send({ name: "email/blast.send", data: { tenantId: auth.tenantId, blastId: id, senderId: auth.userId } });
 
   const { data: updated, error: updateError } = await db
     .from("email_blasts")
     .update({ status: "queued", started_at: new Date().toISOString() })
     .eq("id", id)
+    .eq("status", "draft")
     .select("*")
-    .single();
+    .maybeSingle();
 
   if (updateError) {
     log.error({ err: updateError, blastId: id }, "Failed to update blast status after handing off to the background worker");
@@ -110,6 +122,25 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       `Blast was queued for background send but its status could not be updated — check email_blasts directly (ref: ${requestId})`,
       503
     );
+  }
+
+  if (!updated) {
+    // Not a DB error — zero rows matched .eq("status","draft") because the
+    // background worker already advanced this blast past 'draft' before this
+    // write landed. That's a successful handoff, not a failure: return the
+    // blast's actual current (worker-advanced) state rather than clobbering
+    // it back to 'queued'.
+    const { data: current, error: refetchError } = await db.from("email_blasts").select("*").eq("id", id).maybeSingle();
+    if (refetchError || !current) {
+      log.error({ err: refetchError, blastId: id }, "Blast handed off but its current status could not be confirmed");
+      return apiError(
+        "SERVICE_UNAVAILABLE",
+        `Blast was queued for background send but its current status could not be confirmed (ref: ${requestId})`,
+        503
+      );
+    }
+    log.info({ blastId: id }, "email blast handed off to the background worker (worker already advanced status before this request's own update landed)");
+    return apiSuccess({ blast: current });
   }
 
   log.info({ blastId: id }, "email blast handed off to the background worker");

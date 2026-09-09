@@ -55,12 +55,19 @@ function fakeDb(opts: { blastStatus?: string; updateFails?: boolean } = {}) {
           select: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: { ...blastRow }, error: null }) }) }),
           update: (patch: Record<string, unknown>) => ({
             eq: () => ({
-              select: () => ({
-                single: () => {
-                  if (opts.updateFails) return Promise.resolve({ data: null, error: { message: "connection reset" } });
-                  Object.assign(blastRow, patch);
-                  return Promise.resolve({ data: { ...blastRow }, error: null });
-                },
+              // Second .eq() is the new .eq("status","draft") precondition
+              // (route.ts) — models a real PostgREST update: it only applies
+              // the patch (and only matches a row) when blastRow.status
+              // equals the value being filtered on.
+              eq: (_col: string, val: string) => ({
+                select: () => ({
+                  maybeSingle: () => {
+                    if (opts.updateFails) return Promise.resolve({ data: null, error: { message: "connection reset" } });
+                    if (blastRow.status !== val) return Promise.resolve({ data: null, error: null });
+                    Object.assign(blastRow, patch);
+                    return Promise.resolve({ data: { ...blastRow }, error: null });
+                  },
+                }),
               }),
             }),
           }),
@@ -164,5 +171,28 @@ describe("POST /api/v1/email-blasts/[id]/send", () => {
     // up even though the client sees an error here (see the route's ordering
     // comment: emit-then-update, not update-then-emit).
     expect(inngestSendMock).toHaveBeenCalledTimes(1);
+  });
+
+  // Race regression: there's no atomicity between inngest.send() and this
+  // route's own status update, so the worker can start (and even finish)
+  // before this update runs. Simulates the worker racing all the way ahead
+  // and advancing the blast past 'draft' inside the inngest.send() call
+  // itself, standing in for "by the time this request's update fires, the
+  // worker already got there first."
+  it("returns success without clobbering a blast the worker already advanced past 'draft'", async () => {
+    const fake = fakeDb();
+    requireEmailCampaignsAccessMock.mockResolvedValue({ ok: true, auth: AUTH, db: fake.db });
+    inngestSendMock.mockImplementation(() => {
+      fake.blastRow.status = "sending"; // the worker won the race
+      return Promise.resolve();
+    });
+
+    const { POST } = await import("./route");
+    const res = await POST(fakeReq(), { params });
+    const body = (await res.json()) as { data: { blast: { status: string } } };
+
+    expect(res.status).toBe(200);
+    // Not reset back to 'queued' — the worker's advanced state is preserved.
+    expect(body.data.blast.status).toBe("sending");
   });
 });

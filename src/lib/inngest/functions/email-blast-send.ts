@@ -333,7 +333,8 @@ export async function materializeBlastAudience(tenantId: string, blastId: string
   await db
     .from("email_blasts")
     .update({ recipients_total: audience.sendable.length + audience.suppressed.length, recipients_suppressed: audience.suppressed.length })
-    .eq("id", blastId);
+    .eq("id", blastId)
+    .neq("status", "cancelled");
 
   return { ok: true, sendable: audience.sendable.length, suppressed: audience.suppressed.length };
 }
@@ -388,16 +389,23 @@ export const emailBlastSend = inngest.createFunction(
       return { blastId, ...outcome };
     }
 
-    // Materialize the audience — ONLY on this blast's first run (status is
-    // 'queued', set once by send/route.ts's handoff, before this function
-    // ever sleeps or loops). A resumed run after a throttle cycle re-enters
-    // here with status 'throttled' and must NOT re-resolve/re-materialize:
-    // the audience was already snapshotted on the first run, and re-running
-    // this every cycle would waste a full audience resolution and risk
-    // silently growing recipients_total if new leads started matching the
-    // filter in between cycles — the loop below only ever sends rows already
-    // materialized as 'queued', by design.
-    if (blast.status === "queued") {
+    // Materialize the audience — ONLY on this blast's first run. A fresh run
+    // can observe the row as EITHER 'draft' or 'queued' here, depending on
+    // which of send/route.ts's own two writes (inngest.send(), then its
+    // status update to 'queued') this step's read happened to race against —
+    // there is no atomicity between them, so neither order is guaranteed.
+    // Both states mean the same thing: this is a fresh send, not a resume.
+    // A resumed run after a throttle cycle re-enters here with status
+    // 'throttled' (set by mark-throttled below, before the resume event is
+    // ever re-emitted) and must NOT re-resolve/re-materialize: the audience
+    // was already snapshotted on the first run, and re-running this every
+    // cycle would waste a full audience resolution and risk silently growing
+    // recipients_total if new leads started matching the filter in between
+    // cycles — the loop below only ever sends rows already materialized as
+    // 'queued', by design. See the confirm-queued step below for how the row
+    // is normalized to 'queued' before mark-sending runs, regardless of
+    // which of 'draft'/'queued' was observed here.
+    if (blast.status === "queued" || blast.status === "draft") {
       // senderId is always present on the fresh event that sets 'queued'
       // (send/route.ts always includes it) — this guard exists only so a
       // malformed/hand-fired event fails loudly as a real error instead of
@@ -409,7 +417,7 @@ export const emailBlastSend = inngest.createFunction(
             .from("email_blasts")
             .update({ status: "failed", recipients_total: 0, completed_at: new Date().toISOString() })
             .eq("id", blastId)
-            .eq("status", "queued");
+            .neq("status", "cancelled");
         });
         logger.error({ tenantId, blastId }, "[email-blast-send] event carried no senderId — blast marked failed");
         return { blastId, failed: true, reason: "event carried no senderId" };
@@ -417,17 +425,21 @@ export const emailBlastSend = inngest.createFunction(
 
       const materializeOutcome = await step.run("materialize-audience", () => materializeBlastAudience(tenantId, blastId, senderId));
       if (!materializeOutcome.ok) {
-        // .eq("status", "queued") (not a blanket update) so a /cancel that
-        // raced this step and already flipped the blast to 'cancelled' is
-        // never overwritten back to 'failed' — same F-1 invariant
-        // finalizeEmailBlast enforces elsewhere in this file.
+        // .neq("status", "cancelled") (not a blanket update) so a /cancel
+        // that raced this step and already flipped the blast to 'cancelled'
+        // is never overwritten back to 'failed' — same F-1 invariant
+        // finalizeEmailBlast enforces elsewhere in this file. Not
+        // .eq("status","queued"): the row here can legitimately still be
+        // 'draft' (see comment above), so a queued-only filter would
+        // silently no-op and leave the blast stuck instead of marking it
+        // failed.
         await step.run("mark-failed-no-audience", async () => {
           const db = await scopedClientForTenant(tenantId);
           await db
             .from("email_blasts")
             .update({ status: "failed", recipients_total: 0, completed_at: new Date().toISOString() })
             .eq("id", blastId)
-            .eq("status", "queued");
+            .neq("status", "cancelled");
         });
         logger.error({ tenantId, blastId, error: materializeOutcome.error }, "[email-blast-send] failed to materialize audience — blast marked failed");
         return { blastId, failed: true, reason: materializeOutcome.error };
@@ -454,6 +466,24 @@ export const emailBlastSend = inngest.createFunction(
         });
         const outcome = await step.run("finalize-post-materialize-cancel", () => finalizeEmailBlast(tenantId, blastId));
         return { blastId, ...outcome };
+      }
+
+      // If load-blast (this run's very first step, above) raced ahead of
+      // send/route.ts's own status-flip and observed 'draft' instead of
+      // 'queued', normalize the row to 'queued' now — before mark-sending
+      // below, whose .in(["queued","throttled"]) filter assumes the row is
+      // never still 'draft' at that point. No-op (skipped entirely) when
+      // send/route.ts already won that race and the row was already
+      // 'queued' at load-blast time — the common case pays nothing extra.
+      if (blast.status === "draft") {
+        await step.run("confirm-queued", async () => {
+          const db = await scopedClientForTenant(tenantId);
+          await db
+            .from("email_blasts")
+            .update({ status: "queued", started_at: new Date().toISOString() })
+            .eq("id", blastId)
+            .eq("status", "draft");
+        });
       }
     }
 
