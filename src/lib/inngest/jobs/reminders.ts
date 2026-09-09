@@ -108,7 +108,11 @@ export async function runProjectTaskReminders(): Promise<{ processed: number; no
       assignee_id: string;
     };
     try {
-      await createNotification({
+      // createNotification (src/lib/notifications.ts) logs and returns null on an
+      // insert failure rather than throwing — so a null return, not just a throw,
+      // is a failed delivery. Stamp only when the row actually landed, else the
+      // reminder is lost silently and forever.
+      const notif = await createNotification({
         tenantId: r.tenant_id,
         userId: r.assignee_id,
         type: NotificationTypes.TASK_REMINDER,
@@ -116,6 +120,10 @@ export async function runProjectTaskReminders(): Promise<{ processed: number; no
         message: r.title,
         link: r.project_id ? `/projects/${r.project_id}` : "/tasks",
       });
+      if (!notif) {
+        logger.error({ taskId: r.id }, "reminders run: notification insert failed — not stamping");
+        continue;
+      }
       notified++;
       processedIds.push(r.id); // stamp only after confirmed delivery
     } catch (err) {
@@ -124,13 +132,18 @@ export async function runProjectTaskReminders(): Promise<{ processed: number; no
     }
   }
 
-  if (processedIds.length > 0) {
+  // Chunk the stamp: .in() with up to 500 UUIDs is ~18KB of query string, and
+  // this repo has hit undici request-size overflow at >440 ids before (silently
+  // empty result). An unstamped row here re-notifies every 15 minutes forever,
+  // so cap the batch at 100.
+  for (let i = 0; i < processedIds.length; i += 100) {
+    const chunk = processedIds.slice(i, i + 100);
     const { error: stampErr } = await supabase
       .from("tasks")
       .update({ reminded_at: nowIso })
-      .in("id", processedIds);
+      .in("id", chunk);
     if (stampErr) {
-      logger.error({ err: stampErr }, "reminders run: failed to stamp tasks.reminded_at");
+      logger.error({ err: stampErr, chunkStart: i }, "reminders run: failed to stamp tasks.reminded_at");
     }
   }
 

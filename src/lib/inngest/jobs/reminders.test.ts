@@ -117,6 +117,17 @@ describe("runProjectTaskReminders", () => {
     expect(stamped).toEqual([]); // never stamped -> next scan retries
   });
 
+  it("a task whose createNotification returns null (insert failed, not thrown) is NOT stamped and is retried", async () => {
+    const { client, stamped } = fakeService([ROW]);
+    createServiceClient.mockResolvedValue(client);
+    createNotification.mockResolvedValue(null); // logs-and-returns-null failure mode
+
+    const res = await runProjectTaskReminders();
+
+    expect(res).toEqual({ processed: 0, notified: 0 });
+    expect(stamped).toEqual([]); // never stamped -> next scan retries
+  });
+
   it("links to /tasks when the task has no project", async () => {
     const { client } = fakeService([{ ...ROW, project_id: null }]);
     createServiceClient.mockResolvedValue(client);
