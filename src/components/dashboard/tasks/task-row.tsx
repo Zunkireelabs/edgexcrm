@@ -32,7 +32,7 @@ interface TaskRowProps {
   timeTrackingEnabled?: boolean;
   /** Active timer id for this task, if one is already running. */
   runningTimerId?: string | null;
-  /** Opens the task detail drawer (Round 2 slice A) — omit to keep the title non-interactive (e.g. lead/deal task lists not yet wired). */
+  /** Opens the task detail drawer (Round 2 slice A) — omit to keep the title non-interactive. */
   onOpenDetail?: (id: string) => void;
   onComplete: (id: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;

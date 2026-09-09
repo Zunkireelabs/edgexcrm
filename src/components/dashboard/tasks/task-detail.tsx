@@ -357,7 +357,7 @@ export function TaskDetailBody({
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Assignee</Label>
-            {mode === "my-tasks" && canEdit ? (
+            {canEdit && (mode === "my-tasks" || isAdmin) ? (
               <AssigneePicker
                 assigneeId={task.assignee_id}
                 team={team}
