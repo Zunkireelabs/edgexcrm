@@ -55,9 +55,12 @@ describe("notifyTaskCompleted", () => {
     await vi.waitFor(() => expect(sendTaskCompletedEmail).toHaveBeenCalled());
   });
 
-  it("links to /tasks when there is no project", () => {
+  // /tasks lists project-linked tasks only, so a project-less task is visible
+  // on Home and nowhere else — linking to /tasks would land the dispatcher on a
+  // page that cannot show the task. Caught on stage during the Round 1 smoke.
+  it("links to /home when there is no project", () => {
     notifyTaskCompleted(ctx(), { taskId: "t1", taskTitle: "Ship", assignedById: "u-dispatch", projectId: null });
-    expect(createNotificationsExcept.mock.calls[0][1][0]).toMatchObject({ link: "/tasks" });
+    expect(createNotificationsExcept.mock.calls[0][1][0]).toMatchObject({ link: "/home" });
   });
 
   it("does not email when the assigner is the actor (self-completion)", async () => {
