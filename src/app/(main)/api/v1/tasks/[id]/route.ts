@@ -16,6 +16,7 @@ import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { NotificationTypes, createNotificationsExcept } from "@/lib/notifications";
+import { notifyTaskAssigned, notifyTaskCompleted } from "@/lib/tasks/dispatch-notify";
 
 const TASK_STATUSES = ["todo", "in_progress", "done"];
 const TASK_PRIORITIES = ["low", "normal", "high", "urgent"];
@@ -96,13 +97,14 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   const db = await scopedClient(auth);
   const { data: existing } = await db
     .from("tasks")
-    .select("id, title, assignee_id, assigned_by_id, project_id")
+    .select("id, title, status, assignee_id, assigned_by_id, project_id")
     .eq("id", id)
     .maybeSingle();
   if (!existing) return apiNotFound("Task");
   const existingTask = existing as unknown as {
     id: string;
     title: string;
+    status: string;
     assignee_id: string | null;
     assigned_by_id: string | null;
     project_id: string | null;
@@ -190,7 +192,31 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     requestId,
   });
 
+  const updatedTask = updated as unknown as { title: string | null; project_id: string | null };
+  const taskTitle = updatedTask.title ?? existingTask.title;
+  const projectId = updatedTask.project_id ?? existingTask.project_id;
+  const notifyCtx = {
+    db,
+    log,
+    tenantId: auth.tenantId,
+    actorUserId: auth.userId,
+    actorEmail: auth.email ?? null,
+    industryId: auth.industryId,
+  };
+
+  // Slice A: a task moving into "done" (and not already there) notifies whoever
+  // assigned it. Skip silently when assigned_by_id is null (self-created tasks).
+  if (patch.status === "done" && existingTask.status !== "done" && existingTask.assigned_by_id) {
+    notifyTaskCompleted(notifyCtx, {
+      taskId: id,
+      taskTitle,
+      assignedById: existingTask.assigned_by_id,
+      projectId,
+    });
+  }
+
   if (reassigning && newAssigneeId && newAssigneeId !== existingTask.assignee_id && newAssigneeId !== auth.userId) {
+    const inAppLink = existingTask.project_id ? `/projects/${existingTask.project_id}` : "/home";
     createNotificationsExcept(auth.userId, [
       {
         tenantId: auth.tenantId,
@@ -198,9 +224,10 @@ export async function PATCH(request: NextRequest, { params }: Props) {
         type: NotificationTypes.TASK_ASSIGNED,
         title: "New task assigned",
         message: existingTask.title,
-        link: existingTask.project_id ? `/projects/${existingTask.project_id}` : "/home",
+        link: inAppLink,
       },
     ]);
+    notifyTaskAssigned(notifyCtx, { taskId: id, taskTitle: existingTask.title, assigneeUserId: newAssigneeId, taskPath: inAppLink });
   }
 
   log.info({ taskId: id }, "Task updated");

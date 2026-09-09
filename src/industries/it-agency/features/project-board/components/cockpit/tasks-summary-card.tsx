@@ -2,20 +2,27 @@
 
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { CheckSquare, Loader2 } from "lucide-react";
+import { CheckSquare, Loader2, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { PriorityPill } from "../priority-pill";
+import { TaskCreateDialog } from "../task-create-dialog";
+import type { TeamMember } from "../../hooks/use-projects";
 import type { Task, TaskPriority } from "@/types/database";
 
 interface TasksSummaryCardProps {
   projectId: string;
+  projectName: string;
+  currentUserId: string;
   onViewAllTasks: () => void;
 }
 
 const PRIORITY_ORDER: Record<TaskPriority, number> = { urgent: 0, high: 1, normal: 2, low: 3 };
 
-export function TasksSummaryCard({ projectId, onViewAllTasks }: TasksSummaryCardProps) {
+export function TasksSummaryCard({ projectId, projectName, currentUserId, onViewAllTasks }: TasksSummaryCardProps) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
+  const [team, setTeam] = useState<TeamMember[]>([]);
+  const [createOpen, setCreateOpen] = useState(false);
 
   useEffect(() => {
     fetch(`/api/v1/projects/${projectId}/tasks`)
@@ -24,6 +31,13 @@ export function TasksSummaryCard({ projectId, onViewAllTasks }: TasksSummaryCard
       .catch(() => toast.error("Failed to load tasks"))
       .finally(() => setLoading(false));
   }, [projectId]);
+
+  useEffect(() => {
+    fetch("/api/v1/team?minimal=1")
+      .then((r) => r.json())
+      .then((json) => setTeam(json.data ?? []))
+      .catch(() => {});
+  }, []);
 
   if (loading) {
     return (
@@ -51,9 +65,15 @@ export function TasksSummaryCard({ projectId, onViewAllTasks }: TasksSummaryCard
 
   return (
     <div className="rounded-lg border bg-card p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <CheckSquare className="h-4 w-4 text-muted-foreground" />
-        <h3 className="text-sm font-semibold">Tasks</h3>
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <div className="flex items-center gap-2">
+          <CheckSquare className="h-4 w-4 text-muted-foreground" />
+          <h3 className="text-sm font-semibold">Tasks</h3>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => setCreateOpen(true)}>
+          <Plus className="h-3.5 w-3.5 mr-1.5" />
+          New task
+        </Button>
       </div>
 
       {total === 0 ? (
@@ -129,6 +149,16 @@ export function TasksSummaryCard({ projectId, onViewAllTasks }: TasksSummaryCard
           </button>
         </div>
       )}
+
+      <TaskCreateDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        projects={[{ id: projectId, name: projectName }]}
+        team={team}
+        currentUserId={currentUserId}
+        lockedProjectId={projectId}
+        onSuccess={(task) => setTasks((prev) => [task, ...prev])}
+      />
     </div>
   );
 }

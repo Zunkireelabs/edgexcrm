@@ -13,6 +13,7 @@ import { createRequestLogger } from "@/lib/logger";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { NotificationTypes, createNotificationsExcept } from "@/lib/notifications";
+import { notifyTaskAssigned, notifyTaskCompleted } from "@/lib/tasks/dispatch-notify";
 
 const TASK_STATUSES = ["todo", "in_progress", "done"];
 const TASK_PRIORITIES = ["low", "normal", "high", "urgent"];
@@ -22,10 +23,12 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 type TaskOwner = {
   id: string;
   title: string;
+  status: string;
   assignee_id: string | null;
   assigned_by_id: string | null;
   lead_id: string | null;
   deal_id: string | null;
+  project_id: string | null;
 };
 
 interface Props {
@@ -78,7 +81,7 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   // scopedClient drops column inference — cast at call site per scoped.ts comment.
   const fetchResult = await db
     .from("tasks")
-    .select("id, title, assignee_id, assigned_by_id, lead_id, deal_id")
+    .select("id, title, status, assignee_id, assigned_by_id, lead_id, deal_id, project_id")
     .eq("id", id)
     .maybeSingle();
   const existing = fetchResult.data as TaskOwner | null;
@@ -139,6 +142,15 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     requestId,
   });
 
+  const notifyCtx = {
+    db,
+    log,
+    tenantId: auth.tenantId,
+    actorUserId: auth.userId,
+    actorEmail: auth.email ?? null,
+    industryId: auth.industryId,
+  };
+
   if (reassigning && newAssigneeId && newAssigneeId !== auth.userId) {
     const link = existing.lead_id
       ? `/leads/${existing.lead_id}`
@@ -155,6 +167,17 @@ export async function PATCH(request: NextRequest, { params }: Props) {
         link,
       },
     ]);
+    notifyTaskAssigned(notifyCtx, { taskId: id, taskTitle: existing.title, assigneeUserId: newAssigneeId, taskPath: link });
+  }
+
+  // Slice A: task completed → notify + email whoever assigned it (dispatch loop).
+  if (patch.status === "done" && existing.status !== "done" && existing.assigned_by_id) {
+    notifyTaskCompleted(notifyCtx, {
+      taskId: id,
+      taskTitle: String(patch.title ?? existing.title),
+      assignedById: existing.assigned_by_id,
+      projectId: existing.project_id,
+    });
   }
 
   log.info({ taskId: id }, "Personal task updated");
