@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { addDays } from "@/lib/hr/dates";
 import { groupTasksByDue } from "@/lib/home/task-grouping";
 import { TIMERS_CHANGED_EVENT } from "@/lib/timers/timer-events";
+import { TASK_CHANGED_EVENT } from "@/lib/tasks/task-events";
 import type { ScheduleActivity, PersonalTask, MyTasksResult, InboxSnapshot, RecentActivityItem, LeaveHomeSummary } from "@/lib/supabase/queries";
 import type { HomeTip } from "@/lib/home/tips";
 import type { Lead, TaskStatus } from "@/types/database";
@@ -92,6 +93,13 @@ export function HomeContent({
   const [taskFilter, setTaskFilter] = useState<FilterKey>("all");
   const [activityFilter, setActivityFilter] = useState("all");
 
+  // Round 2 slice A — clicking a task title navigates to /tasks/<id>,
+  // intercepted as the shared TaskDetailDrawer (docs/IT-AGENCY-ROUND2-TASK-OBJECT-BRIEF.md
+  // §2), which replaced Home's per-row (non-)editing. That drawer lives in
+  // the @modal route, not this component's tree, so this refreshes Home's
+  // server-fetched task lists after an edit made there.
+  const openTaskDetail = useCallback((id: string) => router.push(`/tasks/${id}`), [router]);
+
   const handleComplete = useCallback(async (id: string) => {
     const res = await fetch(`/api/v1/my-tasks/${id}`, {
       method: "PATCH",
@@ -133,11 +141,15 @@ export function HomeContent({
   // refreshes the server data so runningTimersByTask re-seeds and every row
   // corrects itself, instead of each row polling or listening individually.
   useEffect(() => {
-    function onTimersChanged() {
+    function onChanged() {
       router.refresh();
     }
-    window.addEventListener(TIMERS_CHANGED_EVENT, onTimersChanged);
-    return () => window.removeEventListener(TIMERS_CHANGED_EVENT, onTimersChanged);
+    window.addEventListener(TIMERS_CHANGED_EVENT, onChanged);
+    window.addEventListener(TASK_CHANGED_EVENT, onChanged);
+    return () => {
+      window.removeEventListener(TIMERS_CHANGED_EVENT, onChanged);
+      window.removeEventListener(TASK_CHANGED_EVENT, onChanged);
+    };
   }, [router]);
 
   const now = new Date().toISOString();
@@ -207,6 +219,7 @@ export function HomeContent({
                   onDelete={handleDelete}
                   onCreated={handleCreated}
                   onViewAll={() => setActiveTab("tasks")}
+                  onOpenDetail={openTaskDetail}
                 />
               </div>
             </div>
@@ -243,6 +256,7 @@ export function HomeContent({
               onComplete={handleComplete}
               onDelete={handleDelete}
               onCreated={handleCreated}
+              onOpenDetail={openTaskDetail}
             />
           </TabsContent>
 

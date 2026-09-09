@@ -32,6 +32,8 @@ interface TaskRowProps {
   timeTrackingEnabled?: boolean;
   /** Active timer id for this task, if one is already running. */
   runningTimerId?: string | null;
+  /** Opens the task detail drawer (Round 2 slice A) — omit to keep the title non-interactive (e.g. lead/deal task lists not yet wired). */
+  onOpenDetail?: (id: string) => void;
   onComplete: (id: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
 }
@@ -44,6 +46,7 @@ export function TaskRow({
   projectBoardEnabled = false,
   timeTrackingEnabled = false,
   runningTimerId = null,
+  onOpenDetail,
   onComplete,
   onDelete,
 }: TaskRowProps) {
@@ -78,9 +81,19 @@ export function TaskRow({
       </button>
 
       <div className="flex-1 min-w-0">
-        <p className={`text-sm font-medium truncate ${completed ? "line-through text-muted-foreground" : "text-gray-900"}`}>
-          {task.title}
-        </p>
+        {onOpenDetail ? (
+          <button
+            type="button"
+            onClick={() => onOpenDetail(task.id)}
+            className={`text-sm font-medium truncate text-left hover:underline ${completed ? "line-through text-muted-foreground" : "text-gray-900"}`}
+          >
+            {task.title}
+          </button>
+        ) : (
+          <p className={`text-sm font-medium truncate ${completed ? "line-through text-muted-foreground" : "text-gray-900"}`}>
+            {task.title}
+          </p>
+        )}
         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
           {task.due_date && (
             <span className={`text-xs ${isOverdue ? "text-red-600 font-medium" : "text-muted-foreground"}`}>
