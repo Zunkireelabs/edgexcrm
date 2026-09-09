@@ -228,12 +228,12 @@ describe("PATCH /api/v1/tasks/:id — Slice A: TASK_COMPLETED (dispatch loop)", 
     expect(completedNotifs()).toHaveLength(0);
   });
 
-  it("links to /tasks when the task has no project", async () => {
+  it("links to /home when the task has no project", async () => {
     state.task = { id: "t-1", title: "Loose task", status: "in_progress", assignee_id: "u-assignee", assigned_by_id: "u-dispatcher", project_id: null };
     auth.current.userId = "u-assignee";
     auth.current.role = "member";
     await PATCH(req({ status: "done" }), { params });
-    expect(completedNotifs()[0]).toMatchObject({ link: "/tasks" });
+    expect(completedNotifs()[0]).toMatchObject({ link: "/home" });
   });
 });
 
