@@ -158,10 +158,18 @@ very likely need several tuning passes, not one clean implementation.
 ## 6. Open items / things flagged, not silently decided
 
 - **Cloudflare R2 (Phase 0) is a manual, non-code step and is still in progress** as of this
-  writing — account created, but bucket/API token/CORS/env vars not yet done. Phase 1's code does
-  not block on this (built and tested against a mock); real end-to-end testing is owed once
-  credentials exist. `getDocumentStorageProvider()` throws a clear, actionable error if called
-  before the 5 `R2_*` env vars are set — it will not silently do the wrong thing.
+  writing — account created, but bucket/API token/CORS/env vars not yet done. **Currently blocked
+  on: Cloudflare requires a payment card on file before R2 activates at all, even to use the free
+  tier** (10GB storage / 1M "write" ops / 10M "read" ops per month, $0/month unless those limits
+  are exceeded — egress/bandwidth is always free regardless of tier, which is the whole reason R2
+  was picked, see §4). Once a card is added and R2 activates: create the bucket → create an
+  API token scoped to just that bucket (Object Read & Write) → copy the Account ID + Access Key ID
+  + Secret Access Key → set the 5 `R2_*` env vars → (optional but cheap to do at the same time)
+  set the bucket's CORS policy for browser-direct upload, needed by Phase 2's UI, not Phase 1.
+  Phase 1's code does not block on any of this (built and tested against a mock); real
+  end-to-end testing is owed once credentials exist. `getDocumentStorageProvider()` throws a
+  clear, actionable error if called before the 5 `R2_*` env vars are set — it will not silently
+  do the wrong thing.
 - **Inngest execution budget (flagged in the parent plan, relevant from Phase 3 onward).** The
   shared Inngest account is Hobby-tier (50,000 executions/month, shared across staging AND
   production, across every scheduled/event function in the app — not just this feature). Each
