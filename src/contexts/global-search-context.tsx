@@ -49,11 +49,14 @@ const GlobalSearchPalette = dynamic(
 interface GlobalSearchProviderProps {
   children: ReactNode;
   navIndex: NavResult[];
+  /** Round 2 slice B: ⌘K quick-add stamps its own assignee (self). */
+  currentUserId: string;
 }
 
 export function GlobalSearchProvider({
   children,
   navIndex,
+  currentUserId,
 }: GlobalSearchProviderProps) {
   const [isOpen, setIsOpen] = useState(false);
   // Default to ⌘K; updated after mount to avoid hydration mismatch
@@ -93,6 +96,7 @@ export function GlobalSearchProvider({
         isOpen={isOpen}
         onClose={close}
         navIndex={navIndex}
+        currentUserId={currentUserId}
       />
     </GlobalSearchContext.Provider>
   );
