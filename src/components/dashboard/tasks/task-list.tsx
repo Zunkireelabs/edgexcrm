@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { ClipboardList } from "lucide-react";
 import { TaskRow, type TaskRowItem } from "./task-row";
 import { TaskComposer, type TaskComposerContext } from "./task-composer";
@@ -17,9 +18,14 @@ interface TaskListProps {
 }
 
 export function TaskList({ fetchUrl, currentUserId, context, emptyLabel = "No tasks yet.", projectBoardEnabled = false }: TaskListProps) {
+  const router = useRouter();
   const [tasks, setTasks] = useState<TaskRowItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCompleted, setShowCompleted] = useState(false);
+
+  // Opens the shared task detail drawer via the /tasks/[id] intercepting
+  // route (@modal) — same pattern as home-content.tsx / tasks-view.tsx.
+  const openDetail = useCallback((id: string) => router.push(`/tasks/${id}`), [router]);
 
   useEffect(() => {
     let cancelled = false;
@@ -80,6 +86,7 @@ export function TaskList({ fetchUrl, currentUserId, context, emptyLabel = "No ta
               today={today}
               showAssignee
               projectBoardEnabled={projectBoardEnabled}
+              onOpenDetail={openDetail}
               onComplete={handleComplete}
               onDelete={handleDelete}
             />

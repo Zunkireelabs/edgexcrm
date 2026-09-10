@@ -28,6 +28,8 @@ interface TasksTabContentProps {
   onComplete: (id: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onCreated: (task: Record<string, unknown>) => void;
+  /** Opens the task detail drawer (Round 2 slice A). */
+  onOpenDetail: (id: string) => void;
 }
 
 export type FilterKey = "all" | "overdue" | "completed";
@@ -53,6 +55,7 @@ function TaskRow({
   projectBoardEnabled,
   timeTrackingEnabled,
   runningTimerId,
+  onOpenDetail,
   onToggle,
   onDelete,
 }: {
@@ -64,6 +67,7 @@ function TaskRow({
   projectBoardEnabled: boolean;
   timeTrackingEnabled: boolean;
   runningTimerId: string | null;
+  onOpenDetail: (id: string) => void;
   onToggle: () => void;
   onDelete?: () => void;
 }) {
@@ -86,9 +90,13 @@ function TaskRow({
       </button>
 
       <div className="flex-1 min-w-0 flex items-center gap-2">
-        <p className={cn("text-sm truncate", completed ? "line-through text-muted-foreground" : "text-foreground font-medium")}>
+        <button
+          type="button"
+          onClick={() => onOpenDetail(task.id)}
+          className={cn("text-sm truncate text-left hover:underline", completed ? "line-through text-muted-foreground" : "text-foreground font-medium")}
+        >
           {task.title}
-        </p>
+        </button>
         <TaskContextChip task={task} projectBoardEnabled={projectBoardEnabled} />
       </div>
 
@@ -129,6 +137,7 @@ function TaskGroup({
   projectBoardEnabled,
   timeTrackingEnabled,
   runningTimersByTask,
+  onOpenDetail,
   onToggle,
   onDelete,
 }: {
@@ -141,6 +150,7 @@ function TaskGroup({
   projectBoardEnabled: boolean;
   timeTrackingEnabled: boolean;
   runningTimersByTask: Record<string, string>;
+  onOpenDetail: (id: string) => void;
   onToggle: (id: string) => void;
   onDelete: (id: string) => void;
 }) {
@@ -176,6 +186,7 @@ function TaskGroup({
               projectBoardEnabled={projectBoardEnabled}
               timeTrackingEnabled={timeTrackingEnabled}
               runningTimerId={runningTimersByTask[task.id] ?? null}
+              onOpenDetail={onOpenDetail}
               onToggle={() => onToggle(task.id)}
               onDelete={() => onDelete(task.id)}
             />
@@ -199,6 +210,7 @@ export function TasksTabContent({
   onComplete,
   onDelete,
   onCreated,
+  onOpenDetail,
 }: TasksTabContentProps) {
   const [acting, setActing] = useState<string | null>(null);
 
@@ -255,6 +267,7 @@ export function TasksTabContent({
                   projectBoardEnabled={projectBoardEnabled}
                   timeTrackingEnabled={timeTrackingEnabled}
                   runningTimerId={runningTimersByTask[task.id] ?? null}
+                  onOpenDetail={onOpenDetail}
                   onToggle={() => handleComplete(task.id)}
                   onDelete={() => handleDelete(task.id)}
                 />
@@ -304,18 +317,19 @@ export function TasksTabContent({
                   projectBoardEnabled={projectBoardEnabled}
                   timeTrackingEnabled={timeTrackingEnabled}
                   runningTimerId={null}
+                  onOpenDetail={onOpenDetail}
                   onToggle={() => {}}
                 />
               ))}
             </div>
           ) : filter === "overdue" ? (
-            <TaskGroup title="Overdue" tasks={overdue} today={today} tomorrow={tomorrow} acting={acting} projectBoardEnabled={projectBoardEnabled} timeTrackingEnabled={timeTrackingEnabled} runningTimersByTask={runningTimersByTask} onToggle={handleComplete} onDelete={handleDelete} />
+            <TaskGroup title="Overdue" tasks={overdue} today={today} tomorrow={tomorrow} acting={acting} projectBoardEnabled={projectBoardEnabled} timeTrackingEnabled={timeTrackingEnabled} runningTimersByTask={runningTimersByTask} onOpenDetail={onOpenDetail} onToggle={handleComplete} onDelete={handleDelete} />
           ) : (
             <div>
-              <TaskGroup title="Overdue" tasks={overdue} today={today} tomorrow={tomorrow} acting={acting} projectBoardEnabled={projectBoardEnabled} timeTrackingEnabled={timeTrackingEnabled} runningTimersByTask={runningTimersByTask} onToggle={handleComplete} onDelete={handleDelete} />
-              <TaskGroup title="Due today" tasks={dueToday} today={today} tomorrow={tomorrow} acting={acting} projectBoardEnabled={projectBoardEnabled} timeTrackingEnabled={timeTrackingEnabled} runningTimersByTask={runningTimersByTask} onToggle={handleComplete} onDelete={handleDelete} />
-              <TaskGroup title="Due tomorrow" tasks={dueTomorrow} today={today} tomorrow={tomorrow} acting={acting} projectBoardEnabled={projectBoardEnabled} timeTrackingEnabled={timeTrackingEnabled} runningTimersByTask={runningTimersByTask} onToggle={handleComplete} onDelete={handleDelete} />
-              <TaskGroup title="Later" tasks={later} today={today} tomorrow={tomorrow} acting={acting} projectBoardEnabled={projectBoardEnabled} timeTrackingEnabled={timeTrackingEnabled} runningTimersByTask={runningTimersByTask} onToggle={handleComplete} onDelete={handleDelete} />
+              <TaskGroup title="Overdue" tasks={overdue} today={today} tomorrow={tomorrow} acting={acting} projectBoardEnabled={projectBoardEnabled} timeTrackingEnabled={timeTrackingEnabled} runningTimersByTask={runningTimersByTask} onOpenDetail={onOpenDetail} onToggle={handleComplete} onDelete={handleDelete} />
+              <TaskGroup title="Due today" tasks={dueToday} today={today} tomorrow={tomorrow} acting={acting} projectBoardEnabled={projectBoardEnabled} timeTrackingEnabled={timeTrackingEnabled} runningTimersByTask={runningTimersByTask} onOpenDetail={onOpenDetail} onToggle={handleComplete} onDelete={handleDelete} />
+              <TaskGroup title="Due tomorrow" tasks={dueTomorrow} today={today} tomorrow={tomorrow} acting={acting} projectBoardEnabled={projectBoardEnabled} timeTrackingEnabled={timeTrackingEnabled} runningTimersByTask={runningTimersByTask} onOpenDetail={onOpenDetail} onToggle={handleComplete} onDelete={handleDelete} />
+              <TaskGroup title="Later" tasks={later} today={today} tomorrow={tomorrow} acting={acting} projectBoardEnabled={projectBoardEnabled} timeTrackingEnabled={timeTrackingEnabled} runningTimersByTask={runningTimersByTask} onOpenDetail={onOpenDetail} onToggle={handleComplete} onDelete={handleDelete} />
             </div>
           )}
 

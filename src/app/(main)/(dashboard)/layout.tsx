@@ -16,8 +16,13 @@ import type { LeadList } from "@/types/database";
 
 export default async function DashboardLayout({
   children,
+  modal,
 }: {
   children: React.ReactNode;
+  // @modal parallel slot — the task-detail drawer (Round 2 slice A,
+  // docs/IT-AGENCY-ROUND2-TASK-OBJECT-BRIEF.md §2). Empty (@modal/default.tsx
+  // returns null) on every route that isn't an intercepted /tasks/[id] click.
+  modal: React.ReactNode;
 }) {
   const user = await getCachedUser();
 
@@ -138,6 +143,7 @@ export default async function DashboardLayout({
             timeTrackingEnabled={timeTrackingEnabled}
           >
             {children}
+            {modal}
           </DashboardShell>
         </GlobalSearchProvider>
       </SettingsModalProvider>

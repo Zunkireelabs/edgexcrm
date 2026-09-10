@@ -208,11 +208,9 @@ export async function createTaskCore(
 
   let notified = false;
   if (assignedById) {
-    const link = task.lead_id
-      ? `/leads/${task.lead_id}`
-      : task.deal_id
-        ? `/deals/${task.deal_id}`
-        : "/home";
+    // Round 2 slice A: link straight at the task, not the lead/deal/home
+    // fallback — see the dispatch-notify.ts comment on notifyTaskCompleted.
+    const link = `/tasks/${task.id}`;
     createNotificationsExcept(defaultAssigneeId, [
       {
         tenantId,
