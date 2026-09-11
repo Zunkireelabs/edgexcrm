@@ -131,6 +131,24 @@ distinction here for next time: a merge-conflict/build audit is not a substitute
 review of new business logic, and the two should be labeled separately, not bundled under one
 "audited" claim.
 
+## 2b. Second review finding: DELETE never purged R2, leaving orphaned files forever (found in a follow-up review, fixed same day)
+
+**Found by:** a different reviewer pass over PR #530, after §2a's fix had already landed.
+
+**The gap:** `DELETE /documents/[id]` only ever set `deleted_at` on the `applicant_documents` row —
+it never called the storage provider at all. `R2Provider.remove()` existed and was unit-tested, but
+nothing in the DELETE route wired it up. So a "deleted" document's file (a passport, a bank
+statement) stayed sitting in the R2 bucket indefinitely, with the app itself no longer holding any
+reference to it. Not a documented tradeoff like §2a's checksum gap — a genuine miss.
+
+**The fix:** DELETE now purges every version's `storage_key` (not just `current_version_id` — old
+versions are deliberately never deleted on replace, see §4, so they'd otherwise be orphaned forever
+once the parent document is gone) from R2 **before** marking the row deleted, same "verify before
+persist" ordering as §2a: if the R2 purge fails, the document stays fully intact and visible so the
+caller can safely retry, rather than the app claiming "deleted" while sensitive bytes remain in the
+bucket. 3 new tests in `documents/[id]/route.test.ts`, including an explicit failure-path test
+proving the DB update is never reached when the purge fails.
+
 ---
 
 ## 3. Full roadmap (from the parent plan's §14) — what comes after this PR merges
