@@ -100,7 +100,6 @@ export function TaskCreateDialog({
     if (!projectId || !pasteLines || pasteLines.length === 0 || saving) return;
     setSaving(true);
     let created = 0;
-    let lastTask: Task | null = null;
     try {
       for (const lineTitle of pasteLines) {
         const res = await fetch(`/api/v1/projects/${projectId}/tasks`, {
@@ -110,13 +109,12 @@ export function TaskCreateDialog({
         });
         if (res.ok) {
           const { data } = await res.json();
-          lastTask = data as Task;
+          onSuccess(data as Task);
           created++;
         }
       }
       if (created > 0) {
         toast.success(`Created ${created} task${created === 1 ? "" : "s"}`);
-        if (lastTask) onSuccess(lastTask);
         onOpenChange(false);
       }
       if (created < pasteLines.length) {
