@@ -7,7 +7,8 @@
 > `docs/FEATURE-CATALOG.md` and archive this file per the repo's own doc-lifecycle rule (CLAUDE.md
 > § Read first, every session).
 
-**Last updated:** 2026-09-10. **Current state:** Phase 1 built, PR open to `stage`, **not merged**.
+**Last updated:** 2026-09-11. **Current state:** Phase 1 built, PR open to `stage`, **not merged**.
+**R2 is live:** Phase 0 (Cloudflare R2 account/bucket/token) is done — see §6, no longer blocked.
 **Branch:** `feature/applicant-documents-phase1`. **PR:** [#530](https://github.com/Zunkireelabs/edgexcrm/pull/530).
 **Parent plan (source of truth for scope/rationale):** `~/.claude/plans/so-my-new-work-temporal-scott.md`
 ("Applicant Document Intelligence & Agentic RAG — EdgeX") — lives outside this repo (local Claude
@@ -37,9 +38,12 @@ feature at risk. `education_consultancy` only, per this repo's current industry 
       `knowledge_hybrid_search`, service-role only).
 - [x] `DocumentStorageProvider` interface + `R2Provider` implementation
       (`src/lib/documents/storage/`), built on `@aws-sdk/client-s3` +
-      `@aws-sdk/s3-request-presigner`. Unit-tested against a **mocked** S3 client — R2 credentials
-      are not provisioned yet (Cloudflare billing setup is a separate, still-in-progress manual
-      step; see §6).
+      `@aws-sdk/s3-request-presigner`. Unit-tested against a **mocked** S3 client (`r2-provider.test.ts`,
+      the permanent regression suite), **and separately verified for real** against the live
+      `edgex-applicant-documents` R2 bucket on 2026-09-11 — a one-off local smoke script exercised
+      the full upload-URL → PUT → server-side read → download-URL → GET → delete cycle end to end
+      and passed; the script was deleted after (not part of the repo — see §6 for what's
+      permanently recorded).
 - [x] Core CRUD API: `POST /leads/[id]/documents/upload-url`, `POST
       /leads/[id]/documents/[docId]/complete`, `GET /leads/[id]/documents`, `GET/PATCH/DELETE
       /documents/[id]`, `GET /documents/[id]/download-url`, `GET/POST /documents/[id]/versions`.
@@ -157,19 +161,23 @@ very likely need several tuning passes, not one clean implementation.
 
 ## 6. Open items / things flagged, not silently decided
 
-- **Cloudflare R2 (Phase 0) is a manual, non-code step and is still in progress** as of this
-  writing — account created, but bucket/API token/CORS/env vars not yet done. **Currently blocked
-  on: Cloudflare requires a payment card on file before R2 activates at all, even to use the free
-  tier** (10GB storage / 1M "write" ops / 10M "read" ops per month, $0/month unless those limits
-  are exceeded — egress/bandwidth is always free regardless of tier, which is the whole reason R2
-  was picked, see §4). Once a card is added and R2 activates: create the bucket → create an
-  API token scoped to just that bucket (Object Read & Write) → copy the Account ID + Access Key ID
-  + Secret Access Key → set the 5 `R2_*` env vars → (optional but cheap to do at the same time)
-  set the bucket's CORS policy for browser-direct upload, needed by Phase 2's UI, not Phase 1.
-  Phase 1's code does not block on any of this (built and tested against a mock); real
-  end-to-end testing is owed once credentials exist. `getDocumentStorageProvider()` throws a
-  clear, actionable error if called before the 5 `R2_*` env vars are set — it will not silently
-  do the wrong thing.
+- **Cloudflare R2 (Phase 0) — DONE (2026-09-11).** Was blocked on Cloudflare requiring a payment
+  card on file before R2 activates at all, even for the free tier (10GB storage / 1M "write" ops /
+  10M "read" ops per month, $0/month unless those limits are exceeded — egress/bandwidth stays
+  free regardless of tier, the whole reason R2 was picked, see §4). Card added, R2 activated,
+  bucket `edgex-applicant-documents` created (Standard storage class, private/no public access,
+  Automatic/Asia-Pacific location), API token created scoped to Object Read & Write on just that
+  one bucket (least-privilege — not "all buckets"), no expiry. All 5 `R2_*` env vars are set in
+  local `.env.local` (gitignored — not in the repo, not committed anywhere). **Verified for real**,
+  not just against the mock: a local smoke test drove `R2Provider`'s actual code path — signed
+  upload URL → real PUT → server-side `getBytes()` read-back → signed download URL → real GET →
+  delete — against the live bucket, and it passed end to end; the bucket was left empty afterward
+  (test object deleted, nothing orphaned). **CORS policy for browser-direct upload is still
+  not set** — not needed for Phase 1 (no browser code exists yet), but is needed before Phase 2's
+  UI can PUT directly from the browser; add it when Phase 2 starts. **Stage/prod env vars are
+  also still not set** (`R2_*` currently exists only in this local `.env.local`) — needed before
+  this feature can be tested on `dev-lead-crm` or promoted, per this repo's per-environment
+  `.env.local` convention (see CLAUDE.md § Supabase Projects for the same pattern on DB config).
 - **Inngest execution budget (flagged in the parent plan, relevant from Phase 3 onward).** The
   shared Inngest account is Hobby-tier (50,000 executions/month, shared across staging AND
   production, across every scheduled/event function in the app — not just this feature). Each
