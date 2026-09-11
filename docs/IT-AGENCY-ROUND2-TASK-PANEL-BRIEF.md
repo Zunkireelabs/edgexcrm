@@ -4,7 +4,7 @@
 **Executor:** Sonnet session · **Reviewer:** Opus (re-reads the diff, re-runs every gate)
 **Base:** `origin/stage` @ `aedca9bd` (Round 2 slice B)
 **Branch:** `feature/round2-task-panel` — ONE branch, BOTH phases, ONE PR to `stage`
-**Migration:** 231 (Phase 2 only)
+**Migration:** 232 (Phase 2 only)
 
 ---
 
@@ -27,7 +27,7 @@ feature stays dead. Slice C is the panel people would actually live in.
 ### Scope
 
 - **Phase 1 — the redesign.** Presentation and interaction only. No schema.
-- **Phase 2 — comments.** Migration 231 + one route pair + the thread UI + an
+- **Phase 2 — comments.** Migration 232 + one route pair + the thread UI + an
   in-app notification.
 
 Phase 1 lands first because Phase 2's thread has to slot into a finished layout;
@@ -55,7 +55,7 @@ decision for Sadin, not a code fix).
 | `src/app/(main)/api/v1/my-tasks/[id]/route.ts` | the `mode: "my-tasks"` endpoint |
 | `src/components/dashboard/tasks/task-detail.test.tsx` | the existing regression guard you must not break |
 | `src/components/dashboard/tasks/task-row.tsx` | where "overdue" styling already exists — match it |
-| `supabase/migrations/214_email_blasts.sql` | the table + RLS + grants idiom to copy for mig 231 |
+| `supabase/migrations/214_email_blasts.sql` | the table + RLS + grants idiom to copy for mig 232 |
 | `supabase/migrations/_TEMPLATE.sql` | mandatory header + ledger self-record |
 
 Orient with the code graph before grepping (`graphify explain "TaskDetailBody"`).
@@ -244,9 +244,9 @@ keep commit-on-blur — do not make them fire per keystroke.
 
 ## 3. Phase 2 — comments
 
-### 3.1 Migration 231
+### 3.1 Migration 232
 
-`supabase/migrations/231_task_comments.sql`. Copy the header block, RLS shape and
+`supabase/migrations/232_task_comments.sql`. Copy the header block, RLS shape and
 ledger self-record from `214_email_blasts.sql` and `_TEMPLATE.sql`. Every
 statement idempotent.
 
@@ -427,7 +427,7 @@ npm run build
 
 Then the part that is not optional (memory `feedback_no_pr_without_local_verification`):
 
-**Local dev, local Supabase, with a screenshot of each.** Apply mig 231 to the
+**Local dev, local Supabase, with a screenshot of each.** Apply mig 232 to the
 LOCAL Docker Supabase only (`127.0.0.1:54321`) — stage and prod are off-limits to
 this session and to yours; the deploy pipeline applies it to stage on merge.
 
@@ -456,7 +456,7 @@ The body must state, accurately and without overclaiming:
 
 - what changed in the panel, and that authorization is unchanged (quote the five
   expressions from §4.1);
-- that mig 231 rides this PR and is `stage HELD / prod HELD` until the deploy
+- that mig 232 rides this PR and is `stage HELD / prod HELD` until the deploy
   applies it;
 - that comment notifications are **in-app only**, no email;
 - the ten screenshots;

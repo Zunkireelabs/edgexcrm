@@ -1,4 +1,4 @@
--- Migration 231: Task comments (it_agency Round 2 slice C, Phase 2)
+-- Migration 232: Task comments (it_agency Round 2 slice C, Phase 2)
 --
 -- Additive only. Wrap in BEGIN/COMMIT.
 --   Expected before/after row counts: task_comments 0 -> 0 (new empty table).
@@ -56,7 +56,7 @@ CREATE TRIGGER set_task_comments_updated_at
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
 -- REQUIRED: self-record in the ledger (mig 123).
-INSERT INTO public.schema_migrations (version) VALUES ('231_task_comments.sql')
+INSERT INTO public.schema_migrations (version) VALUES ('232_task_comments.sql')
   ON CONFLICT (version) DO NOTHING;
 
 COMMIT;
