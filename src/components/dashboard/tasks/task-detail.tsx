@@ -1,23 +1,51 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { toast } from "sonner";
-import { Loader2, Trash2, UserCircle2 } from "lucide-react";
+import {
+  Loader2,
+  Trash2,
+  UserCircle2,
+  Check,
+  Link2,
+  ExternalLink,
+  MoreHorizontal,
+} from "lucide-react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { TaskStatusBadge } from "@/industries/it-agency/features/time-tracking/components/status-badge";
 import { PriorityPill } from "@/industries/it-agency/features/project-board/components/priority-pill";
 import { AssigneePicker } from "@/industries/it-agency/features/project-board/components/assignee-picker";
 import { TagMultiPicker } from "@/industries/it-agency/features/project-board/components/tag-multi-picker";
 import { TaskContextChip } from "./task-context-chip";
 import { TaskTimerButton } from "./task-timer-button";
+import { TaskDueDateField } from "./task-due-date-field";
+import { TaskComments } from "./task-comments";
 import { notifyTaskChanged } from "@/lib/tasks/task-events";
+import { toLocalDateString } from "@/lib/date";
+import { cn } from "@/lib/utils";
 import type { TaskStatus, TaskPriority } from "@/types/database";
 
 // Round 2 slice A — the task as a first-class object
@@ -33,10 +61,16 @@ import type { TaskStatus, TaskPriority } from "@/types/database";
 // Those two endpoints have genuinely different field support and
 // authorization (see fetchTaskDetail below and the Round 2 report) — this
 // component picks the endpoint pair once, on load, and reuses it for every
-// mutation. Per the brief §4, this does NOT change what either PATCH/DELETE
-// accepts or authorizes; it only chooses between the two that already exist.
+// mutation. Per the Round 2 slice A brief §4, this does NOT change what
+// either PATCH/DELETE accepts or authorizes; it only chooses between the two
+// that already exist.
+//
+// Round 2 slice C (docs/IT-AGENCY-ROUND2-TASK-PANEL-BRIEF.md) rebuilt the
+// presentation and interaction of this panel — the `presentation` prop below
+// is the only thing that forks; the rest is one layout for both surfaces.
 
 export type TaskDetailMode = "tasks" | "my-tasks";
+export type TaskDetailPresentation = "drawer" | "page";
 
 export interface TaskDetailTask {
   id: string;
@@ -61,7 +95,7 @@ export interface TaskDetailTask {
   deals: { id: string; name: string } | null;
 }
 
-interface TeamMember {
+export interface TeamMember {
   user_id: string;
   name: string;
 }
@@ -112,6 +146,8 @@ export interface TaskDetailBodyProps {
   isAdmin: boolean;
   /** tenantData.permissions.canManageProjects — the it_agency delivery admin gate DELETE /api/v1/tasks/[id] actually checks (distinct from `isAdmin`). */
   canManageProjects: boolean;
+  /** "drawer" (default) for the @modal intercepting route, "page" for the /tasks/[id] cold load. Decides only the two header affordances that differ (open-in-new-tab, and clearing the Sheet's own close button) — the rest of the layout is identical. */
+  presentation?: TaskDetailPresentation;
   /** Already-running timer id for this task, if the caller happens to know it (e.g. from ActiveTimersProvider). Unknown callers pass nothing. */
   initialTimerId?: string | null;
   onChanged?: () => void;
@@ -123,6 +159,7 @@ export function TaskDetailBody({
   currentUserId,
   isAdmin,
   canManageProjects,
+  presentation = "drawer",
   initialTimerId = null,
   onChanged,
   onDeleted,
@@ -133,11 +170,13 @@ export function TaskDetailBody({
   const [task, setTask] = useState<TaskDetailTask | null>(null);
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [poolTags, setPoolTags] = useState<string[]>([]);
-  const [busy, setBusy] = useState(false);
   const [titleInput, setTitleInput] = useState("");
   const [descInput, setDescInput] = useState("");
+  const [editingDesc, setEditingDesc] = useState(false);
   const [estimateInput, setEstimateInput] = useState("");
-  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [completing, setCompleting] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const moreButtonRef = useRef<HTMLButtonElement>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -182,9 +221,13 @@ export function TaskDetailBody({
       .catch(() => setPoolTags([]));
   }, [mode]);
 
+  // Optimistic patch (Round 2 slice C §2.7): apply immediately, revert +
+  // toast on failure, merge the authoritative server row on success. Replaces
+  // the old global `busy` disable that froze the whole panel on every edit.
   async function patch(fields: Record<string, unknown>) {
     if (!task || !mode) return;
-    setBusy(true);
+    const snapshot = task;
+    setTask((prev) => (prev ? { ...prev, ...fields } as TaskDetailTask : prev));
     try {
       const url = mode === "tasks" ? `/api/v1/tasks/${task.id}` : `/api/v1/my-tasks/${task.id}`;
       const res = await fetch(url, {
@@ -194,20 +237,31 @@ export function TaskDetailBody({
       });
       const json = await res.json();
       if (!res.ok) {
+        setTask(snapshot);
         toast.error(json.error?.message ?? "Failed to update task");
         return;
       }
       setTask((prev) => (prev ? { ...prev, ...(json.data as Partial<TaskDetailTask>) } : prev));
       onChanged?.();
       notifyTaskChanged();
+    } catch {
+      setTask(snapshot);
+      toast.error("Failed to update task");
+    }
+  }
+
+  async function toggleComplete() {
+    if (!task) return;
+    setCompleting(true);
+    try {
+      await patch({ status: task.status === "done" ? "todo" : "done" });
     } finally {
-      setBusy(false);
+      setCompleting(false);
     }
   }
 
   async function handleDelete() {
     if (!task || !mode) return;
-    setBusy(true);
     try {
       const url = mode === "tasks" ? `/api/v1/tasks/${task.id}` : `/api/v1/my-tasks/${task.id}`;
       const res = await fetch(url, { method: "DELETE" });
@@ -220,10 +274,23 @@ export function TaskDetailBody({
       onChanged?.();
       notifyTaskChanged();
       onDeleted?.();
-    } finally {
-      setBusy(false);
-      setDeleteOpen(false);
+    } catch {
+      toast.error("Failed to delete task");
     }
+  }
+
+  function copyLink() {
+    if (!task) return;
+    const url = `${window.location.origin}/tasks/${task.id}`;
+    navigator.clipboard.writeText(url).then(
+      () => toast.success("Link copied"),
+      () => toast.error("Failed to copy link"),
+    );
+  }
+
+  function openInNewTab() {
+    if (!task) return;
+    window.open(`${window.location.origin}/tasks/${task.id}`, "_blank", "noopener");
   }
 
   if (loading) {
@@ -263,6 +330,10 @@ export function TaskDetailBody({
   const assignedByName = task.assigned_by_id ? team.find((m) => m.user_id === task.assigned_by_id)?.name : null;
   const assigneeName = task.assignee_id ? team.find((m) => m.user_id === task.assignee_id)?.name : null;
 
+  const today = toLocalDateString(new Date());
+  const overdue = !!task.due_date && task.due_date < today && task.status !== "done";
+  const isDone = task.status === "done";
+
   function commitTitle() {
     const trimmed = titleInput.trim();
     if (!trimmed || trimmed === task!.title) {
@@ -288,75 +359,129 @@ export function TaskDetailBody({
 
   return (
     <>
-      {/* Plain elements rather than SheetHeader/SheetTitle/SheetFooter — this
-          body renders both inside a Sheet (the drawer) and inside a plain
-          page shell (the full page), and SheetTitle is a Radix Dialog.Title
-          that expects a Dialog context the page doesn't have. */}
-      <div className="flex flex-col gap-1.5 p-4">
-        <h2 className="text-foreground font-semibold pr-8">
-          {canEditTitle ? (
-            <Input
-              value={titleInput}
-              onChange={(e) => setTitleInput(e.target.value)}
-              onBlur={commitTitle}
-              disabled={busy}
-              className="text-base font-semibold border-transparent hover:border-input focus-visible:border-input -mx-3 h-auto py-1"
-            />
-          ) : (
-            <span>{task.title}</span>
-          )}
-        </h2>
-        <div className="flex items-center gap-2 flex-wrap text-xs">
-          {canEdit ? (
-            <Select value={task.status} onValueChange={(v) => patch({ status: v as TaskStatus })}>
-              <SelectTrigger className="h-6 text-xs w-auto gap-1">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {TASK_STATUS_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value} className="text-xs">
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ) : (
-            <TaskStatusBadge status={task.status} />
-          )}
-          <PriorityPill
-            priority={task.priority}
-            onChange={canEdit ? (p) => patch({ priority: p }) : undefined}
-            readOnly={!canEdit}
-          />
-          <TaskContextChip
-            task={{ projects: task.projects, leads: task.leads, deals: task.deals }}
-            projectBoardEnabled={mode === "tasks"}
-          />
-        </div>
+      {/* Top bar — outside the scroll area, so it reads as sticky without
+          position:sticky. pr-10 (drawer only) clears SheetContent's own
+          absolute-positioned close button at top-4 right-4; the page variant
+          has no such button and doesn't need the clearance. */}
+      <div className={cn("flex items-center justify-between gap-2 p-4", presentation === "drawer" && "pr-10")}>
+        {canEdit ? (
+          <Button
+            size="sm"
+            variant={isDone ? "default" : "outline"}
+            disabled={completing}
+            onClick={toggleComplete}
+            className={isDone ? "bg-green-600 text-white hover:bg-green-600/90" : undefined}
+          >
+            {completing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+            {isDone ? "Completed" : "Mark complete"}
+          </Button>
+        ) : (
+          <span
+            className={cn(
+              "inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-md",
+              isDone ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-600",
+            )}
+          >
+            {isDone && <Check className="h-3 w-3" />}
+            {isDone ? "Completed" : "Not completed"}
+          </span>
+        )}
+
+        <TooltipProvider>
+          <div className="flex items-center gap-0.5">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" aria-label="Copy link" onClick={copyLink}>
+                  <Link2 className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Copy link</TooltipContent>
+            </Tooltip>
+
+            {presentation === "drawer" && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" aria-label="Open in new tab" onClick={openInNewTab}>
+                    <ExternalLink className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Open in new tab</TooltipContent>
+              </Tooltip>
+            )}
+
+            {canDelete && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button ref={moreButtonRef} variant="ghost" size="icon" aria-label="More actions">
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem variant="destructive" onClick={() => setDeleteConfirmOpen(true)}>
+                    <Trash2 className="h-4 w-4" />
+                    Delete task
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
+        </TooltipProvider>
       </div>
 
-      <div className="px-4 flex-1 overflow-y-auto space-y-4">
-        <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground">Description</Label>
-          {canEdit ? (
-            <Textarea
-              value={descInput}
-              onChange={(e) => setDescInput(e.target.value)}
-              onBlur={commitDescription}
-              disabled={busy}
-              rows={3}
-              placeholder="Add a description…"
+      <div className="flex-1 overflow-y-auto">
+        {/* Plain <h1>, not SheetTitle — this body renders both inside a Sheet
+            (the drawer) and inside a plain page shell (the full page), and
+            SheetTitle is a Radix Dialog.Title that expects a Dialog context
+            the page doesn't have. */}
+        <div className="flex flex-col gap-1.5 px-4 pb-3">
+          <h1 className="text-lg font-semibold text-foreground">
+            {canEditTitle ? (
+              <Input
+                value={titleInput}
+                onChange={(e) => setTitleInput(e.target.value)}
+                onBlur={commitTitle}
+                className="text-lg font-semibold border-transparent hover:border-input focus-visible:border-input -mx-3 h-auto py-1"
+              />
+            ) : (
+              <span>{task.title}</span>
+            )}
+          </h1>
+          <div className="flex items-center gap-2 flex-wrap text-xs">
+            {canEdit ? (
+              <Select value={task.status} onValueChange={(v) => patch({ status: v as TaskStatus })}>
+                <SelectTrigger className="h-6 text-xs w-auto gap-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TASK_STATUS_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value} className="text-xs">
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <TaskStatusBadge status={task.status} />
+            )}
+            <PriorityPill
+              priority={task.priority}
+              onChange={canEdit ? (p) => patch({ priority: p }) : undefined}
+              readOnly={!canEdit}
             />
-          ) : (
-            <p className="text-sm text-foreground whitespace-pre-wrap">
-              {task.description || <span className="text-muted-foreground italic">No description.</span>}
-            </p>
-          )}
+            <TaskContextChip
+              task={{ projects: task.projects, leads: task.leads, deals: task.deals }}
+              projectBoardEnabled={mode === "tasks"}
+            />
+          </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Assignee</Label>
+        <Separator />
+
+        {/* Metadata — label -> value rows, not a form grid. Single column
+            below sm: so the panel still works at 320px. */}
+        <div className="px-4 py-3 grid grid-cols-1 sm:grid-cols-[7rem_1fr] gap-y-2 sm:gap-y-1 items-center">
+          <div className="text-xs text-muted-foreground pt-2 sm:pt-0">Assignee</div>
+          <div className="min-h-10 flex items-center">
             {canEdit && (mode === "my-tasks" || isAdmin) ? (
               <AssigneePicker
                 assigneeId={task.assignee_id}
@@ -365,13 +490,11 @@ export function TaskDetailBody({
                 showName
               />
             ) : mode === "tasks" && !isAdmin && isUnassigned ? (
-              <Button size="sm" variant="outline" disabled={busy} onClick={() => patch({ assignee_id: currentUserId })}>
+              <Button size="sm" variant="outline" onClick={() => patch({ assignee_id: currentUserId })}>
                 Claim this task
               </Button>
             ) : task.assignee_id ? (
-              <div className="flex items-center gap-1.5">
-                <AssigneePicker assigneeId={task.assignee_id} team={team} onChange={() => {}} disabled showName />
-              </div>
+              <AssigneePicker assigneeId={task.assignee_id} team={team} onChange={() => {}} disabled showName />
             ) : (
               <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
                 <UserCircle2 className="h-4 w-4" />
@@ -380,118 +503,150 @@ export function TaskDetailBody({
             )}
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="task-due" className="text-xs text-muted-foreground">
-              Due date
-            </Label>
-            {canEdit ? (
-              <input
-                id="task-due"
-                type="date"
-                value={task.due_date ?? ""}
-                disabled={busy}
-                onChange={(e) => patch({ due_date: e.target.value || null })}
-                className="w-full text-sm border border-input rounded-md px-2 py-1.5 bg-transparent focus:outline-none focus:ring-1 focus:ring-ring"
-              />
-            ) : (
-              <p className="text-sm text-foreground">{task.due_date ?? "—"}</p>
-            )}
+          <div className="text-xs text-muted-foreground pt-2 sm:pt-0">Due date</div>
+          <div className="min-h-10 flex items-center">
+            <TaskDueDateField
+              value={task.due_date}
+              onChange={(v) => patch({ due_date: v })}
+              canEdit={canEdit}
+              overdue={overdue}
+            />
           </div>
-        </div>
 
-        {mode === "tasks" && (
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="task-est" className="text-xs text-muted-foreground">
-                Estimated hours
-              </Label>
-              {canEdit ? (
-                <Input
-                  id="task-est"
-                  type="number"
-                  min="0"
-                  step="0.25"
-                  value={estimateInput}
-                  disabled={busy}
-                  onChange={(e) => setEstimateInput(e.target.value)}
-                  onBlur={commitEstimate}
-                  placeholder="e.g. 1.5"
-                />
-              ) : (
-                <p className="text-sm text-foreground">{estimateInput || "—"}</p>
-              )}
-            </div>
+          {mode === "tasks" && (
+            <>
+              <div className="text-xs text-muted-foreground pt-2 sm:pt-0">Estimate</div>
+              <div className="min-h-10 flex items-center">
+                {canEdit ? (
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.25"
+                    value={estimateInput}
+                    onChange={(e) => setEstimateInput(e.target.value)}
+                    onBlur={commitEstimate}
+                    placeholder="No estimate"
+                    className="h-8 w-36 border-transparent hover:border-input focus-visible:border-input -mx-3"
+                  />
+                ) : (
+                  <span className="text-sm text-muted-foreground">
+                    {estimateInput ? `${estimateInput} h` : "No estimate"}
+                  </span>
+                )}
+              </div>
 
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Billable</Label>
-              <div className="flex items-center gap-2 h-9">
+              <div className="text-xs text-muted-foreground pt-2 sm:pt-0">Billable</div>
+              <div className="min-h-10 flex items-center gap-2">
                 <Checkbox
                   checked={task.is_billable}
-                  disabled={busy || !canEditBillable}
+                  disabled={!canEditBillable}
                   onCheckedChange={(checked) => patch({ is_billable: checked === true })}
                 />
                 <span className="text-sm text-muted-foreground">
                   {task.is_billable ? "Billable" : "Not billable"}
                 </span>
               </div>
-            </div>
-          </div>
-        )}
 
-        {mode === "tasks" && (
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Tags</Label>
-            {canEdit ? (
-              <TagMultiPicker
-                value={task.tags}
-                onChange={(next) => patch({ tags: next })}
-                allTags={poolTags}
-                placeholder="+ tag"
-              />
-            ) : task.tags.length > 0 ? (
-              <div className="flex flex-wrap gap-1">
-                {task.tags.map((t) => (
-                  <span key={t} className="text-[11px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600">
-                    {t}
-                  </span>
-                ))}
+              <div className="text-xs text-muted-foreground pt-2 sm:pt-0">Tags</div>
+              <div className="min-h-10 flex items-center">
+                {canEdit ? (
+                  <TagMultiPicker value={task.tags} onChange={(next) => patch({ tags: next })} allTags={poolTags} />
+                ) : task.tags.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {task.tags.map((t) => (
+                      <span key={t} className="text-[11px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-sm text-muted-foreground">Add tags…</span>
+                )}
               </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">—</p>
-            )}
-          </div>
-        )}
+            </>
+          )}
 
-        {task.project_id && (
-          <div className="flex items-center gap-2">
-            <TaskTimerButton taskId={task.id} initialTimerId={initialTimerId} />
-            <span className="text-xs text-muted-foreground">Time tracking</span>
-          </div>
-        )}
+          {task.project_id && (
+            <>
+              <div className="text-xs text-muted-foreground pt-2 sm:pt-0">Time</div>
+              <div className="min-h-10 flex items-center">
+                <TaskTimerButton taskId={task.id} initialTimerId={initialTimerId} />
+              </div>
+            </>
+          )}
+        </div>
 
         <Separator />
 
-        <div className="text-xs text-muted-foreground space-y-0.5">
-          {assignedByName && <p>Assigned by {assignedByName}</p>}
-          {!assignedByName && assigneeName && <p>Assigned to {assigneeName}</p>}
-          <p>Created {new Date(task.created_at).toLocaleDateString()}</p>
+        <div className="px-4 py-3 space-y-1.5">
+          <h3 className="text-xs font-medium text-muted-foreground">Description</h3>
+          {canEdit ? (
+            editingDesc ? (
+              <Textarea
+                autoFocus
+                value={descInput}
+                onChange={(e) => setDescInput(e.target.value)}
+                onBlur={() => {
+                  commitDescription();
+                  setEditingDesc(false);
+                }}
+                rows={4}
+                placeholder="Add a description…"
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={() => setEditingDesc(true)}
+                className="w-full min-h-[5rem] text-left text-sm text-foreground whitespace-pre-wrap rounded-md px-2.5 py-2 -mx-2.5 hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {task.description || <span className="text-muted-foreground italic">Add a description…</span>}
+              </button>
+            )
+          ) : (
+            <p className="text-sm text-foreground whitespace-pre-wrap px-2.5 -mx-2.5">
+              {task.description || <span className="text-muted-foreground italic">No description.</span>}
+            </p>
+          )}
+        </div>
+
+        <Separator />
+
+        <div className="px-4 py-3 text-xs text-muted-foreground">
+          Created {new Date(task.created_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
+          {assignedByName && ` · Assigned by ${assignedByName}`}
+          {!assignedByName && assigneeName && ` · Assigned to ${assigneeName}`}
+        </div>
+
+        <Separator />
+
+        <div className="px-4 py-4">
+          <TaskComments taskId={task.id} currentUserId={currentUserId} isAdmin={isAdmin} team={team} />
         </div>
       </div>
 
-      <div className="mt-auto flex flex-row justify-end gap-2 p-4">
-        {canDelete && (
-          <Button
-            variant="destructive"
-            size="sm"
-            disabled={busy}
-            onClick={() => (deleteOpen ? handleDelete() : setDeleteOpen(true))}
-            onBlur={() => setDeleteOpen(false)}
-          >
-            {busy ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5 mr-1.5" />}
-            {deleteOpen ? "Confirm delete" : "Delete task"}
-          </Button>
-        )}
-      </div>
+      <AlertDialog
+        open={deleteConfirmOpen}
+        onOpenChange={(open) => {
+          setDeleteConfirmOpen(open);
+          if (!open) moreButtonRef.current?.focus();
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this task?</AlertDialogTitle>
+            <AlertDialogDescription>This can&apos;t be undone.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
@@ -521,9 +676,9 @@ export function TaskDetailDrawer({
 }: TaskDetailDrawerProps) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="sm:max-w-md w-full flex flex-col">
+      <SheetContent className="sm:max-w-xl w-full flex flex-col">
         {/* Radix requires a real Dialog.Title descendant for a11y; TaskDetailBody
-            renders its own visible <h2> (shared with the plain-page variant,
+            renders its own visible <h1> (shared with the plain-page variant,
             which has no Dialog context to satisfy this against) so this one
             stays screen-reader-only. */}
         <SheetTitle className="sr-only">Task details</SheetTitle>
@@ -534,6 +689,7 @@ export function TaskDetailDrawer({
             currentUserId={currentUserId}
             isAdmin={isAdmin}
             canManageProjects={canManageProjects}
+            presentation="drawer"
             initialTimerId={initialTimerId}
             onChanged={onChanged}
             onDeleted={() => onOpenChange(false)}
