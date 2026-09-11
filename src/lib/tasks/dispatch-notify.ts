@@ -89,11 +89,11 @@ export function notifyTaskCompleted(
   ctx: TaskNotifyCtx,
   opts: { taskId: string; taskTitle: string; assignedById: string; projectId: string | null },
 ): void {
-  // A task with no project is only ever visible on Home — /tasks lists
-  // project-linked tasks only, so linking there lands the dispatcher on a page
-  // that cannot show the task they were just notified about. Matches the
-  // no-project fallback tasks/[id] and my-tasks/[id] already use for assignment.
-  const link = opts.projectId ? `/projects/${opts.projectId}` : "/home";
+  // Round 2 slice A gave every task a real address — /tasks/<id> now renders
+  // for any task, project-linked or not (docs/IT-AGENCY-ROUND2-TASK-OBJECT-BRIEF.md
+  // §2), so both events link straight at the task instead of the /projects or
+  // /home fallback this superseded (see #526).
+  const link = `/tasks/${opts.taskId}`;
   createNotificationsExcept(ctx.actorUserId, [
     {
       tenantId: ctx.tenantId,

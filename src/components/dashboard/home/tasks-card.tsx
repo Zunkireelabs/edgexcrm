@@ -31,6 +31,8 @@ interface TasksCardProps {
   onCreated: (task: Record<string, unknown>) => void;
   /** Switches Home to the Tasks tab — the canonical surface this card summarizes. */
   onViewAll: () => void;
+  /** Opens the task detail drawer (Round 2 slice A). */
+  onOpenDetail: (id: string) => void;
 }
 
 export function TasksCard({
@@ -44,6 +46,7 @@ export function TasksCard({
   onDelete,
   onCreated,
   onViewAll,
+  onOpenDetail,
 }: TasksCardProps) {
   const tomorrow = addDays(today, 1);
   const { visible, total } = summarizeOpenTasks(initialOpen, today, tomorrow, MAX_VISIBLE);
@@ -69,6 +72,7 @@ export function TasksCard({
                 projectBoardEnabled={projectBoardEnabled}
                 timeTrackingEnabled={timeTrackingEnabled}
                 runningTimerId={runningTimersByTask[task.id] ?? null}
+                onOpenDetail={onOpenDetail}
                 onComplete={onComplete}
                 onDelete={onDelete}
               />
