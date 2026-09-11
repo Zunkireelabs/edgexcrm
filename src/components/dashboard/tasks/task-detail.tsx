@@ -526,7 +526,7 @@ export function TaskDetailBody({
                     onChange={(e) => setEstimateInput(e.target.value)}
                     onBlur={commitEstimate}
                     placeholder="No estimate"
-                    className="h-8 w-28 border-transparent hover:border-input focus-visible:border-input -mx-3"
+                    className="h-8 w-36 border-transparent hover:border-input focus-visible:border-input -mx-3"
                   />
                 ) : (
                   <span className="text-sm text-muted-foreground">
