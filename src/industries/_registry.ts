@@ -57,6 +57,10 @@ export const FEATURES = {
   RESOURCING: "resourcing",
   // Industry-scoped (education_consultancy)
   AFFILIATES: "affiliates",
+  // Industry-scoped (education_consultancy) — Applicant Document Intelligence
+  // Phase 1 (schema + storage + core API only; no sidebar item — surfaces as
+  // a Lead Detail tab in a later phase). See docs/APPLICANT-DOCUMENTS-PHASE1-BRIEF.md.
+  APPLICANT_DOCUMENTS: "applicant-documents",
   // Industry-scoped (it_agency) — email sequencing / cadence engine
   OUTREACH: "outreach",
   // Shared (education_consultancy today; other tenants buy this later — see

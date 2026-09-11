@@ -10,6 +10,7 @@ import { applicationTrackingMeta } from "./features/application-tracking/meta";
 import { leadListsMeta } from "../_shared/features/lead-lists/meta";
 import { classesMeta } from "./features/classes/meta";
 import { affiliatesMeta } from "./features/affiliates/meta";
+import { applicantDocumentsMeta } from "./features/applicant-documents/meta";
 import { smsMeta } from "../_shared/features/sms/meta";
 import { emailCampaignsMeta } from "../_shared/features/email-campaigns/meta";
 import { outreachMeta } from "../_shared/features/outreach/meta";
@@ -28,6 +29,7 @@ export const manifest: IndustryManifest = {
     { meta: leadListsMeta },
     { meta: classesMeta },
     { meta: affiliatesMeta },
+    { meta: applicantDocumentsMeta },
     { meta: smsMeta },
     { meta: emailCampaignsMeta },
     { meta: outreachMeta },
