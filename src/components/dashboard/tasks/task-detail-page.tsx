@@ -38,6 +38,7 @@ export function TaskDetailPage({ taskId, currentUserId, isAdmin, canManageProjec
           currentUserId={currentUserId}
           isAdmin={isAdmin}
           canManageProjects={canManageProjects}
+          presentation="page"
           onDeleted={() => router.push("/home")}
         />
       </div>
