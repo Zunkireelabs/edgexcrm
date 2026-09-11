@@ -7,9 +7,12 @@
 > `docs/FEATURE-CATALOG.md` and archive this file per the repo's own doc-lifecycle rule (CLAUDE.md
 > § Read first, every session).
 
-**Last updated:** 2026-09-11. **Current state:** Phase 1 built, PR open to `stage`, **not merged**.
+**Last updated:** 2026-09-11. **Current state:** Phase 1 **merged and live on stage** — PR #530
+merged to `stage` (commit `6036215b`), `deploy-staging.yml` ran and succeeded, so migration 231 is
+now applied on the stage DB (`dymeudcddasqpomfpjvt`) and the code is live on
+`dev-lead-crm.zunkireelabs.com`. Not yet promoted to prod — see §3.
 **R2 is live:** Phase 0 (Cloudflare R2 account/bucket/token) is done — see §6, no longer blocked.
-**Branch:** `feature/applicant-documents-phase1`. **PR:** [#530](https://github.com/Zunkireelabs/edgexcrm/pull/530).
+**Branch:** `feature/applicant-documents-phase1` (merged). **PR:** [#530](https://github.com/Zunkireelabs/edgexcrm/pull/530) (merged).
 **Parent plan (source of truth for scope/rationale):** `~/.claude/plans/so-my-new-work-temporal-scott.md`
 ("Applicant Document Intelligence & Agentic RAG — EdgeX") — lives outside this repo (local Claude
 plans folder, not git-tracked), so its key content is reproduced below rather than only linked, to
@@ -156,7 +159,7 @@ proving the DB update is never reached when the purge fails.
 | Phase | Scope | Status |
 |---|---|---|
 | 0 | Cloudflare R2 account/bucket/API token/CORS/env vars (manual, not code) | In progress — see §6 |
-| **1** | **Schema, storage provider, core CRUD API routes, feature flag** | **Built, PR #530 open** |
+| **1** | **Schema, storage provider, core CRUD API routes, feature flag** | **Merged, live on stage (PR #530)** |
 | 2 | UI: grid/list toggle, upload dropzone, document viewer (iframe/img), Lead Detail tab, grouped-by-category view | Not started |
 | 3 | Processing pipeline: new Inngest fn (validate → parse → extract → chunk → embed → store), reuses existing `parseFileBytes()`/`chunkDocument()`/`embedTexts()`, new structured-extraction step per `document_type` | Not started |
 | 4 | RAG: retrieval module calling `applicant_document_hybrid_search`, lead-scoped, degraded-mode fallback on embedding failure | Not started |
