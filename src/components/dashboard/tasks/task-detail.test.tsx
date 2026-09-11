@@ -10,6 +10,12 @@ import { render, screen, waitFor, fireEvent, cleanup } from "@testing-library/re
 import "@testing-library/jest-dom/vitest";
 import { TaskDetailBody, type TaskDetailTask } from "./task-detail";
 
+const toastError = vi.fn();
+const toastSuccess = vi.fn();
+vi.mock("sonner", () => ({
+  toast: { success: (...a: unknown[]) => toastSuccess(...a), error: (...a: unknown[]) => toastError(...a) },
+}));
+
 const BASE_TASK: TaskDetailTask = {
   id: "task-1",
   tenant_id: "tenant-1",
@@ -91,6 +97,8 @@ describe("TaskDetailBody", () => {
     cleanup();
     global.fetch = originalFetch;
     vi.restoreAllMocks();
+    toastError.mockClear();
+    toastSuccess.mockClear();
   });
 
   it("renders a non-admin, non-owner viewer read-only — no title Input, no status Select, no Delete button", async () => {
@@ -196,14 +204,19 @@ describe("TaskDetailBody", () => {
     expect(screen.queryByText("⚠")).not.toBeInTheDocument();
   });
 
-  it("optimistic revert: a failing PATCH restores the previous value and toasts", async () => {
+  it("optimistic revert: a failing PATCH flips to Completed immediately, then reverts and toasts", async () => {
     global.fetch = mockFetch(BASE_TASK, { patchOk: false }) as unknown as typeof fetch;
     render(<TaskDetailBody taskId="task-1" currentUserId="user-viewer" isAdmin canManageProjects />);
     await waitFor(() => expect(screen.getByDisplayValue("Ship the thing")).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole("button", { name: /mark complete/i }));
 
-    // Reverted: the button goes back to "Mark complete" (not stuck on "Completed").
+    // Optimistic: flips to "Completed" immediately, before the failing PATCH resolves.
+    await waitFor(() => expect(screen.getByRole("button", { name: /^completed$/i })).toBeInTheDocument());
+
+    // Reverted: once the failed response lands, it flips back to "Mark complete" and toasts.
     await waitFor(() => expect(screen.getByRole("button", { name: /mark complete/i })).toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: /^completed$/i })).not.toBeInTheDocument();
+    expect(toastError).toHaveBeenCalledWith("Failed to update task");
   });
 });

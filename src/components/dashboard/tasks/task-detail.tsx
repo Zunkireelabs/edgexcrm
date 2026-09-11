@@ -10,7 +10,6 @@ import {
   Link2,
   ExternalLink,
   MoreHorizontal,
-  Copy,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -23,7 +22,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -411,34 +409,21 @@ export function TaskDetailBody({
               </Tooltip>
             )}
 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button ref={moreButtonRef} variant="ghost" size="icon" aria-label="More actions">
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={copyLink}>
-                  <Copy className="h-4 w-4" />
-                  Copy link
-                </DropdownMenuItem>
-                {presentation === "drawer" && (
-                  <DropdownMenuItem onClick={openInNewTab}>
-                    <ExternalLink className="h-4 w-4" />
-                    Open in new tab
+            {canDelete && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button ref={moreButtonRef} variant="ghost" size="icon" aria-label="More actions">
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem variant="destructive" onClick={() => setDeleteConfirmOpen(true)}>
+                    <Trash2 className="h-4 w-4" />
+                    Delete task
                   </DropdownMenuItem>
-                )}
-                {canDelete && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem variant="destructive" onClick={() => setDeleteConfirmOpen(true)}>
-                      <Trash2 className="h-4 w-4" />
-                      Delete task
-                    </DropdownMenuItem>
-                  </>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         </TooltipProvider>
       </div>
