@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Plus, Loader2, CheckSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { TaskRow } from "../../../time-tracking/components/task-row";
 import { AssigneePicker } from "../assignee-picker";
+import { TASK_CHANGED_EVENT } from "@/lib/tasks/task-events";
 import type { TeamMember } from "../../hooks/use-projects";
 import type { Task } from "@/types/database";
 
@@ -18,7 +20,13 @@ interface TasksSectionProps {
   currentUserId: string;
 }
 
-export function TasksSection({ projectId, canManageProjects, currentUserId }: TasksSectionProps) {
+// Round 2 slice A — clicking a task title navigates to /tasks/<id>,
+// intercepted as the shared TaskDetailDrawer (docs/IT-AGENCY-ROUND2-TASK-OBJECT-BRIEF.md
+// §2), which replaced this section's old Pencil/Dialog editor. That drawer
+// lives in the @modal route, not this component's tree, so this listens for
+// TASK_CHANGED_EVENT to refetch after an edit made there.
+export function TasksSection({ projectId }: TasksSectionProps) {
+  const router = useRouter();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,9 +37,9 @@ export function TasksSection({ projectId, canManageProjects, currentUserId }: Ta
   const [newTaskEstimate, setNewTaskEstimate] = useState("");
   const [savingTask, setSavingTask] = useState(false);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     setLoading(true);
-    Promise.all([
+    return Promise.all([
       fetch(`/api/v1/projects/${projectId}/tasks`).then((r) => r.json()),
       fetch("/api/v1/team?minimal=1").then((r) => r.json()),
     ])
@@ -42,6 +50,19 @@ export function TasksSection({ projectId, canManageProjects, currentUserId }: Ta
       .catch(() => toast.error("Failed to load tasks"))
       .finally(() => setLoading(false));
   }, [projectId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useEffect(() => {
+    window.addEventListener(TASK_CHANGED_EVENT, load);
+    return () => window.removeEventListener(TASK_CHANGED_EVENT, load);
+  }, [load]);
+
+  function openDetail(taskId: string) {
+    router.push(`/tasks/${taskId}`);
+  }
 
   async function handleAddTask(e: React.FormEvent) {
     e.preventDefault();
@@ -71,14 +92,6 @@ export function TasksSection({ projectId, canManageProjects, currentUserId }: Ta
     } finally {
       setSavingTask(false);
     }
-  }
-
-  function handleTaskUpdated(updated: Task) {
-    setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
-  }
-
-  function handleTaskDeleted(taskId: string) {
-    setTasks((prev) => prev.filter((t) => t.id !== taskId));
   }
 
   const todoCount = tasks.filter((t) => t.status === "todo").length;
@@ -121,15 +134,7 @@ export function TasksSection({ projectId, canManageProjects, currentUserId }: Ta
           ) : (
             <div className="divide-y">
               {tasks.map((task) => (
-                <TaskRow
-                  key={task.id}
-                  task={task}
-                  isAdmin={canManageProjects}
-                  currentUserId={currentUserId}
-                  team={team}
-                  onUpdate={handleTaskUpdated}
-                  onDelete={handleTaskDeleted}
-                />
+                <TaskRow key={task.id} task={task} team={team} onOpenDetail={openDetail} />
               ))}
               {addingTask && (
                 <form onSubmit={handleAddTask} className="p-4 flex items-end gap-2">
