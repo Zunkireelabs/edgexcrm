@@ -33,7 +33,10 @@ describe("readR2ConfigFromEnv", () => {
   });
 
   it("throws a clear error listing every missing env var when none are set", () => {
-    expect(() => readR2ConfigFromEnv()).toThrow(/R2_ACCOUNT_ID.*R2_ACCESS_KEY_ID.*R2_SECRET_ACCESS_KEY.*R2_BUCKET_NAME.*R2_ENDPOINT/s);
+    // No /s (dotAll) flag: this repo's tsconfig target predates ES2018, where
+    // that flag isn't available. Not needed anyway — the error message is a
+    // single line, so plain "." already matches across the whole thing.
+    expect(() => readR2ConfigFromEnv()).toThrow(/R2_ACCOUNT_ID.*R2_ACCESS_KEY_ID.*R2_SECRET_ACCESS_KEY.*R2_BUCKET_NAME.*R2_ENDPOINT/);
   });
 
   it("reads all 5 values when every env var is set", () => {
@@ -113,7 +116,7 @@ describe("R2Provider", () => {
   });
 
   it("remove sends a DeleteObjectsCommand for all keys", async () => {
-    const send = vi.fn(async () => ({}));
+    const send = vi.fn(async (_command: unknown) => ({}));
     const client = { send } as unknown as S3Client;
     const provider = new R2Provider(client, "applicant-documents");
 
@@ -125,7 +128,7 @@ describe("R2Provider", () => {
   });
 
   it("remove is a no-op for an empty key list", async () => {
-    const send = vi.fn(async () => ({}));
+    const send = vi.fn(async (_command: unknown) => ({}));
     const client = { send } as unknown as S3Client;
     const provider = new R2Provider(client, "applicant-documents");
 
@@ -142,7 +145,7 @@ describe("R2Provider", () => {
   });
 
   it("copy sends a CopyObjectCommand with a URL-encoded CopySource", async () => {
-    const send = vi.fn(async () => ({}));
+    const send = vi.fn(async (_command: unknown) => ({}));
     const client = { send } as unknown as S3Client;
     const provider = new R2Provider(client, "applicant-documents");
 
@@ -158,7 +161,7 @@ describe("R2Provider", () => {
   });
 
   it("exists returns true when HeadObjectCommand succeeds", async () => {
-    const send = vi.fn(async () => ({}));
+    const send = vi.fn(async (_command: unknown) => ({}));
     const client = { send } as unknown as S3Client;
     const provider = new R2Provider(client, "applicant-documents");
 
