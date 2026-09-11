@@ -116,19 +116,19 @@ describe("R2Provider", () => {
   });
 
   it("remove sends a DeleteObjectsCommand for all keys", async () => {
-    const send = vi.fn(async (_command: unknown) => ({}));
+    const send = vi.fn(async () => ({}));
     const client = { send } as unknown as S3Client;
     const provider = new R2Provider(client, "applicant-documents");
 
     await provider.remove(["a.pdf", "b.pdf"]);
 
     expect(send).toHaveBeenCalledTimes(1);
-    const command = send.mock.calls[0][0] as unknown as { input: { Delete: { Objects: { Key: string }[] } } };
+    const command = (send.mock.calls[0] as unknown as [unknown])[0] as unknown as { input: { Delete: { Objects: { Key: string }[] } } };
     expect(command.input.Delete.Objects).toEqual([{ Key: "a.pdf" }, { Key: "b.pdf" }]);
   });
 
   it("remove is a no-op for an empty key list", async () => {
-    const send = vi.fn(async (_command: unknown) => ({}));
+    const send = vi.fn(async () => ({}));
     const client = { send } as unknown as S3Client;
     const provider = new R2Provider(client, "applicant-documents");
 
@@ -145,14 +145,14 @@ describe("R2Provider", () => {
   });
 
   it("copy sends a CopyObjectCommand with a URL-encoded CopySource", async () => {
-    const send = vi.fn(async (_command: unknown) => ({}));
+    const send = vi.fn(async () => ({}));
     const client = { send } as unknown as S3Client;
     const provider = new R2Provider(client, "applicant-documents");
 
     await provider.copy("versions/v1/original.pdf", "versions/v2/original.pdf");
 
     expect(send).toHaveBeenCalledTimes(1);
-    const command = send.mock.calls[0][0] as unknown as { input: Record<string, unknown> };
+    const command = (send.mock.calls[0] as unknown as [unknown])[0] as unknown as { input: Record<string, unknown> };
     expect(command.input).toMatchObject({
       Bucket: "applicant-documents",
       Key: "versions/v2/original.pdf",
@@ -161,12 +161,12 @@ describe("R2Provider", () => {
   });
 
   it("exists returns true when HeadObjectCommand succeeds", async () => {
-    const send = vi.fn(async (_command: unknown) => ({}));
+    const send = vi.fn(async () => ({}));
     const client = { send } as unknown as S3Client;
     const provider = new R2Provider(client, "applicant-documents");
 
     await expect(provider.exists("tenants/t1/.../original.pdf")).resolves.toBe(true);
-    const command = send.mock.calls[0][0] as unknown as { input: Record<string, unknown> };
+    const command = (send.mock.calls[0] as unknown as [unknown])[0] as unknown as { input: Record<string, unknown> };
     expect(command.input).toMatchObject({ Bucket: "applicant-documents", Key: "tenants/t1/.../original.pdf" });
   });
 
