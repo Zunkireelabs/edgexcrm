@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
+import { toast } from "sonner";
 import {
   Bot,
   Building2,
@@ -29,6 +30,7 @@ import {
   Megaphone,
   BookOpen,
   Loader2,
+  ListPlus,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -42,6 +44,13 @@ import {
 } from "@/components/ui/command";
 import { useSettingsModal } from "@/contexts/settings-modal-context";
 import type { NavResult } from "./build-nav-index";
+
+// Round 2 slice B — quick-add (docs/IT-AGENCY-ROUND2-SLICE-B-BRIEF.md §3a).
+// A project page's URL is the only "current project" signal the palette has
+// (no project picker is in scope) — /projects/<uuid> creates a project task
+// there via POST /api/v1/projects/<id>/tasks; anywhere else creates a
+// personal task via POST /api/v1/my-tasks. Both are stamped self-assigned.
+const PROJECT_PATH_RE = /^\/projects\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
 
 // Resolve icon string name to Lucide component (mirrors shell.tsx INDUSTRY_ICONS)
 const ICON_MAP: Record<string, LucideIcon> = {
@@ -89,6 +98,7 @@ interface GlobalSearchPaletteProps {
   isOpen: boolean;
   onClose: () => void;
   navIndex: NavResult[];
+  currentUserId: string;
 }
 
 // Substring/keyword match for nav results
@@ -109,12 +119,15 @@ export function GlobalSearchPalette({
   isOpen,
   onClose,
   navIndex,
+  currentUserId,
 }: GlobalSearchPaletteProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const { openSettings } = useSettingsModal();
   const [query, setQuery] = useState("");
   const [leads, setLeads] = useState<LeadResult[]>([]);
   const [leadsLoading, setLeadsLoading] = useState(false);
+  const [creatingTask, setCreatingTask] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -179,6 +192,45 @@ export function GlobalSearchPalette({
     [onClose, router]
   );
 
+  const handleQuickAddTask = useCallback(
+    async (title: string) => {
+      const trimmed = title.trim();
+      if (!trimmed || creatingTask) return;
+      setCreatingTask(true);
+      try {
+        const projectMatch = pathname?.match(PROJECT_PATH_RE);
+        const url = projectMatch
+          ? `/api/v1/projects/${projectMatch[1]}/tasks`
+          : "/api/v1/my-tasks";
+        const body = projectMatch
+          ? { title: trimmed, assignee_id: currentUserId }
+          : { title: trimmed };
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const json = await res.json().catch(() => null);
+        if (!res.ok) {
+          toast.error(json?.error?.message ?? "Failed to create task");
+          return;
+        }
+        const task = json?.data as { id: string; title: string } | undefined;
+        onClose();
+        if (task) {
+          toast.success(`Task created: "${task.title}"`, {
+            action: { label: "Open", onClick: () => router.push(`/tasks/${task.id}`) },
+          });
+        }
+      } catch {
+        toast.error("Failed to create task");
+      } finally {
+        setCreatingTask(false);
+      }
+    },
+    [pathname, currentUserId, onClose, router, creatingTask]
+  );
+
   // Filtered nav results (synchronous substring match)
   const filteredNav = query.length > 0 ? navIndex.filter((i) => matchNav(i, query)) : navIndex;
 
@@ -191,7 +243,13 @@ export function GlobalSearchPalette({
   // Group order
   const GROUP_ORDER = ["Pages", "Lead Lists", "Orca", "Settings"];
 
-  const showEmpty = query.length >= 2 && !leadsLoading && leads.length === 0 && filteredNav.length === 0;
+  // Round 2 slice B: quick-add surfaces only when the query matches no nav
+  // item — it never displaces real navigation results.
+  const trimmedQuery = query.trim();
+  const showQuickAdd = trimmedQuery.length > 0 && filteredNav.length === 0;
+
+  const showEmpty =
+    query.length >= 2 && !leadsLoading && leads.length === 0 && filteredNav.length === 0 && !showQuickAdd;
 
   return (
     <CommandDialog
@@ -209,6 +267,27 @@ export function GlobalSearchPalette({
       <CommandList className="h-[60vh] max-h-[60vh]">
         {showEmpty && (
           <CommandEmpty>No results for &ldquo;{query}&rdquo;</CommandEmpty>
+        )}
+
+        {/* Round 2 slice B: quick-add — one row, never a takeover of search results. */}
+        {showQuickAdd && (
+          <CommandGroup heading="Actions">
+            <CommandItem
+              value={`create-task ${trimmedQuery}`}
+              disabled={creatingTask}
+              onSelect={() => handleQuickAddTask(trimmedQuery)}
+              className="flex items-center gap-2"
+            >
+              {creatingTask ? (
+                <Loader2 className="w-4 h-4 text-gray-500 animate-spin" />
+              ) : (
+                <ListPlus className="w-4 h-4 text-gray-500" />
+              )}
+              <span>
+                Create task &ldquo;{trimmedQuery}&rdquo;
+              </span>
+            </CommandItem>
+          </CommandGroup>
         )}
 
         {/* Quick navigation (empty state) or filtered page results */}
