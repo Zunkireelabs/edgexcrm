@@ -11,7 +11,7 @@
 // itself takes an injected S3Client so it can be constructed and unit-tested
 // against a mock with zero real network calls, independent of env state.
 
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectsCommand, CopyObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand, DeleteObjectsCommand, CopyObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type { DocumentStorageProvider } from "./provider";
 
@@ -86,6 +86,23 @@ export class R2Provider implements DocumentStorageProvider {
     if (response.Errors && response.Errors.length > 0) {
       const detail = response.Errors.map((e) => `${e.Key}: ${e.Message}`).join("; ");
       throw new Error(`remove failed for one or more keys in ${this.bucket}: ${detail}`);
+    }
+  }
+
+  async exists(key: string): Promise<boolean> {
+    try {
+      await this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key }));
+      return true;
+    } catch (err) {
+      const name = (err as { name?: string } | undefined)?.name;
+      const status = (err as { $metadata?: { httpStatusCode?: number } } | undefined)?.$metadata?.httpStatusCode;
+      // A genuinely-missing object throws "NotFound" (404) — that's the only
+      // case that means false. Anything else (network blip, auth failure,
+      // 5xx) must propagate as a real error, never be silently read as
+      // "doesn't exist" — that would let a transient R2 outage wrongly fail
+      // a real upload.
+      if (name === "NotFound" || status === 404) return false;
+      throw err;
     }
   }
 

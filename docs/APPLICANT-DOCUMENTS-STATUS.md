@@ -46,7 +46,10 @@ feature at risk. `education_consultancy` only, per this repo's current industry 
       permanently recorded).
 - [x] Core CRUD API: `POST /leads/[id]/documents/upload-url`, `POST
       /leads/[id]/documents/[docId]/complete`, `GET /leads/[id]/documents`, `GET/PATCH/DELETE
-      /documents/[id]`, `GET /documents/[id]/download-url`, `GET/POST /documents/[id]/versions`.
+      /documents/[id]`, `GET /documents/[id]/download-url`, `GET/POST /documents/[id]/versions`,
+      `POST /documents/[id]/versions/[versionId]/complete` (added 2026-09-11 — see §2a, the
+      `upload-url` and `versions` POST routes write NOTHING to the database; only the two
+      `complete` routes do, and only after independently verifying the file exists in R2).
 - [x] `FEATURES.APPLICANT_DOCUMENTS` registered in `src/industries/_registry.ts` + the
       `education-consultancy` manifest. No sidebar item (deliberate — see §4).
 - [x] 59 new tests (8 files): `R2Provider` unit tests, a tenant-isolation/lead-visibility test
@@ -68,6 +71,65 @@ feature at risk. `education_consultancy` only, per this repo's current industry 
 - No malware/AV scanning (a known, deliberate gap — see §6).
 - `applicant_document_chunks` and `applicant_document_extractions` are real tables with real RLS,
   currently and correctly holding **zero rows**.
+
+---
+
+## 2a. Incident: ghost "uploaded" rows with no file behind them (found in review, fixed same day)
+
+**Found by:** a reviewer during PR #530's review, before merge — not caught by this session's own
+testing or its later "audit for merge-readiness" pass (see the lesson at the end of this section).
+
+**The bug:** the original Phase 1 implementation had `upload-url` create the `applicant_documents`
+and `applicant_document_versions` rows (`status: 'uploaded'`) *before* the client had actually
+uploaded any bytes — it only issued a presigned PUT URL. The separate `complete` call, meant to
+run after the client's PUT, never independently checked that the file was really in R2; it just
+logged an audit entry. So: if the client's PUT to R2 failed or never happened (dropped connection,
+closed tab, browser crash, R2 hiccup) — the database permanently claimed a document existed, with
+nothing behind it in storage. Anyone later trying to view/download it would hit a broken link, with
+no signal anywhere that this had happened. The identical flaw existed in the "upload a new
+version" flow too, and was arguably worse there: a failed re-upload would silently re-point
+`current_version_id` at a nonexistent file, breaking access to a document that was previously
+working fine.
+
+**The fix (2026-09-11):** restructured both upload flows so **the database is only ever written to
+after the storage layer has independently confirmed the file exists** — not on the client's say-so.
+
+- Added `DocumentStorageProvider.exists(key)` (`R2Provider` implements it via S3's lightweight
+  `HeadObjectCommand` — no file download, just a presence check; correctly distinguishes "genuinely
+  not there" from "the check itself failed," never conflating a transient R2 outage with a missing
+  file).
+- `upload-url` (both the initial-upload and new-version routes) now writes **nothing** to the
+  database — it only returns a presigned PUT URL + the ids the client will need.
+- All persistence moved into the `complete` routes, which call `exists()` first. If the file isn't
+  there: no DB row is written, the client gets a clear `409 UPLOAD_INCOMPLETE` to retry. Only on a
+  confirmed `true` does the row (or the version re-point) get written. Both `complete` routes are
+  idempotent — a retried call after a real success returns the existing state rather than erroring.
+- Net effect: **it is now structurally impossible** for `applicant_documents`/
+  `applicant_document_versions` to contain a row whose file isn't genuinely in the bucket — not
+  "checked and flagged after the fact," actually impossible by construction, because the row is
+  never created until that's confirmed.
+
+**The general lesson (apply this to any future two-system write, not just this feature):** whenever
+a flow writes to two separate systems (here: the database and R2; the same shape applies to any
+DB+external-API, DB+queue, or DB+third-party-webhook flow), **never let the first system record
+success based on the client's claim that the second one succeeded.** Persist state in the
+system-of-record only after independently verifying the second write actually landed. If that
+verification can't happen synchronously in the same request, the correct pattern is still "verify
+before persist," not "persist then hope" — a reconciliation job checking later is not the same as
+never having written the false claim in the first place.
+
+**Why this session's own review didn't catch it, for the record:** the tests written for the
+original `complete` route validated auth/permission edge cases and the code's own happy path — not
+an adversarial "what if the upload actually failed" scenario, because the design never accounted
+for that failure mode to begin with. Separately, the later "is this ready to merge" audit checked
+for merge conflicts and that the code still built/passed tests against latest `stage` — a real and
+useful check, but not a correctness re-review of the business logic, and reporting it as "audited"
+without that distinction overstated what had actually been verified. Both gaps are closed by the
+fix above (which now has explicit failure-path tests — see the two `THE FIX:` tests in
+`complete/route.test.ts` and `versions/[versionId]/complete/route.test.ts`) and by naming the
+distinction here for next time: a merge-conflict/build audit is not a substitute for a correctness
+review of new business logic, and the two should be labeled separately, not bundled under one
+"audited" claim.
 
 ---
 
@@ -111,12 +173,18 @@ very likely need several tuning passes, not one clean implementation.
   API-layer `canViewLead` check (same helper `get-lead-applications.ts` uses, via the new shared
   `src/lib/documents/access.ts`) stacked on `getFeatureAccess`. DELETE is restricted to
   `is_tenant_admin()` or the original `uploaded_by` user.
-- **Checksum is client-supplied, not server-computed.** The `upload-url` route creates the
-  document+version-1 rows and issues the presigned PUT URL *before* the client has actually
-  uploaded any bytes — the server never has the file content at that point, so it can't hash it.
-  The client computes a sha256 checksum locally (standard Web Crypto `subtle.digest`, the browser
-  already has the `File` object) and sends it in the request body; the route validates it's a
-  64-char hex digest.
+- **Checksum is client-supplied, not server-computed.** The client computes a sha256 checksum
+  locally (standard Web Crypto `subtle.digest` — the browser already has the `File` object) and
+  sends it to `complete`, not `upload-url` (see §2a) — `upload-url` never writes to the database,
+  so there's nowhere to persist a checksum at that point; validation happens where the write
+  happens. The route validates it's a 64-char hex digest.
+- **Nothing is persisted until the storage layer confirms the file exists (§2a).** `upload-url`
+  and the new-version POST route write NOTHING to the database — they only return a presigned PUT
+  URL. Only the two `complete` routes (`/leads/[id]/documents/[docId]/complete` and
+  `/documents/[id]/versions/[versionId]/complete`) create rows or re-point `current_version_id`,
+  and only after `DocumentStorageProvider.exists()` confirms the file is genuinely in R2. This was
+  a real bug found in review (§2a) — do not reintroduce DB writes into either `upload-url` route
+  without also moving the existence check there first.
 - **Empty `mime_type` gotcha, deliberately handled.** Some browsers report an empty `file.type` for
   less-common types (the exact bug the existing knowledge-base upload hit). `mime_type` is
   therefore NOT run through the generic `required()` validator — an empty string is allowed

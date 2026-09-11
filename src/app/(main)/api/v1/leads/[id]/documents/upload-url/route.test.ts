@@ -17,7 +17,6 @@ vi.mock("@/lib/documents/storage/r2-provider", () => ({ getDocumentStorageProvid
 
 const AUTH = { userId: "user-1", tenantId: "tenant-1", industryId: "education_consultancy" } as unknown as AuthContext;
 const LEAD = { id: "lead-1", assigned_to: "user-1", branch_id: null, pipeline_id: "pipe-1", list_id: null };
-const VALID_CHECKSUM = "a".repeat(64);
 
 function fakeReq(body: unknown): NextRequest {
   return { json: async () => body } as unknown as NextRequest;
@@ -34,28 +33,16 @@ function validBody(overrides: Record<string, unknown> = {}) {
     original_filename: "passport.pdf",
     mime_type: "application/pdf",
     file_size: 1024,
-    checksum: VALID_CHECKSUM,
     ...overrides,
   };
 }
 
-function fakeDb(opts: { settings?: Record<string, unknown> | null; createdDoc?: Record<string, unknown>; updatedDoc?: Record<string, unknown> } = {}) {
+function fakeDb(opts: { settings?: Record<string, unknown> | null } = {}) {
   const settingsQuery = { maybeSingle: vi.fn(async () => ({ data: opts.settings ?? null })) };
   const settingsTable = { select: vi.fn(() => settingsQuery) };
-
-  const docInsertSelect = { single: vi.fn(async () => ({ data: opts.createdDoc ?? { id: "doc-1" }, error: null })) };
-  const docInsert = { select: vi.fn(() => docInsertSelect) };
-  const docUpdateEq = { select: vi.fn(() => ({ single: vi.fn(async () => ({ data: opts.updatedDoc ?? opts.createdDoc ?? { id: "doc-1" }, error: null })) })) };
-  const docTable = { insert: vi.fn(() => docInsert), update: vi.fn(() => ({ eq: vi.fn(() => docUpdateEq) })) };
-
-  const versionInsert = { error: null };
-  const versionTable = { insert: vi.fn(async () => versionInsert) };
-
   return {
     from: vi.fn((table: string) => {
       if (table === "tenant_document_settings") return settingsTable;
-      if (table === "applicant_documents") return docTable;
-      if (table === "applicant_document_versions") return versionTable;
       return {};
     }),
   };
@@ -72,6 +59,7 @@ beforeEach(() => {
   authenticateRequestMock.mockResolvedValue(AUTH);
   getFeatureAccessMock.mockReturnValue(true);
   assertLeadVisibleMock.mockResolvedValue(LEAD);
+  scopedClientMock.mockResolvedValue(fakeDb());
   getDocumentStorageProviderMock.mockReturnValue({ createSignedUploadUrl: createSignedUploadUrlMock });
   createSignedUploadUrlMock.mockResolvedValue({ url: "https://r2.example/signed-put", headers: { "Content-Type": "application/pdf" } });
 });
@@ -93,24 +81,21 @@ describe("POST /api/v1/leads/[id]/documents/upload-url", () => {
 
   it("404s when the lead isn't visible to this caller", async () => {
     assertLeadVisibleMock.mockResolvedValue(null);
-    scopedClientMock.mockResolvedValue(fakeDb());
     const { POST } = await import("./route");
     const res = await POST(fakeReq(validBody()), params());
     expect(res.status).toBe(404);
   });
 
   it("422s on an unsupported mime type", async () => {
-    scopedClientMock.mockResolvedValue(fakeDb());
     const { POST } = await import("./route");
     const res = await POST(fakeReq(validBody({ mime_type: "application/x-msdownload", original_filename: "virus.exe" })), params());
     expect(res.status).toBe(422);
   });
 
   it("falls back to the extension when the browser reports an empty mime type", async () => {
-    scopedClientMock.mockResolvedValue(fakeDb());
     const { POST } = await import("./route");
     const res = await POST(fakeReq(validBody({ mime_type: "", original_filename: "transcript.pdf" })), params());
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(200);
   });
 
   it("422s with a {count,max} body when file_size exceeds the tenant's configured cap", async () => {
@@ -132,25 +117,22 @@ describe("POST /api/v1/leads/[id]/documents/upload-url", () => {
     expect(json.error.details.max).toBe(25 * 1024 * 1024);
   });
 
-  it("422s when checksum isn't a valid sha256 hex digest", async () => {
-    scopedClientMock.mockResolvedValue(fakeDb());
-    const { POST } = await import("./route");
-    const res = await POST(fakeReq(validBody({ checksum: "not-a-hash" })), params());
-    expect(res.status).toBe(422);
-  });
-
-  it("creates the document + version-1 rows and returns a signed upload URL on success", async () => {
-    const createdDoc = { id: "doc-1", status: "uploaded" };
-    const db = fakeDb({ createdDoc, updatedDoc: { ...createdDoc, current_version_id: "some-version" } });
+  it("writes nothing to the database — only issues a signed upload URL + ids", async () => {
+    const db = fakeDb();
     scopedClientMock.mockResolvedValue(db);
 
     const { POST } = await import("./route");
     const res = await POST(fakeReq(validBody()), params());
 
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.data.upload_url).toBe("https://r2.example/signed-put");
-    expect(json.data.document.current_version_id).toBe("some-version");
+    expect(typeof json.data.document_id).toBe("string");
+    expect(typeof json.data.version_id).toBe("string");
+    // The only table this route ever touches is tenant_document_settings
+    // (to read the size cap) — never applicant_documents/versions.
+    expect(db.from).not.toHaveBeenCalledWith("applicant_documents");
+    expect(db.from).not.toHaveBeenCalledWith("applicant_document_versions");
     expect(createSignedUploadUrlMock).toHaveBeenCalledTimes(1);
     const [key, contentType] = createSignedUploadUrlMock.mock.calls[0];
     expect(key).toMatch(/^tenants\/tenant-1\/applicants\/lead-1\/documents\/.+\/versions\/.+\/original\.pdf$/);

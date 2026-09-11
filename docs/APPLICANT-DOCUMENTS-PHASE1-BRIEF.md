@@ -1,5 +1,16 @@
 # BRIEF — Applicant Document Intelligence, Phase 1 (schema + storage + core API)
 
+> **⚠️ AMENDED 2026-09-11 — §5's upload-url/complete contract below is HISTORICAL, not current.**
+> A reviewer found that this brief's original design (upload-url writes the DB rows immediately,
+> before the client has uploaded anything; complete never verifies) let the database permanently
+> claim a document existed with nothing behind it in R2 if the client's upload failed or never
+> happened. Fixed same day: `upload-url` now writes nothing to the database; only `complete`
+> does, and only after independently confirming the file exists in R2. The identical fix applies
+> to `POST /documents/[id]/versions` + a new `/versions/[versionId]/complete` route. **Read
+> `docs/APPLICANT-DOCUMENTS-STATUS.md` §2a for the full incident note and the current, correct
+> route contracts — this file is kept for historical record of the original plan, not as a
+> current spec.**
+
 **For:** Sonnet executor session
 **From:** Opus planning session, 2026-09-10
 **Parent plan:** `~/.claude/plans/so-my-new-work-temporal-scott.md` ("Applicant Document Intelligence & Agentic RAG — EdgeX") — read it in full before starting; this brief is Phase 1 of that plan's §14 phase list (schema, storage provider, core API routes). Phases 2–7 (UI, processing pipeline, RAG, agent tools, usage/quotas, hardening) are separate later briefs — **do not build ahead into them.**

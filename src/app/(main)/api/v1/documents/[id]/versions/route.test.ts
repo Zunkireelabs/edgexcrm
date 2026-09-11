@@ -130,7 +130,7 @@ describe("GET /api/v1/documents/[id]/versions", () => {
   });
 });
 
-describe("POST /api/v1/documents/[id]/versions", () => {
+describe("POST /api/v1/documents/[id]/versions — issues an upload URL only, writes nothing to the DB", () => {
   it("404s when the document isn't visible", async () => {
     assertDocumentVisibleMock.mockResolvedValue(null);
     scopedClientMock.mockResolvedValue(fakeDb());
@@ -146,24 +146,30 @@ describe("POST /api/v1/documents/[id]/versions", () => {
     expect(res.status).toBe(422);
   });
 
-  it("computes the next version_number from the current max", async () => {
-    scopedClientMock.mockResolvedValue(fakeDb({ maxVersion: { version_number: 3 }, createdVersion: { id: "v4", version_number: 4 } }));
+  it("THE FIX: writes nothing to the database — no version row, no re-pointing current_version_id, no audit log", async () => {
+    const db = fakeDb();
+    scopedClientMock.mockResolvedValue(db);
+
     const { POST } = await import("./route");
     const res = await POST(fakeReq(validBody()), params());
-    expect(res.status).toBe(201);
+
+    expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json.data.version.version_number).toBe(4);
+    expect(json.data.upload_url).toBe("https://r2.example/signed-put-v2");
+    expect(typeof json.data.version_id).toBe("string");
+    const versionTable = db.from("applicant_document_versions") as unknown as { insert: ReturnType<typeof vi.fn> };
+    expect(versionTable.insert).not.toHaveBeenCalled();
+    const docTable = db.from("applicant_documents") as unknown as { update: ReturnType<typeof vi.fn> };
+    expect(docTable.update).not.toHaveBeenCalled();
+    expect(createAuditLogMock).not.toHaveBeenCalled();
   });
 
-  it("re-points current_version_id and logs document.version_created on success", async () => {
-    scopedClientMock.mockResolvedValue(fakeDb({ maxVersion: null, updatedDoc: { id: "doc-1", current_version_id: "v2" } }));
+  it("builds the storage key from the document's own lead_id, not a caller-supplied one", async () => {
+    scopedClientMock.mockResolvedValue(fakeDb());
     const { POST } = await import("./route");
-    const res = await POST(fakeReq(validBody()), params());
+    await POST(fakeReq(validBody()), params());
 
-    expect(res.status).toBe(201);
-    const json = await res.json();
-    expect(json.data.document.current_version_id).toBe("v2");
-    expect(json.data.upload_url).toBe("https://r2.example/signed-put-v2");
-    expect(createAuditLogMock).toHaveBeenCalledWith(expect.objectContaining({ action: "document.version_created", entityId: "doc-1" }));
+    const [key] = createSignedUploadUrlMock.mock.calls[0];
+    expect(key).toMatch(/^tenants\/tenant-1\/applicants\/lead-1\/documents\/doc-1\/versions\/.+\/original\.pdf$/);
   });
 });

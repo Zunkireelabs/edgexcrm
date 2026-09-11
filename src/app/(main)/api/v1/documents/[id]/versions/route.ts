@@ -2,13 +2,11 @@ import { NextRequest } from "next/server";
 import { authenticateRequest } from "@/lib/api/auth";
 import { apiSuccess, apiUnauthorized, apiForbidden, apiNotFound, apiError, apiValidationError } from "@/lib/api/response";
 import { validate, required, isPositiveInt, maxLength } from "@/lib/api/validation";
-import { isSha256Checksum } from "@/lib/documents/validation";
 import { createRequestLogger } from "@/lib/logger";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { assertDocumentVisible } from "@/lib/documents/access";
-import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { resolveDocumentMimeType } from "@/lib/documents/constants";
 import { loadMaxDocumentSizeBytes } from "@/lib/documents/settings";
 import { buildDocumentStorageKey } from "@/lib/documents/storage-key";
@@ -41,10 +39,17 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   return apiSuccess((data ?? []) as unknown as ApplicantDocumentVersionRow[]);
 }
 
-// POST /api/v1/documents/:id/versions — new version (upload-url + complete variant,
-// same two-step-in-one-call pattern as the initial upload-url route). Re-points
-// current_version_id at the new version and refreshes the document's top-level
-// mime_type/file_size/original_filename to match it.
+// POST /api/v1/documents/:id/versions — issues a presigned R2 PUT URL for a
+// new version. Deliberately writes NOTHING to the database — no version row,
+// no re-pointing of current_version_id. That only happens in
+// POST /documents/:id/versions/:versionId/complete, after that route has
+// verified the file genuinely exists in R2.
+//
+// This split matters more here than on the initial upload: pointing
+// current_version_id at an unconfirmed key doesn't just create a ghost
+// document — it would silently break access to a PREVIOUSLY WORKING
+// document by repointing it at a file that was never actually written. See
+// docs/APPLICANT-DOCUMENTS-STATUS.md's incident note.
 export async function POST(request: NextRequest, context: RouteContext) {
   const { id } = await context.params;
   const requestId = crypto.randomUUID();
@@ -72,7 +77,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
     // empty-file.type gotcha; resolveDocumentMimeType's extension fallback
     // needs an empty string to reach it, not a "missing field" rejection.
     file_size: [required("file_size"), isPositiveInt()],
-    checksum: [required("checksum"), isSha256Checksum()],
   });
   if (!valid) return apiValidationError(errors);
 
@@ -91,15 +95,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
     });
   }
 
-  const { data: maxVersionRow } = await db
-    .from("applicant_document_versions")
-    .select("version_number")
-    .eq("document_id", id)
-    .order("version_number", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  const nextVersionNumber = ((maxVersionRow as { version_number: number } | null)?.version_number ?? 0) + 1;
-
   const versionId = crypto.randomUUID();
   const storageKey = buildDocumentStorageKey({
     tenantId: auth.tenantId,
@@ -117,77 +112,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return apiError("STORAGE_ERROR", "Failed to create upload URL", 500);
   }
 
-  const { data: createdVersion, error: versionError } = await db
-    .from("applicant_document_versions")
-    .insert({
-      id: versionId,
-      document_id: document.id,
-      version_number: nextVersionNumber,
-      storage_key: storageKey,
-      file_size: fileSize,
-      checksum: String(body.checksum).toLowerCase(),
-      mime_type: resolvedMimeType,
-      created_by: auth.userId,
-    })
-    .select()
-    .single();
-  if (versionError || !createdVersion) {
-    log.error({ error: versionError }, "Failed to create applicant document version row");
-    return apiError("DB_ERROR", "Failed to create document version", 500);
-  }
-
-  const { data: updatedDocument, error: updateError } = await db
-    .from("applicant_documents")
-    .update({
-      current_version_id: versionId,
-      mime_type: resolvedMimeType,
-      file_size: fileSize,
-      original_filename: originalFilename,
-      status: "uploaded",
-    })
-    .eq("id", document.id)
-    .select()
-    .single();
-  if (updateError || !updatedDocument) {
-    log.error({ error: updateError }, "Failed to re-point document at its new version");
-    return apiError("DB_ERROR", "Failed to finalize document version", 500);
-  }
-
-  await db.from("document_usage_events").insert({
-    event_type: "upload",
-    resource_type: "applicant_document_version",
-    resource_id: versionId,
-    actor_user_id: auth.userId,
+  log.info({ documentId: document.id, versionId, storageKey }, "New document version upload URL issued (no DB row yet — pending /complete)");
+  return apiSuccess({
+    version_id: versionId,
+    upload_url: signed.url,
+    upload_headers: signed.headers,
+    storage_key: storageKey,
   });
-
-  await Promise.all([
-    createAuditLog({
-      tenantId: auth.tenantId,
-      userId: auth.userId,
-      action: "document.version_created",
-      entityType: "applicant_document",
-      entityId: document.id,
-      requestId,
-    }),
-    emitEvent({
-      tenantId: auth.tenantId,
-      type: "document.version_created",
-      entityType: "applicant_document",
-      entityId: document.id,
-      payload: { versionNumber: nextVersionNumber },
-      requestId,
-    }),
-  ]);
-
-  log.info({ documentId: document.id, versionId, versionNumber: nextVersionNumber }, "Applicant document new version uploaded");
-  return apiSuccess(
-    {
-      document: updatedDocument,
-      version: createdVersion,
-      upload_url: signed.url,
-      upload_headers: signed.headers,
-      storage_key: storageKey,
-    },
-    201,
-  );
 }

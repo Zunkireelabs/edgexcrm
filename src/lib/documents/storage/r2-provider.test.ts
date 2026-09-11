@@ -156,4 +156,45 @@ describe("R2Provider", () => {
       CopySource: "applicant-documents/versions%2Fv1%2Foriginal.pdf",
     });
   });
+
+  it("exists returns true when HeadObjectCommand succeeds", async () => {
+    const send = vi.fn(async () => ({}));
+    const client = { send } as unknown as S3Client;
+    const provider = new R2Provider(client, "applicant-documents");
+
+    await expect(provider.exists("tenants/t1/.../original.pdf")).resolves.toBe(true);
+    const command = send.mock.calls[0][0] as unknown as { input: Record<string, unknown> };
+    expect(command.input).toMatchObject({ Bucket: "applicant-documents", Key: "tenants/t1/.../original.pdf" });
+  });
+
+  it("exists returns false when the object is genuinely missing (NotFound)", async () => {
+    const client = fakeClient(async () => {
+      const err = new Error("not found");
+      (err as unknown as { name: string }).name = "NotFound";
+      throw err;
+    });
+    const provider = new R2Provider(client, "applicant-documents");
+
+    await expect(provider.exists("missing-key")).resolves.toBe(false);
+  });
+
+  it("exists returns false on a plain 404 status code even without the NotFound error name", async () => {
+    const client = fakeClient(async () => {
+      const err = new Error("not found");
+      (err as unknown as { $metadata: { httpStatusCode: number } }).$metadata = { httpStatusCode: 404 };
+      throw err;
+    });
+    const provider = new R2Provider(client, "applicant-documents");
+
+    await expect(provider.exists("missing-key")).resolves.toBe(false);
+  });
+
+  it("exists rethrows a non-404 error (network/auth failure) instead of treating it as absent", async () => {
+    const client = fakeClient(async () => {
+      throw new Error("AccessDenied");
+    });
+    const provider = new R2Provider(client, "applicant-documents");
+
+    await expect(provider.exists("some-key")).rejects.toThrow(/AccessDenied/);
+  });
 });

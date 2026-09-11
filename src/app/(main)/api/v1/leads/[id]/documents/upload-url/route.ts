@@ -2,7 +2,6 @@ import { NextRequest } from "next/server";
 import { authenticateRequest } from "@/lib/api/auth";
 import { apiSuccess, apiUnauthorized, apiForbidden, apiNotFound, apiError, apiValidationError } from "@/lib/api/response";
 import { validate, required, isIn, isPositiveInt, maxLength } from "@/lib/api/validation";
-import { isSha256Checksum } from "@/lib/documents/validation";
 import { createRequestLogger } from "@/lib/logger";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
@@ -18,9 +17,15 @@ interface RouteContext {
 }
 
 // POST /api/v1/leads/:id/documents/upload-url
-// Issues a presigned R2 PUT URL and creates the document + version-1 rows
-// (status: 'uploaded'). No Inngest ingestion event fires — that's a later
-// phase's job. See docs/APPLICANT-DOCUMENTS-PHASE1-BRIEF.md §5.
+// Issues a presigned R2 PUT URL only. Deliberately writes NOTHING to the
+// database — no applicant_documents row, no applicant_document_versions row.
+// A row is only ever created by POST /complete, and only after that route
+// has independently verified the file is genuinely sitting in R2 (via
+// R2Provider.exists()). This is the fix for a real bug: an earlier version
+// of this route created the rows here, before the client had uploaded
+// anything — if the client's PUT then failed or never happened, the
+// database permanently claimed a document existed with nothing behind it.
+// See docs/APPLICANT-DOCUMENTS-STATUS.md's incident note for the full story.
 export async function POST(request: NextRequest, context: RouteContext) {
   const { id } = await context.params;
   const requestId = crypto.randomUUID();
@@ -51,7 +56,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
     // extension below, so an empty string must reach that, not get
     // rejected as "missing" first.
     file_size: [required("file_size"), isPositiveInt()],
-    checksum: [required("checksum"), isSha256Checksum()],
+    // checksum is validated at /complete, not here — this route writes
+    // nothing to the database, so there's nowhere to persist it yet.
   });
   if (!valid) return apiValidationError(errors);
 
@@ -91,62 +97,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return apiError("STORAGE_ERROR", "Failed to create upload URL", 500);
   }
 
-  const { data: created, error: docError } = await db
-    .from("applicant_documents")
-    .insert({
-      id: documentId,
-      lead_id: id,
-      document_type: String(body.document_type),
-      name: String(body.name).trim(),
-      original_filename: originalFilename,
-      mime_type: resolvedMimeType,
-      file_size: fileSize,
-      status: "uploaded",
-      description: body.description ? String(body.description) : null,
-      uploaded_by: auth.userId,
-    })
-    .select()
-    .single();
-  if (docError || !created) {
-    log.error({ error: docError }, "Failed to create applicant document row");
-    return apiError("DB_ERROR", "Failed to create document", 500);
-  }
-
-  const { error: versionError } = await db.from("applicant_document_versions").insert({
-    id: versionId,
+  log.info({ documentId, versionId, storageKey }, "Applicant document upload URL issued (no DB row yet — pending /complete)");
+  return apiSuccess({
     document_id: documentId,
-    version_number: 1,
+    version_id: versionId,
+    upload_url: signed.url,
+    upload_headers: signed.headers,
     storage_key: storageKey,
-    file_size: fileSize,
-    checksum: String(body.checksum).toLowerCase(),
-    mime_type: resolvedMimeType,
-    created_by: auth.userId,
   });
-  if (versionError) {
-    log.error({ error: versionError }, "Failed to create applicant document version row");
-    return apiError("DB_ERROR", "Failed to create document version", 500);
-  }
-
-  const { data: updated, error: updateError } = await db
-    .from("applicant_documents")
-    .update({ current_version_id: versionId })
-    .eq("id", documentId)
-    .select()
-    .single();
-  if (updateError || !updated) {
-    log.error({ error: updateError }, "Failed to point document at its first version");
-    return apiError("DB_ERROR", "Failed to finalize document", 500);
-  }
-
-  log.info({ documentId, versionId, storageKey }, "Applicant document upload URL issued");
-  return apiSuccess(
-    {
-      document: updated,
-      upload_url: signed.url,
-      upload_headers: signed.headers,
-      storage_key: storageKey,
-      version_id: versionId,
-    },
-    201,
-  );
 }

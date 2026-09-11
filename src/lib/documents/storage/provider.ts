@@ -27,4 +27,11 @@ export interface DocumentStorageProvider {
   // Version promotion / restore — copies bytes at one key to another without
   // a round-trip through the app server.
   copy(fromKey: string, toKey: string): Promise<void>;
+  // Lightweight existence check (HEAD, no body download) — the *complete*
+  // routes call this before ever writing a row to applicant_documents /
+  // applicant_document_versions, so a row can only exist for a file that is
+  // genuinely sitting in the bucket. Never trust a client's "the PUT
+  // succeeded" claim without checking here first — see the incident note in
+  // docs/APPLICANT-DOCUMENTS-STATUS.md.
+  exists(key: string): Promise<boolean>;
 }
