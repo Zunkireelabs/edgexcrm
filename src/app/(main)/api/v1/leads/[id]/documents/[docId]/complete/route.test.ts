@@ -10,6 +10,8 @@ const getDocumentStorageProviderMock = vi.fn();
 const existsMock = vi.fn();
 const createAuditLogMock = vi.fn();
 const emitEventMock = vi.fn();
+const isIngestionEnabledForTenantMock = vi.fn();
+const sendMock = vi.fn();
 
 vi.mock("@/lib/api/auth", () => ({ authenticateRequest: authenticateRequestMock }));
 vi.mock("@/industries/_loader", () => ({ getFeatureAccess: getFeatureAccessMock }));
@@ -17,6 +19,8 @@ vi.mock("@/lib/supabase/scoped", () => ({ scopedClient: scopedClientMock }));
 vi.mock("@/lib/documents/access", () => ({ assertLeadVisible: assertLeadVisibleMock }));
 vi.mock("@/lib/documents/storage/r2-provider", () => ({ getDocumentStorageProvider: getDocumentStorageProviderMock }));
 vi.mock("@/lib/api/audit", () => ({ createAuditLog: createAuditLogMock, emitEvent: emitEventMock }));
+vi.mock("@/lib/ai/flag", () => ({ isIngestionEnabledForTenant: isIngestionEnabledForTenantMock }));
+vi.mock("@/lib/inngest/client", () => ({ inngest: { send: sendMock } }));
 
 const AUTH = { userId: "user-1", tenantId: "tenant-1", industryId: "education_consultancy" } as unknown as AuthContext;
 const LEAD = { id: "lead-1", assigned_to: "user-1", branch_id: null, pipeline_id: "pipe-1", list_id: null };
@@ -86,6 +90,8 @@ beforeEach(() => {
   existsMock.mockReset();
   createAuditLogMock.mockReset();
   emitEventMock.mockReset();
+  isIngestionEnabledForTenantMock.mockReset();
+  sendMock.mockReset();
 
   authenticateRequestMock.mockResolvedValue(AUTH);
   getFeatureAccessMock.mockReturnValue(true);
@@ -94,6 +100,8 @@ beforeEach(() => {
   existsMock.mockResolvedValue(true);
   createAuditLogMock.mockResolvedValue(undefined);
   emitEventMock.mockResolvedValue(null);
+  isIngestionEnabledForTenantMock.mockResolvedValue(false);
+  sendMock.mockResolvedValue(undefined);
   scopedClientMock.mockResolvedValue(fakeDb());
 });
 
@@ -195,5 +203,52 @@ describe("POST /api/v1/leads/[id]/documents/[docId]/complete", () => {
     expect(res.status).toBe(500);
     const json = await res.json();
     expect(json.error.code).toBe("STORAGE_ERROR");
+  });
+
+  describe("Phase 3 ingestion trigger", () => {
+    it("does not send an ingest event when the tenant lacks the consent gate", async () => {
+      isIngestionEnabledForTenantMock.mockResolvedValue(false);
+      const createdDoc = { id: "doc-1", document_type: "passport" };
+      scopedClientMock.mockResolvedValue(fakeDb({ createdDoc, updatedDoc: createdDoc }));
+
+      const { POST } = await import("./route");
+      const res = await POST(fakeReq(validBody()), params());
+
+      expect(res.status).toBe(201);
+      expect(isIngestionEnabledForTenantMock).toHaveBeenCalledWith("tenant-1");
+      expect(sendMock).not.toHaveBeenCalled();
+    });
+
+    it("sends an ingest event with the right ids when the tenant has the consent gate", async () => {
+      isIngestionEnabledForTenantMock.mockResolvedValue(true);
+      const createdDoc = { id: "doc-1", document_type: "passport" };
+      scopedClientMock.mockResolvedValue(fakeDb({ createdDoc, updatedDoc: createdDoc }));
+
+      const { POST } = await import("./route");
+      const res = await POST(fakeReq(validBody()), params());
+
+      expect(res.status).toBe(201);
+      expect(sendMock).toHaveBeenCalledWith({
+        name: "applicant-documents/document.ingest.requested",
+        data: {
+          tenantId: "tenant-1",
+          leadId: "lead-1",
+          documentId: "doc-1",
+          versionId: "22222222-2222-2222-2222-222222222222",
+        },
+      });
+    });
+
+    it("does not send an ingest event on the idempotent (already-confirmed) path", async () => {
+      isIngestionEnabledForTenantMock.mockResolvedValue(true);
+      const existingDoc = { id: "doc-1", status: "uploaded" };
+      scopedClientMock.mockResolvedValue(fakeDb({ existingDoc }));
+
+      const { POST } = await import("./route");
+      const res = await POST(fakeReq(validBody()), params());
+
+      expect(res.status).toBe(200);
+      expect(sendMock).not.toHaveBeenCalled();
+    });
   });
 });

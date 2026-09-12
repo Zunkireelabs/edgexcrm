@@ -1,6 +1,7 @@
 import { serve } from "inngest/next";
 import { inngest } from "@/lib/inngest/client";
 import { kbIngest } from "@/lib/ai/ingestion/kb-ingest";
+import { applicantDocumentIngest } from "@/lib/inngest/functions/applicant-document-ingest";
 import { heartbeat } from "@/lib/inngest/functions/heartbeat";
 import { remindersScan } from "@/lib/inngest/functions/reminders";
 import { inboxProcess } from "@/lib/inngest/functions/inbox-process";
@@ -22,6 +23,7 @@ export const { GET, POST, PUT } = serve({
   client: inngest,
   functions: [
     kbIngest,
+    applicantDocumentIngest,
     heartbeat,
     remindersScan,
     inboxProcess,
