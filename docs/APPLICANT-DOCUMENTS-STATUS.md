@@ -8,14 +8,13 @@
 > § Read first, every session).
 
 **Last updated:** 2026-09-12. **Current state:** Phase 1 **merged and live on stage** (PR #530,
-commit `6036215b`). Phase 2 (UI) and Phase 3 (processing pipeline, this branch) are both **built and
-locally verified, on separate un-pushed branches — no PRs open yet.**
-**⚠️ Doc-divergence note:** each phase was branched fresh from `origin/stage` rather than stacked on
-the previous phase's branch, so `feature/applicant-documents-phase1`, `-phase2-ui`, and
-`-phase3-pipeline` each carry their OWN copy of this file, diverged from the point they branched.
-This copy (on `-phase3-pipeline`) does not have Phase 2's doc corrections. **Reconcile all three
-copies into one before any of these branches becomes a PR** — do not trust any single branch's copy
-as authoritative until then.
+commit `6036215b`). Phase 2 (UI, §2c) and Phase 3 (processing pipeline, §2d) are both **built,
+tested, and locally verified — on separate un-pushed branches, no PRs open yet.**
+Phase 2's branch (`feature/applicant-documents-phase2-ui`) was rebased onto the current `origin/stage`
+on 2026-09-12 (it had originally branched before PR #532 merged, which would have made it look like
+it deleted that PR's unrelated task-comments work — fixed, verified clean, re-tested). This copy of
+the doc was then reconciled onto both the Phase 2 and Phase 3 branches so they're identical and both
+carry the full picture — no more per-branch doc drift as of this update.
 **R2 is live:** Phase 0 (Cloudflare R2 account/bucket/token) is done — see §6. CORS was added
 2026-09-12 (on the Phase 2 branch) covering `localhost:3000` + both stage/prod origins.
 **Branches:** `feature/applicant-documents-phase1` (merged, PR [#530](https://github.com/Zunkireelabs/edgexcrm/pull/530)); `feature/applicant-documents-phase2-ui` (local, UI); `feature/applicant-documents-phase3-pipeline` (local, this one — processing pipeline).
@@ -159,6 +158,48 @@ bucket. 3 new tests in `documents/[id]/route.test.ts`, including an explicit fai
 proving the DB update is never reached when the purge fails.
 
 ---
+
+## 2c. Phase 2 (UI) — built and smoke-tested locally, 2026-09-12
+
+Branch `feature/applicant-documents-phase2-ui` (off `origin/stage`, not pushed). New
+`ApplicantDocumentsCard` (`src/industries/education-consultancy/features/applicant-documents/documents-card.tsx`
++ `labels.ts`) wired into the Lead Detail page's right sidebar (`lead-detail-v2.tsx`, gated on a new
+`documentsActive` prop threaded from `page.tsx`'s `getFeatureAccess(..., FEATURES.APPLICANT_DOCUMENTS)`
+call), following the exact same conditional-card pattern as `CheckInHistoryCard`/`ClassesCard` — no
+`Tabs` component exists on this page despite the roadmap calling it a "Lead Detail tab"; it's a card.
+Covers the roadmap's Phase 2 scope: grid/list toggle, upload dropzone (document-type picker → name →
+presigned R2 PUT → client-side SHA-256 checksum → `complete`), a viewer dialog (iframe for PDF, `img`
+for images, download-link fallback otherwise), and documents grouped by category via the existing
+`DOCUMENT_TYPE_CATEGORY` map. Built strictly against Phase 1's existing API contracts — no backend
+changes.
+
+**Smoke-tested for real, not just `npm run build`:** `npm run build` passed clean, then a scripted
+headless-Chromium session (Playwright, installed ad hoc into `/tmp` — not added to the repo) drove
+the actual local app: logged in as `admin@admizz.local` on the seeded `admizz-local` tenant, opened a
+real lead, and ran upload → list (grouped correctly under "Identity") → view → delete end to end.
+Confirmed against the database directly, not just the UI, that delete really soft-deletes
+(`deleted_at` set) and that the API list correctly excludes it afterward.
+
+**One real bug found and fixed by this smoke test, but it was an infra gap, not app code:** the R2
+bucket (`edgex-applicant-documents`) had no CORS policy, so the browser's direct PUT to R2 failed
+with `No 'Access-Control-Allow-Origin' header` on preflight — the presigned-URL upload pattern can
+only ever work if the bucket itself allows cross-origin PUT/GET from the app's origins. Fixed by
+adding a CORS policy in the Cloudflare dashboard (bucket Settings → CORS Policy) allowing
+`http://localhost:3000`, `https://dev-lead-crm.zunkireelabs.com`, and `https://lead-crm.zunkireelabs.com`
+for `GET`/`PUT`/`HEAD`. This was flagged as a known gap in §6 before Phase 2 started; it is now done
+for local — **confirm it's also applied before Phase 2 is ever exercised on stage or prod**, since
+CORS is a bucket-level setting, not something migrations or env vars carry.
+
+**Tests added same day (2026-09-12):** 4 tests for `ApplicantDocumentsCard` — empty state,
+category grouping, the `canManage=false` gate hiding upload/delete controls, and that delete calls
+DELETE and removes the item from the list. Upload's presigned-PUT + checksum path is left to this
+manual smoke test — jsdom's `crypto.subtle` support is inconsistent, and the route contracts already
+have full coverage.
+
+**Not done yet:** not pushed, no PR.
+
+---
+
 
 ## 2d. Phase 3 (processing pipeline) — raw-text ingestion built and tested locally, 2026-09-12
 
