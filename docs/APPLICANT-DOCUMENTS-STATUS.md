@@ -7,12 +7,16 @@
 > `docs/FEATURE-CATALOG.md` and archive this file per the repo's own doc-lifecycle rule (CLAUDE.md
 > § Read first, every session).
 
-**Last updated:** 2026-09-11. **Current state:** Phase 1 **merged and live on stage** — PR #530
+**Last updated:** 2026-09-12. **Current state:** Phase 1 **merged and live on stage** — PR #530
 merged to `stage` (commit `6036215b`), `deploy-staging.yml` ran and succeeded, so migration 231 is
 now applied on the stage DB (`dymeudcddasqpomfpjvt`) and the code is live on
-`dev-lead-crm.zunkireelabs.com`. Not yet promoted to prod — see §3.
+`dev-lead-crm.zunkireelabs.com`. Phase 2 (UI) is **built and smoke-tested locally, not yet a PR** —
+see §2b. Neither phase is promoted to prod yet — see §3.
 **R2 is live:** Phase 0 (Cloudflare R2 account/bucket/token) is done — see §6, no longer blocked.
-**Branch:** `feature/applicant-documents-phase1` (merged). **PR:** [#530](https://github.com/Zunkireelabs/edgexcrm/pull/530) (merged).
+R2 bucket CORS (needed for the browser to PUT/GET directly) was added 2026-09-12, local-origin only
+so far — see §6.
+**Branch:** `feature/applicant-documents-phase1` (merged, PR [#530](https://github.com/Zunkireelabs/edgexcrm/pull/530)). Phase 2 lives on
+`feature/applicant-documents-phase2-ui` (local only, not pushed).
 **Parent plan (source of truth for scope/rationale):** `~/.claude/plans/so-my-new-work-temporal-scott.md`
 ("Applicant Document Intelligence & Agentic RAG — EdgeX") — lives outside this repo (local Claude
 plans folder, not git-tracked), so its key content is reproduced below rather than only linked, to
@@ -154,13 +158,49 @@ proving the DB update is never reached when the purge fails.
 
 ---
 
+## 2c. Phase 2 (UI) — built and smoke-tested locally, 2026-09-12
+
+Branch `feature/applicant-documents-phase2-ui` (off `origin/stage`, not pushed). New
+`ApplicantDocumentsCard` (`src/industries/education-consultancy/features/applicant-documents/documents-card.tsx`
++ `labels.ts`) wired into the Lead Detail page's right sidebar (`lead-detail-v2.tsx`, gated on a new
+`documentsActive` prop threaded from `page.tsx`'s `getFeatureAccess(..., FEATURES.APPLICANT_DOCUMENTS)`
+call), following the exact same conditional-card pattern as `CheckInHistoryCard`/`ClassesCard` — no
+`Tabs` component exists on this page despite the roadmap calling it a "Lead Detail tab"; it's a card.
+Covers the roadmap's Phase 2 scope: grid/list toggle, upload dropzone (document-type picker → name →
+presigned R2 PUT → client-side SHA-256 checksum → `complete`), a viewer dialog (iframe for PDF, `img`
+for images, download-link fallback otherwise), and documents grouped by category via the existing
+`DOCUMENT_TYPE_CATEGORY` map. Built strictly against Phase 1's existing API contracts — no backend
+changes.
+
+**Smoke-tested for real, not just `npm run build`:** `npm run build` passed clean, then a scripted
+headless-Chromium session (Playwright, installed ad hoc into `/tmp` — not added to the repo) drove
+the actual local app: logged in as `admin@admizz.local` on the seeded `admizz-local` tenant, opened a
+real lead, and ran upload → list (grouped correctly under "Identity") → view → delete end to end.
+Confirmed against the database directly, not just the UI, that delete really soft-deletes
+(`deleted_at` set) and that the API list correctly excludes it afterward.
+
+**One real bug found and fixed by this smoke test, but it was an infra gap, not app code:** the R2
+bucket (`edgex-applicant-documents`) had no CORS policy, so the browser's direct PUT to R2 failed
+with `No 'Access-Control-Allow-Origin' header` on preflight — the presigned-URL upload pattern can
+only ever work if the bucket itself allows cross-origin PUT/GET from the app's origins. Fixed by
+adding a CORS policy in the Cloudflare dashboard (bucket Settings → CORS Policy) allowing
+`http://localhost:3000`, `https://dev-lead-crm.zunkireelabs.com`, and `https://lead-crm.zunkireelabs.com`
+for `GET`/`PUT`/`HEAD`. This was flagged as a known gap in §6 before Phase 2 started; it is now done
+for local — **confirm it's also applied before Phase 2 is ever exercised on stage or prod**, since
+CORS is a bucket-level setting, not something migrations or env vars carry.
+
+**Not done yet:** no automated tests for the new component (Phase 1 shipped with 59; this UI has
+zero), not pushed, no PR.
+
+---
+
 ## 3. Full roadmap (from the parent plan's §14) — what comes after this PR merges
 
 | Phase | Scope | Status |
 |---|---|---|
 | 0 | Cloudflare R2 account/bucket/API token/CORS/env vars (manual, not code) | In progress — see §6 |
 | **1** | **Schema, storage provider, core CRUD API routes, feature flag** | **Merged, live on stage (PR #530)** |
-| 2 | UI: grid/list toggle, upload dropzone, document viewer (iframe/img), Lead Detail tab, grouped-by-category view | Not started |
+| **2** | **UI: grid/list toggle, upload dropzone, document viewer (iframe/img), Lead Detail card, grouped-by-category view** | **Built + smoke-tested locally (§2c), not pushed, no PR** |
 | 3 | Processing pipeline: new Inngest fn (validate → parse → extract → chunk → embed → store), reuses existing `parseFileBytes()`/`chunkDocument()`/`embedTexts()`, new structured-extraction step per `document_type` | Not started |
 | 4 | RAG: retrieval module calling `applicant_document_hybrid_search`, lead-scoped, degraded-mode fallback on embedding failure | Not started |
 | 5 | Agent tools: 5 tools (`list_applicant_documents`, `search_applicant_document_content`, `get_document_metadata`/`get_document_extracted_data`, `find_missing_documents`, `get_document_download_url`) under `src/industries/education-consultancy/ai/tools/`, prompt-injection wrapper on all retrieved content | Not started |
@@ -261,12 +301,20 @@ very likely need several tuning passes, not one clean implementation.
   not just against the mock: a local smoke test drove `R2Provider`'s actual code path — signed
   upload URL → real PUT → server-side `getBytes()` read-back → signed download URL → real GET →
   delete — against the live bucket, and it passed end to end; the bucket was left empty afterward
-  (test object deleted, nothing orphaned). **CORS policy for browser-direct upload is still
-  not set** — not needed for Phase 1 (no browser code exists yet), but is needed before Phase 2's
-  UI can PUT directly from the browser; add it when Phase 2 starts. **Stage/prod env vars are
-  also still not set** (`R2_*` currently exists only in this local `.env.local`) — needed before
-  this feature can be tested on `dev-lead-crm` or promoted, per this repo's per-environment
-  `.env.local` convention (see CLAUDE.md § Supabase Projects for the same pattern on DB config).
+  (test object deleted, nothing orphaned). **CORS policy for browser-direct upload — DONE for
+  local (2026-09-12).** Added via the Cloudflare dashboard (bucket Settings → CORS Policy):
+  `AllowedOrigins` = `http://localhost:3000`, `https://dev-lead-crm.zunkireelabs.com`,
+  `https://lead-crm.zunkireelabs.com`; `AllowedMethods` = `GET`/`PUT`/`HEAD`; `AllowedHeaders` = `*`;
+  `ExposeHeaders` = `ETag`; `MaxAgeSeconds` = 3600. Confirmed fixing it locally by smoke-testing
+  Phase 2's upload flow before vs. after (see §2c) — before, the browser's PUT failed with a CORS
+  preflight error; after, it succeeded. **This is a Cloudflare-bucket-level setting, not something
+  a migration or env var carries** — the stage/prod origins are already in the policy, but nobody
+  has yet exercised Phase 2 against those environments to confirm the policy actually takes effect
+  there too (it should, since it was set on the one shared bucket, not a per-environment one).
+  **Stage/prod `R2_*` env vars are still not set** (currently exists only in local `.env.local`) —
+  needed before this feature can be tested on `dev-lead-crm` or promoted, per this repo's
+  per-environment `.env.local` convention (see CLAUDE.md § Supabase Projects for the same pattern on
+  DB config).
 - **Inngest execution budget (flagged in the parent plan, relevant from Phase 3 onward).** The
   shared Inngest account is Hobby-tier (50,000 executions/month, shared across staging AND
   production, across every scheduled/event function in the app — not just this feature). Each
