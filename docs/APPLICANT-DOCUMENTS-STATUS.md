@@ -17,7 +17,7 @@ the doc was then reconciled onto both the Phase 2 and Phase 3 branches so they'r
 carry the full picture — no more per-branch doc drift as of this update.
 **R2 is live:** Phase 0 (Cloudflare R2 account/bucket/token) is done — see §6. CORS was added
 2026-09-12 (on the Phase 2 branch) covering `localhost:3000` + both stage/prod origins.
-**Branches:** `feature/applicant-documents-phase1` (merged, PR [#530](https://github.com/Zunkireelabs/edgexcrm/pull/530)); `feature/applicant-documents-phase2-ui` (local, UI); `feature/applicant-documents-phase3-pipeline` (local, this one — processing pipeline).
+**Branches:** `feature/applicant-documents-phase1` (merged, PR [#530](https://github.com/Zunkireelabs/edgexcrm/pull/530)); `feature/applicant-documents-phase2-ui` (local, UI); `feature/applicant-documents-phase3-pipeline` (local, processing pipeline). This file is kept identical across both open branches — see §2c/§2d for what each one built.
 **Parent plan (source of truth for scope/rationale):** `~/.claude/plans/so-my-new-work-temporal-scott.md`
 ("Applicant Document Intelligence & Agentic RAG — EdgeX") — lives outside this repo (local Claude
 plans folder, not git-tracked), so its key content is reproduced below rather than only linked, to
