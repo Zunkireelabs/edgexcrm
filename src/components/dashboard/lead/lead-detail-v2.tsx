@@ -43,6 +43,7 @@ import { InvestorProfileCard } from "@/industries/real-estate/features/investors
 import { CommitmentsPanel } from "@/industries/real-estate/features/investors/components/commitments-panel";
 import { InvestorCommsCard } from "@/industries/real-estate/features/investors/components/investor-comms-card";
 import { CheckInHistoryCard } from "@/industries/_shared/features/check-in/check-in-history-card";
+import { ApplicantDocumentsCard } from "@/industries/education-consultancy/features/applicant-documents/documents-card";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 
@@ -99,6 +100,7 @@ interface LeadDetailV2Props {
   classesActive?: boolean;
   applicationsActive?: boolean;
   checkInActive?: boolean;
+  documentsActive?: boolean;
   consentEnabled?: boolean;
   consentSigned?: boolean;
   /** Gates whether a project-linked task's chip links to the cockpit — resolved server-side via getFeatureAccess, never re-derived here. */
@@ -180,6 +182,7 @@ export function LeadDetailV2({
   classesActive,
   applicationsActive,
   checkInActive,
+  documentsActive,
   consentEnabled = false,
   consentSigned = false,
   projectBoardEnabled,
@@ -1000,6 +1003,12 @@ export function LeadDetailV2({
                   leadId={currentLead.id}
                   teamMemberNames={teamMemberNames}
                   teamMemberEmails={teamMemberEmails}
+                />
+              )}
+              {documentsActive && (
+                <ApplicantDocumentsCard
+                  leadId={currentLead.id}
+                  canManage={canEdit ?? isAdmin}
                 />
               )}
             </div>
