@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FileText, Upload, Trash2, Loader2, Download, LayoutGrid, List as ListIcon, Image as ImageIcon } from "lucide-react";
+import { FileText, Upload, Trash2, Loader2, Download, LayoutGrid, List as ListIcon, Image as ImageIcon, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -34,6 +34,7 @@ interface ApplicantDocument {
   mime_type: string;
   file_size: number;
   status: string;
+  processing_error: string | null;
   current_version_id: string | null;
   uploaded_by: string | null;
   created_at: string;
@@ -383,6 +384,37 @@ export function ApplicantDocumentsCard({
   );
 }
 
+// Surfaces Phase 3 processing outcome — a review finding on PR #534: a
+// document that fails ingestion (status 'failed', processing_error set) used
+// to look pixel-identical to one that's fully ready, since nothing read
+// `status` in this UI. Renders nothing for 'uploaded'/'ready' — those are the
+// normal "no news is good news" states, including tenants without the AI
+// consent gate on, where every document stays 'uploaded' forever by design
+// (see docs/APPLICANT-DOCUMENTS-STATUS.md §2d) and must never look stuck.
+function DocumentStatusBadge({ status, processingError }: { status: string; processingError: string | null }) {
+  if (status === "queued" || status === "processing") {
+    return (
+      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 gap-1 bg-amber-50 text-amber-700 border-amber-200">
+        <Loader2 className="h-2.5 w-2.5 animate-spin" />
+        Processing
+      </Badge>
+    );
+  }
+  if (status === "failed") {
+    return (
+      <Badge
+        variant="secondary"
+        className="text-[10px] px-1.5 py-0 gap-1 bg-red-50 text-red-700 border-red-200"
+        title={processingError ?? "Processing failed"}
+      >
+        <AlertCircle className="h-2.5 w-2.5" />
+        Failed
+      </Badge>
+    );
+  }
+  return null;
+}
+
 function DocumentTile({
   doc,
   viewMode,
@@ -408,6 +440,7 @@ function DocumentTile({
         <Icon className="h-5 w-5 text-muted-foreground mb-1.5" />
         <p className="text-xs font-medium truncate">{doc.name}</p>
         <p className="text-[10px] text-muted-foreground truncate">{DOCUMENT_TYPE_LABELS[doc.document_type]}</p>
+        <DocumentStatusBadge status={doc.status} processingError={doc.processing_error} />
         {canDelete && (
           <span
             role="button"
@@ -437,10 +470,13 @@ function DocumentTile({
       <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
       <button type="button" onClick={onView} className="min-w-0 flex-1 text-left">
         <p className="text-xs font-medium truncate">{doc.name}</p>
-        <p className="text-[10px] text-muted-foreground">
-          {DOCUMENT_TYPE_LABELS[doc.document_type]}
-          {formatBytes(doc.file_size) && <> · {formatBytes(doc.file_size)}</>}
-        </p>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <p className="text-[10px] text-muted-foreground">
+            {DOCUMENT_TYPE_LABELS[doc.document_type]}
+            {formatBytes(doc.file_size) && <> · {formatBytes(doc.file_size)}</>}
+          </p>
+          <DocumentStatusBadge status={doc.status} processingError={doc.processing_error} />
+        </div>
       </button>
       <button type="button" onClick={onView} className="shrink-0 text-muted-foreground hover:text-foreground" title="View">
         <Download className="h-3.5 w-3.5" />

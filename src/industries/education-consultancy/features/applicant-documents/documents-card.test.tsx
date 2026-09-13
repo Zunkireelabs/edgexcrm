@@ -5,12 +5,14 @@
 // per-document delete gate (mirrors the server's admin-or-uploader rule —
 // a review finding on PR #533: canManage alone is broader than the server's
 // actual DELETE authorization, so an editor who isn't the uploader used to
-// see a Delete button the server would then 403), and that deleting a
-// document actually calls DELETE and removes it from the list. Upload's
-// presigned-PUT + checksum path is exercised by the manual smoke test
-// (docs/APPLICANT-DOCUMENTS-STATUS.md §2c), not here — jsdom's crypto.subtle
-// support is inconsistent across environments, and the API contract itself
-// already has full route-level test coverage.
+// see a Delete button the server would then 403), the processing-status
+// badge (a review finding on PR #534: a document that fails ingestion used
+// to look identical to a fully ready one, since nothing read `status`), and
+// that deleting a document actually calls DELETE and removes it from the
+// list. Upload's presigned-PUT + checksum path is exercised by the manual
+// smoke test (docs/APPLICANT-DOCUMENTS-STATUS.md §2c), not here — jsdom's
+// crypto.subtle support is inconsistent across environments, and the API
+// contract itself already has full route-level test coverage.
 
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent, cleanup } from "@testing-library/react";
@@ -31,6 +33,7 @@ const PASSPORT_DOC = {
   mime_type: "application/pdf",
   file_size: 12345,
   status: "uploaded",
+  processing_error: null,
   current_version_id: "v1",
   uploaded_by: "user-1",
   created_at: new Date().toISOString(),
@@ -137,6 +140,38 @@ describe("ApplicantDocumentsCard", () => {
 
     await waitFor(() => expect(screen.getByText("passport.pdf")).toBeInTheDocument());
     expect(screen.getByTitle("Delete")).toBeInTheDocument();
+  });
+
+  it("shows no status badge for a normal uploaded/ready document (no news is good news)", async () => {
+    global.fetch = mockFetch([{ ...PASSPORT_DOC, status: "ready" }]) as unknown as typeof fetch;
+
+    render(<ApplicantDocumentsCard leadId="lead-1" canManage={true} currentUserId="user-1" isAdmin={false} />);
+
+    await waitFor(() => expect(screen.getByText("passport.pdf")).toBeInTheDocument());
+    expect(screen.queryByText("Processing")).not.toBeInTheDocument();
+    expect(screen.queryByText("Failed")).not.toBeInTheDocument();
+  });
+
+  it("shows a Processing badge while the document is queued or processing", async () => {
+    global.fetch = mockFetch([{ ...PASSPORT_DOC, status: "processing" }]) as unknown as typeof fetch;
+
+    render(<ApplicantDocumentsCard leadId="lead-1" canManage={true} currentUserId="user-1" isAdmin={false} />);
+
+    await waitFor(() => expect(screen.getByText("passport.pdf")).toBeInTheDocument());
+    expect(screen.getByText("Processing")).toBeInTheDocument();
+  });
+
+  it("REGRESSION (PR #534 review): shows a Failed badge with the error in a tooltip when ingestion fails", async () => {
+    global.fetch = mockFetch([
+      { ...PASSPORT_DOC, status: "failed", processing_error: "OCR could not read the scanned page" },
+    ]) as unknown as typeof fetch;
+
+    render(<ApplicantDocumentsCard leadId="lead-1" canManage={true} currentUserId="user-1" isAdmin={false} />);
+
+    await waitFor(() => expect(screen.getByText("passport.pdf")).toBeInTheDocument());
+    const badge = screen.getByText("Failed");
+    expect(badge).toBeInTheDocument();
+    expect(badge).toHaveAttribute("title", "OCR could not read the scanned page");
   });
 
   it("deletes a document and removes it from the list", async () => {
