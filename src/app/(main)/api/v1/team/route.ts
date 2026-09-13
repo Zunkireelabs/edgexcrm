@@ -85,10 +85,17 @@ export async function GET(request: Request) {
   }
 
   if (minimal) {
-    const roster = members.map((m) => ({
-      user_id: m.user_id,
-      name: nameMap.get(m.user_id) || userMap.get(m.user_id) || "Unknown",
-    }));
+    // Round 2 slice E §3.7 — a suspended member can't log in, so they must
+    // not appear in the @-mention / assignee roster that feeds ⌘K and
+    // MemberPicker. Only in this reduced projection: the full roster below
+    // still lists suspended members for admin management (Team UI shows them
+    // greyed out, not removed).
+    const roster = members
+      .filter((m) => !m.suspended_at)
+      .map((m) => ({
+        user_id: m.user_id,
+        name: nameMap.get(m.user_id) || userMap.get(m.user_id) || "Unknown",
+      }));
     return apiSuccess(roster);
   }
 

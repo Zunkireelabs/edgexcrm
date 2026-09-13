@@ -13,11 +13,37 @@ interface TaskEmailTemplateParams {
   primaryColor?: string;
 }
 
+function taskTitleBox(taskTitle: string): string {
+  return `
+            <p style="margin: 0; font-size: 20px; font-weight: 600; color: #111;">
+              ${taskTitle}
+            </p>`;
+}
+
+// Round 2 slice E digest — a list of titles in place of the single-task box.
+// Capped at 25 (the batch's own cap) so a long paste never produces a wall of
+// email.
+function taskTitleListBox(titles: string[]): string {
+  const items = titles
+    .slice(0, 25)
+    .map(
+      (t) => `
+            <p style="margin: 0 0 8px 0; font-size: 15px; font-weight: 500; color: #111;">
+              • ${t}
+            </p>`,
+    )
+    .join("");
+  return `${items}
+            <p style="margin: 8px 0 0 0; font-size: 13px; color: #888;">
+              ${titles.length} task${titles.length === 1 ? "" : "s"} total
+            </p>`;
+}
+
 function shell({
   tenantName,
   heading,
   bodyLine,
-  taskTitle,
+  bodyBoxHtml,
   taskLink,
   ctaLabel,
   primaryColor = "#2272B4",
@@ -25,7 +51,7 @@ function shell({
   tenantName: string;
   heading: string;
   bodyLine: string;
-  taskTitle: string;
+  bodyBoxHtml: string;
   taskLink: string;
   ctaLabel: string;
   primaryColor?: string;
@@ -60,10 +86,7 @@ function shell({
               </h1>
               <table width="100%" cellpadding="0" cellspacing="0" style="margin: 0 0 32px 0; background-color: #f8f9fa; border-radius: 8px; border: 1px solid #eee;">
                 <tr>
-                  <td style="padding: 24px;">
-                    <p style="margin: 0; font-size: 20px; font-weight: 600; color: #111;">
-                      ${taskTitle}
-                    </p>
+                  <td style="padding: 24px;">${bodyBoxHtml}
                   </td>
                 </tr>
               </table>
@@ -112,7 +135,7 @@ export function getTaskAssignedEmailTemplate({
     tenantName,
     heading: "New task assigned to you",
     bodyLine: `Assigned by <strong>${actorEmail}</strong>`,
-    taskTitle,
+    bodyBoxHtml: taskTitleBox(taskTitle),
     taskLink,
     ctaLabel: "View Task",
     primaryColor,
@@ -134,7 +157,7 @@ export function getTaskCompletedEmailTemplate({
     tenantName,
     heading: "Task completed",
     bodyLine: `Marked done by <strong>${actorEmail}</strong>`,
-    taskTitle,
+    bodyBoxHtml: taskTitleBox(taskTitle),
     taskLink,
     ctaLabel: "View Task",
     primaryColor,
@@ -143,4 +166,37 @@ export function getTaskCompletedEmailTemplate({
 
 export function getTaskCompletedEmailSubject(taskTitle: string): string {
   return `Task completed: ${taskTitle}`;
+}
+
+// Round 2 slice E — one digest email for a whole batch, instead of one email
+// per task (the brief's hard rule: pasting 8 lines for a teammate must not
+// train them to filter EdgeX mail with 8 separate emails).
+interface TasksDigestEmailTemplateParams {
+  tenantName: string;
+  actorEmail: string;
+  titles: string[];
+  taskLink: string;
+  primaryColor?: string;
+}
+
+export function getTasksAssignedDigestEmailTemplate({
+  tenantName,
+  actorEmail,
+  titles,
+  taskLink,
+  primaryColor,
+}: TasksDigestEmailTemplateParams): string {
+  return shell({
+    tenantName,
+    heading: `New tasks assigned to you`,
+    bodyLine: `Assigned by <strong>${actorEmail}</strong>`,
+    bodyBoxHtml: taskTitleListBox(titles),
+    taskLink,
+    ctaLabel: "View Tasks",
+    primaryColor,
+  });
+}
+
+export function getTasksAssignedDigestEmailSubject(actorEmail: string, count: number): string {
+  return `${actorEmail} assigned you ${count} task${count === 1 ? "" : "s"}`;
 }

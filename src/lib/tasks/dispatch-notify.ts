@@ -1,6 +1,10 @@
 import { createNotificationsExcept, NotificationTypes } from "@/lib/notifications";
 import { isTaskEmailEnabled } from "@/lib/email/task-email-gate";
-import { sendTaskAssignedEmail, sendTaskCompletedEmail } from "@/lib/email/send-task-assigned";
+import {
+  sendTaskAssignedEmail,
+  sendTaskCompletedEmail,
+  sendTasksAssignedDigestEmail,
+} from "@/lib/email/send-task-assigned";
 import type { ScopedClient } from "@/lib/supabase/scoped";
 
 // Round 1 — the Dispatch Loop (docs/IT-AGENCY-DELIVERY-ADOPTION-PLAN.md §3).
@@ -76,6 +80,45 @@ export function notifyTaskAssigned(
   opts: { taskId: string; taskTitle: string; assigneeUserId: string; taskPath: string },
 ): void {
   fireEmail(ctx, "assigned", opts.assigneeUserId, opts.taskId, opts.taskTitle, opts.taskPath);
+}
+
+/**
+ * Round 2 slice E (docs/IT-AGENCY-ROUND2-SLICE-E-CAPTURE-BRIEF.md §3.5) — the
+ * batch counterpart to notifyTaskAssigned. A multi-line paste delegated to one
+ * teammate must send that teammate exactly ONE email, not one per task —
+ * fireEmail's per-task email is skipped entirely for a batch (createTaskCore /
+ * createProjectTaskCore are called with notify:false) and this is called once
+ * afterward instead. Same fire-and-forget contract: never throws, never
+ * blocks the caller.
+ */
+export function notifyTasksAssignedBatch(
+  ctx: TaskNotifyCtx,
+  opts: { assigneeUserId: string; titles: string[]; link: string },
+): void {
+  if (!isTaskEmailEnabled(ctx.industryId)) return;
+  if (opts.assigneeUserId === ctx.actorUserId) return; // never email yourself
+  void (async () => {
+    try {
+      const raw = ctx.db.raw();
+      const [{ data: recipient }, { data: tenant }] = await Promise.all([
+        raw.auth.admin.getUserById(opts.assigneeUserId),
+        raw.from("tenants").select("name, primary_color").eq("id", ctx.tenantId).single(),
+      ]);
+      const to = recipient?.user?.email;
+      if (!to || !tenant) return;
+      const res = await sendTasksAssignedDigestEmail({
+        to,
+        actorEmail: ctx.actorEmail || "a teammate",
+        tenantName: (tenant as { name: string }).name,
+        titles: opts.titles,
+        link: opts.link,
+        primaryColor: (tenant as { primary_color: string | null }).primary_color || undefined,
+      });
+      if (!res.success) ctx.log.warn({ count: opts.titles.length, err: res.error }, "tasks digest email not sent");
+    } catch (err) {
+      ctx.log.error({ err, count: opts.titles.length }, "error firing tasks digest email");
+    }
+  })();
 }
 
 /**

@@ -1,11 +1,47 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronUp, Reply } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ChevronDown, ChevronUp, Reply, ListPlus } from "lucide-react";
+import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { TaskComposer } from "@/components/dashboard/tasks/task-composer";
+import { notifyTaskChanged } from "@/lib/tasks/task-events";
 import type { EmailThread, Email } from "../hooks/use-email-threads";
+
+const MAX_DESCRIPTION_LENGTH = 1800;
+
+// Round 2 slice E §3.6 — plain-text conversion happens client-side with
+// DOMParser. Deliberately NOT importing htmlToText from
+// src/lib/ai/ingestion/parser.ts — that is server ingestion code and must
+// not enter the client bundle.
+function htmlToPlainText(html: string): string {
+  if (typeof window === "undefined") return "";
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  return (doc.body.textContent ?? "").replace(/\s+/g, " ").trim();
+}
+
+function buildTaskPrefill(thread: EmailThread, teamMemberEmails: Record<string, string>): { initialTitle: string; initialDescription: string } {
+  const title = (thread.subject || `Follow up: ${thread.emails[0]?.from_name || thread.emails[0]?.from_email || ""}`).slice(0, 255);
+
+  const lastInbound = [...thread.emails].reverse().find((e) => e.direction === "inbound");
+  const source = lastInbound ?? thread.emails[thread.emails.length - 1] ?? null;
+
+  let description = "";
+  if (source) {
+    const plain = htmlToPlainText(source.body_html).slice(0, MAX_DESCRIPTION_LENGTH);
+    const fromLabel = source.direction === "inbound"
+      ? (source.from_name || source.from_email)
+      : (source.sender_user_id ? (teamMemberEmails[source.sender_user_id] ?? source.from_email) : source.from_email);
+    const date = source.sent_at ?? source.received_at ?? null;
+    const dateLabel = date ? new Date(date).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "";
+    description = `From email: "${source.subject}" — ${[fromLabel, dateLabel].filter(Boolean).join(", ")}\n\n${plain}`;
+  }
+
+  return { initialTitle: title, initialDescription: description };
+}
 
 interface EmailThreadCardProps {
   thread: EmailThread;
@@ -14,6 +50,8 @@ interface EmailThreadCardProps {
   ownConnectedInboxes: Array<{ id: string; email: string }>;
   onReply: (thread: EmailThread, lastMessage: Email) => void;
   onThreadRead?: (threadId: string) => void;
+  /** When set, the expanded footer offers "Create task" (Round 2 slice E §3.6). */
+  leadId?: string;
 }
 
 function formatRelativeTime(dateString: string | null): string {
@@ -112,12 +150,16 @@ function MessageRow({
 
 export function EmailThreadCard({
   thread,
+  currentUserId,
   teamMemberEmails,
   ownConnectedInboxes,
   onReply,
   onThreadRead,
+  leadId,
 }: EmailThreadCardProps) {
+  const router = useRouter();
   const [expanded, setExpanded] = useState(false);
+  const [composerOpen, setComposerOpen] = useState(false);
 
   const hasInbound = thread.emails.some((e) => e.direction === "inbound");
   const hasUnreadInbound = thread.emails.some((e) => e.direction === "inbound" && !e.read_at);
@@ -189,7 +231,39 @@ export function EmailThreadCard({
                 teamMemberEmails={teamMemberEmails}
               />
             ))}
-            <div className="flex justify-end pt-1">
+            {composerOpen && leadId && currentUserId && (
+              <div onClick={(e) => e.stopPropagation()}>
+                <TaskComposer
+                  currentUserId={currentUserId}
+                  context={{ leadId }}
+                  defaultExpanded
+                  onCancel={() => setComposerOpen(false)}
+                  onCreated={(task) => {
+                    setComposerOpen(false);
+                    notifyTaskChanged();
+                    const id = (task as { id?: string }).id;
+                    toast.success("Task created", {
+                      action: id ? { label: "Open", onClick: () => router.push(`/tasks/${id}`) } : undefined,
+                    });
+                  }}
+                  {...buildTaskPrefill(thread, teamMemberEmails)}
+                />
+              </div>
+            )}
+            <div className="flex justify-end gap-2 pt-1">
+              {leadId && currentUserId && !composerOpen && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setComposerOpen(true);
+                  }}
+                >
+                  <ListPlus className="h-3.5 w-3.5 mr-1.5" />
+                  Create task
+                </Button>
+              )}
               <Button
                 variant="outline"
                 size="sm"

@@ -7,16 +7,21 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const createNotificationsExcept = vi.hoisted(() => vi.fn());
 const sendTaskAssignedEmail = vi.hoisted(() => vi.fn(async () => ({ success: true })));
 const sendTaskCompletedEmail = vi.hoisted(() => vi.fn(async () => ({ success: true })));
+const sendTasksAssignedDigestEmail = vi.hoisted(() => vi.fn(async () => ({ success: true })));
 const isTaskEmailEnabled = vi.hoisted(() => vi.fn(() => true));
 
 vi.mock("@/lib/notifications", () => ({
   createNotificationsExcept,
   NotificationTypes: { TASK_COMPLETED: "task.completed", TASK_ASSIGNED: "task.assigned" },
 }));
-vi.mock("@/lib/email/send-task-assigned", () => ({ sendTaskAssignedEmail, sendTaskCompletedEmail }));
+vi.mock("@/lib/email/send-task-assigned", () => ({
+  sendTaskAssignedEmail,
+  sendTaskCompletedEmail,
+  sendTasksAssignedDigestEmail,
+}));
 vi.mock("@/lib/email/task-email-gate", () => ({ isTaskEmailEnabled }));
 
-import { notifyTaskAssigned, notifyTaskCompleted } from "./dispatch-notify";
+import { notifyTaskAssigned, notifyTaskCompleted, notifyTasksAssignedBatch } from "./dispatch-notify";
 
 function ctx(overrides: Record<string, unknown> = {}) {
   return {
@@ -43,6 +48,7 @@ beforeEach(() => {
   createNotificationsExcept.mockClear();
   sendTaskAssignedEmail.mockClear();
   sendTaskCompletedEmail.mockClear();
+  sendTasksAssignedDigestEmail.mockClear();
   isTaskEmailEnabled.mockReturnValue(true);
 });
 
@@ -102,5 +108,41 @@ describe("notifyTaskAssigned", () => {
     notifyTaskAssigned(ctx(), { taskId: "t1", taskTitle: "Ship", assigneeUserId: "u-actor", taskPath: "/tasks" });
     await new Promise((r) => setTimeout(r, 10));
     expect(sendTaskAssignedEmail).not.toHaveBeenCalled();
+  });
+});
+
+describe("notifyTasksAssignedBatch", () => {
+  it("sends exactly ONE digest email for the whole batch, not one per title", async () => {
+    notifyTasksAssignedBatch(ctx(), {
+      assigneeUserId: "u-new",
+      titles: ["Call vendor", "Send invoice", "Book flights"],
+      link: "/home",
+    });
+    await vi.waitFor(() => expect(sendTasksAssignedDigestEmail).toHaveBeenCalledTimes(1));
+    const [params] = sendTasksAssignedDigestEmail.mock.calls[0] as unknown as [{ titles: string[]; link: string }];
+    expect(params.titles).toEqual(["Call vendor", "Send invoice", "Book flights"]);
+    expect(sendTaskAssignedEmail).not.toHaveBeenCalled();
+  });
+
+  it("never emails the actor (self-assigned batch)", async () => {
+    notifyTasksAssignedBatch(ctx(), { assigneeUserId: "u-actor", titles: ["Solo task"], link: "/home" });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(sendTasksAssignedDigestEmail).not.toHaveBeenCalled();
+  });
+
+  it("respects the tenant email gate", async () => {
+    isTaskEmailEnabled.mockReturnValue(false);
+    notifyTasksAssignedBatch(ctx(), { assigneeUserId: "u-new", titles: ["Task"], link: "/home" });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(sendTasksAssignedDigestEmail).not.toHaveBeenCalled();
+  });
+
+  it("a throwing digest sender never propagates", async () => {
+    sendTasksAssignedDigestEmail.mockRejectedValueOnce(new Error("resend down"));
+    const c = ctx();
+    expect(() =>
+      notifyTasksAssignedBatch(c, { assigneeUserId: "u-new", titles: ["Task"], link: "/home" }),
+    ).not.toThrow();
+    await vi.waitFor(() => expect((c as { log: { error: ReturnType<typeof vi.fn> } }).log.error).toHaveBeenCalled());
   });
 });
