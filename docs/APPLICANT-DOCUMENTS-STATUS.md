@@ -196,7 +196,40 @@ DELETE and removes the item from the list. Upload's presigned-PUT + checksum pat
 manual smoke test — jsdom's `crypto.subtle` support is inconsistent, and the route contracts already
 have full coverage.
 
-**Not done yet:** not pushed, no PR.
+**Merged 2026-09-13 as PR #533**, with two review-found UI bugs fixed before/during review — both
+documented in full in the dedicated `feature/applicant-documents-status-indicator` branch section
+below, since the second one landed as its own follow-up branch after #533 merged:
+
+1. **Delete button shown to editors who can't actually delete.** `canManage` (a broad "can edit
+   this lead" permission) controlled the Delete icon, but the server only allows a tenant admin or
+   the document's original uploader. A counselor with edit rights saw Delete on every document,
+   clicked it, and got a confusing 403. Fixed by computing delete visibility per document
+   (`isAdmin || doc.uploaded_by === currentUserId`), mirroring the server's exact rule. Fixed in
+   #533 itself (commit `a69db066`) before merge.
+2. **Silent processing failures — see the dedicated section below** (`feature/applicant-documents-status-indicator`, after #533 had already merged).
+
+---
+
+## 2e. Follow-up: processing-status visibility (found in PR #534 review), 2026-09-13
+
+**Found by:** a reviewer during PR #534's review — "If AI processing fails on a document, nothing
+tells anyone — UI doesn't show status, so failed looks same as fine. Silent failure. Not dangerous,
+just no visibility."
+
+**The bug:** `applicant_documents.status` and `processing_error` (Phase 1's schema, written by
+Phase 3's Inngest pipeline) were never read anywhere in `ApplicantDocumentsCard` — the UI only ever
+showed name, type, and size. A document stuck in `status: 'failed'` looked pixel-identical to one
+that was fully `ready`.
+
+**The fix (branch `feature/applicant-documents-status-indicator`, off `origin/stage` after #533
+merged — PR #534 is backend-only and doesn't touch this UI, so this couldn't ride that PR):** a new
+`DocumentStatusBadge` renders a "Processing…" badge (amber, spinner) for `queued`/`processing`, and
+a "Failed" badge (red, `processing_error` in a title tooltip) for `failed`. **Deliberately renders
+nothing for `uploaded`/`ready`** — those are the normal states, including every document at every
+tenant that doesn't have the Phase 3 consent gate on, where documents stay `uploaded` forever by
+design (§2d) and must never be made to look stuck. 3 new tests: no badge on a normal document,
+Processing badge, Failed badge + tooltip text — full suite still green (2194 tests, zero
+regressions).
 
 ---
 
