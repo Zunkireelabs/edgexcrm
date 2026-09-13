@@ -7,17 +7,19 @@
 > `docs/FEATURE-CATALOG.md` and archive this file per the repo's own doc-lifecycle rule (CLAUDE.md
 > § Read first, every session).
 
-**Last updated:** 2026-09-12. **Current state:** Phase 1 **merged and live on stage** (PR #530,
-commit `6036215b`). Phase 2 (UI, §2c) and Phase 3 (processing pipeline, §2d) are both **built,
-tested, and locally verified — on separate un-pushed branches, no PRs open yet.**
-Phase 2's branch (`feature/applicant-documents-phase2-ui`) was rebased onto the current `origin/stage`
-on 2026-09-12 (it had originally branched before PR #532 merged, which would have made it look like
-it deleted that PR's unrelated task-comments work — fixed, verified clean, re-tested). This copy of
-the doc was then reconciled onto both the Phase 2 and Phase 3 branches so they're identical and both
-carry the full picture — no more per-branch doc drift as of this update.
-**R2 is live:** Phase 0 (Cloudflare R2 account/bucket/token) is done — see §6. CORS was added
-2026-09-12 (on the Phase 2 branch) covering `localhost:3000` + both stage/prod origins.
-**Branches:** `feature/applicant-documents-phase1` (merged, PR [#530](https://github.com/Zunkireelabs/edgexcrm/pull/530)); `feature/applicant-documents-phase2-ui` (local, UI); `feature/applicant-documents-phase3-pipeline` (local, processing pipeline). This file is kept identical across both open branches — see §2c/§2d for what each one built.
+**Last updated:** 2026-09-13. **Current state:** Phases 1, 2, and 3 are **all merged and live on
+stage**:
+- Phase 1 (schema + R2 storage + core API) — PR [#530](https://github.com/Zunkireelabs/edgexcrm/pull/530), commit `6036215b`.
+- Phase 2 (UI, §2c) — PR [#533](https://github.com/Zunkireelabs/edgexcrm/pull/533), commit `e643556c`. Includes a review-found delete-permission fix (§2c).
+- Phase 3 (processing pipeline, §2d) — PR [#534](https://github.com/Zunkireelabs/edgexcrm/pull/534), commit `33358ea7`.
+- Follow-up: processing-status visibility fix (§2e) — PR [#536](https://github.com/Zunkireelabs/edgexcrm/pull/536), commit `6b96bc22`.
+
+None of the four are promoted to **prod** yet — see §3. **Phase 4 (RAG retrieval) is built and
+tested locally (§2f), on branch `feature/applicant-documents-phase4-retrieval`, no PR yet.**
+**R2 is live:** Phase 0 (Cloudflare R2 account/bucket/token) is done — see §6. CORS covering
+`localhost:3000` + both stage/prod origins is set.
+**Branches:** all four PRs above are merged and their branches deleted. Phase 4 work happens on a
+fresh branch off current `stage`.
 **Parent plan (source of truth for scope/rationale):** `~/.claude/plans/so-my-new-work-temporal-scott.md`
 ("Applicant Document Intelligence & Agentic RAG — EdgeX") — lives outside this repo (local Claude
 plans folder, not git-tracked), so its key content is reproduced below rather than only linked, to
@@ -159,9 +161,9 @@ proving the DB update is never reached when the purge fails.
 
 ---
 
-## 2c. Phase 2 (UI) — built and smoke-tested locally, 2026-09-12
+## 2c. Phase 2 (UI) — merged to stage, 2026-09-13 (PR #533)
 
-Branch `feature/applicant-documents-phase2-ui` (off `origin/stage`, not pushed). New
+Built and smoke-tested locally 2026-09-12, merged 2026-09-13. New
 `ApplicantDocumentsCard` (`src/industries/education-consultancy/features/applicant-documents/documents-card.tsx`
 + `labels.ts`) wired into the Lead Detail page's right sidebar (`lead-detail-v2.tsx`, gated on a new
 `documentsActive` prop threaded from `page.tsx`'s `getFeatureAccess(..., FEATURES.APPLICANT_DOCUMENTS)`
@@ -221,8 +223,9 @@ Phase 3's Inngest pipeline) were never read anywhere in `ApplicantDocumentsCard`
 showed name, type, and size. A document stuck in `status: 'failed'` looked pixel-identical to one
 that was fully `ready`.
 
-**The fix (branch `feature/applicant-documents-status-indicator`, off `origin/stage` after #533
-merged — PR #534 is backend-only and doesn't touch this UI, so this couldn't ride that PR):** a new
+**The fix (merged to stage 2026-09-13 as PR #536** — branched off `origin/stage` after #533 merged,
+since PR #534 is backend-only and doesn't touch this UI, so this couldn't ride that PR; caught its
+own CI-only `tsc --noEmit` type error in a test fixture along the way, fixed same day**):** a new
 `DocumentStatusBadge` renders a "Processing…" badge (amber, spinner) for `queued`/`processing`, and
 a "Failed" badge (red, `processing_error` in a title tooltip) for `failed`. **Deliberately renders
 nothing for `uploaded`/`ready`** — those are the normal states, including every document at every
@@ -234,9 +237,9 @@ regressions).
 ---
 
 
-## 2d. Phase 3 (processing pipeline) — raw-text ingestion built and tested locally, 2026-09-12
+## 2d. Phase 3 (processing pipeline) — merged to stage, 2026-09-13 (PR #534)
 
-Branch `feature/applicant-documents-phase3-pipeline` (off `origin/stage`, not pushed). New Inngest
+Built and tested locally 2026-09-12, merged 2026-09-13. New Inngest
 function `applicantDocumentIngest` (`src/lib/inngest/functions/applicant-document-ingest.ts`,
 registered in `src/app/api/inngest/route.ts`), copying `src/lib/ai/ingestion/kb-ingest.ts`'s exact
 shape: `mark-processing → fetch-and-parse → chunk → embed → store`, each its own `step.run`, same
@@ -279,15 +282,52 @@ tenant and watching an actual Inngest run — not done in this pass.
 
 ---
 
+## 2f. Phase 4 (RAG retrieval) — built and tested locally, 2026-09-13
+
+Branch `feature/applicant-documents-phase4-retrieval` (off `origin/stage`, not pushed). New module
+`src/lib/documents/retrieval/retrieve.ts`, mirroring `src/lib/ai/retrieval/retrieve.ts`'s exact shape
+(the knowledge-base feature's proven retrieval pattern) — this feature's Phase 4 briefs and the
+parent plan both explicitly call for reusing it rather than designing something new: embed the
+query (`embedTexts`), call `applicant_document_hybrid_search` via `db.rpc(...)`, join the raw chunk
+rows back to their parent `applicant_documents` for display data (name, type).
+
+**Lead-scoping is enforced by the database, not just application code** — `applicant_document_hybrid_search`
+(migration 231) takes `p_lead_id` as a required parameter, so a chunk from a different lead can
+never come back even if this module had a bug. `p_tenant_id` is auto-injected by `ScopedClient.rpc()`
+(see `src/lib/supabase/scoped.ts`) — callers never pass it explicitly. This module does **not** check
+whether the caller may see the lead at all; that's the caller's job (`assertLeadVisible`), matching
+the same separation of concerns the KB retrieval module has for tenant-level access.
+
+**Degraded-mode fallback:** if the query-embedding call throws (OpenAI outage, rate limit, etc.),
+the module falls back to a keyword-only search directly against `applicant_document_chunks`
+(`content_tsv` full-text search) rather than failing the whole search — same pattern as the KB
+module, and the result carries a `degraded: true` flag so a caller can surface that to the user
+rather than presenting keyword-only results as if they were the full hybrid search.
+
+**Verification:** 5 new tests (hybrid-search success + lead-scoped RPC args, degrade-to-keyword,
+RPC-error passthrough, empty-results, and a document-deleted-between-write-and-read skip case).
+Verified with the exact commands CI runs, not just `next build`: `npx tsc --noEmit -p .` (clean —
+this is the check that caught a real type error on PR #536's first push, `next build`'s own
+type-check pass didn't reach it), full test suite (2205 passed, zero regressions), `npm run build`,
+and `npm run lint` — all clean.
+
+**Not done in this pass, deliberately:** no caller wires this module up yet — no API route, no
+agent tool. Phase 5 (agent tools) is the first real consumer. Not verified against a live OpenAI
+embedding call or real chunk data — the tests mock `embedTexts` and the RPC entirely, matching how
+`retrieve.test.ts` (the KB precedent) is itself written. Real end-to-end verification needs a
+consent-enabled tenant with Phase 3 having actually processed a document first.
+
+---
+
 ## 3. Full roadmap (from the parent plan's §14) — what comes after this PR merges
 
 | Phase | Scope | Status |
 |---|---|---|
 | 0 | Cloudflare R2 account/bucket/API token/CORS/env vars (manual, not code) | In progress — see §6 |
 | **1** | **Schema, storage provider, core CRUD API routes, feature flag** | **Merged, live on stage (PR #530)** |
-| **2** | **UI: grid/list toggle, upload dropzone, document viewer (iframe/img), Lead Detail card, grouped-by-category view** | **Built + smoke-tested locally, `feature/applicant-documents-phase2-ui`, no PR** |
-| **3** | **Processing pipeline: new Inngest fn (mark-processing → parse → chunk → embed → store), reuses `parseFileBytes()`/`chunkDocument()`/`embedTexts()`** | **Raw text pipeline built + tested locally (§2d), `feature/applicant-documents-phase3-pipeline`, no PR. Structured extraction per `document_type` deliberately NOT included — see §2d.** |
-| 4 | RAG: retrieval module calling `applicant_document_hybrid_search`, lead-scoped, degraded-mode fallback on embedding failure | Not started |
+| **2** | **UI: grid/list toggle, upload dropzone, document viewer (iframe/img), Lead Detail card, grouped-by-category view** | **Merged, live on stage (PR #533, delete-permission fix included)** |
+| **3** | **Processing pipeline: new Inngest fn (mark-processing → parse → chunk → embed → store), reuses `parseFileBytes()`/`chunkDocument()`/`embedTexts()`** | **Merged, live on stage (PR #534). Follow-up processing-status UI fix merged (PR #536, §2e). Structured extraction per `document_type` deliberately NOT included — see §2d.** |
+| **4** | **RAG: retrieval module calling `applicant_document_hybrid_search`, lead-scoped, degraded-mode fallback on embedding failure** | **Built + tested locally (§2f), `feature/applicant-documents-phase4-retrieval`, no PR** |
 | 5 | Agent tools: 5 tools (`list_applicant_documents`, `search_applicant_document_content`, `get_document_metadata`/`get_document_extracted_data`, `find_missing_documents`, `get_document_download_url`) under `src/industries/education-consultancy/ai/tools/`, prompt-injection wrapper on all retrieved content | Not started |
 | 6 | Usage + quotas + audit logging wired end-to-end (ledger already exists from Phase 1; real enforcement is this phase's job) | Not started |
 | 7 | Hardening: isolation tests, prompt-injection resistance test, malicious/oversized/corrupt-file tests, idempotency/retry tests, deletion-cleanup tests (no orphaned R2 objects or vectors) | Not started |
