@@ -22,7 +22,10 @@ export const aiConfig: AiConfig = {
     "students enroll in, with fees tracked per enrollment. Prefer search_applications, " +
     "get_lead_applications, application_funnel_summary, and class_enrollment_summary for any question " +
     "about applications, universities, programs, intakes, offers, deadlines, classes, enrollments, or " +
-    "fees.",
+    "fees. For a student's uploaded admissions documents (passport, transcripts, marksheets, bank " +
+    "statements, etc.), use list_applicant_documents, search_applicant_document_content, " +
+    "get_document_metadata, get_document_extracted_data, find_missing_documents, and " +
+    "get_document_download_url — not for tenants where document management isn't available.",
   toolIds: [
     "search_applications",
     "get_lead_applications",
@@ -30,5 +33,11 @@ export const aiConfig: AiConfig = {
     "class_enrollment_summary",
     "get_form_submissions_summary",
     "update_lead_stage",
+    "list_applicant_documents",
+    "search_applicant_document_content",
+    "get_document_metadata",
+    "get_document_extracted_data",
+    "find_missing_documents",
+    "get_document_download_url",
   ],
 };
