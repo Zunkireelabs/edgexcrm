@@ -6,9 +6,11 @@ import type { ToolContext } from "@/lib/ai/tools/types";
 const assertLeadVisibleMock = vi.fn();
 const getFeatureAccessMock = vi.fn();
 const retrieveDocumentsMock = vi.fn();
+const isIngestionEnabledForTenantMock = vi.fn();
 vi.mock("@/lib/documents/access", () => ({ assertLeadVisible: assertLeadVisibleMock }));
 vi.mock("@/industries/_loader", () => ({ getFeatureAccess: getFeatureAccessMock }));
 vi.mock("@/lib/documents/retrieval/retrieve", () => ({ retrieveDocuments: retrieveDocumentsMock }));
+vi.mock("@/lib/ai/flag", () => ({ isIngestionEnabledForTenant: isIngestionEnabledForTenantMock }));
 
 function fixtureAuth(): AuthContext {
   return {
@@ -43,8 +45,10 @@ describe("search_applicant_document_content", () => {
     assertLeadVisibleMock.mockReset();
     getFeatureAccessMock.mockReset();
     retrieveDocumentsMock.mockReset();
+    isIngestionEnabledForTenantMock.mockReset();
     getFeatureAccessMock.mockReturnValue(true);
     assertLeadVisibleMock.mockResolvedValue(LEAD_ROW);
+    isIngestionEnabledForTenantMock.mockResolvedValue(true);
   });
 
   it("refuses a lead the caller can't view, without calling retrieveDocuments", async () => {
@@ -52,6 +56,14 @@ describe("search_applicant_document_content", () => {
     const { searchApplicantDocumentContentTool } = await import("./search-applicant-document-content");
     const result = await searchApplicantDocumentContentTool.execute(fixtureCtx(), { leadId: "lead-1", query: "passport number", limit: 8 });
     expect(result).toEqual({ error: "Lead not found." });
+    expect(retrieveDocumentsMock).not.toHaveBeenCalled();
+  });
+
+  it("REGRESSION (reviewer finding on PR #539): refuses to search, and never calls retrieveDocuments, when the tenant lacks the AI consent gate", async () => {
+    isIngestionEnabledForTenantMock.mockResolvedValue(false);
+    const { searchApplicantDocumentContentTool } = await import("./search-applicant-document-content");
+    const result = await searchApplicantDocumentContentTool.execute(fixtureCtx(), { leadId: "lead-1", query: "passport number", limit: 8 });
+    expect(result).toEqual({ error: "AI document search is not available for this tenant." });
     expect(retrieveDocumentsMock).not.toHaveBeenCalled();
   });
 

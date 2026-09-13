@@ -365,6 +365,20 @@ changed file — all clean.
 oversight). Not verified against a real running assistant conversation — tests mock every DB/RPC
 call, same approach every other phase's tests use.
 
+**Review finding, fixed same day (2026-09-14): missing privacy consent gate on the search tool.**
+A reviewer on PR #539 caught that `search_applicant_document_content` called `retrieveDocuments()`
+(Phase 4) gated only on `getFeatureAccess(APPLICANT_DOCUMENTS)` — it never checked
+`isIngestionEnabledForTenant()`. `retrieveDocuments()` embeds the search **query text** itself via
+`embedTexts()` with no gate of its own (by design — it assumes its caller already checked, and
+Phase 5 is that caller's first real implementation). Missing the check meant a tenant that had
+never consented to AI document processing at all would still have had its search text sent to
+OpenAI. Fixed by adding the same `isIngestionEnabledForTenant(auth.tenantId)` check Phase 3's
+`complete` route uses, returning a clear error instead of silently calling OpenAI. 1 new regression
+test. This is the second time this exact class of gap (a consent check present at one layer but
+missing at the next one that reuses it) has been found in this feature — worth double-checking any
+future caller of `retrieveDocuments()` or `embedTexts()` explicitly re-verifies this gate rather
+than assuming an earlier layer already did.
+
 ---
 
 ## 3. Full roadmap (from the parent plan's §14) — what comes after this PR merges
