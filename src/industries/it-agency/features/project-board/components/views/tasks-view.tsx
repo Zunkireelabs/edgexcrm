@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowUp, ArrowDown, ArrowUpDown, Timer, ListTodo, Play, Square, Loader2 } from "lucide-react";
+import { ArrowUp, ArrowDown, ArrowUpDown, ChevronDown, ChevronRight, Timer, ListTodo, Play, Square, Loader2 } from "lucide-react";
 import {
   TableBody,
   TableCell,
@@ -18,6 +18,9 @@ import { useActiveTimersContext, formatElapsed } from "@/industries/it-agency/fe
 import { AssigneePicker } from "../assignee-picker";
 import { PriorityPill } from "../priority-pill";
 import { TASK_CHANGED_EVENT } from "@/lib/tasks/task-events";
+import { TaskContextChip } from "@/components/dashboard/tasks/task-context-chip";
+import { deriveTaskContext } from "@/lib/home/task-context";
+import { splitTasksByProject } from "../../lib/split-tasks-by-project";
 import type { Task, TaskPriority } from "@/types/database";
 import type { TeamMember } from "../../hooks/use-projects";
 import type { WorkspaceFilters } from "../../hooks/use-workspace-filters";
@@ -46,17 +49,21 @@ function buildQuery(filters: WorkspaceFilters): string {
   if (filters.priorities.length > 0) params.set("priority", filters.priorities.join(","));
   if (filters.tags.length > 0) params.set("tags", filters.tags.join(","));
   if (filters.due !== "__all__") params.set("due", filters.due);
+  if (filters.account === "__all__") params.set("include_personal", "1");
   params.set("page_size", "200");
   return `/api/v1/tasks?${params.toString()}`;
 }
 
-interface TaskWithProject extends Task {
+interface TaskWithProject extends Omit<Task, "project_id"> {
+  project_id: string | null;
   projects: {
     id: string;
     name: string;
     account_id: string;
     accounts: { id: string; name: string } | null;
   } | null;
+  leads: { id: string; first_name: string | null; last_name: string | null } | null;
+  deals: { id: string; name: string } | null;
 }
 
 interface TasksViewProps {
@@ -84,6 +91,7 @@ export function TasksView({ filters, team, teamMap, onClearFilters }: TasksViewP
   const [loading, setLoading] = useState(true);
   const [sortKey, setSortKey] = useState<SortKey>("due_date");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [personalCollapsed, setPersonalCollapsed] = useState(false);
 
   // Log-time dialog state
   const [logTimeOpen, setLogTimeOpen] = useState(false);
@@ -174,6 +182,11 @@ export function TasksView({ filters, team, teamMap, onClearFilters }: TasksViewP
     });
   }, [tasks, sortKey, sortDir, teamMap]);
 
+  const { projectTasks, personalTasks } = useMemo(
+    () => splitTasksByProject(sorted),
+    [sorted],
+  );
+
   function openLogTime(task: TaskWithProject) {
     if (!task.projects) return;
     setLogTimeTask({ taskId: task.id, projectId: task.projects.id });
@@ -263,7 +276,7 @@ export function TasksView({ filters, team, teamMap, onClearFilters }: TasksViewP
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sorted.map((task) => (
+              {projectTasks.map((task) => (
                 <TaskRow
                   key={task.id}
                   task={task}
@@ -272,6 +285,36 @@ export function TasksView({ filters, team, teamMap, onClearFilters }: TasksViewP
                   onLogTime={openLogTime}
                 />
               ))}
+              {personalTasks.length > 0 && (
+                <>
+                  <TableRow className="bg-gray-50/80 hover:bg-gray-50/80">
+                    <TableCell colSpan={9} className="p-0">
+                      <button
+                        type="button"
+                        onClick={() => setPersonalCollapsed((c) => !c)}
+                        className="flex w-full items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 hover:text-gray-900"
+                      >
+                        {personalCollapsed ? (
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        ) : (
+                          <ChevronDown className="h-3.5 w-3.5" />
+                        )}
+                        Personal · {personalTasks.length}
+                      </button>
+                    </TableCell>
+                  </TableRow>
+                  {!personalCollapsed &&
+                    personalTasks.map((task) => (
+                      <TaskRow
+                        key={task.id}
+                        task={task}
+                        team={team}
+                        onOpenDetail={openDetail}
+                        onLogTime={openLogTime}
+                      />
+                    ))}
+                </>
+              )}
             </TableBody>
           </table>
         </div>
@@ -392,8 +435,10 @@ function TaskRow({ task, team, onOpenDetail, onLogTime }: TaskRowProps) {
           >
             {task.projects.name}
           </a>
+        ) : deriveTaskContext(task, true) ? (
+          <TaskContextChip task={task} projectBoardEnabled className="text-muted-foreground" />
         ) : (
-          <span className="text-xs text-muted-foreground">—</span>
+          <span className="text-xs text-muted-foreground">Personal</span>
         )}
       </TableCell>
 
