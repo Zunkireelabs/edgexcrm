@@ -7,9 +7,17 @@
 > `docs/FEATURE-CATALOG.md` and archive this file per the repo's own doc-lifecycle rule (CLAUDE.md
 > § Read first, every session).
 
-**Last updated:** 2026-09-11. **Current state:** Phase 1 built, PR open to `stage`, **not merged**.
-**R2 is live:** Phase 0 (Cloudflare R2 account/bucket/token) is done — see §6, no longer blocked.
-**Branch:** `feature/applicant-documents-phase1`. **PR:** [#530](https://github.com/Zunkireelabs/edgexcrm/pull/530).
+**Last updated:** 2026-09-12. **Current state:** Phase 1 **merged and live on stage** (PR #530,
+commit `6036215b`). Phase 2 (UI, §2c) and Phase 3 (processing pipeline, §2d) are both **built,
+tested, and locally verified — on separate un-pushed branches, no PRs open yet.**
+Phase 2's branch (`feature/applicant-documents-phase2-ui`) was rebased onto the current `origin/stage`
+on 2026-09-12 (it had originally branched before PR #532 merged, which would have made it look like
+it deleted that PR's unrelated task-comments work — fixed, verified clean, re-tested). This copy of
+the doc was then reconciled onto both the Phase 2 and Phase 3 branches so they're identical and both
+carry the full picture — no more per-branch doc drift as of this update.
+**R2 is live:** Phase 0 (Cloudflare R2 account/bucket/token) is done — see §6. CORS was added
+2026-09-12 (on the Phase 2 branch) covering `localhost:3000` + both stage/prod origins.
+**Branches:** `feature/applicant-documents-phase1` (merged, PR [#530](https://github.com/Zunkireelabs/edgexcrm/pull/530)); `feature/applicant-documents-phase2-ui` (local, UI); `feature/applicant-documents-phase3-pipeline` (local, processing pipeline). This file is kept identical across both open branches — see §2c/§2d for what each one built.
 **Parent plan (source of truth for scope/rationale):** `~/.claude/plans/so-my-new-work-temporal-scott.md`
 ("Applicant Document Intelligence & Agentic RAG — EdgeX") — lives outside this repo (local Claude
 plans folder, not git-tracked), so its key content is reproduced below rather than only linked, to
@@ -151,14 +159,101 @@ proving the DB update is never reached when the purge fails.
 
 ---
 
+## 2c. Phase 2 (UI) — built and smoke-tested locally, 2026-09-12
+
+Branch `feature/applicant-documents-phase2-ui` (off `origin/stage`, not pushed). New
+`ApplicantDocumentsCard` (`src/industries/education-consultancy/features/applicant-documents/documents-card.tsx`
++ `labels.ts`) wired into the Lead Detail page's right sidebar (`lead-detail-v2.tsx`, gated on a new
+`documentsActive` prop threaded from `page.tsx`'s `getFeatureAccess(..., FEATURES.APPLICANT_DOCUMENTS)`
+call), following the exact same conditional-card pattern as `CheckInHistoryCard`/`ClassesCard` — no
+`Tabs` component exists on this page despite the roadmap calling it a "Lead Detail tab"; it's a card.
+Covers the roadmap's Phase 2 scope: grid/list toggle, upload dropzone (document-type picker → name →
+presigned R2 PUT → client-side SHA-256 checksum → `complete`), a viewer dialog (iframe for PDF, `img`
+for images, download-link fallback otherwise), and documents grouped by category via the existing
+`DOCUMENT_TYPE_CATEGORY` map. Built strictly against Phase 1's existing API contracts — no backend
+changes.
+
+**Smoke-tested for real, not just `npm run build`:** `npm run build` passed clean, then a scripted
+headless-Chromium session (Playwright, installed ad hoc into `/tmp` — not added to the repo) drove
+the actual local app: logged in as `admin@admizz.local` on the seeded `admizz-local` tenant, opened a
+real lead, and ran upload → list (grouped correctly under "Identity") → view → delete end to end.
+Confirmed against the database directly, not just the UI, that delete really soft-deletes
+(`deleted_at` set) and that the API list correctly excludes it afterward.
+
+**One real bug found and fixed by this smoke test, but it was an infra gap, not app code:** the R2
+bucket (`edgex-applicant-documents`) had no CORS policy, so the browser's direct PUT to R2 failed
+with `No 'Access-Control-Allow-Origin' header` on preflight — the presigned-URL upload pattern can
+only ever work if the bucket itself allows cross-origin PUT/GET from the app's origins. Fixed by
+adding a CORS policy in the Cloudflare dashboard (bucket Settings → CORS Policy) allowing
+`http://localhost:3000`, `https://dev-lead-crm.zunkireelabs.com`, and `https://lead-crm.zunkireelabs.com`
+for `GET`/`PUT`/`HEAD`. This was flagged as a known gap in §6 before Phase 2 started; it is now done
+for local — **confirm it's also applied before Phase 2 is ever exercised on stage or prod**, since
+CORS is a bucket-level setting, not something migrations or env vars carry.
+
+**Tests added same day (2026-09-12):** 4 tests for `ApplicantDocumentsCard` — empty state,
+category grouping, the `canManage=false` gate hiding upload/delete controls, and that delete calls
+DELETE and removes the item from the list. Upload's presigned-PUT + checksum path is left to this
+manual smoke test — jsdom's `crypto.subtle` support is inconsistent, and the route contracts already
+have full coverage.
+
+**Not done yet:** not pushed, no PR.
+
+---
+
+
+## 2d. Phase 3 (processing pipeline) — raw-text ingestion built and tested locally, 2026-09-12
+
+Branch `feature/applicant-documents-phase3-pipeline` (off `origin/stage`, not pushed). New Inngest
+function `applicantDocumentIngest` (`src/lib/inngest/functions/applicant-document-ingest.ts`,
+registered in `src/app/api/inngest/route.ts`), copying `src/lib/ai/ingestion/kb-ingest.ts`'s exact
+shape: `mark-processing → fetch-and-parse → chunk → embed → store`, each its own `step.run`, same
+`NonRetriableError`-on-parse-failure policy, same `parseFileBytes()`/`chunkDocument()`/`embedTexts()`
+calls. Reads the file via `R2Provider.getBytes()` (already existed from Phase 1 — built in
+anticipation of this). Writes into `applicant_document_chunks`, scoped to `lead_id`/`document_id`/
+`document_version_id`. Triggered by a new `inngest.send()` call in the `complete` route
+(`leads/[id]/documents/[docId]/complete/route.ts`) — fires `applicant-documents/document.ingest.requested`
+right after a document is confirmed persisted, gated on the privacy check below. 3 new tests for the
+function (mirroring `kb-ingest.test.ts`'s structure) + 3 new tests on the `complete` route covering
+the trigger's on/off/idempotent-path behavior. Full existing suite (2217 tests) still green.
+
+**Privacy gate — reused, not newly invented, and NOT a complete answer (read this before enabling
+anywhere):** this pipeline sends document text to OpenAI via `embedTexts()`. Applicant documents
+(passports, bank statements) are more sensitive than the knowledge-base content that already
+required per-tenant written consent (ADR-001 "D5") before any OpenAI call. This pipeline reuses that
+exact same technical gate — `isIngestionEnabledForTenant()` — rather than inventing a separate,
+weaker one. **The open question this does NOT resolve:** Admizz's existing KB consent was written
+about CRM notes/knowledge-base content, not about applicant passports/bank statements. Reusing the
+gate is a code decision; whether that existing consent's *scope* actually covers this new, more
+sensitive use is a real judgment call for whoever owns the Admizz relationship — confirm before
+flipping this on for any tenant that already has KB ingestion enabled, don't assume the existing
+consent silently extends here.
+
+**Deliberately NOT built in this pass:** structured extraction per `document_type` (passport number,
+transcript GPA, etc.) — `applicant_document_extractions` stays empty. This was flagged in the parent
+plan as the hardest part of the whole project (real documents from many countries/formats needing
+several tuning passes), and bundling it into the same PR as the basic pipeline would make review
+much harder for no benefit — raw-text chunking/embedding needs to work and be reviewed on its own
+first. Also not built: any code that actually calls `applicant_document_hybrid_search` (Phase 4's
+job), and reprocessing on a document's new-version upload (`versions/[versionId]/complete` does not
+fire an ingest event yet — only the initial upload does; a real gap for a document that's replaced,
+tracked here rather than silently accepted).
+
+**Not verified against a real OpenAI call yet** — the two new test files mock `embedTexts`/
+`parseFileBytes` entirely (matching `kb-ingest.test.ts`'s own approach), so this proves the
+step-wiring and gating logic is correct, not that a live document actually ends up with real,
+useful embeddings. That would require flipping `isIngestionEnabledForTenant` on for a real local
+tenant and watching an actual Inngest run — not done in this pass.
+
+---
+
 ## 3. Full roadmap (from the parent plan's §14) — what comes after this PR merges
 
 | Phase | Scope | Status |
 |---|---|---|
 | 0 | Cloudflare R2 account/bucket/API token/CORS/env vars (manual, not code) | In progress — see §6 |
-| **1** | **Schema, storage provider, core CRUD API routes, feature flag** | **Built, PR #530 open** |
-| 2 | UI: grid/list toggle, upload dropzone, document viewer (iframe/img), Lead Detail tab, grouped-by-category view | Not started |
-| 3 | Processing pipeline: new Inngest fn (validate → parse → extract → chunk → embed → store), reuses existing `parseFileBytes()`/`chunkDocument()`/`embedTexts()`, new structured-extraction step per `document_type` | Not started |
+| **1** | **Schema, storage provider, core CRUD API routes, feature flag** | **Merged, live on stage (PR #530)** |
+| **2** | **UI: grid/list toggle, upload dropzone, document viewer (iframe/img), Lead Detail card, grouped-by-category view** | **Built + smoke-tested locally, `feature/applicant-documents-phase2-ui`, no PR** |
+| **3** | **Processing pipeline: new Inngest fn (mark-processing → parse → chunk → embed → store), reuses `parseFileBytes()`/`chunkDocument()`/`embedTexts()`** | **Raw text pipeline built + tested locally (§2d), `feature/applicant-documents-phase3-pipeline`, no PR. Structured extraction per `document_type` deliberately NOT included — see §2d.** |
 | 4 | RAG: retrieval module calling `applicant_document_hybrid_search`, lead-scoped, degraded-mode fallback on embedding failure | Not started |
 | 5 | Agent tools: 5 tools (`list_applicant_documents`, `search_applicant_document_content`, `get_document_metadata`/`get_document_extracted_data`, `find_missing_documents`, `get_document_download_url`) under `src/industries/education-consultancy/ai/tools/`, prompt-injection wrapper on all retrieved content | Not started |
 | 6 | Usage + quotas + audit logging wired end-to-end (ledger already exists from Phase 1; real enforcement is this phase's job) | Not started |
