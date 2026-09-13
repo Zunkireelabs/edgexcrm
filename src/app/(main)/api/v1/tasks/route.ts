@@ -59,6 +59,8 @@ export async function GET(request: NextRequest) {
   const rawTags = searchParams.get("tags");
   const tags = rawTags ? rawTags.split(",").filter(Boolean) : [];
 
+  const includePersonal = searchParams.get("include_personal") === "1";
+
   const db = await scopedClient(auth);
 
   // If account_id filter is set, resolve project IDs for that account first
@@ -77,9 +79,20 @@ export async function GET(request: NextRequest) {
 
   let query = db
     .from("tasks")
-    .select("*, projects(id, name, account_id, accounts(id, name))", { count: "exact" });
+    .select(
+      "*, projects(id, name, account_id, accounts(id, name)), leads(id, first_name, last_name), deals(id, name)",
+      { count: "exact" }
+    );
 
-  query = query.not("project_id", "is", null);
+  // include_personal only applies when neither project_id nor account_id
+  // narrows the result to a specific project's tasks already.
+  if (includePersonal && !projectId && !accountId) {
+    query = query.or(
+      `project_id.not.is.null,assignee_id.eq.${auth.userId},assigned_by_id.eq.${auth.userId}`
+    );
+  } else {
+    query = query.not("project_id", "is", null);
+  }
 
   if (projectId) query = query.eq("project_id", projectId);
   if (accountProjectIds) query = query.in("project_id", accountProjectIds);

@@ -19,7 +19,7 @@ interface TaskRow {
 export default function MyTasksWidget({ currentUserId }: DeliveryWidgetProps) {
   const assigneeId = currentUserId || NIL_UUID;
   const { data: tasks, loading, error } = useWidgetData<TaskRow[]>(
-    `/api/v1/tasks?assignee_id=${encodeURIComponent(assigneeId)}&page_size=200`
+    `/api/v1/tasks?assignee_id=${encodeURIComponent(assigneeId)}&page_size=200&include_personal=1`
   );
 
   return (
