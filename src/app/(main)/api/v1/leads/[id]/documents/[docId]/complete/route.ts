@@ -13,6 +13,8 @@ import { loadMaxDocumentSizeBytes } from "@/lib/documents/settings";
 import { buildDocumentStorageKey } from "@/lib/documents/storage-key";
 import { getDocumentStorageProvider } from "@/lib/documents/storage/r2-provider";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
+import { isIngestionEnabledForTenant } from "@/lib/ai/flag";
+import { inngest } from "@/lib/inngest/client";
 import type { ApplicantDocumentRow } from "@/lib/documents/types";
 
 interface RouteContext {
@@ -161,6 +163,21 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   const document = updated as unknown as ApplicantDocumentRow;
+
+  // Phase 3 pipeline trigger — same D5-style consent gate the knowledge-base
+  // ingestion uses (see src/lib/inngest/functions/applicant-document-ingest.ts's
+  // header comment for the caveat this doesn't fully resolve). A tenant
+  // without that consent stays on "uploaded" forever by design — nothing
+  // ever processes it, but the document is still fully usable for manual
+  // view/download.
+  if (await isIngestionEnabledForTenant(auth.tenantId)) {
+    inngest
+      .send({
+        name: "applicant-documents/document.ingest.requested",
+        data: { tenantId: auth.tenantId, leadId: id, documentId: document.id, versionId },
+      })
+      .catch((err) => log.error({ err, documentId: document.id }, "Failed to send applicant-document-ingest event (recoverable via backfill)"));
+  }
 
   const { error: usageError } = await db.from("document_usage_events").insert({
     event_type: "upload",
