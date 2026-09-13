@@ -7,18 +7,18 @@
 > `docs/FEATURE-CATALOG.md` and archive this file per the repo's own doc-lifecycle rule (CLAUDE.md
 > § Read first, every session).
 
-**Last updated:** 2026-09-13. **Current state:** Phases 1, 2, and 3 are **all merged and live on
-stage**:
+**Last updated:** 2026-09-13. **Current state:** Phases 1–4 are **all merged and live on stage**:
 - Phase 1 (schema + R2 storage + core API) — PR [#530](https://github.com/Zunkireelabs/edgexcrm/pull/530), commit `6036215b`.
 - Phase 2 (UI, §2c) — PR [#533](https://github.com/Zunkireelabs/edgexcrm/pull/533), commit `e643556c`. Includes a review-found delete-permission fix (§2c).
 - Phase 3 (processing pipeline, §2d) — PR [#534](https://github.com/Zunkireelabs/edgexcrm/pull/534), commit `33358ea7`.
 - Follow-up: processing-status visibility fix (§2e) — PR [#536](https://github.com/Zunkireelabs/edgexcrm/pull/536), commit `6b96bc22`.
+- Phase 4 (RAG retrieval, §2f) — PR [#538](https://github.com/Zunkireelabs/edgexcrm/pull/538), commit `1c350f6d`.
 
-None of the four are promoted to **prod** yet — see §3. **Phase 4 (RAG retrieval) is built and
-tested locally (§2f), on branch `feature/applicant-documents-phase4-retrieval`, no PR yet.**
+None of the five are promoted to **prod** yet — see §3. **Phase 5 (agent tools) is built and tested
+locally (§2g), on branch `feature/applicant-documents-phase5-agent-tools`, no PR yet.**
 **R2 is live:** Phase 0 (Cloudflare R2 account/bucket/token) is done — see §6. CORS covering
 `localhost:3000` + both stage/prod origins is set.
-**Branches:** all four PRs above are merged and their branches deleted. Phase 4 work happens on a
+**Branches:** all five PRs above are merged and their branches deleted. Phase 5 work happens on a
 fresh branch off current `stage`.
 **Parent plan (source of truth for scope/rationale):** `~/.claude/plans/so-my-new-work-temporal-scott.md`
 ("Applicant Document Intelligence & Agentic RAG — EdgeX") — lives outside this repo (local Claude
@@ -319,6 +319,68 @@ consent-enabled tenant with Phase 3 having actually processed a document first.
 
 ---
 
+## 2g. Phase 5 (agent tools) — built and tested locally, 2026-09-13
+
+Branch `feature/applicant-documents-phase5-agent-tools` (off `origin/stage`, not pushed). Six new
+tools under `src/industries/education-consultancy/ai/tools/`, registered in that folder's `index.ts`
+and declared in `ai/agent.ts`'s `toolIds` (kept in sync by the existing `packs.test.ts` consistency
+check — both had to be updated, since the check fails the build otherwise):
+
+- **`list_applicant_documents`** — one lead's documents with type/category labels and status.
+- **`search_applicant_document_content`** — the first real caller of Phase 4's `retrieveDocuments()`.
+- **`get_document_metadata`** — one document's type/category/size/status/verification, no content.
+- **`get_document_extracted_data`** — reads `applicant_document_extractions`; since Phase 3 never
+  populates that table (structured extraction is deferred, §2d), this returns "nothing extracted
+  yet" for effectively every document today — built now so the tool exists and is wired correctly
+  for whenever that later phase ships, not because it does anything useful yet.
+- **`find_missing_documents`** — diffs `tenant_document_settings.required_document_types` against
+  what a lead has uploaded; returns an empty list *with a note*, not an error, when a tenant has no
+  checklist configured, so a model can't misread "not configured" as "nothing missing."
+- **`get_document_download_url`** — reuses the exact same signed-URL + audit-log + usage-event
+  trail as the human-facing `GET .../download-url` route, so an AI-initiated download leaves an
+  identical audit trail to a human one.
+
+All six reuse `assertLeadVisible`/`assertDocumentVisible` (`src/lib/documents/access.ts`) for
+authorization — the same gate the API routes use — plus `industries: [INDUSTRIES.EDUCATION_CONSULTANCY]`
+and an explicit `getFeatureAccess(auth.industryId, FEATURES.APPLICANT_DOCUMENTS)` check, matching
+`get-lead-applications.ts`'s existing double-gate pattern exactly.
+
+**Prompt-injection handling — a description-level convention, not a new runtime mechanism.**
+Checked first: no prompt-injection *wrapper function* exists anywhere in this codebase, not even for
+the knowledge-base tools — the actual existing convention (`read_document`, `search_knowledge`) is a
+line in the tool's `description` telling the model retrieved content is data, not instructions.
+`search_applicant_document_content`'s description follows that exact same convention. This is
+**lighter than the roadmap's original "prompt-injection wrapper" language implied** — a deliberate
+choice to match how this codebase actually defends against this today, rather than inventing a new,
+inconsistent mechanism for one feature. If a real runtime wrapper gets built later for the KB tools,
+this tool should adopt it too, at the same time.
+
+**Verification:** 21 new tool tests (across all 6 files) + 6 more updated in `packs.test.ts` /
+`_loader.test.ts` (the manifest-sync consistency checks) + `index.test.ts` (toolset registration,
+now covering 10 education-consultancy tools instead of 4). Verified with `npx tsc --noEmit -p .`
+(clean), full suite (2226 tests, zero regressions), `npm run build`, and targeted lint on every
+changed file — all clean.
+
+**Not done in this pass:** no runtime prompt-injection wrapper (see above — deliberate, not an
+oversight). Not verified against a real running assistant conversation — tests mock every DB/RPC
+call, same approach every other phase's tests use.
+
+**Review finding, fixed same day (2026-09-14): missing privacy consent gate on the search tool.**
+A reviewer on PR #539 caught that `search_applicant_document_content` called `retrieveDocuments()`
+(Phase 4) gated only on `getFeatureAccess(APPLICANT_DOCUMENTS)` — it never checked
+`isIngestionEnabledForTenant()`. `retrieveDocuments()` embeds the search **query text** itself via
+`embedTexts()` with no gate of its own (by design — it assumes its caller already checked, and
+Phase 5 is that caller's first real implementation). Missing the check meant a tenant that had
+never consented to AI document processing at all would still have had its search text sent to
+OpenAI. Fixed by adding the same `isIngestionEnabledForTenant(auth.tenantId)` check Phase 3's
+`complete` route uses, returning a clear error instead of silently calling OpenAI. 1 new regression
+test. This is the second time this exact class of gap (a consent check present at one layer but
+missing at the next one that reuses it) has been found in this feature — worth double-checking any
+future caller of `retrieveDocuments()` or `embedTexts()` explicitly re-verifies this gate rather
+than assuming an earlier layer already did.
+
+---
+
 ## 3. Full roadmap (from the parent plan's §14) — what comes after this PR merges
 
 | Phase | Scope | Status |
@@ -327,8 +389,8 @@ consent-enabled tenant with Phase 3 having actually processed a document first.
 | **1** | **Schema, storage provider, core CRUD API routes, feature flag** | **Merged, live on stage (PR #530)** |
 | **2** | **UI: grid/list toggle, upload dropzone, document viewer (iframe/img), Lead Detail card, grouped-by-category view** | **Merged, live on stage (PR #533, delete-permission fix included)** |
 | **3** | **Processing pipeline: new Inngest fn (mark-processing → parse → chunk → embed → store), reuses `parseFileBytes()`/`chunkDocument()`/`embedTexts()`** | **Merged, live on stage (PR #534). Follow-up processing-status UI fix merged (PR #536, §2e). Structured extraction per `document_type` deliberately NOT included — see §2d.** |
-| **4** | **RAG: retrieval module calling `applicant_document_hybrid_search`, lead-scoped, degraded-mode fallback on embedding failure** | **Built + tested locally (§2f), `feature/applicant-documents-phase4-retrieval`, no PR** |
-| 5 | Agent tools: 5 tools (`list_applicant_documents`, `search_applicant_document_content`, `get_document_metadata`/`get_document_extracted_data`, `find_missing_documents`, `get_document_download_url`) under `src/industries/education-consultancy/ai/tools/`, prompt-injection wrapper on all retrieved content | Not started |
+| **4** | **RAG: retrieval module calling `applicant_document_hybrid_search`, lead-scoped, degraded-mode fallback on embedding failure** | **Merged, live on stage (PR #538)** |
+| **5** | **Agent tools: 6 tools (`list_applicant_documents`, `search_applicant_document_content`, `get_document_metadata`, `get_document_extracted_data`, `find_missing_documents`, `get_document_download_url`) under `src/industries/education-consultancy/ai/tools/`** | **Built + tested locally (§2g), `feature/applicant-documents-phase5-agent-tools`, no PR** |
 | 6 | Usage + quotas + audit logging wired end-to-end (ledger already exists from Phase 1; real enforcement is this phase's job) | Not started |
 | 7 | Hardening: isolation tests, prompt-injection resistance test, malicious/oversized/corrupt-file tests, idempotency/retry tests, deletion-cleanup tests (no orphaned R2 objects or vectors) | Not started |
 

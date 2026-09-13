@@ -58,6 +58,12 @@ describe("getIndustryAiConfig", () => {
       "class_enrollment_summary",
       "get_form_submissions_summary",
       "update_lead_stage",
+      "list_applicant_documents",
+      "search_applicant_document_content",
+      "get_document_metadata",
+      "get_document_extracted_data",
+      "find_missing_documents",
+      "get_document_download_url",
     ]);
   });
 
