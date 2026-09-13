@@ -35,6 +35,31 @@ interface Props {
   params: Promise<{ id: string }>;
 }
 
+/**
+ * Round 2 slice A (docs/IT-AGENCY-ROUND2-TASK-OBJECT-BRIEF.md §2) — TaskDetail
+ * needs a universal, ungated read for a task by id, since a personal
+ * (project-less) task can belong to any industry and GET /api/v1/tasks/[id]
+ * 403s outside it_agency (FEATURES.ACCOUNTS). Viewable by any tenant member,
+ * not just the owner — matches GET /api/v1/tasks/[id]'s own no-ownership-
+ * restriction and the brief's "read-only controls, not editors that 403".
+ */
+export async function GET(_request: NextRequest, { params }: Props) {
+  const { id } = await params;
+  const auth = await authenticateRequest();
+  if (!auth) return apiUnauthorized();
+
+  const db = await scopedClient(auth);
+  const { data: task, error } = await db
+    .from("tasks")
+    .select("*, projects(id, name), leads(id, first_name, last_name), deals(id, name)")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) return apiError("DB_ERROR", "Failed to fetch task", 500);
+  if (!task) return apiNotFound("Task");
+  return apiSuccess(task);
+}
+
 export async function PATCH(request: NextRequest, { params }: Props) {
   const { id } = await params;
   const requestId = crypto.randomUUID();
@@ -152,11 +177,9 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   };
 
   if (reassigning && newAssigneeId && newAssigneeId !== auth.userId) {
-    const link = existing.lead_id
-      ? `/leads/${existing.lead_id}`
-      : existing.deal_id
-        ? `/deals/${existing.deal_id}`
-        : "/home";
+    // Round 2 slice A: link straight at the task, not the lead/deal/home
+    // fallback — see the dispatch-notify.ts comment on notifyTaskCompleted.
+    const link = `/tasks/${id}`;
     createNotificationsExcept(auth.userId, [
       {
         tenantId: auth.tenantId,

@@ -33,9 +33,12 @@ export async function GET(_request: NextRequest, { params }: Props) {
   if (!getFeatureAccess(auth.industryId, FEATURES.ACCOUNTS)) return apiForbidden();
 
   const db = await scopedClient(auth);
+  // Embeds match the list route (GET /api/v1/tasks) so TaskDetail (Round 2
+  // slice A) can render the same project/lead/deal context chip regardless
+  // of which endpoint served it — see TaskContextSource.
   const { data: task, error } = await db
     .from("tasks")
-    .select("*")
+    .select("*, projects(id, name), leads(id, first_name, last_name), deals(id, name)")
     .eq("id", id)
     .maybeSingle();
 
@@ -216,7 +219,9 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   }
 
   if (reassigning && newAssigneeId && newAssigneeId !== existingTask.assignee_id && newAssigneeId !== auth.userId) {
-    const inAppLink = existingTask.project_id ? `/projects/${existingTask.project_id}` : "/home";
+    // Round 2 slice A: link straight at the task, not the project/home
+    // fallback — see the dispatch-notify.ts comment on notifyTaskCompleted.
+    const inAppLink = `/tasks/${id}`;
     createNotificationsExcept(auth.userId, [
       {
         tenantId: auth.tenantId,

@@ -125,7 +125,7 @@ export function buildNavIndex({
   // ── Industry sidebar items ────────────────────────────────────
   function addSidebarItem(item: SidebarItem) {
     results.push({
-      id: `industry-${item.featureId}`,
+      id: `industry-${item.featureId}-${item.href}`,
       label: item.label,
       group: "Pages",
       icon: item.icon,

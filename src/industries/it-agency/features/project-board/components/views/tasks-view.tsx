@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowUp, ArrowDown, ArrowUpDown, Timer, ListTodo, Play, Square, Loader2 } from "lucide-react";
 import {
@@ -10,20 +11,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { LogTimeDialog } from "@/industries/it-agency/features/time-tracking/components/log-time-dialog";
+import { TaskStatusBadge } from "@/industries/it-agency/features/time-tracking/components/status-badge";
 import { useActiveTimersContext, formatElapsed } from "@/industries/it-agency/features/time-tracking/hooks/use-active-timers";
 import { AssigneePicker } from "../assignee-picker";
 import { PriorityPill } from "../priority-pill";
-import { TagMultiPicker } from "../tag-multi-picker";
-import type { Task, TaskStatus, TaskPriority } from "@/types/database";
+import { TASK_CHANGED_EVENT } from "@/lib/tasks/task-events";
+import type { Task, TaskPriority } from "@/types/database";
 import type { TeamMember } from "../../hooks/use-projects";
 import type { WorkspaceFilters } from "../../hooks/use-workspace-filters";
 
@@ -33,21 +28,6 @@ const PRIORITY_ORDER: Record<TaskPriority, number> = {
   high: 2,
   urgent: 3,
 };
-
-const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
-  todo: "To Do",
-  in_progress: "In Progress",
-  done: "Done",
-};
-
-interface TaskWithProject extends Task {
-  projects: {
-    id: string;
-    name: string;
-    account_id: string;
-    accounts: { id: string; name: string } | null;
-  } | null;
-}
 
 type SortKey = "title" | "project" | "status" | "assignee" | "priority" | "due_date" | "created_at";
 type SortDir = "asc" | "desc";
@@ -70,27 +50,36 @@ function buildQuery(filters: WorkspaceFilters): string {
   return `/api/v1/tasks?${params.toString()}`;
 }
 
+interface TaskWithProject extends Task {
+  projects: {
+    id: string;
+    name: string;
+    account_id: string;
+    accounts: { id: string; name: string } | null;
+  } | null;
+}
+
 interface TasksViewProps {
   filters: WorkspaceFilters;
   team: TeamMember[];
   teamMap: Map<string, TeamMember>;
-  poolTags: string[];
-  refetchTags: () => Promise<void>;
   onClearFilters: () => void;
-  canManageProjects: boolean;
-  currentUserId: string;
 }
 
-/** Mirrors the server rule in src/app/(main)/api/v1/tasks/[id]/route.ts:
- *  admins edit everything; a member may edit a task they're the assignee of,
- *  that they assigned, or that is unassigned (claimable team work). */
-function canEditTask(task: TaskWithProject, canManageProjects: boolean, currentUserId: string): boolean {
-  if (canManageProjects) return true;
-  if (task.assignee_id === null) return true;
-  return task.assignee_id === currentUserId || task.assigned_by_id === currentUserId;
-}
-
-export function TasksView({ filters, team, teamMap, poolTags, refetchTags, onClearFilters, canManageProjects, currentUserId }: TasksViewProps) {
+/**
+ * Round 2 slice A (docs/IT-AGENCY-ROUND2-TASK-OBJECT-BRIEF.md §2) replaced
+ * this table's per-cell inline editors (status select, assignee picker,
+ * priority pill, due-date input, estimate input, tag picker) with a single
+ * click-through to /tasks/<id>, intercepted as the shared TaskDetailDrawer —
+ * one editing path shared with Home and the cockpit Tasks tab, instead of a
+ * fourth divergent one. The row below is now a read-only summary; the timer
+ * and "log time" controls stay as quick actions since they're not edits to
+ * the task record. The drawer lives in the @modal route, not this
+ * component's tree, so this listens for TASK_CHANGED_EVENT to refetch after
+ * an edit made there.
+ */
+export function TasksView({ filters, team, teamMap, onClearFilters }: TasksViewProps) {
+  const router = useRouter();
   const [tasks, setTasks] = useState<TaskWithProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortKey, setSortKey] = useState<SortKey>("due_date");
@@ -124,6 +113,15 @@ export function TasksView({ filters, team, teamMap, poolTags, refetchTags, onCle
   ]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    window.addEventListener(TASK_CHANGED_EVENT, load);
+    return () => window.removeEventListener(TASK_CHANGED_EVENT, load);
+  }, [load]);
+
+  function openDetail(taskId: string) {
+    router.push(`/tasks/${taskId}`);
+  }
 
   function handleSort(key: SortKey) {
     if (key === sortKey) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -175,75 +173,6 @@ export function TasksView({ filters, team, teamMap, poolTags, refetchTags, onCle
       return sortDir === "asc" ? cmp : -cmp;
     });
   }, [tasks, sortKey, sortDir, teamMap]);
-
-  async function patchTask(id: string, patch: Partial<Task>) {
-    const res = await fetch(`/api/v1/tasks/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(patch),
-    });
-    if (!res.ok) throw new Error("Failed to update task");
-    const { data } = await res.json();
-    return data as Task;
-  }
-
-  async function handleStatusChange(taskId: string, status: TaskStatus) {
-    try {
-      const updated = await patchTask(taskId, { status });
-      setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, ...updated } : t)));
-    } catch {
-      toast.error("Failed to update status");
-    }
-  }
-
-  async function handleAssigneeChange(taskId: string, assigneeId: string | null) {
-    try {
-      const updated = await patchTask(taskId, { assignee_id: assigneeId });
-      setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, ...updated } : t)));
-    } catch {
-      toast.error("Failed to update assignee");
-    }
-  }
-
-  async function handlePriorityChange(taskId: string, priority: TaskPriority) {
-    try {
-      const updated = await patchTask(taskId, { priority });
-      setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, ...updated } : t)));
-    } catch {
-      toast.error("Failed to update priority");
-    }
-  }
-
-  async function handleDueDateChange(taskId: string, due_date: string | null) {
-    try {
-      const updated = await patchTask(taskId, { due_date });
-      setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, ...updated } : t)));
-    } catch {
-      toast.error("Failed to update due date");
-    }
-  }
-
-  async function handleEstimateChange(taskId: string, estimated_minutes: number | null) {
-    try {
-      const updated = await patchTask(taskId, { estimated_minutes });
-      setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, ...updated } : t)));
-    } catch {
-      toast.error("Failed to update estimate");
-    }
-  }
-
-  async function handleTagsChange(taskId: string, newTags: string[]) {
-    const prevTags = tasks.find((t) => t.id === taskId)?.tags ?? [];
-    setTasks((curr) => curr.map((t) => (t.id === taskId ? { ...t, tags: newTags } : t)));
-    try {
-      const updated = await patchTask(taskId, { tags: newTags });
-      setTasks((curr) => curr.map((t) => (t.id === taskId ? { ...t, ...updated } : t)));
-      await refetchTags();
-    } catch {
-      setTasks((curr) => curr.map((t) => (t.id === taskId ? { ...t, tags: prevTags } : t)));
-      toast.error("Failed to update tags");
-    }
-  }
 
   function openLogTime(task: TaskWithProject) {
     if (!task.projects) return;
@@ -339,14 +268,7 @@ export function TasksView({ filters, team, teamMap, poolTags, refetchTags, onCle
                   key={task.id}
                   task={task}
                   team={team}
-                  poolTags={poolTags}
-                  canEdit={canEditTask(task, canManageProjects, currentUserId)}
-                  onStatusChange={handleStatusChange}
-                  onAssigneeChange={handleAssigneeChange}
-                  onPriorityChange={handlePriorityChange}
-                  onDueDateChange={handleDueDateChange}
-                  onEstimateChange={handleEstimateChange}
-                  onTagsChange={handleTagsChange}
+                  onOpenDetail={openDetail}
                   onLogTime={openLogTime}
                 />
               ))}
@@ -367,34 +289,18 @@ export function TasksView({ filters, team, teamMap, poolTags, refetchTags, onCle
 }
 
 // ── TaskRow ──────────────────────────────────────────────────────────────────
+// Read-only summary + quick actions (timer, log time) — clicking the title
+// navigates to /tasks/<id>, intercepted as the shared drawer. See the file
+// header.
 
 interface TaskRowProps {
   task: TaskWithProject;
   team: TeamMember[];
-  poolTags: string[];
-  canEdit: boolean;
-  onStatusChange: (id: string, s: TaskStatus) => void;
-  onAssigneeChange: (id: string, uid: string | null) => void;
-  onPriorityChange: (id: string, p: TaskPriority) => void;
-  onDueDateChange: (id: string, d: string | null) => void;
-  onEstimateChange: (id: string, estimated_minutes: number | null) => void;
-  onTagsChange: (id: string, tags: string[]) => void;
+  onOpenDetail: (id: string) => void;
   onLogTime: (task: TaskWithProject) => void;
 }
 
-function TaskRow({
-  task,
-  team,
-  poolTags,
-  canEdit,
-  onStatusChange,
-  onAssigneeChange,
-  onPriorityChange,
-  onDueDateChange,
-  onEstimateChange,
-  onTagsChange,
-  onLogTime,
-}: TaskRowProps) {
+function TaskRow({ task, team, onOpenDetail, onLogTime }: TaskRowProps) {
   const isOverdue =
     task.due_date != null &&
     task.status !== "done" &&
@@ -404,17 +310,10 @@ function TaskRow({
   const running = isTaskRunning(task.id);
   const timerPending = isPending(task.id);
 
-  const [estimateInput, setEstimateInput] = useState(
-    task.estimated_minutes != null ? String(Math.round((task.estimated_minutes / 60) * 100) / 100) : ""
-  );
-
-  function commitEstimate() {
-    const trimmed = estimateInput.trim();
-    const minutes = trimmed ? Math.round(parseFloat(trimmed) * 60) : null;
-    if (minutes != null && Number.isNaN(minutes)) return;
-    if (minutes === (task.estimated_minutes ?? null)) return;
-    onEstimateChange(task.id, minutes);
-  }
+  const estimateLabel =
+    task.estimated_minutes != null
+      ? String(Math.round((task.estimated_minutes / 60) * 100) / 100)
+      : "—";
 
   return (
     <TableRow className="group hover:bg-gray-50">
@@ -467,11 +366,16 @@ function TaskRow({
         </div>
       </TableCell>
 
-      {/* Title */}
+      {/* Title — opens the task detail drawer */}
       <TableCell className="max-w-[220px] border-r border-gray-100">
-        <span className="text-sm font-medium text-[#0f0f10] truncate block" title={task.title}>
+        <button
+          type="button"
+          onClick={() => onOpenDetail(task.id)}
+          className="text-sm font-medium text-[#0f0f10] truncate block text-left hover:underline"
+          title={task.title}
+        >
           {task.title}
-        </span>
+        </button>
         {task.projects?.accounts?.name && (
           <span className="text-[11px] text-muted-foreground">
             {task.projects.accounts.name}
@@ -495,95 +399,34 @@ function TaskRow({
 
       {/* Status */}
       <TableCell className="border-r border-gray-100">
-        {canEdit ? (
-          <Select
-            value={task.status}
-            onValueChange={(v) => onStatusChange(task.id, v as TaskStatus)}
-          >
-            <SelectTrigger className="h-6 text-xs border-0 bg-transparent p-0 gap-1 w-auto focus:ring-0 shadow-none hover:bg-gray-100 rounded px-1.5">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {(Object.entries(TASK_STATUS_LABELS) as [TaskStatus, string][]).map(([v, lbl]) => (
-                <SelectItem key={v} value={v} className="text-xs">{lbl}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ) : (
-          <span className="text-xs text-gray-600 px-1.5">{TASK_STATUS_LABELS[task.status]}</span>
-        )}
+        <TaskStatusBadge status={task.status} />
       </TableCell>
 
       {/* Assignee */}
       <TableCell className="border-r border-gray-100">
-        <AssigneePicker
-          assigneeId={task.assignee_id}
-          team={team}
-          onChange={(uid) => onAssigneeChange(task.id, uid)}
-          disabled={!canEdit}
-          showName
-        />
+        <AssigneePicker assigneeId={task.assignee_id} team={team} onChange={() => {}} disabled showName />
       </TableCell>
 
       {/* Priority */}
       <TableCell className="border-r border-gray-100">
-        <PriorityPill
-          priority={task.priority}
-          onChange={canEdit ? (p) => onPriorityChange(task.id, p) : undefined}
-          readOnly={!canEdit}
-        />
+        <PriorityPill priority={task.priority} readOnly />
       </TableCell>
 
       {/* Due date */}
       <TableCell className="border-r border-gray-100">
-        {canEdit ? (
-          <input
-            type="date"
-            value={task.due_date ?? ""}
-            onChange={(e) => onDueDateChange(task.id, e.target.value || null)}
-            aria-label="Due date"
-            className={[
-              "text-xs border rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring bg-transparent",
-              isOverdue ? "text-red-600 border-red-200" : "border-gray-200 text-gray-700",
-            ].join(" ")}
-          />
-        ) : (
-          <span className={`text-xs ${isOverdue ? "text-red-600" : "text-gray-600"}`}>
-            {task.due_date ?? "—"}
-          </span>
-        )}
+        <span className={`text-xs ${isOverdue ? "text-red-600" : "text-gray-600"}`}>
+          {task.due_date ?? "—"}
+        </span>
       </TableCell>
 
       {/* Estimate (hours) */}
       <TableCell className="border-r border-gray-100">
-        {canEdit ? (
-          <input
-            type="number"
-            min="0"
-            step="0.25"
-            value={estimateInput}
-            onChange={(e) => setEstimateInput(e.target.value)}
-            onBlur={commitEstimate}
-            placeholder="—"
-            aria-label="Estimated hours"
-            className="w-14 text-xs border border-gray-200 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring bg-transparent text-gray-700"
-          />
-        ) : (
-          <span className="text-xs text-gray-600">{estimateInput || "—"}</span>
-        )}
+        <span className="text-xs text-gray-600">{estimateLabel}</span>
       </TableCell>
 
       {/* Tags */}
       <TableCell className="max-w-[200px]">
-        {canEdit ? (
-          <TagMultiPicker
-            size="sm"
-            value={task.tags}
-            onChange={(next) => onTagsChange(task.id, next)}
-            allTags={poolTags}
-            placeholder="+ tag"
-          />
-        ) : task.tags.length > 0 ? (
+        {task.tags.length > 0 ? (
           <div className="flex flex-wrap gap-1">
             {task.tags.map((t) => (
               <span key={t} className="text-[11px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600">
@@ -598,4 +441,3 @@ function TaskRow({
     </TableRow>
   );
 }
-

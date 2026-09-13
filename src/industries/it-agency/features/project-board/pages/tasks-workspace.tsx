@@ -16,10 +16,12 @@ interface TasksWorkspacePageProps {
   canManageProjects: boolean;
 }
 
-function TasksWorkspaceInner({ currentUserId, canManageProjects }: TasksWorkspacePageProps) {
+function TasksWorkspaceInner({ currentUserId }: TasksWorkspacePageProps) {
   const { projects, accounts, team, accountMap, teamMap, loading, refetch } = useProjects();
   const { filters, setFilters } = useWorkspaceFilters("tasks", { currentUserId });
-  const { tags: poolTags, refetchTags } = useTaskTags();
+  // refetchTags no longer threaded to TasksView — tag edits now happen in the
+  // TaskDetailDrawer, which fetches its own pool (Round 2 slice A).
+  const { tags: poolTags } = useTaskTags();
 
   function handleClearFilters() {
     setFilters({
@@ -69,11 +71,7 @@ function TasksWorkspaceInner({ currentUserId, canManageProjects }: TasksWorkspac
             filters={filters}
             team={team}
             teamMap={teamMap}
-            poolTags={poolTags}
-            refetchTags={refetchTags}
             onClearFilters={handleClearFilters}
-            canManageProjects={canManageProjects}
-            currentUserId={currentUserId}
           />
         </ActiveTimersProvider>
       )}

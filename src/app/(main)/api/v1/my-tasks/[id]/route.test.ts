@@ -45,7 +45,7 @@ vi.mock("@/lib/supabase/scoped", () => ({
   })),
 }));
 
-import { PATCH } from "./route";
+import { GET, PATCH } from "./route";
 
 const req = (body: unknown) => ({ json: async () => body, url: "http://localhost/api/v1/my-tasks/t-1" }) as unknown as NextRequest;
 const params = Promise.resolve({ id: "t-1" });
@@ -56,6 +56,27 @@ beforeEach(() => {
   notifSpy.mockClear();
   dispatchSpy.assigned.mockClear();
   dispatchSpy.completed.mockClear();
+});
+
+// Round 2 slice A's fallback read for a personal task from any industry —
+// TaskDetail falls back here when GET /api/v1/tasks/[id] 403s (non-it_agency
+// tenant). No ownership restriction on GET: any tenant member can view the
+// task (matches GET /api/v1/tasks/[id] and the brief's "read-only controls,
+// not editors that 403" — see docs/IT-AGENCY-ROUND2-TASK-OBJECT-BRIEF.md §5).
+describe("GET /api/v1/my-tasks/:id", () => {
+  it("returns the task even for a caller who is neither the assignee nor the assigner", async () => {
+    auth.current = { userId: "u-bystander", email: "x@x.co", tenantId: "tenant-A", role: "member", industryId: "education_consultancy" };
+    const res = await GET({} as NextRequest, { params });
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.data).toMatchObject({ id: "t-1" });
+  });
+
+  it("404s when the task doesn't exist in this tenant (tenant isolation)", async () => {
+    state.task = null as unknown as Record<string, unknown>;
+    const res = await GET({} as NextRequest, { params });
+    expect(res.status).toBe(404);
+  });
 });
 
 describe("PATCH /api/v1/my-tasks/:id — dispatch loop", () => {

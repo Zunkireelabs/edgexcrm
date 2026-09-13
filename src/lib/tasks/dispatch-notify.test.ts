@@ -50,17 +50,17 @@ describe("notifyTaskCompleted", () => {
   it("writes the in-app notification and sends the completed email to the assigner", async () => {
     notifyTaskCompleted(ctx(), { taskId: "t1", taskTitle: "Ship", assignedById: "u-dispatch", projectId: "p1" });
     expect(createNotificationsExcept).toHaveBeenCalledWith("u-actor", [
-      expect.objectContaining({ userId: "u-dispatch", type: "task.completed", link: "/projects/p1" }),
+      expect.objectContaining({ userId: "u-dispatch", type: "task.completed", link: "/tasks/t1" }),
     ]);
     await vi.waitFor(() => expect(sendTaskCompletedEmail).toHaveBeenCalled());
   });
 
-  // /tasks lists project-linked tasks only, so a project-less task is visible
-  // on Home and nowhere else — linking to /tasks would land the dispatcher on a
-  // page that cannot show the task. Caught on stage during the Round 1 smoke.
-  it("links to /home when there is no project", () => {
+  // Round 2 slice A gave every task a real address — /tasks/<id> now renders
+  // for a project-less task too (docs/IT-AGENCY-ROUND2-TASK-OBJECT-BRIEF.md
+  // §2), superseding the /home fallback Round 1 shipped (#526).
+  it("links to /tasks/<id> even when there is no project", () => {
     notifyTaskCompleted(ctx(), { taskId: "t1", taskTitle: "Ship", assignedById: "u-dispatch", projectId: null });
-    expect(createNotificationsExcept.mock.calls[0][1][0]).toMatchObject({ link: "/home" });
+    expect(createNotificationsExcept.mock.calls[0][1][0]).toMatchObject({ link: "/tasks/t1" });
   });
 
   it("does not email when the assigner is the actor (self-completion)", async () => {

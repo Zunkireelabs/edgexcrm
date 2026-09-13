@@ -90,7 +90,7 @@ vi.mock("@/lib/supabase/scoped", () => ({
   })),
 }));
 
-import { PATCH, DELETE } from "./route";
+import { GET, PATCH, DELETE } from "./route";
 
 function req(body: unknown): NextRequest {
   return { json: async () => body, url: "http://localhost/api/v1/tasks/t-1" } as unknown as NextRequest;
@@ -104,6 +104,27 @@ beforeEach(() => {
   notifSpy.mockClear();
   emailSpy.assigned.mockClear();
   emailSpy.completed.mockClear();
+});
+
+// Round 2 slice A (docs/IT-AGENCY-ROUND2-TASK-OBJECT-BRIEF.md §2/§5) —
+// /tasks/[id] is a new attack surface: any tenant member can view any task
+// (editability is gated separately, client-side, on the same fields PATCH
+// already authorizes), and a task outside the caller's tenant must 404, not
+// leak a different response shape.
+describe("GET /api/v1/tasks/:id", () => {
+  it("returns the task for a caller in the same tenant, regardless of ownership", async () => {
+    auth.current = { userId: "u-someone-else", email: "x@x.co", tenantId: "tenant-A", role: "member", industryId: "it_agency" };
+    const res = await GET({} as NextRequest, { params });
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.data).toMatchObject({ id: "t-1" });
+  });
+
+  it("404s when the task doesn't exist in this tenant (tenant isolation)", async () => {
+    state.task = null as unknown as Record<string, unknown>;
+    const res = await GET({} as NextRequest, { params });
+    expect(res.status).toBe(404);
+  });
 });
 
 describe("PATCH /api/v1/tasks/:id — own-vs-admin", () => {
@@ -199,7 +220,7 @@ describe("PATCH /api/v1/tasks/:id — Slice A: TASK_COMPLETED (dispatch loop)", 
     expect(res.status).toBe(200);
     const n = completedNotifs();
     expect(n).toHaveLength(1);
-    expect(n[0]).toMatchObject({ userId: "u-dispatcher", message: "Ship it", link: "/projects/p-1" });
+    expect(n[0]).toMatchObject({ userId: "u-dispatcher", message: "Ship it", link: "/tasks/t-1" });
   });
 
   it("does NOT re-fire when the task was already done", async () => {
@@ -228,12 +249,12 @@ describe("PATCH /api/v1/tasks/:id — Slice A: TASK_COMPLETED (dispatch loop)", 
     expect(completedNotifs()).toHaveLength(0);
   });
 
-  it("links to /home when the task has no project", async () => {
+  it("links to /tasks/<id> even when the task has no project", async () => {
     state.task = { id: "t-1", title: "Loose task", status: "in_progress", assignee_id: "u-assignee", assigned_by_id: "u-dispatcher", project_id: null };
     auth.current.userId = "u-assignee";
     auth.current.role = "member";
     await PATCH(req({ status: "done" }), { params });
-    expect(completedNotifs()[0]).toMatchObject({ link: "/home" });
+    expect(completedNotifs()[0]).toMatchObject({ link: "/tasks/t-1" });
   });
 });
 

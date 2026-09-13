@@ -9,15 +9,18 @@ import {
   apiError,
   apiValidationError,
 } from "@/lib/api/response";
-import { validate, required, maxLength, optionalMaxLength } from "@/lib/api/validation";
+import { validate, required, maxLength, optionalMaxLength, isIn } from "@/lib/api/validation";
 import { createRequestLogger } from "@/lib/logger";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { NotificationTypes, createNotificationsExcept } from "@/lib/notifications";
+import { notifyTaskAssigned } from "@/lib/tasks/dispatch-notify";
+import { TASK_PRIORITIES } from "@/lib/tasks/create-task";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -74,12 +77,19 @@ export async function POST(request: NextRequest, { params }: Props) {
   const { valid, errors } = validate(body, {
     title: [required("title"), maxLength(255)],
     description: [optionalMaxLength(2000)],
+    priority: [isIn([...TASK_PRIORITIES])],
   });
   const validationErrors: Record<string, string[]> = { ...errors };
 
   if (body.assignee_id !== undefined && body.assignee_id !== null) {
     if (typeof body.assignee_id !== "string" || !UUID_RE.test(body.assignee_id)) {
       validationErrors.assignee_id = ["Must be a valid UUID or null"];
+    }
+  }
+
+  if (body.due_date !== undefined && body.due_date !== null) {
+    if (typeof body.due_date !== "string" || !ISO_DATE_RE.test(body.due_date)) {
+      validationErrors.due_date = ["Must be a valid ISO date YYYY-MM-DD or null"];
     }
   }
 
@@ -138,6 +148,8 @@ export async function POST(request: NextRequest, { params }: Props) {
       position: nextPosition,
       assignee_id: assigneeId,
       assigned_by_id: assignedById,
+      priority: body.priority ? String(body.priority) : "normal",
+      due_date: body.due_date ? String(body.due_date) : null,
     })
     .select()
     .single();
@@ -166,6 +178,9 @@ export async function POST(request: NextRequest, { params }: Props) {
   ]);
 
   if (assigneeIsOther) {
+    // Round 2 slice B: link straight at the task, not the project fallback —
+    // matches every other dispatch path (see tasks/[id]/route.ts, create-task.ts).
+    const taskPath = `/tasks/${created.id}`;
     createNotificationsExcept(auth.userId, [
       {
         tenantId: auth.tenantId,
@@ -173,9 +188,20 @@ export async function POST(request: NextRequest, { params }: Props) {
         type: NotificationTypes.TASK_ASSIGNED,
         title: "New task assigned",
         message: created.title,
-        link: `/projects/${projectId}`,
+        link: taskPath,
       },
     ]);
+    notifyTaskAssigned(
+      {
+        db,
+        log,
+        tenantId: auth.tenantId,
+        actorUserId: auth.userId,
+        actorEmail: auth.email ?? null,
+        industryId: auth.industryId,
+      },
+      { taskId: created.id, taskTitle: created.title, assigneeUserId: assigneeId!, taskPath },
+    );
   }
 
   log.info({ taskId: created.id, assigneeId }, "Task created");

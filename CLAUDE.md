@@ -430,6 +430,14 @@ Most API routes live under `src/app/(main)/api/v1/`. Public submission API at `s
 5. **For tenant data**: prefer `scopedClient(auth)` (auto-injects `tenant_id` filter) over `createServiceClient()` (raw, bypasses RLS — see Tenant Isolation Rules below).
 6. Return via standardized helpers: `apiSuccess()`, `apiPaginated()`, `apiError()`, `apiUnauthorized()`, `apiForbidden()`, etc.
 
+### Two-System Writes: Verify Before You Persist
+
+**Any flow that writes to two separate systems (DB + external storage, DB + third-party API, DB + queue, DB + webhook target) must never let the first system record success based on the second system's unverified claim.** Persist to the system-of-record (Postgres) only after independently confirming the second write actually landed — not on the client's say-so, not on "the call didn't throw."
+
+This is a real, incident-derived rule, not theoretical: the applicant-documents feature (`src/lib/documents/`) originally had its upload route write the DB row as `status: 'uploaded'` *before* the client had uploaded any bytes to R2 — it only issued a presigned URL. If the client's upload then failed or never happened, the database permanently claimed a document existed with nothing behind it in storage, with no signal anywhere that this had happened. Fixed by adding a real existence check (`DocumentStorageProvider.exists()`, a lightweight HEAD request) and restructuring the flow so the presign step writes nothing to the DB — only a `complete` step does, and only after that check confirms the file is genuinely there. Full incident note: `docs/APPLICANT-DOCUMENTS-STATUS.md` §2a.
+
+**Applies to:** any future feature doing a client-direct-upload-then-confirm flow (signed URLs to any bucket), any outbound send that logs success before the provider confirms delivery, any two-phase write in general. If synchronous verification isn't possible in the same request, the correct pattern is still "verify before persist" via a callback/webhook/poll — not "persist optimistically, reconcile later." A reconciliation job that catches the lie afterward is not the same as never having recorded the lie in the first place.
+
 ### Tenant Isolation Rules
 
 **Three invariants every feature must respect.** Cross-tenant data leaks are the single biggest risk in a multi-tenant SaaS — these rules exist because we have **~37 of ~47 authenticated routes** using `createServiceClient()` (which bypasses RLS) and relying on the developer remembering `.eq("tenant_id", auth.tenantId)`. New code should not add to that pile.
