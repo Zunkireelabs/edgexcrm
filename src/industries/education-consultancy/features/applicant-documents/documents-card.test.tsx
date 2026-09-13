@@ -33,7 +33,7 @@ const PASSPORT_DOC = {
   mime_type: "application/pdf",
   file_size: 12345,
   status: "uploaded",
-  processing_error: null,
+  processing_error: null as string | null,
   current_version_id: "v1",
   uploaded_by: "user-1",
   created_at: new Date().toISOString(),
