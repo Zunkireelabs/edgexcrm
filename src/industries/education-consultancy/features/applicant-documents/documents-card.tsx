@@ -49,7 +49,17 @@ async function sha256Hex(file: File): Promise<string> {
     .join("");
 }
 
-export function ApplicantDocumentsCard({ leadId, canManage }: { leadId: string; canManage: boolean }) {
+export function ApplicantDocumentsCard({
+  leadId,
+  canManage,
+  currentUserId,
+  isAdmin,
+}: {
+  leadId: string;
+  canManage: boolean;
+  currentUserId: string;
+  isAdmin: boolean;
+}) {
   const [docs, setDocs] = useState<ApplicantDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>("list");
@@ -267,7 +277,11 @@ export function ApplicantDocumentsCard({ leadId, canManage }: { leadId: string; 
                         key={doc.id}
                         doc={doc}
                         viewMode={viewMode}
-                        canManage={canManage}
+                        // Mirrors the server's exact DELETE authorization
+                        // (requireAdmin(auth) || document.uploaded_by === auth.userId)
+                        // — canManage alone is broader (any editor) and would
+                        // show a Delete button the server then 403s.
+                        canDelete={isAdmin || doc.uploaded_by === currentUserId}
                         onView={() => openViewer(doc)}
                         onDelete={() => handleDelete(doc)}
                       />
@@ -372,13 +386,13 @@ export function ApplicantDocumentsCard({ leadId, canManage }: { leadId: string; 
 function DocumentTile({
   doc,
   viewMode,
-  canManage,
+  canDelete,
   onView,
   onDelete,
 }: {
   doc: ApplicantDocument;
   viewMode: ViewMode;
-  canManage: boolean;
+  canDelete: boolean;
   onView: () => void;
   onDelete: () => void;
 }) {
@@ -394,7 +408,7 @@ function DocumentTile({
         <Icon className="h-5 w-5 text-muted-foreground mb-1.5" />
         <p className="text-xs font-medium truncate">{doc.name}</p>
         <p className="text-[10px] text-muted-foreground truncate">{DOCUMENT_TYPE_LABELS[doc.document_type]}</p>
-        {canManage && (
+        {canDelete && (
           <span
             role="button"
             tabIndex={0}
@@ -431,7 +445,7 @@ function DocumentTile({
       <button type="button" onClick={onView} className="shrink-0 text-muted-foreground hover:text-foreground" title="View">
         <Download className="h-3.5 w-3.5" />
       </button>
-      {canManage && (
+      {canDelete && (
         <button type="button" onClick={onDelete} className="shrink-0 text-muted-foreground hover:text-red-600" title="Delete">
           <Trash2 className="h-3.5 w-3.5" />
         </button>

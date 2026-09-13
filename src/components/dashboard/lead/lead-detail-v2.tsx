@@ -1009,6 +1009,8 @@ export function LeadDetailV2({
                 <ApplicantDocumentsCard
                   leadId={currentLead.id}
                   canManage={canEdit ?? isAdmin}
+                  currentUserId={userId}
+                  isAdmin={isAdmin}
                 />
               )}
             </div>

@@ -1,12 +1,16 @@
 // @vitest-environment jsdom
 //
 // Coverage for the Phase 2 UI: the empty state, category grouping, the
-// canManage gate (no upload/delete controls for a read-only viewer), and
-// that deleting a document actually calls DELETE and removes it from the
-// list. Upload's presigned-PUT + checksum path is exercised by the manual
-// smoke test (docs/APPLICANT-DOCUMENTS-STATUS.md §2c), not here — jsdom's
-// crypto.subtle support is inconsistent across environments, and the API
-// contract itself already has full route-level test coverage.
+// canManage gate (no upload controls for a read-only viewer), the
+// per-document delete gate (mirrors the server's admin-or-uploader rule —
+// a review finding on PR #533: canManage alone is broader than the server's
+// actual DELETE authorization, so an editor who isn't the uploader used to
+// see a Delete button the server would then 403), and that deleting a
+// document actually calls DELETE and removes it from the list. Upload's
+// presigned-PUT + checksum path is exercised by the manual smoke test
+// (docs/APPLICANT-DOCUMENTS-STATUS.md §2c), not here — jsdom's crypto.subtle
+// support is inconsistent across environments, and the API contract itself
+// already has full route-level test coverage.
 
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent, cleanup } from "@testing-library/react";
@@ -76,7 +80,7 @@ describe("ApplicantDocumentsCard", () => {
   it("renders the empty state when there are no documents", async () => {
     global.fetch = mockFetch([]) as unknown as typeof fetch;
 
-    render(<ApplicantDocumentsCard leadId="lead-1" canManage={true} />);
+    render(<ApplicantDocumentsCard leadId="lead-1" canManage={true} currentUserId="user-1" isAdmin={false} />);
 
     await waitFor(() => expect(screen.getByText(/no documents yet/i)).toBeInTheDocument());
     expect(screen.getByText("0")).toBeInTheDocument();
@@ -85,7 +89,7 @@ describe("ApplicantDocumentsCard", () => {
   it("groups documents by category and shows the total count", async () => {
     global.fetch = mockFetch([PASSPORT_DOC, TRANSCRIPT_DOC]) as unknown as typeof fetch;
 
-    render(<ApplicantDocumentsCard leadId="lead-1" canManage={true} />);
+    render(<ApplicantDocumentsCard leadId="lead-1" canManage={true} currentUserId="user-1" isAdmin={false} />);
 
     await waitFor(() => expect(screen.getByText("passport.pdf")).toBeInTheDocument());
     expect(screen.getByText("transcript.pdf")).toBeInTheDocument();
@@ -95,21 +99,51 @@ describe("ApplicantDocumentsCard", () => {
     expect(screen.getByText("2")).toBeInTheDocument();
   });
 
-  it("hides the upload and delete controls for a read-only viewer (canManage=false)", async () => {
+  it("hides the upload controls for a read-only viewer (canManage=false)", async () => {
     global.fetch = mockFetch([PASSPORT_DOC]) as unknown as typeof fetch;
 
-    render(<ApplicantDocumentsCard leadId="lead-1" canManage={false} />);
+    render(<ApplicantDocumentsCard leadId="lead-1" canManage={false} currentUserId="user-1" isAdmin={false} />);
 
     await waitFor(() => expect(screen.getByText("passport.pdf")).toBeInTheDocument());
     expect(screen.queryByTitle("Upload document")).not.toBeInTheDocument();
+  });
+
+  it("REGRESSION (PR #533 review): hides Delete for an editor who can manage but did not upload the document", async () => {
+    global.fetch = mockFetch([PASSPORT_DOC]) as unknown as typeof fetch;
+
+    // canManage=true (e.g. a counselor with edit rights) but neither the
+    // uploader (PASSPORT_DOC.uploaded_by === "user-1") nor an admin — the
+    // server's DELETE route would 403 this caller, so the button must not
+    // even render.
+    render(<ApplicantDocumentsCard leadId="lead-1" canManage={true} currentUserId="user-2" isAdmin={false} />);
+
+    await waitFor(() => expect(screen.getByText("passport.pdf")).toBeInTheDocument());
     expect(screen.queryByTitle("Delete")).not.toBeInTheDocument();
+  });
+
+  it("shows Delete for the original uploader even without admin rights", async () => {
+    global.fetch = mockFetch([PASSPORT_DOC]) as unknown as typeof fetch;
+
+    render(<ApplicantDocumentsCard leadId="lead-1" canManage={true} currentUserId="user-1" isAdmin={false} />);
+
+    await waitFor(() => expect(screen.getByText("passport.pdf")).toBeInTheDocument());
+    expect(screen.getByTitle("Delete")).toBeInTheDocument();
+  });
+
+  it("shows Delete for an admin regardless of who uploaded the document", async () => {
+    global.fetch = mockFetch([PASSPORT_DOC]) as unknown as typeof fetch;
+
+    render(<ApplicantDocumentsCard leadId="lead-1" canManage={true} currentUserId="user-2" isAdmin={true} />);
+
+    await waitFor(() => expect(screen.getByText("passport.pdf")).toBeInTheDocument());
+    expect(screen.getByTitle("Delete")).toBeInTheDocument();
   });
 
   it("deletes a document and removes it from the list", async () => {
     const fetchMock = mockFetch([PASSPORT_DOC]);
     global.fetch = fetchMock as unknown as typeof fetch;
 
-    render(<ApplicantDocumentsCard leadId="lead-1" canManage={true} />);
+    render(<ApplicantDocumentsCard leadId="lead-1" canManage={true} currentUserId="user-1" isAdmin={false} />);
 
     await waitFor(() => expect(screen.getByText("passport.pdf")).toBeInTheDocument());
 
