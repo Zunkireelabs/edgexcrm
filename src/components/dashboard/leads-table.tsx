@@ -847,7 +847,12 @@ export function LeadsTable({
   // already fetches exactly those two catalogs (with a hardcoded fallback if the
   // tenant hasn't configured any yet) — `enabled` gates the fetch to education_
   // consultancy only, same reasoning as wantsDestinationFacet above.
-  const { fieldsOfStudy: eduFieldsOfStudy, studyLevels: eduStudyLevels } = useEduTaxonomy({
+  const {
+    fieldsOfStudy: eduFieldsOfStudy,
+    studyLevels: eduStudyLevels,
+    intakeMonths: eduIntakeMonths,
+    intakeYears: eduIntakeYears,
+  } = useEduTaxonomy({
     enabled: wantsDestinationFacet,
   });
   const [serverSourceFacet, setServerSourceFacet] = useState<{ name: string; count: number }[] | null>(null);
@@ -2347,6 +2352,16 @@ export function LeadsTable({
       // gate; they carry education-only values regardless of tenant.
       field_of_study: eduFieldsOfStudy.map((name) => ({ value: name, label: name })),
       degree_level: eduStudyLevels.map((name) => ({ value: name, label: name })),
+      // Intake: same fixed-dropdown reasoning as field_of_study/degree_level
+      // above, but composed from the two Settings catalogs (Intake Months x
+      // Intake Years) Applications already uses — same "Month Year" join
+      // (e.g. "November 2026") the Add Lead sheet writes to intake_term.
+      intake_term: eduIntakeMonths.flatMap((month) =>
+        eduIntakeYears.map((year) => {
+          const value = `${month} ${year}`;
+          return { value, label: value };
+        })
+      ),
     };
   }, [
     statusFilterOptions,
@@ -2363,6 +2378,8 @@ export function LeadsTable({
     isAdmin,
     eduFieldsOfStudy,
     eduStudyLevels,
+    eduIntakeMonths,
+    eduIntakeYears,
   ]);
 
   // "+ Add filter" renders separately in row 1 (see the toolbar JSX below) while

@@ -772,6 +772,7 @@ function StudyInterestPanel({ lead, isAdmin, isEditor, onSave, submissionHistory
     destinations?: string[] | null;
     field_of_study?: string | null;
     degree_level?: string | null;
+    intake_term?: string | null;
   };
   const cf = (lead.custom_fields || {}) as Record<string, unknown>;
 
@@ -796,13 +797,16 @@ function StudyInterestPanel({ lead, isAdmin, isEditor, onSave, submissionHistory
       : normalizeDestinations(getDistinctFormValues(cf, submissionHistory, "countries"));
   const effectiveFieldOfStudy = normalizeFieldOfStudy(leadWithEdu.field_of_study) || distinctFieldOfStudy.join(", ") || null;
   const effectiveDegreeLevel = normalizeDegreeLevel(leadWithEdu.degree_level) || distinctDegreeLevel.join(", ") || null;
+  const effectiveIntakeTerm = leadWithEdu.intake_term?.trim() || null;
 
-  const { destinations: destOptions, fieldsOfStudy, studyLevels } = useEduTaxonomy();
+  const { destinations: destOptions, fieldsOfStudy, studyLevels, intakeMonths, intakeYears } = useEduTaxonomy();
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [draftDests, setDraftDests] = useState<string[]>(leadWithEdu.destinations ?? []);
   const [draftField, setDraftField] = useState(leadWithEdu.field_of_study ?? "");
   const [draftDegree, setDraftDegree] = useState(leadWithEdu.degree_level ?? "");
+  const [draftIntakeMonth, setDraftIntakeMonth] = useState("");
+  const [draftIntakeYear, setDraftIntakeYear] = useState("");
   const [draftAcademics, setDraftAcademics] = useState<Record<string, string>>({});
   const [draftTestScores, setDraftTestScores] = useState<Record<string, string>>({});
   const leadRecord = lead as unknown as Record<string, unknown>;
@@ -815,6 +819,16 @@ function StudyInterestPanel({ lead, isAdmin, isEditor, onSave, submissionHistory
     setDraftDests(effectiveDestinations);
     setDraftField(leadWithEdu.field_of_study || distinctFieldOfStudy[0] || "");
     setDraftDegree(leadWithEdu.degree_level || distinctDegreeLevel[0] || "");
+    // intake_term is stored as "<Month> <Year>" (e.g. "November 2026") — split
+    // back into the two pickers. Seeded from the raw stored value unconditionally
+    // (same reasoning as draftField/draftDegree above) — NOT gated on whether
+    // intakeMonths/intakeYears have finished loading yet, since useEduTaxonomy()
+    // fetches async and Edit can be clicked before it resolves; gating here would
+    // silently reset a real value to blank and Save would erase it. The free-text
+    // fallback SelectItems below keep a value not in the loaded catalog visible.
+    const [storedMonth, storedYear] = (leadWithEdu.intake_term ?? "").trim().split(/\s+/).filter(Boolean);
+    setDraftIntakeMonth(storedMonth ?? "");
+    setDraftIntakeYear(storedYear ?? "");
     const academics: Record<string, string> = {};
     for (const level of ACADEMIC_LEVELS) {
       academics[`${level.key}_gpa`] = String(leadRecord[`${level.key}_gpa`] ?? "");
@@ -839,6 +853,7 @@ function StudyInterestPanel({ lead, isAdmin, isEditor, onSave, submissionHistory
         destinations: draftDests,
         field_of_study: draftField || null,
         degree_level: draftDegree || null,
+        intake_term: [draftIntakeMonth, draftIntakeYear].filter(Boolean).join(" ") || null,
         ...draftAcademics,
         ...draftTestScores,
       });
@@ -851,7 +866,8 @@ function StudyInterestPanel({ lead, isAdmin, isEditor, onSave, submissionHistory
   const hasAny =
     effectiveDestinations.length > 0 ||
     effectiveFieldOfStudy ||
-    effectiveDegreeLevel;
+    effectiveDegreeLevel ||
+    effectiveIntakeTerm;
 
   const academicLevelRows = ACADEMIC_LEVELS.map((level) => ({
     level,
@@ -942,6 +958,54 @@ function StudyInterestPanel({ lead, isAdmin, isEditor, onSave, submissionHistory
                 ))}
               </SelectContent>
             </Select>
+          </div>
+          {/* Intake (Month + Year) — reuses the same intake_months/intake_years
+              catalogs Applications already uses (migration 139). */}
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Intake</p>
+            <div className="grid grid-cols-2 gap-1.5">
+              <Select
+                value={draftIntakeMonth || "__none__"}
+                onValueChange={(v) => setDraftIntakeMonth(v === "__none__" ? "" : v)}
+              >
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue placeholder="Month" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">
+                    <span className="text-muted-foreground">Month</span>
+                  </SelectItem>
+                  {/* Same free-text fallback as Field of Study/Degree Level above —
+                      keeps a stored value visible even if the catalog hasn't
+                      loaded yet or no longer contains it. */}
+                  {draftIntakeMonth && !intakeMonths.includes(draftIntakeMonth) && (
+                    <SelectItem value={draftIntakeMonth}>{draftIntakeMonth}</SelectItem>
+                  )}
+                  {intakeMonths.map((m) => (
+                    <SelectItem key={m} value={m}>{m}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select
+                value={draftIntakeYear || "__none__"}
+                onValueChange={(v) => setDraftIntakeYear(v === "__none__" ? "" : v)}
+              >
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue placeholder="Year" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">
+                    <span className="text-muted-foreground">Year</span>
+                  </SelectItem>
+                  {draftIntakeYear && !intakeYears.includes(draftIntakeYear) && (
+                    <SelectItem value={draftIntakeYear}>{draftIntakeYear}</SelectItem>
+                  )}
+                  {intakeYears.map((y) => (
+                    <SelectItem key={y} value={y}>{y}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           {/* Academic Qualification */}
           <div className="pt-1 space-y-2">
@@ -1036,6 +1100,9 @@ function StudyInterestPanel({ lead, isAdmin, isEditor, onSave, submissionHistory
           )}
           {effectiveDegreeLevel && (
             <InfoRow label="Degree Level" value={effectiveDegreeLevel} />
+          )}
+          {effectiveIntakeTerm && (
+            <InfoRow label="Intake" value={effectiveIntakeTerm} />
           )}
         </div>
       ) : (

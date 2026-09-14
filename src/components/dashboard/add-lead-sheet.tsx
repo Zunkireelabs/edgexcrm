@@ -118,6 +118,8 @@ interface FormData {
   destinations: string[];
   fieldOfStudy: string;
   degreeLevel: string;
+  intakeMonth: string;
+  intakeYear: string;
   archiveReason: string;
 }
 
@@ -162,6 +164,8 @@ const initialFormData: FormData = {
   destinations: [],
   fieldOfStudy: "",
   degreeLevel: "",
+  intakeMonth: "",
+  intakeYear: "",
   archiveReason: "",
 };
 
@@ -191,7 +195,7 @@ export function AddLeadSheet({
     role === "owner" ? "owner" : role === "admin" ? "admin" : "member",
     currentUserPositionSlug,
   );
-  const { destinations: destOptions, fieldsOfStudy, studyLevels } = useEduTaxonomy();
+  const { destinations: destOptions, fieldsOfStudy, studyLevels, intakeMonths, intakeYears } = useEduTaxonomy();
   const [formData, setFormData] = useState<FormData>(initialFormData);
   const [errors, setErrors] = useState<FormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -326,6 +330,9 @@ export function AddLeadSheet({
         destinations: industryId === "education_consultancy" ? formData.destinations : undefined,
         field_of_study: industryId === "education_consultancy" ? (formData.fieldOfStudy || null) : undefined,
         degree_level: industryId === "education_consultancy" ? (formData.degreeLevel || null) : undefined,
+        intake_term: industryId === "education_consultancy"
+          ? ([formData.intakeMonth, formData.intakeYear].filter(Boolean).join(" ") || null)
+          : undefined,
         ...(industryId === "education_consultancy" ? { ...academics, ...testScores } : {}),
         is_final: true,
         step: 1,
@@ -1131,6 +1138,46 @@ export function AddLeadSheet({
                   <SelectItem value="__none__">Select level</SelectItem>
                   {studyLevels.map((lvl) => (
                     <SelectItem key={lvl} value={lvl}>{lvl}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        )}
+        {industryId === "education_consultancy" && (
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-gray-600">Intake Month</Label>
+              <Select
+                value={formData.intakeMonth || "__none__"}
+                onValueChange={(v) => updateField("intakeMonth", v === "__none__" ? "" : v)}
+                disabled={isSubmitting}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select month" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Select month</SelectItem>
+                  {intakeMonths.map((m) => (
+                    <SelectItem key={m} value={m}>{m}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-gray-600">Intake Year</Label>
+              <Select
+                value={formData.intakeYear || "__none__"}
+                onValueChange={(v) => updateField("intakeYear", v === "__none__" ? "" : v)}
+                disabled={isSubmitting}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select year" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Select year</SelectItem>
+                  {intakeYears.map((y) => (
+                    <SelectItem key={y} value={y}>{y}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

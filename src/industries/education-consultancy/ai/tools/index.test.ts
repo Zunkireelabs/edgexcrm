@@ -8,6 +8,12 @@ const EDU_TOOL_IDS = [
   "get_lead_applications",
   "application_funnel_summary",
   "class_enrollment_summary",
+  "list_applicant_documents",
+  "search_applicant_document_content",
+  "get_document_metadata",
+  "get_document_extracted_data",
+  "find_missing_documents",
+  "get_document_download_url",
 ];
 
 function fixtureAuth(overrides: Partial<AuthContext> = {}): AuthContext {
@@ -29,7 +35,7 @@ function fixtureAuth(overrides: Partial<AuthContext> = {}): AuthContext {
 }
 
 describe("education_consultancy tool pack registration", () => {
-  it("includes all 4 tools for an education_consultancy auth", () => {
+  it("includes all 10 tools for an education_consultancy auth", () => {
     const toolset = buildToolset(fixtureAuth({ industryId: "education_consultancy" }));
     const ids = toolset.map((t) => t.id);
     for (const id of EDU_TOOL_IDS) {
@@ -37,7 +43,7 @@ describe("education_consultancy tool pack registration", () => {
     }
   });
 
-  it("excludes all 4 tools for a real_estate auth", () => {
+  it("excludes all 10 tools for a real_estate auth", () => {
     const toolset = buildToolset(fixtureAuth({ industryId: "real_estate" }));
     const ids = toolset.map((t) => t.id);
     for (const id of EDU_TOOL_IDS) {
@@ -45,7 +51,7 @@ describe("education_consultancy tool pack registration", () => {
     }
   });
 
-  it("excludes all 4 tools for an it_agency auth", () => {
+  it("excludes all 10 tools for an it_agency auth", () => {
     const toolset = buildToolset(fixtureAuth({ industryId: "it_agency" }));
     const ids = toolset.map((t) => t.id);
     for (const id of EDU_TOOL_IDS) {
@@ -53,7 +59,7 @@ describe("education_consultancy tool pack registration", () => {
     }
   });
 
-  it("excludes all 4 tools when the auth has no industryId", () => {
+  it("excludes all 10 tools when the auth has no industryId", () => {
     const toolset = buildToolset(fixtureAuth({ industryId: null }));
     const ids = toolset.map((t) => t.id);
     for (const id of EDU_TOOL_IDS) {
