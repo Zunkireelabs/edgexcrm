@@ -20,7 +20,12 @@ const LEAD_ROW = {
   tags: [],
   created_at: "2026-01-01T00:00:00.000Z",
   last_activity_at: null,
+  custom_fields: null as unknown,
 };
+
+function leadRow(overrides: Partial<typeof LEAD_ROW> = {}) {
+  return { ...LEAD_ROW, ...overrides };
+}
 
 function emptyArrayChain() {
   const chain: Record<string, unknown> = {
@@ -34,7 +39,7 @@ function emptyArrayChain() {
   return chain;
 }
 
-function fakeDb(): ScopedClient {
+function fakeDb(row: typeof LEAD_ROW = LEAD_ROW): ScopedClient {
   return {
     from: (table: string) => {
       if (table === "leads") {
@@ -42,7 +47,7 @@ function fakeDb(): ScopedClient {
           select: () => chain,
           eq: () => chain,
           is: () => chain,
-          maybeSingle: () => Promise.resolve({ data: LEAD_ROW }),
+          maybeSingle: () => Promise.resolve({ data: row }),
         };
         return chain;
       }
@@ -91,8 +96,8 @@ function agentAuth(overrides: Partial<AgentAuthContext> = {}): AgentAuthContext 
   };
 }
 
-function ctxFor(auth: AgentAuthContext): ToolContext {
-  return { db: fakeDb(), auth, logger: { child: () => ({}) } as unknown as ToolContext["logger"], runId: "run-1" };
+function ctxFor(auth: AgentAuthContext, row: typeof LEAD_ROW = LEAD_ROW): ToolContext {
+  return { db: fakeDb(row), auth, logger: { child: () => ({}) } as unknown as ToolContext["logger"], runId: "run-1" };
 }
 
 describe("get_lead — background agent (AgentAuthContext) scoping (doc 03 §6)", () => {
@@ -113,5 +118,59 @@ describe("get_lead — background agent (AgentAuthContext) scoping (doc 03 §6)"
     const restricted = agentAuth({ permissions: { ...agentAuth().permissions, leadScope: "own" } });
     const result = (await getLeadTool.execute(ctxFor(restricted), { leadId: "lead-1" })) as { id?: string; error?: string };
     expect(result.error).toBe("Lead not found.");
+  });
+});
+
+describe("get_lead — customFields sanitization (BRIEF-LEAD-TRIAGE-ROUND2-FIX B1)", () => {
+  it("returns {} when custom_fields is null", async () => {
+    const result = (await getLeadTool.execute(ctxFor(agentAuth()), { leadId: "lead-1" })) as { customFields?: Record<string, unknown> };
+    expect(result.customFields).toEqual({});
+  });
+
+  it("passes through primitive values when set", async () => {
+    const row = leadRow({ custom_fields: { initial_notes: "Applying for a marketing internship", years_experience: 2, urgent: true } });
+    const result = (await getLeadTool.execute(ctxFor(agentAuth(), row), { leadId: "lead-1" })) as { customFields?: Record<string, unknown> };
+    expect(result.customFields).toEqual({
+      initial_notes: "Applying for a marketing internship",
+      years_experience: 2,
+      urgent: true,
+    });
+  });
+
+  it("truncates a string value to 1000 chars", async () => {
+    const long = "a".repeat(2000);
+    const row = leadRow({ custom_fields: { initial_notes: long } });
+    const result = (await getLeadTool.execute(ctxFor(agentAuth(), row), { leadId: "lead-1" })) as { customFields?: Record<string, string> };
+    expect(result.customFields?.initial_notes.length).toBe(1000);
+  });
+
+  it("keeps at most 20 keys", async () => {
+    const many: Record<string, string> = {};
+    for (let i = 0; i < 30; i++) many[`field_${i}`] = `value_${i}`;
+    const row = leadRow({ custom_fields: many });
+    const result = (await getLeadTool.execute(ctxFor(agentAuth(), row), { leadId: "lead-1" })) as { customFields?: Record<string, unknown> };
+    expect(Object.keys(result.customFields ?? {}).length).toBe(20);
+  });
+
+  it("drops non-primitive values (nested objects/arrays) instead of serialising them", async () => {
+    const row = leadRow({
+      custom_fields: {
+        initial_notes: "Vendor pitching a CRM integration",
+        nested: { a: 1 },
+        list: [1, 2, 3],
+      },
+    });
+    const result = (await getLeadTool.execute(ctxFor(agentAuth(), row), { leadId: "lead-1" })) as { customFields?: Record<string, unknown> };
+    expect(result.customFields).toEqual({ initial_notes: "Vendor pitching a CRM integration" });
+  });
+
+  it("stops adding keys once the total serialised size exceeds ~4000 chars", async () => {
+    const many: Record<string, string> = {};
+    for (let i = 0; i < 10; i++) many[`field_${i}`] = "x".repeat(1000);
+    const row = leadRow({ custom_fields: many });
+    const result = (await getLeadTool.execute(ctxFor(agentAuth(), row), { leadId: "lead-1" })) as { customFields?: Record<string, string> };
+    const total = Object.entries(result.customFields ?? {}).reduce((sum, [k, v]) => sum + k.length + String(v).length, 0);
+    expect(total).toBeLessThanOrEqual(4000);
+    expect(Object.keys(result.customFields ?? {}).length).toBeLessThan(10);
   });
 });

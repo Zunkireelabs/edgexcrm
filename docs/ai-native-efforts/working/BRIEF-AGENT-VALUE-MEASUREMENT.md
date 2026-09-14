@@ -176,6 +176,43 @@ the expected expiry behaviour, not a failure.)
 
 ---
 
+## Round 1 results (2026-09-14, synthetic gate tenant `orca-gate`, stage) — pre-fix
+
+61 synthetic leads (ORC-001…061) created one at a time via *Add lead*, scored by Lead Triage
+against an answer key kept outside the app. See `BRIEF-LEAD-TRIAGE-ROUND2-FIX.md` for the full
+brief; summary here for the gate record.
+
+| Category | In band |
+|---|---|
+| Complete clear fit | 12/12 |
+| No email or phone | 6/6 |
+| Near-duplicate, different person | 4/4 |
+| One contact method | 4/8 (four scored 81 — rubric says 81+ needs both) |
+| Duplicate re-enquiry (same name + phone, new or no email) | 1/8 |
+| Spam / gibberish | 3/6 (the 21s come from missing contact details, not spam detection) |
+| Job applicant | 0/7, plus ORC-029 produced nothing |
+| Vendor / sales pitch | 0/8 |
+
+Root causes:
+
+1. `get_lead` never returned `custom_fields` (where *Add lead*'s free-text notes and every
+   form/API-submitted answer live) — every job applicant and vendor reached the agent looking like
+   "complete contact details" with nothing to say otherwise.
+2. The *Add lead* form applies a `student` tag by default.
+3. `search_leads` requires every word in a query to match (verified in code). Whether the agent
+   combined name + email + phone into one query — and so missed re-enquiries with a new email — is
+   a hypothesis, not yet confirmed by trace.
+
+Fixed in `fix/lead-triage-visibility` (PR pending review): `get_lead` now returns a sanitized
+`customFields`, and the prompt defines fit per industry, discounts the default tag, separates
+duplicate searches per field, and scores off-target leads (job applicants, vendors, spam) 0-20 with
+a review/tidy task instead of a sales follow-up.
+
+**Round 2 runs after this PR merges** — a new batch on `orca-gate`, same mix and data rules, new
+display ids, new answer key, to measure whether the fix moved these numbers.
+
+---
+
 ## Results — fill in, then open the docs-only PR
 
 *(Leave empty until step 6.)*
