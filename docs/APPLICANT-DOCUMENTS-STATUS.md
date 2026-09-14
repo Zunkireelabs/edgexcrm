@@ -256,17 +256,20 @@ right after a document is confirmed persisted, gated on the privacy check below.
 function (mirroring `kb-ingest.test.ts`'s structure) + 3 new tests on the `complete` route covering
 the trigger's on/off/idempotent-path behavior. Full existing suite (2217 tests) still green.
 
-**Privacy gate — reused, not newly invented, and NOT a complete answer (read this before enabling
-anywhere):** this pipeline sends document text to OpenAI via `embedTexts()`. Applicant documents
-(passports, bank statements) are more sensitive than the knowledge-base content that already
-required per-tenant written consent (ADR-001 "D5") before any OpenAI call. This pipeline reuses that
-exact same technical gate — `isIngestionEnabledForTenant()` — rather than inventing a separate,
-weaker one. **The open question this does NOT resolve:** Admizz's existing KB consent was written
-about CRM notes/knowledge-base content, not about applicant passports/bank statements. Reusing the
-gate is a code decision; whether that existing consent's *scope* actually covers this new, more
-sensitive use is a real judgment call for whoever owns the Admizz relationship — confirm before
-flipping this on for any tenant that already has KB ingestion enabled, don't assume the existing
-consent silently extends here.
+**Privacy gate — reused, not newly invented.** This pipeline sends document text to OpenAI via
+`embedTexts()`. Applicant documents (passports, bank statements) are more sensitive than the
+knowledge-base content that already required per-tenant written consent (ADR-001 "D5") before any
+OpenAI call. This pipeline reuses that exact same technical gate — `isIngestionEnabledForTenant()`
+— rather than inventing a separate, weaker one.
+
+**RESOLVED 2026-09-14:** whether Admizz's existing 2026-09-03 written consent (an email, per
+`docs/ai-native-efforts/00-DECISIONS-ADR.md`'s D5 requirement — "short written notice + consent...
+covering the AI processing and sub-processor list") actually extends to applicant documents was an
+open judgment call, not assumed. **Confirmed by whoever owns the Admizz relationship: the existing
+consent's scope is broad enough — it covers "the AI processing" generally, not narrowly scoped to
+notes/knowledge-base content specifically — so it already covers this use. No fresh consent
+conversation with Admizz was needed.** Reusing `isIngestionEnabledForTenant()` as this pipeline's
+gate is confirmed correct, not just convenient.
 
 **Deliberately NOT built in this pass:** structured extraction per `document_type` (passport number,
 transcript GPA, etc.) — `applicant_document_extractions` stays empty. This was flagged in the parent
@@ -423,12 +426,12 @@ works, not just that its pieces pass mocked tests in isolation.
 **What this proves:** Phases 1–5 genuinely work together, end to end, against real OpenAI calls,
 real R2 storage, and a real Inngest run — not just against each phase's own mocked test suite.
 
-**What this does NOT resolve — still open:** the Phase 3/5 privacy caveat (§2d, §6) is now a
-confirmed *live* fact, not a hypothetical: Admizz's real data is actually being sent to OpenAI
-today. Whether Admizz's existing AI/KB consent language actually covers applicant documents
-specifically (passports, bank statements) is still an unanswered, real judgment call for whoever
-owns that tenant relationship — arguably more urgent now that it's proven to be happening, not just
-theoretically possible.
+**Privacy follow-up — RESOLVED 2026-09-14, same day:** this test proved the Phase 3/5 privacy
+caveat (§2d) was no longer hypothetical — Admizz's real data was demonstrably being sent to OpenAI.
+That raised the outstanding question of whether Admizz's existing consent covers applicant
+documents specifically, addressed the same day: **confirmed by whoever owns the Admizz relationship
+that the existing 2026-09-03 consent's scope is broad enough to already cover this — see §2d's
+resolution note.** No fresh Admizz conversation was needed.
 
 ---
 
