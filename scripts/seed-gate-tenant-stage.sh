@@ -49,7 +49,7 @@ for marker in "${PROD_MARKERS[@]}"; do
 done
 
 if ! psql "$DB" -tAc "SELECT 1;" >/dev/null 2>&1; then
-  echo "ERROR: cannot reach the $ENV database ($DB)." >&2
+  echo "ERROR: cannot reach the $ENV database." >&2
   exit 1
 fi
 
@@ -138,7 +138,7 @@ VALUES
 --    list (is_intake=true) — this is where the education_consultancy default
 --    seeding (migration 059) originally routed new leads, and it is the
 --    single row src/app/(main)/api/v1/leads/route.ts's
---    `.eq("is_intake", true).limit(1).maybeSingle()` needs for the C4/Part D
+--    is_intake=true, limit 1, maybeSingle() query needs for the C4/Part D
 --    single-lead-create smoke test to land somewhere instead of list_id=null.
 INSERT INTO public.lead_lists (id, tenant_id, name, slug, sort_order, is_system, is_intake, color, access, pipeline_id)
 VALUES
