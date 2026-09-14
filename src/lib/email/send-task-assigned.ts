@@ -4,6 +4,8 @@ import {
   getTaskAssignedEmailSubject,
   getTaskCompletedEmailTemplate,
   getTaskCompletedEmailSubject,
+  getTasksAssignedDigestEmailTemplate,
+  getTasksAssignedDigestEmailSubject,
 } from "./templates/task-assigned";
 import { createRequestLogger } from "@/lib/logger";
 
@@ -104,4 +106,59 @@ export async function sendTaskCompletedEmail(params: SendTaskEmailParams): Promi
       primaryColor: params.primaryColor,
     }),
   );
+}
+
+interface SendTasksDigestEmailParams {
+  to: string;
+  actorEmail: string;
+  tenantName: string;
+  titles: string[];
+  /** Path (leading slash) the CTA links to — /home for the batch digest. */
+  link: string;
+  primaryColor?: string;
+}
+
+// Round 2 slice E — one email for a whole batch of assigned tasks, never one
+// per task (see dispatch-notify.ts's notifyTasksAssignedBatch for why).
+export async function sendTasksAssignedDigestEmail(
+  params: SendTasksDigestEmailParams,
+): Promise<SendEmailResult> {
+  const log = createRequestLogger({
+    requestId: crypto.randomUUID(),
+    method: "EMAIL",
+    path: "send-tasks-assigned-digest",
+  });
+
+  const resend = getResendClient();
+  if (!resend) {
+    log.warn({ to: params.to, count: params.titles.length }, "Email disabled - RESEND_API_KEY not configured");
+    return { success: false, error: "Email not configured" };
+  }
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: EMAIL_FROM,
+      to: params.to,
+      subject: getTasksAssignedDigestEmailSubject(params.actorEmail, params.titles.length),
+      html: getTasksAssignedDigestEmailTemplate({
+        tenantName: params.tenantName,
+        actorEmail: params.actorEmail,
+        titles: params.titles,
+        taskLink: taskLink(params.link),
+        primaryColor: params.primaryColor,
+      }),
+    });
+
+    if (error) {
+      log.error({ err: error, to: params.to }, "Failed to send tasks digest email");
+      return { success: false, error: error.message };
+    }
+
+    log.info({ messageId: data?.id, to: params.to, count: params.titles.length }, "Tasks digest email sent");
+    return { success: true, messageId: data?.id };
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : "Unknown error";
+    log.error({ err, to: params.to }, "Exception sending tasks digest email");
+    return { success: false, error: errorMessage };
+  }
 }
