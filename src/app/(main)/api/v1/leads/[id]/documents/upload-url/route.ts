@@ -8,7 +8,8 @@ import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { assertLeadVisible } from "@/lib/documents/access";
 import { DOCUMENT_TYPES, resolveDocumentMimeType } from "@/lib/documents/constants";
-import { loadMaxDocumentSizeBytes } from "@/lib/documents/settings";
+import { loadMaxDocumentSizeBytes, loadMaxDocumentsPerLead, loadStorageQuotaBytes } from "@/lib/documents/settings";
+import { getLeadDocumentCount, getTenantStorageUsedBytes } from "@/lib/documents/usage";
 import { buildDocumentStorageKey } from "@/lib/documents/storage-key";
 import { getDocumentStorageProvider } from "@/lib/documents/storage/r2-provider";
 
@@ -77,6 +78,35 @@ export async function POST(request: NextRequest, context: RouteContext) {
       count: fileSize,
       max: maxBytes,
     });
+  }
+
+  // Phase 6 quotas — both null-means-unlimited (see settings.ts). Checked
+  // here (issue time), same as the file-size cap above, so a caller never
+  // wastes an R2 PUT on an upload that would be rejected at /complete.
+  const maxDocsPerLead = await loadMaxDocumentsPerLead(db);
+  if (maxDocsPerLead !== null) {
+    const currentCount = await getLeadDocumentCount(db, id);
+    if (currentCount >= maxDocsPerLead) {
+      return apiError(
+        "DOCUMENT_LIMIT_EXCEEDED",
+        `This lead already has ${currentCount} document(s), at the ${maxDocsPerLead}-document cap for this tenant`,
+        422,
+        { count: currentCount, max: maxDocsPerLead },
+      );
+    }
+  }
+
+  const storageQuotaBytes = await loadStorageQuotaBytes(db);
+  if (storageQuotaBytes !== null) {
+    const usedBytes = await getTenantStorageUsedBytes(db);
+    if (usedBytes + fileSize > storageQuotaBytes) {
+      return apiError(
+        "STORAGE_QUOTA_EXCEEDED",
+        `This upload (${fileSize} bytes) would exceed the tenant's ${storageQuotaBytes}-byte storage quota (currently using ${usedBytes} bytes)`,
+        422,
+        { count: usedBytes + fileSize, max: storageQuotaBytes },
+      );
+    }
   }
 
   const documentId = crypto.randomUUID();
