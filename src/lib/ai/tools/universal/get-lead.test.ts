@@ -20,7 +20,7 @@ const LEAD_ROW = {
   tags: [],
   created_at: "2026-01-01T00:00:00.000Z",
   last_activity_at: null,
-  custom_fields: null,
+  custom_fields: null as unknown,
 };
 
 function leadRow(overrides: Partial<typeof LEAD_ROW> = {}) {
