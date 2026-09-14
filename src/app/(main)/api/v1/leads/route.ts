@@ -91,7 +91,7 @@ form_config_id,deleted_at,converted_at,converted_contact_id,idempotency_key,\
 ai_score,ai_priority,ai_score_updated_at,\
 normalized_email,merged_into,\
 company_name,designation,prospect_industry,owner_id,salutation,company_email,\
-branch_id,list_id,destinations,field_of_study,degree_level,\
+branch_id,list_id,destinations,field_of_study,degree_level,intake_term,\
 nationality,intake_account,custom_fields,\
 pre_app_fee_status,pre_app_fee_amount,pre_app_fee_notes,\
 see_gpa,see_institution,see_passed_year,\
@@ -971,6 +971,7 @@ async function handlePost(request: NextRequest) {
     destinations: Array.isArray(body.destinations) ? normalizeDestinations(body.destinations) : [],
     field_of_study: normalizeFieldOfStudy(body.field_of_study as string | null | undefined),
     degree_level: normalizeDegreeLevel(body.degree_level as string | null | undefined),
+    intake_term: (body.intake_term as string | null | undefined)?.trim() || null,
     ...coerceAcademicPayload(body),
     ...(idempotencyKey && { idempotency_key: idempotencyKey }),
   };
