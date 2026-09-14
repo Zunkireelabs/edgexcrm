@@ -485,6 +485,22 @@ one set per cap per route, plus a test proving the versions route does NOT check
 Verified with `npx tsc --noEmit -p .` (clean), full suite (2322 tests, zero regressions),
 `npm run build`, targeted lint — all clean.
 
+**Known limitation, flagged by a reviewer on PR #544 — soft enforcement under concurrent uploads
+(TOCTOU race), not fixed in this pass.** Both quota checks (`getTenantStorageUsedBytes`,
+`getLeadDocumentCount`) read the current usage, then decide, with no lock or transaction around
+that read-then-decide window. Two uploads landing at nearly the same instant for the same
+tenant/lead can both read the same (stale) "under the cap" usage number and both proceed, letting
+the tenant end up slightly over the cap — by at most one extra concurrent upload's worth. **Not a
+security issue** — no cross-tenant leak, no data corruption, nobody bypasses `getFeatureAccess` or
+`assertLeadVisible`; the exposure is purely "the cap is soft under concurrency, not hard." The
+existing `max_document_size_mb` check doesn't have this problem because it only ever evaluates a
+single file in isolation — nothing to race against. A real fix would need either a DB-level
+constraint/transaction or a Postgres advisory lock around the check-and-reserve step, which is a
+genuinely bigger change than this phase's scope (and this phase makes no DB changes at all, by
+design — see above). Deliberately left as a known, documented gap rather than a silent one; revisit
+if this tenant's real upload concurrency ever makes the race practically likely, not just
+theoretically possible.
+
 ---
 
 ## 3. Full roadmap (from the parent plan's §14) — what comes after this PR merges
