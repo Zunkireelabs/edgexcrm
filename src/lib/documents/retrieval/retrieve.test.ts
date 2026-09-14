@@ -11,13 +11,17 @@ const { retrieveDocuments } = await import("./retrieve");
 
 type Row = Record<string, unknown>;
 
-function selectChain(rows: Row[]) {
+function selectChain(rows: Row[], spies?: { isSpy?: ReturnType<typeof vi.fn> }) {
   const c: Record<string, unknown> = {};
   c.select = () => c;
   c.eq = () => c;
   c.in = () => c;
   c.textSearch = () => c;
   c.limit = () => c;
+  c.is = (...args: unknown[]) => {
+    spies?.isSpy?.(...args);
+    return Promise.resolve({ data: rows, error: null });
+  };
   c.then = (resolve: (v: { data: Row[]; error: null }) => unknown) =>
     Promise.resolve({ data: rows, error: null }).then(resolve);
   return c;
@@ -25,11 +29,17 @@ function selectChain(rows: Row[]) {
 
 const DOCUMENT_ROWS: Row[] = [{ id: "doc-1", name: "Passport.pdf", document_type: "passport" }];
 
-function fakeDb(opts: { rpcResult?: Row[]; rpcError?: { message: string }; keywordRows?: Row[]; documentRows?: Row[] }): ScopedClient {
+function fakeDb(opts: {
+  rpcResult?: Row[];
+  rpcError?: { message: string };
+  keywordRows?: Row[];
+  documentRows?: Row[];
+  documentsIsSpy?: ReturnType<typeof vi.fn>;
+}): ScopedClient {
   const insertMock = vi.fn(() => Promise.resolve({ data: null, error: null }));
   return {
     from: (table: string) => {
-      if (table === "applicant_documents") return selectChain(opts.documentRows ?? DOCUMENT_ROWS);
+      if (table === "applicant_documents") return selectChain(opts.documentRows ?? DOCUMENT_ROWS, { isSpy: opts.documentsIsSpy });
       if (table === "applicant_document_chunks") return selectChain(opts.keywordRows ?? []);
       if (table === "ai_usage_events") return { insert: insertMock };
       throw new Error(`unexpected table ${table}`);
@@ -144,6 +154,27 @@ describe("retrieveDocuments", () => {
     });
 
     const result = await retrieveDocuments(db, "tenant-1", "lead-1", "query", 8);
+    expect(result.chunks).toEqual([]);
+  });
+
+  it("PHASE 7 HARDENING FIX: the parent-document join filters is('deleted_at', null) -- a soft-deleted document's chunks can never surface in search results", async () => {
+    embedTextsMock.mockResolvedValue([[0.1, 0.2, 0.3]]);
+    const isSpy = vi.fn();
+    const db = fakeDb({
+      rpcResult: [
+        { chunk_id: "chunk-1", document_id: "doc-1", document_version_id: "version-1", chunk_index: 0, content: "passport text", page_number: null, metadata: {}, rrf_score: 0.05 },
+      ],
+      // Simulates the real DB: a soft-deleted document row still exists
+      // (deleted_at set, not removed) but is("deleted_at", null) correctly
+      // excludes it from the join, so `data` comes back empty here even
+      // though the row technically exists.
+      documentRows: [],
+      documentsIsSpy: isSpy,
+    });
+
+    const result = await retrieveDocuments(db, "tenant-1", "lead-1", "query", 8);
+
+    expect(isSpy).toHaveBeenCalledWith("deleted_at", null);
     expect(result.chunks).toEqual([]);
   });
 });

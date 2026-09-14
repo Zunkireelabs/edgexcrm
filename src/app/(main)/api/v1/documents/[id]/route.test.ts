@@ -42,6 +42,8 @@ function fakeDb(opts: {
   deleteError?: unknown;
   versions?: { storage_key: string }[];
   versionsError?: unknown;
+  chunksDeleteError?: unknown;
+  extractionsDeleteError?: unknown;
 } = {}) {
   const extractionQuery = {
     eq: vi.fn(() => extractionQuery),
@@ -49,7 +51,11 @@ function fakeDb(opts: {
     limit: vi.fn(() => extractionQuery),
     maybeSingle: vi.fn(async () => ({ data: opts.extraction ?? null })),
   };
-  const extractionTable = { select: vi.fn(() => extractionQuery) };
+  const extractionsDeleteEq = vi.fn(async () => ({ error: opts.extractionsDeleteError ?? null }));
+  const extractionTable = {
+    select: vi.fn(() => extractionQuery),
+    delete: vi.fn(() => ({ eq: extractionsDeleteEq })),
+  };
 
   const updateSelect = { single: vi.fn(async () => ({ data: opts.updated ?? { id: "doc-1" }, error: opts.updateError ?? null })) };
   const updateEq = { select: vi.fn(() => updateSelect), then: (resolve: (v: unknown) => unknown) => Promise.resolve({ error: opts.deleteError ?? null }).then(resolve) };
@@ -60,14 +66,20 @@ function fakeDb(opts: {
   const versionsQuery = { eq: vi.fn(async () => ({ data: opts.versions ?? [{ storage_key: "tenants/t1/.../v1/original.pdf" }], error: opts.versionsError ?? null })) };
   const versionsTable = { select: vi.fn(() => versionsQuery) };
 
+  const chunksDeleteEq = vi.fn(async () => ({ error: opts.chunksDeleteError ?? null }));
+  const chunksTable = { delete: vi.fn(() => ({ eq: chunksDeleteEq })) };
+
   return {
     from: vi.fn((table: string) => {
       if (table === "applicant_document_extractions") return extractionTable;
       if (table === "applicant_documents") return docTable;
       if (table === "document_usage_events") return usageTable;
       if (table === "applicant_document_versions") return versionsTable;
+      if (table === "applicant_document_chunks") return chunksTable;
       return {};
     }),
+    extractionsDeleteEq,
+    chunksDeleteEq,
   };
 }
 
@@ -257,5 +269,58 @@ describe("DELETE /api/v1/documents/[id]", () => {
 
     expect(res.status).toBe(200);
     expect(removeMock).toHaveBeenCalledWith([]);
+  });
+
+  it("PHASE 7 HARDENING FIX: purges applicant_document_chunks AND applicant_document_extractions, not just R2 and the parent row", async () => {
+    const document = { id: "doc-1", uploaded_by: "user-1" };
+    assertDocumentVisibleMock.mockResolvedValue({ document, lead: LEAD });
+    const db = fakeDb();
+    scopedClientMock.mockResolvedValue(db);
+
+    const { DELETE } = await import("./route");
+    const res = await DELETE(fakeReq(), params());
+
+    expect(res.status).toBe(200);
+    const chunksTable = db.from("applicant_document_chunks") as unknown as { delete: ReturnType<typeof vi.fn> };
+    expect(chunksTable.delete).toHaveBeenCalled();
+    expect(db.chunksDeleteEq).toHaveBeenCalledWith("document_id", "doc-1");
+    const extractionsTable = db.from("applicant_document_extractions") as unknown as { delete: ReturnType<typeof vi.fn> };
+    expect(extractionsTable.delete).toHaveBeenCalled();
+    expect(db.extractionsDeleteEq).toHaveBeenCalledWith("document_id", "doc-1");
+  });
+
+  it("PHASE 7 HARDENING FIX: 500s and leaves the document intact when purging chunks fails — never marks deleted while chunks still exist", async () => {
+    const document = { id: "doc-1", uploaded_by: "user-1" };
+    assertDocumentVisibleMock.mockResolvedValue({ document, lead: LEAD });
+    const db = fakeDb({ chunksDeleteError: { message: "db error" } });
+    scopedClientMock.mockResolvedValue(db);
+
+    const { DELETE } = await import("./route");
+    const res = await DELETE(fakeReq(), params());
+
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error.code).toBe("DB_ERROR");
+    const docTable = db.from("applicant_documents") as unknown as { update: ReturnType<typeof vi.fn> };
+    expect(docTable.update).not.toHaveBeenCalled();
+    // R2 was already purged by this point (files genuinely gone) — only the
+    // DB-side cleanup failed, so the document is left intact/visible, not
+    // silently claiming success with orphaned chunks.
+    expect(removeMock).toHaveBeenCalled();
+  });
+
+  it("PHASE 7 HARDENING FIX: 500s and leaves the document intact when purging extractions fails, even though chunks already purged", async () => {
+    const document = { id: "doc-1", uploaded_by: "user-1" };
+    assertDocumentVisibleMock.mockResolvedValue({ document, lead: LEAD });
+    const db = fakeDb({ extractionsDeleteError: { message: "db error" } });
+    scopedClientMock.mockResolvedValue(db);
+
+    const { DELETE } = await import("./route");
+    const res = await DELETE(fakeReq(), params());
+
+    expect(res.status).toBe(500);
+    const docTable = db.from("applicant_documents") as unknown as { update: ReturnType<typeof vi.fn> };
+    expect(docTable.update).not.toHaveBeenCalled();
+    expect(db.chunksDeleteEq).toHaveBeenCalled();
   });
 });
