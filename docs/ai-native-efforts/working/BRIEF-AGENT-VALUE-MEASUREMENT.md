@@ -193,16 +193,15 @@ brief; summary here for the gate record.
 | Job applicant | 0/7, plus ORC-029 produced nothing |
 | Vendor / sales pitch | 0/8 |
 
-Three root causes verified in code:
+Root causes:
 
 1. `get_lead` never returned `custom_fields` (where *Add lead*'s free-text notes and every
    form/API-submitted answer live) — every job applicant and vendor reached the agent looking like
    "complete contact details" with nothing to say otherwise.
-2. Every education lead is tagged `student` by the *Add lead* form by default; the agent read that
-   tag as evidence of fit.
-3. The prompt had no definition of what a good-fit lead looks like for this tenant's industry, and
-   let one combined `search_leads` query (name + email + phone) miss re-enquiries that used a new
-   email — a combined query requires every token to match.
+2. The *Add lead* form applies a `student` tag by default.
+3. `search_leads` requires every word in a query to match (verified in code). Whether the agent
+   combined name + email + phone into one query — and so missed re-enquiries with a new email — is
+   a hypothesis, not yet confirmed by trace.
 
 Fixed in `fix/lead-triage-visibility` (PR pending review): `get_lead` now returns a sanitized
 `customFields`, and the prompt defines fit per industry, discounts the default tag, separates

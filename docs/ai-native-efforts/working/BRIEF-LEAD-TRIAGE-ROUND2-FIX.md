@@ -121,9 +121,10 @@ three verified root causes, and "Round 2 runs after this PR merges". No lead con
 
 ### Privacy note for the PR description
 
-B1 widens what is sent to the model provider (lead-supplied form answers). Prod is unaffected
-(`deploy.yml` sets no AI agent flags). On stage, only tenants with `ai_agents_enabled = true` and a hired,
-active agent run it. State this in the PR in one sentence; no security detail beyond that.
+B1 widens what is sent to the model provider (lead-supplied form answers). `get_lead` is also an
+assistant tool, and `AI_ASSISTANT_ENABLED` is on in prod for opted-in tenants (`deploy.yml`), so
+`customFields` reaches the prod assistant once this merges stage→main. State this in the PR in one
+sentence; no security detail beyond that.
 
 **Acceptance (Part B):** lint, type check and all tests green including the database-backed job; CI 9/9;
 PR to `stage`; brain folder reviews the diff before merge. **Do not merge. Do not deploy.**
