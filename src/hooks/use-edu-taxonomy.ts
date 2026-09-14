@@ -13,6 +13,10 @@ interface EduTaxonomy {
   /** "Interested Degree Level" options — sourced from the study_levels catalog,
    *  falling back to the DEGREE_LEVELS labels until the catalog loads/if empty. */
   studyLevels: string[];
+  /** Same intake_months/intake_years catalogs Applications already uses
+   *  (migration 139) — no lead-specific catalog, shared list. */
+  intakeMonths: string[];
+  intakeYears: string[];
   loading: boolean;
 }
 
@@ -27,6 +31,8 @@ export function useEduTaxonomy(options?: { enabled?: boolean }): EduTaxonomy {
   const [destinations, setDestinations] = useState<string[]>([...DESTINATIONS]);
   const [fieldsOfStudy, setFieldsOfStudy] = useState<string[]>([...FIELDS_OF_STUDY]);
   const [studyLevels, setStudyLevels] = useState<string[]>(DEGREE_LEVELS.map((d) => d.label));
+  const [intakeMonths, setIntakeMonths] = useState<string[]>([]);
+  const [intakeYears, setIntakeYears] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -41,15 +47,21 @@ export function useEduTaxonomy(options?: { enabled?: boolean }): EduTaxonomy {
       fetch("/api/v1/countries").then((r) => (r.ok ? r.json() : { data: [] })),
       fetch("/api/v1/courses").then((r) => (r.ok ? r.json() : { data: [] })),
       fetch("/api/v1/study-levels").then((r) => (r.ok ? r.json() : { data: [] })),
+      fetch("/api/v1/intake-months").then((r) => (r.ok ? r.json() : { data: [] })),
+      fetch("/api/v1/intake-years").then((r) => (r.ok ? r.json() : { data: [] })),
     ])
-      .then(([countriesRes, coursesRes, studyLevelsRes]) => {
+      .then(([countriesRes, coursesRes, studyLevelsRes, intakeMonthsRes, intakeYearsRes]) => {
         if (cancelled) return;
         const countries: { name: string }[] = countriesRes.data ?? [];
         const courses: { name: string }[] = coursesRes.data ?? [];
         const levels: { name: string }[] = studyLevelsRes.data ?? [];
+        const months: { name: string }[] = intakeMonthsRes.data ?? [];
+        const years: { name: string }[] = intakeYearsRes.data ?? [];
         if (countries.length > 0) setDestinations(countries.map((c) => c.name));
         if (courses.length > 0) setFieldsOfStudy(courses.map((c) => c.name));
         if (levels.length > 0) setStudyLevels(levels.map((l) => l.name));
+        if (months.length > 0) setIntakeMonths(months.map((m) => m.name));
+        if (years.length > 0) setIntakeYears(years.map((y) => y.name));
       })
       .catch(() => {
         // keep hardcoded fallback values
@@ -62,5 +74,5 @@ export function useEduTaxonomy(options?: { enabled?: boolean }): EduTaxonomy {
     };
   }, [enabled]);
 
-  return { destinations, fieldsOfStudy, studyLevels, loading: enabled && loading };
+  return { destinations, fieldsOfStudy, studyLevels, intakeMonths, intakeYears, loading: enabled && loading };
 }

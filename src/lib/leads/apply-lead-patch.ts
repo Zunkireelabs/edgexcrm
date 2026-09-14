@@ -64,6 +64,7 @@ const UPDATABLE_FIELDS = [
   "destinations",
   "field_of_study",
   "degree_level",
+  "intake_term",
   "pre_app_fee_status",
   "pre_app_fee_amount",
   "pre_app_fee_notes",

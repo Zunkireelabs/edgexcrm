@@ -313,6 +313,21 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       filterable: true,
       industries: ["education_consultancy"],
     },
+    {
+      key: "intake_term",
+      label: "Intake",
+      // Reuses the same "Intake Term" concept + intake_months/intake_years
+      // catalogs Applications already has (migration 139) — see migration
+      // 233_lead_intake_term.sql. Options come from those same two catalogs
+      // (leads-table.tsx's advancedFilterOptionOverrides.intake_term, via
+      // useEduTaxonomy()'s intakeMonths/intakeYears), never a hardcoded list.
+      type: "select",
+      source: { kind: "promoted", column: "intake_term", jsonb: { column: "custom_fields", path: "intake_term" } },
+      emptyIsBlankString: true,
+      group: "Education",
+      filterable: true,
+      industries: ["education_consultancy"],
+    },
 
     // ── obvious first-class columns (also folds SORT_COLUMNS in) ─────────
     {
