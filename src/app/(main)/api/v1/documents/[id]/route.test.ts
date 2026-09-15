@@ -40,6 +40,9 @@ function fakeDb(opts: {
   updated?: Record<string, unknown>;
   updateError?: unknown;
   deleteError?: unknown;
+  /** Per-attempt errors for the final applicant_documents soft-delete update, indexed by call
+   * count (0-based); the last entry repeats once exhausted. Overrides `deleteError` if set. */
+  deleteErrorSequence?: (unknown | null)[];
   versions?: { storage_key: string }[];
   versionsError?: unknown;
   chunksDeleteError?: unknown;
@@ -58,8 +61,20 @@ function fakeDb(opts: {
   };
 
   const updateSelect = { single: vi.fn(async () => ({ data: opts.updated ?? { id: "doc-1" }, error: opts.updateError ?? null })) };
-  const updateEq = { select: vi.fn(() => updateSelect), then: (resolve: (v: unknown) => unknown) => Promise.resolve({ error: opts.deleteError ?? null }).then(resolve) };
-  const docTable = { update: vi.fn(() => ({ eq: vi.fn(() => updateEq) })) };
+  const deleteErrorSequence = opts.deleteErrorSequence ?? [opts.deleteError ?? null];
+  let updateCallCount = 0;
+  const docTable = {
+    update: vi.fn(() => {
+      const err = deleteErrorSequence[Math.min(updateCallCount, deleteErrorSequence.length - 1)];
+      updateCallCount++;
+      return {
+        eq: vi.fn(() => ({
+          select: vi.fn(() => updateSelect),
+          then: (resolve: (v: unknown) => unknown) => Promise.resolve({ error: err }).then(resolve),
+        })),
+      };
+    }),
+  };
 
   const usageTable = { insert: vi.fn(async () => ({ error: null })) };
 
@@ -322,5 +337,36 @@ describe("DELETE /api/v1/documents/[id]", () => {
     const docTable = db.from("applicant_documents") as unknown as { update: ReturnType<typeof vi.fn> };
     expect(docTable.update).not.toHaveBeenCalled();
     expect(db.chunksDeleteEq).toHaveBeenCalled();
+  });
+
+  it("LOGIC-GAP FIX: retries the final soft-delete write and succeeds on the 2nd attempt after chunks/extractions/R2 are already purged", async () => {
+    const document = { id: "doc-1", uploaded_by: "user-1" };
+    assertDocumentVisibleMock.mockResolvedValue({ document, lead: LEAD });
+    const db = fakeDb({ deleteErrorSequence: [{ message: "transient db hiccup" }, null] });
+    scopedClientMock.mockResolvedValue(db);
+
+    const { DELETE } = await import("./route");
+    const res = await DELETE(fakeReq(), params());
+
+    expect(res.status).toBe(200);
+    const docTable = db.from("applicant_documents") as unknown as { update: ReturnType<typeof vi.fn> };
+    expect(docTable.update).toHaveBeenCalledTimes(2);
+  });
+
+  it("LOGIC-GAP FIX: 500s after exhausting 3 attempts on the final soft-delete write — the residual gap is retrying the DELETE call again (safe, purges no-op), not silent data loss going unreported", async () => {
+    const document = { id: "doc-1", uploaded_by: "user-1" };
+    assertDocumentVisibleMock.mockResolvedValue({ document, lead: LEAD });
+    const persistentError = { message: "db still down" };
+    const db = fakeDb({ deleteErrorSequence: [persistentError, persistentError, persistentError] });
+    scopedClientMock.mockResolvedValue(db);
+
+    const { DELETE } = await import("./route");
+    const res = await DELETE(fakeReq(), params());
+
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error.code).toBe("DB_ERROR");
+    const docTable = db.from("applicant_documents") as unknown as { update: ReturnType<typeof vi.fn> };
+    expect(docTable.update).toHaveBeenCalledTimes(3);
   });
 });
