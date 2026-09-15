@@ -7,18 +7,21 @@
 > `docs/FEATURE-CATALOG.md` and archive this file per the repo's own doc-lifecycle rule (CLAUDE.md
 > § Read first, every session).
 
-**Last updated:** 2026-09-14. **Current state:** Phases 1–5 are **all merged and live on stage**,
-and — for the first time — **verified working end-to-end against real infrastructure, not mocks**
-(§2h):
+**Last updated:** 2026-09-14. **Current state:** Phases 1–6 are **all merged and live on stage**,
+verified working end-to-end against real infrastructure (§2h), and the project's one open privacy
+question is resolved (§2d):
 - Phase 1 (schema + R2 storage + core API) — PR [#530](https://github.com/Zunkireelabs/edgexcrm/pull/530), commit `6036215b`.
 - Phase 2 (UI, §2c) — PR [#533](https://github.com/Zunkireelabs/edgexcrm/pull/533), commit `e643556c`. Includes a review-found delete-permission fix.
 - Phase 3 (processing pipeline, §2d) — PR [#534](https://github.com/Zunkireelabs/edgexcrm/pull/534), commit `33358ea7`.
 - Follow-up: processing-status visibility fix (§2e) — PR [#536](https://github.com/Zunkireelabs/edgexcrm/pull/536), commit `6b96bc22`.
 - Phase 4 (RAG retrieval, §2f) — PR [#538](https://github.com/Zunkireelabs/edgexcrm/pull/538), commit `1c350f6d`.
 - Phase 5 (agent tools, §2g) — PR [#539](https://github.com/Zunkireelabs/edgexcrm/pull/539), commit `fba2430d`. Includes a review-found privacy-gate fix (the search tool was missing the `isIngestionEnabledForTenant()` check).
+- Phase 6 (quota enforcement, §2i) — PR [#544](https://github.com/Zunkireelabs/edgexcrm/pull/544), commit `1c0f0b97`.
+- Privacy consent question — RESOLVED — PR [#545](https://github.com/Zunkireelabs/edgexcrm/pull/545), commit `3b8d7a5f`.
 
-**Phase 6 (quota enforcement, §2i) is built and tested locally, on branch
-`feature/applicant-documents-phase6-quotas`, no PR yet.**
+**Phase 7 (hardening, §2j) is built and tested locally, on branch
+`feature/applicant-documents-phase7-hardening`, no PR yet.** Found and fixed a real bug along the
+way — see §2j.
 None of the six merged phases are promoted to **prod** yet — see §3.
 **R2 is live on stage as of 2026-09-14** — see §6: stage's `.env.local` was missing the 5 `R2_*`
 vars entirely until today (a gap flagged since Phase 1 but never closed until the first real test
@@ -435,7 +438,7 @@ resolution note.** No fresh Admizz conversation was needed.
 
 ---
 
-## 2i. Phase 6 (quota enforcement) — built and tested locally, 2026-09-14
+## 2i. Phase 6 (quota enforcement) — merged to stage, 2026-09-14 (PR #544)
 
 Branch `feature/applicant-documents-phase6-quotas` (off `origin/stage`, not pushed). Enforces 2 of
 the 3 caps `tenant_document_settings` (migration 231) already has columns for; the third
@@ -506,6 +509,63 @@ theoretically possible.
 
 ---
 
+## 2j. Phase 7 (hardening) — built and tested locally, 2026-09-14
+
+Branch `feature/applicant-documents-phase7-hardening` (off `origin/stage`, not pushed). This phase
+is mostly proving existing behavior is safe, not adding features — but it found one real,
+previously-undiscovered bug along the way.
+
+**Real bug found and fixed: soft-deleted documents' chunks were still fully searchable — "orphaned
+vectors," exactly the class of gap this phase's own roadmap line names.** Neither
+`applicant_document_hybrid_search` (the SQL RPC, migration 231) nor Phase 4's `retrieveDocuments()`
+join filtered chunks by their parent document's `deleted_at`. A document soft-deleted via the DELETE
+route (files purged from R2, DB row marked `deleted_at`) still had its `applicant_document_chunks`
+rows sitting untouched — fully embedded, fully searchable, fully citable by the AI assistant. A user
+could delete a passport from the UI, see "0 documents," and the assistant could still answer
+questions about its content and cite it by name.
+
+**The fix, two layers (can't touch the RPC — this phase makes no DB/migration changes, same
+constraint as Phase 6):**
+1. **`documents/[id]/route.ts`'s DELETE handler now genuinely purges `applicant_document_chunks`
+   and `applicant_document_extractions`** for the document, alongside the existing R2 file purge —
+   same "deleted means gone, not hidden" principle this route's R2 purge already established (see
+   §2b). If either purge fails, the document stays intact and visible (safe to retry), matching the
+   route's existing failure-handling pattern exactly.
+2. **`retrieve.ts`'s `joinToDocuments()` now filters `is("deleted_at", null)`** on the parent-document
+   lookup, as defense-in-depth for the narrow race where a chunk could still be written by Phase 3's
+   async pipeline after a document was already soft-deleted (slow processing finishing late) — so
+   even in that window, a deleted document's content can never surface in a search result.
+
+**Other hardening coverage added, no bugs found:**
+- **Idempotency/retry:** a new test proves a re-run of Phase 3's ingest function (e.g. an Inngest
+  step retry) clears a version's existing chunks before inserting, in that order — confirming the
+  existing `delete().eq("document_version_id", ...)` before `insert()` logic actually prevents
+  duplicate chunks on a retry, not just asserting the code exists.
+- **Corrupt-file handling:** a new test proves a file that fails to parse (garbage bytes, not a real
+  PDF) surfaces as `NonRetriableError`, not a generic error — confirming Inngest won't burn retry
+  budget retrying something that can never succeed, and that chunk/embed are never attempted for a
+  document that failed to parse.
+- **XSS / unsafe rendering:** checked, not fixed — grepped the entire applicant-documents feature
+  (API, UI, AI tools) for `dangerouslySetInnerHTML`. None found. Document names and content always
+  render through React's default JSX escaping.
+- **Malicious/oversized files, tenant isolation:** already covered by Phase 1's existing test suite
+  (`FILE_TOO_LARGE`, unsupported-mime-type rejection, and `assertLeadVisible`/`assertDocumentVisible`
+  — the single shared authorization boundary every route and every Phase 5 tool goes through) — no
+  new tests needed, the existing coverage already proves this.
+- **Prompt-injection resistance:** not a new runtime mechanism — confirmed (again) that this
+  matches the codebase's actual existing convention (a description-line telling the model retrieved
+  content is data, not instructions — see §2g). No code-level injection risk exists in how retrieved
+  content flows through the system: it's returned as a plain string field in a tool-result JSON
+  object, never interpolated into a query, template, or `eval`.
+
+**Verification:** 3 new tests on the DELETE route (chunk/extraction purge happens, and 500s-without-
+marking-deleted when either purge fails) + 1 new test on `retrieve.ts` (the `deleted_at` filter is
+actually applied) + 2 new tests on the Phase 3 ingest function (idempotent retry, corrupt-file
+`NonRetriableError`). `npx tsc --noEmit -p .` clean, full suite (2301 tests, zero regressions),
+`npm run build`, targeted lint — all clean.
+
+---
+
 ## 3. Full roadmap (from the parent plan's §14) — what comes after this PR merges
 
 | Phase | Scope | Status |
@@ -516,8 +576,8 @@ theoretically possible.
 | **3** | **Processing pipeline: new Inngest fn (mark-processing → parse → chunk → embed → store), reuses `parseFileBytes()`/`chunkDocument()`/`embedTexts()`** | **Merged, live on stage (PR #534). Follow-up processing-status UI fix merged (PR #536, §2e). Structured extraction per `document_type` deliberately NOT included — see §2d.** |
 | **4** | **RAG: retrieval module calling `applicant_document_hybrid_search`, lead-scoped, degraded-mode fallback on embedding failure** | **Merged, live on stage (PR #538) — real end-to-end verified 2026-09-14 (§2h)** |
 | **5** | **Agent tools: 6 tools (`list_applicant_documents`, `search_applicant_document_content`, `get_document_metadata`, `get_document_extracted_data`, `find_missing_documents`, `get_document_download_url`) under `src/industries/education-consultancy/ai/tools/`** | **Merged, live on stage (PR #539) — real end-to-end verified 2026-09-14 (§2h)** |
-| **6** | **Usage + quotas + audit logging wired end-to-end (ledger already exists from Phase 1; real enforcement is this phase's job)** | **Built + tested locally (§2i), `feature/applicant-documents-phase6-quotas`, no PR — storage + per-lead-count enforced; OCR-page cap explicitly NOT built, see §2i** |
-| 7 | Hardening: isolation tests, prompt-injection resistance test, malicious/oversized/corrupt-file tests, idempotency/retry tests, deletion-cleanup tests (no orphaned R2 objects or vectors) | Not started |
+| **6** | **Usage + quotas + audit logging wired end-to-end (ledger already exists from Phase 1; real enforcement is this phase's job)** | **Merged, live on stage (PR #544) — storage + per-lead-count enforced; OCR-page cap explicitly NOT built, see §2i** |
+| **7** | **Hardening: isolation tests, prompt-injection resistance test, malicious/oversized/corrupt-file tests, idempotency/retry tests, deletion-cleanup tests (no orphaned R2 objects or vectors)** | **Built + tested locally (§2j), `feature/applicant-documents-phase7-hardening`, no PR — found and fixed a real "orphaned vectors" bug, see §2j** |
 
 **Each phase depends on the one before it** — schema before UI, UI before pipeline testing,
 pipeline before RAG, RAG before agent tools. Effort estimate from the parent plan (honest range,

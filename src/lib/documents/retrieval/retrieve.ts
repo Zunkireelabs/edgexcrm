@@ -122,16 +122,25 @@ async function joinToDocuments(db: ScopedClient, rows: HybridSearchRow[]): Promi
   if (rows.length === 0) return [];
 
   const documentIds = [...new Set(rows.map((r) => r.document_id))];
+  // is("deleted_at", null) matters here, not just belt-and-suspenders: the
+  // DELETE route purges a document's chunks genuinely (Phase 7 hardening
+  // fix), but a document row is only ever SOFT-deleted — .in("id", ...)
+  // alone would still find it. Filtering here is the second layer that
+  // covers the narrow race where a chunk gets written by Phase 3's pipeline
+  // after the document was already soft-deleted (async processing finishing
+  // late), so a deleted document's content can never surface in search
+  // results even in that window.
   const { data } = await db
     .from("applicant_documents")
     .select("id, name, document_type")
-    .in("id", documentIds);
+    .in("id", documentIds)
+    .is("deleted_at", null);
   const docById = new Map(((data ?? []) as unknown as ApplicantDocumentSummary[]).map((d) => [d.id, d]));
 
   const chunks: RetrievedDocumentChunk[] = [];
   for (const row of rows) {
     const doc = docById.get(row.document_id);
-    if (!doc) continue; // document deleted between chunk write and this read — skip rather than error
+    if (!doc) continue; // document deleted (or never existed) — skip rather than error
     const metadata = row.metadata as { section?: string };
     chunks.push({
       chunkId: row.chunk_id,

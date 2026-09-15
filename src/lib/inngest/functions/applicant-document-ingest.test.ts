@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { NonRetriableError } from "inngest";
 
 const isIngestionEnabledForTenantMock = vi.fn();
 const scopedClientForTenantMock = vi.fn();
@@ -150,5 +151,103 @@ describe("applicant-document-ingest — per-tenant AI gate", () => {
 
     expect(result).toEqual({ skipped: true, reason: "document or version not found" });
     expect(parseFileBytesMock).not.toHaveBeenCalled();
+  });
+
+  it("PHASE 7 HARDENING: idempotent on retry -- clears this version's existing chunks before inserting, scoped to document_version_id, so a re-run (e.g. an Inngest step retry) never doubles the chunk count", async () => {
+    isIngestionEnabledForTenantMock.mockResolvedValue(true);
+
+    const docRow = { id: "doc-1", lead_id: "lead-1", mime_type: "application/pdf" };
+    const versionRow = { id: "version-1", storage_key: "tenants/tenant-1/applicants/lead-1/documents/doc-1/versions/version-1/original.pdf" };
+
+    const deleteEq = vi.fn(() => Promise.resolve({ error: null }));
+    const insertSpy = vi.fn(() => Promise.resolve({ error: null }));
+    const docsTable = {
+      select: vi.fn(() => ({ eq: vi.fn(() => ({ is: vi.fn(() => ({ maybeSingle: vi.fn(() => Promise.resolve({ data: docRow })) })) })) })),
+      update: vi.fn(() => ({ eq: vi.fn(() => Promise.resolve({ error: null })) })),
+    };
+    const versionsTable = {
+      select: vi.fn(() => ({ eq: vi.fn(() => ({ maybeSingle: vi.fn(() => Promise.resolve({ data: versionRow })) })) })),
+    };
+    const chunksTable = {
+      delete: vi.fn(() => ({ eq: deleteEq })),
+      insert: insertSpy,
+    };
+    const usageTable = { insert: vi.fn(() => Promise.resolve({ error: null })) };
+    const db = {
+      from: vi.fn((table: string) => {
+        if (table === "applicant_documents") return docsTable;
+        if (table === "applicant_document_versions") return versionsTable;
+        if (table === "applicant_document_chunks") return chunksTable;
+        if (table === "ai_usage_events") return usageTable;
+        throw new Error(`unexpected table: ${table}`);
+      }),
+    };
+    scopedClientForTenantMock.mockResolvedValue(db);
+    getBytesMock.mockResolvedValue(new Uint8Array());
+    parseFileBytesMock.mockResolvedValue({ text: "passport contents" });
+    chunkDocumentMock.mockReturnValue([{ content: "passport contents" }]);
+    embedTextsMock.mockResolvedValue([[0.1, 0.2]]);
+
+    const { applicantDocumentIngest } = await import("./applicant-document-ingest");
+    const step = fakeStep();
+
+    const deleteCallOrder: number[] = [];
+    const insertCallOrder: number[] = [];
+    let callCounter = 0;
+    deleteEq.mockImplementation(() => {
+      deleteCallOrder.push(++callCounter);
+      return Promise.resolve({ error: null });
+    });
+    insertSpy.mockImplementation(() => {
+      insertCallOrder.push(++callCounter);
+      return Promise.resolve({ error: null });
+    });
+
+    await (applicantDocumentIngest as unknown as { handler: (args: unknown) => Promise<unknown> }).handler({
+      event: { data: EVENT_DATA },
+      step,
+    });
+
+    expect(deleteEq).toHaveBeenCalledWith("document_version_id", "version-1");
+    expect(deleteCallOrder[0]).toBeLessThan(insertCallOrder[0]); // delete happens before insert, not after
+  });
+
+  it("PHASE 7 HARDENING: a corrupt/unparseable file surfaces as NonRetriableError, not a generic retriable error -- Inngest must not burn retry budget on something retrying can never fix", async () => {
+    isIngestionEnabledForTenantMock.mockResolvedValue(true);
+
+    const docRow = { id: "doc-1", lead_id: "lead-1", mime_type: "application/pdf" };
+    const versionRow = { id: "version-1", storage_key: "tenants/tenant-1/applicants/lead-1/documents/doc-1/versions/version-1/original.pdf" };
+    const docsTable = {
+      select: vi.fn(() => ({ eq: vi.fn(() => ({ is: vi.fn(() => ({ maybeSingle: vi.fn(() => Promise.resolve({ data: docRow })) })) })) })),
+      update: vi.fn(() => ({ eq: vi.fn(() => Promise.resolve({ error: null })) })),
+    };
+    const versionsTable = {
+      select: vi.fn(() => ({ eq: vi.fn(() => ({ maybeSingle: vi.fn(() => Promise.resolve({ data: versionRow })) })) })),
+    };
+    const db = {
+      from: vi.fn((table: string) => {
+        if (table === "applicant_documents") return docsTable;
+        if (table === "applicant_document_versions") return versionsTable;
+        throw new Error(`unexpected table: ${table}`);
+      }),
+    };
+    scopedClientForTenantMock.mockResolvedValue(db);
+    getBytesMock.mockResolvedValue(new Uint8Array([0xde, 0xad, 0xbe, 0xef])); // garbage bytes, not a real PDF
+    parseFileBytesMock.mockRejectedValue(new Error("Unable to parse: not a valid PDF structure"));
+
+    const { applicantDocumentIngest } = await import("./applicant-document-ingest");
+    const step = fakeStep();
+
+    await expect(
+      (applicantDocumentIngest as unknown as { handler: (args: unknown) => Promise<unknown> }).handler({
+        event: { data: EVENT_DATA },
+        step,
+      }),
+    ).rejects.toThrow(NonRetriableError);
+
+    // Same bytes in -> same parse failure out -- retrying is never going to
+    // help, so chunk/embed must never even be attempted for a corrupt file.
+    expect(chunkDocumentMock).not.toHaveBeenCalled();
+    expect(embedTextsMock).not.toHaveBeenCalled();
   });
 });
