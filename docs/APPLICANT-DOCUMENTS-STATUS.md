@@ -7,9 +7,10 @@
 > `docs/FEATURE-CATALOG.md` and archive this file per the repo's own doc-lifecycle rule (CLAUDE.md
 > § Read first, every session).
 
-**Last updated:** 2026-09-14. **Current state:** Phases 1–6 are **all merged and live on stage**,
-verified working end-to-end against real infrastructure (§2h), and the project's one open privacy
-question is resolved (§2d):
+**Last updated:** 2026-09-15. **Current state:** all 7 phases are **merged and live on stage** —
+the project is feature-complete on stage. Verified working end-to-end against real infrastructure
+(§2h), the project's one open privacy question is resolved (§2d), and a review-found logic gap in
+Phase 7's own fix has been closed (§2k):
 - Phase 1 (schema + R2 storage + core API) — PR [#530](https://github.com/Zunkireelabs/edgexcrm/pull/530), commit `6036215b`.
 - Phase 2 (UI, §2c) — PR [#533](https://github.com/Zunkireelabs/edgexcrm/pull/533), commit `e643556c`. Includes a review-found delete-permission fix.
 - Phase 3 (processing pipeline, §2d) — PR [#534](https://github.com/Zunkireelabs/edgexcrm/pull/534), commit `33358ea7`.
@@ -18,11 +19,11 @@ question is resolved (§2d):
 - Phase 5 (agent tools, §2g) — PR [#539](https://github.com/Zunkireelabs/edgexcrm/pull/539), commit `fba2430d`. Includes a review-found privacy-gate fix (the search tool was missing the `isIngestionEnabledForTenant()` check).
 - Phase 6 (quota enforcement, §2i) — PR [#544](https://github.com/Zunkireelabs/edgexcrm/pull/544), commit `1c0f0b97`.
 - Privacy consent question — RESOLVED — PR [#545](https://github.com/Zunkireelabs/edgexcrm/pull/545), commit `3b8d7a5f`.
+- Phase 7 (hardening, §2j) — PR [#547](https://github.com/Zunkireelabs/edgexcrm/pull/547), commit `15eea3d6`. Found and fixed a real "orphaned vectors" bug.
+- Follow-up: soft-delete retry on transient DB failure (§2k) — PR [#548](https://github.com/Zunkireelabs/edgexcrm/pull/548), commit `abe00c26`. A partial-failure logic gap flagged in review of #547, fixed same day.
 
-**Phase 7 (hardening, §2j) is built and tested locally, on branch
-`feature/applicant-documents-phase7-hardening`, no PR yet.** Found and fixed a real bug along the
-way — see §2j.
-None of the six merged phases are promoted to **prod** yet — see §3.
+None of the seven merged phases are promoted to **prod** yet — see §3. That is now the sole
+remaining milestone for this feature (no more phases queued).
 **R2 is live on stage as of 2026-09-14** — see §6: stage's `.env.local` was missing the 5 `R2_*`
 vars entirely until today (a gap flagged since Phase 1 but never closed until the first real test
 attempt surfaced it as a hard failure, not just a doc note).
@@ -509,11 +510,12 @@ theoretically possible.
 
 ---
 
-## 2j. Phase 7 (hardening) — built and tested locally, 2026-09-14
+## 2j. Phase 7 (hardening) — merged to stage, 2026-09-15 (PR #547)
 
-Branch `feature/applicant-documents-phase7-hardening` (off `origin/stage`, not pushed). This phase
-is mostly proving existing behavior is safe, not adding features — but it found one real,
-previously-undiscovered bug along the way.
+Branch `feature/applicant-documents-phase7-hardening`. This phase is mostly proving existing
+behavior is safe, not adding features — but it found one real, previously-undiscovered bug along
+the way. (A partial-failure logic gap in this phase's own DELETE-route fix was then flagged in
+review and closed the same day — see §2k.)
 
 **Real bug found and fixed: soft-deleted documents' chunks were still fully searchable — "orphaned
 vectors," exactly the class of gap this phase's own roadmap line names.** Neither
@@ -566,6 +568,45 @@ actually applied) + 2 new tests on the Phase 3 ingest function (idempotent retry
 
 ---
 
+## 2k. Follow-up: soft-delete retry on transient DB failure — merged to stage, 2026-09-15 (PR #548)
+
+Branch `feature/applicant-documents-phase7-delete-retry`. Flagged during review of #547, not a
+regression it introduced — the same partial-failure shape already existed in the original
+R2-purge-then-DB-update pattern (§2b); Phase 7 extended it to two more resources rather than
+creating it new.
+
+**The gap:** DELETE's purge order is R2 files → `applicant_document_chunks` →
+`applicant_document_extractions` → mark `applicant_documents.deleted_at`. If the first three all
+succeed but that last write hits a transient DB error, the row is left reading "not deleted" —
+still visible in the UI/list — while its files and searchable content are already genuinely gone
+underneath. The caller only sees a generic 500, with nothing indicating content loss already
+happened.
+
+**The fix:** retry that final write up to 3 times with a short backoff before giving up. It's a
+plain DB write with no destructive side effect, so retrying is always safe — unlike the three
+purge steps before it, which must never be retried blindly against R2/other tables without care.
+Deliberately does **not** reorder the purge sequence: marking `deleted_at` first and purging after
+would trade this bug for a worse one — an R2 purge failure after the row is already marked deleted
+would leave a sensitive file (passport, bank statement) permanently orphaned in storage with no UI
+path left to ever retry it, since the document would already look deleted. No DB/migration/RPC
+changes.
+
+**Verification:** 2 new tests on the DELETE route (retry succeeds on the 2nd attempt after 1
+transient failure; still 500s with the unchanged `DB_ERROR` shape after exhausting all 3 attempts).
+`npx tsc --noEmit -p .` clean, full suite (2318 tests, zero regressions), `npm run build`, targeted
+lint — all clean. Also audited before merge: branch was a verified fast-forward-safe ancestor of
+`origin/stage`, diff scoped to exactly the 2 intended files, no migration files, no hot-shared-file
+touches, and zero overlap with any other open PR's changed files.
+
+**Known residual, deliberately not built:** if all 3 retries are exhausted, the gap still exists —
+this closes it for the transient case, not the persistent-outage case. Not pursued further because
+closing it fully would need either a DB transaction across the three writes (would require an RPC
+— blocked by the same "no migration in this phase" constraint) or marking the row in some
+intermediate "deletion in progress" state (a schema change). Left as an accepted tradeoff, same
+class as the original R2-purge-then-update design in §2b.
+
+---
+
 ## 3. Full roadmap (from the parent plan's §14) — what comes after this PR merges
 
 | Phase | Scope | Status |
@@ -577,14 +618,17 @@ actually applied) + 2 new tests on the Phase 3 ingest function (idempotent retry
 | **4** | **RAG: retrieval module calling `applicant_document_hybrid_search`, lead-scoped, degraded-mode fallback on embedding failure** | **Merged, live on stage (PR #538) — real end-to-end verified 2026-09-14 (§2h)** |
 | **5** | **Agent tools: 6 tools (`list_applicant_documents`, `search_applicant_document_content`, `get_document_metadata`, `get_document_extracted_data`, `find_missing_documents`, `get_document_download_url`) under `src/industries/education-consultancy/ai/tools/`** | **Merged, live on stage (PR #539) — real end-to-end verified 2026-09-14 (§2h)** |
 | **6** | **Usage + quotas + audit logging wired end-to-end (ledger already exists from Phase 1; real enforcement is this phase's job)** | **Merged, live on stage (PR #544) — storage + per-lead-count enforced; OCR-page cap explicitly NOT built, see §2i** |
-| **7** | **Hardening: isolation tests, prompt-injection resistance test, malicious/oversized/corrupt-file tests, idempotency/retry tests, deletion-cleanup tests (no orphaned R2 objects or vectors)** | **Built + tested locally (§2j), `feature/applicant-documents-phase7-hardening`, no PR — found and fixed a real "orphaned vectors" bug, see §2j** |
+| **7** | **Hardening: isolation tests, prompt-injection resistance test, malicious/oversized/corrupt-file tests, idempotency/retry tests, deletion-cleanup tests (no orphaned R2 objects or vectors)** | **Merged, live on stage (PR #547) — found and fixed a real "orphaned vectors" bug, see §2j. Follow-up partial-failure retry fix merged (PR #548, §2k).** |
 
-**Each phase depends on the one before it** — schema before UI, UI before pipeline testing,
-pipeline before RAG, RAG before agent tools. Effort estimate from the parent plan (honest range,
-not a commitment): **~18–25 working days total**, Phase 1 was budgeted 3–4 days. The parent plan
-flags Phase 3's structured-extraction step as the hardest part — real documents (passports from
-different countries, transcripts from hundreds of universities, scans of varying quality) will
-very likely need several tuning passes, not one clean implementation.
+**All 7 phases are now merged and live on stage — the build queue is empty.** The only remaining
+step for this feature is **prod promotion** (stage → main), not yet started — see the "None of the
+seven merged phases are promoted to prod yet" note at the top of this doc. Effort estimate from the
+parent plan (historical, for context): **~18–25 working days total**, Phase 1 was budgeted 3–4
+days. The parent plan flagged Phase 3's structured-extraction step as the hardest part — real
+documents (passports from different countries, transcripts from hundreds of universities, scans of
+varying quality) will very likely need several tuning passes, not one clean implementation. (Note:
+structured extraction per `document_type` was deliberately **not** included in Phase 3 as shipped —
+see §2d.)
 
 ---
 
@@ -661,6 +705,14 @@ very likely need several tuning passes, not one clean implementation.
 ---
 
 ## 6. Open items / things flagged, not silently decided
+
+- **Minor, non-blocking: `applicant_document_hybrid_search` (mig 231) still does the RPC-level
+  vector/keyword search work for chunks belonging to soft-deleted documents before the app-layer
+  `deleted_at` filter (§2k) throws them out.** Not a correctness bug — deleted content never
+  reaches a caller — just wasted DB work on the affected query. Fixing it means adding a
+  `deleted_at` check inside the RPC itself, which needs a migration; parked rather than done in
+  #547/#548 since neither phase touches the DB. Pick up whenever a migration for this feature is
+  next warranted for another reason, or if this RPC's cost ever becomes worth optimizing on its own.
 
 - **Cloudflare R2 (Phase 0) — DONE (2026-09-11).** Was blocked on Cloudflare requiring a payment
   card on file before R2 activates at all, even for the free tier (10GB storage / 1M "write" ops /
