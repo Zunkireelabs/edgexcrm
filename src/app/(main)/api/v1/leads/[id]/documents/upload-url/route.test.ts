@@ -37,12 +37,49 @@ function validBody(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function fakeDb(opts: { settings?: Record<string, unknown> | null } = {}) {
+function fakeDb(
+  opts: {
+    settings?: Record<string, unknown> | null;
+    /** applicant_documents rows counted for the per-lead cap query */
+    leadDocs?: Record<string, unknown>[];
+    /** applicant_documents rows used to seed the storage-quota's live-doc-id lookup */
+    tenantDocs?: Record<string, unknown>[];
+    /** applicant_document_versions rows summed for the storage-quota check */
+    versions?: Record<string, unknown>[];
+  } = {},
+) {
   const settingsQuery = { maybeSingle: vi.fn(async () => ({ data: opts.settings ?? null })) };
   const settingsTable = { select: vi.fn(() => settingsQuery) };
+
+  const docsTable = {
+    select: vi.fn((_cols: string, selectOpts?: { count?: string; head?: boolean }) => {
+      if (selectOpts?.head) {
+        // getLeadDocumentCount's count:exact/head:true query
+        const c: Record<string, unknown> = {};
+        c.eq = () => c;
+        c.is = async () => ({ count: (opts.leadDocs ?? []).length, error: null });
+        return c;
+      }
+      // getTenantStorageUsedBytes's plain "id" select for live documents
+      const c: Record<string, unknown> = {};
+      c.is = () => Promise.resolve({ data: opts.tenantDocs ?? [], error: null });
+      return c;
+    }),
+  };
+
+  const versionsTable = {
+    select: vi.fn(() => {
+      const c: Record<string, unknown> = {};
+      c.in = () => Promise.resolve({ data: opts.versions ?? [], error: null });
+      return c;
+    }),
+  };
+
   return {
     from: vi.fn((table: string) => {
       if (table === "tenant_document_settings") return settingsTable;
+      if (table === "applicant_documents") return docsTable;
+      if (table === "applicant_document_versions") return versionsTable;
       return {};
     }),
   };
@@ -115,6 +152,69 @@ describe("POST /api/v1/leads/[id]/documents/upload-url", () => {
     expect(res.status).toBe(422);
     const json = await res.json();
     expect(json.error.details.max).toBe(25 * 1024 * 1024);
+  });
+
+  it("422s with DOCUMENT_LIMIT_EXCEEDED when the lead is already at the per-lead document cap", async () => {
+    scopedClientMock.mockResolvedValue(
+      fakeDb({ settings: { max_documents_per_lead: 2 }, leadDocs: [{ id: "d1" }, { id: "d2" }] }),
+    );
+    const { POST } = await import("./route");
+    const res = await POST(fakeReq(validBody()), params());
+    expect(res.status).toBe(422);
+    const json = await res.json();
+    expect(json.error.code).toBe("DOCUMENT_LIMIT_EXCEEDED");
+    expect(json.error.details).toEqual({ count: 2, max: 2 });
+  });
+
+  it("allows the upload when the lead is under the per-lead document cap", async () => {
+    scopedClientMock.mockResolvedValue(fakeDb({ settings: { max_documents_per_lead: 5 }, leadDocs: [{ id: "d1" }] }));
+    const { POST } = await import("./route");
+    const res = await POST(fakeReq(validBody()), params());
+    expect(res.status).toBe(200);
+  });
+
+  it("skips the per-lead cap entirely when max_documents_per_lead is null (unlimited)", async () => {
+    const db = fakeDb({ settings: { max_documents_per_lead: null } });
+    scopedClientMock.mockResolvedValue(db);
+    const { POST } = await import("./route");
+    const res = await POST(fakeReq(validBody()), params());
+    expect(res.status).toBe(200);
+    expect(db.from).not.toHaveBeenCalledWith("applicant_documents");
+  });
+
+  it("422s with STORAGE_QUOTA_EXCEEDED when this upload would push the tenant over its storage quota", async () => {
+    scopedClientMock.mockResolvedValue(
+      fakeDb({
+        settings: { max_storage_bytes: 5000 },
+        tenantDocs: [{ id: "d1" }],
+        versions: [{ file_size: 4500 }],
+      }),
+    );
+    const { POST } = await import("./route");
+    // 4500 already used + 1024 (validBody's file_size) > 5000 cap
+    const res = await POST(fakeReq(validBody({ file_size: 1024 })), params());
+    expect(res.status).toBe(422);
+    const json = await res.json();
+    expect(json.error.code).toBe("STORAGE_QUOTA_EXCEEDED");
+    expect(json.error.details).toEqual({ count: 5524, max: 5000 });
+  });
+
+  it("allows the upload when it fits within the storage quota", async () => {
+    scopedClientMock.mockResolvedValue(
+      fakeDb({ settings: { max_storage_bytes: 10_000 }, tenantDocs: [{ id: "d1" }], versions: [{ file_size: 1000 }] }),
+    );
+    const { POST } = await import("./route");
+    const res = await POST(fakeReq(validBody({ file_size: 1024 })), params());
+    expect(res.status).toBe(200);
+  });
+
+  it("skips the storage quota entirely when max_storage_bytes is null (unlimited)", async () => {
+    const db = fakeDb({ settings: { max_storage_bytes: null } });
+    scopedClientMock.mockResolvedValue(db);
+    const { POST } = await import("./route");
+    const res = await POST(fakeReq(validBody()), params());
+    expect(res.status).toBe(200);
+    expect(db.from).not.toHaveBeenCalledWith("applicant_document_versions");
   });
 
   it("writes nothing to the database — only issues a signed upload URL + ids", async () => {

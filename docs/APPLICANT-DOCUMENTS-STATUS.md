@@ -7,19 +7,27 @@
 > `docs/FEATURE-CATALOG.md` and archive this file per the repo's own doc-lifecycle rule (CLAUDE.md
 > § Read first, every session).
 
-**Last updated:** 2026-09-13. **Current state:** Phases 1–4 are **all merged and live on stage**:
+**Last updated:** 2026-09-15. **Current state:** all 7 phases are **merged and live on stage** —
+the project is feature-complete on stage. Verified working end-to-end against real infrastructure
+(§2h), the project's one open privacy question is resolved (§2d), and a review-found logic gap in
+Phase 7's own fix has been closed (§2k):
 - Phase 1 (schema + R2 storage + core API) — PR [#530](https://github.com/Zunkireelabs/edgexcrm/pull/530), commit `6036215b`.
-- Phase 2 (UI, §2c) — PR [#533](https://github.com/Zunkireelabs/edgexcrm/pull/533), commit `e643556c`. Includes a review-found delete-permission fix (§2c).
+- Phase 2 (UI, §2c) — PR [#533](https://github.com/Zunkireelabs/edgexcrm/pull/533), commit `e643556c`. Includes a review-found delete-permission fix.
 - Phase 3 (processing pipeline, §2d) — PR [#534](https://github.com/Zunkireelabs/edgexcrm/pull/534), commit `33358ea7`.
 - Follow-up: processing-status visibility fix (§2e) — PR [#536](https://github.com/Zunkireelabs/edgexcrm/pull/536), commit `6b96bc22`.
 - Phase 4 (RAG retrieval, §2f) — PR [#538](https://github.com/Zunkireelabs/edgexcrm/pull/538), commit `1c350f6d`.
+- Phase 5 (agent tools, §2g) — PR [#539](https://github.com/Zunkireelabs/edgexcrm/pull/539), commit `fba2430d`. Includes a review-found privacy-gate fix (the search tool was missing the `isIngestionEnabledForTenant()` check).
+- Phase 6 (quota enforcement, §2i) — PR [#544](https://github.com/Zunkireelabs/edgexcrm/pull/544), commit `1c0f0b97`.
+- Privacy consent question — RESOLVED — PR [#545](https://github.com/Zunkireelabs/edgexcrm/pull/545), commit `3b8d7a5f`.
+- Phase 7 (hardening, §2j) — PR [#547](https://github.com/Zunkireelabs/edgexcrm/pull/547), commit `15eea3d6`. Found and fixed a real "orphaned vectors" bug.
+- Follow-up: soft-delete retry on transient DB failure (§2k) — PR [#548](https://github.com/Zunkireelabs/edgexcrm/pull/548), commit `abe00c26`. A partial-failure logic gap flagged in review of #547, fixed same day.
 
-None of the five are promoted to **prod** yet — see §3. **Phase 5 (agent tools) is built and tested
-locally (§2g), on branch `feature/applicant-documents-phase5-agent-tools`, no PR yet.**
-**R2 is live:** Phase 0 (Cloudflare R2 account/bucket/token) is done — see §6. CORS covering
-`localhost:3000` + both stage/prod origins is set.
-**Branches:** all five PRs above are merged and their branches deleted. Phase 5 work happens on a
-fresh branch off current `stage`.
+None of the seven merged phases are promoted to **prod** yet — see §3. That is now the sole
+remaining milestone for this feature (no more phases queued).
+**R2 is live on stage as of 2026-09-14** — see §6: stage's `.env.local` was missing the 5 `R2_*`
+vars entirely until today (a gap flagged since Phase 1 but never closed until the first real test
+attempt surfaced it as a hard failure, not just a doc note).
+**Branches:** all six PRs above are merged and their branches deleted.
 **Parent plan (source of truth for scope/rationale):** `~/.claude/plans/so-my-new-work-temporal-scott.md`
 ("Applicant Document Intelligence & Agentic RAG — EdgeX") — lives outside this repo (local Claude
 plans folder, not git-tracked), so its key content is reproduced below rather than only linked, to
@@ -252,17 +260,20 @@ right after a document is confirmed persisted, gated on the privacy check below.
 function (mirroring `kb-ingest.test.ts`'s structure) + 3 new tests on the `complete` route covering
 the trigger's on/off/idempotent-path behavior. Full existing suite (2217 tests) still green.
 
-**Privacy gate — reused, not newly invented, and NOT a complete answer (read this before enabling
-anywhere):** this pipeline sends document text to OpenAI via `embedTexts()`. Applicant documents
-(passports, bank statements) are more sensitive than the knowledge-base content that already
-required per-tenant written consent (ADR-001 "D5") before any OpenAI call. This pipeline reuses that
-exact same technical gate — `isIngestionEnabledForTenant()` — rather than inventing a separate,
-weaker one. **The open question this does NOT resolve:** Admizz's existing KB consent was written
-about CRM notes/knowledge-base content, not about applicant passports/bank statements. Reusing the
-gate is a code decision; whether that existing consent's *scope* actually covers this new, more
-sensitive use is a real judgment call for whoever owns the Admizz relationship — confirm before
-flipping this on for any tenant that already has KB ingestion enabled, don't assume the existing
-consent silently extends here.
+**Privacy gate — reused, not newly invented.** This pipeline sends document text to OpenAI via
+`embedTexts()`. Applicant documents (passports, bank statements) are more sensitive than the
+knowledge-base content that already required per-tenant written consent (ADR-001 "D5") before any
+OpenAI call. This pipeline reuses that exact same technical gate — `isIngestionEnabledForTenant()`
+— rather than inventing a separate, weaker one.
+
+**RESOLVED 2026-09-14:** whether Admizz's existing 2026-09-03 written consent (an email, per
+`docs/ai-native-efforts/00-DECISIONS-ADR.md`'s D5 requirement — "short written notice + consent...
+covering the AI processing and sub-processor list") actually extends to applicant documents was an
+open judgment call, not assumed. **Confirmed by whoever owns the Admizz relationship: the existing
+consent's scope is broad enough — it covers "the AI processing" generally, not narrowly scoped to
+notes/knowledge-base content specifically — so it already covers this use. No fresh consent
+conversation with Admizz was needed.** Reusing `isIngestionEnabledForTenant()` as this pipeline's
+gate is confirmed correct, not just convenient.
 
 **Deliberately NOT built in this pass:** structured extraction per `document_type` (passport number,
 transcript GPA, etc.) — `applicant_document_extractions` stays empty. This was flagged in the parent
@@ -282,7 +293,7 @@ tenant and watching an actual Inngest run — not done in this pass.
 
 ---
 
-## 2f. Phase 4 (RAG retrieval) — built and tested locally, 2026-09-13
+## 2f. Phase 4 (RAG retrieval) — merged to stage, 2026-09-14 (PR #538)
 
 Branch `feature/applicant-documents-phase4-retrieval` (off `origin/stage`, not pushed). New module
 `src/lib/documents/retrieval/retrieve.ts`, mirroring `src/lib/ai/retrieval/retrieve.ts`'s exact shape
@@ -319,7 +330,7 @@ consent-enabled tenant with Phase 3 having actually processed a document first.
 
 ---
 
-## 2g. Phase 5 (agent tools) — built and tested locally, 2026-09-13
+## 2g. Phase 5 (agent tools) — merged to stage, 2026-09-14 (PR #539)
 
 Branch `feature/applicant-documents-phase5-agent-tools` (off `origin/stage`, not pushed). Six new
 tools under `src/industries/education-consultancy/ai/tools/`, registered in that folder's `index.ts`
@@ -381,6 +392,221 @@ than assuming an earlier layer already did.
 
 ---
 
+## 2h. First real end-to-end verification on stage — 2026-09-14
+
+Every phase up to this point was verified only against mocked tests — `embedTexts`, the hybrid-
+search RPC, and OpenAI itself were faked in every test file, and each phase's own STATUS.md section
+explicitly flagged "not verified against a live OpenAI call" as an open gap (§2d, §2f). This section
+closes that gap: a real document was uploaded on **stage**, processed by real AI, searched for
+real, and correctly answered by the real assistant — the first genuine proof the whole feature
+works, not just that its pieces pass mocked tests in isolation.
+
+**What was actually done:**
+1. Confirmed stage's server already had the OpenAI key, `AI_INGESTION_ENABLED`, `AI_ASSISTANT_ENABLED`,
+   and Inngest keys configured, and that the Admizz tenant already has `ai_enabled = true` on the
+   stage DB.
+2. Generated a synthetic test PDF (a fake passport with an obviously fake country name and a known
+   passport number, `P1234567`) — not real personal data.
+3. **Hit a real, previously-undiscovered infra gap:** uploading failed with "Failed to create
+   upload URL." Root cause — the stage server's `.env.local` had **no `R2_*` variables at all**.
+   This was flagged as an open item since Phase 1 (§6, "Stage/prod R2 env vars are still not set")
+   but had never actually blocked anything until this was the first real upload attempt on stage.
+   Fixed by adding the same R2 credentials already verified locally (one shared bucket, not
+   per-environment) to stage's `.env.local`.
+4. **Hit a second infra gap on the same fix:** `docker compose restart` did not pick up the new
+   `.env.local` values — Compose only re-reads the env file when a container is recreated, not
+   restarted. Fixed with `docker compose up -d` instead. Worth remembering for any future stage
+   env-var change: **`restart` is not enough — use `up -d`.**
+5. Re-uploaded the test document — succeeded. Confirmed via the UI: no stuck "Processing" or
+   "Failed" badge.
+6. Asked the real Orca assistant, on stage, as a real Admizz user: *"What's the passport number for
+   [test lead]?"* Its own visible tool-call trace showed it running `list_applicant_documents` then
+   `search_applicant_document_content` (Phase 5's tools, calling Phase 4's retrieval, reading
+   Phase 3's real chunks). **It answered correctly: `P1234567`**, with a citation back to the
+   uploaded file.
+7. Deleted the test document afterward (synthetic data, but good hygiene to not leave test clutter
+   on a real tenant).
+
+**What this proves:** Phases 1–5 genuinely work together, end to end, against real OpenAI calls,
+real R2 storage, and a real Inngest run — not just against each phase's own mocked test suite.
+
+**Privacy follow-up — RESOLVED 2026-09-14, same day:** this test proved the Phase 3/5 privacy
+caveat (§2d) was no longer hypothetical — Admizz's real data was demonstrably being sent to OpenAI.
+That raised the outstanding question of whether Admizz's existing consent covers applicant
+documents specifically, addressed the same day: **confirmed by whoever owns the Admizz relationship
+that the existing 2026-09-03 consent's scope is broad enough to already cover this — see §2d's
+resolution note.** No fresh Admizz conversation was needed.
+
+---
+
+## 2i. Phase 6 (quota enforcement) — merged to stage, 2026-09-14 (PR #544)
+
+Branch `feature/applicant-documents-phase6-quotas` (off `origin/stage`, not pushed). Enforces 2 of
+the 3 caps `tenant_document_settings` (migration 231) already has columns for; the third
+(`max_ocr_pages_per_month`) is explicitly not built — see below.
+
+**What's enforced, and where:**
+- **`max_storage_bytes`** (total tenant storage) — checked in both upload-url routes (the initial
+  upload and the new-version upload), matching where the existing `max_document_size_mb` check
+  already lives. A new upload that would push the tenant's total stored bytes over the cap is
+  rejected with `422 STORAGE_QUOTA_EXCEEDED`.
+- **`max_documents_per_lead`** — checked only in the *initial* upload-url route, not the new-version
+  one — a new version of an existing document isn't a new document, so it doesn't count against
+  this cap. Rejected with `422 DOCUMENT_LIMIT_EXCEEDED`.
+- Both follow the existing `{count, max}` error-detail shape `FILE_TOO_LARGE` already uses, and both
+  are checked at upload-*url* issue time (not `/complete`) — same reasoning as the existing
+  size cap: never waste a real R2 PUT on an upload that's going to be rejected anyway.
+- **Both columns are nullable with no default** (unlike `max_document_size_mb`, which defaults to
+  25) — `null` means "no cap configured," i.e. unlimited, not zero. Every check treats `null` as
+  "skip this check entirely," including skipping the underlying DB query (see below) — verified by
+  a specific test per cap ("skips ... entirely when ... is null").
+
+**A real design decision, not an oversight — storage usage is computed from ALL versions, not just
+current ones.** `applicant_documents.file_size` only reflects the *current* version's size (it gets
+overwritten on every new-version `/complete`) — but old versions are never deleted from R2 on
+replace (only a full document delete purges them, per `documents/[id]/route.ts`'s existing DELETE
+logic). So true storage usage is `SUM(file_size)` across every row in `applicant_document_versions`
+for the tenant's live (non-deleted) documents — computed in `src/lib/documents/usage.ts`'s
+`getTenantStorageUsedBytes()`.
+
+**Deliberately does NOT use a `!inner` resource-embed to join versions → documents in one query.**
+This repo's own CLAUDE.md documents a real, previously-hit production incident: an embed join on a
+table needs its own `GRANT SELECT` migration (migration 195 revoked broad `SELECT` grants), and
+adding one is out of scope — this phase makes no database changes at all. Instead,
+`getTenantStorageUsedBytes()` runs two plain, already-tenant-scoped queries (live document ids, then
+their versions' file sizes) and sums in application code. Slightly more DB round-trips; zero grant
+risk, zero migration needed.
+
+**Deliberately NOT built: `max_ocr_pages_per_month`.** There is currently no usage signal that
+actually measures "OCR pages" anywhere in the codebase — Phase 3's `OcrUsage` type
+(`src/lib/ai/ingestion/parser.ts`) tracks `inputTokens`/`outputTokens`, not a page count. Building a
+fake proxy (e.g. treating each processed document as "1 page") would be worse than not enforcing
+this cap at all — it would silently under- or over-count real usage and nobody would know. This is
+flagged here explicitly rather than silently skipped; a real page-count signal would need to come
+from Phase 3's OCR path itself, which is out of scope for this phase.
+
+**Verification:** 5 new tests for `usage.ts` (empty case, multi-version summing, the
+no-live-documents-skips-the-versions-query optimization, count query, null-count-defaults-to-zero) +
+9 new tests across the two route test files (limit-exceeded, under-limit, null-skips-the-check —
+one set per cap per route, plus a test proving the versions route does NOT check the per-lead cap).
+Verified with `npx tsc --noEmit -p .` (clean), full suite (2322 tests, zero regressions),
+`npm run build`, targeted lint — all clean.
+
+**Known limitation, flagged by a reviewer on PR #544 — soft enforcement under concurrent uploads
+(TOCTOU race), not fixed in this pass.** Both quota checks (`getTenantStorageUsedBytes`,
+`getLeadDocumentCount`) read the current usage, then decide, with no lock or transaction around
+that read-then-decide window. Two uploads landing at nearly the same instant for the same
+tenant/lead can both read the same (stale) "under the cap" usage number and both proceed, letting
+the tenant end up slightly over the cap — by at most one extra concurrent upload's worth. **Not a
+security issue** — no cross-tenant leak, no data corruption, nobody bypasses `getFeatureAccess` or
+`assertLeadVisible`; the exposure is purely "the cap is soft under concurrency, not hard." The
+existing `max_document_size_mb` check doesn't have this problem because it only ever evaluates a
+single file in isolation — nothing to race against. A real fix would need either a DB-level
+constraint/transaction or a Postgres advisory lock around the check-and-reserve step, which is a
+genuinely bigger change than this phase's scope (and this phase makes no DB changes at all, by
+design — see above). Deliberately left as a known, documented gap rather than a silent one; revisit
+if this tenant's real upload concurrency ever makes the race practically likely, not just
+theoretically possible.
+
+---
+
+## 2j. Phase 7 (hardening) — merged to stage, 2026-09-15 (PR #547)
+
+Branch `feature/applicant-documents-phase7-hardening`. This phase is mostly proving existing
+behavior is safe, not adding features — but it found one real, previously-undiscovered bug along
+the way. (A partial-failure logic gap in this phase's own DELETE-route fix was then flagged in
+review and closed the same day — see §2k.)
+
+**Real bug found and fixed: soft-deleted documents' chunks were still fully searchable — "orphaned
+vectors," exactly the class of gap this phase's own roadmap line names.** Neither
+`applicant_document_hybrid_search` (the SQL RPC, migration 231) nor Phase 4's `retrieveDocuments()`
+join filtered chunks by their parent document's `deleted_at`. A document soft-deleted via the DELETE
+route (files purged from R2, DB row marked `deleted_at`) still had its `applicant_document_chunks`
+rows sitting untouched — fully embedded, fully searchable, fully citable by the AI assistant. A user
+could delete a passport from the UI, see "0 documents," and the assistant could still answer
+questions about its content and cite it by name.
+
+**The fix, two layers (can't touch the RPC — this phase makes no DB/migration changes, same
+constraint as Phase 6):**
+1. **`documents/[id]/route.ts`'s DELETE handler now genuinely purges `applicant_document_chunks`
+   and `applicant_document_extractions`** for the document, alongside the existing R2 file purge —
+   same "deleted means gone, not hidden" principle this route's R2 purge already established (see
+   §2b). If either purge fails, the document stays intact and visible (safe to retry), matching the
+   route's existing failure-handling pattern exactly.
+2. **`retrieve.ts`'s `joinToDocuments()` now filters `is("deleted_at", null)`** on the parent-document
+   lookup, as defense-in-depth for the narrow race where a chunk could still be written by Phase 3's
+   async pipeline after a document was already soft-deleted (slow processing finishing late) — so
+   even in that window, a deleted document's content can never surface in a search result.
+
+**Other hardening coverage added, no bugs found:**
+- **Idempotency/retry:** a new test proves a re-run of Phase 3's ingest function (e.g. an Inngest
+  step retry) clears a version's existing chunks before inserting, in that order — confirming the
+  existing `delete().eq("document_version_id", ...)` before `insert()` logic actually prevents
+  duplicate chunks on a retry, not just asserting the code exists.
+- **Corrupt-file handling:** a new test proves a file that fails to parse (garbage bytes, not a real
+  PDF) surfaces as `NonRetriableError`, not a generic error — confirming Inngest won't burn retry
+  budget retrying something that can never succeed, and that chunk/embed are never attempted for a
+  document that failed to parse.
+- **XSS / unsafe rendering:** checked, not fixed — grepped the entire applicant-documents feature
+  (API, UI, AI tools) for `dangerouslySetInnerHTML`. None found. Document names and content always
+  render through React's default JSX escaping.
+- **Malicious/oversized files, tenant isolation:** already covered by Phase 1's existing test suite
+  (`FILE_TOO_LARGE`, unsupported-mime-type rejection, and `assertLeadVisible`/`assertDocumentVisible`
+  — the single shared authorization boundary every route and every Phase 5 tool goes through) — no
+  new tests needed, the existing coverage already proves this.
+- **Prompt-injection resistance:** not a new runtime mechanism — confirmed (again) that this
+  matches the codebase's actual existing convention (a description-line telling the model retrieved
+  content is data, not instructions — see §2g). No code-level injection risk exists in how retrieved
+  content flows through the system: it's returned as a plain string field in a tool-result JSON
+  object, never interpolated into a query, template, or `eval`.
+
+**Verification:** 3 new tests on the DELETE route (chunk/extraction purge happens, and 500s-without-
+marking-deleted when either purge fails) + 1 new test on `retrieve.ts` (the `deleted_at` filter is
+actually applied) + 2 new tests on the Phase 3 ingest function (idempotent retry, corrupt-file
+`NonRetriableError`). `npx tsc --noEmit -p .` clean, full suite (2301 tests, zero regressions),
+`npm run build`, targeted lint — all clean.
+
+---
+
+## 2k. Follow-up: soft-delete retry on transient DB failure — merged to stage, 2026-09-15 (PR #548)
+
+Branch `feature/applicant-documents-phase7-delete-retry`. Flagged during review of #547, not a
+regression it introduced — the same partial-failure shape already existed in the original
+R2-purge-then-DB-update pattern (§2b); Phase 7 extended it to two more resources rather than
+creating it new.
+
+**The gap:** DELETE's purge order is R2 files → `applicant_document_chunks` →
+`applicant_document_extractions` → mark `applicant_documents.deleted_at`. If the first three all
+succeed but that last write hits a transient DB error, the row is left reading "not deleted" —
+still visible in the UI/list — while its files and searchable content are already genuinely gone
+underneath. The caller only sees a generic 500, with nothing indicating content loss already
+happened.
+
+**The fix:** retry that final write up to 3 times with a short backoff before giving up. It's a
+plain DB write with no destructive side effect, so retrying is always safe — unlike the three
+purge steps before it, which must never be retried blindly against R2/other tables without care.
+Deliberately does **not** reorder the purge sequence: marking `deleted_at` first and purging after
+would trade this bug for a worse one — an R2 purge failure after the row is already marked deleted
+would leave a sensitive file (passport, bank statement) permanently orphaned in storage with no UI
+path left to ever retry it, since the document would already look deleted. No DB/migration/RPC
+changes.
+
+**Verification:** 2 new tests on the DELETE route (retry succeeds on the 2nd attempt after 1
+transient failure; still 500s with the unchanged `DB_ERROR` shape after exhausting all 3 attempts).
+`npx tsc --noEmit -p .` clean, full suite (2318 tests, zero regressions), `npm run build`, targeted
+lint — all clean. Also audited before merge: branch was a verified fast-forward-safe ancestor of
+`origin/stage`, diff scoped to exactly the 2 intended files, no migration files, no hot-shared-file
+touches, and zero overlap with any other open PR's changed files.
+
+**Known residual, deliberately not built:** if all 3 retries are exhausted, the gap still exists —
+this closes it for the transient case, not the persistent-outage case. Not pursued further because
+closing it fully would need either a DB transaction across the three writes (would require an RPC
+— blocked by the same "no migration in this phase" constraint) or marking the row in some
+intermediate "deletion in progress" state (a schema change). Left as an accepted tradeoff, same
+class as the original R2-purge-then-update design in §2b.
+
+---
+
 ## 3. Full roadmap (from the parent plan's §14) — what comes after this PR merges
 
 | Phase | Scope | Status |
@@ -389,17 +615,20 @@ than assuming an earlier layer already did.
 | **1** | **Schema, storage provider, core CRUD API routes, feature flag** | **Merged, live on stage (PR #530)** |
 | **2** | **UI: grid/list toggle, upload dropzone, document viewer (iframe/img), Lead Detail card, grouped-by-category view** | **Merged, live on stage (PR #533, delete-permission fix included)** |
 | **3** | **Processing pipeline: new Inngest fn (mark-processing → parse → chunk → embed → store), reuses `parseFileBytes()`/`chunkDocument()`/`embedTexts()`** | **Merged, live on stage (PR #534). Follow-up processing-status UI fix merged (PR #536, §2e). Structured extraction per `document_type` deliberately NOT included — see §2d.** |
-| **4** | **RAG: retrieval module calling `applicant_document_hybrid_search`, lead-scoped, degraded-mode fallback on embedding failure** | **Merged, live on stage (PR #538)** |
-| **5** | **Agent tools: 6 tools (`list_applicant_documents`, `search_applicant_document_content`, `get_document_metadata`, `get_document_extracted_data`, `find_missing_documents`, `get_document_download_url`) under `src/industries/education-consultancy/ai/tools/`** | **Built + tested locally (§2g), `feature/applicant-documents-phase5-agent-tools`, no PR** |
-| 6 | Usage + quotas + audit logging wired end-to-end (ledger already exists from Phase 1; real enforcement is this phase's job) | Not started |
-| 7 | Hardening: isolation tests, prompt-injection resistance test, malicious/oversized/corrupt-file tests, idempotency/retry tests, deletion-cleanup tests (no orphaned R2 objects or vectors) | Not started |
+| **4** | **RAG: retrieval module calling `applicant_document_hybrid_search`, lead-scoped, degraded-mode fallback on embedding failure** | **Merged, live on stage (PR #538) — real end-to-end verified 2026-09-14 (§2h)** |
+| **5** | **Agent tools: 6 tools (`list_applicant_documents`, `search_applicant_document_content`, `get_document_metadata`, `get_document_extracted_data`, `find_missing_documents`, `get_document_download_url`) under `src/industries/education-consultancy/ai/tools/`** | **Merged, live on stage (PR #539) — real end-to-end verified 2026-09-14 (§2h)** |
+| **6** | **Usage + quotas + audit logging wired end-to-end (ledger already exists from Phase 1; real enforcement is this phase's job)** | **Merged, live on stage (PR #544) — storage + per-lead-count enforced; OCR-page cap explicitly NOT built, see §2i** |
+| **7** | **Hardening: isolation tests, prompt-injection resistance test, malicious/oversized/corrupt-file tests, idempotency/retry tests, deletion-cleanup tests (no orphaned R2 objects or vectors)** | **Merged, live on stage (PR #547) — found and fixed a real "orphaned vectors" bug, see §2j. Follow-up partial-failure retry fix merged (PR #548, §2k).** |
 
-**Each phase depends on the one before it** — schema before UI, UI before pipeline testing,
-pipeline before RAG, RAG before agent tools. Effort estimate from the parent plan (honest range,
-not a commitment): **~18–25 working days total**, Phase 1 was budgeted 3–4 days. The parent plan
-flags Phase 3's structured-extraction step as the hardest part — real documents (passports from
-different countries, transcripts from hundreds of universities, scans of varying quality) will
-very likely need several tuning passes, not one clean implementation.
+**All 7 phases are now merged and live on stage — the build queue is empty.** The only remaining
+step for this feature is **prod promotion** (stage → main), not yet started — see the "None of the
+seven merged phases are promoted to prod yet" note at the top of this doc. Effort estimate from the
+parent plan (historical, for context): **~18–25 working days total**, Phase 1 was budgeted 3–4
+days. The parent plan flagged Phase 3's structured-extraction step as the hardest part — real
+documents (passports from different countries, transcripts from hundreds of universities, scans of
+varying quality) will very likely need several tuning passes, not one clean implementation. (Note:
+structured extraction per `document_type` was deliberately **not** included in Phase 3 as shipped —
+see §2d.)
 
 ---
 
@@ -477,6 +706,14 @@ very likely need several tuning passes, not one clean implementation.
 
 ## 6. Open items / things flagged, not silently decided
 
+- **Minor, non-blocking: `applicant_document_hybrid_search` (mig 231) still does the RPC-level
+  vector/keyword search work for chunks belonging to soft-deleted documents before the app-layer
+  `deleted_at` filter (§2k) throws them out.** Not a correctness bug — deleted content never
+  reaches a caller — just wasted DB work on the affected query. Fixing it means adding a
+  `deleted_at` check inside the RPC itself, which needs a migration; parked rather than done in
+  #547/#548 since neither phase touches the DB. Pick up whenever a migration for this feature is
+  next warranted for another reason, or if this RPC's cost ever becomes worth optimizing on its own.
+
 - **Cloudflare R2 (Phase 0) — DONE (2026-09-11).** Was blocked on Cloudflare requiring a payment
   card on file before R2 activates at all, even for the free tier (10GB storage / 1M "write" ops /
   10M "read" ops per month, $0/month unless those limits are exceeded — egress/bandwidth stays
@@ -488,12 +725,16 @@ very likely need several tuning passes, not one clean implementation.
   not just against the mock: a local smoke test drove `R2Provider`'s actual code path — signed
   upload URL → real PUT → server-side `getBytes()` read-back → signed download URL → real GET →
   delete — against the live bucket, and it passed end to end; the bucket was left empty afterward
-  (test object deleted, nothing orphaned). **CORS policy for browser-direct upload is still
-  not set** — not needed for Phase 1 (no browser code exists yet), but is needed before Phase 2's
-  UI can PUT directly from the browser; add it when Phase 2 starts. **Stage/prod env vars are
-  also still not set** (`R2_*` currently exists only in this local `.env.local`) — needed before
-  this feature can be tested on `dev-lead-crm` or promoted, per this repo's per-environment
-  `.env.local` convention (see CLAUDE.md § Supabase Projects for the same pattern on DB config).
+  (test object deleted, nothing orphaned). **CORS policy — DONE (2026-09-12)**, added via the
+  Cloudflare dashboard covering `localhost:3000` + both stage/prod origins (see §2c). **Stage `R2_*`
+  env vars — DONE (2026-09-14)**, added to stage's `.env.local` (same bucket/credentials already
+  verified locally, not a separate stage bucket) as part of the first real end-to-end test (§2h).
+  Two things worth remembering from that fix: (1) the app's Docker container did not pick up the
+  new env vars on a plain `docker compose restart` — Compose only re-reads `.env.local` when a
+  container is recreated, not restarted; use `docker compose up -d` for any future stage env-var
+  change. (2) **Prod's `R2_*` env vars are still not set** — this feature has never been tested or
+  promoted to prod, and will hit the identical "Failed to create upload URL" failure there until
+  someone repeats this same fix on the prod server.
 - **Inngest execution budget (flagged in the parent plan, relevant from Phase 3 onward).** The
   shared Inngest account is Hobby-tier (50,000 executions/month, shared across staging AND
   production, across every scheduled/event function in the app — not just this feature). Each

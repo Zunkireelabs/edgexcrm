@@ -1,6 +1,5 @@
 import { NextRequest } from "next/server";
 import { authenticateRequest } from "@/lib/api/auth";
-import { canManageBilling } from "@/lib/api/permissions";
 import {
   apiSuccess,
   apiUnauthorized,
@@ -9,18 +8,11 @@ import {
   apiError,
   apiValidationError,
 } from "@/lib/api/response";
-import { validate, required, maxLength, optionalMaxLength, isIn } from "@/lib/api/validation";
 import { createRequestLogger } from "@/lib/logger";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
-import { createAuditLog, emitEvent } from "@/lib/api/audit";
-import { NotificationTypes, createNotificationsExcept } from "@/lib/notifications";
-import { notifyTaskAssigned } from "@/lib/tasks/dispatch-notify";
-import { TASK_PRIORITIES } from "@/lib/tasks/create-task";
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+import { createProjectTaskCore } from "@/lib/tasks/create-project-task";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -52,6 +44,12 @@ export async function GET(_request: NextRequest, { params }: Props) {
   return apiSuccess(tasks ?? []);
 }
 
+// POST is a thin wrapper over createProjectTaskCore (Round 2 slice E,
+// docs/IT-AGENCY-ROUND2-SLICE-E-CAPTURE-BRIEF.md §3.4) — the bulk endpoint
+// (/api/v1/my-tasks/bulk) calls the same core with notifications suppressed
+// and batched. Task creation is open to all tenant members (brief: "let
+// employees get started"). Budget/margin-bearing actions stay admin-only
+// elsewhere.
 export async function POST(request: NextRequest, { params }: Props) {
   const { id: projectId } = await params;
   const requestId = crypto.randomUUID();
@@ -64,8 +62,6 @@ export async function POST(request: NextRequest, { params }: Props) {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
   if (!getFeatureAccess(auth.industryId, FEATURES.ACCOUNTS)) return apiForbidden();
-  // Task creation is open to all tenant members (brief: "let employees get
-  // started"). Budget/margin-bearing actions stay admin-only elsewhere.
 
   let body: Record<string, unknown>;
   try {
@@ -74,136 +70,16 @@ export async function POST(request: NextRequest, { params }: Props) {
     return apiError("INVALID_JSON", "Request body must be valid JSON", 400);
   }
 
-  const { valid, errors } = validate(body, {
-    title: [required("title"), maxLength(255)],
-    description: [optionalMaxLength(2000)],
-    priority: [isIn([...TASK_PRIORITIES])],
-  });
-  const validationErrors: Record<string, string[]> = { ...errors };
-
-  if (body.assignee_id !== undefined && body.assignee_id !== null) {
-    if (typeof body.assignee_id !== "string" || !UUID_RE.test(body.assignee_id)) {
-      validationErrors.assignee_id = ["Must be a valid UUID or null"];
-    }
-  }
-
-  if (body.due_date !== undefined && body.due_date !== null) {
-    if (typeof body.due_date !== "string" || !ISO_DATE_RE.test(body.due_date)) {
-      validationErrors.due_date = ["Must be a valid ISO date YYYY-MM-DD or null"];
-    }
-  }
-
-  if (!valid || Object.keys(validationErrors).length > 0) return apiValidationError(validationErrors);
-
   const db = await scopedClient(auth);
+  const outcome = await createProjectTaskCore(db, auth, projectId, body, { requestId, log });
 
-  // Verify project belongs to this tenant
-  const { data: project } = await db
-    .from("projects")
-    .select("id")
-    .eq("id", projectId)
-    .maybeSingle();
-  if (!project) return apiNotFound("Project");
-
-  const assigneeId = body.assignee_id ? String(body.assignee_id) : null;
-  const assigneeIsOther = !!assigneeId && assigneeId !== auth.userId;
-  if (assigneeIsOther) {
-    const { data: member } = await db
-      .from("tenant_users")
-      .select("user_id")
-      .eq("user_id", assigneeId)
-      .maybeSingle();
-    if (!member) return apiValidationError({ assignee_id: ["Not a member of this tenant"] });
-  }
-  // Always stamp the creator so they can edit their own task later
-  // (own-vs-admin rule in tasks/[id]/route.ts keys off assignee_id OR
-  // assigned_by_id). Never taken from the body.
-  const assignedById = auth.userId;
-
-  // Get next position
-  const { data: posResult } = await db
-    .raw()
-    .from("tasks")
-    .select("position")
-    .eq("tenant_id", auth.tenantId)
-    .eq("project_id", projectId)
-    .order("position", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  const nextPosition = posResult ? (posResult.position as number) + 1 : 0;
-
-  const { data: created, error } = await db
-    .from("tasks")
-    .insert({
-      project_id: projectId,
-      title: String(body.title).trim(),
-      description: body.description ? String(body.description).trim() : null,
-      status: "todo",
-      estimated_minutes:
-        body.estimated_minutes != null ? Number(body.estimated_minutes) : null,
-      // is_billable is budget-bearing — only callers with billing capability
-      // (owner/admin, or a position granting canManageBilling) can set it;
-      // otherwise the task defaults to billable (matches PATCH handling).
-      is_billable: canManageBilling(auth.permissions) ? body.is_billable !== false : true,
-      position: nextPosition,
-      assignee_id: assigneeId,
-      assigned_by_id: assignedById,
-      priority: body.priority ? String(body.priority) : "normal",
-      due_date: body.due_date ? String(body.due_date) : null,
-    })
-    .select()
-    .single();
-
-  if (error) {
-    log.error({ error }, "Failed to create task");
+  if (outcome.kind === "validation") return apiValidationError(outcome.errors);
+  if (outcome.kind === "not_found") return apiNotFound("Project");
+  if (outcome.kind === "db_error") {
+    log.error({ error: outcome.error }, "Failed to create task");
     return apiError("DB_ERROR", "Failed to create task", 500);
   }
 
-  await Promise.all([
-    createAuditLog({
-      tenantId: auth.tenantId,
-      userId: auth.userId,
-      action: "task.created",
-      entityType: "task",
-      entityId: created.id,
-      requestId,
-    }),
-    emitEvent({
-      tenantId: auth.tenantId,
-      type: "task.created",
-      entityType: "task",
-      entityId: created.id,
-      requestId,
-    }),
-  ]);
-
-  if (assigneeIsOther) {
-    // Round 2 slice B: link straight at the task, not the project fallback —
-    // matches every other dispatch path (see tasks/[id]/route.ts, create-task.ts).
-    const taskPath = `/tasks/${created.id}`;
-    createNotificationsExcept(auth.userId, [
-      {
-        tenantId: auth.tenantId,
-        userId: assigneeId!,
-        type: NotificationTypes.TASK_ASSIGNED,
-        title: "New task assigned",
-        message: created.title,
-        link: taskPath,
-      },
-    ]);
-    notifyTaskAssigned(
-      {
-        db,
-        log,
-        tenantId: auth.tenantId,
-        actorUserId: auth.userId,
-        actorEmail: auth.email ?? null,
-        industryId: auth.industryId,
-      },
-      { taskId: created.id, taskTitle: created.title, assigneeUserId: assigneeId!, taskPath },
-    );
-  }
-
-  log.info({ taskId: created.id, assigneeId }, "Task created");
-  return apiSuccess(created, 201);
+  log.info({ taskId: outcome.task.id, assigneeId: outcome.task.assignee_id }, "Task created");
+  return apiSuccess(outcome.task, 201);
 }

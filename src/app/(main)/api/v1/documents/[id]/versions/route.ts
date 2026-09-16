@@ -8,7 +8,8 @@ import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { assertDocumentVisible } from "@/lib/documents/access";
 import { resolveDocumentMimeType } from "@/lib/documents/constants";
-import { loadMaxDocumentSizeBytes } from "@/lib/documents/settings";
+import { loadMaxDocumentSizeBytes, loadStorageQuotaBytes } from "@/lib/documents/settings";
+import { getTenantStorageUsedBytes } from "@/lib/documents/usage";
 import { buildDocumentStorageKey } from "@/lib/documents/storage-key";
 import { getDocumentStorageProvider } from "@/lib/documents/storage/r2-provider";
 import type { ApplicantDocumentVersionRow } from "@/lib/documents/types";
@@ -93,6 +94,21 @@ export async function POST(request: NextRequest, context: RouteContext) {
       count: fileSize,
       max: maxBytes,
     });
+  }
+
+  // Phase 6: storage quota only here, not the per-lead document-count cap --
+  // a new version of an EXISTING document doesn't create a new document.
+  const storageQuotaBytes = await loadStorageQuotaBytes(db);
+  if (storageQuotaBytes !== null) {
+    const usedBytes = await getTenantStorageUsedBytes(db);
+    if (usedBytes + fileSize > storageQuotaBytes) {
+      return apiError(
+        "STORAGE_QUOTA_EXCEEDED",
+        `This upload (${fileSize} bytes) would exceed the tenant's ${storageQuotaBytes}-byte storage quota (currently using ${usedBytes} bytes)`,
+        422,
+        { count: usedBytes + fileSize, max: storageQuotaBytes },
+      );
+    }
   }
 
   const versionId = crypto.randomUUID();

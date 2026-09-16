@@ -36,6 +36,11 @@ function fakeDb(opts: {
   maxVersion?: { version_number: number } | null;
   createdVersion?: Record<string, unknown>;
   updatedDoc?: Record<string, unknown>;
+  settings?: Record<string, unknown> | null;
+  /** applicant_documents rows for the storage-quota's live-doc-id lookup */
+  tenantDocs?: Record<string, unknown>[];
+  /** applicant_document_versions rows summed for the storage-quota check */
+  quotaVersions?: Record<string, unknown>[];
 } = {}) {
   const listQuery = { eq: vi.fn(() => listQuery), order: vi.fn(() => Promise.resolve({ data: opts.versions ?? [], error: null })) };
   const maxQuery = {
@@ -44,20 +49,29 @@ function fakeDb(opts: {
     limit: vi.fn(() => maxQuery),
     maybeSingle: vi.fn(async () => ({ data: opts.maxVersion ?? null })),
   };
+  const inQuery = { in: vi.fn(() => Promise.resolve({ data: opts.quotaVersions ?? [], error: null })) };
   const insertSelect = { single: vi.fn(async () => ({ data: opts.createdVersion ?? { id: "v2", version_number: 2 }, error: null })) };
   const versionTable = {
     select: vi.fn((columns?: string) => {
-      // GET uses select().eq().order(); the max-version lookup uses select().eq().order().limit().maybeSingle()
-      return columns === "version_number" ? maxQuery : listQuery;
+      // GET uses select().eq().order(); the max-version lookup uses
+      // select("version_number").eq().order().limit().maybeSingle(); the
+      // Phase 6 storage-quota check uses select("file_size").in(...).
+      if (columns === "version_number") return maxQuery;
+      if (columns === "file_size") return inQuery;
+      return listQuery;
     }),
     insert: vi.fn(() => ({ select: vi.fn(() => insertSelect) })),
   };
 
   const docUpdateSelect = { single: vi.fn(async () => ({ data: opts.updatedDoc ?? { id: "doc-1", current_version_id: "v2" }, error: null })) };
-  const docTable = { update: vi.fn(() => ({ eq: vi.fn(() => ({ select: vi.fn(() => docUpdateSelect) })) })) };
+  const docsIsQuery = { is: vi.fn(() => Promise.resolve({ data: opts.tenantDocs ?? [], error: null })) };
+  const docTable = {
+    update: vi.fn(() => ({ eq: vi.fn(() => ({ select: vi.fn(() => docUpdateSelect) })) })),
+    select: vi.fn(() => docsIsQuery),
+  };
 
   const usageTable = { insert: vi.fn(async () => ({ error: null })) };
-  const settingsQuery = { maybeSingle: vi.fn(async () => ({ data: null })) };
+  const settingsQuery = { maybeSingle: vi.fn(async () => ({ data: opts.settings ?? null })) };
   const settingsTable = { select: vi.fn(() => settingsQuery) };
 
   return {
@@ -171,5 +185,39 @@ describe("POST /api/v1/documents/[id]/versions — issues an upload URL only, wr
 
     const [key] = createSignedUploadUrlMock.mock.calls[0];
     expect(key).toMatch(/^tenants\/tenant-1\/applicants\/lead-1\/documents\/doc-1\/versions\/.+\/original\.pdf$/);
+  });
+
+  it("422s with STORAGE_QUOTA_EXCEEDED when a new version would push the tenant over its storage quota", async () => {
+    scopedClientMock.mockResolvedValue(
+      fakeDb({
+        settings: { max_storage_bytes: 5000 },
+        tenantDocs: [{ id: "doc-1" }],
+        quotaVersions: [{ file_size: 4500 }],
+      }),
+    );
+    const { POST } = await import("./route");
+    // 4500 already used + 2048 (validBody's file_size) > 5000 cap
+    const res = await POST(fakeReq(validBody()), params());
+    expect(res.status).toBe(422);
+    const json = await res.json();
+    expect(json.error.code).toBe("STORAGE_QUOTA_EXCEEDED");
+  });
+
+  it("does NOT check the per-lead document-count cap — a new version isn't a new document", async () => {
+    const db = fakeDb({ settings: { max_documents_per_lead: 0 } });
+    scopedClientMock.mockResolvedValue(db);
+    const { POST } = await import("./route");
+    const res = await POST(fakeReq(validBody()), params());
+    // max_documents_per_lead: 0 would reject every upload if this route
+    // (wrongly) checked it -- 200 proves it doesn't.
+    expect(res.status).toBe(200);
+  });
+
+  it("skips the storage quota entirely when max_storage_bytes is null (unlimited)", async () => {
+    const db = fakeDb({ settings: { max_storage_bytes: null } });
+    scopedClientMock.mockResolvedValue(db);
+    const { POST } = await import("./route");
+    const res = await POST(fakeReq(validBody()), params());
+    expect(res.status).toBe(200);
   });
 });

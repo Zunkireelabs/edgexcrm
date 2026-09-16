@@ -75,7 +75,7 @@ export async function createTaskCore(
   db: ScopedClient,
   actor: CreateTaskCoreActor,
   input: CreateTaskInput,
-  opts: { requestId?: string } = {},
+  opts: { requestId?: string; notify?: boolean } = {},
 ): Promise<CreateTaskOutcome> {
   const { tenantId, defaultAssigneeId } = actor;
   const requestId = opts.requestId ?? crypto.randomUUID();
@@ -206,8 +206,9 @@ export async function createTaskCore(
     }),
   ]);
 
+  const shouldNotify = opts.notify !== false;
   let notified = false;
-  if (assignedById) {
+  if (assignedById && shouldNotify) {
     // Round 2 slice A: link straight at the task, not the lead/deal/home
     // fallback — see the dispatch-notify.ts comment on notifyTaskCompleted.
     const link = `/tasks/${task.id}`;

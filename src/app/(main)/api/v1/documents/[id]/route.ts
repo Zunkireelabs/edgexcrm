@@ -129,6 +129,16 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 // succeeds does the DB row get marked deleted_at — if the purge fails, the
 // document stays fully intact and visible, safe to retry, rather than the app
 // claiming "deleted" while sensitive bytes are still sitting in the bucket.
+//
+// Phase 7 hardening fix: also purges applicant_document_chunks and
+// applicant_document_extractions for this document. Neither
+// applicant_document_hybrid_search (migration 231) nor Phase 4's retrieval
+// join filters chunks by the parent document's deleted_at — a soft-deleted
+// document's chunks were otherwise still fully searchable and citable by the
+// AI assistant after "deletion", the exact "orphaned vector" this repo's own
+// roadmap (§3 Phase 7) calls out. Genuinely deleting the rows here, not just
+// hiding them, matches the same principle the R2 purge above already
+// established — "deleted" means gone, not filtered-if-someone-remembers-to.
 export async function DELETE(_request: NextRequest, context: RouteContext) {
   const { id } = await context.params;
   const requestId = crypto.randomUUID();
@@ -164,9 +174,42 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
     return apiError("STORAGE_ERROR", "Failed to delete the stored files — please retry", 500);
   }
 
-  const { error } = await db.from("applicant_documents").update({ deleted_at: new Date().toISOString() }).eq("id", id);
-  if (error) {
-    log.error({ error }, "Failed to soft-delete applicant document (files were already purged from R2)");
+  const { error: chunksError } = await db.from("applicant_document_chunks").delete().eq("document_id", id);
+  if (chunksError) {
+    log.error({ error: chunksError }, "Failed to purge document chunks (files were already purged from R2) — document left intact, safe to retry");
+    return apiError("DB_ERROR", "Failed to delete document", 500);
+  }
+
+  const { error: extractionsError } = await db.from("applicant_document_extractions").delete().eq("document_id", id);
+  if (extractionsError) {
+    log.error({ error: extractionsError }, "Failed to purge document extractions (files/chunks were already purged) — document left intact, safe to retry");
+    return apiError("DB_ERROR", "Failed to delete document", 500);
+  }
+
+  // Files, chunks, and extractions are already gone by this point — this write has no
+  // destructive side effect, so a short retry closes the "purge succeeded, this one
+  // write hiccupped" gap: without it, the row would read "not deleted" (visible in the
+  // UI) while its content is already gone underneath. If all 3 attempts fail, the
+  // document is left in that same intact-but-inconsistent state — a retried DELETE
+  // call is still safe (the earlier purges simply no-op on retry).
+  let markDeletedError: unknown = null;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const { error: attemptError } = await db
+      .from("applicant_documents")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", id);
+    if (!attemptError) {
+      markDeletedError = null;
+      break;
+    }
+    markDeletedError = attemptError;
+    if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, 150 * attempt));
+  }
+  if (markDeletedError) {
+    log.error(
+      { error: markDeletedError },
+      "Failed to soft-delete applicant document after retries (files/chunks/extractions were already purged)",
+    );
     return apiError("DB_ERROR", "Failed to delete document", 500);
   }
 

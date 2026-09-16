@@ -1,185 +1,235 @@
 # BRIEF — Agent Value Measurement (the Phase 6 gate)
 
-**Author:** Opus planner (brain folder). **For:** Sadin (ops steps) + the executor session (query/report steps).
-**Date:** 2026-09-09. **Branch:** cut a fresh docs branch from latest `origin/stage`; this file is the only change.
+**Author:** Opus planner (brain folder). **For:** Sadin (UI review) + the executor session (read-only checks, reporting).
+**Date:** 2026-09-09 · corrected 2026-09-13 twice — first against the workflows, then against the step-1 pre-flight report. **Branch:** cut a fresh docs branch from latest `origin/stage`; this file is the only change.
 
-> **Scope discipline.** This slice ships **no source code**. Everything it needs is already
-> merged and tested — it is switched off, not missing. If you find yourself editing anything
-> under `src/`, stop: you have gone off-design and should re-brief instead.
+> **Scope discipline.** This slice ships **no source code**, and — as of the pre-flight — needs
+> **no DB writes and no env changes** either. If you find yourself editing `src/`, running SQL, or
+> touching an env file, stop and re-brief.
+
+> **Status: 🛑 STOPPED 2026-09-13 at follow-up check F1 — the gate tenant is NOT scrubbed.**
+>
+> **Update 2026-09-13:** agents on `zunkireelabs-crm` stage are **paused** (Active 0/3). Source of the
+> real data: the tenant's public form catching job applications. **New gate vehicle:**
+> `BRIEF-SYNTHETIC-GATE-TENANT.md` — a dedicated `orca-gate` tenant that is synthetic by construction.
+> Steps 5–6 below still apply, run on `orca-gate`.
+>
+> F1 found **all 25** pending Lead Triage proposals on `zunkireelabs-crm` (stage) contain real
+> personal data (real names, real email domains, real phone numbers); **none** use
+> `@scrubbed.invalid`; the newest is ~2 days old. So Lead Triage is **actively** sending real
+> contact data to the AI provider from stage.
+>
+> What is verified in code: `scripts/scrub-stage-pii.sh` has **no tenant filter** — it is a
+> **one-time** rewrite of every row present when it runs. The Admizz sample being scrubbed is
+> consistent with it having run once; it does nothing for leads created afterwards. Stage keeps
+> receiving new leads through three paths that all fire `crm/lead.created` → Lead Triage: the
+> dashboard/v1 leads route, the public form-submit route, and the integration API
+> (`emitIntegrationEvent` → `emitEvent` → `emitDomainEvent`). Inbound WhatsApp/email does **not**
+> create leads (`src/lib/inbox/process-inbound.ts` only links by phone).
+>
+> **Superseded below:** the "Stage lead data scrubbed? — Yes, very likely" row and consequence 1
+> ("run the gate on `zunkireelabs-crm`, zero DB writes"). Both are wrong. Do not proceed to steps 2+.
+>
+> **Open decisions (Sadin):** (1) pause the agents hired on `zunkireelabs-crm` stage via Fleet —
+> reversible, UI-only; (2) pick a gate vehicle whose data is synthetic by construction — a dedicated
+> synthetic stage tenant with no real inflow (recommended), or the local DB; (3) find which of the
+> three lead paths is bringing real data into stage, and decide whether stage should accept it.
 
 ---
 
 ## Why
 
-A wider audit (2026-09-09) compared this repo against `~/Projects/orca` and asked whether the
-agent layer should be extracted into a standalone platform that also serves Stella and
-health-hrms. The audit's conclusion was that **the agent platform already exists here**, and
-that extracting it is a large, mostly-irreversible bet.
+One number gates the decision to extract the agent platform into a standalone product, and nobody
+has it: **do humans accept what the agents propose?**
 
-There is one number that should gate that bet, and nobody has it: **do humans accept what the
-agents propose?**
-
-What we actually know today:
-
-- Lead Triage **has** run on stage — five live observations on 2026-07-27, recorded in
-  `BRIEF-6-2-LEAD-TRIAGE-PROMPT-QUALITY.md`.
-- Those five runs exposed two real defects: the fit score was **inverted for duplicates**
-  (every correctly-identified duplicate still scored 100), and Accept in the Review Queue was a
-  **dead end** — it flipped `agent_outputs.status` and created nothing.
-- Both are fixed and merged. Slice **6.1** routed the task suggestion through `create_task`
-  and the real approval spine; **6.2** added the 0–20 / 21–50 / 51–80 / 81–100 rubric now in
-  `leadTriageAgent.systemPrompt`; **6.3** handled search self-exclusion; **6.4** (#305) strips
-  agent-supplied `assigneeId` structurally.
-- **Nothing has been measured since those fixes landed.** The five July observations are
-  pre-fix and are not a baseline for anything.
-
-So the agents are not unproven in the sense of never having run. They are unproven in the sense
-that **their output quality has never been measured against a human decision after the fixes
-that were supposed to make them good.**
-
-That measurement costs an env var and a week. The decision it gates costs a quarter.
+Lead Triage ran on stage on 2026-07-27 and exposed an inverted duplicate score and a dead-end
+Accept. Both were fixed on stage the same day — 6.1 (#300), rubric + self-exclusion (#303), 6.4
+(#305) — and promoted 2026-07-28. Nothing has been measured since.
 
 ---
 
-## Blast radius — deliberately near-zero
+## What the pre-flight established (2026-09-13)
 
-This repo is actively shipping (PR #523 merged 2026-09-08). This slice must not compete with it.
+| Question | Answer | How known |
+|---|---|---|
+| Stage env flags | `AI_AGENTS_ENABLED`, `AI_WRITE_TOOLS_ENABLED`, `AI_MCP_ENABLED` all `=true`; approval secret present | workflow + live `.env.local` presence counts |
+| Prod env flags | none of the three set | workflow + live `.env.local` count = 0 |
+| CI | #538, 9/9 pass incl. both test jobs | `gh pr checks` |
+| **Stage lead data scrubbed?** | **Yes, very likely.** 10/10 sampled Admizz leads carry `@scrubbed.invalid` emails — the exact output of `scripts/scrub-stage-pii.sh`, which scrubs `leads` / `lead_submissions` / `contacts` / `conversations` / `emails` **for every tenant** (no tenant filter). Realistic Nepali names are expected: the script draws replacement names from a fixed pool. `CLAUDE.md`'s "stage is not anonymized" line is stale. | UI sample + script source |
+| Agents on `admizz` (stage) | none hired; 0 pending; assistant responds | UI |
+| Agents on `zunkireelabs-crm` (stage) | **3 hired, all active**: Lead Triage, Daily Digest, External MCP Client. No "not yet active" banner → both tenant flags already on. **25 pending** in `/orca/review`, oldest ≈ 2026-07-28 | UI |
+| Inngest run counts | **not checked** — dashboard login unavailable to the executor | — |
 
-- **No `src/` changes.** None.
-- **No production changes.** `AI_AGENTS_ENABLED` stays **unset on prod** throughout. Prod
-  remains read-only Ask Orca, owner-only, two tenants, exactly as it is today.
-- **Stage only.** One tenant, one agent.
-- **Writes stay off.** Do not set `AI_WRITE_TOOLS_ENABLED`. Lead Triage's `create_task` runs
-  under the `agent_human` policy — it produces an approval-queue proposal, and a human clicking
-  Accept is precisely the signal we are measuring. That is the whole point; do not shortcut it.
-- **One DB write in total** — `tenants.ai_agents_enabled` for the single test tenant, through
-  the normal reviewed pipeline with per-action approval. No migration.
-- **One PR, docs-only** — this file plus its filled-in Results section.
+### Consequences for the gate
 
-Everything else happens through the product's own UI and stage env vars.
+1. **The blocking tenant decision is resolved.** Run the gate on **`zunkireelabs-crm` (stage)**:
+   Lead Triage is already hired there and active, both tenant flags are already on, and its lead
+   data is scrubbed. **Zero DB writes, zero env changes.** Leave `admizz` alone.
+2. **The 25 pending proposals are valid data, with one caveat.** They postdate the 6.x fixes, and
+   the background-agent review path (`/api/v1/agent-outputs`, `/api/v1/agent-approvals` →
+   Inngest) was **not** affected by the 2026-09-01 approval-signature bug (#464 was confined to
+   the interactive chat route). But each `agent_approvals` row expires after **48h**, while
+   `agent_outputs` stay `proposed` forever — so accepting an old `write_action_proposal` flips its
+   status **without creating a task**. That is expected, not a spine failure.
+3. **The product already computes the gate metric.** The Lead Triage detail drawer's
+   **"Acceptance"** = (`accepted` + `edited_accepted`) ÷ reviewed, excluding `proposed` and
+   `expired` (`getAgentDetail` in `src/lib/ai/agents/queries.ts`). It rolls up **full history**, so
+   the gate records a **baseline at start** and reads the **delta at the end** — no query needed.
+
+### Residual privacy gap (separate follow-up, not blocking)
+
+The scrub does **not** touch AI-side tables: `agent_outputs.payload`, `agent_approvals.tool_input`,
+`ai_write_actions`, `ai_messages`. The AI assistant was enabled on stage tenants before the scrub,
+and stage was cloned from prod 2026-06-21 — so anything those tables captured *before* the scrub ran
+may still hold real personal data, as may Langfuse traces from that period. Extend the scrub script
+to the AI tables in its own brief.
+
+---
+
+## Blast radius — near-zero, now literally
+
+- **No `src/` changes. No prod changes. No DB writes. No env changes.**
+- **One tenant** (`zunkireelabs-crm`, stage). **Measure one agent** (Lead Triage). Daily Digest and
+  External MCP Client stay as they are; they are not part of the measurement.
+- Writes are approval-queued: `create_task` runs at `agent_human`; `fully_automated` is rejected in code.
+- **One PR, docs-only** — this file with Results filled in.
 
 ---
 
 ## Steps
 
-### 1 — Pre-flight (read-only, executor session)
+### 1 — Pre-flight ✅ done 2026-09-13 (results above)
 
-Report actual values; do not change anything.
+### 1b — Follow-up checks (read-only, executor, UI only, counts only)
 
-- [ ] Is `AI_AGENTS_ENABLED` currently set on **stage**? (Docs disagree: `FEATURE-CATALOG.md`
-      says the spine is flag-gated and was unpromoted at 2026-07-27, yet agents demonstrably
-      ran on stage that day. Settle it by looking, not by reading.)
-- [ ] Is `AI_AGENTS_ENABLED` **unset on prod**? Confirm — this is the safety invariant.
-- [ ] Is `AI_TOOL_APPROVAL_SECRET` set on stage? `STATUS-BOARD.md` lists it as overdue, and the
-      approval flow will not work without it.
-- [ ] Is `AI_WRITE_TOOLS_ENABLED` unset on stage? If it is *set*, say so — it changes what
-      step 4 means.
-- [ ] CI `Test` and `Test (database-backed)` jobs green on latest `stage`.
-- [ ] Stage PII scrub still holds (scrubbed 2026-07-19, PR #252). Spot-check that stage leads
-      carry no real phone numbers before pointing an LLM at them.
+- **F1** `zunkireelabs-crm` → `/orca/review`: of the 25 pending, how many per kind (score
+  suggestion / task proposal / digest / other); how many show an email ending `@scrubbed.invalid`
+  vs any other domain; date of the newest item (proves whether Lead Triage is still producing).
+- **F2** `zunkireelabs-crm` → leads list: sample 10 leads — how many `@scrubbed.invalid` (confirms
+  the scrub reached this tenant).
+- **F3** `zunkireelabs-crm` → `/orca/agents` → open **Lead Triage**: record Acceptance %, tasks
+  completed, last active, and — if shown — the reviewed/accepted counts. This is the **baseline**.
+- **F4** `admizz` → leads list with every filter cleared: total lead count, and the logged-in
+  user's role. Explains the 143-vs-~16.7k discrepancy (filtered view? role scope? trimmed stage?).
+- **F5** `zunkireelabs-crm` → Settings → API keys: number of **integration-category** keys, their
+  scope and last-used date — names only, never a key value. (External MCP Client is hired and
+  `AI_MCP_ENABLED` is on; a live integration key makes `/api/mcp` usable from outside.)
 
-**Stop here and report.** Steps 2+ do not start until Sadin has read this.
+**Stop and report.** If F1/F2 show any non-`@scrubbed.invalid` email, stop — the scrub premise is wrong.
 
-### 2 — Enable on stage (Sadin, ops)
+### 2 — Start the measurement window (Sadin)
 
-- Set `AI_AGENTS_ENABLED=true` in the **stage** environment only.
-- Set `tenants.ai_agents_enabled = true` for **one** test tenant — through the reviewed
-  pipeline with per-action approval, not an interactive DB session.
-- Leave `AI_WRITE_TOOLS_ENABLED` and every prod variable untouched.
+Record the start date/time and the F3 baseline. From here on, only outputs created **after** the
+start count.
 
-### 3 — Hire the agent through the product (Sadin, UI)
+### 3 — Clear the backlog honestly (Sadin, UI)
 
-In `/orca/agents` (Fleet), hire **Lead Triage** against a real position — the same
-`POST /api/v1/agent-identities` flow a customer would use. Do not seed it via a script; using
-the real path is part of what we are testing.
-
-Leave `agent_tool_policies` at default-deny, except `create_task` at **`agent_human`**.
+Review the 25 existing proposals **on their merits** — they are genuine post-fix outputs. Note the
+expected behaviour for stale task proposals (accept flips status, creates no task). Then take a
+**second baseline** from the drawer so the backlog and the fresh window can be reported separately.
 
 ### 4 — Generate real triggers (Sadin or executor)
 
-Create **at least 60 leads** on stage through the normal lead-creation path, so
-`crm/lead.created` actually fires through `emitEvent()` in `src/lib/api/audit.ts`. Do not
-insert rows directly — direct inserts skip the event fan-out and nothing will run.
+Create **at least 60 leads** in `zunkireelabs-crm` through the normal lead-creation path
+(`emitEvent()` in `src/lib/api/audit.ts` must fire — no direct inserts). Mix and record counts:
 
-Make the batch realistic and deliberately mixed, because the rubric is what we are testing:
+- duplicates of existing leads → expect 0–20
+- neither email nor phone → expect 21–50
+- one contact method → expect 51–80
+- complete and well-fitting → expect 81–100
 
-- some genuine duplicates of existing stage leads (should score 0–20),
-- some with neither email nor phone (should cap at 21–50),
-- some with one contact method (51–80),
-- some complete and well-fitting (81–100).
+### 5 — Review within 48h, honestly (Sadin, ~1 week)
 
-Record roughly how many of each you created — the expected distribution is what makes the
-scores checkable rather than merely plausible.
+Work `/orca/review` **within 48h of each proposal** so task approvals are still live and "accept →
+one task" is a real test. Accept, edit-then-accept, or dismiss on the merits — **honestly, not
+generously**. Open one fresh agent trace in Langfuse: input/output `[masked]`; `tenantId` / `model`
+/ `environment` readable.
 
-### 5 — Let it run, and review honestly (Sadin, ~1 week)
+### 6 — Measure (executor, UI)
 
-Work the Review Queue at `/orca/review` as a user would. Accept, edit-then-accept, or dismiss
-each proposal on its merits.
-
-**The integrity of this whole exercise depends on reviewing honestly rather than generously.**
-An inflated acceptance rate produces a confident decision to re-platform on a false premise —
-the most expensive possible outcome here.
-
-While the traces are fresh, also open one agent run in Langfuse and confirm input/output read
-`[masked]` while `tenantId` / `model` / `environment` stay readable. That closes a standing
-STATUS-BOARD item for agent traffic in passing.
-
-### 6 — Measure (executor session)
-
-Query stage and fill in the Results section below with real numbers.
+From the Lead Triage drawer, subtract the step-3 baseline from the end numbers.
 
 | Metric | Source |
 |---|---|
-| Runs attempted, completed, failed, awaiting_approval | `agent_runs.status` |
-| Median latency; tokens per run | `agent_runs.usage`, `ai_usage_events` |
-| Cost per run → extrapolated per-tenant per-month | `ai_usage_events` |
-| **Acceptance rate** | `agent_outputs.status`: (`accepted` + `edited_accepted`) ÷ total reviewed |
-| Score-rubric correctness | `agent_outputs` score vs. the expected band from step 4 |
-| Approval-spine integrity | every `accepted` `write_action_proposal` produced exactly one task; no duplicate writes in `ai_write_actions` |
-
-Report `edited_accepted` **separately** from `accepted`. A high edit rate means the agent is
-useful but not yet trustworthy — a materially different conclusion from either extreme, and it
-is invisible if the two are summed.
+| Runs completed in window | drawer "tasks completed" delta |
+| **Acceptance rate (window)** | drawer reviewed/accepted delta |
+| `edited_accepted` vs `accepted` | drawer recent-outputs timeline, counted by status — report **separately** |
+| Score-rubric correctness | each proposal's score vs the expected band from step 4 |
+| Spine integrity | each proposal accepted **within 48h** → exactly one task in `/tasks`; no duplicates |
+| Cost per run | Langfuse (tokens per trace, this tenant, window) |
 
 ---
 
 ## Decision gate
 
-Against **≥50 reviewed outputs**:
+Against **≥50 reviewed outputs created inside the window**:
 
-| Result | Meaning | Next |
-|---|---|---|
-| **≥50% accepted-or-edited**, run failure <10% | The loop produces work humans want | Green. Proceed to the extraction design, and amend ADR-001 D1 in the same pass |
-| **30–50%** | The idea works, the prompt or the task doesn't | Iterate the agent definition here first. Extracting a weak agent only moves it |
-| **<30%**, or failure rate >10% | The premise is wrong | Stop. Rethink the product before any extraction. This is the cheap failure and it is worth having |
+| Result | Next |
+|---|---|
+| **≥50% accepted-or-edited**, run failure <10% | Green → extraction design + amend ADR-001 D1 in the same pass |
+| **30–50%** | Iterate the agent definition here first |
+| **<30%**, or failure >10% | Stop; rethink before any extraction |
 
-Also fail the gate, regardless of acceptance rate, if any of these appear: a duplicate write in
-`ai_write_actions`, an accepted proposal that produced no task, or unmasked PII in a Langfuse
-trace. Those are correctness problems, and no acceptance rate redeems them.
+Fail regardless of acceptance on: a duplicate task from one accept, an accept **within 48h** that
+produced no task, or unmasked PII in a Langfuse trace. (An accept *after* 48h producing no task is
+the expected expiry behaviour, not a failure.)
+
+---
+
+## Round 1 results (2026-09-14, synthetic gate tenant `orca-gate`, stage) — pre-fix
+
+61 synthetic leads (ORC-001…061) created one at a time via *Add lead*, scored by Lead Triage
+against an answer key kept outside the app. See `BRIEF-LEAD-TRIAGE-ROUND2-FIX.md` for the full
+brief; summary here for the gate record.
+
+| Category | In band |
+|---|---|
+| Complete clear fit | 12/12 |
+| No email or phone | 6/6 |
+| Near-duplicate, different person | 4/4 |
+| One contact method | 4/8 (four scored 81 — rubric says 81+ needs both) |
+| Duplicate re-enquiry (same name + phone, new or no email) | 1/8 |
+| Spam / gibberish | 3/6 (the 21s come from missing contact details, not spam detection) |
+| Job applicant | 0/7, plus ORC-029 produced nothing |
+| Vendor / sales pitch | 0/8 |
+
+Root causes:
+
+1. `get_lead` never returned `custom_fields` (where *Add lead*'s free-text notes and every
+   form/API-submitted answer live) — every job applicant and vendor reached the agent looking like
+   "complete contact details" with nothing to say otherwise.
+2. The *Add lead* form applies a `student` tag by default.
+3. `search_leads` requires every word in a query to match (verified in code). Whether the agent
+   combined name + email + phone into one query — and so missed re-enquiries with a new email — is
+   a hypothesis, not yet confirmed by trace.
+
+Fixed in `fix/lead-triage-visibility` (PR pending review): `get_lead` now returns a sanitized
+`customFields`, and the prompt defines fit per industry, discounts the default tag, separates
+duplicate searches per field, and scores off-target leads (job applicants, vendors, spam) 0-20 with
+a review/tidy task instead of a sales follow-up.
+
+**Round 2 runs after this PR merges** — a new batch on `orca-gate`, same mix and data rules, new
+display ids, new answer key, to measure whether the fix moved these numbers.
 
 ---
 
 ## Results — fill in, then open the docs-only PR
 
-*(Leave this section empty until step 6. An empty section is an honest one; a plausible-looking
-one that was never measured is how PR #372 shipped with "verification in progress" still in its
-body.)*
+*(Leave empty until step 6.)*
 
-- Window measured:
-- Runs attempted / completed / failed:
-- Outputs produced / reviewed:
-- Accepted: ___ · Edited-accepted: ___ · Dismissed: ___ · **Acceptance rate: ___%**
-- Score-rubric correctness (scored band vs expected band):
-- Median latency / tokens / cost per run:
-- Extrapolated cost per tenant per month:
-- Langfuse masking confirmed on agent traffic: ☐
-- Approval-spine integrity (1 accept → 1 task, no duplicate writes): ☐
+- Window start / end:
+- Baseline (step 3) — reviewed / accepted / edited-accepted:
+- End — reviewed / accepted / edited-accepted:
+- Backlog of 25 — accepted / edited / dismissed (reported separately, not in the gate number):
+- **Window acceptance rate: ___% over ___ reviewed**
+- Score-rubric correctness:
+- Spine integrity (≤48h accepts → one task each): ☐
+- Langfuse masking on agent traffic: ☐
+- Cost per run:
 - **Gate outcome:**
 
 ---
 
-## Afterwards — restore stage
+## Afterwards
 
-Once measured, decide deliberately whether stage keeps agents on. Leaving a flag on because
-nobody turned it off is how stage state drifts from what the docs claim. Record the choice here
-either way.
+Record deliberately whether Lead Triage stays active on `zunkireelabs-crm` (stage).

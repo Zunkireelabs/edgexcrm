@@ -540,6 +540,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
                       ownConnectedInboxes={ownConnectedInboxes}
                       onReply={handleReply}
                       onThreadRead={handleThreadRead}
+                      leadId={leadId}
                     />
                   ))}
                 </div>

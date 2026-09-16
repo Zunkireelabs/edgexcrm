@@ -37,6 +37,7 @@ const members = vi.hoisted(() => ({
   rows: [
     { id: "tu-1", user_id: "user-a", role: "admin", position_id: null, branch_id: null, default_hourly_rate: 120, cost_rate: 80, created_at: "2026-01-01", suspended_at: null, positions: null },
     { id: "tu-2", user_id: "user-b", role: "viewer", position_id: null, branch_id: null, default_hourly_rate: null, cost_rate: null, created_at: "2026-02-01", suspended_at: null, positions: null },
+    { id: "tu-3", user_id: "user-c", role: "viewer", position_id: null, branch_id: null, default_hourly_rate: null, cost_rate: null, created_at: "2026-03-01", suspended_at: "2026-08-01T00:00:00Z", positions: null },
   ],
 }));
 
@@ -53,6 +54,7 @@ vi.mock("@/lib/supabase/scoped", () => ({
               users: [
                 { id: "user-a", email: "ada@agency.com", user_metadata: { name: "Ada Lovelace" } },
                 { id: "user-b", email: "bram@agency.com", user_metadata: {} },
+                { id: "user-c", email: "charlie@agency.com", user_metadata: { name: "Charlie Suspended" } },
               ],
             },
           }),
@@ -97,5 +99,15 @@ describe("GET /api/v1/team?minimal=1", () => {
   it("still gates the full roster behind the /team nav / canAssignLeads check", async () => {
     const res = await GET(req("https://x.test/api/v1/team"));
     expect(res.status).toBe(403);
+  });
+
+  // Round 2 slice E §3.7 — this roster now feeds ⌘K @-mention + MemberPicker
+  // assignment; a suspended member can't log in, so they must not be
+  // assignable through it.
+  it("minimal excludes a suspended member", async () => {
+    const res = await GET(req("https://x.test/api/v1/team?minimal=1"));
+    const body = await res.json();
+    expect(body.data.map((m: { user_id: string }) => m.user_id)).toEqual(["user-a", "user-b"]);
+    expect(body.data.some((m: { user_id: string }) => m.user_id === "user-c")).toBe(false);
   });
 });

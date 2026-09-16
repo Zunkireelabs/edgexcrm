@@ -25,6 +25,13 @@ interface TaskComposerProps {
   /** Called with the created task's JSON body after a successful POST. */
   onCreated: (task: Record<string, unknown>) => void;
   triggerLabel?: string;
+  /** Round 2 slice E §3.6 — prefill for the email→task flow. Backward-compatible: all optional, unused by Home/TaskList callers. */
+  initialTitle?: string;
+  initialDescription?: string;
+  /** Render already expanded (skip the "+ Task" trigger button). */
+  defaultExpanded?: boolean;
+  /** Called when the user cancels an already-expanded composer (only meaningful with defaultExpanded). */
+  onCancel?: () => void;
 }
 
 export function TaskComposer({
@@ -32,9 +39,14 @@ export function TaskComposer({
   context,
   onCreated,
   triggerLabel = "New Task",
+  initialTitle = "",
+  initialDescription = "",
+  defaultExpanded = false,
+  onCancel,
 }: TaskComposerProps) {
-  const [expanded, setExpanded] = useState(false);
-  const [title, setTitle] = useState("");
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  const [title, setTitle] = useState(initialTitle);
+  const [description, setDescription] = useState(initialDescription);
   const [dueDate, setDueDate] = useState("");
   const [priority, setPriority] = useState<TaskPriority>("normal");
   const [assigneeId, setAssigneeId] = useState<string>(currentUserId);
@@ -65,6 +77,7 @@ export function TaskComposer({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: title.trim(),
+          description: description.trim() || null,
           due_date: dueDate || null,
           priority,
           assignee_id: assigneeId,
@@ -75,11 +88,14 @@ export function TaskComposer({
       if (res.ok) {
         const { data } = await res.json();
         onCreated(data);
-        setTitle("");
+        // defaultExpanded callers (the email→task composer) reset to their
+        // initial prefill, not empty — matches Round 2 slice E §3.6.
+        setTitle(defaultExpanded ? initialTitle : "");
+        setDescription(defaultExpanded ? initialDescription : "");
         setDueDate("");
         setPriority("normal");
         setAssigneeId(currentUserId);
-        setExpanded(false);
+        if (!defaultExpanded) setExpanded(false);
       }
     } finally {
       setSaving(false);
@@ -112,6 +128,16 @@ export function TaskComposer({
         maxLength={255}
         className="w-full text-sm border border-gray-200 rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
       />
+      {defaultExpanded && (
+        <textarea
+          placeholder="Description (optional)"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          maxLength={2000}
+          rows={4}
+          className="w-full text-sm border border-gray-200 rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white resize-none"
+        />
+      )}
       <div className="flex items-center gap-2 flex-wrap">
         <input
           type="date"
@@ -142,7 +168,7 @@ export function TaskComposer({
             type="button"
             variant="ghost"
             size="sm"
-            onClick={() => setExpanded(false)}
+            onClick={() => (defaultExpanded ? onCancel?.() : setExpanded(false))}
             className="h-7 text-xs"
           >
             Cancel

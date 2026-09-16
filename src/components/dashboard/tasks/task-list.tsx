@@ -6,6 +6,7 @@ import { ClipboardList } from "lucide-react";
 import { TaskRow, type TaskRowItem } from "./task-row";
 import { TaskComposer, type TaskComposerContext } from "./task-composer";
 import { toLocalDateString } from "@/lib/date";
+import { TASK_CHANGED_EVENT } from "@/lib/tasks/task-events";
 
 interface TaskListProps {
   /** GET endpoint returning the entity-scoped, enriched task list. */
@@ -27,7 +28,7 @@ export function TaskList({ fetchUrl, currentUserId, context, emptyLabel = "No ta
   // route (@modal) — same pattern as home-content.tsx / tasks-view.tsx.
   const openDetail = useCallback((id: string) => router.push(`/tasks/${id}`), [router]);
 
-  useEffect(() => {
+  const fetchTasks = useCallback(() => {
     let cancelled = false;
     fetch(fetchUrl)
       .then((res) => (res.ok ? res.json() : { data: [] }))
@@ -41,6 +42,22 @@ export function TaskList({ fetchUrl, currentUserId, context, emptyLabel = "No ta
       cancelled = true;
     };
   }, [fetchUrl]);
+
+  useEffect(() => fetchTasks(), [fetchTasks]);
+
+  // Round 2 slice E §3.6 — a task created from a different surface in the
+  // same tree (e.g. the lead email thread's inline composer, which lives on
+  // the Emails sub-tab while this list renders on the Tasks sub-tab) has no
+  // prop channel back to this list. TASK_CHANGED_EVENT is the same
+  // window-CustomEvent mechanism the /tasks detail drawer already uses to
+  // refresh other task surfaces (src/lib/tasks/task-events.ts).
+  useEffect(() => {
+    function onChanged() {
+      fetchTasks();
+    }
+    window.addEventListener(TASK_CHANGED_EVENT, onChanged);
+    return () => window.removeEventListener(TASK_CHANGED_EVENT, onChanged);
+  }, [fetchTasks]);
 
   const handleComplete = useCallback(async (id: string) => {
     const res = await fetch(`/api/v1/my-tasks/${id}`, {

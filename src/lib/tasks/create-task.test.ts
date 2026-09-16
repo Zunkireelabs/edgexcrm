@@ -1,12 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { ScopedClient } from "@/lib/supabase/scoped";
 import type { AuthContext } from "@/lib/api/auth";
-import { createTaskForUser } from "./create-task";
+import { createTaskCore, createTaskForUser, type CreateTaskCoreActor } from "./create-task";
 
-const { createAuditLogMock, emitEventMock, createNotificationsExceptMock } = vi.hoisted(() => ({
+const { createAuditLogMock, emitEventMock, createNotificationsExceptMock, notifyTaskAssignedMock } = vi.hoisted(() => ({
   createAuditLogMock: vi.fn(async () => {}),
   emitEventMock: vi.fn(async () => "event-1"),
   createNotificationsExceptMock: vi.fn(async () => {}),
+  notifyTaskAssignedMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api/audit", () => ({
@@ -16,6 +17,9 @@ vi.mock("@/lib/api/audit", () => ({
 vi.mock("@/lib/notifications", () => ({
   NotificationTypes: { TASK_ASSIGNED: "task.assigned" },
   createNotificationsExcept: createNotificationsExceptMock,
+}));
+vi.mock("@/lib/tasks/dispatch-notify", () => ({
+  notifyTaskAssigned: notifyTaskAssignedMock,
 }));
 
 const USER_ID = "10000000-0000-0000-0000-000000000001";
@@ -98,6 +102,7 @@ beforeEach(() => {
   createAuditLogMock.mockClear();
   emitEventMock.mockClear();
   createNotificationsExceptMock.mockClear();
+  notifyTaskAssignedMock.mockClear();
 });
 
 describe("createTaskForUser — validation", () => {
@@ -203,6 +208,52 @@ describe("createTaskForUser — happy paths", () => {
     const outcome = await createTaskForUser(db, fixtureAuth(), { title: "Call back", lead_id: "11111111-1111-1111-1111-111111111111" });
     expect(outcome.kind).toBe("ok");
     expect(insertedRows[0]).toMatchObject({ lead_id: "11111111-1111-1111-1111-111111111111" });
+  });
+});
+
+describe("createTaskCore — opts.notify (Round 2 slice E)", () => {
+  function fixtureActor(overrides: Partial<CreateTaskCoreActor> = {}): CreateTaskCoreActor {
+    return {
+      tenantId: "tenant-1",
+      defaultAssigneeId: USER_ID,
+      actorEmail: "user1@example.com",
+      industryId: "it_agency",
+      ...overrides,
+    };
+  }
+
+  it("default (no opts) still notifies when delegating — byte-identical to every existing caller", async () => {
+    const { db } = fakeDb({ memberExists: true, insertedTask: { id: "task-3", title: "Follow up", assignee_id: MEMBER_ID, assigned_by_id: USER_ID, lead_id: null, deal_id: null } });
+    const outcome = await createTaskCore(db, fixtureActor(), { title: "Follow up", assignee_id: MEMBER_ID });
+
+    expect(outcome.kind).toBe("ok");
+    if (outcome.kind !== "ok") return;
+    expect(outcome.notified).toBe(true);
+    expect(createNotificationsExceptMock).toHaveBeenCalledTimes(1);
+    expect(notifyTaskAssignedMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("notify:false suppresses both the in-app notification and the email, but still writes audit log + event", async () => {
+    const { db } = fakeDb({ memberExists: true, insertedTask: { id: "task-4", title: "Follow up", assignee_id: MEMBER_ID, assigned_by_id: USER_ID, lead_id: null, deal_id: null } });
+    const outcome = await createTaskCore(db, fixtureActor(), { title: "Follow up", assignee_id: MEMBER_ID }, { notify: false });
+
+    expect(outcome.kind).toBe("ok");
+    if (outcome.kind !== "ok") return;
+    expect(outcome.notified).toBe(false);
+    expect(createNotificationsExceptMock).not.toHaveBeenCalled();
+    expect(notifyTaskAssignedMock).not.toHaveBeenCalled();
+    expect(createAuditLogMock).toHaveBeenCalledWith(expect.objectContaining({ action: "task.created" }));
+    expect(emitEventMock).toHaveBeenCalledWith(expect.objectContaining({ type: "task.created" }));
+  });
+
+  it("notify:false on a self-assigned task is a no-op either way (nothing to suppress)", async () => {
+    const { db } = fakeDb();
+    const outcome = await createTaskCore(db, fixtureActor(), { title: "Call back" }, { notify: false });
+
+    expect(outcome.kind).toBe("ok");
+    if (outcome.kind !== "ok") return;
+    expect(outcome.notified).toBe(false);
+    expect(notifyTaskAssignedMock).not.toHaveBeenCalled();
   });
 });
 
