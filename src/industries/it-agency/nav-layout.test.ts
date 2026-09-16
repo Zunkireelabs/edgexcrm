@@ -70,7 +70,8 @@ describe("Resourcing/Utilization live in Delivery, not Organization", () => {
 
 describe("parity: pure refactor plus one item move", () => {
   it("ordered entry keys match the brief's target layout exactly", () => {
-    // docs/IT-AGENCY-PHASE5-DELIVERY-NAV-IA-BRIEF.md §1b — the spec table.
+    // docs/IT-AGENCY-PHASE5-DELIVERY-NAV-IA-BRIEF.md §1b — the spec table,
+    // plus /forms (Form Builder, added 2026-09-16 next to Outreach in Sales).
     const expected: ItAgencyNavEntryKey[] = [
       "universal:/home",
       "universal:/dashboard",
@@ -78,6 +79,7 @@ describe("parity: pure refactor plus one item move", () => {
       "slot:leads-organise",
       "slot:leads-funnels",
       "/outreach",
+      "/forms",
       "slot:archive-lists",
       "universal:/pipeline",
       "/proposals",

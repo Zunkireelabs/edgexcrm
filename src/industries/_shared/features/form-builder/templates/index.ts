@@ -51,6 +51,8 @@ export function getTemplatesForIndustry(industryId: string | null | undefined): 
       return [generalContactTemplate, BLANK_TEMPLATE];
     case "travel_agency":
       return [tripEnquiryTemplate, generalContactTemplate, BLANK_TEMPLATE];
+    case "it_agency":
+      return [generalContactTemplate, BLANK_TEMPLATE];
     default:
       return [generalContactTemplate, BLANK_TEMPLATE];
   }
