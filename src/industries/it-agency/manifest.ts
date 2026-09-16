@@ -12,6 +12,7 @@ import { leadListsMeta } from "../_shared/features/lead-lists/meta";
 import { insightsMeta } from "../_shared/features/insights/meta";
 import { emailMeta } from "../_shared/features/email/meta";
 import { outreachMeta } from "../_shared/features/outreach/meta";
+import { formBuilderMeta } from "../_shared/features/form-builder/meta";
 import { aiConfig } from "./ai/agent";
 
 // Re-exported for discoverability — the sidebar's declarative layout lives in
@@ -35,6 +36,7 @@ export const manifest: IndustryManifest = {
     { meta: insightsMeta },
     { meta: emailMeta },
     { meta: outreachMeta },
+    { meta: formBuilderMeta },
   ],
   sidebar: [
     {
@@ -42,6 +44,12 @@ export const manifest: IndustryManifest = {
       href: "/contacts",
       label: "Contacts",
       icon: "Contact",
+    },
+    {
+      featureId: FEATURES.FORM_BUILDER,
+      href: "/forms",
+      label: "Forms",
+      icon: "FileText",
     },
     {
       featureId: FEATURES.ACCOUNTS,

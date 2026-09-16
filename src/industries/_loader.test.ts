@@ -8,7 +8,11 @@ describe("getFeatureAccess", () => {
   });
 
   it("returns false for an education-scoped feature under a different industry", () => {
-    expect(getFeatureAccess("it_agency", FEATURES.FORM_BUILDER)).toBe(false);
+    expect(getFeatureAccess("it_agency", FEATURES.CHECK_IN)).toBe(false);
+  });
+
+  it("returns true for the shared form-builder feature under it_agency", () => {
+    expect(getFeatureAccess("it_agency", FEATURES.FORM_BUILDER)).toBe(true);
   });
 
   it("returns false for an unknown industryId (falls back to the general manifest, which has no features)", () => {

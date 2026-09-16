@@ -22,10 +22,22 @@ Phase 7's own fix has been closed (§2k):
 - Phase 7 (hardening, §2j) — PR [#547](https://github.com/Zunkireelabs/edgexcrm/pull/547), commit `15eea3d6`. Found and fixed a real "orphaned vectors" bug.
 - Follow-up: soft-delete retry on transient DB failure (§2k) — PR [#548](https://github.com/Zunkireelabs/edgexcrm/pull/548), commit `abe00c26`. A partial-failure logic gap flagged in review of #547, fixed same day.
 
-None of the seven merged phases are promoted to **prod** yet — see §3. That is now the sole
-remaining milestone for this feature (no more phases queued).
+**All seven phases are now live on production as of 2026-09-16 — verified working end-to-end
+with a real upload, not just deployed.** `stage` and `main` were fully reconciled (PR #551,
+commit `6f9dad5a`, 2026-09-16) and the prod deploy pipeline ran clean — migration 231 was
+already applied to the prod DB from an earlier partial promotion (2026-09-14, PR #543 shipped
+Phase 1's code without anyone tracking it as a prod release), so `Detect Pending Migrations`
+correctly found nothing pending and `Apply Pending Migrations` was skipped.
+
+**Two prod-only gaps were found and fixed the same day (§2l):** production's `.env.local` was
+missing all 5 `R2_*` credentials (first upload attempt failed with "Failed to create upload URL"),
+and once those were added, the R2 bucket's CORS policy didn't allow `https://edgex.zunkireelabs.com`
+as an origin (second attempt failed with a generic "Upload failed" — a browser-side CORS block).
+Both fixed; a real document upload on production was then verified to land correctly in the
+`edgex-applicant-documents` R2 bucket, at the correct tenant/lead/document path.
+
 **R2 is live on stage as of 2026-09-14** — see §6: stage's `.env.local` was missing the 5 `R2_*`
-vars entirely until today (a gap flagged since Phase 1 but never closed until the first real test
+vars entirely until then (a gap flagged since Phase 1 but never closed until the first real test
 attempt surfaced it as a hard failure, not just a doc note).
 **Branches:** all six PRs above are merged and their branches deleted.
 **Parent plan (source of truth for scope/rationale):** `~/.claude/plans/so-my-new-work-temporal-scott.md`
@@ -607,22 +619,78 @@ class as the original R2-purge-then-update design in §2b.
 
 ---
 
+## 2l. Incident: production silently ended up partially live, then two prod-only config gaps blocked real uploads — found and fixed, 2026-09-16
+
+**How production ended up partially live without anyone deciding that.** A `stage → main`
+promotion on 2026-09-14 (PR #543) shipped Phase 1 of this feature (schema + R2 storage + core
+API) to production as a side effect of a broader promotion — nobody flagged it as an Applicant
+Documents release at the time, so this doc kept saying "none of the seven phases are on prod"
+for two more days while Phase 1's API routes were, in fact, already reachable on
+`edgex.zunkireelabs.com` (confirmed by hitting `/api/v1/documents/:id` and
+`/api/v1/leads/:id/documents` unauthenticated on both prod and stage — both returned `401`, not
+`404`, meaning the route code existed on both). **Lesson: a promotion's effects should be checked
+against what actually deployed, not assumed from the PR's stated intent** — "promote stage → main"
+carries everything on stage, not just the feature the promotion was framed around.
+
+**Then, on 2026-09-16, `stage` and `main` were fully reconciled** (PR #551, commit `6f9dad5a`) —
+this brought the remaining Phases 2–7 to production too, making the feature completely present in
+the prod codebase for the first time. The `Detect Pending Migrations` deploy job correctly found
+nothing pending (migration 231 was already applied to prod from the 2026-09-14 partial promotion)
+and skipped `Apply Pending Migrations` — the database side was never at risk.
+
+**But two prod-only environment gaps then surfaced on the first real upload attempt:**
+
+1. **Production's `.env.local` had zero `R2_*` credentials** (confirmed: `grep -c "^R2_"` returned
+   `0`), unlike stage which got them on 2026-09-14 (§6). First upload attempt failed immediately
+   with `"Failed to create upload URL"` (`STORAGE_ERROR`, the exact error path in
+   `upload-url/route.ts` when `getDocumentStorageProvider()` can't read its config from the
+   environment). **Fixed:** copied the same 5 `R2_ACCOUNT_ID`/`R2_ACCESS_KEY_ID`/
+   `R2_SECRET_ACCESS_KEY`/`R2_BUCKET_NAME`/`R2_ENDPOINT` values already working on stage into
+   prod's `.env.local` (backed up first), then `docker compose -f docker-compose.prod.yml up -d
+   --force-recreate app`. There is still only one R2 bucket total (`edgex-applicant-documents`,
+   see §4) — this was copying existing credentials, not provisioning new ones.
+2. **The R2 bucket's CORS policy didn't allow `https://edgex.zunkireelabs.com`** — only
+   `localhost:3000`, `dev-lead-crm.zunkireelabs.com`, and `lead-crm.zunkireelabs.com` were on the
+   allow-list (set during the original §2c CORS fix, before `edgex.zunkireelabs.com` existed as
+   prod's domain — see the ongoing lead-crm→edgex domain migration tracked on STATUS-BOARD). With
+   credentials fixed, the upload got past the presign step but the browser's direct `PUT` to R2
+   was blocked client-side, surfacing as a generic `"Upload failed"` with no server-side error
+   logged (a CORS block never reaches the app's own error handling — it's the browser refusing to
+   send the response back to the page). **Fixed:** added `https://edgex.zunkireelabs.com` to the
+   bucket's `AllowedOrigins` in Cloudflare dashboard → bucket → Settings → CORS Policy, alongside
+   the 3 existing origins (none removed).
+
+**Verified for real, not just "should work now":** uploaded a genuine test file
+(`IMG_2253.jpg`, Marksheet, 220 KB) on a real production lead, got the `"Document uploaded"`
+success toast, then independently confirmed in the Cloudflare dashboard that `original.jpg`
+(225.32 KB, `image/jpeg`) exists at the correct
+`tenants/<tenant-id>/applicants/<lead-id>/documents/<doc-id>/versions/<version-id>/` path — same
+verification method as §2h, just against prod instead of stage.
+
+**Open follow-up, not yet done:** `edgex.zunkireelabs.com` and `lead-crm.zunkireelabs.com` are
+currently dual-hosted (per the domain-migration item on STATUS-BOARD) — worth confirming whether
+`lead-crm.zunkireelabs.com` also needs its own CORS entry, or whether that's already covered and
+only `edgex` was the gap. Not tested either way.
+
+---
+
 ## 3. Full roadmap (from the parent plan's §14) — what comes after this PR merges
 
 | Phase | Scope | Status |
 |---|---|---|
-| 0 | Cloudflare R2 account/bucket/API token/CORS/env vars (manual, not code) | In progress — see §6 |
-| **1** | **Schema, storage provider, core CRUD API routes, feature flag** | **Merged, live on stage (PR #530)** |
-| **2** | **UI: grid/list toggle, upload dropzone, document viewer (iframe/img), Lead Detail card, grouped-by-category view** | **Merged, live on stage (PR #533, delete-permission fix included)** |
-| **3** | **Processing pipeline: new Inngest fn (mark-processing → parse → chunk → embed → store), reuses `parseFileBytes()`/`chunkDocument()`/`embedTexts()`** | **Merged, live on stage (PR #534). Follow-up processing-status UI fix merged (PR #536, §2e). Structured extraction per `document_type` deliberately NOT included — see §2d.** |
-| **4** | **RAG: retrieval module calling `applicant_document_hybrid_search`, lead-scoped, degraded-mode fallback on embedding failure** | **Merged, live on stage (PR #538) — real end-to-end verified 2026-09-14 (§2h)** |
-| **5** | **Agent tools: 6 tools (`list_applicant_documents`, `search_applicant_document_content`, `get_document_metadata`, `get_document_extracted_data`, `find_missing_documents`, `get_document_download_url`) under `src/industries/education-consultancy/ai/tools/`** | **Merged, live on stage (PR #539) — real end-to-end verified 2026-09-14 (§2h)** |
-| **6** | **Usage + quotas + audit logging wired end-to-end (ledger already exists from Phase 1; real enforcement is this phase's job)** | **Merged, live on stage (PR #544) — storage + per-lead-count enforced; OCR-page cap explicitly NOT built, see §2i** |
-| **7** | **Hardening: isolation tests, prompt-injection resistance test, malicious/oversized/corrupt-file tests, idempotency/retry tests, deletion-cleanup tests (no orphaned R2 objects or vectors)** | **Merged, live on stage (PR #547) — found and fixed a real "orphaned vectors" bug, see §2j. Follow-up partial-failure retry fix merged (PR #548, §2k).** |
+| 0 | Cloudflare R2 account/bucket/API token/CORS/env vars (manual, not code) | Done — see §6, plus the two prod-only gaps closed in §2l |
+| **1** | **Schema, storage provider, core CRUD API routes, feature flag** | **Live on stage + prod (PR #530)** |
+| **2** | **UI: grid/list toggle, upload dropzone, document viewer (iframe/img), Lead Detail card, grouped-by-category view** | **Live on stage + prod (PR #533, delete-permission fix included)** |
+| **3** | **Processing pipeline: new Inngest fn (mark-processing → parse → chunk → embed → store), reuses `parseFileBytes()`/`chunkDocument()`/`embedTexts()`** | **Live on stage + prod (PR #534). Follow-up processing-status UI fix merged (PR #536, §2e). Structured extraction per `document_type` deliberately NOT included — see §2d.** |
+| **4** | **RAG: retrieval module calling `applicant_document_hybrid_search`, lead-scoped, degraded-mode fallback on embedding failure** | **Live on stage + prod (PR #538) — real end-to-end verified 2026-09-14 on stage, 2026-09-16 on prod (§2h, §2l)** |
+| **5** | **Agent tools: 6 tools (`list_applicant_documents`, `search_applicant_document_content`, `get_document_metadata`, `get_document_extracted_data`, `find_missing_documents`, `get_document_download_url`) under `src/industries/education-consultancy/ai/tools/`** | **Live on stage + prod (PR #539) — real end-to-end verified 2026-09-14 on stage (§2h)** |
+| **6** | **Usage + quotas + audit logging wired end-to-end (ledger already exists from Phase 1; real enforcement is this phase's job)** | **Live on stage + prod (PR #544) — storage + per-lead-count enforced; OCR-page cap explicitly NOT built, see §2i** |
+| **7** | **Hardening: isolation tests, prompt-injection resistance test, malicious/oversized/corrupt-file tests, idempotency/retry tests, deletion-cleanup tests (no orphaned R2 objects or vectors)** | **Live on stage + prod (PR #547) — found and fixed a real "orphaned vectors" bug, see §2j. Follow-up partial-failure retry fix merged (PR #548, §2k).** |
 
-**All 7 phases are now merged and live on stage — the build queue is empty.** The only remaining
-step for this feature is **prod promotion** (stage → main), not yet started — see the "None of the
-seven merged phases are promoted to prod yet" note at the top of this doc. Effort estimate from the
+**All 7 phases are now merged and live on both stage and production** (promoted 2026-09-16, PR
+#551 — see §2l for the two prod-only config gaps found and fixed the same day). **The build queue
+is empty and there is no remaining milestone for this feature** — it is fully shipped and verified
+end to end on production. Effort estimate from the
 parent plan (historical, for context): **~18–25 working days total**, Phase 1 was budgeted 3–4
 days. The parent plan flagged Phase 3's structured-extraction step as the hardest part — real
 documents (passports from different countries, transcripts from hundreds of universities, scans of
