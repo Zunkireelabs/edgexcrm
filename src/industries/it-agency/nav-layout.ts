@@ -38,6 +38,7 @@ export type ItAgencyNavEntryKey =
   | "universal:/leave"
   | "universal:/attendance"
   | "/outreach"
+  | "/forms"
   | "/proposals"
   | "/deals"
   | "/services"
@@ -77,6 +78,7 @@ export const IT_AGENCY_NAV_LAYOUT: readonly ItAgencyNavSection[] = [
       "slot:leads-organise",
       "slot:leads-funnels",
       "/outreach",
+      "/forms",
       "slot:archive-lists",
       "universal:/pipeline",
     ],
