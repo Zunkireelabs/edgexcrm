@@ -50,6 +50,8 @@ interface LeadTabsProps {
   projectBoardEnabled?: boolean;
   /** Fallback source for Study Interest fields (destinations/field_of_study/degree_level) when the lead's dedicated columns are empty but a form submission already answered them. */
   submissionHistory?: LeadSubmissionSnapshot[];
+  /** Keeps the parent's lead state in sync after the Student Details popup actually saves Study Interest/Academic fields, so the old Study Interest panel reflects it without a reload. */
+  onLeadUpdate?: (patch: Partial<Lead>) => void;
 }
 
 export interface LeadTabsRef {
@@ -58,7 +60,7 @@ export interface LeadTabsRef {
 
 export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
   function LeadTabs(
-    { lead, notes, activities, teamMemberEmails, teamMemberNames, customFields, activeTab, onTabChange, onNotesChange, onCustomFieldsChange, checklists, onChecklistsChange, isAdmin, canEdit, canManageNotes, currentUserId, industryId, tenantName, tenantLogoUrl, onSaveItinerary, onTagChange, projectBoardEnabled, submissionHistory },
+    { lead, notes, activities, teamMemberEmails, teamMemberNames, customFields, activeTab, onTabChange, onNotesChange, onCustomFieldsChange, checklists, onChecklistsChange, isAdmin, canEdit, canManageNotes, currentUserId, industryId, tenantName, tenantLogoUrl, onSaveItinerary, onTagChange, projectBoardEnabled, submissionHistory, onLeadUpdate },
     ref
   ) {
     const activitiesPanelRef = useRef<ActivitiesPanelRef>(null);
@@ -247,6 +249,7 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
           open={isPersonalDetailsOpen}
           onOpenChange={setIsPersonalDetailsOpen}
           submissionHistory={submissionHistory}
+          onLeadUpdate={onLeadUpdate}
         />
       )}
       </>

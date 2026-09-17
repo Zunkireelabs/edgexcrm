@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil, X, Check } from "lucide-react";
+import { toast } from "sonner";
+import { Pencil, X, Check, Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -24,7 +25,7 @@ import { DestinationsMultiSelect } from "@/components/dashboard/destinations-mul
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 import { getDistinctFormValues, type LeadSubmissionSnapshot } from "@/lib/leads/submission-history";
 import { normalizeDestinations, normalizeFieldOfStudy, normalizeDegreeLevel } from "@/lib/leads/destination-normalize";
-import { TestScoresSection, type TestScore } from "./test-scores-section";
+import { TestScoresSection, testScoresFromLead, type TestScore } from "./test-scores-section";
 import { QualificationsSection, qualificationsFromLead, type Qualifications } from "./qualifications-section";
 import { WorkExperienceSection, type WorkExperienceEntry } from "./work-experience-section";
 import { ReferencesSection, type ReferenceEntry } from "./references-section";
@@ -117,21 +118,57 @@ function studyInterestFromLead(lead: Lead, submissionHistory?: LeadSubmissionSna
   };
 }
 
+const QUALIFICATION_COLUMN_PREFIX: Record<keyof Qualifications, string> = {
+  see: "see",
+  plusTwo: "plus_two",
+  bachelor: "bachelor",
+  masters: "masters",
+};
+
+/**
+ * Only the fields that already have a real column on `leads` today go into
+ * this patch — Study Interest and the legacy per-level Institution/GPA
+ * values, both already whitelisted in apply-lead-patch.ts and already
+ * written by the old Study Interest panel. Everything else this dialog
+ * collects (new Personal Information fields, the richer Qualification
+ * fields, Test Scores/Work Experience/References) has no live column or
+ * table yet (migrations 234-239 aren't applied anywhere), so it deliberately
+ * stays out of this payload — sending it would just 500 against a column
+ * that doesn't exist.
+ */
+function buildLivePatch(study: StudyInterest, qualifications: Qualifications): Record<string, unknown> {
+  const patch: Record<string, unknown> = {
+    destinations: study.destinations,
+    field_of_study: study.fieldOfStudy || null,
+    degree_level: study.degreeLevel || null,
+    intake_term: [study.intakeMonth, study.intakeYear].filter(Boolean).join(" ") || null,
+  };
+  for (const [level, prefix] of Object.entries(QUALIFICATION_COLUMN_PREFIX) as [keyof Qualifications, string][]) {
+    const entry = qualifications[level];
+    patch[`${prefix}_institution`] = entry.institution || null;
+    patch[`${prefix}_gpa`] = entry.percentageGrade || null;
+  }
+  return patch;
+}
+
 interface PersonalDetailsDialogProps {
   lead: Lead;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Fallback source for Study Interest fields when the lead's dedicated columns are empty but a form submission already answered them. */
   submissionHistory?: LeadSubmissionSnapshot[];
+  /** Called with the fields that were actually persisted, so the parent's own `lead` state (and anything else reading it, like the old Study Interest panel) stays in sync without a reload. */
+  onLeadUpdate?: (patch: Partial<Lead>) => void;
 }
 
-export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHistory }: PersonalDetailsDialogProps) {
+export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHistory, onLeadUpdate }: PersonalDetailsDialogProps) {
   const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [values, setValues] = useState<FieldValues>({});
   const [draft, setDraft] = useState<FieldValues>({});
   const [studyInterest, setStudyInterest] = useState<StudyInterest>(() => studyInterestFromLead(lead, submissionHistory));
   const [studyDraft, setStudyDraft] = useState<StudyInterest>(studyInterest);
-  const [testScores, setTestScores] = useState<TestScore[]>([]);
+  const [testScores, setTestScores] = useState<TestScore[]>(() => testScoresFromLead(lead));
   const [testScoresDraft, setTestScoresDraft] = useState<TestScore[]>([]);
   const [qualifications, setQualifications] = useState<Qualifications>(() => qualificationsFromLead(lead));
   const [qualificationsDraft, setQualificationsDraft] = useState<Qualifications>(qualifications);
@@ -160,14 +197,34 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
     setIsEditing(false);
   };
 
-  const save = () => {
-    setValues(draft);
-    setStudyInterest(studyDraft);
-    setTestScores(testScoresDraft);
-    setQualifications(qualificationsDraft);
-    setWorkExperience(workExperienceDraft);
-    setReferences(referencesDraft);
-    setIsEditing(false);
+  const save = async () => {
+    const patch = buildLivePatch(studyDraft, qualificationsDraft);
+    setIsSaving(true);
+    try {
+      const res = await fetch(`/api/v1/leads/${lead.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      if (!res.ok) throw new Error("Failed to save");
+
+      // Only commit local state — including the sections that don't persist
+      // yet — after the live save actually succeeds, so a failed save never
+      // silently discards what was typed.
+      setValues(draft);
+      setStudyInterest(studyDraft);
+      setTestScores(testScoresDraft);
+      setQualifications(qualificationsDraft);
+      setWorkExperience(workExperienceDraft);
+      setReferences(referencesDraft);
+      setIsEditing(false);
+      onLeadUpdate?.(patch);
+      toast.success("Study Interest and Academic Qualification institution/grade saved. Other new fields are saved locally for preview only until the database update is live.");
+    } catch {
+      toast.error("Failed to save — nothing was changed. Your edits are still here, try again.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleChange = (key: string, value: string) => {
@@ -175,7 +232,10 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
   };
 
   const handleOpenChange = (next: boolean) => {
-    if (!next) setIsEditing(false);
+    if (!next) {
+      if (isSaving) return; // never let a close interrupt an in-flight save
+      setIsEditing(false);
+    }
     onOpenChange(next);
   };
 
@@ -189,6 +249,9 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
               ? "Fill in the student's record — personal, study interest, and more as it's added."
               : "Preview of the student's record."}
           </DialogDescription>
+          <p className="text-xs text-muted-foreground">
+            Study Interest and Academic Qualification (institution/grade) save for real. Everything else here is a preview — it saves locally for now and will start saving for real once the database update for it is live.
+          </p>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-7">
@@ -294,12 +357,12 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
         <DialogFooter className="px-6 py-4 border-t shrink-0">
           {isEditing ? (
             <>
-              <Button variant="ghost" onClick={cancelEditing}>
+              <Button variant="ghost" onClick={cancelEditing} disabled={isSaving}>
                 <X className="h-3.5 w-3.5 mr-1" />
                 Cancel
               </Button>
-              <Button onClick={save}>
-                <Check className="h-3.5 w-3.5 mr-1" />
+              <Button onClick={save} disabled={isSaving}>
+                {isSaving ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Check className="h-3.5 w-3.5 mr-1" />}
                 Save
               </Button>
             </>
