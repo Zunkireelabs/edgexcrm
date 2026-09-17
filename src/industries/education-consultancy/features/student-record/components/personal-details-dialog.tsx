@@ -26,6 +26,8 @@ import { getDistinctFormValues, type LeadSubmissionSnapshot } from "@/lib/leads/
 import { normalizeDestinations, normalizeFieldOfStudy, normalizeDegreeLevel } from "@/lib/leads/destination-normalize";
 import { TestScoresSection, type TestScore } from "./test-scores-section";
 import { QualificationsSection, qualificationsFromLead, type Qualifications } from "./qualifications-section";
+import { WorkExperienceSection, type WorkExperienceEntry } from "./work-experience-section";
+import { ReferencesSection, type ReferenceEntry } from "./references-section";
 import { SectionGroup, CardSection, FieldGrid, ReadOnlyField, EditableField } from "./form-primitives";
 
 /**
@@ -57,6 +59,16 @@ const PASSPORT_CITIZENSHIP_FIELDS = [
   { key: "citizenship_number", label: "Citizenship Number", type: "text" },
   { key: "citizenship_issued_by", label: "Citizenship Issued By", type: "text", placeholder: "Government of Home Minister, District Administration Office" },
   { key: "citizenship_issued_date", label: "Citizenship Issued Date", type: "date" },
+] as const;
+
+// Not part of the client's original PDF template — flagged there as a
+// generic "standard fields for completeness" addition, so it may change
+// pending client confirmation.
+const FINANCIAL_FIELDS = [
+  { key: "sponsor_name", label: "Sponsor Name", type: "text" },
+  { key: "sponsor_relationship", label: "Relationship to Applicant", type: "text" },
+  { key: "source_of_funds", label: "Source of Funds", type: "text", placeholder: "e.g. Cash or Bank Loan" },
+  { key: "scholarship_loan", label: "Scholarship / Loan (if any)", type: "text" },
 ] as const;
 
 type FieldValues = Record<string, string>;
@@ -123,12 +135,18 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
   const [testScoresDraft, setTestScoresDraft] = useState<TestScore[]>([]);
   const [qualifications, setQualifications] = useState<Qualifications>(() => qualificationsFromLead(lead));
   const [qualificationsDraft, setQualificationsDraft] = useState<Qualifications>(qualifications);
+  const [workExperience, setWorkExperience] = useState<WorkExperienceEntry[]>([]);
+  const [workExperienceDraft, setWorkExperienceDraft] = useState<WorkExperienceEntry[]>([]);
+  const [references, setReferences] = useState<ReferenceEntry[]>([]);
+  const [referencesDraft, setReferencesDraft] = useState<ReferenceEntry[]>([]);
 
   const startEditing = () => {
     setDraft(values);
     setStudyDraft(studyInterest);
     setTestScoresDraft(testScores);
     setQualificationsDraft(qualifications);
+    setWorkExperienceDraft(workExperience);
+    setReferencesDraft(references);
     setIsEditing(true);
   };
 
@@ -137,6 +155,8 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
     setStudyDraft(studyInterest);
     setTestScoresDraft(testScores);
     setQualificationsDraft(qualifications);
+    setWorkExperienceDraft(workExperience);
+    setReferencesDraft(references);
     setIsEditing(false);
   };
 
@@ -145,6 +165,8 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
     setStudyInterest(studyDraft);
     setTestScores(testScoresDraft);
     setQualifications(qualificationsDraft);
+    setWorkExperience(workExperienceDraft);
+    setReferences(referencesDraft);
     setIsEditing(false);
   };
 
@@ -232,6 +254,39 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
                 value={isEditing ? testScoresDraft : testScores}
                 onChange={setTestScoresDraft}
               />
+            </CardSection>
+          </SectionGroup>
+
+          <SectionGroup title="Professional Information">
+            <CardSection title="Work Experience">
+              <WorkExperienceSection
+                isEditing={isEditing}
+                value={isEditing ? workExperienceDraft : workExperience}
+                onChange={setWorkExperienceDraft}
+              />
+            </CardSection>
+            <CardSection title="References">
+              <ReferencesSection
+                isEditing={isEditing}
+                value={isEditing ? referencesDraft : references}
+                onChange={setReferencesDraft}
+              />
+            </CardSection>
+          </SectionGroup>
+
+          <SectionGroup title="Financial Information">
+            <CardSection title="Sponsor / Study Funding">
+              <FieldGrid>
+                {FINANCIAL_FIELDS.map((field) => (
+                  <EditableField
+                    key={field.key}
+                    field={field}
+                    isEditing={isEditing}
+                    value={(isEditing ? draft : values)[field.key] || ""}
+                    onChange={(v) => handleChange(field.key, v)}
+                  />
+                ))}
+              </FieldGrid>
             </CardSection>
           </SectionGroup>
         </div>
