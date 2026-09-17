@@ -942,6 +942,7 @@ export function LeadDetailV2({
             tenantLogoUrl={tenant.logo_url}
             projectBoardEnabled={projectBoardEnabled}
             onTagChange={(tags) => setCurrentLead((prev) => ({ ...prev, tags } as Lead))}
+            submissionHistory={submissionHistory}
             onSaveItinerary={async (itinerary) => {
               // Merge against live state (not the stale `lead` prop) so saving the
               // itinerary doesn't clobber trip fields saved earlier this session.

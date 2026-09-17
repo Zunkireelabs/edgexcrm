@@ -14,6 +14,7 @@ import { applicantDocumentsMeta } from "./features/applicant-documents/meta";
 import { smsMeta } from "../_shared/features/sms/meta";
 import { emailCampaignsMeta } from "../_shared/features/email-campaigns/meta";
 import { outreachMeta } from "../_shared/features/outreach/meta";
+import { studentRecordMeta } from "./features/student-record/meta";
 import { aiConfig } from "./ai/agent";
 
 export const manifest: IndustryManifest = {
@@ -33,6 +34,7 @@ export const manifest: IndustryManifest = {
     { meta: smsMeta },
     { meta: emailCampaignsMeta },
     { meta: outreachMeta },
+    { meta: studentRecordMeta },
   ],
   sidebar: [
     // Intelligence section

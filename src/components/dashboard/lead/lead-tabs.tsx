@@ -3,7 +3,7 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { GitMerge, X } from "lucide-react";
+import { GitMerge, Pencil, X } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +21,8 @@ import { FEATURES } from "@/industries/_registry";
 import { getLeadFullName } from "./lead-name";
 import { ItineraryBuilder } from "@/industries/travel-agency/features/itinerary/builder";
 import type { Itinerary } from "@/industries/travel-agency/features/itinerary/types";
+import { PersonalDetailsDialog } from "@/industries/education-consultancy/features/student-record/components/personal-details-dialog";
+import type { LeadSubmissionSnapshot } from "@/lib/leads/submission-history";
 interface LeadTabsProps {
   lead: Lead;
   notes: LeadNote[];
@@ -46,6 +48,8 @@ interface LeadTabsProps {
   onTagChange?: (tags: string[]) => void;
   /** Gates whether a project-linked task's chip links to the cockpit — resolved server-side via getFeatureAccess, never re-derived here. */
   projectBoardEnabled?: boolean;
+  /** Fallback source for Study Interest fields (destinations/field_of_study/degree_level) when the lead's dedicated columns are empty but a form submission already answered them. */
+  submissionHistory?: LeadSubmissionSnapshot[];
 }
 
 export interface LeadTabsRef {
@@ -54,11 +58,12 @@ export interface LeadTabsRef {
 
 export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
   function LeadTabs(
-    { lead, notes, activities, teamMemberEmails, teamMemberNames, customFields, activeTab, onTabChange, onNotesChange, onCustomFieldsChange, checklists, onChecklistsChange, isAdmin, canEdit, canManageNotes, currentUserId, industryId, tenantName, tenantLogoUrl, onSaveItinerary, onTagChange, projectBoardEnabled },
+    { lead, notes, activities, teamMemberEmails, teamMemberNames, customFields, activeTab, onTabChange, onNotesChange, onCustomFieldsChange, checklists, onChecklistsChange, isAdmin, canEdit, canManageNotes, currentUserId, industryId, tenantName, tenantLogoUrl, onSaveItinerary, onTagChange, projectBoardEnabled, submissionHistory },
     ref
   ) {
     const activitiesPanelRef = useRef<ActivitiesPanelRef>(null);
     const router = useRouter();
+    const [isPersonalDetailsOpen, setIsPersonalDetailsOpen] = useState(false);
 
     useImperativeHandle(ref, () => ({
       focusComposer: () => {
@@ -79,6 +84,7 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
     const location = [lead.city, lead.country].filter(Boolean).join(", ");
 
     return (
+      <>
       <Tabs value={activeTab} onValueChange={onTabChange}>
         <TabsList className="mb-4">
           <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -105,6 +111,20 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4 mt-0">
+          {industryId === "education_consultancy" && (
+            <div className="flex justify-end">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 px-3"
+                onClick={() => setIsPersonalDetailsOpen(true)}
+              >
+                <Pencil className="h-3.5 w-3.5 mr-1.5" />
+                Details
+              </Button>
+            </div>
+          )}
+
           {/* Personal Information */}
           <Card className="shadow-none rounded-lg py-0">
             <CardHeader className="pt-4 pb-3">
@@ -221,6 +241,15 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
           </TabsContent>
         )}
       </Tabs>
+      {industryId === "education_consultancy" && (
+        <PersonalDetailsDialog
+          lead={lead}
+          open={isPersonalDetailsOpen}
+          onOpenChange={setIsPersonalDetailsOpen}
+          submissionHistory={submissionHistory}
+        />
+      )}
+      </>
     );
   }
 );
