@@ -20,7 +20,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Lead } from "@/types/database";
-import { getLeadFullName } from "@/components/dashboard/lead/lead-name";
 import { DestinationsMultiSelect } from "@/components/dashboard/destinations-multi-select";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 import { getDistinctFormValues, type LeadSubmissionSnapshot } from "@/lib/leads/submission-history";
@@ -29,7 +28,8 @@ import { TestScoresSection, testScoresFromLead, type TestScore } from "./test-sc
 import { QualificationsSection, qualificationsFromLead, type Qualifications } from "./qualifications-section";
 import { WorkExperienceSection, type WorkExperienceEntry } from "./work-experience-section";
 import { ReferencesSection, type ReferenceEntry } from "./references-section";
-import { SectionGroup, CardSection, FieldGrid, ReadOnlyField, EditableField } from "./form-primitives";
+import { SectionGroup, CardSection, FieldGrid, EditableField } from "./form-primitives";
+import { AttachDocumentButton } from "./attach-document-button";
 
 /**
  * Phase 1 preview build: new personal-detail fields live only in this
@@ -42,6 +42,17 @@ import { SectionGroup, CardSection, FieldGrid, ReadOnlyField, EditableField } fr
  * pre-filled from the real lead record, matching the auto-fill rule applied
  * everywhere else in this dialog.
  */
+// Already editable elsewhere (the page's main "Edit" button) — this is a
+// convenience second editor for the same real columns, so it saves live the
+// same way Study Interest does, not preview-only.
+const CORE_IDENTITY_FIELDS = [
+  { key: "firstName", label: "First Name", type: "text" },
+  { key: "lastName", label: "Last Name", type: "text" },
+  { key: "email", label: "Email", type: "email" },
+  { key: "phone", label: "Phone", type: "tel" },
+  { key: "nationality", label: "Nationality", type: "text" },
+] as const;
+
 const PERSONAL_DETAIL_FIELDS = [
   { key: "date_of_birth", label: "Date of Birth", type: "date" },
   { key: "marital_status", label: "Marital Status", type: "select", options: [{ value: "unmarried", label: "Unmarried" }, { value: "married", label: "Married" }] },
@@ -118,6 +129,24 @@ function studyInterestFromLead(lead: Lead, submissionHistory?: LeadSubmissionSna
   };
 }
 
+interface CoreIdentity {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  nationality: string;
+}
+
+function coreIdentityFromLead(lead: Lead): CoreIdentity {
+  return {
+    firstName: lead.first_name ?? "",
+    lastName: lead.last_name ?? "",
+    email: lead.email ?? "",
+    phone: lead.phone ?? "",
+    nationality: lead.nationality ?? "",
+  };
+}
+
 const QUALIFICATION_COLUMN_PREFIX: Record<keyof Qualifications, string> = {
   see: "see",
   plusTwo: "plus_two",
@@ -127,17 +156,25 @@ const QUALIFICATION_COLUMN_PREFIX: Record<keyof Qualifications, string> = {
 
 /**
  * Only the fields that already have a real column on `leads` today go into
- * this patch — Study Interest and the legacy per-level Institution/GPA
- * values, both already whitelisted in apply-lead-patch.ts and already
- * written by the old Study Interest panel. Everything else this dialog
- * collects (new Personal Information fields, the richer Qualification
- * fields, Test Scores/Work Experience/References) has no live column or
- * table yet (migrations 234-239 aren't applied anywhere), so it deliberately
- * stays out of this payload — sending it would just 500 against a column
- * that doesn't exist.
+ * this patch — core identity (Full Name/Email/Phone/Nationality), Study
+ * Interest, and the legacy per-level Institution/GPA values, all already
+ * whitelisted in apply-lead-patch.ts. Core identity is also already editable
+ * today via the page's main "Edit" button — this is a second, convenience
+ * editor for the same fields, not the only one, so it's held to the same
+ * "only send what's whitelisted, never guess" rule as the rest of this
+ * function. Everything else this dialog collects (new Personal Information
+ * fields, the richer Qualification fields, Test Scores/Work
+ * Experience/References) has no live column or table yet (migrations
+ * 234-239 aren't applied anywhere), so it deliberately stays out of this
+ * payload — sending it would just 500 against a column that doesn't exist.
  */
-function buildLivePatch(study: StudyInterest, qualifications: Qualifications): Record<string, unknown> {
+function buildLivePatch(core: CoreIdentity, study: StudyInterest, qualifications: Qualifications): Record<string, unknown> {
   const patch: Record<string, unknown> = {
+    first_name: core.firstName || null,
+    last_name: core.lastName || null,
+    email: core.email || null,
+    phone: core.phone || null,
+    nationality: core.nationality || null,
     destinations: study.destinations,
     field_of_study: study.fieldOfStudy || null,
     degree_level: study.degreeLevel || null,
@@ -159,13 +196,17 @@ interface PersonalDetailsDialogProps {
   submissionHistory?: LeadSubmissionSnapshot[];
   /** Called with the fields that were actually persisted, so the parent's own `lead` state (and anything else reading it, like the old Study Interest panel) stays in sync without a reload. */
   onLeadUpdate?: (patch: Partial<Lead>) => void;
+  /** Gates the "Attach Document" triggers on Passport & Citizenship / each Qualification card — mirrors ApplicantDocumentsCard's own `canManage` (FEATURES.APPLICANT_DOCUMENTS && (canEdit ?? isAdmin)), computed once by the caller so this dialog doesn't re-derive permission logic. */
+  canUploadDocuments?: boolean;
 }
 
-export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHistory, onLeadUpdate }: PersonalDetailsDialogProps) {
+export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHistory, onLeadUpdate, canUploadDocuments }: PersonalDetailsDialogProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [values, setValues] = useState<FieldValues>({});
   const [draft, setDraft] = useState<FieldValues>({});
+  const [coreIdentity, setCoreIdentity] = useState<CoreIdentity>(() => coreIdentityFromLead(lead));
+  const [coreIdentityDraft, setCoreIdentityDraft] = useState<CoreIdentity>(coreIdentity);
   const [studyInterest, setStudyInterest] = useState<StudyInterest>(() => studyInterestFromLead(lead, submissionHistory));
   const [studyDraft, setStudyDraft] = useState<StudyInterest>(studyInterest);
   const [testScores, setTestScores] = useState<TestScore[]>(() => testScoresFromLead(lead));
@@ -179,6 +220,7 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
 
   const startEditing = () => {
     setDraft(values);
+    setCoreIdentityDraft(coreIdentity);
     setStudyDraft(studyInterest);
     setTestScoresDraft(testScores);
     setQualificationsDraft(qualifications);
@@ -189,6 +231,7 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
 
   const cancelEditing = () => {
     setDraft(values);
+    setCoreIdentityDraft(coreIdentity);
     setStudyDraft(studyInterest);
     setTestScoresDraft(testScores);
     setQualificationsDraft(qualifications);
@@ -198,7 +241,7 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
   };
 
   const save = async () => {
-    const patch = buildLivePatch(studyDraft, qualificationsDraft);
+    const patch = buildLivePatch(coreIdentityDraft, studyDraft, qualificationsDraft);
     setIsSaving(true);
     try {
       const res = await fetch(`/api/v1/leads/${lead.id}`, {
@@ -212,6 +255,7 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
       // yet — after the live save actually succeeds, so a failed save never
       // silently discards what was typed.
       setValues(draft);
+      setCoreIdentity(coreIdentityDraft);
       setStudyInterest(studyDraft);
       setTestScores(testScoresDraft);
       setQualifications(qualificationsDraft);
@@ -219,7 +263,7 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
       setReferences(referencesDraft);
       setIsEditing(false);
       onLeadUpdate?.(patch);
-      toast.success("Study Interest and Academic Qualification institution/grade saved. Other new fields are saved locally for preview only until the database update is live.");
+      toast.success("Full Name/Email/Phone/Nationality, Study Interest, and Academic Qualification institution/grade saved. Other new fields are saved locally for preview only until the database update is live.");
     } catch {
       toast.error("Failed to save — nothing was changed. Your edits are still here, try again.");
     } finally {
@@ -229,6 +273,10 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
 
   const handleChange = (key: string, value: string) => {
     setDraft((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleCoreChange = (key: keyof CoreIdentity, value: string) => {
+    setCoreIdentityDraft((prev) => ({ ...prev, [key]: value }));
   };
 
   const handleOpenChange = (next: boolean) => {
@@ -250,7 +298,7 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
               : "Preview of the student's record."}
           </DialogDescription>
           <p className="text-xs text-muted-foreground">
-            Study Interest and Academic Qualification (institution/grade) save for real. Everything else here is a preview — it saves locally for now and will start saving for real once the database update for it is live.
+            Full Name/Email/Phone/Nationality, Study Interest, and Academic Qualification (institution/grade) save for real. Everything else here is a preview — it saves locally for now and will start saving for real once the database update for it is live.
           </p>
         </DialogHeader>
 
@@ -258,10 +306,15 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
           <SectionGroup title="Personal Information">
             <CardSection title="From existing lead record">
               <FieldGrid>
-                <ReadOnlyField label="Full Name" value={getLeadFullName(lead, "—")} />
-                <ReadOnlyField label="Email" value={lead.email || "—"} />
-                <ReadOnlyField label="Phone" value={lead.phone || "—"} />
-                <ReadOnlyField label="Nationality" value={lead.nationality || "—"} />
+                {CORE_IDENTITY_FIELDS.map((field) => (
+                  <EditableField
+                    key={field.key}
+                    field={field}
+                    isEditing={isEditing}
+                    value={(isEditing ? coreIdentityDraft : coreIdentity)[field.key]}
+                    onChange={(v) => handleCoreChange(field.key, v)}
+                  />
+                ))}
               </FieldGrid>
             </CardSection>
 
@@ -279,7 +332,14 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
               </FieldGrid>
             </CardSection>
 
-            <CardSection title="Passport & Citizenship Details">
+            <CardSection
+              title="Passport & Citizenship Details"
+              action={
+                canUploadDocuments && (
+                  <AttachDocumentButton leadId={lead.id} defaultDocumentType="passport" label="Attach Passport / ID" />
+                )
+              }
+            >
               <FieldGrid>
                 {PASSPORT_CITIZENSHIP_FIELDS.map((field) => (
                   <EditableField
@@ -310,6 +370,8 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
               degreeLevel={(isEditing ? studyDraft : studyInterest).degreeLevel}
               value={isEditing ? qualificationsDraft : qualifications}
               onChange={setQualificationsDraft}
+              leadId={lead.id}
+              canUploadDocuments={canUploadDocuments}
             />
             <CardSection title="Test Scores">
               <TestScoresSection

@@ -20,13 +20,23 @@ export function SectionGroup({ title, children }: { title: string; children: Rea
   );
 }
 
-export function CardSection({ title, children }: { title?: string; children: React.ReactNode }) {
+export function CardSection({
+  title,
+  action,
+  children,
+}: {
+  title?: string;
+  /** Optional header-row control, e.g. an "Attach Document" button — rendered right-aligned next to the title. */
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
     <div className="rounded-lg border bg-card">
-      {title && (
-        <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground px-4 pt-3 pb-2 border-b">
-          {title}
-        </h4>
+      {(title || action) && (
+        <div className="flex items-center justify-between px-4 pt-3 pb-2 border-b">
+          {title && <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h4>}
+          {action}
+        </div>
       )}
       <div className="p-4">{children}</div>
     </div>

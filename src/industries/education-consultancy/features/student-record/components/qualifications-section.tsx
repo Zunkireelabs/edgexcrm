@@ -3,6 +3,8 @@
 import { Info } from "lucide-react";
 import type { Lead } from "@/types/database";
 import { CardSection, FieldGrid, EditableField, type FieldDef } from "./form-primitives";
+import { AttachDocumentButton } from "./attach-document-button";
+import type { QualificationLevel } from "@/industries/education-consultancy/features/applicant-documents/document-upload-dialog";
 
 export interface QualificationEntry {
   institution: string;
@@ -74,6 +76,17 @@ const LEVELS: readonly LevelMeta[] = [
   { key: "masters", title: "Qualification 4 — Postgraduate", hasStream: true, visibleFor: ["phd"] },
 ];
 
+// `Qualifications` keys are camelCase (matches the rest of this dialog's JS
+// naming); the document link and the `leads` column prefixes are snake_case
+// (matches migration 159/236's actual column names) — this is the one place
+// that mapping needs to happen.
+const QUALIFICATION_DOCUMENT_LEVEL: Record<keyof Qualifications, QualificationLevel> = {
+  see: "see",
+  plusTwo: "plus_two",
+  bachelor: "bachelor",
+  masters: "masters",
+};
+
 function levelFields(meta: LevelMeta): FieldDef[] {
   const fields: FieldDef[] = [
     { key: "institution", label: "Name of Institution", type: "text" },
@@ -92,11 +105,15 @@ export function QualificationsSection({
   degreeLevel,
   value,
   onChange,
+  leadId,
+  canUploadDocuments,
 }: {
   isEditing: boolean;
   degreeLevel: string;
   value: Qualifications;
   onChange: (next: Qualifications) => void;
+  leadId: string;
+  canUploadDocuments?: boolean;
 }) {
   const tier = qualificationTier(degreeLevel);
 
@@ -119,7 +136,20 @@ export function QualificationsSection({
         const entry = value[meta.key];
         const update = (patch: Partial<QualificationEntry>) => onChange({ ...value, [meta.key]: { ...entry, ...patch } });
         return (
-          <CardSection key={meta.key} title={meta.title}>
+          <CardSection
+            key={meta.key}
+            title={meta.title}
+            action={
+              canUploadDocuments && (
+                <AttachDocumentButton
+                  leadId={leadId}
+                  defaultDocumentType="marksheet"
+                  fixedQualificationLevel={QUALIFICATION_DOCUMENT_LEVEL[meta.key]}
+                  label="Attach Marksheet"
+                />
+              )
+            }
+          >
             <FieldGrid>
               {levelFields(meta).map((field) => (
                 <EditableField

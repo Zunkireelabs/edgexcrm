@@ -73,6 +73,8 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
       },
     }));
 
+    const canUploadDocuments = getFeatureAccess(industryId, FEATURES.APPLICANT_DOCUMENTS) && (canEdit ?? isAdmin);
+
     const hasEmail = getFeatureAccess(industryId, FEATURES.EMAIL);
     const { threads, setThreads, loading: threadsLoading } = useEmailThreads(hasEmail ? lead.id : "");
     const unreadEmailCount = useMemo(
@@ -250,6 +252,7 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
           onOpenChange={setIsPersonalDetailsOpen}
           submissionHistory={submissionHistory}
           onLeadUpdate={onLeadUpdate}
+          canUploadDocuments={canUploadDocuments}
         />
       )}
       </>
