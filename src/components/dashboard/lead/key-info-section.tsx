@@ -639,6 +639,19 @@ export function KeyInfoSection({
             <InfoRow label="Residence Country" value={lead.country} />
           ) : null}
 
+          {/* Interested Destinations / Degree Level — read-only here (edited
+              via the Study Interest panel / Student Details popup above, not
+              duplicated as a third editor); sourced from the real
+              destinations/degree_level columns, not custom_fields, so this
+              can never show a stale duplicate the way the generic Additional
+              Details list used to. */}
+          {industryId === "education_consultancy" && lead.destinations && lead.destinations.length > 0 && (
+            <InfoRow label="Interested Destinations" value={lead.destinations.join(", ")} />
+          )}
+          {industryId === "education_consultancy" && lead.degree_level && (
+            <InfoRow label="Degree Level" value={lead.degree_level} />
+          )}
+
           {/* Preferred Contact */}
           {isEditing && draft ? (
             <div>
