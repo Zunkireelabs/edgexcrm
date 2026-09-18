@@ -74,6 +74,7 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
     }));
 
     const canUploadDocuments = getFeatureAccess(industryId, FEATURES.APPLICANT_DOCUMENTS) && (canEdit ?? isAdmin);
+    const studentRecordActive = getFeatureAccess(industryId, FEATURES.STUDENT_RECORD);
 
     const hasEmail = getFeatureAccess(industryId, FEATURES.EMAIL);
     const { threads, setThreads, loading: threadsLoading } = useEmailThreads(hasEmail ? lead.id : "");
@@ -115,7 +116,7 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4 mt-0">
-          {industryId === "education_consultancy" && (
+          {studentRecordActive && (
             <div className="flex justify-end">
               <Button
                 variant="outline"
@@ -245,7 +246,7 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
           </TabsContent>
         )}
       </Tabs>
-      {industryId === "education_consultancy" && (
+      {studentRecordActive && (
         <PersonalDetailsDialog
           lead={lead}
           open={isPersonalDetailsOpen}
