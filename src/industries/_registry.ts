@@ -72,6 +72,11 @@ export const FEATURES = {
   // blast surface. Also never called "campaigns" for the same reason as SMS
   // above — route is /email-campaigns, provisional naming pending Sadin.
   EMAIL_CAMPAIGNS: "email-campaigns",
+  // Industry-scoped (education_consultancy) — expanded student record (client
+  // PDF template: Personal/Academic/Professional/Financial). Phase 1 is the
+  // "Personal Information" details popup only; no sidebar item — surfaces as
+  // an edit button embedded in the Lead Detail Overview tab.
+  STUDENT_RECORD: "student-record",
 } as const;
 
 export type FeatureId = (typeof FEATURES)[keyof typeof FEATURES];

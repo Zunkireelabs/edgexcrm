@@ -6,15 +6,6 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -23,8 +14,9 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { formatBytes } from "@/lib/format";
-import { DOCUMENT_TYPES, DOCUMENT_TYPE_CATEGORY, type DocumentType } from "@/lib/documents/constants";
+import { DOCUMENT_TYPE_CATEGORY, type DocumentType } from "@/lib/documents/constants";
 import { DOCUMENT_TYPE_LABELS, DOCUMENT_CATEGORY_LABELS, DOCUMENT_CATEGORY_ORDER } from "./labels";
+import { DocumentUploadDialog } from "./document-upload-dialog";
 
 interface ApplicantDocument {
   id: string;
@@ -42,14 +34,6 @@ interface ApplicantDocument {
 
 type ViewMode = "grid" | "list";
 
-async function sha256Hex(file: File): Promise<string> {
-  const buf = await file.arrayBuffer();
-  const digest = await crypto.subtle.digest("SHA-256", buf);
-  return Array.from(new Uint8Array(digest))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
 export function ApplicantDocumentsCard({
   leadId,
   canManage,
@@ -65,9 +49,6 @@ export function ApplicantDocumentsCard({
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
-  const [uploadType, setUploadType] = useState<DocumentType>("other");
-  const [uploadName, setUploadName] = useState("");
-  const [uploading, setUploading] = useState(false);
   const [viewerDoc, setViewerDoc] = useState<ApplicantDocument | null>(null);
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
   const [viewerLoading, setViewerLoading] = useState(false);
@@ -89,79 +70,6 @@ export function ApplicantDocumentsCard({
   useEffect(() => {
     load();
   }, [load]);
-
-  function pickFile(file: File) {
-    setPendingFile(file);
-    setUploadName(file.name);
-    setUploadType("other");
-  }
-
-  async function handleUpload() {
-    if (!pendingFile) return;
-    const file = pendingFile;
-    setUploading(true);
-    try {
-      const urlRes = await fetch(`/api/v1/leads/${leadId}/documents/upload-url`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          document_type: uploadType,
-          name: uploadName.trim() || file.name,
-          original_filename: file.name,
-          file_size: file.size,
-          mime_type: file.type || "",
-        }),
-      });
-      const urlJson = await urlRes.json();
-      if (!urlRes.ok) {
-        toast.error(urlJson?.error?.message ?? "Failed to get upload URL");
-        return;
-      }
-      const { document_id, version_id, upload_url, upload_headers } = urlJson.data as {
-        document_id: string;
-        version_id: string;
-        upload_url: string;
-        upload_headers?: Record<string, string>;
-      };
-
-      const putRes = await fetch(upload_url, {
-        method: "PUT",
-        headers: upload_headers,
-        body: file,
-      });
-      if (!putRes.ok) {
-        toast.error("Upload to storage failed");
-        return;
-      }
-
-      const checksum = await sha256Hex(file);
-      const completeRes = await fetch(`/api/v1/leads/${leadId}/documents/${document_id}/complete`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          version_id,
-          document_type: uploadType,
-          name: uploadName.trim() || file.name,
-          original_filename: file.name,
-          file_size: file.size,
-          mime_type: file.type || "",
-          checksum,
-        }),
-      });
-      const completeJson = await completeRes.json();
-      if (!completeRes.ok) {
-        toast.error(completeJson?.error?.message ?? "Failed to confirm upload — please retry");
-        return;
-      }
-      toast.success("Document uploaded");
-      setPendingFile(null);
-      load();
-    } catch {
-      toast.error("Upload failed");
-    } finally {
-      setUploading(false);
-    }
-  }
 
   async function handleDelete(doc: ApplicantDocument) {
     if (!confirm(`Delete "${doc.name}"? This cannot be undone.`)) return;
@@ -237,7 +145,7 @@ export function ApplicantDocumentsCard({
                     className="hidden"
                     onChange={(e) => {
                       const f = e.target.files?.[0];
-                      if (f) pickFile(f);
+                      if (f) setPendingFile(f);
                       e.target.value = "";
                     }}
                   />
@@ -295,49 +203,13 @@ export function ApplicantDocumentsCard({
         </CardContent>
       </Card>
 
-      {/* Upload dialog — collect document type + name before uploading */}
-      <Dialog open={!!pendingFile} onOpenChange={(open) => !open && !uploading && setPendingFile(null)}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Upload document</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
-            <div className="space-y-1.5">
-              <Label className="text-xs text-gray-600">Document type</Label>
-              <Select value={uploadType} onValueChange={(v) => setUploadType(v as DocumentType)}>
-                <SelectTrigger className="h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {DOCUMENT_TYPES.map((t) => (
-                    <SelectItem key={t} value={t}>
-                      {DOCUMENT_TYPE_LABELS[t]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-gray-600">Name</Label>
-              <Input value={uploadName} onChange={(e) => setUploadName(e.target.value)} autoFocus />
-            </div>
-            {pendingFile && (
-              <p className="text-xs text-muted-foreground">
-                {pendingFile.name} · {formatBytes(pendingFile.size)}
-              </p>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPendingFile(null)} disabled={uploading}>
-              Cancel
-            </Button>
-            <Button onClick={handleUpload} disabled={uploading}>
-              {uploading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Upload
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DocumentUploadDialog
+        leadId={leadId}
+        file={pendingFile}
+        onOpenChange={(open) => !open && setPendingFile(null)}
+        onUploaded={load}
+        showQualificationLevelPicker
+      />
 
       {/* Viewer dialog */}
       <Dialog open={!!viewerDoc} onOpenChange={(open) => !open && setViewerDoc(null)}>

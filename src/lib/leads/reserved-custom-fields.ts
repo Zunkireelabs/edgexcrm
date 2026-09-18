@@ -26,7 +26,18 @@ const PROMOTED_KEYS = new Set([
 // education_consultancy-only (see key-info-section.tsx). Reserving these for
 // every industry would hide the data with nowhere else to show it, so they're
 // only reserved when the lead actually belongs to that industry.
-const EDUCATION_ONLY_PROMOTED_KEYS = new Set(["field_of_study", "education_level", "countries"]);
+// "destination"/"degree_level" added after a real duplicate-display bug: a
+// lead's loose custom_fields can carry these exact keys (e.g. from a direct
+// API write or older form) alongside the real `destinations`/`degree_level`
+// columns, showing the same information twice — once correctly in Details,
+// once stale in the generic Additional Details list.
+const EDUCATION_ONLY_PROMOTED_KEYS = new Set([
+  "field_of_study",
+  "education_level",
+  "countries",
+  "destination",
+  "degree_level",
+]);
 
 // Keys whose only dedicated UI is the InvestorProfileCard (see
 // src/industries/real-estate/features/investors), shown for any tenant whose
