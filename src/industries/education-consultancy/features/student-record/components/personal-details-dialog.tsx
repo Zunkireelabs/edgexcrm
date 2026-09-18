@@ -9,7 +9,6 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -291,12 +290,35 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="w-[95vw] sm:max-w-5xl p-0 gap-0 flex flex-col max-h-[85vh]">
         <DialogHeader className="px-6 pt-6 pb-4 border-b shrink-0">
-          <DialogTitle>Student Details</DialogTitle>
-          <DialogDescription>
-            {isEditing
-              ? "Fill in the student's record — personal, study interest, and more as it's added."
-              : "Preview of the student's record."}
-          </DialogDescription>
+          <div className="flex items-start justify-between gap-4 pr-8">
+            <div className="space-y-1.5">
+              <DialogTitle>Student Details</DialogTitle>
+              <DialogDescription>
+                {isEditing
+                  ? "Fill in the student's record — personal, study interest, and more as it's added."
+                  : "Preview of the student's record."}
+              </DialogDescription>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {isEditing ? (
+                <>
+                  <Button variant="ghost" onClick={cancelEditing} disabled={isSaving}>
+                    <X className="h-3.5 w-3.5 mr-1" />
+                    Cancel
+                  </Button>
+                  <Button onClick={save} disabled={isSaving}>
+                    {isSaving ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Check className="h-3.5 w-3.5 mr-1" />}
+                    Save
+                  </Button>
+                </>
+              ) : (
+                <Button onClick={startEditing}>
+                  <Pencil className="h-3.5 w-3.5 mr-1" />
+                  Edit
+                </Button>
+              )}
+            </div>
+          </div>
           <p className="text-xs text-muted-foreground">
             Full Name/Email/Phone/Nationality, Study Interest, and Academic Qualification (institution/grade) save for real. Everything else here is a preview — it saves locally for now and will start saving for real once the database update for it is live.
           </p>
@@ -415,26 +437,6 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
             </CardSection>
           </SectionGroup>
         </div>
-
-        <DialogFooter className="px-6 py-4 border-t shrink-0">
-          {isEditing ? (
-            <>
-              <Button variant="ghost" onClick={cancelEditing} disabled={isSaving}>
-                <X className="h-3.5 w-3.5 mr-1" />
-                Cancel
-              </Button>
-              <Button onClick={save} disabled={isSaving}>
-                {isSaving ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Check className="h-3.5 w-3.5 mr-1" />}
-                Save
-              </Button>
-            </>
-          ) : (
-            <Button onClick={startEditing}>
-              <Pencil className="h-3.5 w-3.5 mr-1" />
-              Edit
-            </Button>
-          )}
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
