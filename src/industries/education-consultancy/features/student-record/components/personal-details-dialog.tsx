@@ -166,23 +166,51 @@ const QUALIFICATION_COLUMN_PREFIX: Record<keyof Qualifications, string> = {
  * Experience/References) has no live column or table yet (migrations
  * 234-239 aren't applied anywhere), so it deliberately stays out of this
  * payload — sending it would just 500 against a column that doesn't exist.
+ *
+ * Only fields that actually changed from their original (committed) value
+ * are included — never blindly resend an untouched field. This isn't just
+ * tidiness: apply-lead-patch.ts runs a strict phone-format check on ANY
+ * patch that includes `phone` for education_consultancy tenants. A lead
+ * whose stored phone number predates that check (or came in slightly
+ * malformed some other way) would fail that check every time — and since
+ * this function used to resend every core-identity field unconditionally,
+ * saving something as unrelated as Study Interest would silently drag that
+ * old, already-invalid phone number along and get the *entire* save
+ * rejected. Confirmed live in production. Diffing against the original
+ * fixes it structurally: an untouched field is never sent, so it can never
+ * fail a check nobody asked it to run.
  */
-function buildLivePatch(core: CoreIdentity, study: StudyInterest, qualifications: Qualifications): Record<string, unknown> {
-  const patch: Record<string, unknown> = {
-    first_name: core.firstName || null,
-    last_name: core.lastName || null,
-    email: core.email || null,
-    phone: core.phone || null,
-    nationality: core.nationality || null,
-    destinations: study.destinations,
-    field_of_study: study.fieldOfStudy || null,
-    degree_level: study.degreeLevel || null,
-    intake_term: [study.intakeMonth, study.intakeYear].filter(Boolean).join(" ") || null,
+function buildLivePatch(
+  core: CoreIdentity,
+  coreOriginal: CoreIdentity,
+  study: StudyInterest,
+  studyOriginal: StudyInterest,
+  qualifications: Qualifications,
+  qualificationsOriginal: Qualifications
+): Record<string, unknown> {
+  const patch: Record<string, unknown> = {};
+  const setIfChanged = (key: string, next: unknown, prev: unknown) => {
+    if (JSON.stringify(next) !== JSON.stringify(prev)) patch[key] = next;
   };
+
+  setIfChanged("first_name", core.firstName || null, coreOriginal.firstName || null);
+  setIfChanged("last_name", core.lastName || null, coreOriginal.lastName || null);
+  setIfChanged("email", core.email || null, coreOriginal.email || null);
+  setIfChanged("phone", core.phone || null, coreOriginal.phone || null);
+  setIfChanged("nationality", core.nationality || null, coreOriginal.nationality || null);
+
+  setIfChanged("destinations", study.destinations, studyOriginal.destinations);
+  setIfChanged("field_of_study", study.fieldOfStudy || null, studyOriginal.fieldOfStudy || null);
+  setIfChanged("degree_level", study.degreeLevel || null, studyOriginal.degreeLevel || null);
+  const intakeTerm = [study.intakeMonth, study.intakeYear].filter(Boolean).join(" ") || null;
+  const intakeTermOriginal = [studyOriginal.intakeMonth, studyOriginal.intakeYear].filter(Boolean).join(" ") || null;
+  setIfChanged("intake_term", intakeTerm, intakeTermOriginal);
+
   for (const [level, prefix] of Object.entries(QUALIFICATION_COLUMN_PREFIX) as [keyof Qualifications, string][]) {
     const entry = qualifications[level];
-    patch[`${prefix}_institution`] = entry.institution || null;
-    patch[`${prefix}_gpa`] = entry.percentageGrade || null;
+    const entryOriginal = qualificationsOriginal[level];
+    setIfChanged(`${prefix}_institution`, entry.institution || null, entryOriginal.institution || null);
+    setIfChanged(`${prefix}_gpa`, entry.percentageGrade || null, entryOriginal.percentageGrade || null);
   }
   return patch;
 }
@@ -240,19 +268,23 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
   };
 
   const save = async () => {
-    const patch = buildLivePatch(coreIdentityDraft, studyDraft, qualificationsDraft);
+    const patch = buildLivePatch(coreIdentityDraft, coreIdentity, studyDraft, studyInterest, qualificationsDraft, qualifications);
+    const hasLiveChanges = Object.keys(patch).length > 0;
     setIsSaving(true);
     try {
-      const res = await fetch(`/api/v1/leads/${lead.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(patch),
-      });
-      if (!res.ok) throw new Error("Failed to save");
+      if (hasLiveChanges) {
+        const res = await fetch(`/api/v1/leads/${lead.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(patch),
+        });
+        if (!res.ok) throw new Error("Failed to save");
+        onLeadUpdate?.(patch);
+      }
 
       // Only commit local state — including the sections that don't persist
-      // yet — after the live save actually succeeds, so a failed save never
-      // silently discards what was typed.
+      // yet — after the live save actually succeeds (or there was nothing
+      // live to save), so a failed save never silently discards what was typed.
       setValues(draft);
       setCoreIdentity(coreIdentityDraft);
       setStudyInterest(studyDraft);
@@ -261,8 +293,11 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
       setWorkExperience(workExperienceDraft);
       setReferences(referencesDraft);
       setIsEditing(false);
-      onLeadUpdate?.(patch);
-      toast.success("Full Name/Email/Phone/Nationality, Study Interest, and Academic Qualification institution/grade saved. Other new fields are saved locally for preview only until the database update is live.");
+      toast.success(
+        hasLiveChanges
+          ? "Full Name/Email/Phone/Nationality, Study Interest, and Academic Qualification institution/grade saved. Other new fields are saved locally for preview only until the database update is live."
+          : "Saved locally for preview only — nothing in the real-save fields changed."
+      );
     } catch {
       toast.error("Failed to save — nothing was changed. Your edits are still here, try again.");
     } finally {
