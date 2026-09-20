@@ -22,6 +22,7 @@ import { getLeadFullName } from "./lead-name";
 import { ItineraryBuilder } from "@/industries/travel-agency/features/itinerary/builder";
 import type { Itinerary } from "@/industries/travel-agency/features/itinerary/types";
 import { PersonalDetailsDialog } from "@/industries/education-consultancy/features/student-record/components/personal-details-dialog";
+import { StudentDetailsSummaryCard } from "@/industries/education-consultancy/features/student-record/components/student-details-summary-card";
 import type { LeadSubmissionSnapshot } from "@/lib/leads/submission-history";
 interface LeadTabsProps {
   lead: Lead;
@@ -201,6 +202,16 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
               </CardContent>
             </Card>
           )}
+
+          {/* Student Details summary — read-only; Edit opens the same Student Details dialog as the "Details" button above */}
+          {studentRecordActive && (
+            <StudentDetailsSummaryCard
+              lead={lead}
+              submissionHistory={submissionHistory}
+              onEdit={() => setIsPersonalDetailsOpen(true)}
+            />
+          )}
+
           {/* Possible Duplicates — admin-only */}
           {isAdmin && <PossibleDuplicatesCard lead={lead} onMerged={() => router.refresh()} />}
         </TabsContent>
