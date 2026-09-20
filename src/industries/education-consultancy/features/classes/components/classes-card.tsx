@@ -194,7 +194,7 @@ export function ClassesCard({ leadId, canManage }: ClassesCardProps) {
               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
             </div>
           ) : loadError ? (
-            <p className="text-xs text-destructive text-center py-2">Couldn't load classes — try refreshing.</p>
+            <p className="text-xs text-destructive text-center py-2">Couldn&apos;t load classes — try refreshing.</p>
           ) : enrollments.length === 0 ? (
             <p className="text-xs text-muted-foreground text-center py-2">Not enrolled in any class yet.</p>
           ) : (
