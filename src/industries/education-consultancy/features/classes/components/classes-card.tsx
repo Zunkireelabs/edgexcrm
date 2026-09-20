@@ -56,6 +56,7 @@ interface ClassesCardProps {
 export function ClassesCard({ leadId, canManage }: ClassesCardProps) {
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [markPaidTarget, setMarkPaidTarget] = useState<Enrollment | null>(null);
   const [feeAmountInput, setFeeAmountInput] = useState("");
@@ -65,11 +66,18 @@ export function ClassesCard({ leadId, canManage }: ClassesCardProps) {
   const fetchEnrollments = useCallback(async () => {
     try {
       const res = await fetch(`/api/v1/leads/${leadId}/classes`);
-      if (!res.ok) throw new Error("Failed to fetch");
+      if (!res.ok) throw new Error(`Failed to fetch classes (${res.status})`);
       const { data } = await res.json();
       setEnrollments(data ?? []);
+      setLoadError(false);
     } catch {
-      // silently fail
+      // A failed fetch must never look identical to a genuine empty list —
+      // this exact confusion (404 rendering as "Not enrolled in any class
+      // yet.") was a real prod bug that hid a collaborator-visibility
+      // permissions gap for weeks. Surface it distinctly instead.
+      setEnrollments([]);
+      setLoadError(true);
+      toast.error("Couldn't load this student's classes — try refreshing the page.");
     }
   }, [leadId]);
 
@@ -185,6 +193,8 @@ export function ClassesCard({ leadId, canManage }: ClassesCardProps) {
             <div className="flex justify-center py-3">
               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
             </div>
+          ) : loadError ? (
+            <p className="text-xs text-destructive text-center py-2">Couldn't load classes — try refreshing.</p>
           ) : enrollments.length === 0 ? (
             <p className="text-xs text-muted-foreground text-center py-2">Not enrolled in any class yet.</p>
           ) : (
