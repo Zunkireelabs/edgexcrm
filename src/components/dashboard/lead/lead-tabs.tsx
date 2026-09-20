@@ -67,6 +67,10 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
     const activitiesPanelRef = useRef<ActivitiesPanelRef>(null);
     const router = useRouter();
     const [isPersonalDetailsOpen, setIsPersonalDetailsOpen] = useState(false);
+    // True only when opened via the Student Details summary card's own "Edit"
+    // button, so that path skips straight to the editable form instead of the
+    // preview — the top-of-tab "Details" button still opens to preview first.
+    const [personalDetailsOpenInEditMode, setPersonalDetailsOpenInEditMode] = useState(false);
 
     useImperativeHandle(ref, () => ({
       focusComposer: () => {
@@ -208,7 +212,10 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
             <StudentDetailsSummaryCard
               lead={lead}
               submissionHistory={submissionHistory}
-              onEdit={() => setIsPersonalDetailsOpen(true)}
+              onEdit={() => {
+                setPersonalDetailsOpenInEditMode(true);
+                setIsPersonalDetailsOpen(true);
+              }}
             />
           )}
 
@@ -261,10 +268,14 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
         <PersonalDetailsDialog
           lead={lead}
           open={isPersonalDetailsOpen}
-          onOpenChange={setIsPersonalDetailsOpen}
+          onOpenChange={(next) => {
+            setIsPersonalDetailsOpen(next);
+            if (!next) setPersonalDetailsOpenInEditMode(false);
+          }}
           submissionHistory={submissionHistory}
           onLeadUpdate={onLeadUpdate}
           canUploadDocuments={canUploadDocuments}
+          openInEditMode={personalDetailsOpenInEditMode}
         />
       )}
       </>

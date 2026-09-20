@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Pencil, X, Check, Loader2 } from "lucide-react";
 import {
@@ -225,9 +225,11 @@ interface PersonalDetailsDialogProps {
   onLeadUpdate?: (patch: Partial<Lead>) => void;
   /** Gates the "Attach Document" triggers on Passport & Citizenship / each Qualification card — mirrors ApplicantDocumentsCard's own `canManage` (FEATURES.APPLICANT_DOCUMENTS && (canEdit ?? isAdmin)), computed once by the caller so this dialog doesn't re-derive permission logic. */
   canUploadDocuments?: boolean;
+  /** When true, the dialog enters edit mode as soon as it opens instead of showing the preview first — used by the inline summary card's "Edit" button so it's a single click, not open-then-click-Edit-again. */
+  openInEditMode?: boolean;
 }
 
-export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHistory, onLeadUpdate, canUploadDocuments }: PersonalDetailsDialogProps) {
+export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHistory, onLeadUpdate, canUploadDocuments, openInEditMode }: PersonalDetailsDialogProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [values, setValues] = useState<FieldValues>({});
@@ -255,6 +257,11 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
     setReferencesDraft(references);
     setIsEditing(true);
   };
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- startEditing is intentionally re-read fresh each run, not tracked as a dep; this should only fire on the open/openInEditMode transition, not on every render startEditing's identity would otherwise change.
+  useEffect(() => {
+    if (open && openInEditMode) startEditing();
+  }, [open, openInEditMode]);
 
   const cancelEditing = () => {
     setDraft(values);
