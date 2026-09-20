@@ -258,9 +258,15 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
     setIsEditing(true);
   };
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- startEditing is intentionally re-read fresh each run, not tracked as a dep; this should only fire on the open/openInEditMode transition, not on every render startEditing's identity would otherwise change.
   useEffect(() => {
     if (open && openInEditMode) startEditing();
+    // startEditing is deliberately omitted: it's a new function reference on
+    // every render (not memoized), so including it would re-run this effect
+    // — and reset every draft field back to the current saved values — on
+    // any unrelated re-render while the dialog happens to be open in edit
+    // mode, silently wiping in-progress edits. This should only fire once,
+    // on the open/openInEditMode transition itself.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, openInEditMode]);
 
   const cancelEditing = () => {
