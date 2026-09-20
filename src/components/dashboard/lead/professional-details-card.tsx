@@ -163,6 +163,7 @@ export function ProfessionalDetailsCard({
   return (
     <InfoSection
       title="Professional Details"
+      defaultOpen={false}
       titleClassName="text-base font-semibold text-foreground normal-case tracking-normal"
       headerAction={headerAction}
     >

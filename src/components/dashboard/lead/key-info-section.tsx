@@ -613,7 +613,7 @@ export function KeyInfoSection({
 
           {/* ── DETAILS ─────────────────────────────────────────────── */}
           <div className="border-t border-border" />
-          <InfoSection title="Details" titleClassName="text-[10px]">
+          <InfoSection title="Details" defaultOpen={false} titleClassName="text-[10px]">
             <div className="space-y-2">
               {/* Residence Country */}
               {isEditing && draft ? (
@@ -902,6 +902,7 @@ function StudyInterestPanel({ lead, isAdmin, isEditor, onSave, submissionHistory
       <div className="border-t border-border" />
       <InfoSection
         title="Study Interest"
+        defaultOpen={false}
         titleClassName="text-[10px]"
         headerAction={
           canEditPanel && !editing ? (
@@ -1233,6 +1234,7 @@ function LeadSourcePanel({ lead, isAdmin, onSave, submissionHistory }: LeadSourc
       <div className="border-t border-border" />
       <InfoSection
         title="Lead Source"
+        defaultOpen={false}
         titleClassName="text-[10px]"
         headerAction={
           isAdmin && !editing ? (

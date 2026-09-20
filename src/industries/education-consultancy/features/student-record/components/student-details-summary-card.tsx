@@ -43,7 +43,7 @@ const noop = () => {};
  * fresh page load they always render as empty/"—" here too, identical to
  * what the dialog itself shows on a fresh open. Not a bug in this component.
  */
-export function StudentDetailsSummaryCard({ lead, submissionHistory, onEdit, defaultOpen = false }: StudentDetailsSummaryCardProps) {
+export function StudentDetailsSummaryCard({ lead, submissionHistory, onEdit, defaultOpen = true }: StudentDetailsSummaryCardProps) {
   const coreIdentity = coreIdentityFromLead(lead);
   const studyInterest = studyInterestFromLead(lead, submissionHistory);
   const qualifications = qualificationsFromLead(lead);
