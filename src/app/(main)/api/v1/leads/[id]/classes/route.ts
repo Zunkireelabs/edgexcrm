@@ -1,8 +1,6 @@
 import { NextRequest } from "next/server";
-import { createServiceClient } from "@/lib/supabase/server";
-import { authenticateRequest, requireLeadBranchAccess } from "@/lib/api/auth";
-import { getLeadMembership } from "@/lib/leads/branch-membership";
-import { shouldRestrictToSelf } from "@/lib/api/permissions";
+import { authenticateRequest } from "@/lib/api/auth";
+import { canViewLead } from "@/lib/ai/tools/universal/lib/lead-visibility";
 import { canEnrollStudents } from "@/lib/api/class-attendance";
 import {
   apiSuccess,
@@ -24,6 +22,14 @@ interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
+interface LeadForAccess {
+  id: string;
+  assigned_to: string | null;
+  branch_id: string | null;
+  pipeline_id: string;
+  list_id: string | null;
+}
+
 // GET /api/v1/leads/:id/classes
 export async function GET(_request: NextRequest, context: RouteContext) {
   const { id } = await context.params;
@@ -32,32 +38,28 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   if (!auth) return apiUnauthorized();
   if (!getFeatureAccess(auth.industryId, FEATURES.CLASSES)) return apiForbidden();
 
-  const supabase = await createServiceClient();
+  const db = await scopedClient(auth);
 
-  const { data: lead } = await supabase
+  const { data: lead } = await db
     .from("leads")
-    .select("id, assigned_to, branch_id")
+    .select("id, assigned_to, branch_id, pipeline_id, list_id")
     .eq("id", id)
-    .eq("tenant_id", auth.tenantId)
     .is("deleted_at", null)
-    .single();
+    .maybeSingle();
 
   if (!lead) return apiNotFound("Lead");
 
-  const leadRow = lead as { id: string; assigned_to: string | null; branch_id: string | null };
-  const membership = await getLeadMembership(supabase, auth.tenantId, id);
-  if (
-    shouldRestrictToSelf(auth.permissions) &&
-    !(
-      membership.some((m: { assigned_to: string | null }) => m.assigned_to === auth.userId) ||
-      leadRow.assigned_to === auth.userId
-    )
-  ) {
-    return apiNotFound("Lead");
-  }
-  if (!requireLeadBranchAccess(auth, leadRow, membership)) return apiNotFound("Lead");
+  // canViewLead is the same collaborator-aware visibility check the Lead
+  // Detail page itself uses (src/lib/ai/tools/universal/lib/lead-visibility.ts)
+  // — own-scope assignee/collaborator, team-scope branch membership,
+  // cross-branch pool, or pipeline access. The previous hand-rolled check
+  // here (shouldRestrictToSelf + requireLeadBranchAccess, lib/api/auth.ts)
+  // never consulted lead_collaborators, so a collaborator who wasn't also
+  // the assignee or lead_branches-mapped got a false 404 here even though
+  // they could see everything else on the lead — this is the fix for that.
+  const leadRow = lead as unknown as LeadForAccess;
+  if (!(await canViewLead(db, auth, leadRow))) return apiNotFound("Lead");
 
-  const db = await scopedClient(auth);
   const { data, error } = await db
     .from("class_enrollments")
     .select("*, classes!class_enrollments_class_id_fkey(id,name,default_fee)")
@@ -80,30 +82,19 @@ export async function POST(request: NextRequest, context: RouteContext) {
   if (!getFeatureAccess(auth.industryId, FEATURES.CLASSES)) return apiForbidden();
   if (!(await canEnrollStudents(auth))) return apiForbidden();
 
-  const supabase = await createServiceClient();
+  const db = await scopedClient(auth);
 
-  const { data: lead } = await supabase
+  const { data: lead } = await db
     .from("leads")
-    .select("id, assigned_to, branch_id")
+    .select("id, assigned_to, branch_id, pipeline_id, list_id")
     .eq("id", id)
-    .eq("tenant_id", auth.tenantId)
     .is("deleted_at", null)
-    .single();
+    .maybeSingle();
 
   if (!lead) return apiNotFound("Lead");
-  const leadRow = lead as { id: string; assigned_to: string | null; branch_id: string | null };
-
-  const membership = await getLeadMembership(supabase, auth.tenantId, id);
-  if (
-    shouldRestrictToSelf(auth.permissions) &&
-    !(
-      leadRow.assigned_to === auth.userId ||
-      membership.some((m: { assigned_to: string | null }) => m.assigned_to === auth.userId)
-    )
-  ) {
-    return apiNotFound("Lead");
-  }
-  if (!requireLeadBranchAccess(auth, leadRow, membership)) return apiNotFound("Lead");
+  const leadRow = lead as unknown as LeadForAccess;
+  // Same collaborator-aware check as GET above — see its comment for why.
+  if (!(await canViewLead(db, auth, leadRow))) return apiNotFound("Lead");
 
   let body: Record<string, unknown>;
   try {
@@ -116,8 +107,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
     class_id: [required("class_id")],
   });
   if (!valid) return apiValidationError(errors);
-
-  const db = await scopedClient(auth);
 
   // Verify class belongs to tenant and is active
   const { data: classRow } = await db
