@@ -57,6 +57,7 @@ import { getDistinctFormValues, type LeadSubmissionSnapshot } from "@/lib/leads/
 import { normalizeDestinations, normalizeFieldOfStudy, normalizeDegreeLevel } from "@/lib/leads/destination-normalize";
 import { BranchesBlock } from "./branches-block";
 import { CollaboratorsBlock } from "./collaborators-block";
+import { InfoSection } from "./info-section";
 import { ListStepper } from "@/components/dashboard/leads/list-stepper";
 import { StageMoveSelector } from "@/components/dashboard/leads/stage-move-selector";
 import { ACADEMIC_LEVELS, TEST_TYPES } from "@/lib/leads/prospect-qualification";
@@ -612,111 +613,113 @@ export function KeyInfoSection({
 
           {/* ── DETAILS ─────────────────────────────────────────────── */}
           <div className="border-t border-border" />
-          <SectionHeading>Details</SectionHeading>
-
-          {/* Residence Country */}
-          {isEditing && draft ? (
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Residence Country</p>
-              <Select
-                value={draft.country || "__none__"}
-                onValueChange={(v) => onDraftChange?.("country", v === "__none__" ? "" : v)}
-              >
-                <SelectTrigger className="h-8 text-sm">
-                  <SelectValue placeholder="Select country" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">
-                    <span className="text-muted-foreground">Select country</span>
-                  </SelectItem>
-                  {COUNTRIES.map((c) => (
-                    <SelectItem key={c} value={c}>{c}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          ) : lead.country ? (
-            <InfoRow label="Residence Country" value={lead.country} />
-          ) : null}
-
-          {/* Interested Destinations / Degree Level — read-only here (edited
-              via the Study Interest panel / Student Details popup above, not
-              duplicated as a third editor); sourced from the real
-              destinations/degree_level columns, not custom_fields, so this
-              can never show a stale duplicate the way the generic Additional
-              Details list used to. */}
-          {industryId === "education_consultancy" && lead.destinations && lead.destinations.length > 0 && (
-            <InfoRow label="Interested Destinations" value={lead.destinations.join(", ")} />
-          )}
-          {industryId === "education_consultancy" && lead.degree_level && (
-            <InfoRow label="Degree Level" value={lead.degree_level} />
-          )}
-
-          {/* Preferred Contact */}
-          {isEditing && draft ? (
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Preferred Contact</p>
-              <Select
-                value={draft.preferred_contact_method || "__none__"}
-                onValueChange={(v) => onDraftChange?.("preferred_contact_method", v === "__none__" ? "" : v)}
-              >
-                <SelectTrigger className="h-8 text-sm">
-                  <SelectValue placeholder="Select method" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">
-                    <span className="text-muted-foreground">None</span>
-                  </SelectItem>
-                  {CONTACT_METHODS.map((m) => (
-                    <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          ) : lead.preferred_contact_method ? (
-            <InfoRow
-              label="Preferred Contact"
-              value={lead.preferred_contact_method.charAt(0).toUpperCase() + lead.preferred_contact_method.slice(1)}
-            />
-          ) : null}
-
-          {/* Entity (e.g., College, Service, Project Type).
-              travel_agency has its own editable Package selector in the Trip
-              Inquiry panel above, so skip this read-only block there. */}
-          {entity && industryId !== "travel_agency" && (
-            <div>
-              <p className="text-xs text-muted-foreground mb-1.5">{entityLabel}</p>
-              <div className="flex items-center gap-2">
-                <div className="h-6 w-6 rounded-md bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
-                  <Building className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+          <InfoSection title="Details" defaultOpen={false} titleClassName="text-[10px]">
+            <div className="space-y-2">
+              {/* Residence Country */}
+              {isEditing && draft ? (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Residence Country</p>
+                  <Select
+                    value={draft.country || "__none__"}
+                    onValueChange={(v) => onDraftChange?.("country", v === "__none__" ? "" : v)}
+                  >
+                    <SelectTrigger className="h-8 text-sm">
+                      <SelectValue placeholder="Select country" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">
+                        <span className="text-muted-foreground">Select country</span>
+                      </SelectItem>
+                      {COUNTRIES.map((c) => (
+                        <SelectItem key={c} value={c}>{c}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-                <span className="text-sm font-medium">{entity.name}</span>
-              </div>
-              {entity.description && (
-                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                  {entity.description}
-                </p>
+              ) : lead.country ? (
+                <InfoRow label="Residence Country" value={lead.country} />
+              ) : null}
+
+              {/* Interested Destinations / Degree Level — read-only here (edited
+                  via the Study Interest panel / Student Details popup above, not
+                  duplicated as a third editor); sourced from the real
+                  destinations/degree_level columns, not custom_fields, so this
+                  can never show a stale duplicate the way the generic Additional
+                  Details list used to. */}
+              {industryId === "education_consultancy" && lead.destinations && lead.destinations.length > 0 && (
+                <InfoRow label="Interested Destinations" value={lead.destinations.join(", ")} />
               )}
+              {industryId === "education_consultancy" && lead.degree_level && (
+                <InfoRow label="Degree Level" value={lead.degree_level} />
+              )}
+
+              {/* Preferred Contact */}
+              {isEditing && draft ? (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Preferred Contact</p>
+                  <Select
+                    value={draft.preferred_contact_method || "__none__"}
+                    onValueChange={(v) => onDraftChange?.("preferred_contact_method", v === "__none__" ? "" : v)}
+                  >
+                    <SelectTrigger className="h-8 text-sm">
+                      <SelectValue placeholder="Select method" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">
+                        <span className="text-muted-foreground">None</span>
+                      </SelectItem>
+                      {CONTACT_METHODS.map((m) => (
+                        <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : lead.preferred_contact_method ? (
+                <InfoRow
+                  label="Preferred Contact"
+                  value={lead.preferred_contact_method.charAt(0).toUpperCase() + lead.preferred_contact_method.slice(1)}
+                />
+              ) : null}
+
+              {/* Entity (e.g., College, Service, Project Type).
+                  travel_agency has its own editable Package selector in the Trip
+                  Inquiry panel above, so skip this read-only block there. */}
+              {entity && industryId !== "travel_agency" && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1.5">{entityLabel}</p>
+                  <div className="flex items-center gap-2">
+                    <div className="h-6 w-6 rounded-md bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
+                      <Building className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <span className="text-sm font-medium">{entity.name}</span>
+                  </div>
+                  {entity.description && (
+                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                      {entity.description}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Created */}
+              <InfoRow
+                label="Created"
+                value={new Date(lead.created_at).toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}
+              />
+
+              {/* Last Updated */}
+              <InfoRow
+                label="Last Updated"
+                value={formatRelativeTime(lead.updated_at)}
+              />
             </div>
-          )}
-
-          {/* Created */}
-          <InfoRow
-            label="Created"
-            value={new Date(lead.created_at).toLocaleDateString("en-US", {
-              month: "short",
-              day: "numeric",
-              year: "numeric",
-              hour: "numeric",
-              minute: "2-digit",
-            })}
-          />
-
-          {/* Last Updated */}
-          <InfoRow
-            label="Last Updated"
-            value={formatRelativeTime(lead.updated_at)}
-          />
+          </InfoSection>
 
           {/* ── ADDITIONAL DETAILS (true extras only) ───────────────── */}
           {customFields.length > 0 && (
@@ -897,21 +900,23 @@ function StudyInterestPanel({ lead, isAdmin, isEditor, onSave, submissionHistory
   return (
     <>
       <div className="border-t border-border" />
-      <div className="flex items-center justify-between">
-        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-          Study Interest
-        </p>
-        {canEditPanel && !editing && (
-          <button
-            type="button"
-            onClick={openEdit}
-            className="text-[10px] text-primary hover:underline"
-          >
-            Edit
-          </button>
-        )}
-      </div>
-
+      <InfoSection
+        title="Study Interest"
+        defaultOpen={false}
+        titleClassName="text-[10px]"
+        headerAction={
+          canEditPanel && !editing ? (
+            <button
+              type="button"
+              onClick={openEdit}
+              className="text-[10px] text-primary hover:underline shrink-0"
+            >
+              Edit
+            </button>
+          ) : undefined
+        }
+      >
+      <div className="space-y-2">
       {editing ? (
         <div className="space-y-2">
           {/* Destinations multi-select */}
@@ -1152,6 +1157,8 @@ function StudyInterestPanel({ lead, isAdmin, isEditor, onSave, submissionHistory
           )}
         </div>
       )}
+      </div>
+      </InfoSection>
     </>
   );
 }
@@ -1225,21 +1232,22 @@ function LeadSourcePanel({ lead, isAdmin, onSave, submissionHistory }: LeadSourc
   return (
     <>
       <div className="border-t border-border" />
-      <div className="flex items-center justify-between">
-        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-          Lead Source
-        </p>
-        {isAdmin && !editing && (
-          <button
-            type="button"
-            onClick={openEdit}
-            className="text-[10px] text-primary hover:underline"
-          >
-            Edit
-          </button>
-        )}
-      </div>
-
+      <InfoSection
+        title="Lead Source"
+        defaultOpen={false}
+        titleClassName="text-[10px]"
+        headerAction={
+          isAdmin && !editing ? (
+            <button
+              type="button"
+              onClick={openEdit}
+              className="text-[10px] text-primary hover:underline shrink-0"
+            >
+              Edit
+            </button>
+          ) : undefined
+        }
+      >
       {editing ? (
         <div className="space-y-2">
           <div>
@@ -1308,6 +1316,7 @@ function LeadSourcePanel({ lead, isAdmin, onSave, submissionHistory }: LeadSourc
           )}
         </div>
       )}
+      </InfoSection>
     </>
   );
 }

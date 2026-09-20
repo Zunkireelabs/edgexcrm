@@ -801,8 +801,22 @@ export function LeadDetailV2({
 
       {/* 3-Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] xl:grid-cols-[280px_1fr_320px] gap-6">
-        {/* Left Sidebar */}
-        <div className="space-y-4">
+        {/* Left Sidebar — scrolls with the page until its own content ends, then
+            sticks in place while the taller center column keeps scrolling.
+            self-start is required alongside sticky: without it, CSS Grid's
+            default item-stretch makes this div's own box already span the full
+            row height, leaving sticky nothing to do. With self-start, the box
+            shrinks to its natural (short) content height, but the grid AREA
+            still spans the full row (grid track sizing is unaffected by
+            align-self) — that extra area is what sticky uses to hold this
+            div near the top while the row scrolls past underneath it.
+            max-h + overflow-y-auto is the safety net for when this sidebar's
+            OWN content (e.g. Study Interest/Lead Source/Details all expanded)
+            is taller than the viewport itself: once stuck at the top, sticky
+            alone can't reveal anything below the fold since the page's scroll
+            now only moves the center column — this lets you scroll inside the
+            sidebar itself to reach the rest. */}
+        <div className="space-y-4 lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto scroll-shadows">
           {/* Contact Card */}
           <ContactCard
             lead={currentLead}
@@ -959,8 +973,12 @@ export function LeadDetailV2({
           />
         </div>
 
-        {/* Right Sidebar */}
-        <div className="lg:col-span-full xl:col-span-1">
+        {/* Right Sidebar — same sticky-until-its-own-content-ends behavior (and
+            same max-h/overflow-y-auto safety net for taller-than-viewport
+            content) as the left sidebar — see comment there. Only from xl
+            where this becomes a real third column; at lg it's stacked
+            full-width below the others, where sticky would make no sense. */}
+        <div className="lg:col-span-full xl:col-span-1 xl:sticky xl:top-4 xl:self-start xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto scroll-shadows">
           {tenant.industry_id === "education_consultancy" ? (
             <div className="space-y-4">
               {applicationsActive ? (
