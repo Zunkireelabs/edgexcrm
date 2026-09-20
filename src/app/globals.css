@@ -159,6 +159,42 @@
   }
 }
 
+/* Scroll-shadow cue for independently-scrollable panels (e.g. the sticky
+ * lead-detail sidebars): a subtle shadow appears at the top/bottom edge only
+ * when there's more content to scroll that direction, and disappears once
+ * you reach the actual start/end — pure CSS, no JS/scroll-position tracking
+ * needed. Two gradient layers per edge: an opaque cover in the panel's own
+ * background color that scrolls WITH the content (masking the shadow once
+ * you've scrolled past it), and a shadow that stays fixed relative to the
+ * viewport (so it's always drawn, then gets covered by the first layer at
+ * the scroll extremes). Classic technique, e.g. Lea Verou's "scroll shadows".
+ */
+.scroll-shadows {
+  background:
+    linear-gradient(var(--background) 30%, rgba(0, 0, 0, 0)),
+    linear-gradient(rgba(0, 0, 0, 0), var(--background) 70%) 0 100%,
+    radial-gradient(farthest-side at 50% 0, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0)),
+    radial-gradient(farthest-side at 50% 100%, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0)) 0 100%;
+  background-repeat: no-repeat;
+  background-color: var(--background);
+  background-size: 100% 24px, 100% 24px, 100% 10px, 100% 10px;
+  background-attachment: local, local, scroll, scroll;
+}
+
+/* Hides the scrollbar track/thumb on an internally-scrollable panel while
+ * keeping it fully scrollable (wheel, trackpad, keyboard, touch) — used
+ * alongside .scroll-shadows on the sticky lead-detail sidebars, since a
+ * persistent OS-drawn scrollbar (e.g. macOS "Always show scrollbars") reads
+ * as a visual bug and the .scroll-shadows cue already signals scrollability.
+ */
+.scrollbar-hidden {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* old Edge/IE */
+}
+.scrollbar-hidden::-webkit-scrollbar {
+  display: none; /* Chrome/Safari/Edge (Chromium) */
+}
+
 /* Interactive elements - show pointer cursor (edge-flow pattern) */
 button,
 [role="button"],

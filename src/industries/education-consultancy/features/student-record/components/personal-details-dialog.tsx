@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Pencil, X, Check, Loader2 } from "lucide-react";
 import {
@@ -44,7 +44,7 @@ import { AttachDocumentButton } from "./attach-document-button";
 // Already editable elsewhere (the page's main "Edit" button) — this is a
 // convenience second editor for the same real columns, so it saves live the
 // same way Study Interest does, not preview-only.
-const CORE_IDENTITY_FIELDS = [
+export const CORE_IDENTITY_FIELDS = [
   { key: "firstName", label: "First Name", type: "text" },
   { key: "lastName", label: "Last Name", type: "text" },
   { key: "email", label: "Email", type: "email" },
@@ -52,7 +52,7 @@ const CORE_IDENTITY_FIELDS = [
   { key: "nationality", label: "Nationality", type: "text" },
 ] as const;
 
-const PERSONAL_DETAIL_FIELDS = [
+export const PERSONAL_DETAIL_FIELDS = [
   { key: "date_of_birth", label: "Date of Birth", type: "date" },
   { key: "marital_status", label: "Marital Status", type: "select", options: [{ value: "unmarried", label: "Unmarried" }, { value: "married", label: "Married" }] },
   { key: "father_name", label: "Father's Name", type: "text" },
@@ -62,7 +62,7 @@ const PERSONAL_DETAIL_FIELDS = [
   { key: "emergency_contact_phone", label: "Emergency Contact No.", type: "tel" },
 ] as const;
 
-const PASSPORT_CITIZENSHIP_FIELDS = [
+export const PASSPORT_CITIZENSHIP_FIELDS = [
   { key: "passport_number", label: "Passport Number", type: "text" },
   { key: "passport_issued_by", label: "Passport Issued By", type: "text", placeholder: "MOFA, Department of Passport" },
   { key: "passport_issued_date", label: "Passport Issued Date", type: "date" },
@@ -75,7 +75,7 @@ const PASSPORT_CITIZENSHIP_FIELDS = [
 // Not part of the client's original PDF template — flagged there as a
 // generic "standard fields for completeness" addition, so it may change
 // pending client confirmation.
-const FINANCIAL_FIELDS = [
+export const FINANCIAL_FIELDS = [
   { key: "sponsor_name", label: "Sponsor Name", type: "text" },
   { key: "sponsor_relationship", label: "Relationship to Applicant", type: "text" },
   { key: "source_of_funds", label: "Source of Funds", type: "text", placeholder: "e.g. Cash or Bank Loan" },
@@ -84,7 +84,7 @@ const FINANCIAL_FIELDS = [
 
 type FieldValues = Record<string, string>;
 
-interface StudyInterest {
+export interface StudyInterest {
   destinations: string[];
   fieldOfStudy: string;
   degreeLevel: string;
@@ -92,7 +92,7 @@ interface StudyInterest {
   intakeYear: string;
 }
 
-function studyInterestFromLead(lead: Lead, submissionHistory?: LeadSubmissionSnapshot[]): StudyInterest {
+export function studyInterestFromLead(lead: Lead, submissionHistory?: LeadSubmissionSnapshot[]): StudyInterest {
   // `intake_term` exists on the `leads` table (migration 233) but isn't yet
   // declared on the `Lead` type — same gap key-info-section.tsx's
   // StudyInterestPanel works around with this same inline cast.
@@ -128,7 +128,7 @@ function studyInterestFromLead(lead: Lead, submissionHistory?: LeadSubmissionSna
   };
 }
 
-interface CoreIdentity {
+export interface CoreIdentity {
   firstName: string;
   lastName: string;
   email: string;
@@ -136,7 +136,7 @@ interface CoreIdentity {
   nationality: string;
 }
 
-function coreIdentityFromLead(lead: Lead): CoreIdentity {
+export function coreIdentityFromLead(lead: Lead): CoreIdentity {
   return {
     firstName: lead.first_name ?? "",
     lastName: lead.last_name ?? "",
@@ -225,9 +225,11 @@ interface PersonalDetailsDialogProps {
   onLeadUpdate?: (patch: Partial<Lead>) => void;
   /** Gates the "Attach Document" triggers on Passport & Citizenship / each Qualification card — mirrors ApplicantDocumentsCard's own `canManage` (FEATURES.APPLICANT_DOCUMENTS && (canEdit ?? isAdmin)), computed once by the caller so this dialog doesn't re-derive permission logic. */
   canUploadDocuments?: boolean;
+  /** When true, the dialog enters edit mode as soon as it opens instead of showing the preview first — used by the inline summary card's "Edit" button so it's a single click, not open-then-click-Edit-again. */
+  openInEditMode?: boolean;
 }
 
-export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHistory, onLeadUpdate, canUploadDocuments }: PersonalDetailsDialogProps) {
+export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHistory, onLeadUpdate, canUploadDocuments, openInEditMode }: PersonalDetailsDialogProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [values, setValues] = useState<FieldValues>({});
@@ -255,6 +257,17 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
     setReferencesDraft(references);
     setIsEditing(true);
   };
+
+  useEffect(() => {
+    if (open && openInEditMode) startEditing();
+    // startEditing is deliberately omitted: it's a new function reference on
+    // every render (not memoized), so including it would re-run this effect
+    // — and reset every draft field back to the current saved values — on
+    // any unrelated re-render while the dialog happens to be open in edit
+    // mode, silently wiping in-progress edits. This should only fire once,
+    // on the open/openInEditMode transition itself.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, openInEditMode]);
 
   const cancelEditing = () => {
     setDraft(values);

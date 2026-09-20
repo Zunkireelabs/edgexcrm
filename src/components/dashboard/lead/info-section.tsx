@@ -9,28 +9,35 @@ interface InfoSectionProps {
   children: React.ReactNode;
   defaultOpen?: boolean;
   className?: string;
+  /** Optional control rendered next to the toggle, e.g. an "Edit" button — a sibling of the toggle button, never nested inside it. */
+  headerAction?: React.ReactNode;
+  /** Override for the title's default small-caps sidebar styling. */
+  titleClassName?: string;
 }
 
-export function InfoSection({ title, children, defaultOpen = true, className }: InfoSectionProps) {
+export function InfoSection({ title, children, defaultOpen = true, className, headerAction, titleClassName }: InfoSectionProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
 
   return (
     <div className={cn("border border-border rounded-lg bg-card shadow-none", className)}>
-      <button
-        type="button"
-        className="flex items-center justify-between w-full p-3 text-left"
-        onClick={() => setIsOpen(!isOpen)}
-      >
-        <h3 className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
-          {title}
-        </h3>
-        <ChevronDown
-          className={cn(
-            "h-4 w-4 text-muted-foreground transition-transform duration-200",
-            isOpen && "rotate-180"
-          )}
-        />
-      </button>
+      <div className="flex items-center justify-between w-full p-3 gap-2">
+        <button
+          type="button"
+          className="flex items-center justify-between flex-1 text-left min-w-0"
+          onClick={() => setIsOpen(!isOpen)}
+        >
+          <h3 className={cn("text-[11px] font-medium text-muted-foreground uppercase tracking-wide", titleClassName)}>
+            {title}
+          </h3>
+          <ChevronDown
+            className={cn(
+              "h-4 w-4 text-muted-foreground transition-transform duration-200 ml-2 shrink-0",
+              isOpen && "rotate-180"
+            )}
+          />
+        </button>
+        {headerAction}
+      </div>
       {isOpen && (
         <div className="px-3 pb-3 pt-0">
           {children}

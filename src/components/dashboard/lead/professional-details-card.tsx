@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { Pencil, X, Check, Loader2 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { InfoSection } from "./info-section";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { isReservedCustomField } from "@/lib/leads/reserved-custom-fields";
@@ -122,50 +122,52 @@ export function ProfessionalDetailsCard({
     }
   };
 
+  const headerAction = isEditing ? (
+    <div className="flex items-center gap-1">
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-7 px-2"
+        onClick={cancelEditing}
+        disabled={isSaving}
+      >
+        <X className="h-3.5 w-3.5 mr-1" />
+        Cancel
+      </Button>
+      <Button
+        size="sm"
+        className="h-7 px-2"
+        onClick={saveChanges}
+        disabled={isSaving}
+      >
+        {isSaving ? (
+          <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+        ) : (
+          <Check className="h-3.5 w-3.5 mr-1" />
+        )}
+        Save
+      </Button>
+    </div>
+  ) : isAdmin ? (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="h-7 px-2 text-muted-foreground hover:text-foreground"
+      onClick={startEditing}
+    >
+      <Pencil className="h-3.5 w-3.5 mr-1" />
+      Edit
+    </Button>
+  ) : undefined;
+
   return (
-    <Card className="shadow-none rounded-lg py-0">
-      <CardHeader className="pt-4 pb-3 flex flex-row items-center justify-between">
-        <CardTitle className="text-base">Professional Details</CardTitle>
-        {isAdmin && !isEditing && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-muted-foreground hover:text-foreground"
-            onClick={startEditing}
-          >
-            <Pencil className="h-3.5 w-3.5 mr-1" />
-            Edit
-          </Button>
-        )}
-        {isEditing && (
-          <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2"
-              onClick={cancelEditing}
-              disabled={isSaving}
-            >
-              <X className="h-3.5 w-3.5 mr-1" />
-              Cancel
-            </Button>
-            <Button
-              size="sm"
-              className="h-7 px-2"
-              onClick={saveChanges}
-              disabled={isSaving}
-            >
-              {isSaving ? (
-                <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-              ) : (
-                <Check className="h-3.5 w-3.5 mr-1" />
-              )}
-              Save
-            </Button>
-          </div>
-        )}
-      </CardHeader>
-      <CardContent className="grid gap-3 pb-4">
+    <InfoSection
+      title="Professional Details"
+      defaultOpen={false}
+      titleClassName="text-base font-semibold text-foreground normal-case tracking-normal"
+      headerAction={headerAction}
+    >
+      <div className="grid gap-3">
         {isEditing ? (
           // Edit mode - show inputs for all standard fields
           PROFESSIONAL_FIELDS.map((field) => (
@@ -225,8 +227,8 @@ export function ProfessionalDetailsCard({
             ))}
           </>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </InfoSection>
   );
 }
 
