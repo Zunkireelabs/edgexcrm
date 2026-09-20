@@ -65,7 +65,7 @@ export function StudentDetailsSummaryCard({ lead, submissionHistory, onEdit, def
         </Button>
       }
     >
-      <div className="space-y-7 pt-2">
+      <div className="max-h-[500px] overflow-y-auto space-y-7 pt-2 pr-1">
         <SectionGroup title="Personal Information">
           <CardSection title="From existing lead record">
             <FieldGrid>
