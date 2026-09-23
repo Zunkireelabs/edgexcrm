@@ -63,6 +63,8 @@ interface ConsentCardProps {
   consentEnabled: boolean;
   consentSigned: boolean;
   canManage: boolean;
+  /** Processing fee is owner/admin-only (not branch-manager/assignee like canManage) — see API guard in apply-lead-patch.ts. */
+  canManageFee: boolean;
   onSignedChange?: (signed: boolean) => void;
   // Pre-Application fee (migration 084) — current lead-level values
   feeStatus?: FeeStatus | null;
@@ -77,6 +79,7 @@ export function ConsentCard({
   leadId,
   tenantId,
   canManage,
+  canManageFee,
   onSignedChange,
   feeStatus: initialFeeStatus = null,
   feeAmount: initialFeeAmount = null,
@@ -321,7 +324,7 @@ export function ConsentCard({
           <div className="border-t pt-3 space-y-3">
             <p className="text-xs font-medium text-muted-foreground">Processing Fee</p>
 
-            {canManage ? (
+            {canManageFee ? (
               <>
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Fee Paid?</Label>

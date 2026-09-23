@@ -268,6 +268,19 @@ export async function applyLeadPatch(
     }
   }
 
+  // Processing/pre-application fee fields are owner/admin-only. Team members
+  // must report a received payment to an admin, who verifies and enters it
+  // themselves — closes the direct-API path so a non-admin with ordinary
+  // lead-edit access can't record an unverified fee.
+  const FEE_FIELDS = ["pre_app_fee_status", "pre_app_fee_amount", "pre_app_fee_notes"] as const;
+  if (!requireAdmin(auth)) {
+    for (const field of FEE_FIELDS) {
+      if (body[field] !== undefined) {
+        return { kind: "forbidden", message: "Only an owner or admin can edit the processing fee." };
+      }
+    }
+  }
+
   // Validate an incoming pipeline_id belongs to this tenant before it can be
   // written (pipeline_id is in UPDATABLE_FIELDS, and the drift self-heal sends it).
   // Stops a crafted request from stamping a lead with another tenant's pipeline.
