@@ -990,6 +990,7 @@ export function LeadDetailV2({
                       consentEnabled={consentEnabled}
                       consentSigned={consentSigned}
                       canManage={canManageApplications ?? isAdmin}
+                      canManageFee={isAdmin}
                       onSignedChange={setConsentSignedState}
                       feeStatus={currentLead.pre_app_fee_status}
                       feeAmount={currentLead.pre_app_fee_amount}
@@ -1051,6 +1052,7 @@ export function LeadDetailV2({
                 consentEnabled={true}
                 consentSigned={false}
                 canManage={isAdmin}
+                canManageFee={isAdmin}
                 showProcessingFee={false}
                 labels={{
                   sectionTitle: "Subscription Agreement",
