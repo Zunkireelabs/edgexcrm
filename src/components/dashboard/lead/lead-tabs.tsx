@@ -210,8 +210,6 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
           {/* Student Details summary — read-only; Edit opens the same Student Details dialog as the "Details" button above */}
           {studentRecordActive && (
             <StudentDetailsSummaryCard
-              lead={lead}
-              submissionHistory={submissionHistory}
               onEdit={() => {
                 setPersonalDetailsOpenInEditMode(true);
                 setIsPersonalDetailsOpen(true);

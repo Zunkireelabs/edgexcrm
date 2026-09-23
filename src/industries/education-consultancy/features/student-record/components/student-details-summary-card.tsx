@@ -2,7 +2,6 @@
 
 import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { Lead } from "@/types/database";
 import { InfoSection } from "@/components/dashboard/lead/info-section";
 import { SectionGroup, CardSection, FieldGrid, EditableField } from "./form-primitives";
 import { WorkExperienceSection } from "./work-experience-section";
@@ -12,11 +11,8 @@ import {
   PASSPORT_CITIZENSHIP_FIELDS,
   FINANCIAL_FIELDS,
 } from "./personal-details-dialog";
-import type { LeadSubmissionSnapshot } from "@/lib/leads/submission-history";
 
 interface StudentDetailsSummaryCardProps {
-  lead: Lead;
-  submissionHistory?: LeadSubmissionSnapshot[];
   /** Opens the existing Student Details dialog — the single source of truth for editing. */
   onEdit: () => void;
   defaultOpen?: boolean;
