@@ -170,13 +170,18 @@
  * the scroll extremes). Classic technique, e.g. Lea Verou's "scroll shadows".
  */
 .scroll-shadows {
+  /* content-bg (#ffffff), not background (#f7f7f7) — this class is applied to
+     panels sitting inside the app's scrolling content pane (shell.tsx's
+     bg-content-bg <main>), not the outer page chrome. Using the wrong token
+     here left a visible grey tint in the gaps between cards, since
+     --background is a shade darker than the pane it actually sits on. */
   background:
-    linear-gradient(var(--background) 30%, rgba(0, 0, 0, 0)),
-    linear-gradient(rgba(0, 0, 0, 0), var(--background) 70%) 0 100%,
+    linear-gradient(var(--content-bg) 30%, rgba(0, 0, 0, 0)),
+    linear-gradient(rgba(0, 0, 0, 0), var(--content-bg) 70%) 0 100%,
     radial-gradient(farthest-side at 50% 0, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0)),
     radial-gradient(farthest-side at 50% 100%, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0)) 0 100%;
   background-repeat: no-repeat;
-  background-color: var(--background);
+  background-color: var(--content-bg);
   background-size: 100% 24px, 100% 24px, 100% 10px, 100% 10px;
   background-attachment: local, local, scroll, scroll;
 }
