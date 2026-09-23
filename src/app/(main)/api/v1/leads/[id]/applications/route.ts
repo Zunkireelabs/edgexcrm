@@ -5,6 +5,7 @@ import { getLeadMembership } from "@/lib/leads/branch-membership";
 import { isLeadCollaborator } from "@/lib/leads/collaborators";
 import { shouldRestrictToSelf } from "@/lib/api/permissions";
 import { canCreateOrReorderApplications } from "@/lib/api/applications";
+import { checkLeadProfileCompleteness } from "@/lib/leads/profile-completeness";
 import { resolveApplicationPipelineAndStage } from "@/lib/applications/pipeline-resolution";
 import {
   apiSuccess,
@@ -154,6 +155,17 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .select("id").eq("tenant_id", auth.tenantId).eq("lead_id", id)
       .eq("status", "signed").is("deleted_at", null).limit(1).maybeSingle();
     if (!signed) return apiError("CONSENT_REQUIRED", "Student consent must be signed before creating an application", 409);
+  }
+
+  // Profile-completeness gate — client request 2026-09-23: name/email/phone/
+  // study info + a document must be on file before a lead can formally apply.
+  const profileCheck = await checkLeadProfileCompleteness(supabase, auth.tenantId, id);
+  if (!profileCheck.complete) {
+    return apiError(
+      "PROFILE_INCOMPLETE",
+      `Complete the student profile before creating an application. Missing: ${profileCheck.missing.join(", ")}`,
+      409,
+    );
   }
 
   let body: Record<string, unknown>;
