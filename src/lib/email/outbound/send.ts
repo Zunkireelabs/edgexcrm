@@ -3,7 +3,7 @@ import { resolveTenantSender } from "../sender";
 import { getResendClient } from "../index";
 import { applyEmailEnvGuard } from "./env-guard";
 import { loadSuppressedEmails, normalizeEmail } from "./suppression";
-import { getOrCreateUnsubscribeToken, unsubscribeUrl, injectUnsubscribe } from "./unsubscribe";
+import { ensureUnsubscribeTokens, unsubscribeUrl, injectUnsubscribe } from "./unsubscribe";
 import { buildBulkEmailHeaders } from "./headers";
 import { getDailyCapStatus } from "./cap";
 import { acquireResendRateLimitSlot } from "./rate-limit";
@@ -194,11 +194,22 @@ export async function sendQueuedEmailBatch(
 
   let sent = 0;
 
-  // Step 5/6: per row, get-or-create the unsubscribe token, inject the
-  // footer, build headers, apply the env guard, flip to 'sending', call
-  // Resend, write back. Bounded concurrency (5 in flight) so a 16k batch
-  // doesn't open 16k sockets at once — reused from src/lib/sms/concurrency.ts
-  // rather than a second implementation.
+  // PROD INCIDENT (2026-09-24) — unsubscribe tokens used to be minted one
+  // recipient at a time, inside the concurrency-5 loop below: a 3,131-row
+  // blast meant 6,000+ extra insert+select round trips competing with the
+  // batch materialize writes for the same connection pool, the exact shape
+  // that caused F2 for SMS (BLAST-FINDINGS-2026-09-06.md) — fixed there, not
+  // here, until now. Mint/read every token for this batch up front in a
+  // small, bounded number of chunked calls instead.
+  const tokenByEmail = await ensureUnsubscribeTokens(
+    db,
+    withinCap.map((m) => ({ email: m.to_email, leadId: m.lead_id }))
+  );
+
+  // Step 5/6: per row, inject the footer, build headers, apply the env
+  // guard, flip to 'sending', call Resend, write back. Bounded concurrency (5
+  // in flight) so a 16k batch doesn't open 16k sockets at once — reused from
+  // src/lib/sms/concurrency.ts rather than a second implementation.
   //
   // §5.3: one row = one resend.emails.send() call, always exactly one
   // recipient in `to`. Never cc/bcc, never Resend's batch endpoint. This
@@ -210,7 +221,14 @@ export async function sendQueuedEmailBatch(
     // whole batch, not be silently swallowed into a per-row 'failed'.
     const guarded = applyEmailEnvGuard(normalizeEmail(msg.to_email), msg.subject);
 
-    const token = await getOrCreateUnsubscribeToken(db, tenantId, msg.to_email, msg.lead_id);
+    const token = tokenByEmail.get(normalizeEmail(msg.to_email));
+    if (!token) {
+      await db
+        .from("email_messages")
+        .update({ status: "failed", error_code: "exception", error_message: "no unsubscribe token minted for this recipient" })
+        .eq("id", msg.id);
+      return;
+    }
     const unsubUrl = unsubscribeUrl(token);
     const bodyWithFooter = injectUnsubscribe(msg.body_html, unsubUrl, {
       orgName: sender.orgName,
