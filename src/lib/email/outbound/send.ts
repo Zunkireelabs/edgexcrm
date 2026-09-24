@@ -3,7 +3,7 @@ import { resolveTenantSender } from "../sender";
 import { getResendClient } from "../index";
 import { applyEmailEnvGuard } from "./env-guard";
 import { loadSuppressedEmails, normalizeEmail } from "./suppression";
-import { ensureUnsubscribeTokens, unsubscribeUrl, injectUnsubscribe } from "./unsubscribe";
+import { getOrCreateUnsubscribeToken, unsubscribeUrl, injectUnsubscribe } from "./unsubscribe";
 import { buildBulkEmailHeaders } from "./headers";
 import { getDailyCapStatus } from "./cap";
 import { acquireResendRateLimitSlot } from "./rate-limit";
@@ -194,22 +194,24 @@ export async function sendQueuedEmailBatch(
 
   let sent = 0;
 
-  // PROD INCIDENT (2026-09-24) — unsubscribe tokens used to be minted one
-  // recipient at a time, inside the concurrency-5 loop below: a 3,131-row
-  // blast meant 6,000+ extra insert+select round trips competing with the
-  // batch materialize writes for the same connection pool, the exact shape
-  // that caused F2 for SMS (BLAST-FINDINGS-2026-09-06.md) — fixed there, not
-  // here, until now. Mint/read every token for this batch up front in a
-  // small, bounded number of chunked calls instead.
-  const tokenByEmail = await ensureUnsubscribeTokens(
-    db,
-    withinCap.map((m) => ({ email: m.to_email, leadId: m.lead_id }))
-  );
-
-  // Step 5/6: per row, inject the footer, build headers, apply the env
-  // guard, flip to 'sending', call Resend, write back. Bounded concurrency (5
-  // in flight) so a 16k batch doesn't open 16k sockets at once — reused from
-  // src/lib/sms/concurrency.ts rather than a second implementation.
+  // TEMPORARY REVERT (2026-09-24) — the bulk-mint path (ensureUnsubscribeTokens,
+  // called once per batch up front) was shipped in PR #567 to fix real
+  // connection-pool contention, but every blast on staging afterward got
+  // stuck permanently at status:'sending' with recipients stuck 'queued' —
+  // the worker reaches this function and never completes a single send, with
+  // no error surfaced anywhere in our own logs (a background-job failure here
+  // only shows up in Inngest's dashboard, which this revert was made without
+  // access to). Reverting to the proven-working per-row
+  // getOrCreateUnsubscribeToken call to restore sending while the bulk-mint
+  // path is root-caused separately. See unsubscribe.ts — ensureUnsubscribeTokens
+  // is left in place (and its tests), just unused by this call site, so the
+  // real fix can re-wire it here once the actual failure is understood.
+  //
+  // Step 5/6: per row, get-or-create the unsubscribe token, inject the
+  // footer, build headers, apply the env guard, flip to 'sending', call
+  // Resend, write back. Bounded concurrency (5 in flight) so a 16k batch
+  // doesn't open 16k sockets at once — reused from src/lib/sms/concurrency.ts
+  // rather than a second implementation.
   //
   // §5.3: one row = one resend.emails.send() call, always exactly one
   // recipient in `to`. Never cc/bcc, never Resend's batch endpoint. This
@@ -221,14 +223,7 @@ export async function sendQueuedEmailBatch(
     // whole batch, not be silently swallowed into a per-row 'failed'.
     const guarded = applyEmailEnvGuard(normalizeEmail(msg.to_email), msg.subject);
 
-    const token = tokenByEmail.get(normalizeEmail(msg.to_email));
-    if (!token) {
-      await db
-        .from("email_messages")
-        .update({ status: "failed", error_code: "exception", error_message: "no unsubscribe token minted for this recipient" })
-        .eq("id", msg.id);
-      return;
-    }
+    const token = await getOrCreateUnsubscribeToken(db, tenantId, msg.to_email, msg.lead_id);
     const unsubUrl = unsubscribeUrl(token);
     const bodyWithFooter = injectUnsubscribe(msg.body_html, unsubUrl, {
       orgName: sender.orgName,
