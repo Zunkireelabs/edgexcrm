@@ -118,6 +118,7 @@ export default async function ApplicationDetailRoute({ params }: Props) {
       activityTimeline={activityTimeline}
       canEdit={canManageApplicationForLead(tenantData, parentLead)}
       canDelete={canManageApplicationForLead(tenantData, parentLead)}
+      canManageFee={tenantData.permissions.baseTier === "owner" || tenantData.permissions.baseTier === "admin"}
       currentUserId={tenantData.userId}
     />
   );

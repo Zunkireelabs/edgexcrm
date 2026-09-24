@@ -323,20 +323,66 @@ export async function materializeBlastAudience(tenantId: string, blastId: string
     async (chunk) => db.from("email_messages").upsert(chunk, { onConflict: "source_id,lead_id", ignoreDuplicates: true }),
     { chunkSize: MATERIALIZE_CHUNK_SIZE }
   );
-  if (!materializeResult.ok) {
+
+  // BUG FIX (2026-09-24 prod incident — 3 stuck blasts, thousands of
+  // recipients orphaned): materializeInChunks commits each chunk as it goes
+  // (its own header comment says so explicitly), so a single failed chunk
+  // after N earlier successful ones still leaves N*chunkSize real rows
+  // sitting in email_messages as 'queued'. The old code here treated ANY
+  // chunk failure as total failure — returning ok:false, which the caller
+  // (emailBlastSend's mark-failed-no-audience step) turned into
+  // `status:'failed', recipients_total:0`. That wiped the blast's own count
+  // back to zero and marked it terminal, even though real recipients were
+  // already committed — and since 'failed' is never revisited, those rows
+  // were then abandoned forever: never sent, never counted, never retried.
+  // Fix: only report ok:false when NOTHING committed (chunk 0 itself failed).
+  // Any later chunk failing means earlier chunks already landed — recompute
+  // the real total from email_messages (not the intended full-audience
+  // length) and proceed to send exactly what did materialize, instead of
+  // discarding it under a false "failed".
+  if (!materializeResult.ok && materializeResult.failedChunkIndex === 0) {
     return {
       ok: false,
       error: `failed to materialize recipient rows at chunk ${materializeResult.failedChunkIndex}: ${materializeResult.error?.message}`,
     };
   }
 
+  if (!materializeResult.ok) {
+    logger.error(
+      {
+        tenantId,
+        blastId,
+        failedChunkIndex: materializeResult.failedChunkIndex,
+        intendedRows: newRows.length,
+        error: materializeResult.error,
+      },
+      "[materializeBlastAudience] partial materialize failure — proceeding with the rows that already committed instead of orphaning them under a false 'failed' status"
+    );
+  }
+
+  // Recomputed from email_messages (the source of truth) rather than trusted
+  // off audience.sendable/suppressed.length — those reflect the INTENDED
+  // audience, which can be larger than what actually landed after a partial
+  // materialize failure above.
+  const committedRows = await fetchAllRows<{ status: string }>((offset, limit) =>
+    db
+      .from("email_messages")
+      .select("status")
+      .eq("source", "blast")
+      .eq("source_id", blastId)
+      .order("id", { ascending: true })
+      .range(offset, offset + limit - 1) as unknown as Promise<PageResult<{ status: string }>>
+  );
+  const committedSendable = committedRows.filter((r) => r.status !== "suppressed").length;
+  const committedSuppressed = committedRows.filter((r) => r.status === "suppressed").length;
+
   await db
     .from("email_blasts")
-    .update({ recipients_total: audience.sendable.length + audience.suppressed.length, recipients_suppressed: audience.suppressed.length })
+    .update({ recipients_total: committedSendable + committedSuppressed, recipients_suppressed: committedSuppressed })
     .eq("id", blastId)
     .neq("status", "cancelled");
 
-  return { ok: true, sendable: audience.sendable.length, suppressed: audience.suppressed.length };
+  return { ok: true, sendable: committedSendable, suppressed: committedSuppressed };
 }
 
 export const emailBlastSend = inngest.createFunction(

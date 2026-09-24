@@ -9,8 +9,14 @@ import { INDUSTRIES } from "@/industries/_registry";
 // retry it. This sweep finds any education-tenant lead that's been live
 // (non-staging list, or no list) for more than 10 minutes with a NULL
 // display_id, and backfills it via the same RPC the normal assignment path uses.
+//
+// Cadence (2026-09-24): relaxed from */15 to */30 — this is a rare-case safety
+// net for a transient failure, not a user-facing real-time path, so the extra
+// delay is inconsequential; freed up as part of bringing the shared Inngest
+// Hobby-tier execution budget back under its monthly limit (had run over,
+// 115,545/50,000, degrading every function across both staging and production).
 export const displayIdBackfillSweep = inngest.createFunction(
-  { id: "display-id-backfill-sweep", triggers: [{ cron: "*/15 * * * *" }] },
+  { id: "display-id-backfill-sweep", triggers: [{ cron: "*/30 * * * *" }] },
   async () => {
     const supabase = await createServiceClient();
 

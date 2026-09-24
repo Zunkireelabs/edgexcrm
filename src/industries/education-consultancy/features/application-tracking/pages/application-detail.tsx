@@ -93,6 +93,8 @@ interface ApplicationDetailPageProps {
   activityTimeline: LeadActivity[];
   canEdit: boolean;
   canDelete: boolean;
+  /** Processing fee is owner/admin-only, stricter than canEdit (branch-manager/assignee). */
+  canManageFee: boolean;
   currentUserId: string;
 }
 
@@ -103,6 +105,7 @@ export function ApplicationDetailPage({
   activityTimeline,
   canEdit,
   canDelete,
+  canManageFee,
   currentUserId,
 }: ApplicationDetailPageProps) {
   const router = useRouter();
@@ -935,6 +938,7 @@ export function ApplicationDetailPage({
               consentEnabled={true}
               consentSigned={false}
               canManage={canEdit}
+              canManageFee={canManageFee}
               feeStatus={fullLead.pre_app_fee_status}
               feeAmount={fullLead.pre_app_fee_amount}
               feeNotes={fullLead.pre_app_fee_notes}

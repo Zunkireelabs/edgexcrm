@@ -194,6 +194,19 @@ export async function sendQueuedEmailBatch(
 
   let sent = 0;
 
+  // TEMPORARY REVERT (2026-09-24) — the bulk-mint path (ensureUnsubscribeTokens,
+  // called once per batch up front) was shipped in PR #567 to fix real
+  // connection-pool contention, but every blast on staging afterward got
+  // stuck permanently at status:'sending' with recipients stuck 'queued' —
+  // the worker reaches this function and never completes a single send, with
+  // no error surfaced anywhere in our own logs (a background-job failure here
+  // only shows up in Inngest's dashboard, which this revert was made without
+  // access to). Reverting to the proven-working per-row
+  // getOrCreateUnsubscribeToken call to restore sending while the bulk-mint
+  // path is root-caused separately. See unsubscribe.ts — ensureUnsubscribeTokens
+  // is left in place (and its tests), just unused by this call site, so the
+  // real fix can re-wire it here once the actual failure is understood.
+  //
   // Step 5/6: per row, get-or-create the unsubscribe token, inject the
   // footer, build headers, apply the env guard, flip to 'sending', call
   // Resend, write back. Bounded concurrency (5 in flight) so a 16k batch

@@ -603,3 +603,50 @@ describe("applyLeadPatch — Lead Source lock (owner/admin only)", () => {
     if (outcome.kind === "ok") expect(outcome.lead.city).toBe("Kathmandu");
   });
 });
+
+describe("applyLeadPatch — Processing fee lock (owner/admin only)", () => {
+  const FEE_DB = {
+    leads: { id: "lead-1", pipeline_id: "pipe-1", assigned_to: "user-1", branch_id: null, list_id: null },
+  };
+
+  it.each([
+    ["pre_app_fee_status", "paid"],
+    ["pre_app_fee_amount", 5000],
+    ["pre_app_fee_notes", "cash received"],
+  ])("assignee with ordinary lead-edit access is forbidden from setting %s", async (field, value) => {
+    await setFakeDb(FEE_DB);
+    const auth = fixtureAuth({ permissions: { leadScope: "own", canEditLeads: true } as ResolvedPermissions });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(auth, "lead-1", { [field]: value }, OPTS);
+    expect(outcome).toEqual({ kind: "forbidden", message: "Only an owner or admin can edit the processing fee." });
+  });
+
+  it("team-scoped branch manager is also forbidden from setting the fee (stricter than ADMIN_ONLY_FIELDS)", async () => {
+    await setFakeDb(FEE_DB);
+    const auth = fixtureAuth({ permissions: { leadScope: "team", canEditLeads: true, canAssignLeads: true } as ResolvedPermissions });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(auth, "lead-1", { pre_app_fee_status: "paid" }, OPTS);
+    expect(outcome).toEqual({ kind: "forbidden", message: "Only an owner or admin can edit the processing fee." });
+  });
+
+  it("owner can set pre_app_fee_status", async () => {
+    await setFakeDb(FEE_DB);
+    const auth = fixtureAuth({ role: "owner", permissions: { baseTier: "owner", leadScope: "all" } as ResolvedPermissions });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(auth, "lead-1", { pre_app_fee_status: "paid", pre_app_fee_amount: 5000 }, OPTS);
+    expect(outcome.kind).toBe("ok");
+    if (outcome.kind === "ok") {
+      expect(outcome.lead.pre_app_fee_status).toBe("paid");
+      expect(outcome.lead.pre_app_fee_amount).toBe(5000);
+    }
+  });
+
+  it("admin can set pre_app_fee_notes", async () => {
+    await setFakeDb(FEE_DB);
+    const auth = fixtureAuth({ role: "admin", permissions: { baseTier: "admin", leadScope: "all" } as ResolvedPermissions });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(auth, "lead-1", { pre_app_fee_notes: "verified with student" }, OPTS);
+    expect(outcome.kind).toBe("ok");
+    if (outcome.kind === "ok") expect(outcome.lead.pre_app_fee_notes).toBe("verified with student");
+  });
+});
