@@ -123,3 +123,75 @@ describe("getOrCreateUnsubscribeToken — race safety", () => {
     expect(second).toBe(first);
   });
 });
+
+// PROD INCIDENT (2026-09-24) — sendQueuedEmailBatch used to call
+// getOrCreateUnsubscribeToken once per recipient inside its concurrency-5
+// send loop: 6,000+ extra round trips on a 3,131-recipient blast, the exact
+// shape SMS's ensureOptOutTokens (§F2) was already fixed for. Same coverage
+// shape as src/lib/sms/optout.test.ts's "ensureOptOutTokens — bulk mint/read".
+describe("ensureUnsubscribeTokens — bulk mint/read", () => {
+  it("returns a stable token for an email that already has one", async (ctx) => {
+    if (!localDbAvailable) {
+      ctx.skip();
+      return;
+    }
+
+    const { ensureUnsubscribeTokens } = await import("./unsubscribe");
+    const scoped = localScopedClient(tenantId);
+    const email = `bulk.${Math.floor(Math.random() * 900000 + 100000)}@example.com`;
+
+    const first = await ensureUnsubscribeTokens(scoped, [{ email, leadId: null }]);
+    const second = await ensureUnsubscribeTokens(scoped, [{ email, leadId: null }]);
+
+    expect(first.get(email)).toBeTruthy();
+    expect(second.get(email)).toBe(first.get(email));
+  });
+
+  it("resolves a duplicate email in one batch to a single row and token", async (ctx) => {
+    if (!localDbAvailable) {
+      ctx.skip();
+      return;
+    }
+
+    const { ensureUnsubscribeTokens } = await import("./unsubscribe");
+    const scoped = localScopedClient(tenantId);
+    const email = `dup.${Math.floor(Math.random() * 900000 + 100000)}@example.com`;
+
+    const result = await ensureUnsubscribeTokens(scoped, [
+      { email, leadId: null },
+      { email, leadId: null },
+    ]);
+
+    expect(result.size).toBe(1);
+    expect(result.get(email)).toBeTruthy();
+
+    const { count } = await db
+      .from("email_unsubscribe_tokens")
+      .select("token", { count: "exact", head: true })
+      .eq("tenant_id", tenantId)
+      .eq("email", email);
+    expect(count).toBe(1);
+  });
+
+  it("resolves every email across >1,000 distinct emails (proves the pagination)", async (ctx) => {
+    if (!localDbAvailable) {
+      ctx.skip();
+      return;
+    }
+
+    const { ensureUnsubscribeTokens } = await import("./unsubscribe");
+    const scoped = localScopedClient(tenantId);
+    const base = Math.floor(Math.random() * 900000 + 100000);
+    const emails = Array.from({ length: 1200 }, (_, i) => `bulk.${base}.${i}@example.com`);
+
+    const result = await ensureUnsubscribeTokens(
+      scoped,
+      emails.map((email) => ({ email, leadId: null }))
+    );
+
+    expect(result.size).toBe(emails.length);
+    for (const email of emails) {
+      expect(result.get(email)).toBeTruthy();
+    }
+  }, 30000);
+});
