@@ -308,7 +308,17 @@ const FULL_AUTH = {
   permissions: { leadScope: "all", pipelineAccess: "all" },
 };
 
-function fakeMaterializeDb(opts: { failUpsertOnce?: boolean; failUpsertAlways?: boolean; maxRecipientsPerBlast?: number } = {}) {
+function fakeMaterializeDb(
+  opts: {
+    failUpsertOnce?: boolean;
+    failUpsertAlways?: boolean;
+    maxRecipientsPerBlast?: number;
+    // Simulates a chunk permanently failing only after N rows from earlier
+    // chunks already committed — models the real prod incident (2026-09-24):
+    // chunk 0..k-1 land fine, chunk k exhausts its retries and never does.
+    failPermanentlyAfterRows?: number;
+  } = {}
+) {
   const messages = new Map<string, Record<string, unknown>>();
   let upsertFailuresLeft = opts.failUpsertOnce ? 1 : 0;
   const blastContentRow = {
@@ -356,7 +366,11 @@ function fakeMaterializeDb(opts: { failUpsertOnce?: boolean; failUpsertAlways?: 
       if (table === "email_messages") {
         return {
           upsert: (rows: Record<string, unknown>[], options: { onConflict: string; ignoreDuplicates?: boolean }) => {
-            if (opts.failUpsertAlways || upsertFailuresLeft > 0) {
+            if (
+              opts.failUpsertAlways ||
+              upsertFailuresLeft > 0 ||
+              (opts.failPermanentlyAfterRows !== undefined && messages.size >= opts.failPermanentlyAfterRows)
+            ) {
               upsertFailuresLeft--;
               return Promise.resolve({ data: null, error: { message: "connection reset", code: "08006" } });
             }
@@ -367,6 +381,21 @@ function fakeMaterializeDb(opts: { failUpsertOnce?: boolean; failUpsertAlways?: 
             }
             return Promise.resolve({ data: null, error: null });
           },
+          // Read-back used by the partial-materialize-failure fix — recomputes
+          // recipients_total/suppressed from what actually committed instead
+          // of trusting the intended audience length.
+          select: () => ({
+            eq: () => ({
+              eq: () => ({
+                order: () => ({
+                  range: (from: number, to: number) => {
+                    const statuses = Array.from(messages.values()).map((m) => ({ status: m.status }));
+                    return Promise.resolve({ data: statuses.slice(from, to + 1), error: null });
+                  },
+                }),
+              }),
+            }),
+          }),
         };
       }
       throw new Error(`unexpected table: ${table}`);
@@ -483,6 +512,57 @@ describe("materializeBlastAudience", () => {
 
     expect(result.ok).toBe(false);
     expect(fake.messages.size).toBe(0); // nothing landed — a retry can safely re-attempt every row
+  });
+
+  // PROD INCIDENT REGRESSION (2026-09-24) — three real blasts (one with 3,131
+  // recipients) ended up 'failed' with recipients_total reset to 0 while
+  // thousands of real 'queued' rows sat orphaned in email_messages forever,
+  // because a single chunk failing after many earlier chunks had already
+  // committed was treated as total failure. Must now: (1) report ok:true —
+  // not a terminal failure — so the blast proceeds to send what did
+  // materialize instead of abandoning it under 'failed'; (2) report the real
+  // committed count (100), not the full intended audience (250).
+  it("a chunk failing AFTER earlier chunks already committed does NOT discard those rows or report total failure", async () => {
+    const fake = fakeMaterializeDb({ failPermanentlyAfterRows: 100 });
+    scopedClientForTenantMock.mockResolvedValue(fake.db);
+    const sendable = Array.from({ length: 250 }, (_, i) => audienceRow(`lead-${i}`, `lead${i}@example.com`));
+    resolveAudienceMock.mockResolvedValue({
+      ok: true,
+      audience: { matched: 250, sendable, suppressed: [], excluded: { noEmail: 0, malformed: 0, suppressed: 0, duplicateEmail: 0 } },
+    });
+    const { materializeBlastAudience } = await import("./email-blast-send");
+
+    const result = await materializeBlastAudience("tenant-1", "blast-1", "user-1");
+
+    // Chunk 0 (rows 0-99) committed before chunk 1 exhausted its retries.
+    expect(fake.messages.size).toBe(100);
+    expect(result).toEqual({ ok: true, sendable: 100, suppressed: 0 });
+    // recipients_total on the blast row must reflect what actually landed
+    // (100), never the wiped-to-0 or the full-intended-250 count.
+    const lastUpdate = fake.blastUpdates[fake.blastUpdates.length - 1];
+    expect(lastUpdate).toMatchObject({ recipients_total: 100, recipients_suppressed: 0 });
+  });
+
+  // A chunk failing at index 0 (nothing ever committed) is still a genuine
+  // total failure — must stay ok:false, unlike the partial case above.
+  it("a chunk failing at index 0 (nothing committed yet) still reports total failure", async () => {
+    const fake = fakeMaterializeDb({ failPermanentlyAfterRows: 0 });
+    scopedClientForTenantMock.mockResolvedValue(fake.db);
+    resolveAudienceMock.mockResolvedValue({
+      ok: true,
+      audience: {
+        matched: 1,
+        sendable: [audienceRow("lead-1", "a@example.com")],
+        suppressed: [],
+        excluded: { noEmail: 0, malformed: 0, suppressed: 0, duplicateEmail: 0 },
+      },
+    });
+    const { materializeBlastAudience } = await import("./email-blast-send");
+
+    const result = await materializeBlastAudience("tenant-1", "blast-1", "user-1");
+
+    expect(result.ok).toBe(false);
+    expect(fake.messages.size).toBe(0);
   });
 
   // F4 (docs/BLAST-FINDINGS-2026-09-06.md) — over-cap REJECTS rather than
