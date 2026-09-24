@@ -69,10 +69,16 @@ export async function getOrCreateUnsubscribeToken(
 const MINT_CHUNK_SIZE = 1000;
 
 // Read-back chunk: the select-back's `.in("email", chunk)` filter is
-// serialized into the request URL — same 300 as the SMS precedent (proven
-// safe against local PostgREST's ~400-450-entry URI-too-long ceiling); do
-// not raise this without re-verifying against that same limit.
-const SELECT_CHUNK_SIZE = 300;
+// serialized into the request URL. NOT the SMS precedent's 300 — that's
+// sized for short E.164 phone numbers, not emails. Emails need
+// loadSuppressedEmails' (suppression.ts) chunk size instead: verified
+// empirically there against real Admizz-length addresses (36.6 char
+// average) that 250/300/400 all 414 ("URI too long") and 200 is the first
+// size that passes — 150 keeps real headroom under that boundary. Caught by
+// this file's own ">1,000 distinct emails" CI test 414-ing with the wrong
+// (SMS-sized) chunk before this was fixed — do not raise this without
+// re-verifying against that same limit.
+const SELECT_CHUNK_SIZE = 150;
 
 interface UnsubscribeTokenLookupRow {
   email: string;
