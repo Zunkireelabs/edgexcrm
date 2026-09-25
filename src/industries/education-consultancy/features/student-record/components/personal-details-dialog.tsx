@@ -372,7 +372,7 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
           </p>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-7">
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-7 no-scrollbar">
           <SectionGroup title="Personal Information">
             <CardSection title="From existing lead record">
               <FieldGrid>

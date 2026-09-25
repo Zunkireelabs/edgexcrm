@@ -722,7 +722,7 @@ export function LeadDetailV2({
             alone can't reveal anything below the fold since the page's scroll
             now only moves the center column — this lets you scroll inside the
             sidebar itself to reach the rest. */}
-        <div className="space-y-4 lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto scroll-shadows scrollbar-hidden">
+        <div className="space-y-4 lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto scroll-shadows no-scrollbar">
           {/* Contact Card */}
           <ContactCard
             lead={currentLead}
@@ -897,7 +897,7 @@ export function LeadDetailV2({
             content) as the left sidebar — see comment there. Only from xl
             where this becomes a real third column; at lg it's stacked
             full-width below the others, where sticky would make no sense. */}
-        <div className="lg:col-span-full xl:col-span-1 xl:sticky xl:top-4 xl:self-start xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto scroll-shadows scrollbar-hidden">
+        <div className="lg:col-span-full xl:col-span-1 xl:sticky xl:top-4 xl:self-start xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto scroll-shadows no-scrollbar">
           {tenant.industry_id === "education_consultancy" ? (
             <div className="space-y-4">
               {applicationsActive ? (
