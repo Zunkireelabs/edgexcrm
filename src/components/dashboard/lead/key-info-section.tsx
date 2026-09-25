@@ -14,6 +14,7 @@ import {
   type AccreditationStatus,
 } from "@/industries/real-estate/lib/investor-fields";
 import { isOtherLead } from "@/lib/leads/lead-type";
+import { canEditLeadWorkingData } from "@/lib/leads/lead-edit-scope";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { SALUTATIONS } from "@/industries/it-agency/leads/salutations";
@@ -297,7 +298,7 @@ export function KeyInfoSection({
           {!isInIntakeList && !isOtherContact && (
           <div>
             <p className="text-xs text-muted-foreground mb-1.5">Status</p>
-            {(isAdmin || leadScope === "team" || (canEdit && !!userId && userId === assignedTo)) ? (
+            {canEditLeadWorkingData({ isAdmin, leadScope, isOwnScopeEditor: canEdit && !!userId && userId === assignedTo }) ? (
               <Select
                 value={effectiveStageId}
                 onValueChange={industryId === "education_consultancy" ? setPendingStageId : onStageChange}
@@ -352,7 +353,7 @@ export function KeyInfoSection({
                   />
                 ) : (
                 <ListStepper
-                  readOnly={!(onListChange && (isAdmin || leadScope === "team" || (canEdit && !!userId && userId === assignedTo)))}
+                  readOnly={!(onListChange && canEditLeadWorkingData({ isAdmin, leadScope, isOwnScopeEditor: canEdit && !!userId && userId === assignedTo }))}
                   currentListId={lead.list_id ?? null}
                   activeLists={activeLeadLists ?? leadLists}
                   accessibleLists={leadLists}
@@ -491,12 +492,13 @@ export function KeyInfoSection({
               lead={lead}
               isAdmin={isAdmin}
               isEditor={isEditor ?? isAdmin}
+              leadScope={leadScope}
               onSave={onSaveStudyFields}
               submissionHistory={submissionHistory}
             />
           )}
 
-          <LeadSourcePanel lead={lead} isAdmin={isAdmin} onSave={onSaveSourceFields} submissionHistory={submissionHistory} />
+          <LeadSourcePanel lead={lead} isAdmin={isAdmin} isEditor={isEditor ?? isAdmin} leadScope={leadScope} onSave={onSaveSourceFields} submissionHistory={submissionHistory} />
 
           {/* ── COMPANY — it_agency only ──────────────────────────── */}
           {industryId === "it_agency" && isEditing && draft ? (
@@ -607,6 +609,8 @@ export function KeyInfoSection({
             <TripInquiryPanel
               lead={lead}
               isAdmin={isAdmin}
+              isEditor={isEditor ?? isAdmin}
+              leadScope={leadScope}
               onSave={onSaveTripFields}
             />
           )}
@@ -778,12 +782,13 @@ interface StudyInterestPanelProps {
   lead: Lead;
   isAdmin: boolean;
   isEditor?: boolean;
+  leadScope?: "all" | "own" | "team";
   onSave?: (fields: Record<string, unknown>) => Promise<void>;
   submissionHistory?: LeadSubmissionSnapshot[];
 }
 
-function StudyInterestPanel({ lead, isAdmin, isEditor, onSave, submissionHistory }: StudyInterestPanelProps) {
-  const canEditPanel = isEditor ?? isAdmin;
+function StudyInterestPanel({ lead, isAdmin, isEditor, leadScope, onSave, submissionHistory }: StudyInterestPanelProps) {
+  const canEditPanel = canEditLeadWorkingData({ isAdmin, leadScope, isOwnScopeEditor: isEditor ?? false });
   const leadWithEdu = lead as {
     destinations?: string[] | null;
     field_of_study?: string | null;
@@ -1168,11 +1173,14 @@ function StudyInterestPanel({ lead, isAdmin, isEditor, onSave, submissionHistory
 interface LeadSourcePanelProps {
   lead: Lead;
   isAdmin: boolean;
+  isEditor?: boolean;
+  leadScope?: "all" | "own" | "team";
   onSave?: (fields: Record<string, unknown>) => Promise<void>;
   submissionHistory?: LeadSubmissionSnapshot[];
 }
 
-function LeadSourcePanel({ lead, isAdmin, onSave, submissionHistory }: LeadSourcePanelProps) {
+function LeadSourcePanel({ lead, isAdmin, isEditor, leadScope, onSave, submissionHistory }: LeadSourcePanelProps) {
+  const canEditPanel = canEditLeadWorkingData({ isAdmin, leadScope, isOwnScopeEditor: isEditor ?? false });
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [draftSource, setDraftSource] = useState(lead.intake_source ?? "");
@@ -1237,7 +1245,7 @@ function LeadSourcePanel({ lead, isAdmin, onSave, submissionHistory }: LeadSourc
         defaultOpen={false}
         titleClassName="text-[10px]"
         headerAction={
-          isAdmin && !editing ? (
+          canEditPanel && !editing ? (
             <button
               type="button"
               onClick={openEdit}
@@ -1332,12 +1340,15 @@ interface TripPackage {
 interface TripInquiryPanelProps {
   lead: Lead;
   isAdmin: boolean;
+  isEditor?: boolean;
+  leadScope?: "all" | "own" | "team";
   onSave?: (fields: Record<string, unknown>) => Promise<void>;
 }
 
 const NULL_PACKAGE = "__none__";
 
-function TripInquiryPanel({ lead, isAdmin, onSave }: TripInquiryPanelProps) {
+function TripInquiryPanel({ lead, isAdmin, isEditor, leadScope, onSave }: TripInquiryPanelProps) {
+  const canEditPanel = canEditLeadWorkingData({ isAdmin, leadScope, isOwnScopeEditor: isEditor ?? false });
   const cf = (lead.custom_fields || {}) as Record<string, unknown>;
 
   const [packages, setPackages] = useState<TripPackage[]>([]);
@@ -1427,7 +1438,7 @@ function TripInquiryPanel({ lead, isAdmin, onSave }: TripInquiryPanelProps) {
         <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
           Trip Inquiry
         </p>
-        {isAdmin && !editing && (
+        {canEditPanel && !editing && (
           <button
             type="button"
             onClick={() => setEditing(true)}
@@ -1441,7 +1452,7 @@ function TripInquiryPanel({ lead, isAdmin, onSave }: TripInquiryPanelProps) {
       {/* Package selector — always visible, saves immediately on change */}
       <div>
         <p className="text-xs text-muted-foreground mb-1">Package</p>
-        {isAdmin ? (
+        {canEditPanel ? (
           <Select
             value={packageId ?? NULL_PACKAGE}
             onValueChange={handlePackageChange}
@@ -1648,7 +1659,7 @@ function TripInquiryPanel({ lead, isAdmin, onSave }: TripInquiryPanelProps) {
           ) : null}
           {!cf.trip_destination && !cf.trip_type && !cf.trip_start_date && (
             <p className="text-xs text-muted-foreground italic">
-              No trip details yet.{isAdmin ? " Click Edit to add." : ""}
+              No trip details yet.{canEditPanel ? " Click Edit to add." : ""}
             </p>
           )}
         </div>
