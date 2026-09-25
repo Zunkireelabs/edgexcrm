@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useState } from "react";
 import { CheckSquare, Square, Plus, Trash2, FileDown, ExternalLink, AlarmClock, X } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -89,69 +89,32 @@ function ReminderButton({
 
 interface ManagementPanelProps {
   lead: Lead;
-  checklists: LeadChecklist[];
-  isAdmin: boolean;
-  canEdit?: boolean;
-  onChecklistsChange: (checklists: LeadChecklist[]) => void;
 }
 
-export interface ManagementPanelRef {
-  focusInput: () => void;
+// Legacy `lead.file_urls` documents only — the Checklist that used to render
+// here is dropped: it duplicated the identical ChecklistCard already rendered
+// in Activity → Tasks (see activities-panel.tsx), reminders included.
+export function ManagementPanel({ lead }: ManagementPanelProps) {
+  const fileUrls = lead.file_urls || {};
+  const documents = Object.entries(fileUrls);
+
+  if (documents.length === 0) return null;
+
+  return (
+    <Card className="shadow-none rounded-lg py-0">
+      <CardHeader className="pt-4 pb-3">
+        <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+          Documents
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2 pb-4">
+        {documents.map(([key, url]) => (
+          <DocumentRow key={key} name={key} url={url} />
+        ))}
+      </CardContent>
+    </Card>
+  );
 }
-
-export const ManagementPanel = forwardRef<ManagementPanelRef, ManagementPanelProps>(
-  function ManagementPanel(
-    {
-      lead,
-      checklists,
-      isAdmin,
-      canEdit,
-      onChecklistsChange,
-    },
-    ref
-  ) {
-    const checklistInputRef = useRef<HTMLInputElement>(null);
-
-    useImperativeHandle(ref, () => ({
-      focusInput: () => {
-        checklistInputRef.current?.focus();
-      },
-    }));
-
-    const fileUrls = lead.file_urls || {};
-    const documents = Object.entries(fileUrls);
-
-    return (
-      <div className="space-y-4">
-        {/* Checklist */}
-        <ChecklistCard
-          ref={checklistInputRef}
-          leadId={lead.id}
-          checklists={checklists}
-          isAdmin={isAdmin}
-          canEdit={canEdit}
-          onChecklistsChange={onChecklistsChange}
-        />
-
-        {/* Documents */}
-        {documents.length > 0 && (
-          <Card className="shadow-none rounded-lg py-0">
-            <CardHeader className="pt-4 pb-3">
-              <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-                Documents
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 pb-4">
-              {documents.map(([key, url]) => (
-                <DocumentRow key={key} name={key} url={url} />
-              ))}
-            </CardContent>
-          </Card>
-        )}
-      </div>
-    );
-  }
-);
 
 // Checklist Card Component
 interface ChecklistCardProps {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { forwardRef, useImperativeHandle, useState } from "react";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toLocalDateString } from "@/lib/date";
@@ -34,7 +34,12 @@ interface TaskComposerProps {
   onCancel?: () => void;
 }
 
-export function TaskComposer({
+export interface TaskComposerRef {
+  /** Expands the composer (title input autofocuses itself, see below). */
+  expand: () => void;
+}
+
+export const TaskComposer = forwardRef<TaskComposerRef, TaskComposerProps>(function TaskComposer({
   currentUserId,
   context,
   onCreated,
@@ -43,8 +48,12 @@ export function TaskComposer({
   initialDescription = "",
   defaultExpanded = false,
   onCancel,
-}: TaskComposerProps) {
+}: TaskComposerProps, ref) {
   const [expanded, setExpanded] = useState(defaultExpanded);
+
+  useImperativeHandle(ref, () => ({
+    expand: () => setExpanded(true),
+  }));
   const [title, setTitle] = useState(initialTitle);
   const [description, setDescription] = useState(initialDescription);
   const [dueDate, setDueDate] = useState("");
@@ -185,4 +194,4 @@ export function TaskComposer({
       </div>
     </form>
   );
-}
+});
