@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useLeadBackDestination } from "@/hooks/use-lead-back-destination";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -187,6 +188,7 @@ export function LeadDetailV2({
 }: LeadDetailV2Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const backDestination = useLeadBackDestination();
   const notesTabRef = useRef<{ focusComposer: () => void; focusTaskComposer: () => void }>(null);
   const { destinations: destOptions, fieldsOfStudy, studyLevels } = useEduTaxonomy();
 
@@ -735,7 +737,8 @@ export function LeadDetailV2({
             onDraftChange={updateDraft}
             industryId={tenant.industry_id}
             onTagChange={(tags) => setCurrentLead((prev) => ({ ...prev, tags } as Lead))}
-            onBack={() => router.back()}
+            onBack={() => router.push(backDestination.href)}
+            backLabel={backDestination.label}
             isInvestor={isRealEstate}
             onEdit={startEditing}
             onSave={handleSave}

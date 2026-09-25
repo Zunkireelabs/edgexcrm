@@ -68,6 +68,7 @@ import { NotificationsDropdown } from "./notifications-dropdown";
 import { BranchSwitcher } from "./branch-switcher";
 import { RunningTimerChip } from "./running-timer-chip";
 import { useBadgeCounts } from "@/hooks/use-badge-counts";
+import { useTrackPreviousPage } from "@/hooks/use-track-previous-page";
 import { Badge } from "@/components/ui/badge";
 import type { SidebarEntry, SidebarGroup, SidebarItem } from "@/industries/_types";
 import { getFeatureAccess } from "@/industries/_loader";
@@ -325,6 +326,10 @@ export function DashboardShell({
 }: DashboardShellProps) {
   const pathname = usePathname();
   const router = useRouter();
+  // Remembers the last non-lead-detail page visited, so the Lead Detail
+  // page's back button can return to the actual origin instead of a blind
+  // router.back() — see src/hooks/use-track-previous-page.ts.
+  useTrackPreviousPage();
   // Interim Orca access gate: the entire Orca surface (mode switcher, nav,
   // Ask-Orca assistant panel) is OWNER ONLY until per-user AI access levels
   // ship (first Admizz prod exposure — admin excluded). The matching /orca/*

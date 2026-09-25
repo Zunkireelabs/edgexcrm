@@ -160,6 +160,9 @@ interface ContactCardProps {
   onTagChange?: (tags: string[]) => void;
   /** Back-navigation handler, rendered top-left of the card. */
   onBack?: () => void;
+  /** Label for the page the back button actually returns to (e.g. "Applications",
+   * "Pipeline") — shown next to the arrow so the destination isn't a guess. */
+  backLabel?: string;
   /** real_estate / home_moving: shows an "Investor" badge alongside the stage badge. */
   isInvestor?: boolean;
   /** Page-level actions, folded into the card's "Action" dropdown instead of a
@@ -216,6 +219,7 @@ export function ContactCard({
   industryId,
   onTagChange,
   onBack,
+  backLabel,
   isInvestor = false,
   onEdit,
   onSave,
@@ -270,8 +274,9 @@ export function ContactCard({
         {/* Top row: back arrow + status badges — replaces the page-level header */}
         <div className="flex items-start justify-between mb-3">
           {onBack ? (
-            <Button variant="ghost" size="icon" className="-ml-2 h-8 w-8" onClick={onBack}>
+            <Button variant="ghost" size="sm" className="-ml-2 h-8 px-2 gap-1.5" onClick={onBack}>
               <ArrowLeft className="h-4 w-4" />
+              {backLabel && <span className="text-xs">{backLabel}</span>}
             </Button>
           ) : <span />}
           {!isEditing && (
