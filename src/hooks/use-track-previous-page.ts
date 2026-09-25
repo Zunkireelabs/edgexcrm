@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 
 export const PREVIOUS_PAGE_KEY = "edgex:pre-lead-page";
 
@@ -20,14 +20,17 @@ const LEAD_DETAIL_RE = /^\/leads\/[0-9a-f-]{36}(?:\/|$)/i;
  */
 export function useTrackPreviousPage() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     if (!pathname || LEAD_DETAIL_RE.test(pathname)) return;
+    const query = searchParams.toString();
+    const href = query ? `${pathname}?${query}` : pathname;
     try {
-      sessionStorage.setItem(PREVIOUS_PAGE_KEY, pathname);
+      sessionStorage.setItem(PREVIOUS_PAGE_KEY, href);
     } catch {
       // sessionStorage unavailable (private mode, etc.) — back button falls
       // back to the default destination.
     }
-  }, [pathname]);
+  }, [pathname, searchParams]);
 }
