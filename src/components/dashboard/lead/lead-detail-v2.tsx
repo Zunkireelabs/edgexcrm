@@ -35,6 +35,7 @@ import { LeadTabs } from "./lead-tabs";
 import { ManagementPanel } from "./management-panel";
 import { ProspectQualificationDialog } from "@/components/dashboard/leads/prospect-qualification-dialog";
 import { hasProspectQualification, canBypassProspectQualification } from "@/lib/leads/prospect-qualification";
+import { canEditLeadWorkingData } from "@/lib/leads/lead-edit-scope";
 import { ApplicationsCard } from "@/industries/education-consultancy/features/application-tracking/components/applications-card";
 import { ClassesCard } from "@/industries/education-consultancy/features/classes/components/classes-card";
 import { ConsentCard } from "@/industries/education-consultancy/features/application-tracking/components/consent-card";
@@ -236,7 +237,7 @@ export function LeadDetailV2({
   const canEdit = isAdmin || canEditLeads;
   // Note-editing gate: owner/admin, branch-manager, or the lead's own-scope assignee.
   // Author-of-the-note is a separate, per-note check made in NoteCard itself.
-  const canManageNotes = isAdmin || leadScope === "team" || userId === currentLead.assigned_to;
+  const canManageNotes = canEditLeadWorkingData({ isAdmin, leadScope, isOwnScopeEditor: userId === currentLead.assigned_to });
   const maxBranches = resolveEntitlements({
     plan: tenant.plan,
     entitlement_overrides: tenant.entitlement_overrides,
