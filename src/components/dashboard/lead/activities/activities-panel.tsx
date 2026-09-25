@@ -26,7 +26,7 @@ import { ActivityCard } from "./activity-card";
 import { LogActivityModal } from "./log-activity-modal";
 import { NotesTab, type NotesTabRef } from "../notes-tab";
 import { ChecklistCard } from "../management-panel";
-import { TaskList } from "@/components/dashboard/tasks/task-list";
+import { TaskList, type TaskListRef } from "@/components/dashboard/tasks/task-list";
 import { type EmailThread, type Email } from "@/industries/_shared/features/email/hooks/use-email-threads";
 import { useConnectedInboxes } from "@/industries/_shared/features/email/hooks/use-connected-inboxes";
 import { getFeatureAccess } from "@/industries/_loader";
@@ -89,6 +89,8 @@ const SUB_TABS: { id: SubTab; label: string; icon: React.ReactNode }[] = [
 export interface ActivitiesPanelRef {
   /** Switch to the Notes sub-tab; pass true to also focus the composer. */
   openNotes: (focus?: boolean) => void;
+  /** Switch to the Tasks sub-tab; pass true to also expand the task composer. */
+  openTasks: (focus?: boolean) => void;
 }
 
 export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelProps>(
@@ -116,12 +118,19 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
 }: ActivitiesPanelProps, ref) {
   const [activeTab, setActiveTab] = useState<SubTab>("all");
   const notesTabRef = useRef<NotesTabRef>(null);
+  const taskListRef = useRef<TaskListRef>(null);
 
   useImperativeHandle(ref, () => ({
     openNotes: (focus = false) => {
       setActiveTab("notes");
       if (focus) {
         setTimeout(() => notesTabRef.current?.focusComposer(), 50);
+      }
+    },
+    openTasks: (focus = false) => {
+      setActiveTab("tasks");
+      if (focus) {
+        setTimeout(() => taskListRef.current?.focusComposer(), 50);
       }
     },
   }));
@@ -479,6 +488,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
                 Assigned Tasks
               </p>
               <TaskList
+                ref={taskListRef}
                 fetchUrl={`/api/v1/leads/${leadId}/tasks`}
                 currentUserId={currentUserId}
                 context={{ leadId }}

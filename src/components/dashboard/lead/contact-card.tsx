@@ -1,8 +1,25 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Mail, Phone, MessageSquare, CheckSquare, MoreHorizontal, MessageCircle, ChevronDown } from "lucide-react";
+import Link from "next/link";
+import {
+  ArrowLeft,
+  Mail,
+  Phone,
+  MessageSquare,
+  CheckSquare,
+  MoreHorizontal,
+  MessageCircle,
+  ChevronDown,
+  Pencil,
+  Trash2,
+  UserCheck,
+  Check,
+  X,
+  Loader2,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { PhoneInput } from "@/components/ui/phone-input";
@@ -10,6 +27,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -18,6 +36,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { CopyButton } from "@/components/ui/copy-button";
+import { TruncatedText } from "@/components/ui/truncated-text";
 import { formatPhoneForTel, formatPhoneForWhatsApp } from "@/lib/phone-utils";
 import { nationalityFromPhone } from "@/lib/leads/nationality";
 import { toast } from "sonner";
@@ -139,6 +158,28 @@ interface ContactCardProps {
   /** Called after the Tag pill changes the lead type, so the parent can keep its
    * lead state in sync (Status/Stage gating depends on tags). */
   onTagChange?: (tags: string[]) => void;
+  /** Back-navigation handler, rendered top-left of the card. */
+  onBack?: () => void;
+  /** Label for the page the back button actually returns to (e.g. "Applications",
+   * "Pipeline") — shown next to the arrow so the destination isn't a guess. */
+  backLabel?: string;
+  /** real_estate / home_moving: shows an "Investor" badge alongside the stage badge. */
+  isInvestor?: boolean;
+  /** Page-level actions, folded into the card's "Action" dropdown instead of a
+   * separate floating header. */
+  onEdit?: () => void;
+  onSave?: () => void;
+  onCancelEdit?: () => void;
+  isSaving?: boolean;
+  saveDisabled?: boolean;
+  canDelete?: boolean;
+  onDelete?: () => void;
+  deleting?: boolean;
+  /** it_agency only: Convert to Contact entry point. */
+  isItAgency?: boolean;
+  convertedContactId?: string | null;
+  convertedContactName?: string | null;
+  onConvertClick?: () => void;
 }
 
 interface QuickActionButtonProps {
@@ -177,12 +218,28 @@ export function ContactCard({
   onDraftChange,
   industryId,
   onTagChange,
+  onBack,
+  backLabel,
+  isInvestor = false,
+  onEdit,
+  onSave,
+  onCancelEdit,
+  isSaving = false,
+  saveDisabled = false,
+  canDelete = false,
+  onDelete,
+  deleting = false,
+  isItAgency = false,
+  convertedContactId,
+  convertedContactName,
+  onConvertClick,
 }: ContactCardProps) {
   const fullName = isEditing && draft
     ? [draft.first_name, draft.last_name].filter(Boolean).join(" ") || "—"
     : getLeadFullName(lead);
   const initials = getLeadInitials(lead);
   const stageColor = currentStage?.color || "#6b7280";
+  const showDisplayId = industryId === "education_consultancy" && !!lead.display_id;
 
   const handleEmailClick = () => {
     if (lead.email) {
@@ -214,16 +271,58 @@ export function ContactCard({
   return (
     <Card className="border border-border shadow-none rounded-lg py-0">
       <CardContent className="p-4">
+        {/* Top row: back arrow + status badges — replaces the page-level header */}
+        <div className="flex items-start justify-between mb-3">
+          {onBack ? (
+            <Button variant="ghost" size="sm" className="-ml-2 h-8 px-2 gap-1.5" onClick={onBack}>
+              <ArrowLeft className="h-4 w-4" />
+              {backLabel && <span className="text-xs">{backLabel}</span>}
+            </Button>
+          ) : <span />}
+          {!isEditing && (
+            <div className="flex flex-wrap items-center justify-end gap-1.5 max-w-[70%]">
+              {/* Pipeline stage badge — meaningless for Other-tagged walk-ins, which
+                  never enter the funnel (same gate as Key Information's Status/Stage). */}
+              {currentStage && !isOtherLead(lead.tags, industryId) && (
+                <Badge
+                  variant="secondary"
+                  style={{
+                    backgroundColor: `${stageColor}20`,
+                    color: stageColor,
+                  }}
+                >
+                  {currentStage.name}
+                </Badge>
+              )}
+              {industryId === "education_consultancy" && (
+                <LeadTypeBadge leadId={lead.id} tags={lead.tags ?? []} onTagChange={onTagChange} />
+              )}
+              {isInvestor && (
+                <Badge variant="secondary" className="bg-violet-100 text-violet-800">
+                  Investor
+                </Badge>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* Avatar and Name */}
-        <div className="flex flex-col items-center text-center mb-4">
-          <div
-            className="h-16 w-16 rounded-full flex items-center justify-center mb-3"
-            style={{ backgroundColor: `${stageColor}15` }}
-          >
-            <span className="text-lg font-semibold" style={{ color: stageColor }}>
-              {initials}
+        <div className="flex flex-col items-start text-left mb-4">
+          {showDisplayId && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono bg-gray-100 text-gray-600 font-medium mb-3">
+              {lead.display_id}
             </span>
-          </div>
+          )}
+          {isEditing && draft ? (
+            <div
+              className="h-16 w-16 rounded-full flex items-center justify-center mb-3"
+              style={{ backgroundColor: `${stageColor}15` }}
+            >
+              <span className="text-lg font-semibold" style={{ color: stageColor }}>
+                {initials}
+              </span>
+            </div>
+          ) : null}
           {isEditing && draft ? (
             <div className="w-full space-y-2 text-left">
               <div className="grid grid-cols-2 gap-2">
@@ -305,25 +404,21 @@ export function ContactCard({
             </div>
           ) : (
             <>
-              <h2 className="text-lg font-semibold text-foreground">{fullName}</h2>
-              <div className="flex flex-wrap items-center justify-center gap-1.5 mt-2">
-                {/* Pipeline stage badge — meaningless for Other-tagged walk-ins, which
-                    never enter the funnel (same gate as Key Information's Status/Stage). */}
-                {currentStage && !isOtherLead(lead.tags, industryId) && (
-                  <Badge
-                    variant="secondary"
-                    style={{
-                      backgroundColor: `${stageColor}20`,
-                      color: stageColor,
-                    }}
-                  >
-                    {currentStage.name}
-                  </Badge>
-                )}
-                {industryId === "education_consultancy" && (
-                  <LeadTypeBadge leadId={lead.id} tags={lead.tags ?? []} onTagChange={onTagChange} />
-                )}
+              <div className="flex items-center gap-2.5">
+                <div
+                  className="h-10 w-10 shrink-0 rounded-full flex items-center justify-center"
+                  style={{ backgroundColor: `${stageColor}15` }}
+                >
+                  <span className="text-sm font-semibold" style={{ color: stageColor }}>
+                    {initials}
+                  </span>
+                </div>
+                <h2 className="text-lg font-semibold text-foreground">{fullName}</h2>
               </div>
+              <p className="text-[10px] text-muted-foreground mt-2">
+                Submitted {new Date(lead.created_at).toLocaleDateString()} at{" "}
+                {new Date(lead.created_at).toLocaleTimeString()}
+              </p>
             </>
           )}
         </div>
@@ -332,12 +427,9 @@ export function ContactCard({
         {!isEditing && (
         <div className="space-y-2 mb-4">
           {lead.email && (
-            <div className="flex items-center justify-between group">
-              <a
-                href={`mailto:${lead.email}`}
-                className="text-sm text-muted-foreground hover:text-primary truncate flex-1"
-              >
-                {lead.email}
+            <div className="flex items-center justify-between gap-2 group">
+              <a href={`mailto:${lead.email}`} className="min-w-0 flex-1 hover:text-primary">
+                <TruncatedText text={lead.email} className="text-sm text-muted-foreground" />
               </a>
               <CopyButton value={lead.email} label="Email" className="opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
@@ -374,8 +466,26 @@ export function ContactCard({
         </div>
         )}
 
-        {/* Quick Actions (hidden in edit mode) */}
-        {!isEditing && <div className="flex items-center justify-between gap-1 pt-4 border-t border-border">
+        {/* Quick Actions, or Save/Cancel while editing — page-level actions
+            (Edit/Convert/Delete) live in the Action dropdown below instead
+            of a separate floating header, to reclaim that space. */}
+        {isEditing ? (
+          <div className="flex items-center justify-end gap-2 pt-4 border-t border-border">
+            <Button variant="ghost" size="sm" onClick={onCancelEdit} disabled={isSaving}>
+              <X className="h-4 w-4 mr-2" />
+              Cancel
+            </Button>
+            <Button size="sm" onClick={onSave} disabled={isSaving || saveDisabled}>
+              {isSaving ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Check className="h-4 w-4 mr-2" />
+              )}
+              {isSaving ? "Saving..." : "Save"}
+            </Button>
+          </div>
+        ) : (
+        <div className="flex items-center justify-between gap-1 pt-4 border-t border-border">
           <QuickActionButton
             icon={<MessageSquare className="h-4 w-4" />}
             label="Note"
@@ -407,7 +517,7 @@ export function ContactCard({
                 <span className="h-9 w-9 rounded-full border border-border flex items-center justify-center text-muted-foreground group-hover:border-foreground group-hover:text-foreground transition-colors">
                   <MoreHorizontal className="h-4 w-4" />
                 </span>
-                <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">More</span>
+                <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">Action</span>
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
@@ -420,9 +530,42 @@ export function ContactCard({
                   WhatsApp
                 </DropdownMenuItem>
               )}
+              {(onEdit || isItAgency || canDelete) && <DropdownMenuSeparator />}
+              {onEdit && (
+                <DropdownMenuItem onClick={onEdit}>
+                  <Pencil className="h-4 w-4 mr-2" />
+                  Edit
+                </DropdownMenuItem>
+              )}
+              {isItAgency && (
+                convertedContactId ? (
+                  <DropdownMenuItem asChild>
+                    <Link href={`/contacts/${convertedContactId}`}>
+                      <UserCheck className="h-4 w-4 mr-2" />
+                      Converted to {convertedContactName ?? "Contact"}
+                    </Link>
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem onClick={onConvertClick}>
+                    <UserCheck className="h-4 w-4 mr-2" />
+                    Convert to Contact
+                  </DropdownMenuItem>
+                )
+              )}
+              {canDelete && (
+                <DropdownMenuItem
+                  variant="destructive"
+                  onClick={onDelete}
+                  disabled={deleting}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  {deleting ? "Deleting..." : "Delete"}
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
-        </div>}
+        </div>
+        )}
       </CardContent>
     </Card>
   );

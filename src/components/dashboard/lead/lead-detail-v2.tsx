@@ -2,8 +2,8 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
-import { ArrowLeft, Trash2, UserCheck, Pencil, X, Check, Loader2 } from "lucide-react";
+import { useLeadBackDestination } from "@/hooks/use-lead-back-destination";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import {
@@ -33,9 +33,9 @@ import { ContactCard } from "./contact-card";
 import { KeyInfoSection } from "./key-info-section";
 import { LeadTabs } from "./lead-tabs";
 import { ManagementPanel } from "./management-panel";
-import { getLeadFullName } from "./lead-name";
 import { ProspectQualificationDialog } from "@/components/dashboard/leads/prospect-qualification-dialog";
 import { hasProspectQualification, canBypassProspectQualification } from "@/lib/leads/prospect-qualification";
+import { canEditLeadWorkingData } from "@/lib/leads/lead-edit-scope";
 import { ApplicationsCard } from "@/industries/education-consultancy/features/application-tracking/components/applications-card";
 import { ClassesCard } from "@/industries/education-consultancy/features/classes/components/classes-card";
 import { ConsentCard } from "@/industries/education-consultancy/features/application-tracking/components/consent-card";
@@ -189,8 +189,8 @@ export function LeadDetailV2({
 }: LeadDetailV2Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const notesTabRef = useRef<{ focusComposer: () => void }>(null);
-  const checklistRef = useRef<{ focusInput: () => void }>(null);
+  const backDestination = useLeadBackDestination();
+  const notesTabRef = useRef<{ focusComposer: () => void; focusTaskComposer: () => void }>(null);
   const { destinations: destOptions, fieldsOfStudy, studyLevels } = useEduTaxonomy();
 
   const [notes, setNotes] = useState(initialNotes);
@@ -237,7 +237,7 @@ export function LeadDetailV2({
   const canEdit = isAdmin || canEditLeads;
   // Note-editing gate: owner/admin, branch-manager, or the lead's own-scope assignee.
   // Author-of-the-note is a separate, per-note check made in NoteCard itself.
-  const canManageNotes = isAdmin || leadScope === "team" || userId === currentLead.assigned_to;
+  const canManageNotes = canEditLeadWorkingData({ isAdmin, leadScope, isOwnScopeEditor: userId === currentLead.assigned_to });
   const maxBranches = resolveEntitlements({
     plan: tenant.plan,
     entitlement_overrides: tenant.entitlement_overrides,
@@ -517,8 +517,11 @@ export function LeadDetailV2({
   };
 
   const handleTaskClick = () => {
+    // Tasks live in the Activity tab's Tasks sub-tab; switch there, then
+    // focusTaskComposer routes through LeadTabs → ActivitiesPanel.openTasks(true).
+    setActiveTab("activity");
     setTimeout(() => {
-      checklistRef.current?.focusInput();
+      notesTabRef.current?.focusTaskComposer();
     }, 100);
   };
 
@@ -702,102 +705,8 @@ export function LeadDetailV2({
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => router.back()}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold">
-                {getLeadFullName(currentLead)}
-              </h1>
-              {tenant.industry_id === "education_consultancy" && currentLead.display_id && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono bg-gray-100 text-gray-600 font-medium">
-                  {currentLead.display_id}
-                </span>
-              )}
-              {isRealEstate && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-violet-100 text-violet-800 font-medium">
-                  Investor
-                </span>
-              )}
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Submitted {new Date(currentLead.created_at).toLocaleDateString()} at{" "}
-              {new Date(currentLead.created_at).toLocaleTimeString()}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {isItAgency && !isEditing && (
-            currentLead.converted_contact_id ? (
-              <Link href={`/contacts/${currentLead.converted_contact_id}`}>
-                <Button variant="outline" size="sm">
-                  <UserCheck className="h-4 w-4 mr-2" />
-                  Converted to {convertedContactName ?? "Contact"}
-                </Button>
-              </Link>
-            ) : (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setConvertDialogOpen(true)}
-              >
-                <UserCheck className="h-4 w-4 mr-2" />
-                Convert to Contact
-              </Button>
-            )
-          )}
-          {!isEditing && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={startEditing}
-            >
-              <Pencil className="h-4 w-4 mr-2" />
-              Edit
-            </Button>
-          )}
-          {isEditing && (
-            <>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={cancelEditing}
-                disabled={isSaving}
-              >
-                <X className="h-4 w-4 mr-2" />
-                Cancel
-              </Button>
-              <Button
-                size="sm"
-                onClick={handleSave}
-                disabled={isSaving || Object.keys(editErrors).length > 0}
-              >
-                {isSaving ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Check className="h-4 w-4 mr-2" />
-                )}
-                {isSaving ? "Saving..." : "Save"}
-              </Button>
-            </>
-          )}
-          {isAdmin && !isEditing && (
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={handleDeleteLead}
-              disabled={deleting}
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              {deleting ? "Deleting..." : "Delete"}
-            </Button>
-          )}
-        </div>
-      </div>
+      {/* Page-level actions (Edit/Convert/Delete) now live inside ContactCard's
+          Action dropdown — no separate floating header. */}
 
       {/* 3-Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] xl:grid-cols-[280px_1fr_320px] gap-6">
@@ -816,7 +725,7 @@ export function LeadDetailV2({
             alone can't reveal anything below the fold since the page's scroll
             now only moves the center column — this lets you scroll inside the
             sidebar itself to reach the rest. */}
-        <div className="space-y-4 lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto scroll-shadows scrollbar-hidden">
+        <div className="space-y-4 lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto scroll-shadows no-scrollbar">
           {/* Contact Card */}
           <ContactCard
             lead={currentLead}
@@ -829,6 +738,21 @@ export function LeadDetailV2({
             onDraftChange={updateDraft}
             industryId={tenant.industry_id}
             onTagChange={(tags) => setCurrentLead((prev) => ({ ...prev, tags } as Lead))}
+            onBack={() => router.push(backDestination.href)}
+            backLabel={backDestination.label}
+            isInvestor={isRealEstate}
+            onEdit={startEditing}
+            onSave={handleSave}
+            onCancelEdit={cancelEditing}
+            isSaving={isSaving}
+            saveDisabled={Object.keys(editErrors).length > 0}
+            canDelete={isAdmin}
+            onDelete={handleDeleteLead}
+            deleting={deleting}
+            isItAgency={isItAgency}
+            convertedContactId={currentLead.converted_contact_id}
+            convertedContactName={convertedContactName}
+            onConvertClick={() => setConvertDialogOpen(true)}
           />
 
           {/* Key Information (includes Stage, Assigned To, and all lead details) */}
@@ -955,7 +879,6 @@ export function LeadDetailV2({
             tenantName={tenant.name}
             tenantLogoUrl={tenant.logo_url}
             projectBoardEnabled={projectBoardEnabled}
-            onTagChange={(tags) => setCurrentLead((prev) => ({ ...prev, tags } as Lead))}
             submissionHistory={submissionHistory}
             onLeadUpdate={(patch) => setCurrentLead((prev) => ({ ...prev, ...patch } as Lead))}
             onSaveItinerary={async (itinerary) => {
@@ -978,7 +901,7 @@ export function LeadDetailV2({
             content) as the left sidebar — see comment there. Only from xl
             where this becomes a real third column; at lg it's stacked
             full-width below the others, where sticky would make no sense. */}
-        <div className="lg:col-span-full xl:col-span-1 xl:sticky xl:top-4 xl:self-start xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto scroll-shadows scrollbar-hidden">
+        <div className="lg:col-span-full xl:col-span-1 xl:sticky xl:top-4 xl:self-start xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto scroll-shadows no-scrollbar">
           {tenant.industry_id === "education_consultancy" ? (
             <div className="space-y-4">
               {applicationsActive ? (
@@ -1004,14 +927,7 @@ export function LeadDetailV2({
                   />
                 </>
               ) : (
-                <ManagementPanel
-                  ref={checklistRef}
-                  lead={currentLead}
-                  checklists={checklists}
-                  isAdmin={isAdmin}
-                  canEdit={canEdit}
-                  onChecklistsChange={handleChecklistsChange}
-                />
+                <ManagementPanel lead={currentLead} />
               )}
               {classesActive && (
                 <ClassesCard
@@ -1064,24 +980,10 @@ export function LeadDetailV2({
                   signedTitle: "Subscription Agreement signed",
                 }}
               />
-              <ManagementPanel
-                ref={checklistRef}
-                lead={currentLead}
-                checklists={checklists}
-                isAdmin={isAdmin}
-                canEdit={canEdit}
-                onChecklistsChange={handleChecklistsChange}
-              />
+              <ManagementPanel lead={currentLead} />
             </div>
           ) : (
-            <ManagementPanel
-              ref={checklistRef}
-              lead={currentLead}
-              checklists={checklists}
-              isAdmin={isAdmin}
-              canEdit={canEdit}
-              onChecklistsChange={handleChecklistsChange}
-            />
+            <ManagementPanel lead={currentLead} />
           )}
         </div>
       </div>

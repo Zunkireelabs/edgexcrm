@@ -3,7 +3,7 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { GitMerge, Pencil, X } from "lucide-react";
+import { GitMerge, X } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +18,6 @@ import { MergeDialog } from "./merge-dialog";
 import { useEmailThreads } from "@/industries/_shared/features/email/hooks/use-email-threads";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
-import { getLeadFullName } from "./lead-name";
 import { ItineraryBuilder } from "@/industries/travel-agency/features/itinerary/builder";
 import type { Itinerary } from "@/industries/travel-agency/features/itinerary/types";
 import { PersonalDetailsDialog } from "@/industries/education-consultancy/features/student-record/components/personal-details-dialog";
@@ -45,8 +44,6 @@ interface LeadTabsProps {
   tenantName?: string;
   tenantLogoUrl?: string | null;
   onSaveItinerary?: (itinerary: Itinerary) => Promise<void>;
-  /** Keeps the parent's lead state in sync when the overview Tag control changes it. */
-  onTagChange?: (tags: string[]) => void;
   /** Gates whether a project-linked task's chip links to the cockpit — resolved server-side via getFeatureAccess, never re-derived here. */
   projectBoardEnabled?: boolean;
   /** Fallback source for Study Interest fields (destinations/field_of_study/degree_level) when the lead's dedicated columns are empty but a form submission already answered them. */
@@ -57,11 +54,12 @@ interface LeadTabsProps {
 
 export interface LeadTabsRef {
   focusComposer: () => void;
+  focusTaskComposer: () => void;
 }
 
 export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
   function LeadTabs(
-    { lead, notes, activities, teamMemberEmails, teamMemberNames, customFields, activeTab, onTabChange, onNotesChange, onCustomFieldsChange, checklists, onChecklistsChange, isAdmin, canEdit, canManageNotes, currentUserId, industryId, tenantName, tenantLogoUrl, onSaveItinerary, onTagChange, projectBoardEnabled, submissionHistory, onLeadUpdate },
+    { lead, notes, activities, teamMemberEmails, teamMemberNames, customFields, activeTab, onTabChange, onNotesChange, onCustomFieldsChange, checklists, onChecklistsChange, isAdmin, canEdit, canManageNotes, currentUserId, industryId, tenantName, tenantLogoUrl, onSaveItinerary, projectBoardEnabled, submissionHistory, onLeadUpdate },
     ref
   ) {
     const activitiesPanelRef = useRef<ActivitiesPanelRef>(null);
@@ -75,6 +73,9 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
     useImperativeHandle(ref, () => ({
       focusComposer: () => {
         activitiesPanelRef.current?.openNotes(true);
+      },
+      focusTaskComposer: () => {
+        activitiesPanelRef.current?.openTasks(true);
       },
     }));
 
@@ -90,8 +91,6 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
     // Roll-up of inner Activity sub-tab notification counts. Today only Emails contributes;
     // add future inner counts (unread calls/tasks/meetings) into this sum.
     const activityUnreadCount = unreadEmailCount;
-
-    const location = [lead.city, lead.country].filter(Boolean).join(", ");
 
     return (
       <>
@@ -121,60 +120,19 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4 mt-0">
-          {studentRecordActive && (
-            <div className="flex justify-end">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 px-3"
-                onClick={() => setIsPersonalDetailsOpen(true)}
-              >
-                <Pencil className="h-3.5 w-3.5 mr-1.5" />
-                Details
-              </Button>
-            </div>
+          {/* Professional Details (editable) — generic B2B fields (Company/
+              Designation/Office Phone), not relevant to education_consultancy
+              leads. That industry's own Professional Information (Work
+              Experience/References) lives in the Student Details popup instead. */}
+          {industryId !== "education_consultancy" && (
+            <ProfessionalDetailsCard
+              leadId={lead.id}
+              customFields={customFields}
+              onFieldsUpdate={onCustomFieldsChange}
+              isAdmin={isAdmin}
+              industryId={industryId}
+            />
           )}
-
-          {/* Personal Information */}
-          <Card className="shadow-none rounded-lg py-0">
-            <CardHeader className="pt-4 pb-3">
-              <CardTitle className="text-base">Personal Information</CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-3 pb-4">
-              <InfoGridRow label="Full Name" value={getLeadFullName(lead, "—")} />
-              {lead.display_id && <InfoGridRow label="Lead ID" value={lead.display_id} />}
-              {industryId === "education_consultancy" && (
-                <InfoGridRow
-                  label="Tag"
-                  value={
-                    <TagSelector
-                      leadId={lead.id}
-                      currentTags={lead.tags || []}
-                      onTagChange={onTagChange}
-                    />
-                  }
-                />
-              )}
-              <InfoGridRow label="Email" value={lead.email} isLink linkType="email" />
-              <InfoGridRow label="Phone" value={lead.phone} isLink linkType="phone" />
-              {location && <InfoGridRow label="Location" value={location} />}
-              {lead.preferred_contact_method && (
-                <InfoGridRow
-                  label="Preferred Contact"
-                  value={lead.preferred_contact_method.charAt(0).toUpperCase() + lead.preferred_contact_method.slice(1)}
-                />
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Professional Details (editable) */}
-          <ProfessionalDetailsCard
-            leadId={lead.id}
-            customFields={customFields}
-            onFieldsUpdate={onCustomFieldsChange}
-            isAdmin={isAdmin}
-            industryId={industryId}
-          />
 
           {/* Recent Notes Preview */}
           {notes.length > 0 && (
@@ -491,94 +449,6 @@ function PossibleDuplicatesCard({ lead, onMerged }: { lead: Lead; onMerged?: () 
 }
 
 // ── Helper components ────────────────────────────────────────────────────────
-
-interface InfoGridRowProps {
-  label: string;
-  value: React.ReactNode | string | null | undefined;
-  isLink?: boolean;
-  linkType?: "email" | "phone";
-}
-
-function InfoGridRow({ label, value, isLink, linkType }: InfoGridRowProps) {
-  if (!value) return null;
-
-  const displayValue = isLink && typeof value === "string" ? (
-    <a
-      href={linkType === "email" ? `mailto:${value}` : `tel:${value}`}
-      className="text-primary hover:underline"
-    >
-      {value}
-    </a>
-  ) : (
-    value
-  );
-
-  return (
-    <div className="grid grid-cols-[140px_1fr] gap-4 text-sm">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-medium">{displayValue}</span>
-    </div>
-  );
-}
-
-function TagSelector({
-  leadId,
-  currentTags,
-  onTagChange,
-}: {
-  leadId: string;
-  currentTags: string[];
-  onTagChange?: (tags: string[]) => void;
-}) {
-  const [tags, setTags] = useState(currentTags);
-  const [updating, setUpdating] = useState(false);
-
-  async function handleToggle(tag: string) {
-    setUpdating(true);
-    const newTags = [tag];
-    try {
-      const res = await fetch(`/api/v1/leads/${leadId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tags: newTags }),
-      });
-      if (res.ok) {
-        setTags(newTags);
-        onTagChange?.(newTags);
-        toast.success(`Tagged as ${tag}`);
-      }
-    } catch {
-      toast.error("Failed to update tag");
-    } finally {
-      setUpdating(false);
-    }
-  }
-
-  return (
-    <div className="flex gap-1.5">
-      {["student", "other"].map((tag) => {
-        // Treat a legacy "parent" tag as "other" for the active state.
-        const isActive = tag === "other" ? (tags.includes("other") || tags.includes("parent")) : tags.includes(tag);
-        return (
-          <button
-            key={tag}
-            disabled={updating}
-            onClick={() => handleToggle(tag)}
-            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold transition-colors cursor-pointer ${
-              isActive
-                ? tag === "other"
-                  ? "bg-amber-100 text-amber-700 ring-2 ring-amber-300"
-                  : "bg-blue-100 text-blue-700 ring-2 ring-blue-300"
-                : "bg-gray-100 text-gray-400 hover:bg-gray-200"
-            }`}
-          >
-            {tag.charAt(0).toUpperCase() + tag.slice(1)}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
 
 function formatRelativeTime(dateString: string): string {
   const date = new Date(dateString);

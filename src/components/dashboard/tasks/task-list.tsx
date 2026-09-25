@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle } from "react";
 import { useRouter } from "next/navigation";
 import { ClipboardList } from "lucide-react";
 import { TaskRow, type TaskRowItem } from "./task-row";
-import { TaskComposer, type TaskComposerContext } from "./task-composer";
+import { TaskComposer, type TaskComposerContext, type TaskComposerRef } from "./task-composer";
 import { toLocalDateString } from "@/lib/date";
 import { TASK_CHANGED_EVENT } from "@/lib/tasks/task-events";
 
@@ -18,11 +18,24 @@ interface TaskListProps {
   projectBoardEnabled?: boolean;
 }
 
-export function TaskList({ fetchUrl, currentUserId, context, emptyLabel = "No tasks yet.", projectBoardEnabled = false }: TaskListProps) {
+export interface TaskListRef {
+  /** Expands the inline "+ Task" composer (its title input autofocuses itself). */
+  focusComposer: () => void;
+}
+
+export const TaskList = forwardRef<TaskListRef, TaskListProps>(function TaskList(
+  { fetchUrl, currentUserId, context, emptyLabel = "No tasks yet.", projectBoardEnabled = false },
+  ref
+) {
   const router = useRouter();
   const [tasks, setTasks] = useState<TaskRowItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCompleted, setShowCompleted] = useState(false);
+  const composerRef = useRef<TaskComposerRef>(null);
+
+  useImperativeHandle(ref, () => ({
+    focusComposer: () => composerRef.current?.expand(),
+  }));
 
   // Opens the shared task detail drawer via the /tasks/[id] intercepting
   // route (@modal) — same pattern as home-content.tsx / tasks-view.tsx.
@@ -141,6 +154,7 @@ export function TaskList({ fetchUrl, currentUserId, context, emptyLabel = "No ta
 
       <div className="pt-2">
         <TaskComposer
+          ref={composerRef}
           currentUserId={currentUserId}
           context={context}
           onCreated={handleCreated}
@@ -149,4 +163,4 @@ export function TaskList({ fetchUrl, currentUserId, context, emptyLabel = "No ta
       </div>
     </div>
   );
-}
+});

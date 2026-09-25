@@ -186,20 +186,6 @@
   background-attachment: local, local, scroll, scroll;
 }
 
-/* Hides the scrollbar track/thumb on an internally-scrollable panel while
- * keeping it fully scrollable (wheel, trackpad, keyboard, touch) — used
- * alongside .scroll-shadows on the sticky lead-detail sidebars, since a
- * persistent OS-drawn scrollbar (e.g. macOS "Always show scrollbars") reads
- * as a visual bug and the .scroll-shadows cue already signals scrollability.
- */
-.scrollbar-hidden {
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none; /* old Edge/IE */
-}
-.scrollbar-hidden::-webkit-scrollbar {
-  display: none; /* Chrome/Safari/Edge (Chromium) */
-}
-
 /* Interactive elements - show pointer cursor (edge-flow pattern) */
 button,
 [role="button"],
