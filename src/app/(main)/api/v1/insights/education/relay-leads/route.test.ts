@@ -30,6 +30,8 @@ vi.mock("@/lib/supabase/scoped", () => ({
 
 import { GET } from "./route";
 
+const VALID_USER_ID = "22222222-2222-2222-2222-222222222222";
+
 function req(qs: string) {
   return { nextUrl: new URL(`http://localhost/api/v1/insights/education/relay-leads?${qs}`) } as unknown as Parameters<typeof GET>[0];
 }
@@ -50,34 +52,40 @@ beforeEach(() => {
 describe("GET /api/v1/insights/education/relay-leads", () => {
   it("401s when unauthenticated", async () => {
     auth.current = null;
-    const res = await GET(req("stage=qualified&userId=u-2"));
+    const res = await GET(req(`stage=qualified&userId=${VALID_USER_ID}`));
     expect(res.status).toBe(401);
   });
 
   it("403s for a non-admin role", async () => {
     auth.current = { ...auth.current, role: "counselor" };
-    const res = await GET(req("stage=qualified&userId=u-2"));
+    const res = await GET(req(`stage=qualified&userId=${VALID_USER_ID}`));
     expect(res.status).toBe(403);
   });
 
   it("422s when stage is missing", async () => {
-    const res = await GET(req("userId=u-2"));
+    const res = await GET(req(`userId=${VALID_USER_ID}`));
     expect(res.status).toBe(422);
   });
 
-  it("422s when userId is missing", async () => {
-    const res = await GET(req("stage=qualified"));
+  it("422s when userId is present but not a valid UUID (e.g. the 'unassigned' sentinel)", async () => {
+    const res = await GET(req("stage=qualified&userId=unassigned"));
     expect(res.status).toBe(422);
+  });
+
+  it("treats an absent userId as the unassigned bucket — passes p_user_id=null, 200", async () => {
+    const res = await GET(req("stage=qualified"));
+    expect(res.status).toBe(200);
+    expect((rpcArgs.last as { p_user_id: unknown }).p_user_id).toBeNull();
   });
 
   it("passes p_position_slug=null when position is omitted", async () => {
-    const res = await GET(req("stage=qualified&userId=u-2"));
+    const res = await GET(req(`stage=qualified&userId=${VALID_USER_ID}`));
     expect(res.status).toBe(200);
     expect((rpcArgs.last as { p_position_slug: unknown }).p_position_slug).toBeNull();
   });
 
   it("passes the position through when provided", async () => {
-    const res = await GET(req("stage=qualified&position=counsellor&userId=u-2"));
+    const res = await GET(req(`stage=qualified&position=counsellor&userId=${VALID_USER_ID}`));
     expect(res.status).toBe(200);
     expect((rpcArgs.last as { p_position_slug: unknown }).p_position_slug).toBe("counsellor");
   });

@@ -35,6 +35,7 @@ const MIGRATIONS_WITH_TOUCH_LOGIC = [
   { file: "241_education_relay_aggregates.sql", label: "migration 241 (education_relay_aggregates)" },
   { file: "242_education_intake_and_idle.sql", label: "migration 242 (education_intake_alarm + education_idle_staff)" },
   { file: "245_education_relay_leads.sql", label: "migration 245 (education_relay_leads — last_touch_at)" },
+  { file: "247_education_relay_leads_unassigned.sql", label: "migration 247 (education_relay_leads — unassigned)" },
 ];
 
 for (const { file, label } of MIGRATIONS_WITH_TOUCH_LOGIC) {

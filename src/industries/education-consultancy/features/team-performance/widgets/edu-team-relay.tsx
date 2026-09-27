@@ -22,7 +22,11 @@ interface Crumb {
   stageName?: string;
   positionSlug?: string | null;
   positionName?: string | null;
-  personId?: string;
+  // string = assigned to that user; null = the unassigned bucket; undefined =
+  // not on the leads level yet. Never the "unassigned" sentinel string used
+  // only for map-keying inside PersonTable — that string isn't a valid UUID
+  // and must never reach the RPC (round-2 review bug).
+  personId?: string | null;
   personLabel?: string;
 }
 
@@ -96,7 +100,7 @@ export default function EduTeamRelayWidget() {
           rows={personRows}
           groupBy="stage"
           activeWindowLabel={window.label}
-          onSelect={(_key, stageSlug, stageName) => setCrumb({ level: "leads", stageSlug, stageName })}
+          onSelect={(_userId, stageSlug, stageName) => setCrumb({ level: "leads", stageSlug, stageName, personId: jumpTo })}
         />
       </WidgetCard>
     );
@@ -128,13 +132,13 @@ export default function EduTeamRelayWidget() {
           rows={rows.filter((r) => r.stage_slug === crumb.stageSlug && r.position_slug === crumb.positionSlug)}
           groupBy="person"
           activeWindowLabel={window.label}
-          onSelect={(personId, _stageSlug, _stageName, personLabel) =>
-            setCrumb({ ...crumb, level: "leads", personId, personLabel })
+          onSelect={(userId, _stageSlug, _stageName, personLabel) =>
+            setCrumb({ ...crumb, level: "leads", personId: userId, personLabel })
           }
         />
       )}
 
-      {crumb.level === "leads" && crumb.stageSlug && crumb.personId && (
+      {crumb.level === "leads" && crumb.stageSlug && crumb.personId !== undefined && (
         <LeadLevel stageSlug={crumb.stageSlug} positionSlug={crumb.positionSlug ?? null} userId={crumb.personId} />
       )}
     </WidgetCard>
@@ -289,13 +293,15 @@ function PersonTable({
   rows: RelayAggregateRow[];
   groupBy: "person" | "stage";
   activeWindowLabel: string;
-  onSelect: (key: string, stageSlug: string, stageName: string, label: string) => void;
+  // userId is the REAL value (string | null) — never the "unassigned" map-key
+  // sentinel, which isn't a valid UUID and must never reach the RPC.
+  onSelect: (userId: string | null, stageSlug: string, stageName: string, label: string) => void;
 }) {
-  const meta = new Map<string, { label: string; stageSlug: string; stageName: string }>();
+  const meta = new Map<string, { label: string; stageSlug: string; stageName: string; userId: string | null }>();
   for (const r of rows) {
     const key = groupBy === "person" ? r.user_id ?? "unassigned" : r.stage_slug;
     const label = (groupBy === "person" ? r.user_email : r.stage_name) ?? "Unassigned";
-    meta.set(key, { label, stageSlug: r.stage_slug, stageName: r.stage_name });
+    meta.set(key, { label, stageSlug: r.stage_slug, stageName: r.stage_name, userId: r.user_id });
   }
   const byKey = groupRelayRows(rows, (r) => (groupBy === "person" ? r.user_id ?? "unassigned" : r.stage_slug));
 
@@ -334,7 +340,7 @@ function PersonTable({
           return (
             <TableRow key={key}>
               <TableCell className="font-medium">
-                <button className="hover:underline text-left" onClick={() => onSelect(key, m.stageSlug, m.stageName, m.label)}>
+                <button className="hover:underline text-left" onClick={() => onSelect(m.userId, m.stageSlug, m.stageName, m.label)}>
                   {m.label}
                 </button>
               </TableCell>
@@ -358,8 +364,19 @@ function PersonTable({
 // (education_relay_leads, migration 245) — window-independent, matching the
 // RPC's own scope. Each row navigates to the existing lead-detail page
 // (Phase 1 is read-only; no inline reassign/nudge here).
-function LeadLevel({ stageSlug, positionSlug, userId }: { stageSlug: string; positionSlug: string | null; userId: string }) {
-  const params = new URLSearchParams({ stage: stageSlug, userId });
+function LeadLevel({
+  stageSlug,
+  positionSlug,
+  userId,
+}: {
+  stageSlug: string;
+  positionSlug: string | null;
+  // null means the unassigned bucket — omitted from the query entirely, per
+  // the route's contract (an absent userId means "match assigned_to IS NULL").
+  userId: string | null;
+}) {
+  const params = new URLSearchParams({ stage: stageSlug });
+  if (userId) params.set("userId", userId);
   if (positionSlug) params.set("position", positionSlug);
   const { data, loading, error } = useWidgetData<LeadRow[]>(`/api/v1/insights/education/relay-leads?${params.toString()}`);
 

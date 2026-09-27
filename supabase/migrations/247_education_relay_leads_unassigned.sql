@@ -1,33 +1,15 @@
--- Migration 245: Team & Lead Performance dashboard — Person -> Lead drill level.
--- (education_consultancy). education_relay_aggregates (mig 241) is a GROUP BY —
--- it has no lead ids. This RPC returns individual lead rows for one
--- stage x position x person cell (position nullable — the jump-to-person view
--- doesn't pre-filter by position, only stage x person).
---
--- Mirrors migration 241's active/archived-enrolled duality so a cell's lead
--- list matches the numbers shown for that cell: a currently-archived lead
--- that won an application before archiving still counts toward that cell's
--- enrolled_cnt/tuition_value (mig 241), so it must still appear here when
--- drilling into that same cell, attributed to its archived_from_list_id.
---
--- Window-independent — this is "show me this person's current leads right
--- now," not scoped to the dashboard's date-window filter (matches the
--- original plan's Level 5 spec).
---
--- p_user_id NULL handling (unassigned leads) added in migration 247 — see
--- that file.
---
--- "Days in stage" uses leads.stage_changed_at — verified this column IS
--- updated on a list_id change, not just stage_id/status (see
--- src/lib/leads/apply-lead-patch.ts's update-payload branch), so it is a
--- legitimate list_id-lifecycle timestamp, not a fabricated fact.
---
--- "Last touch" is all-time (not window-scoped) MAX() across the same
--- canonical touched sources as migration 241/242's header comments:
--- lead_activities(activity_type IN ('call','email','meeting')) UNION lead_notes.
+-- Migration 247: education_relay_leads — accept a NULL p_user_id meaning
+-- "unassigned." Round-2 review bug: PersonTable's grouping used the string
+-- sentinel "unassigned" for rows with no assignee; clicking that row sent the
+-- literal text "unassigned" as p_user_id (a UUID column), which Postgres
+-- rejected — the client now passes a real null instead (route omits the
+-- userId param entirely), so the RPC must match `l.assigned_to IS NULL` in
+-- that case rather than `l.assigned_to = p_user_id`. CREATE OR REPLACE on
+-- the same signature; 245 itself is left untouched (additive-only per this
+-- repo's migration rules) — its header comment now points here.
 --
 --   Expected before/after row counts: 0 rows touched (function definition only).
---   Rollback: DROP FUNCTION IF EXISTS education_relay_leads(UUID, TEXT, TEXT, UUID);
+--   Rollback: re-apply 245's original body (drop the `p_user_id IS NULL` branch).
 --   Applied: stage <YYYY-MM-DD> / prod HELD.
 
 BEGIN;
@@ -53,7 +35,7 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
     WHERE l.tenant_id = p_tenant
       AND l.deleted_at IS NULL
       AND ll.slug = p_stage_slug
-      AND l.assigned_to = p_user_id
+      AND ((p_user_id IS NULL AND l.assigned_to IS NULL) OR l.assigned_to = p_user_id)
       AND (p_position_slug IS NULL OR p.slug = p_position_slug)
 
     UNION ALL
@@ -67,7 +49,7 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
     LEFT JOIN auth.users u ON u.id = l.assigned_to
     WHERE l.tenant_id = p_tenant
       AND l.deleted_at IS NULL
-      AND l.assigned_to = p_user_id
+      AND ((p_user_id IS NULL AND l.assigned_to IS NULL) OR l.assigned_to = p_user_id)
       AND (p_position_slug IS NULL OR p.slug = p_position_slug)
       AND EXISTS (
         SELECT 1 FROM applications a2
@@ -110,7 +92,7 @@ $$;
 
 GRANT EXECUTE ON FUNCTION education_relay_leads(UUID, TEXT, TEXT, UUID) TO service_role;
 
-INSERT INTO public.schema_migrations (version) VALUES ('245_education_relay_leads.sql')
+INSERT INTO public.schema_migrations (version) VALUES ('247_education_relay_leads_unassigned.sql')
   ON CONFLICT (version) DO NOTHING;
 
 COMMIT;
