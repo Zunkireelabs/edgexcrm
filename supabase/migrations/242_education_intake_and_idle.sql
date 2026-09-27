@@ -3,11 +3,13 @@
 --   education_intake_alarm  — Pre-qualified leads with NO qualifying touch yet,
 --                              bucketed by age (0-24h / 24-48h / 48h+).
 --   education_idle_staff    — staff who touched zero leads anywhere in the window
---                              (distinct from "this one lead is stuck").
+--                              (distinct from "this one lead is stuck"). Role
+--                              exclusion (owner/admin never flagged) added in
+--                              migration 246 — see that file.
 --
 -- Same canonical "touched" definition as migration 241 — see that file's header.
 -- Do not extend either function's touch source without updating the shared
--- regression test (education-relay-aggregates.test.ts).
+-- regression test (touched-definition.test.ts).
 --
 --   Expected before/after row counts: 0 rows touched (function definitions only).
 --   Rollback:

@@ -6,11 +6,15 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useDateWindow } from "@/industries/_shared/features/insights/lib/use-date-window";
+import { DateWindowFilter } from "@/industries/_shared/features/insights/components/date-window-filter";
+import { useWidgetData } from "@/industries/_shared/features/insights/lib/use-widget-data";
 import { useRelayAggregates } from "../lib/use-relay-aggregates";
 import { WidgetCard, WidgetLoading, WidgetEmpty, WidgetError } from "./widget-shell";
 import { groupRelayRows, type RelayAggregateRow } from "../lib/types";
 
-type Level = "stages" | "positions" | "people";
+type Level = "stages" | "positions" | "people" | "leads";
 
 interface Crumb {
   level: Level;
@@ -18,6 +22,18 @@ interface Crumb {
   stageName?: string;
   positionSlug?: string | null;
   positionName?: string | null;
+  personId?: string;
+  personLabel?: string;
+}
+
+interface LeadRow {
+  lead_id: string;
+  display_name: string;
+  stage_name: string;
+  assignee_email: string | null;
+  days_in_stage: number;
+  last_touch_at: string | null;
+  note_preview: string | null;
 }
 
 // The Relay Explorer — a person's pile/touched/enrolled/tuition are always
@@ -25,7 +41,8 @@ interface Crumb {
 // surfaces outliers fast; it is not a computed performance verdict, and there
 // is no rank/medal styling anywhere here.
 export default function EduTeamRelayWidget() {
-  const { data, loading, error } = useRelayAggregates();
+  const window = useDateWindow();
+  const { data, loading, error } = useRelayAggregates(window);
   const [crumb, setCrumb] = useState<Crumb>({ level: "stages" });
   const [jumpTo, setJumpTo] = useState<string | null>(null);
 
@@ -39,20 +56,48 @@ export default function EduTeamRelayWidget() {
     return Array.from(seen.entries()).map(([value, label]) => ({ value, label }));
   }, [rows]);
 
-  if (loading) return <WidgetCard title="The Pipeline"><WidgetLoading /></WidgetCard>;
-  if (error || !data) return <WidgetCard title="The Pipeline"><WidgetError /></WidgetCard>;
-  if (rows.length === 0) return <WidgetCard title="The Pipeline"><WidgetEmpty message="No active leads yet." /></WidgetCard>;
+  const header = (
+    <div className="mb-3 space-y-1">
+      <div className="flex items-center gap-2">
+        <DateWindowFilter />
+        <span className="text-xs text-muted-foreground">Showing: {window.label}</span>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Pile counts are a live snapshot regardless of window; touched/enrolled/tuition numbers are scoped to {window.label.toLowerCase()}.
+      </p>
+    </div>
+  );
+
+  if (loading) return <WidgetCard title="The Pipeline">{header}<WidgetLoading /></WidgetCard>;
+  if (error || !data) return <WidgetCard title="The Pipeline">{header}<WidgetError /></WidgetCard>;
+  if (rows.length === 0) return <WidgetCard title="The Pipeline">{header}<WidgetEmpty message="No active leads yet." /></WidgetCard>;
 
   // Jump-to-person bypasses the drill entirely: show that one person's full
   // load across every stage they hold leads in.
   if (jumpTo) {
     const personRows = rows.filter((r) => r.user_id === jumpTo);
     const label = personRows[0]?.user_email ?? jumpTo;
+    if (crumb.level === "leads" && crumb.stageSlug) {
+      return (
+        <WidgetCard title="The Pipeline">
+          {header}
+          <JumpSearch options={personOptions} value={jumpTo} onChange={setJumpTo} onClear={() => setJumpTo(null)} />
+          <LeadBreadcrumb stageName={crumb.stageName} personLabel={label} onBack={() => setCrumb({ level: "stages" })} />
+          <LeadLevel stageSlug={crumb.stageSlug} positionSlug={null} userId={jumpTo} />
+        </WidgetCard>
+      );
+    }
     return (
       <WidgetCard title="The Pipeline">
+        {header}
         <JumpSearch options={personOptions} value={jumpTo} onChange={setJumpTo} onClear={() => setJumpTo(null)} />
         <p className="text-sm font-medium mb-2">{label} — all stages</p>
-        <PersonTable rows={personRows} groupBy="stage" />
+        <PersonTable
+          rows={personRows}
+          groupBy="stage"
+          activeWindowLabel={window.label}
+          onSelect={(_key, stageSlug, stageName) => setCrumb({ level: "leads", stageSlug, stageName })}
+        />
       </WidgetCard>
     );
   }
@@ -61,6 +106,7 @@ export default function EduTeamRelayWidget() {
 
   return (
     <WidgetCard title="The Pipeline">
+      {header}
       <JumpSearch options={personOptions} value={jumpTo} onChange={setJumpTo} onClear={() => setJumpTo(null)} />
       <Breadcrumb crumb={crumb} totalPile={totalPile} onNavigate={setCrumb} />
 
@@ -81,7 +127,15 @@ export default function EduTeamRelayWidget() {
         <PersonTable
           rows={rows.filter((r) => r.stage_slug === crumb.stageSlug && r.position_slug === crumb.positionSlug)}
           groupBy="person"
+          activeWindowLabel={window.label}
+          onSelect={(personId, _stageSlug, _stageName, personLabel) =>
+            setCrumb({ ...crumb, level: "leads", personId, personLabel })
+          }
         />
+      )}
+
+      {crumb.level === "leads" && crumb.stageSlug && crumb.personId && (
+        <LeadLevel stageSlug={crumb.stageSlug} positionSlug={crumb.positionSlug ?? null} userId={crumb.personId} />
       )}
     </WidgetCard>
   );
@@ -135,12 +189,42 @@ function Breadcrumb({ crumb, totalPile, onNavigate }: { crumb: Crumb; totalPile:
           </Button>
         </>
       )}
-      {crumb.positionSlug !== undefined && crumb.level === "people" && (
+      {crumb.positionSlug !== undefined && (crumb.level === "people" || crumb.level === "leads") && (
         <>
           <span className="text-muted-foreground">/</span>
-          <span className="font-medium">{crumb.positionName ?? "Unassigned position"}</span>
+          {crumb.level === "leads" ? (
+            <Button
+              variant="link"
+              className="h-auto p-0"
+              onClick={() =>
+                onNavigate({ level: "people", stageSlug: crumb.stageSlug, stageName: crumb.stageName, positionSlug: crumb.positionSlug, positionName: crumb.positionName })
+              }
+            >
+              {crumb.positionName ?? "Unassigned position"}
+            </Button>
+          ) : (
+            <span className="font-medium">{crumb.positionName ?? "Unassigned position"}</span>
+          )}
         </>
       )}
+      {crumb.level === "leads" && crumb.personLabel && (
+        <>
+          <span className="text-muted-foreground">/</span>
+          <span className="font-medium">{crumb.personLabel}</span>
+        </>
+      )}
+    </div>
+  );
+}
+
+function LeadBreadcrumb({ stageName, personLabel, onBack }: { stageName?: string; personLabel: string; onBack: () => void }) {
+  return (
+    <div className="flex items-center gap-1 text-sm mb-3">
+      <Button variant="link" className="h-auto p-0" onClick={onBack}>
+        {personLabel} — all stages
+      </Button>
+      <span className="text-muted-foreground">/</span>
+      <span className="font-medium">{stageName}</span>
     </div>
   );
 }
@@ -191,18 +275,27 @@ function PositionLevel({
   );
 }
 
-// Stuck-rate here is an approximation from the window's touched_cnt/cnt (no
-// per-lead dwell data is available from the aggregate RPC) — a plain sorted
-// table, never a computed "performance score" or ranked with medals.
-function PersonTable({ rows, groupBy }: { rows: RelayAggregateRow[]; groupBy: "person" | "stage" }) {
-  const meta = new Map<string, { label: string; leadHref: string }>();
+// "Not touched" is an approximation from the currently-selected window's
+// touched_cnt/cnt (no per-lead dwell data is available from the aggregate
+// RPC) — a plain sorted table, never a computed "performance score" or
+// ranked with medals. The column header names the active window explicitly
+// so it never reads as a standing, window-independent fact.
+function PersonTable({
+  rows,
+  groupBy,
+  activeWindowLabel,
+  onSelect,
+}: {
+  rows: RelayAggregateRow[];
+  groupBy: "person" | "stage";
+  activeWindowLabel: string;
+  onSelect: (key: string, stageSlug: string, stageName: string, label: string) => void;
+}) {
+  const meta = new Map<string, { label: string; stageSlug: string; stageName: string }>();
   for (const r of rows) {
     const key = groupBy === "person" ? r.user_id ?? "unassigned" : r.stage_slug;
     const label = (groupBy === "person" ? r.user_email : r.stage_name) ?? "Unassigned";
-    // /leads only supports ?list=<slug> (resolved against lead_lists.slug) —
-    // no assignee filter param exists there today, so this scopes to the
-    // right stage; the owner still has to spot the person within it.
-    meta.set(key, { label, leadHref: `/leads?list=${r.stage_slug}` });
+    meta.set(key, { label, stageSlug: r.stage_slug, stageName: r.stage_name });
   }
   const byKey = groupRelayRows(rows, (r) => (groupBy === "person" ? r.user_id ?? "unassigned" : r.stage_slug));
 
@@ -218,7 +311,18 @@ function PersonTable({ rows, groupBy }: { rows: RelayAggregateRow[]; groupBy: "p
         <TableRow>
           <TableHead>{groupBy === "person" ? "Person" : "Stage"}</TableHead>
           <TableHead className="text-right">Pile</TableHead>
-          <TableHead className="text-right">Stuck-rate</TableHead>
+          <TableHead className="text-right">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="cursor-help underline decoration-dotted">Not touched ({activeWindowLabel})</span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  % of this pile with no qualifying touch in the selected window — not a dwell-time or performance measure.
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </TableHead>
           <TableHead className="text-right">Enrolled</TableHead>
           <TableHead className="text-right">Tuition value</TableHead>
         </TableRow>
@@ -230,9 +334,9 @@ function PersonTable({ rows, groupBy }: { rows: RelayAggregateRow[]; groupBy: "p
           return (
             <TableRow key={key}>
               <TableCell className="font-medium">
-                <Link href={m.leadHref} className="hover:underline">
+                <button className="hover:underline text-left" onClick={() => onSelect(key, m.stageSlug, m.stageName, m.label)}>
                   {m.label}
-                </Link>
+                </button>
               </TableCell>
               <TableCell className="text-right">{s.cnt}</TableCell>
               <TableCell className="text-right">
@@ -245,6 +349,53 @@ function PersonTable({ rows, groupBy }: { rows: RelayAggregateRow[]; groupBy: "p
             </TableRow>
           );
         })}
+      </TableBody>
+    </Table>
+  );
+}
+
+// Level 6: individual leads within one stage x position x person cell
+// (education_relay_leads, migration 245) — window-independent, matching the
+// RPC's own scope. Each row navigates to the existing lead-detail page
+// (Phase 1 is read-only; no inline reassign/nudge here).
+function LeadLevel({ stageSlug, positionSlug, userId }: { stageSlug: string; positionSlug: string | null; userId: string }) {
+  const params = new URLSearchParams({ stage: stageSlug, userId });
+  if (positionSlug) params.set("position", positionSlug);
+  const { data, loading, error } = useWidgetData<LeadRow[]>(`/api/v1/insights/education/relay-leads?${params.toString()}`);
+
+  if (loading) return <WidgetLoading />;
+  if (error || !data) return <WidgetError />;
+  if (data.length === 0) return <WidgetEmpty message="No leads in this cell." />;
+
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Lead</TableHead>
+          <TableHead>Stage</TableHead>
+          <TableHead className="text-right">Days in stage</TableHead>
+          <TableHead>Last touch</TableHead>
+          <TableHead>Latest note</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {data.map((lead) => (
+          <TableRow key={lead.lead_id}>
+            <TableCell className="font-medium">
+              <Link href={`/leads/${lead.lead_id}`} className="hover:underline">
+                {lead.display_name}
+              </Link>
+            </TableCell>
+            <TableCell>{lead.stage_name}</TableCell>
+            <TableCell className="text-right">{Math.floor(lead.days_in_stage)}</TableCell>
+            <TableCell className="text-sm text-muted-foreground">
+              {lead.last_touch_at ? new Date(lead.last_touch_at).toLocaleDateString() : "Never"}
+            </TableCell>
+            <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">
+              {lead.note_preview ?? "—"}
+            </TableCell>
+          </TableRow>
+        ))}
       </TableBody>
     </Table>
   );

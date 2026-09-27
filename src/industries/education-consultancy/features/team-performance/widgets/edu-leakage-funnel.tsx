@@ -2,14 +2,18 @@
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useWidgetData } from "@/industries/_shared/features/insights/lib/use-widget-data";
+import { useDateWindow, dateWindowToQuery } from "@/industries/_shared/features/insights/lib/use-date-window";
 import { WidgetCard, WidgetLoading, WidgetEmpty, WidgetError } from "./widget-shell";
 import type { LeakageFunnelRow } from "../lib/types";
 
 // Where AND why leads left this window — archived out of a stage without ever
 // advancing (archived_from_list_id + archived_at, migration 127), broken down
-// by archive_reason.
+// by archive_reason. Shares the dashboard's date-window filter.
 export default function EduLeakageFunnelWidget() {
-  const { data, loading, error } = useWidgetData<LeakageFunnelRow[]>("/api/v1/insights/education/leakage-funnel");
+  const window = useDateWindow();
+  const { data, loading, error } = useWidgetData<LeakageFunnelRow[]>(
+    `/api/v1/insights/education/leakage-funnel?${dateWindowToQuery(window)}`,
+  );
 
   const rows = data ?? [];
   const byStage = new Map<string, { stageName: string; total: number; reasons: LeakageFunnelRow[] }>();

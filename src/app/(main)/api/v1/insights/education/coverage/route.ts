@@ -11,7 +11,7 @@ export async function GET() {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
   if (!getFeatureAccess(auth.industryId, FEATURES.INSIGHTS)) return apiForbidden();
-  if (auth.industryId !== "education_consultancy") return apiForbidden();
+  if (!getFeatureAccess(auth.industryId, FEATURES.TEAM_PERFORMANCE)) return apiForbidden();
   if (auth.role !== "owner" && auth.role !== "admin") return apiForbidden();
 
   const db = await scopedClient(auth);

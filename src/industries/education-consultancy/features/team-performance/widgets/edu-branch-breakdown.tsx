@@ -1,15 +1,18 @@
 "use client";
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useDateWindow } from "@/industries/_shared/features/insights/lib/use-date-window";
 import { useRelayAggregates } from "../lib/use-relay-aggregates";
 import { WidgetCard, WidgetLoading, WidgetEmpty, WidgetError } from "./widget-shell";
 import { groupRelayRows } from "../lib/types";
 
 // Same pile cross-tab as the Relay Explorer, by assignee's branch — mirrors
 // migration 095's "assignee-branch" resolution, not leads.branch_id (mostly
-// null per that migration's finding).
+// null per that migration's finding). Shares the dashboard's date-window
+// filter (the same URL search params The Pipeline's <DateWindowFilter /> writes).
 export default function EduBranchBreakdownWidget() {
-  const { data, loading, error } = useRelayAggregates();
+  const window = useDateWindow();
+  const { data, loading, error } = useRelayAggregates(window);
 
   const rows = data ?? [];
   const branchNames = new Map<string, string>();

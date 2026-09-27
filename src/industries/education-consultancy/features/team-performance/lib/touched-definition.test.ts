@@ -11,8 +11,8 @@ import { join } from "path";
 // CLAUDE.md's "Do Not Touch The Database"), so this test statically asserts the
 // RPC source never references the forbidden tables in a touch-computation CTE,
 // and does reference the two required ones. A future editor who adds
-// sms_messages/email_messages/lead_assignment_history into education_relay_
-// aggregates, education_intake_alarm, or education_idle_staff will fail this.
+// sms_messages/email_messages/lead_assignment_history into any of these RPCs
+// will fail this.
 
 const MIGRATIONS_DIR = join(__dirname, "../../../../../../supabase/migrations");
 
@@ -31,42 +31,30 @@ function functionBodies(sql: string): string {
 const FORBIDDEN_TABLES = ["sms_messages", "email_messages", "lead_assignment_history"];
 const REQUIRED_TABLES = ["lead_activities", "lead_notes"];
 
-describe("canonical 'touched' definition — migration 241 (education_relay_aggregates)", () => {
-  const body = functionBodies(readMigration("241_education_relay_aggregates.sql"));
+const MIGRATIONS_WITH_TOUCH_LOGIC = [
+  { file: "241_education_relay_aggregates.sql", label: "migration 241 (education_relay_aggregates)" },
+  { file: "242_education_intake_and_idle.sql", label: "migration 242 (education_intake_alarm + education_idle_staff)" },
+  { file: "245_education_relay_leads.sql", label: "migration 245 (education_relay_leads — last_touch_at)" },
+];
 
-  it("never unions a forbidden non-attributable/non-contact table", () => {
-    for (const table of FORBIDDEN_TABLES) {
-      expect(body).not.toContain(table);
-    }
+for (const { file, label } of MIGRATIONS_WITH_TOUCH_LOGIC) {
+  describe(`canonical 'touched' definition — ${label}`, () => {
+    const body = functionBodies(readMigration(file));
+
+    it("never references a forbidden non-attributable/non-contact table", () => {
+      for (const table of FORBIDDEN_TABLES) {
+        expect(body).not.toContain(table);
+      }
+    });
+
+    it("references both required attributable touch sources", () => {
+      for (const table of REQUIRED_TABLES) {
+        expect(body).toContain(table);
+      }
+    });
+
+    it("restricts lead_activities to call/email/meeting only", () => {
+      expect(body).toMatch(/activity_type IN \('call', 'email', 'meeting'\)/);
+    });
   });
-
-  it("unions both required attributable touch sources", () => {
-    for (const table of REQUIRED_TABLES) {
-      expect(body).toContain(table);
-    }
-  });
-
-  it("restricts lead_activities to call/email/meeting only", () => {
-    expect(body).toMatch(/activity_type IN \('call', 'email', 'meeting'\)/);
-  });
-});
-
-describe("canonical 'touched' definition — migration 242 (education_intake_alarm + education_idle_staff)", () => {
-  const body = functionBodies(readMigration("242_education_intake_and_idle.sql"));
-
-  it("never references a forbidden non-attributable/non-contact table", () => {
-    for (const table of FORBIDDEN_TABLES) {
-      expect(body).not.toContain(table);
-    }
-  });
-
-  it("references both required attributable touch sources", () => {
-    for (const table of REQUIRED_TABLES) {
-      expect(body).toContain(table);
-    }
-  });
-
-  it("restricts lead_activities to call/email/meeting only", () => {
-    expect(body).toMatch(/activity_type IN \('call', 'email', 'meeting'\)/);
-  });
-});
+}

@@ -12,7 +12,9 @@ vi.mock("@/lib/api/auth", () => ({
   authenticateRequest: vi.fn(async () => auth.current),
 }));
 
-vi.mock("@/industries/_loader", () => ({ getFeatureAccess: () => true }));
+vi.mock("@/industries/_loader", () => ({
+  getFeatureAccess: (industryId: string | null) => industryId === "education_consultancy",
+}));
 
 const rpcResult = vi.hoisted(() => ({ data: [{ stage_slug: "qualified", cnt: 3 }] as unknown, error: null as unknown }));
 
