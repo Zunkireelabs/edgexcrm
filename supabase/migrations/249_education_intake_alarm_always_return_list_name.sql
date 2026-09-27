@@ -21,7 +21,12 @@
 
 BEGIN;
 
-CREATE OR REPLACE FUNCTION education_intake_alarm(p_tenant UUID, p_now TIMESTAMPTZ, p_bucket1_hours INT, p_bucket2_hours INT)
+-- Same reason as migration 248's DROP: this changes the RETURNS TABLE shape
+-- again (248's 4 scalar columns -> buckets JSONB + list_name + list_slug),
+-- which CREATE OR REPLACE rejects. Drop first.
+DROP FUNCTION IF EXISTS education_intake_alarm(UUID, TIMESTAMPTZ, INT, INT);
+
+CREATE FUNCTION education_intake_alarm(p_tenant UUID, p_now TIMESTAMPTZ, p_bucket1_hours INT, p_bucket2_hours INT)
 RETURNS TABLE (buckets JSONB, list_name TEXT, list_slug TEXT)
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   WITH intake_list AS (

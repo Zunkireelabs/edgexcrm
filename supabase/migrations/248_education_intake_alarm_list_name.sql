@@ -17,7 +17,13 @@
 
 BEGIN;
 
-CREATE OR REPLACE FUNCTION education_intake_alarm(p_tenant UUID, p_now TIMESTAMPTZ, p_bucket1_hours INT, p_bucket2_hours INT)
+-- CREATE OR REPLACE cannot change a RETURNS TABLE shape (adding list_name/
+-- list_slug here counts as a shape change, not a pure append) — Postgres
+-- rejects it with "cannot change return type of existing function". Drop
+-- first; safe, nothing else references this function.
+DROP FUNCTION IF EXISTS education_intake_alarm(UUID, TIMESTAMPTZ, INT, INT);
+
+CREATE FUNCTION education_intake_alarm(p_tenant UUID, p_now TIMESTAMPTZ, p_bucket1_hours INT, p_bucket2_hours INT)
 RETURNS TABLE (bucket TEXT, cnt BIGINT, list_name TEXT, list_slug TEXT)
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   WITH untouched_intake AS (
