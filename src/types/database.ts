@@ -75,6 +75,15 @@ export interface TenantConfig {
   statuses?: string[];
   max_file_size_mb?: number;
   accepted_file_types?: string[];
+  // Team & Lead Performance dashboard (education_consultancy) — intake-alarm
+  // age buckets. Owner-tunable without a code deploy; see
+  // industries/education-consultancy/features/team-performance/lib/thresholds.ts
+  // for defaults used when this key is absent. Per-stage dwell thresholds are
+  // Phase 2 (not wired to any widget yet — stuck-rate is currently a plain
+  // touched/pile ratio, not dwell-based).
+  team_performance_thresholds?: {
+    intake_alarm_buckets_hours?: [number, number];
+  };
 }
 
 export interface ConnectedEmailAccount {

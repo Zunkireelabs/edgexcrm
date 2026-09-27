@@ -15,6 +15,7 @@ import { smsMeta } from "../_shared/features/sms/meta";
 import { emailCampaignsMeta } from "../_shared/features/email-campaigns/meta";
 import { outreachMeta } from "../_shared/features/outreach/meta";
 import { studentRecordMeta } from "./features/student-record/meta";
+import { teamPerformanceMeta } from "./features/team-performance/meta";
 import { aiConfig } from "./ai/agent";
 
 export const manifest: IndustryManifest = {
@@ -29,6 +30,7 @@ export const manifest: IndustryManifest = {
     { meta: applicationTrackingMeta },
     { meta: leadListsMeta },
     { meta: classesMeta },
+    { meta: teamPerformanceMeta },
     { meta: affiliatesMeta },
     { meta: applicantDocumentsMeta },
     { meta: smsMeta },

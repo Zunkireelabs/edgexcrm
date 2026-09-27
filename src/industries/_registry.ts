@@ -40,6 +40,7 @@ export const FEATURES = {
   APPLICATION_TRACKING: "application-tracking",
   LEAD_LISTS: "lead-lists",
   CLASSES: "classes",
+  TEAM_PERFORMANCE: "team-performance",
   // Industry-scoped (it_agency)
   TIME_TRACKING: "time-tracking",
   ACCOUNTS: "accounts",
