@@ -4,10 +4,12 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { useWidgetData } from "@/industries/_shared/features/insights/lib/use-widget-data";
 import { WidgetCard, WidgetLoading, WidgetEmpty, WidgetError } from "./widget-shell";
-import type { IntakeAlarmRow, IdleStaffRow } from "../lib/types";
+import type { IntakeAlarmBucket, IdleStaffRow } from "../lib/types";
 
 interface IntakeAlarmData {
-  buckets: IntakeAlarmRow[];
+  buckets: IntakeAlarmBucket[];
+  listName: string | null;
+  listSlug: string | null;
   idleStaff: IdleStaffRow[];
 }
 
@@ -40,7 +42,7 @@ export default function EduIntakeAlarmWidget() {
     router.push(`${pathname}?${params.toString()}`);
   }
 
-  const intakeListName = data?.buckets.find((b) => b.list_name)?.list_name ?? "Pre-qualified";
+  const intakeListName = data?.listName ?? "Intake list not configured";
 
   return (
     <WidgetCard title="Needs Attention Now">
@@ -60,11 +62,11 @@ export default function EduIntakeAlarmWidget() {
                   <button
                     key={b.bucket}
                     type="button"
-                    disabled={!b.list_slug}
-                    onClick={() => b.list_slug && deepLink({ stage: b.list_slug })}
+                    disabled={!data.listSlug}
+                    onClick={() => data.listSlug && deepLink({ stage: data.listSlug })}
                     className="disabled:cursor-default"
                   >
-                    <Badge variant={bucketVariant(b.bucket)} className={b.list_slug ? "cursor-pointer hover:opacity-80" : undefined}>
+                    <Badge variant={bucketVariant(b.bucket)} className={data.listSlug ? "cursor-pointer hover:opacity-80" : undefined}>
                       {b.bucket}: {b.cnt}
                     </Badge>
                   </button>

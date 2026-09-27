@@ -22,11 +22,9 @@ export interface LeakageFunnelRow {
   cnt: number;
 }
 
-export interface IntakeAlarmRow {
+export interface IntakeAlarmBucket {
   bucket: string;
   cnt: number;
-  list_name: string | null;
-  list_slug: string | null;
 }
 
 export interface IdleStaffRow {
