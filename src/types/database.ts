@@ -83,6 +83,7 @@ export interface TenantConfig {
   // touched/pile ratio, not dwell-based).
   team_performance_thresholds?: {
     intake_alarm_buckets_hours?: [number, number];
+    follow_up_stale_days?: number;
   };
 }
 

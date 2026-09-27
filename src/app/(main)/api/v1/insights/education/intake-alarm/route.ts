@@ -45,8 +45,12 @@ export async function GET() {
 
   if (alarmResult.error || idleResult.error) return apiError("DB_ERROR", "Failed to load intake alarm", 500);
 
+  const alarmRow = alarmResult.data?.[0] ?? null;
+
   return apiSuccess({
-    buckets: alarmResult.data ?? [],
+    buckets: alarmRow?.buckets ?? [],
+    listName: alarmRow?.list_name ?? null,
+    listSlug: alarmRow?.list_slug ?? null,
     idleStaff: idleResult.data ?? [],
   });
 }

@@ -4,6 +4,8 @@ import { apiSuccess, apiUnauthorized, apiForbidden, apiError } from "@/lib/api/r
 import { scopedClient } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
+import { resolveThresholds } from "@/industries/education-consultancy/features/team-performance/lib/thresholds";
+import type { TenantConfig } from "@/types/database";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -37,5 +39,12 @@ export async function GET(request: NextRequest) {
   });
 
   if (error) return apiError("DB_ERROR", "Failed to load leads for this cell", 500);
-  return apiSuccess(data ?? []);
+
+  // Surfaces the follow-up-stale threshold alongside the rows so the client
+  // can compute the follow-up-needed sign without a second fetch — the flag
+  // itself is still computed client-side from last_touch_at (no RPC change).
+  const { data: tenantRow } = await db.raw().from("tenants").select("config").eq("id", auth.tenantId).single();
+  const thresholds = resolveThresholds((tenantRow?.config ?? null) as TenantConfig | null);
+
+  return apiSuccess({ leads: data ?? [], followUpStaleDays: thresholds.followUpStaleDays });
 }

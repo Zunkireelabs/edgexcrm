@@ -1,8 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export function WidgetCard({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -15,10 +15,19 @@ export function WidgetCard({ title, children }: { title: string; children: React
   );
 }
 
+// Perceived-speed polish only (Item 5) — shaped like the widget's real
+// content (a control row + a few data rows) instead of a bare spinner. The
+// actual root-cause fix for slow loads is Item 2 (legacy/staging list
+// exclusion), deliberately not in this round.
 export function WidgetLoading() {
   return (
-    <div className="flex items-center justify-center h-32">
-      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+    <div className="space-y-3">
+      <Skeleton className="h-7 w-48" />
+      <div className="space-y-2">
+        <Skeleton className="h-8 w-full" />
+        <Skeleton className="h-8 w-full" />
+        <Skeleton className="h-8 w-3/4" />
+      </div>
     </div>
   );
 }
