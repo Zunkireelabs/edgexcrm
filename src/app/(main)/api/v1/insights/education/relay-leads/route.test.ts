@@ -16,6 +16,7 @@ vi.mock("@/industries/_loader", () => ({
 
 const rpcResult = vi.hoisted(() => ({ data: [{ lead_id: "lead-1", display_name: "Ada" }] as unknown, error: null as unknown }));
 const rpcArgs = vi.hoisted(() => ({ last: null as unknown }));
+const tenantConfig = vi.hoisted(() => ({ current: {} as Record<string, unknown> }));
 
 vi.mock("@/lib/supabase/scoped", () => ({
   scopedClient: vi.fn(async () => ({
@@ -23,6 +24,13 @@ vi.mock("@/lib/supabase/scoped", () => ({
       rpc: vi.fn(async (_name: string, args: unknown) => {
         rpcArgs.last = args;
         return rpcResult;
+      }),
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            single: async () => ({ data: { config: tenantConfig.current } }),
+          }),
+        }),
       }),
     }),
   })),
@@ -47,6 +55,7 @@ beforeEach(() => {
   rpcResult.data = [{ lead_id: "lead-1", display_name: "Ada" }];
   rpcResult.error = null;
   rpcArgs.last = null;
+  tenantConfig.current = {};
 });
 
 describe("GET /api/v1/insights/education/relay-leads", () => {
@@ -88,5 +97,19 @@ describe("GET /api/v1/insights/education/relay-leads", () => {
     const res = await GET(req(`stage=qualified&position=counsellor&userId=${VALID_USER_ID}`));
     expect(res.status).toBe(200);
     expect((rpcArgs.last as { p_position_slug: unknown }).p_position_slug).toBe("counsellor");
+  });
+
+  it("wraps rows as { leads, followUpStaleDays }, defaulting the threshold when unconfigured", async () => {
+    const res = await GET(req(`stage=qualified&userId=${VALID_USER_ID}`));
+    const body = await res.json();
+    expect(body.data.leads).toEqual([{ lead_id: "lead-1", display_name: "Ada" }]);
+    expect(body.data.followUpStaleDays).toBe(3);
+  });
+
+  it("surfaces the tenant's configured follow_up_stale_days", async () => {
+    tenantConfig.current = { team_performance_thresholds: { follow_up_stale_days: 5 } };
+    const res = await GET(req(`stage=qualified&userId=${VALID_USER_ID}`));
+    const body = await res.json();
+    expect(body.data.followUpStaleDays).toBe(5);
   });
 });

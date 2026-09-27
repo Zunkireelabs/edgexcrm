@@ -12,7 +12,18 @@ import { DATE_WINDOW_PRESETS, isDateWindowKey } from "../lib/date-window";
  * Client components (the self-fetching widgets) read the result via
  * useDateWindow(); router.push re-renders them without a full page reload.
  */
-export function DateWindowFilter() {
+interface DateWindowFilterProps {
+  /**
+   * Extra search params to unconditionally clear whenever the window
+   * changes — for widgets (e.g. the Pipeline explorer) that keep drill state
+   * in the URL and need it invalidated on a higher-level filter change.
+   * Optional and empty by default so other consumers of this shared
+   * component are unaffected.
+   */
+  clearParamsOnChange?: string[];
+}
+
+export function DateWindowFilter({ clearParamsOnChange = [] }: DateWindowFilterProps = {}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -28,6 +39,7 @@ export function DateWindowFilter() {
       if (v) params.set(k, v);
       else params.delete(k);
     }
+    for (const key of clearParamsOnChange) params.delete(key);
     const qs = params.toString();
     router.push(qs ? `${pathname}?${qs}` : pathname);
   }

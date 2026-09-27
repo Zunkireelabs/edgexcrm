@@ -13,14 +13,17 @@ import type { TenantConfig } from "@/types/database";
 // window, not dwell-based.
 
 export const DEFAULT_INTAKE_ALARM_BUCKETS_HOURS: [number, number] = [24, 48];
+export const DEFAULT_FOLLOW_UP_STALE_DAYS = 3;
 
 export interface TeamPerformanceThresholds {
   intakeAlarmBucketsHours: [number, number];
+  followUpStaleDays: number;
 }
 
 export function resolveThresholds(config: TenantConfig | null | undefined): TeamPerformanceThresholds {
   const stored = config?.team_performance_thresholds;
   return {
     intakeAlarmBucketsHours: stored?.intake_alarm_buckets_hours ?? DEFAULT_INTAKE_ALARM_BUCKETS_HOURS,
+    followUpStaleDays: stored?.follow_up_stale_days ?? DEFAULT_FOLLOW_UP_STALE_DAYS,
   };
 }

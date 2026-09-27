@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { useWidgetData } from "@/industries/_shared/features/insights/lib/use-widget-data";
 import { WidgetCard, WidgetLoading, WidgetEmpty, WidgetError } from "./widget-shell";
@@ -22,6 +23,24 @@ function bucketVariant(bucket: string): "secondary" | "warning" | "destructive" 
 // never "Staff Idle" — exact wording locked by the approved UI plan.
 export default function EduIntakeAlarmWidget() {
   const { data, loading, error } = useWidgetData<IntakeAlarmData>("/api/v1/insights/education/intake-alarm");
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  // Both "Needs Attention Now" and "The Pipeline" always render on the same
+  // Team & Lead Performance dashboard page — deep-link by pushing new search
+  // params onto the current pathname rather than needing a separate dashboard
+  // URL. Preserves window/branch/team; clears every Pipeline drill param
+  // (stage/position/person/jump) per the URL-state invalidation rule so the
+  // link always lands on a fresh, valid drill state.
+  function deepLink(next: Record<string, string>) {
+    const params = new URLSearchParams(searchParams.toString());
+    for (const key of ["stage", "position", "person", "jump"]) params.delete(key);
+    for (const [k, v] of Object.entries(next)) params.set(k, v);
+    router.push(`${pathname}?${params.toString()}`);
+  }
+
+  const intakeListName = data?.buckets.find((b) => b.list_name)?.list_name ?? "Pre-qualified";
 
   return (
     <WidgetCard title="Needs Attention Now">
@@ -32,15 +51,23 @@ export default function EduIntakeAlarmWidget() {
       ) : (
         <div className="space-y-4">
           <div>
-            <p className="text-xs font-medium text-muted-foreground mb-2">Pre-qualified, untouched</p>
+            <p className="text-xs font-medium text-muted-foreground mb-2">{intakeListName}, untouched</p>
             {data.buckets.length === 0 ? (
               <WidgetEmpty message="Nothing untouched right now." />
             ) : (
               <div className="flex gap-2">
                 {data.buckets.map((b) => (
-                  <Badge key={b.bucket} variant={bucketVariant(b.bucket)}>
-                    {b.bucket}: {b.cnt}
-                  </Badge>
+                  <button
+                    key={b.bucket}
+                    type="button"
+                    disabled={!b.list_slug}
+                    onClick={() => b.list_slug && deepLink({ stage: b.list_slug })}
+                    className="disabled:cursor-default"
+                  >
+                    <Badge variant={bucketVariant(b.bucket)} className={b.list_slug ? "cursor-pointer hover:opacity-80" : undefined}>
+                      {b.bucket}: {b.cnt}
+                    </Badge>
+                  </button>
                 ))}
               </div>
             )}
@@ -52,9 +79,11 @@ export default function EduIntakeAlarmWidget() {
             ) : (
               <div className="flex flex-wrap gap-2">
                 {data.idleStaff.map((s) => (
-                  <Badge key={s.user_id} variant="warning">
-                    {s.user_email}
-                  </Badge>
+                  <button key={s.user_id} type="button" onClick={() => deepLink({ jump: s.user_id })}>
+                    <Badge variant="warning" className="cursor-pointer hover:opacity-80">
+                      {s.user_email}
+                    </Badge>
+                  </button>
                 ))}
               </div>
             )}
