@@ -112,25 +112,41 @@ FROM latest_touch
 WHERE leads.id = latest_touch.lead_id
   AND (leads.last_touched_at IS NULL OR leads.last_touched_at <> latest_touch.touched_at);
 
--- callback_due_at: for any lead whose most recent qualifying activity (by
--- created_at, across call/email/meeting) is itself a no_answer/busy call,
--- set callback_due_at = that call's created_at + the tenant's
--- callback_reminder_minutes (consistent with the live trigger logic above).
-WITH latest_activity AS (
+-- callback_due_at: for any lead whose most recent qualifying TOUCH OF ANY KIND
+-- (call/email/meeting activity, OR a note — same union the live trigger's two
+-- branches and last_touched_at's own backfill above use) is itself a
+-- no_answer/busy call, set callback_due_at = that call's created_at + the
+-- tenant's callback_reminder_minutes. A note is never itself callback-causing,
+-- but if a note is the overall-latest event it must WIN and suppress
+-- callback_due_at — matching the live trigger, where a note landing after a
+-- pending callback always clears it (lead_notes branch above). Restricting
+-- "most recent" to lead_activities alone (as this backfill originally did)
+-- missed that: a lead whose real sequence was [no_answer call, T1] -> [note,
+-- T2 > T1] would wrongly get callback_due_at backfilled as still pending.
+WITH latest_touch_event AS (
   SELECT DISTINCT ON (lead_id) lead_id, tenant_id, created_at, activity_type, call_outcome
-  FROM lead_activities
-  WHERE activity_type IN ('call', 'email', 'meeting')
+  FROM (
+    SELECT lead_id, tenant_id, created_at, activity_type, call_outcome
+    FROM lead_activities
+    WHERE activity_type IN ('call', 'email', 'meeting')
+    UNION ALL
+    -- lead_notes has no tenant_id column (001_initial_schema.sql) — NULL is
+    -- harmless here: a note row never survives pending_callback's
+    -- activity_type = 'call' filter below, so its tenant_id is never joined.
+    SELECT lead_id, NULL::UUID AS tenant_id, created_at, NULL::activity_type AS activity_type, NULL::call_outcome AS call_outcome
+    FROM lead_notes
+  ) touches
   ORDER BY lead_id, created_at DESC
 ),
 pending_callback AS (
   SELECT
-    la.lead_id,
-    la.created_at + (
+    lte.lead_id,
+    lte.created_at + (
       COALESCE((t.config -> 'team_performance_thresholds' ->> 'callback_reminder_minutes')::INTEGER, 10) || ' minutes'
     )::INTERVAL AS due_at
-  FROM latest_activity la
-  JOIN tenants t ON t.id = la.tenant_id
-  WHERE la.activity_type = 'call' AND la.call_outcome IN ('no_answer', 'busy')
+  FROM latest_touch_event lte
+  JOIN tenants t ON t.id = lte.tenant_id
+  WHERE lte.activity_type = 'call' AND lte.call_outcome IN ('no_answer', 'busy')
 )
 UPDATE leads
 SET callback_due_at = pending_callback.due_at
