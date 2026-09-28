@@ -97,6 +97,16 @@ async function loadBatchIds(tenantId: string, blastId: string): Promise<string[]
 // no way to notice a stranded 'sending' row exists at all. Feed whatever's
 // here back into sendQueuedEmailBatch, which already knows how to safely
 // reclaim-or-permanently-fail a stranded row (§5.2 in send.ts).
+// email_blasts.recipients_total is NOT NULL DEFAULT 0 (migration 214) — it is
+// never actually null, so "has materialize run yet" can't be read off it.
+// email_messages existing for this blast is the real signal (and what
+// materializeBlastAudience itself writes to, idempotently).
+async function hasMaterializedRows(tenantId: string, blastId: string): Promise<boolean> {
+  const db = await scopedClientForTenant(tenantId);
+  const { data } = await db.from("email_messages").select("id").eq("source", "blast").eq("source_id", blastId).limit(1);
+  return (data ?? []).length > 0;
+}
+
 async function loadStrandedSendingIds(tenantId: string, blastId: string): Promise<string[]> {
   const db = await scopedClientForTenant(tenantId);
   const { data } = await db
@@ -369,7 +379,7 @@ export async function processOneBlast(tenantId: string, blastId: string, senderI
   }
 
   // Fresh blast, not yet materialized.
-  if (blast.status === "queued" && blast.recipients_total == null) {
+  if (blast.status === "queued" && !(await hasMaterializedRows(tenantId, blastId))) {
     if (!senderId) {
       // No sender identity available (this is the periodic scan, not the
       // immediate post-Send call) — only the immediate call can safely

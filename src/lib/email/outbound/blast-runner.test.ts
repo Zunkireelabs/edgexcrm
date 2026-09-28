@@ -450,6 +450,40 @@ describe("processOneBlast", () => {
     expect(outcome.finalStatus).toBe("sent");
   });
 
+  // REGRESSION (found 2026-09-28 during first local test) — email_blasts.
+  // recipients_total is NOT NULL DEFAULT 0 (migration 214), so it is never
+  // actually null on a fresh blast; a `recipients_total == null` check to
+  // decide "needs materialize" is always false and silently skips materialize
+  // entirely, falling straight through to a 0-recipient send loop that
+  // finalizes as a false 'sent' (0 total / 0 sent / 0 failed) — exactly what
+  // was observed live. Pins the real DB default (0, not null) so this can't
+  // silently reappear.
+  it("with a senderId, still materializes a fresh queued blast even though recipients_total is the real DB default of 0, not null", async () => {
+    const fake = fakeHandlerDb("queued", { recipients_total: 0 });
+    scopedClientForTenantMock.mockResolvedValue(fake.db);
+    buildUserAuthContextMock.mockResolvedValue(FULL_AUTH);
+    resolveAudienceMock.mockResolvedValue({
+      ok: true,
+      audience: { matched: 1, sendable: [audienceRow("lead-1", "a@example.com")], suppressed: [], excluded: { noEmail: 0, malformed: 0, suppressed: 0, duplicateEmail: 0 } },
+    });
+    sendQueuedEmailBatchMock.mockImplementation(async (_tenantId: string, ids: string[]) => {
+      for (const id of ids) {
+        const row = fake.messages.find((m) => m.id === id);
+        if (row) row.status = "sent";
+      }
+      return { sent: ids.length, failed: 0, suppressed: 0, throttled: 0 };
+    });
+
+    const outcome = await processOneBlastImport(fake, "tenant-1", "blast-1", "user-1");
+
+    expect(resolveAudienceMock).toHaveBeenCalledTimes(1);
+    expect(fake.messages).toHaveLength(1);
+    expect(outcome.finalStatus).toBe("sent");
+    // The real bug: without the fix, this would also report 'sent' but with
+    // zero messages ever materialized — assert the count, not just the status.
+    expect(outcome.sent).toBe(1);
+  });
+
   it("without a senderId (periodic scan), a freshly queued un-materialized blast is skipped, not failed, within the grace period", async () => {
     const fake = fakeHandlerDb("queued", { started_at: new Date().toISOString() });
     scopedClientForTenantMock.mockResolvedValue(fake.db);
