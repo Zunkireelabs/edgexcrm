@@ -59,3 +59,38 @@ describe("getLeadColumns — 'field_of_study' custom-field fallback column norma
     expect(cellText(col.renderTd(lead, {} as never))).toBe("Computer Science");
   });
 });
+
+// Client-reported (2026-09-28): a contact form that only asks for country (never
+// city, e.g. zunkireelabs.com's own site) always showed "—" in this column even
+// though lead.country was captured correctly — this column only ever read city.
+describe("getLeadColumns — 'location' column country fallback", () => {
+  it("shows city alone when country is absent", () => {
+    const cols = getLeadColumns("it_agency", []);
+    const col = cols.find((c) => c.key === "location")!;
+    const lead = fakeLead({ city: "Kathmandu", country: null });
+    expect(cellText(col.renderTd(lead, {} as never))).toBe("Kathmandu");
+  });
+
+  it("falls back to country when city is absent", () => {
+    const cols = getLeadColumns("it_agency", []);
+    const col = cols.find((c) => c.key === "location")!;
+    const lead = fakeLead({ city: null, country: "Nepal" });
+    expect(cellText(col.renderTd(lead, {} as never))).toBe("Nepal");
+  });
+
+  it("combines city and country when both are present", () => {
+    const cols = getLeadColumns("it_agency", []);
+    const col = cols.find((c) => c.key === "location")!;
+    const lead = fakeLead({ city: "Kathmandu", country: "Nepal" });
+    expect(cellText(col.renderTd(lead, {} as never))).toBe("Kathmandu, Nepal");
+  });
+
+  it("still shows a — placeholder when neither city nor country is present", () => {
+    const cols = getLeadColumns("it_agency", []);
+    const col = cols.find((c) => c.key === "location")!;
+    const lead = fakeLead({ city: null, country: null });
+    const rendered = col.renderTd(lead, {} as never) as ReactElement;
+    const cellChild = (rendered.props as { children: ReactElement }).children;
+    expect((cellChild.props as { children: string }).children).toBe("—");
+  });
+});
