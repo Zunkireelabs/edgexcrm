@@ -380,9 +380,14 @@ const STATIC_COLUMNS: LeadColumn[] = [
       // that posted it nested under custom_fields instead of top-level).
       const cf = (lead.custom_fields || {}) as Record<string, unknown>;
       const city = lead.city || (typeof cf.city === "string" ? cf.city : null);
+      // Country-only leads (e.g. a contact form that only asks for country, never
+      // city) previously showed "—" here even though lead.country was captured
+      // correctly — this column ignored country entirely. Fall back to it, and
+      // combine when both are present, so the column matches what "Location" implies.
+      const location = city && lead.country ? `${city}, ${lead.country}` : city || lead.country;
       return (
         <td key="location" className="px-3 py-1.5 hidden lg:table-cell text-sm font-normal text-[#787871]">
-          {city || <span className="text-gray-400">—</span>}
+          {location || <span className="text-gray-400">—</span>}
         </td>
       );
     },

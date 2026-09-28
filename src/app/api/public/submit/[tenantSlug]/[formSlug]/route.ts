@@ -44,6 +44,10 @@ import {
   resolveDegreeLevel,
 } from "@/lib/leads/destination-normalize";
 import { normalizePhoneForStorage } from "@/lib/phone-utils";
+import {
+  resolveEmailField,
+  foldUnknownFieldsIntoCustomFields,
+} from "@/lib/leads/submission-normalize";
 
 const CORS_STATIC_HEADERS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -235,6 +239,28 @@ export async function POST(
     }
   }
 
+  // Resolve email: try the canonical `email` key first, then a short list of known
+  // synonyms an external site's own form JS might use instead (e.g. "work_email") —
+  // see submission-normalize.ts for why this exists.
+  const emailResolution = resolveEmailField(body);
+  const resolvedEmail = emailResolution.value;
+
+  // Fold any top-level key that isn't part of our recognized contract into custom_fields,
+  // so a caller that doesn't nest its extra questions under custom_fields (as-is, common
+  // for hand-built external integrations) doesn't silently lose that data. Computed before
+  // the destinations/field-of-study/degree-level resolution below so those also see
+  // synonym keys a caller sent unnested instead of inside body.custom_fields.
+  //
+  // Only excludes the ONE synonym key that actually resolved to `email` (if any) — not the
+  // whole EMAIL_SYNONYM_KEYS list. Excluding the whole list would silently drop a distinct
+  // second address (e.g. a submission with both `email` and its own separate
+  // `business_email`): the synonym value would be excluded from custom_fields for being a
+  // "known" key, yet never promoted anywhere either, since `email` already won.
+  const resolvedCustomFields = foldUnknownFieldsIntoCustomFields(
+    body,
+    emailResolution.sourceKey && emailResolution.sourceKey !== "email" ? [emailResolution.sourceKey] : []
+  );
+
   // Resolve destinations: prefer an explicit `destinations` array field, else fall back to
   // whatever synonym key this form's destination question actually used (education_consultancy
   // only — see docs/DESTINATION-COLUMN-DISPLAY-FIX-BRIEF.md for why this fallback exists).
@@ -246,7 +272,7 @@ export async function POST(
   const resolvedDestinations = explicitDestinations.length > 0
     ? normalizeDestinations(explicitDestinations)
     : tenant.industry_id === "education_consultancy"
-      ? extractDestinationsFromCustomFields(body.custom_fields as Record<string, unknown> | undefined)
+      ? extractDestinationsFromCustomFields(resolvedCustomFields)
       : [];
 
   // Same normalization for field_of_study/degree_level — degree_level was previously never
@@ -254,15 +280,15 @@ export async function POST(
   // the answer at write time.
   const resolvedFieldOfStudy = resolveFieldOfStudy(
     body.field_of_study as string | null | undefined,
-    body.custom_fields as Record<string, unknown> | undefined
+    resolvedCustomFields
   );
   const resolvedDegreeLevel = resolveDegreeLevel(
     body.degree_level as string | null | undefined,
-    body.custom_fields as Record<string, unknown> | undefined
+    resolvedCustomFields
   );
 
   // ── 10. Dedup: resolve identity ──
-  const normalizedEmail = normalizeEmail(body.email as string | undefined);
+  const normalizedEmail = normalizeEmail(resolvedEmail);
   const normalizedPhone = normalizePhone(phone);
   const identity = await resolveLeadIdentity(supabase, {
     tenantId: tenant.id,
@@ -282,13 +308,13 @@ export async function POST(
         idempotencyKey: idempotencyKey ?? null,
         firstName: (body.first_name as string) || null,
         lastName: (body.last_name as string) || null,
-        email: (body.email as string) || null,
+        email: resolvedEmail,
         phone,
         city: (body.city as string) || null,
         country: (body.country as string) || null,
         normalizedEmail,
         normalizedPhone,
-        customFields: (body.custom_fields as Record<string, unknown>) ?? {},
+        customFields: resolvedCustomFields,
         fileUrls: (body.file_urls as Record<string, unknown>) ?? {},
         intakeSource: (body.intake_source as string) || (formConfig.attribution?.default_source ?? null),
         intakeMedium: (body.intake_medium as string) || (formConfig.attribution?.default_medium ?? null),
@@ -302,12 +328,12 @@ export async function POST(
     const patch = applyCanonicalUpdate(canonical, {
       first_name: (body.first_name as string) || null,
       last_name: (body.last_name as string) || null,
-      email: (body.email as string) || null,
+      email: resolvedEmail,
       phone,
       city: (body.city as string) || null,
       country: (body.country as string) || null,
       entity_id: (body.entity_id as string) || null,
-      custom_fields: (body.custom_fields as Record<string, unknown>) ?? {},
+      custom_fields: resolvedCustomFields,
       file_urls: (body.file_urls as Record<string, unknown>) ?? {},
       destinations: resolvedDestinations,
       field_of_study: resolvedFieldOfStudy,
@@ -432,14 +458,14 @@ export async function POST(
     step: 1,
     first_name: body.first_name || null,
     last_name: body.last_name || null,
-    email: body.email || null,
+    email: resolvedEmail,
     phone,
     city: body.city || null,
     country: body.country || null,
     destinations: resolvedDestinations,
     field_of_study: resolvedFieldOfStudy,
     degree_level: resolvedDegreeLevel,
-    custom_fields: body.custom_fields || {},
+    custom_fields: resolvedCustomFields,
     file_urls: body.file_urls || {},
     entity_id: body.entity_id || null,
     intake_source: body.intake_source
@@ -501,7 +527,7 @@ export async function POST(
               formConfigId: formConfig.id,
               createdVia: "public_form",
               idempotencyKey: idempotencyKey ?? null,
-              email: (body.email as string) || null,
+              email: resolvedEmail,
               normalizedEmail,
               normalizedPhone,
               rawPayload: body,
