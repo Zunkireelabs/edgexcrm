@@ -120,6 +120,13 @@ export interface CompileCtx {
   now: Date; // injected, never Date.now() inside the compiler — keeps date tests deterministic
   industryId: string | null;
   permissions: ResolvedPermissions;
+  // Team & Lead Performance's tenant-configurable stale threshold (days) — read by
+  // the "follow_up_needed" virtual field's compile() in registry/leads.ts, the one
+  // FieldDef in this registry whose cutoff can't be a literal baked in at build
+  // time. Optional so every other CompileCtx construction site (tests, other
+  // callers) doesn't need to know this field exists; the field's compile()
+  // falls back to the same default resolveThresholds() uses when absent.
+  followUpStaleDays?: number;
 }
 
 export interface FieldDef {
@@ -140,6 +147,11 @@ export interface FieldDef {
   hiddenFromPicker?: boolean;
   sortable?: boolean;
   sortColumns?: string[]; // multi-column sort (e.g. first_name -> [first_name, last_name])
+  // Postgres's own ASC/DESC null-ordering default (NULLS LAST for ASC, NULLS
+  // FIRST for DESC) is wrong for "follow-up needed" — never-touched (NULL)
+  // leads must sort to the TOP on an ascending sort, not the bottom. Only that
+  // field sets this; every other sortable field keeps the DB default.
+  sortNullsFirst?: boolean;
   columnKey?: string; // back-reference into a rendering columns-registry
   accessor?: string;
   visibleTo?: (p: ResolvedPermissions) => boolean;

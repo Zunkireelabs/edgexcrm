@@ -1,6 +1,14 @@
 import { and, or, pgLike, pgVal } from "../pgrst";
 import { FilterCompileError, type CompileCtx, type FieldDef, type FieldRegistry, type FilterCondition } from "../types";
 
+// Mirrors DEFAULT_FOLLOW_UP_STALE_DAYS in
+// industries/education-consultancy/features/team-performance/lib/thresholds.ts — not
+// imported directly (src/lib/filters/ has zero imports from the rest of the app, by
+// design; see types.ts's CompileCtx doc comment). The real per-tenant value always
+// arrives via ctx.followUpStaleDays (route.ts resolves it through resolveThresholds());
+// this literal is only the fallback for a caller that never sets it (e.g. a test ctx).
+const FALLBACK_FOLLOW_UP_STALE_DAYS = 3;
+
 // Lead field registry — Phase 2 of docs/ADVANCED-FILTERS-BRIEF.md. Covers the 9
 // existing /api/v1/leads toolbar axes (status, search, form, tag, created,
 // industry, source, assignees, collaborators) plus the "obvious first-class
@@ -142,6 +150,36 @@ function compileLocation(cond: FilterCondition): string {
   // NOT(city ilike P OR country ilike P) = (city IS NULL OR city NOT ilike P) AND (country IS NULL OR country NOT ilike P)
   const pattern = pgLike(value, "contains");
   return and(or("city.is.null", `city.not.ilike.${pattern}`), or("country.is.null", `country.not.ilike.${pattern}`));
+}
+
+// ── follow_up_needed: virtual, NULL-inclusive cutoff on last_touched_at ─────
+// (migration 250). Mirrors edu-team-relay.tsx's needsFollowUp() rule exactly:
+// never-touched (NULL) OR last touch older than the threshold. Only one
+// operator offered ("is_true") — this is a toggle ("follow-up needed" on/off),
+// not a value comparison; there is no meaningful "is_false" (see compileCallbackDue
+// below for the identical shape/reasoning on the callback-due field).
+//
+// on_hold (migration 251) excludes a lead from this signal entirely — "customer
+// asked to wait" is a deliberate hold, not a forgotten lead. Callback-due has no
+// equivalent exclusion: a missed-call callback stays time-sensitive regardless of
+// hold status (see compileCallbackDue below, unchanged).
+
+function compileFollowUpNeeded(cond: FilterCondition, ctx: CompileCtx): string {
+  const staleDays = ctx.followUpStaleDays ?? FALLBACK_FOLLOW_UP_STALE_DAYS;
+  const cutoff = new Date(ctx.now.getTime() - staleDays * 24 * 60 * 60 * 1000);
+  return and(
+    "on_hold.eq.false",
+    or("last_touched_at.is.null", `last_touched_at.lt.${pgVal(cutoff.toISOString())}`),
+  );
+}
+
+// ── callback_due: virtual — a pending callback window that has fully elapsed ─
+// (migration 250). "Due" = window elapsed, not merely a missed call: a lead
+// still inside its grace period has callback_due_at set but in the future —
+// not due yet.
+
+function compileCallbackDue(cond: FilterCondition, ctx: CompileCtx): string {
+  return and("callback_due_at.not.is.null", `callback_due_at.lte.${pgVal(ctx.now.toISOString())}`);
 }
 
 // `ctx` is accepted (not yet read) so a future industry/permission-filtered
@@ -421,6 +459,35 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       operators: ["contains", "not_contains", "starts_with", "ends_with", "is_empty", "is_not_empty"],
       group: "Basic",
       filterable: true,
+    },
+
+    // ── follow-up-needed / callback-due signals (migration 250) ──────────
+    {
+      key: "follow_up_needed",
+      label: "Follow-up needed",
+      type: "boolean",
+      source: { kind: "virtual", compile: compileFollowUpNeeded },
+      operators: ["is_true"],
+      group: "Basic",
+      filterable: true,
+      sortable: true,
+      sortColumns: ["last_touched_at"],
+      // Never-touched (NULL) must sort to the TOP on ascending — see
+      // FieldDef.sortNullsFirst's doc comment in types.ts.
+      sortNullsFirst: true,
+      industries: ["education_consultancy"],
+    },
+    {
+      key: "callback_due",
+      label: "Callback due",
+      type: "boolean",
+      source: { kind: "virtual", compile: compileCallbackDue },
+      operators: ["is_true"],
+      group: "Basic",
+      filterable: true,
+      sortable: true,
+      sortColumns: ["callback_due_at"],
+      industries: ["education_consultancy"],
     },
 
     // ── explicitly not filterable in Phase 2 ─────────────────────────────

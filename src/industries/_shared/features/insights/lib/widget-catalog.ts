@@ -47,6 +47,12 @@ export const WIDGET_CATALOG: WidgetDef[] = [
   // tile rows that bubble up Sales + Delivery, no new fetch surface.
   { key: "overview-sales",         label: "Sales Overview",          description: "New leads, weighted pipeline, win rate, bookings won" },
   { key: "overview-delivery",      label: "Delivery Overview",       description: "Delivery health, over-budget projects, team utilization, bench" },
+  // education_consultancy Team & Lead Performance widgets — self-fetching, owner/admin only
+  { key: "edu-intake-alarm",       label: "Needs Attention Now",     description: "Untouched Pre-qualified leads by age + staff with no CRM activity" },
+  { key: "edu-team-relay",         label: "The Pipeline",            description: "Stage x position x person drilldown with stuck-rate and jump-to-person search" },
+  { key: "edu-leakage-funnel",     label: "Losing Leads",            description: "Per stage, leads archived out without advancing, by reason" },
+  { key: "edu-branch-breakdown",   label: "Branches",                description: "Pile, enrolled count and tuition value by assignee's branch" },
+  { key: "edu-coverage-meter",     label: "Coverage",                description: "% of active-pipeline leads with a live assignee" },
 ];
 
 export const WIDGET_KEYS = WIDGET_CATALOG.map((w) => w.key);
@@ -93,6 +99,11 @@ export const WIDGET_SIZE: Record<string, WidgetSize> = {
   "sales-win-loss": "half",
   "overview-sales": "full",
   "overview-delivery": "full",
+  "edu-intake-alarm": "full",
+  "edu-team-relay": "full",
+  "edu-leakage-funnel": "half",
+  "edu-branch-breakdown": "half",
+  "edu-coverage-meter": "stat",
 };
 
 // Personal widgets (my-utilization, my-tasks, my-time) are intentionally excluded —
@@ -132,8 +143,26 @@ const IT_AGENCY_WIDGET_KEYS = new Set([
 
 const LEAD_WIDGET_KEYS = new Set(["stats", "leads-by-stage", "leads-by-source", "leads-by-counselor", "utm"]);
 
+// education_consultancy gets the universal lead widgets plus its own
+// Team & Lead Performance widgets — kept separate from LEAD_WIDGET_KEYS so
+// construction/travel_agency (which fall back to LEAD_WIDGET_KEYS too) never
+// see these Admizz-relay-specific widgets in their dashboard builder.
+const EDUCATION_CONSULTANCY_WIDGET_KEYS = new Set([
+  ...LEAD_WIDGET_KEYS,
+  "edu-intake-alarm",
+  "edu-team-relay",
+  "edu-leakage-funnel",
+  "edu-branch-breakdown",
+  "edu-coverage-meter",
+]);
+
 export function getWidgetCatalog(industryId: string | null): WidgetDef[] {
-  const allowed = industryId === "it_agency" ? IT_AGENCY_WIDGET_KEYS : LEAD_WIDGET_KEYS;
+  const allowed =
+    industryId === "it_agency"
+      ? IT_AGENCY_WIDGET_KEYS
+      : industryId === "education_consultancy"
+        ? EDUCATION_CONSULTANCY_WIDGET_KEYS
+        : LEAD_WIDGET_KEYS;
   return WIDGET_CATALOG.filter((w) => allowed.has(w.key));
 }
 

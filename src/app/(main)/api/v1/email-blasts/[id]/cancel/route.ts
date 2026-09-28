@@ -18,7 +18,7 @@ const CANCELLABLE_STATUSES = new Set(["scheduled", "queued", "sending", "throttl
 // cancel-then-let-the-worker-notice shape, minus the credit settle step (no
 // per-send provider cost to reconcile for email). Cancels remaining
 // queued email_messages rows for this blast; safe to race against the worker
-// — finalizeEmailBlast (email-blast-send.ts) must never transition a blast
+// — finalizeEmailBlast (blast-runner.ts) must never transition a blast
 // OUT of 'cancelled' once this route has set it (F-1 in the SMS precedent).
 export async function POST(_request: NextRequest, { params }: RouteParams) {
   const requestId = crypto.randomUUID();

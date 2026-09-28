@@ -43,7 +43,7 @@ const EXEMPT_SITES: Record<string, "rpc-only" | "auth-only"> = {
   "src/app/(main)/api/v1/email-blasts/[id]/audience-preview/route.ts": "rpc-only", // resolveAudience() -> visibleLeadsBase() call site
   // email-blasts/[id]/send/route.ts REMOVED from this list: it no longer calls
   // resolveAudience() (or createClient() at all) — that moved into the
-  // background worker's materializeBlastAudience (email-blast-send.ts), which
+  // background worker's materializeBlastAudience (blast-runner.ts), which
   // uses buildUserAuthContext() + a service-role client instead, precisely
   // because a background job has no live session to bind a real
   // createClient() to. See that function's own header comment.

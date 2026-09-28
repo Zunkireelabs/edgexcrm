@@ -16,7 +16,6 @@ import { agentMcpWriteGate } from "@/lib/inngest/functions/agent-mcp-write-gate"
 import { smsBlastSend } from "@/lib/inngest/functions/sms-blast-send";
 import { smsDeliveryPoll, smsBlastPollReceipts } from "@/lib/inngest/functions/sms-delivery-poll";
 import { smsCreditReaper } from "@/lib/inngest/functions/sms-credit-reaper";
-import { emailBlastSend } from "@/lib/inngest/functions/email-blast-send";
 import { sequenceStepSend } from "@/lib/inngest/functions/sequence-step-send";
 
 export const { GET, POST, PUT } = serve({
@@ -39,7 +38,6 @@ export const { GET, POST, PUT } = serve({
     smsDeliveryPoll,
     smsBlastPollReceipts,
     smsCreditReaper,
-    emailBlastSend,
     sequenceStepSend,
   ],
 });

@@ -116,6 +116,28 @@ const OVERVIEW_WIDGETS: Record<string, ComponentType<DeliveryWidgetProps>> = {
   ),
 };
 
+// Team & Lead Performance dashboard widgets (education_consultancy) — self-fetching.
+// Same defense-in-depth as DELIVERY_WIDGETS/SALES_WIDGETS: only resolved for
+// education_consultancy below, even though getWidgetCatalog already prevents these
+// keys from reaching a non-education dashboard's widgets array.
+const EDUCATION_TEAM_PERF_WIDGETS: Record<string, ComponentType<DeliveryWidgetProps>> = {
+  "edu-intake-alarm": dynamic(
+    () => import("@/industries/education-consultancy/features/team-performance/widgets/edu-intake-alarm")
+  ),
+  "edu-team-relay": dynamic(
+    () => import("@/industries/education-consultancy/features/team-performance/widgets/edu-team-relay")
+  ),
+  "edu-leakage-funnel": dynamic(
+    () => import("@/industries/education-consultancy/features/team-performance/widgets/edu-leakage-funnel")
+  ),
+  "edu-branch-breakdown": dynamic(
+    () => import("@/industries/education-consultancy/features/team-performance/widgets/edu-branch-breakdown")
+  ),
+  "edu-coverage-meter": dynamic(
+    () => import("@/industries/education-consultancy/features/team-performance/widgets/edu-coverage-meter")
+  ),
+};
+
 interface DashboardRendererProps {
   widgetKey: string;
   aggregates: LeadAggregates;
@@ -173,6 +195,15 @@ export function DashboardRenderer({
   const OverviewWidget = industryId === "it_agency" ? OVERVIEW_WIDGETS[widgetKey] : undefined;
   if (OverviewWidget) {
     return <OverviewWidget />;
+  }
+
+  // Defense-in-depth: Team & Lead Performance widgets only resolve for
+  // education_consultancy dashboards, even if one of these keys somehow ends
+  // up in a non-education dashboard's widgets array (getWidgetCatalog already
+  // prevents this at selection time).
+  const EduTeamPerfWidget = industryId === "education_consultancy" ? EDUCATION_TEAM_PERF_WIDGETS[widgetKey] : undefined;
+  if (EduTeamPerfWidget) {
+    return <EduTeamPerfWidget />;
   }
 
   switch (widgetKey) {

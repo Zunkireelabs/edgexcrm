@@ -75,6 +75,17 @@ export interface TenantConfig {
   statuses?: string[];
   max_file_size_mb?: number;
   accepted_file_types?: string[];
+  // Team & Lead Performance dashboard (education_consultancy) — intake-alarm
+  // age buckets. Owner-tunable without a code deploy; see
+  // industries/education-consultancy/features/team-performance/lib/thresholds.ts
+  // for defaults used when this key is absent. Per-stage dwell thresholds are
+  // Phase 2 (not wired to any widget yet — stuck-rate is currently a plain
+  // touched/pile ratio, not dwell-based).
+  team_performance_thresholds?: {
+    intake_alarm_buckets_hours?: [number, number];
+    follow_up_stale_days?: number;
+    callback_reminder_minutes?: number;
+  };
 }
 
 export interface ConnectedEmailAccount {
@@ -231,6 +242,12 @@ export interface Lead {
   stage_changed_at: string;
   created_at: string;
   updated_at: string;
+  // Follow-up-needed / callback-due signals (education_consultancy — migration 250)
+  last_touched_at: string | null;
+  callback_due_at: string | null;
+  // "Customer asked to wait" marker (migration 251) — suppresses follow-up-needed
+  // only; callback-due still applies regardless.
+  on_hold: boolean;
 }
 
 export interface LeadList {

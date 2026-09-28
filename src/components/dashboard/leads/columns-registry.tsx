@@ -28,6 +28,9 @@ export interface LeadColumnCtx {
   industryId: string | null | undefined;
   selectedIds: Set<string>;
   unreadLeadIds: Set<string>;
+  /** Team & Lead Performance's tenant-configurable stale threshold (days) — powers the
+   *  "Follow-up needed" row badge below (education_consultancy only). */
+  followUpStaleDays?: number;
   onToggleSelect: (id: string) => void;
   onPreviewToggle: (id: string) => void;
   onTagUpdate: (leadId: string, tags: string[]) => void;
@@ -58,6 +61,36 @@ export interface LeadColumn {
   tdClassName?: string;
   renderTh: (ctx: LeadColumnCtx) => React.ReactNode;
   renderTd: (lead: Lead, ctx: LeadColumnCtx) => React.ReactNode;
+}
+
+// ─── follow-up-needed / callback-due row badges (education_consultancy only, ───
+// migration 250) — same rule as edu-team-relay.tsx's needsFollowUp()/followUpLabel(),
+// now computed directly off the real last_touched_at/callback_due_at columns instead
+// of derived client-side from raw activity rows. Fallback mirrors
+// DEFAULT_FOLLOW_UP_STALE_DAYS in thresholds.ts — not imported directly to avoid
+// pulling an industries/ import into this shared component for a value that's
+// already threaded through ctx.followUpStaleDays with the real default applied
+// upstream (leads-table.tsx).
+export const FALLBACK_FOLLOW_UP_STALE_DAYS = 3;
+
+// Exported for leads-table.tsx: the row-indicator bar (left-edge anchor column)
+// and the callback-due-floats-to-top display partition both need these outside
+// this file now that the dot they used to live next to has moved.
+export function followUpBadgeLabel(lead: Lead, staleDays: number): string | null {
+  // on_hold (migration 251) — "customer asked to wait" — suppresses this signal
+  // entirely, regardless of how stale last_touched_at is. Mirrors
+  // compileFollowUpNeeded's on_hold.eq.false clause (src/lib/filters/registry/leads.ts)
+  // so the row badge and the "Follow-up needed" filter/sort never disagree.
+  if (lead.on_hold) return null;
+  if (!lead.last_touched_at) return "Never touched";
+  const days = Math.floor((Date.now() - new Date(lead.last_touched_at).getTime()) / (1000 * 60 * 60 * 24));
+  return days >= staleDays ? `${days}d since touch` : null;
+}
+
+// Callback-due is NEVER suppressed by on_hold — a missed-call callback stays
+// time-sensitive regardless of hold status.
+export function isCallbackDue(lead: Lead): boolean {
+  return !!lead.callback_due_at && new Date(lead.callback_due_at).getTime() <= Date.now();
 }
 
 // ─── inline sub-components (moved from leads-table.tsx) ───────────────────────
@@ -150,7 +183,8 @@ const STATIC_COLUMNS: LeadColumn[] = [
         Name
       </th>
     ),
-    renderTd: (lead, ctx) => (
+    renderTd: (lead, ctx) => {
+      return (
         <td key="name" className="px-3 py-1.5">
           {/* @container: the inline preview icon only renders once this cell has room for it —
               driven by the cell's real (possibly drag-resized) width, not a guessed breakpoint. */}
@@ -198,7 +232,8 @@ const STATIC_COLUMNS: LeadColumn[] = [
             </button>
           </div>
         </td>
-    ),
+      );
+    },
   },
 
   // ── tags (education_consultancy only, defaultVisible when showTags)

@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { ChevronDown, UserCircle, Building, Check } from "lucide-react";
+import { ChevronDown, UserCircle, Building, Check, PauseCircle, PlayCircle } from "lucide-react";
+import { toast } from "sonner";
 import { prospectIndustryLabel, PROSPECT_INDUSTRIES } from "@/industries/it-agency/leads/prospect-industries";
 import { TRIP_TYPES, tripTypeLabel } from "@/industries/travel-agency/leads/trip-types";
 import { formatMoney } from "@/lib/travel/currency";
@@ -499,6 +500,11 @@ export function KeyInfoSection({
           )}
 
           <LeadSourcePanel lead={lead} isAdmin={isAdmin} isEditor={isEditor ?? isAdmin} leadScope={leadScope} onSave={onSaveSourceFields} submissionHistory={submissionHistory} />
+
+          {/* ── ON HOLD — education_consultancy only (migration 251) ─────────── */}
+          {industryId === "education_consultancy" && (
+            <OnHoldToggle lead={lead} canEdit={canEdit} />
+          )}
 
           {/* ── COMPANY — it_agency only ──────────────────────────── */}
           {industryId === "it_agency" && isEditing && draft ? (
@@ -1165,6 +1171,64 @@ function StudyInterestPanel({ lead, isAdmin, isEditor, leadScope, onSave, submis
       </div>
       </InfoSection>
     </>
+  );
+}
+
+// ── On hold toggle (education_consultancy only, migration 251) ─────────────
+// "Customer asked to wait" vs. "actually forgotten": suppresses the
+// follow-up-needed signal only (columns-registry.tsx's followUpBadgeLabel,
+// src/lib/filters/registry/leads.ts's compileFollowUpNeeded) — callback-due
+// stays time-sensitive regardless. Self-contained fetch+optimistic update,
+// same shape as columns-registry.tsx's LeadTypeToggle/LeadTagToggle.
+
+function OnHoldToggle({ lead, canEdit }: { lead: Lead; canEdit: boolean }) {
+  const [onHold, setOnHold] = useState(lead.on_hold ?? false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => setOnHold(lead.on_hold ?? false), [lead.on_hold]);
+
+  async function toggle() {
+    const next = !onHold;
+    setOnHold(next);
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/v1/leads/${lead.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ on_hold: next }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      setOnHold(!next);
+      toast.error("Failed to update hold status");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!canEdit && !onHold) return null;
+
+  return (
+    <div className="flex items-center justify-between py-1">
+      <div className="flex items-center gap-1.5">
+        {onHold ? (
+          <PauseCircle className="h-4 w-4 text-amber-600" />
+        ) : (
+          <PlayCircle className="h-4 w-4 text-muted-foreground" />
+        )}
+        <span className="text-sm">On hold</span>
+        {onHold && (
+          <span className="text-xs text-muted-foreground">
+            — follow-up needed is suppressed while on hold
+          </span>
+        )}
+      </div>
+      {canEdit && (
+        <Button variant={onHold ? "secondary" : "outline"} size="sm" disabled={saving} onClick={toggle}>
+          {onHold ? "Resume" : "Put on hold"}
+        </Button>
+      )}
+    </div>
   );
 }
 
