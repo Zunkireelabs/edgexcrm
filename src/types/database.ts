@@ -245,6 +245,9 @@ export interface Lead {
   // Follow-up-needed / callback-due signals (education_consultancy — migration 250)
   last_touched_at: string | null;
   callback_due_at: string | null;
+  // "Customer asked to wait" marker (migration 251) — suppresses follow-up-needed
+  // only; callback-due still applies regardless.
+  on_hold: boolean;
 }
 
 export interface LeadList {

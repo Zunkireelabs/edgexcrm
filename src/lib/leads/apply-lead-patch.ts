@@ -85,6 +85,7 @@ const UPDATABLE_FIELDS = [
   "toefl_score",
   "sat_score",
   "gre_gmat_score",
+  "on_hold",
 ] as const;
 
 // Blocked for plain counselors/viewers but NOT for team-scoped branch managers

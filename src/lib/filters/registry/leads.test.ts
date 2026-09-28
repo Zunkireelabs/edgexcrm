@@ -364,12 +364,12 @@ describe("follow_up_needed / callback_due — touch-signal virtual fields (migra
   it("follow_up_needed: ctx.followUpStaleDays set (5) drives the cutoff — now minus 5 days", () => {
     const customCtx: CompileCtx = { ...ctx, followUpStaleDays: 5 };
     const b = compileFilter(new FakeBuilder(), andTree(cond("c1", "follow_up_needed", "is_true")), registry, customCtx);
-    expect(b.calls).toEqual(['or(or(last_touched_at.is.null,last_touched_at.lt."2026-01-10T12:00:00.000Z"))']);
+    expect(b.calls).toEqual(['or(and(on_hold.eq.false,or(last_touched_at.is.null,last_touched_at.lt."2026-01-10T12:00:00.000Z")))']);
   });
 
   it("follow_up_needed: ctx.followUpStaleDays unset falls back to the default (3 days)", () => {
     const b = compile(andTree(cond("c1", "follow_up_needed", "is_true")));
-    expect(b.calls).toEqual(['or(or(last_touched_at.is.null,last_touched_at.lt."2026-01-12T12:00:00.000Z"))']);
+    expect(b.calls).toEqual(['or(and(on_hold.eq.false,or(last_touched_at.is.null,last_touched_at.lt."2026-01-12T12:00:00.000Z")))']);
   });
 
   it("callback_due is_true compiles to and(callback_due_at.not.is.null, callback_due_at.lte.<ctx.now>)", () => {

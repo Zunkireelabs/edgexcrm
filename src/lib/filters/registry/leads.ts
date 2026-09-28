@@ -158,11 +158,19 @@ function compileLocation(cond: FilterCondition): string {
 // operator offered ("is_true") — this is a toggle ("follow-up needed" on/off),
 // not a value comparison; there is no meaningful "is_false" (see compileCallbackDue
 // below for the identical shape/reasoning on the callback-due field).
+//
+// on_hold (migration 251) excludes a lead from this signal entirely — "customer
+// asked to wait" is a deliberate hold, not a forgotten lead. Callback-due has no
+// equivalent exclusion: a missed-call callback stays time-sensitive regardless of
+// hold status (see compileCallbackDue below, unchanged).
 
 function compileFollowUpNeeded(cond: FilterCondition, ctx: CompileCtx): string {
   const staleDays = ctx.followUpStaleDays ?? FALLBACK_FOLLOW_UP_STALE_DAYS;
   const cutoff = new Date(ctx.now.getTime() - staleDays * 24 * 60 * 60 * 1000);
-  return or("last_touched_at.is.null", `last_touched_at.lt.${pgVal(cutoff.toISOString())}`);
+  return and(
+    "on_hold.eq.false",
+    or("last_touched_at.is.null", `last_touched_at.lt.${pgVal(cutoff.toISOString())}`),
+  );
 }
 
 // ── callback_due: virtual — a pending callback window that has fully elapsed ─

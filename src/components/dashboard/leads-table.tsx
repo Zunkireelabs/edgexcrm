@@ -89,6 +89,9 @@ import { useBadgeCounts } from "@/hooks/use-badge-counts";
 import {
   getLeadColumns,
   getDefaultVisibleKeys,
+  isCallbackDue,
+  followUpBadgeLabel,
+  FALLBACK_FOLLOW_UP_STALE_DAYS,
   type LeadColumn,
   type LeadColumnCtx,
 } from "@/components/dashboard/leads/columns-registry";
@@ -100,14 +103,16 @@ import { DESTINATION_SYNONYM_KEYS } from "@/lib/leads/destination-normalize";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 import { DEFAULT_FOLLOW_UP_STALE_DAYS } from "@/industries/education-consultancy/features/team-performance/lib/thresholds";
 
-type SortField = "activity" | "created" | "updated" | "name" | "email" | "follow_up_needed" | "callback_due";
+type SortField = "activity" | "created" | "updated" | "name" | "email" | "follow_up_needed";
 type SortDirection = "asc" | "desc";
 
 // UI sort field -> GET /api/v1/leads `sort` param. Values are matched against the
 // lead field registry's FieldDef key (src/lib/filters/registry/leads.ts) since the
 // API resolves `sort` by looking up that key directly, not a raw column name — see
-// route.ts's `filterRegistry[sortKey]` lookup. follow_up_needed/callback_due reuse
-// that FieldDef's sortColumns/sortNullsFirst rather than re-deriving the sort rule here.
+// route.ts's `filterRegistry[sortKey]` lookup. follow_up_needed reuses that FieldDef's
+// sortColumns/sortNullsFirst rather than re-deriving the sort rule here.
+// callback_due is NOT a sort option — it's an automatic, unconditional display-order
+// float applied after whatever sort is active (see the displayLeads partition below).
 const SORT_FIELD_TO_API: Record<SortField, string> = {
   activity: "last_activity_at",
   created: "created_at",
@@ -115,7 +120,6 @@ const SORT_FIELD_TO_API: Record<SortField, string> = {
   name: "first_name",
   email: "email",
   follow_up_needed: "follow_up_needed",
-  callback_due: "callback_due",
 };
 
 interface TeamMember {
@@ -284,11 +288,11 @@ function withResizedTd(tdElement: ReactNode, width: number | undefined): ReactNo
 // Extracted so the identical popover can render in two different toolbar
 // slots — row 1 (legacy/flag-off) or the new filters+sort row (advanced
 // mode) — without duplicating the JSX.
-// follow_up_needed/callback_due are fixed-direction signals (stalest / most-overdue
-// first) mirroring the field registry's sortNullsFirst rule — force ascending on
-// selection so the default read matches that rule instead of inheriting whatever
-// direction was left over from a previous field.
-const ASC_ONLY_SORT_FIELDS = new Set<SortField>(["follow_up_needed", "callback_due"]);
+// follow_up_needed is a fixed-direction signal (stalest first) mirroring the field
+// registry's sortNullsFirst rule — force ascending on selection so the default read
+// matches that rule instead of inheriting whatever direction was left over from a
+// previous field.
+const ASC_ONLY_SORT_FIELDS = new Set<SortField>(["follow_up_needed"]);
 
 function SortPopover({
   sortField,
@@ -336,10 +340,7 @@ function SortPopover({
                 <SelectItem value="name">Name</SelectItem>
                 <SelectItem value="email">Email</SelectItem>
                 {industryId === "education_consultancy" && (
-                  <>
-                    <SelectItem value="follow_up_needed">Follow-up needed</SelectItem>
-                    <SelectItem value="callback_due">Callback due</SelectItem>
-                  </>
+                  <SelectItem value="follow_up_needed">Follow-up needed</SelectItem>
                 )}
               </SelectContent>
             </Select>
@@ -1223,15 +1224,6 @@ export function LeadsTable({
           else comparison = aVal - bVal;
           break;
         }
-        case "callback_due": {
-          const aVal = a.callback_due_at ? new Date(a.callback_due_at).getTime() : null;
-          const bVal = b.callback_due_at ? new Date(b.callback_due_at).getTime() : null;
-          if (aVal === null && bVal === null) comparison = 0;
-          else if (aVal === null) comparison = 1;
-          else if (bVal === null) comparison = -1;
-          else comparison = aVal - bVal;
-          break;
-        }
         default:
           comparison = 0;
       }
@@ -1298,6 +1290,23 @@ export function LeadsTable({
     () => (serverPaginated ? filtered : filtered.slice(startIndex, endIndex)),
     [serverPaginated, filtered, startIndex, endIndex],
   );
+
+  // Callback-due leads float to the top, unconditionally, regardless of whatever
+  // sort is active — a display-order transform layered on top of the already-sorted
+  // page, not a sort field of its own (item 3 of the follow-up/callback-due
+  // follow-ups brief). Stable partition: relative order within each group (due /
+  // not-due) is preserved from `paginatedLeads`. Applies identically to the
+  // server-paginated path and the two legacy client-sort consumers, since both
+  // funnel through paginatedLeads before render.
+  const displayLeads = useMemo(() => {
+    if (industryId !== "education_consultancy") return paginatedLeads;
+    const due: Lead[] = [];
+    const rest: Lead[] = [];
+    for (const lead of paginatedLeads) {
+      (isCallbackDue(lead) ? due : rest).push(lead);
+    }
+    return due.length > 0 ? [...due, ...rest] : paginatedLeads;
+  }, [paginatedLeads, industryId]);
 
   // Legacy mode only: server mode's page-1 reset lives in the fetch effect's signature
   // check above; nothing else would reset a stale page here now that filtered.length
@@ -2090,8 +2099,8 @@ export function LeadsTable({
     [memberMap, memberNames, formMap, entityMap, branchMap, memberBranchMap, roleMap, stages, industryId, selectedIds, unreadLeadIds, followUpStaleDays, leadLists, viewMode, intakeListId, canEditRows, leads, openTaskLeadIds, assignableMembers, teamMembers, isAdmin],
   );
 
-  // Total column count: 2 anchors (select + avatar) + visible data columns + 1 actions column
-  const totalColSpan = 3 + visibleColumns.length;
+  // Total column count: signal-bar + 2 anchors (select + avatar) + visible data columns + 1 actions column
+  const totalColSpan = 4 + visibleColumns.length;
 
   // Filter menu config — reuses the exact option arrays / onChange closures from the
   // filter dropdowns below (gating conditions preserved identically).
@@ -2765,6 +2774,8 @@ export function LeadsTable({
           <table className="w-max min-w-[max(900px,100%)]">
           <thead className="sticky top-0 z-10 [&_th]:shadow-[inset_0_1px_0_0_#e5e7eb,inset_0_-1px_0_0_#e5e7eb]">
             <tr className="bg-gray-50">
+              {/* Anchor: follow-up/callback-due row-signal bar (education_consultancy only) */}
+              <th className="p-0 w-1"></th>
               {/* Anchor: select checkbox */}
               <th className="pl-3 pr-1 py-2 text-left w-10">
                 <Checkbox
@@ -2784,7 +2795,7 @@ export function LeadsTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {paginatedLeads.length === 0 ? (
+            {displayLeads.length === 0 ? (
               <tr>
                 <td
                   colSpan={totalColSpan}
@@ -2795,15 +2806,38 @@ export function LeadsTable({
                 </td>
               </tr>
             ) : (
-              paginatedLeads.map((lead) => {
+              displayLeads.map((lead) => {
                 const isSelected = selectedIds.has(lead.id);
                 const initials = getLeadInitials(lead);
+
+                // Row-signal bar (education_consultancy only, migration 250/251):
+                // full-row-height colored bar at the row's left edge — red for
+                // callback-due, amber for follow-up-needed, callback-due wins if
+                // both apply. Same tooltip content the old dot used to carry.
+                const callbackDue = industryId === "education_consultancy" && isCallbackDue(lead);
+                const followUpLabel =
+                  industryId === "education_consultancy"
+                    ? followUpBadgeLabel(lead, followUpStaleDays ?? FALLBACK_FOLLOW_UP_STALE_DAYS)
+                    : null;
+                const signalLabel = callbackDue ? "Callback due" : followUpLabel;
+                const signalColor = callbackDue ? "bg-red-500" : followUpLabel ? "bg-amber-500" : null;
 
                 return (
                   <tr
                     key={lead.id}
-                    className={`group hover:bg-gray-50 transition-colors ${isSelected ? "bg-blue-50" : ""}`}
+                    className={`group relative hover:bg-gray-50 transition-colors ${isSelected ? "bg-blue-50" : ""}`}
                   >
+                    {/* Anchor: follow-up/callback-due row-signal bar */}
+                    <td className="p-0 w-1 relative" onClick={(e) => e.stopPropagation()}>
+                      {signalColor && (
+                        <span
+                          className={`absolute left-0 top-0 bottom-0 w-1 ${signalColor}`}
+                          role="img"
+                          aria-label={signalLabel ?? undefined}
+                          title={signalLabel ?? undefined}
+                        />
+                      )}
+                    </td>
                     {/* Anchor: select checkbox */}
                     <td className="pl-3 pr-1 py-1.5" onClick={(e) => e.stopPropagation()}>
                       <Checkbox
