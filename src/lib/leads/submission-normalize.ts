@@ -19,16 +19,32 @@ export const EMAIL_SYNONYM_KEYS = [
   "business_email",
 ] as const;
 
-export function resolveEmail(body: Record<string, unknown>): string | null {
-  if (typeof body.email === "string" && body.email.trim()) return body.email;
+export interface ResolvedEmail {
+  value: string | null;
+  // Which top-level key the value came from ("email" or one of EMAIL_SYNONYM_KEYS), or
+  // null if nothing matched. Callers use this to exclude ONLY that specific key from
+  // custom_fields — not the whole synonym list — so a submission that legitimately sends
+  // both `email` and a distinct `business_email` (two different addresses, not the same
+  // field under two names) doesn't lose the second one: it stays visible in custom_fields
+  // instead of being excluded (because it's a "known" synonym key) yet never promoted
+  // anywhere (because `email` already won).
+  sourceKey: string | null;
+}
+
+export function resolveEmailField(body: Record<string, unknown>): ResolvedEmail {
+  if (typeof body.email === "string" && body.email.trim()) return { value: body.email, sourceKey: "email" };
   const customFields = (body.custom_fields && typeof body.custom_fields === "object")
     ? (body.custom_fields as Record<string, unknown>)
     : {};
   for (const key of EMAIL_SYNONYM_KEYS) {
     const raw = body[key] ?? customFields[key];
-    if (typeof raw === "string" && raw.trim()) return raw;
+    if (typeof raw === "string" && raw.trim()) return { value: raw, sourceKey: key };
   }
-  return null;
+  return { value: null, sourceKey: null };
+}
+
+export function resolveEmail(body: Record<string, unknown>): string | null {
+  return resolveEmailField(body).value;
 }
 
 // Every top-level key the public submit route already reads explicitly. Kept as a flat

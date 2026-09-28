@@ -45,9 +45,8 @@ import {
 } from "@/lib/leads/destination-normalize";
 import { normalizePhoneForStorage } from "@/lib/phone-utils";
 import {
-  resolveEmail,
+  resolveEmailField,
   foldUnknownFieldsIntoCustomFields,
-  EMAIL_SYNONYM_KEYS,
 } from "@/lib/leads/submission-normalize";
 
 const CORS_STATIC_HEADERS = {
@@ -240,6 +239,28 @@ export async function POST(
     }
   }
 
+  // Resolve email: try the canonical `email` key first, then a short list of known
+  // synonyms an external site's own form JS might use instead (e.g. "work_email") —
+  // see submission-normalize.ts for why this exists.
+  const emailResolution = resolveEmailField(body);
+  const resolvedEmail = emailResolution.value;
+
+  // Fold any top-level key that isn't part of our recognized contract into custom_fields,
+  // so a caller that doesn't nest its extra questions under custom_fields (as-is, common
+  // for hand-built external integrations) doesn't silently lose that data. Computed before
+  // the destinations/field-of-study/degree-level resolution below so those also see
+  // synonym keys a caller sent unnested instead of inside body.custom_fields.
+  //
+  // Only excludes the ONE synonym key that actually resolved to `email` (if any) — not the
+  // whole EMAIL_SYNONYM_KEYS list. Excluding the whole list would silently drop a distinct
+  // second address (e.g. a submission with both `email` and its own separate
+  // `business_email`): the synonym value would be excluded from custom_fields for being a
+  // "known" key, yet never promoted anywhere either, since `email` already won.
+  const resolvedCustomFields = foldUnknownFieldsIntoCustomFields(
+    body,
+    emailResolution.sourceKey && emailResolution.sourceKey !== "email" ? [emailResolution.sourceKey] : []
+  );
+
   // Resolve destinations: prefer an explicit `destinations` array field, else fall back to
   // whatever synonym key this form's destination question actually used (education_consultancy
   // only — see docs/DESTINATION-COLUMN-DISPLAY-FIX-BRIEF.md for why this fallback exists).
@@ -247,18 +268,6 @@ export async function POST(
   // canonicalize aliases) — previously only the synonym-key fallback got it, so a form using
   // the real `destinations` key directly stored whatever raw text (incl. a flag emoji) an
   // admin had typed into that option's value, unlike a form using an older synonym key.
-  // Resolve email: try the canonical `email` key first, then a short list of known
-  // synonyms an external site's own form JS might use instead (e.g. "work_email") —
-  // see submission-normalize.ts for why this exists.
-  const resolvedEmail = resolveEmail(body);
-
-  // Fold any top-level key that isn't part of our recognized contract into custom_fields,
-  // so a caller that doesn't nest its extra questions under custom_fields (as-is, common
-  // for hand-built external integrations) doesn't silently lose that data. Computed before
-  // the destinations/field-of-study/degree-level resolution below so those also see
-  // synonym keys a caller sent unnested instead of inside body.custom_fields.
-  const resolvedCustomFields = foldUnknownFieldsIntoCustomFields(body, EMAIL_SYNONYM_KEYS);
-
   const explicitDestinations = Array.isArray(body.destinations) ? (body.destinations as string[]) : [];
   const resolvedDestinations = explicitDestinations.length > 0
     ? normalizeDestinations(explicitDestinations)
