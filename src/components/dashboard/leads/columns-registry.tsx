@@ -4,7 +4,6 @@ import React from "react";
 import Link from "next/link";
 import { Eye, RotateCcw } from "lucide-react";
 import { TruncatedText } from "@/components/ui/truncated-text";
-import { Badge } from "@/components/ui/badge";
 import { prospectIndustryLabel } from "@/industries/it-agency/leads/prospect-industries";
 import { MoveToListSelector } from "@/components/dashboard/leads/move-to-list-selector";
 import { StageSelector } from "@/components/dashboard/leads/stage-selector";
@@ -174,7 +173,13 @@ const STATIC_COLUMNS: LeadColumn[] = [
         Name
       </th>
     ),
-    renderTd: (lead, ctx) => (
+    renderTd: (lead, ctx) => {
+      const followUpLabel =
+        ctx.industryId === "education_consultancy"
+          ? followUpBadgeLabel(lead, ctx.followUpStaleDays ?? FALLBACK_FOLLOW_UP_STALE_DAYS)
+          : null;
+      const callbackDue = ctx.industryId === "education_consultancy" && isCallbackDue(lead);
+      return (
         <td key="name" className="px-3 py-1.5">
           {/* @container: the inline preview icon only renders once this cell has room for it —
               driven by the cell's real (possibly drag-resized) width, not a guessed breakpoint. */}
@@ -194,14 +199,20 @@ const STATIC_COLUMNS: LeadColumn[] = [
                 text={getLeadFullName(lead, "—")}
               />
             </Link>
-            {ctx.industryId === "education_consultancy" && isCallbackDue(lead) ? (
-              <Badge variant="destructive" className="text-[10px] px-1.5 py-0 shrink-0">
-                Callback due
-              </Badge>
-            ) : ctx.industryId === "education_consultancy" && followUpBadgeLabel(lead, ctx.followUpStaleDays ?? FALLBACK_FOLLOW_UP_STALE_DAYS) ? (
-              <Badge variant="warning" className="text-[10px] px-1.5 py-0 shrink-0">
-                {followUpBadgeLabel(lead, ctx.followUpStaleDays ?? FALLBACK_FOLLOW_UP_STALE_DAYS)}
-              </Badge>
+            {callbackDue ? (
+              <span
+                className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0"
+                role="img"
+                aria-label="Callback due"
+                title="Callback due"
+              />
+            ) : followUpLabel ? (
+              <span
+                className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"
+                role="img"
+                aria-label={followUpLabel}
+                title={followUpLabel}
+              />
             ) : null}
             <button
               onClick={(e) => {
@@ -231,7 +242,8 @@ const STATIC_COLUMNS: LeadColumn[] = [
             </button>
           </div>
         </td>
-    ),
+      );
+    },
   },
 
   // ── tags (education_consultancy only, defaultVisible when showTags)
