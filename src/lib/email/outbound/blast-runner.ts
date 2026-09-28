@@ -344,16 +344,43 @@ export interface ProcessOneBlastOutcome {
   suppressed?: number;
 }
 
+// In-process guard against two overlapping runs working the same blast at
+// once — the plain-process replacement for Inngest's
+// concurrency: [{ key: "event.data.tenantId", limit: 1 }]. A large blast
+// (hundreds+ recipients) takes minutes to send (rate-limited well under
+// Resend's cap), which is longer than the periodic scan's 30s cycle — without
+// this guard, the scan would start a SECOND concurrent send loop on the same
+// blast while the immediate post-Send call (send/route.ts's after()) is still
+// running the first one, and nothing stops the two loops from both grabbing
+// the same 'queued' row before either marks it 'sending' — a real
+// double-send risk. Lives here (inside processOneBlast itself, not in
+// runEmailBlastQueue) specifically so it protects BOTH callers — the
+// immediate after() call and the periodic scan — not just the scan alone.
+// Sufficient because the app runs as a single Node process per environment
+// (same assumption already relied on by rate-limit.ts's in-process Resend
+// limiter).
+const inFlightBlastIds = new Set<string>();
+
 // The plain-async replacement for email-blast-send.ts's Inngest handler body.
 // Drives one blast from wherever it currently is to its next pause point
-// (materialized-and-parked-for-schedule / throttled / terminal). Safe to call
-// repeatedly and concurrently-in-sequence on the same blast — every write is
-// idempotent or status-guarded exactly as it was under Inngest.
+// (materialized-and-parked-for-schedule / throttled / terminal).
 //
 // senderId is only ever present on the immediate post-Send call from
 // send/route.ts (via after()) — see this file's header comment. The periodic
 // cross-tenant scan never passes one.
 export async function processOneBlast(tenantId: string, blastId: string, senderId?: string): Promise<ProcessOneBlastOutcome> {
+  if (inFlightBlastIds.has(blastId)) {
+    return { blastId, skipped: true, reason: "already being processed by another in-flight call" };
+  }
+  inFlightBlastIds.add(blastId);
+  try {
+    return await processOneBlastLocked(tenantId, blastId, senderId);
+  } finally {
+    inFlightBlastIds.delete(blastId);
+  }
+}
+
+async function processOneBlastLocked(tenantId: string, blastId: string, senderId?: string): Promise<ProcessOneBlastOutcome> {
   const db = await scopedClientForTenant(tenantId);
 
   const { data } = await db
@@ -488,19 +515,15 @@ interface DiscoveredBlastRow {
   tenant_id: string;
 }
 
-// In-process guard against overlapping ticks working the same blast twice —
-// the plain-process replacement for Inngest's
-// concurrency: [{ key: "event.data.tenantId", limit: 1 }]. Sufficient because
-// the app runs as a single Node process per environment (same assumption
-// already relied on by rate-limit.ts's in-process Resend limiter).
-const inFlightBlastIds = new Set<string>();
-
 // Called on a ~30s interval by src/instrumentation.ts. Cross-tenant scan for
 // any blast that needs work right now — freshly queued, mid-send, or
 // throttled-and-maybe-past-reset. Never passes a senderId (see
 // processOneBlast's header comment) — a freshly queued, never-materialized
 // blast is handled by the immediate post-Send call instead, with this scan
-// as the loud-failure safety net if that call never completed.
+// as the loud-failure safety net if that call never completed. Safe to fire
+// on a blast the immediate after() call is still actively working —
+// processOneBlast's own inFlightBlastIds guard (see its header comment) skips
+// it rather than double-processing.
 export async function runEmailBlastQueue(): Promise<{ processed: number }> {
   const service = await createServiceClient();
   const { data, error } = await service
@@ -517,15 +540,11 @@ export async function runEmailBlastQueue(): Promise<{ processed: number }> {
   let processed = 0;
 
   for (const row of rows) {
-    if (inFlightBlastIds.has(row.id)) continue;
-    inFlightBlastIds.add(row.id);
     try {
       await processOneBlast(row.tenant_id, row.id);
       processed += 1;
     } catch (err) {
       logger.error({ err, tenantId: row.tenant_id, blastId: row.id }, "[blast-runner] processOneBlast threw during periodic scan");
-    } finally {
-      inFlightBlastIds.delete(row.id);
     }
   }
 

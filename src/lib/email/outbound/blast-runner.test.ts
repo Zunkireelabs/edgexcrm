@@ -484,6 +484,48 @@ describe("processOneBlast", () => {
     expect(outcome.sent).toBe(1);
   });
 
+  // REGRESSION (found 2026-09-28, reasoning through a real 1000-recipient
+  // send) — a large blast takes minutes to send (rate-limited well under
+  // Resend's cap), longer than the periodic scan's 30s cycle. Without a
+  // shared guard, the scan would start a SECOND concurrent run on the same
+  // blast the immediate post-Send call is still working — risking a
+  // double-send. Proves two concurrent processOneBlast calls on the same
+  // blast only do the work once.
+  it("two concurrent calls on the same blast only materialize/send once — the second is skipped, not doubled", async () => {
+    const fake = fakeHandlerDb("queued");
+    scopedClientForTenantMock.mockResolvedValue(fake.db);
+    buildUserAuthContextMock.mockResolvedValue(FULL_AUTH);
+    resolveAudienceMock.mockImplementation(
+      () =>
+        new Promise((resolve) =>
+          setTimeout(
+            () =>
+              resolve({
+                ok: true,
+                audience: { matched: 1, sendable: [audienceRow("lead-1", "a@example.com")], suppressed: [], excluded: { noEmail: 0, malformed: 0, suppressed: 0, duplicateEmail: 0 } },
+              }),
+            20
+          )
+        )
+    );
+    sendQueuedEmailBatchMock.mockImplementation(async (_tenantId: string, ids: string[]) => {
+      for (const id of ids) {
+        const row = fake.messages.find((m) => m.id === id);
+        if (row) row.status = "sent";
+      }
+      return { sent: ids.length, failed: 0, suppressed: 0, throttled: 0 };
+    });
+
+    const [first, second] = await Promise.all([
+      processOneBlastImport(fake, "tenant-1", "blast-1", "user-1"),
+      processOneBlastImport(fake, "tenant-1", "blast-1"),
+    ]);
+
+    expect(resolveAudienceMock).toHaveBeenCalledTimes(1);
+    expect(fake.messages).toHaveLength(1);
+    expect([first.skipped, second.skipped].filter(Boolean)).toHaveLength(1);
+  });
+
   it("without a senderId (periodic scan), a freshly queued un-materialized blast is skipped, not failed, within the grace period", async () => {
     const fake = fakeHandlerDb("queued", { started_at: new Date().toISOString() });
     scopedClientForTenantMock.mockResolvedValue(fake.db);
