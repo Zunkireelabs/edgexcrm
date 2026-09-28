@@ -100,16 +100,22 @@ import { DESTINATION_SYNONYM_KEYS } from "@/lib/leads/destination-normalize";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 import { DEFAULT_FOLLOW_UP_STALE_DAYS } from "@/industries/education-consultancy/features/team-performance/lib/thresholds";
 
-type SortField = "activity" | "created" | "updated" | "name" | "email";
+type SortField = "activity" | "created" | "updated" | "name" | "email" | "follow_up_needed" | "callback_due";
 type SortDirection = "asc" | "desc";
 
-// UI sort field -> GET /api/v1/leads `sort` param (route.ts SORT_COLUMNS allow-list).
+// UI sort field -> GET /api/v1/leads `sort` param. Values are matched against the
+// lead field registry's FieldDef key (src/lib/filters/registry/leads.ts) since the
+// API resolves `sort` by looking up that key directly, not a raw column name — see
+// route.ts's `filterRegistry[sortKey]` lookup. follow_up_needed/callback_due reuse
+// that FieldDef's sortColumns/sortNullsFirst rather than re-deriving the sort rule here.
 const SORT_FIELD_TO_API: Record<SortField, string> = {
   activity: "last_activity_at",
   created: "created_at",
   updated: "updated_at",
   name: "first_name",
   email: "email",
+  follow_up_needed: "follow_up_needed",
+  callback_due: "callback_due",
 };
 
 interface TeamMember {
@@ -278,17 +284,25 @@ function withResizedTd(tdElement: ReactNode, width: number | undefined): ReactNo
 // Extracted so the identical popover can render in two different toolbar
 // slots — row 1 (legacy/flag-off) or the new filters+sort row (advanced
 // mode) — without duplicating the JSX.
+// follow_up_needed/callback_due are fixed-direction signals (stalest / most-overdue
+// first) mirroring the field registry's sortNullsFirst rule — force ascending on
+// selection so the default read matches that rule instead of inheriting whatever
+// direction was left over from a previous field.
+const ASC_ONLY_SORT_FIELDS = new Set<SortField>(["follow_up_needed", "callback_due"]);
+
 function SortPopover({
   sortField,
   sortDirection,
   setSortField,
   setSortDirection,
+  industryId,
   align = "start",
 }: {
   sortField: SortField;
   sortDirection: "asc" | "desc";
   setSortField: (field: SortField) => void;
   setSortDirection: (direction: "asc" | "desc") => void;
+  industryId?: string | null;
   align?: "start" | "end";
 }) {
   return (
@@ -304,7 +318,14 @@ function SortPopover({
           <p className="text-sm font-medium">Sort by</p>
           <div className="flex items-center gap-2">
             {/* Field selector */}
-            <Select value={sortField} onValueChange={(v) => setSortField(v as SortField)}>
+            <Select
+              value={sortField}
+              onValueChange={(v) => {
+                const field = v as SortField;
+                setSortField(field);
+                if (ASC_ONLY_SORT_FIELDS.has(field)) setSortDirection("asc");
+              }}
+            >
               <SelectTrigger className="flex-1 h-9">
                 <SelectValue />
               </SelectTrigger>
@@ -314,6 +335,12 @@ function SortPopover({
                 <SelectItem value="updated">Last updated</SelectItem>
                 <SelectItem value="name">Name</SelectItem>
                 <SelectItem value="email">Email</SelectItem>
+                {industryId === "education_consultancy" && (
+                  <>
+                    <SelectItem value="follow_up_needed">Follow-up needed</SelectItem>
+                    <SelectItem value="callback_due">Callback due</SelectItem>
+                  </>
+                )}
               </SelectContent>
             </Select>
             {/* Direction toggle */}
@@ -1181,6 +1208,28 @@ export function LeadsTable({
           const emailA = (a.email || "").toLowerCase();
           const emailB = (b.email || "").toLowerCase();
           comparison = emailA.localeCompare(emailB);
+          break;
+        }
+        // Local mirror of the field registry's last_touched_at/NULLS FIRST rule
+        // (src/lib/filters/registry/leads.ts's follow_up_needed FieldDef) for the
+        // two legacy (non-serverPaginated) consumers — Contacts, leads-organise —
+        // that never hit GET /api/v1/leads's ?sort= and sort client-side instead.
+        case "follow_up_needed": {
+          const aVal = a.last_touched_at ? new Date(a.last_touched_at).getTime() : null;
+          const bVal = b.last_touched_at ? new Date(b.last_touched_at).getTime() : null;
+          if (aVal === null && bVal === null) comparison = 0;
+          else if (aVal === null) comparison = -1;
+          else if (bVal === null) comparison = 1;
+          else comparison = aVal - bVal;
+          break;
+        }
+        case "callback_due": {
+          const aVal = a.callback_due_at ? new Date(a.callback_due_at).getTime() : null;
+          const bVal = b.callback_due_at ? new Date(b.callback_due_at).getTime() : null;
+          if (aVal === null && bVal === null) comparison = 0;
+          else if (aVal === null) comparison = 1;
+          else if (bVal === null) comparison = -1;
+          else comparison = aVal - bVal;
           break;
         }
         default:
@@ -2492,6 +2541,7 @@ export function LeadsTable({
             sortDirection={sortDirection}
             setSortField={setSortField}
             setSortDirection={setSortDirection}
+            industryId={industryId}
             align="end"
           />
 
