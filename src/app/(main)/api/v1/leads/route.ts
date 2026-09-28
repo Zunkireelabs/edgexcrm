@@ -28,7 +28,8 @@ import {
   getTenantAdminRecipients,
   NotificationTypes,
 } from "@/lib/notifications";
-import type { Lead, FormStep, FormConfig } from "@/types/database";
+import type { Lead, FormStep, FormConfig, TenantConfig } from "@/types/database";
+import { resolveThresholds } from "@/industries/education-consultancy/features/team-performance/lib/thresholds";
 import { validateSubmissionAgainstForm, buildSchemaValidationValues } from "@/lib/leads/form-validation";
 import { branchMemberIds, syncOriginMembership } from "@/lib/leads/branch-membership";
 import { POSITION_ROUTE_MAP } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
@@ -100,7 +101,8 @@ bachelor_gpa,bachelor_institution,bachelor_passed_year,\
 masters_gpa,masters_institution,masters_passed_year,\
 ielts_score,pte_score,toefl_score,sat_score,gre_gmat_score,\
 archive_reason,archived_by,archived_at,archived_from_list_id,archived_from_status,\
-last_activity_at,stage_changed_at,created_at,updated_at";
+last_activity_at,stage_changed_at,created_at,updated_at,\
+last_touched_at,callback_due_at";
 
 // Sort allow-list — never interpolate a client-supplied column name into the query.
 // Folded into the lead field registry's FieldDef.sortColumns (src/lib/filters/registry/leads.ts)
@@ -203,6 +205,19 @@ export async function GET(request: NextRequest) {
   // needs tz-aware day boundaries (they all use rolling within_last windows or
   // plain column comparisons), and per-tenant timezone wiring for the real
   // date-picker UI is Phase 3+ work.
+  // "Follow-up needed"'s cutoff is the same tenant-configurable threshold the Team &
+  // Lead Performance dashboard's Pipeline widget already reads (resolveThresholds()) —
+  // one threshold, one meaning, never a second config key for the same concept. Only
+  // fetched for education_consultancy (the only industry the field is offered to —
+  // see its `industries` allow-list in registry/leads.ts) so other tenants' list
+  // requests don't pay for a query they'll never use.
+  let followUpStaleDays: number | undefined;
+  if (auth.industryId === "education_consultancy") {
+    const cfgClient = await createServiceClient();
+    const { data: tenantRow } = await cfgClient.from("tenants").select("config").eq("id", auth.tenantId).single();
+    followUpStaleDays = resolveThresholds((tenantRow?.config ?? null) as TenantConfig | null).followUpStaleDays;
+  }
+
   const compileCtx: CompileCtx = {
     tz: "UTC",
     now: new Date(),
@@ -212,6 +227,7 @@ export async function GET(request: NextRequest) {
     // structural cast is the seam. No field on it is currently read by any FieldDef's
     // visibleTo in this registry, so this is a type-level bridge only, not a behavior gap.
     permissions: auth.permissions as unknown as FilterResolvedPermissions,
+    followUpStaleDays,
   };
   const filterRegistry = leadFields(compileCtx);
 
@@ -682,7 +698,7 @@ export async function GET(request: NextRequest) {
   // sort node, no page drift. Non-default sort keys still get id DESC as the final
   // tiebreaker so ties never reshuffle rows between pages.
   for (const col of sortColumns) {
-    query = query.order(col, { ascending: sortAscending });
+    query = query.order(col, { ascending: sortAscending, nullsFirst: sortField?.sortNullsFirst });
   }
   query = query.order("id", { ascending: false });
 

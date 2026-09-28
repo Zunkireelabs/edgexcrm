@@ -4,6 +4,7 @@ import React from "react";
 import Link from "next/link";
 import { Eye, RotateCcw } from "lucide-react";
 import { TruncatedText } from "@/components/ui/truncated-text";
+import { Badge } from "@/components/ui/badge";
 import { prospectIndustryLabel } from "@/industries/it-agency/leads/prospect-industries";
 import { MoveToListSelector } from "@/components/dashboard/leads/move-to-list-selector";
 import { StageSelector } from "@/components/dashboard/leads/stage-selector";
@@ -28,6 +29,9 @@ export interface LeadColumnCtx {
   industryId: string | null | undefined;
   selectedIds: Set<string>;
   unreadLeadIds: Set<string>;
+  /** Team & Lead Performance's tenant-configurable stale threshold (days) — powers the
+   *  "Follow-up needed" row badge below (education_consultancy only). */
+  followUpStaleDays?: number;
   onToggleSelect: (id: string) => void;
   onPreviewToggle: (id: string) => void;
   onTagUpdate: (leadId: string, tags: string[]) => void;
@@ -58,6 +62,26 @@ export interface LeadColumn {
   tdClassName?: string;
   renderTh: (ctx: LeadColumnCtx) => React.ReactNode;
   renderTd: (lead: Lead, ctx: LeadColumnCtx) => React.ReactNode;
+}
+
+// ─── follow-up-needed / callback-due row badges (education_consultancy only, ───
+// migration 250) — same rule as edu-team-relay.tsx's needsFollowUp()/followUpLabel(),
+// now computed directly off the real last_touched_at/callback_due_at columns instead
+// of derived client-side from raw activity rows. Fallback mirrors
+// DEFAULT_FOLLOW_UP_STALE_DAYS in thresholds.ts — not imported directly to avoid
+// pulling an industries/ import into this shared component for a value that's
+// already threaded through ctx.followUpStaleDays with the real default applied
+// upstream (leads-table.tsx).
+const FALLBACK_FOLLOW_UP_STALE_DAYS = 3;
+
+function followUpBadgeLabel(lead: Lead, staleDays: number): string | null {
+  if (!lead.last_touched_at) return "Never touched";
+  const days = Math.floor((Date.now() - new Date(lead.last_touched_at).getTime()) / (1000 * 60 * 60 * 24));
+  return days >= staleDays ? `${days}d since touch` : null;
+}
+
+function isCallbackDue(lead: Lead): boolean {
+  return !!lead.callback_due_at && new Date(lead.callback_due_at).getTime() <= Date.now();
 }
 
 // ─── inline sub-components (moved from leads-table.tsx) ───────────────────────
@@ -170,6 +194,15 @@ const STATIC_COLUMNS: LeadColumn[] = [
                 text={getLeadFullName(lead, "—")}
               />
             </Link>
+            {ctx.industryId === "education_consultancy" && isCallbackDue(lead) ? (
+              <Badge variant="destructive" className="text-[10px] px-1.5 py-0 shrink-0">
+                Callback due
+              </Badge>
+            ) : ctx.industryId === "education_consultancy" && followUpBadgeLabel(lead, ctx.followUpStaleDays ?? FALLBACK_FOLLOW_UP_STALE_DAYS) ? (
+              <Badge variant="warning" className="text-[10px] px-1.5 py-0 shrink-0">
+                {followUpBadgeLabel(lead, ctx.followUpStaleDays ?? FALLBACK_FOLLOW_UP_STALE_DAYS)}
+              </Badge>
+            ) : null}
             <button
               onClick={(e) => {
                 e.stopPropagation();

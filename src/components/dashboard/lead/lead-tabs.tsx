@@ -341,6 +341,8 @@ function PossibleDuplicatesCard({ lead, onMerged }: { lead: Lead; onMerged?: () 
       last_activity_at: otherLead.created_at,
       stage_changed_at: otherLead.created_at,
       updated_at: otherLead.created_at,
+      last_touched_at: null,
+      callback_due_at: null,
       list_id: null,
       destinations: [],
       field_of_study: null,

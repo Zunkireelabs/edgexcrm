@@ -360,6 +360,52 @@ describe("location — city+country combined virtual field", () => {
   });
 });
 
+describe("follow_up_needed / callback_due — touch-signal virtual fields (migration 250)", () => {
+  it("follow_up_needed: ctx.followUpStaleDays set (5) drives the cutoff — now minus 5 days", () => {
+    const customCtx: CompileCtx = { ...ctx, followUpStaleDays: 5 };
+    const b = compileFilter(new FakeBuilder(), andTree(cond("c1", "follow_up_needed", "is_true")), registry, customCtx);
+    expect(b.calls).toEqual(['or(or(last_touched_at.is.null,last_touched_at.lt."2026-01-10T12:00:00.000Z"))']);
+  });
+
+  it("follow_up_needed: ctx.followUpStaleDays unset falls back to the default (3 days)", () => {
+    const b = compile(andTree(cond("c1", "follow_up_needed", "is_true")));
+    expect(b.calls).toEqual(['or(or(last_touched_at.is.null,last_touched_at.lt."2026-01-12T12:00:00.000Z"))']);
+  });
+
+  it("callback_due is_true compiles to and(callback_due_at.not.is.null, callback_due_at.lte.<ctx.now>)", () => {
+    const b = compile(andTree(cond("c1", "callback_due", "is_true")));
+    expect(b.calls).toEqual(['or(and(callback_due_at.not.is.null,callback_due_at.lte."2026-01-15T12:00:00.000Z"))']);
+  });
+
+  it("both fields are education_consultancy-gated — a non-education ctx.industryId denies the condition", () => {
+    const nonEduCtx: CompileCtx = { ...ctx, industryId: "it_agency" };
+    const followUp = planFilter(andTree(cond("c1", "follow_up_needed", "is_true")), registry, nonEduCtx);
+    expect(followUp.ok).toBe(false);
+
+    const callback = planFilter(andTree(cond("c1", "callback_due", "is_true")), registry, nonEduCtx);
+    expect(callback.ok).toBe(false);
+  });
+
+  it("both fields allow when ctx.industryId is education_consultancy", () => {
+    const eduCtx: CompileCtx = { ...ctx, industryId: "education_consultancy" };
+    const followUp = planFilter(andTree(cond("c1", "follow_up_needed", "is_true")), registry, eduCtx);
+    expect(followUp.ok).toBe(true);
+
+    const callback = planFilter(andTree(cond("c1", "callback_due", "is_true")), registry, eduCtx);
+    expect(callback.ok).toBe(true);
+  });
+
+  it("follow_up_needed carries sortNullsFirst: true (never-touched leads sort to the top on ascending) — callback_due deliberately does NOT (asymmetry is intentional, not a bug to 'fix')", () => {
+    expect(registry.follow_up_needed.sortNullsFirst).toBe(true);
+    expect(registry.callback_due.sortNullsFirst).toBeUndefined();
+  });
+
+  it("both fields carry sortColumns pointing at their backing timestamp column", () => {
+    expect(registry.follow_up_needed.sortColumns).toEqual(["last_touched_at"]);
+    expect(registry.callback_due.sortColumns).toEqual(["callback_due_at"]);
+  });
+});
+
 // ── embed-kind fields need a standing GRANT, or they 503 for every non-admin scope ──
 //
 // A `kind: "embed"` field (Collaborators today) filters via a real PostgREST

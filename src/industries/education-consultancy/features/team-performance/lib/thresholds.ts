@@ -14,10 +14,14 @@ import type { TenantConfig } from "@/types/database";
 
 export const DEFAULT_INTAKE_ALARM_BUCKETS_HOURS: [number, number] = [24, 48];
 export const DEFAULT_FOLLOW_UP_STALE_DAYS = 3;
+// Mirrors migration 250's trigger-side default (COALESCE(..., 10)) — keep in
+// sync if either default ever changes.
+export const DEFAULT_CALLBACK_REMINDER_MINUTES = 10;
 
 export interface TeamPerformanceThresholds {
   intakeAlarmBucketsHours: [number, number];
   followUpStaleDays: number;
+  callbackReminderMinutes: number;
 }
 
 export function resolveThresholds(config: TenantConfig | null | undefined): TeamPerformanceThresholds {
@@ -25,5 +29,6 @@ export function resolveThresholds(config: TenantConfig | null | undefined): Team
   return {
     intakeAlarmBucketsHours: stored?.intake_alarm_buckets_hours ?? DEFAULT_INTAKE_ALARM_BUCKETS_HOURS,
     followUpStaleDays: stored?.follow_up_stale_days ?? DEFAULT_FOLLOW_UP_STALE_DAYS,
+    callbackReminderMinutes: stored?.callback_reminder_minutes ?? DEFAULT_CALLBACK_REMINDER_MINUTES,
   };
 }

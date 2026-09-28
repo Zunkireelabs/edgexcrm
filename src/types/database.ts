@@ -84,6 +84,7 @@ export interface TenantConfig {
   team_performance_thresholds?: {
     intake_alarm_buckets_hours?: [number, number];
     follow_up_stale_days?: number;
+    callback_reminder_minutes?: number;
   };
 }
 
@@ -241,6 +242,9 @@ export interface Lead {
   stage_changed_at: string;
   created_at: string;
   updated_at: string;
+  // Follow-up-needed / callback-due signals (education_consultancy — migration 250)
+  last_touched_at: string | null;
+  callback_due_at: string | null;
 }
 
 export interface LeadList {
