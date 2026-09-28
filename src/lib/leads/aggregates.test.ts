@@ -118,6 +118,7 @@ function makeLead(overrides: Partial<Lead>): Lead {
     updated_at: THIS_WEEK_TS,
     last_touched_at: null,
     callback_due_at: null,
+    on_hold: false,
   };
   return { ...base, ...overrides };
 }
