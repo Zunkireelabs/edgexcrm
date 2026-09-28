@@ -14,6 +14,12 @@ These decisions are the constitution for everything in `docs/ai-native-efforts/`
 
 **Decision.** **Orca is the brand name for the agent layer that lives inside EdgeX.** The Orca UI (`/orca`, already shipped as shells), the agent runtime, the tool registry, and the knowledge layer are all EdgeX code, deployed with EdgeX, using EdgeX's tenant isolation directly.
 
+> **⚠️ AMENDED 2026-09-27.** The core conclusion of Decision 1 — "Orca is edgeX's agent layer, lives
+> inside edgeX" — has been **reversed**. Orca is now a separate platform; edgeX is one of the products
+> it reaches over MCP. Read **§ D1 Amendment** below as authoritative where the two disagree. What
+> survives (the permission-spine argument, the tool-manifest→MCP bet, D2's employee model) is called
+> out there.
+
 **Why.**
 - A separate external product doubles auth, deployment, data-sync, and compliance surface, and the external wiring has been "deferred" for 4+ months — revealed preference.
 - Agents need the permission spine (`AuthContext`, `scopedClient`, positions, counselor scoping). Rebuilding that boundary across an API is strictly worse than using it in-process.
@@ -22,6 +28,53 @@ These decisions are the constitution for everything in `docs/ai-native-efforts/`
 **What survives from the old spec.** The tool-manifest idea (`GET /api/v1/integrations/crm/tools`) was ahead of its time — the industry has since standardized on **MCP (Model Context Protocol)**. When external agent access is wanted (Phase 4+), EdgeX exposes its tool registry as an **MCP server** instead of the bespoke manifest. The integration-auth API-key system (`crm_live_...`) is reused for MCP auth.
 
 **Consequence.** Mark the integration spec as superseded (add a header note pointing here). The `/Users/sadinshrestha/Projects/orca` repo is not part of this track.
+
+### D1 Amendment — 2026-09-27
+
+**Status of Decision 1:** its conclusion is superseded. Orca is **not** edgeX's in-process agent layer.
+The reasoning D1 used to protect the permission spine is preserved and re-scoped below; its
+tool-manifest→MCP prediction is now the primary architecture, not a deferred option.
+
+**The decision now (source of record: `orca-platform/ORCA-PLATFORM-VISION.md`, brain folder).**
+
+1. **Orca is a separate platform** — the repo `Zunkireelabs/orca-gateway` (the `-gateway` suffix is
+   historical). It is the one place agents are built, improved and operated; every product calls into
+   it. It is **not** edgeX code and is not deployed with edgeX.
+2. **Brain central, hands in the product.** The brain — prompts, tool bindings, the run loop, evals,
+   cost, versioning — lives in Orca. The hands — the actual writes, the permission check, the audit
+   row, the approval queue, the kill switch — **stay in edgeX**, because that is where tenancy, RBAC
+   and the system of record live. **This is D1's permission-spine argument, intact.** D1 was right that
+   rebuilding `AuthContext`/`scopedClient`/positions across an API is strictly worse; that only ever
+   applied to the hands. Orca never holds edgeX's data.
+3. **The seam is MCP with a scoped, revocable integration key** — never an in-process import. This is
+   D1's "tool-manifest → MCP" bet, promoted from a Phase-4+ contingency to the primary architecture.
+   edgeX exposes its tool registry as an **MCP server** (`/api/mcp`, built and tested, dark in prod);
+   the integration-auth key system (`crm_live_...`) is reused for MCP auth, exactly as D1 foresaw.
+4. **D2 is unchanged and reinforced.** "An agent is a team member with a position" (`agent_identities`,
+   `agent_tool_policies`, `agent_approvals`) is the employee model the whole platform adopts (vision
+   §2.3). edgeX's tested TypeScript agent runtime is a **candidate for which runtime becomes Orca's
+   brain** — vision open-question **O1**, decided in Q4 with Dental City's numbers. Nothing here
+   commits that choice; it only removes the false claim that the runtime must be edgeX-internal.
+
+**Consequence for edgeX.**
+- edgeX keeps its agent runtime, tool registry and knowledge layer as edgeX code **for now**; they are
+  not deleted or moved by this amendment. What changes is their *role*: they are edgeX's hands (kept)
+  plus a candidate brain runtime (O1, Q4), not "the Orca product."
+- The MCP server is the contract edgeX offers Orca. Keep it MCP-shaped and scoped-key-authenticated.
+- The autonomy ladder and write gate (D4) and the privacy posture (D5) are unaffected — they govern
+  edgeX's hands regardless of where the brain runs. All prod AI flags stay off until their gates.
+
+**Name collision — read `ORCA-PLATFORM-VISION.md` §9.** Three unrelated things carry the name "Orca":
+`Zunkireelabs/orca-gateway` (**this platform**); `sthasadin/orca` at `~/Projects/orca` (the **frozen**
+GenXCRM beta app — D1's original "not part of this track" line still holds, and it is *not* the
+platform); and edgeX's own live owner-only `/orca` feature for Admizz (unchanged; any future rename is
+deliberately deferred). Resolve which "Orca" a doc means before acting on it.
+
+**Why the reversal (brief).** A separate brain lets the team get better at agents once instead of
+rebuilding an agent layer inside each product (edgeX, Zunkiree, health-hrms each grew their own). The
+cost D1 rightly feared — doubled auth/deployment/compliance surface — is paid only if the *hands*
+move; they do not. Keeping the seam MCP-with-a-scoped-key from day one makes "sellable to external
+customers" a packaging decision rather than a rewrite (vision §2.4), at near-zero cost now.
 
 ---
 
@@ -150,3 +203,4 @@ Decided 2026-07-07. Amended 2026-07-19. Sadin's call on provider: **stay on Open
 | 4 | Langfuse Cloud vs self-host? | **Cloud + PII masking** (per recommendation, no objection; revisit at Phase 2 privacy checklist / any tenant data-residency demand). |
 | 5 | Embedding vendor (carried from KB blueprint)? | **OpenAI `text-embedding-3-large` @ 1024d** (per recommendation, no objection; Voyage stays a one-line swap behind the seam). |
 | 6 | D4 ladder reorder — interactive user-approved assistant writes (rung 2b) before draft-only background agents? | **ACCEPTED** (Sadin, 2026-07-17) — see D4 amendment + 04-PHASE-4 §0.1. |
+| 7 | D1 reversal — Orca is a separate platform (`orca-gateway`), not edgeX's in-process agent layer; edgeX is reached over MCP; brain central, hands stay in edgeX? | **ACCEPTED** (Sadin, 2026-09-27) — see § D1 Amendment 2026-09-27; source of record `orca-platform/ORCA-PLATFORM-VISION.md`. Closes vision O4. |
