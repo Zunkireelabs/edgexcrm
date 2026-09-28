@@ -7,7 +7,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { logger } from "@/lib/logger";
 import { getAdapter } from "./adapters";
 import { decryptToken } from "./crypto";
-import type { InboxProvider } from "./adapters/types";
+import type { InboxProvider, TemplateContent } from "./adapters/types";
 
 export interface HumanAuthor {
   type: "human_agent";
@@ -30,6 +30,14 @@ export interface SendMessageInput {
   author: HumanAuthor | AiAuthor | SystemAuthor;
   /** If provided, flip an existing draft row to sent instead of inserting a new row */
   fromDraftMessageId?: string;
+  /**
+   * A pre-approved provider template to send instead of/alongside free text.
+   * Required to get past the session-window guard below once outside the
+   * window; optional (and still valid) inside it. `content` is still stored
+   * as the human-readable message-log entry either way — this only changes
+   * what's actually transmitted to the provider.
+   */
+  template?: TemplateContent;
 }
 
 export interface SendMessageResult {
@@ -93,9 +101,11 @@ export async function sendMessage(input: SendMessageInput): Promise<SendMessageR
   const adapter = getAdapter(conversation.provider as InboxProvider);
 
   // Session-window guard: enforce for providers that require templates outside the window.
-  // Template composing UI is out of scope — if we're outside the window and no template is
-  // provided, fail early so the rep gets a clear error instead of a silent Meta rejection.
-  if (adapter.capabilities.requiresTemplateOutsideWindow && adapter.capabilities.sessionWindowHours !== null) {
+  // A caller-supplied template clears this guard even outside the window (that's the
+  // whole point of a template — Meta's actual rule) — only fail when we're outside the
+  // window AND no template was given, so the rep gets a clear error instead of a silent
+  // Meta rejection.
+  if (!input.template && adapter.capabilities.requiresTemplateOutsideWindow && adapter.capabilities.sessionWindowHours !== null) {
     const windowHours = adapter.capabilities.sessionWindowHours;
 
     const { data: latestInbound } = await supabase
@@ -217,7 +227,7 @@ export async function sendMessage(input: SendMessageInput): Promise<SendMessageR
         contact_display_name: conversation.contact_display_name,
         lead_id: conversation.lead_id,
       },
-      { text: input.content }
+      { text: input.content, template: input.template }
     );
     providerMessageId = result.providerMessageId;
   } catch (err) {

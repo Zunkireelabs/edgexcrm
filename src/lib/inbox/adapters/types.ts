@@ -63,11 +63,40 @@ export interface StatusEventResult {
   timestamp: string | null;
 }
 
+/** One variable substitution inside a template component (Meta's template-parameter shape). */
+export interface TemplateParameter {
+  type: "text";
+  text: string;
+}
+
+/** One templated section (header/body/button) — mirrors Meta's `components[]` shape. */
+export interface TemplateComponent {
+  type: "header" | "body" | "button";
+  parameters: TemplateParameter[];
+}
+
+/**
+ * A pre-approved, provider-specific message template to send instead of free text.
+ * `name` and `languageCode` must match an ALREADY-APPROVED template on the provider's
+ * side (Meta rejects anything else) — this type carries no opinion about which
+ * templates exist; that's decided once Business Verification + template approval
+ * (Track A) actually produces real, named templates.
+ */
+export interface TemplateContent {
+  name: string;
+  languageCode: string;
+  components?: TemplateComponent[];
+}
+
 export interface SendMessageContent {
   text: string;
   attachments?: unknown[];
-  /** Pre-approved template payload (WhatsApp). If absent and window is closed, send will fail. */
-  template?: unknown;
+  /**
+   * Pre-approved template payload. Required by WhatsApp to send outside the
+   * 24h session window (requiresTemplateOutsideWindow); optional inside it.
+   * Providers without supportsTemplates ignore this field entirely.
+   */
+  template?: TemplateContent;
 }
 
 export interface SendResult {
