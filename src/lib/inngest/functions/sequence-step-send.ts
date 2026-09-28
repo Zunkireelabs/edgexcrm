@@ -8,7 +8,7 @@ import { logger } from "@/lib/logger";
 
 // Durable auto-send worker for Outreach drip sequences — OUTREACH-PHASE2-BRIEF.md
 // §5. Cross-tenant cron scan (mirrors reminders.ts's shape), NOT an
-// event-triggered per-tenant worker like email-blast-send.ts — a sequence
+// event-triggered per-tenant worker like blast-runner.ts — a sequence
 // step has no "materialize + emit" call site to hang an event off; due_at
 // itself is the trigger, so a scan has to find "what just became due."
 //
@@ -19,7 +19,7 @@ import { logger } from "@/lib/logger";
 //
 // Cap priority (§3.1/§5.3): sendQueuedEmailBatch is called here with NO
 // capCaller option, which means the full daily-cap remaining is visible —
-// drip claims first. email-blast-send.ts passes { capCaller: "blast" },
+// drip claims first. blast-runner.ts passes { capCaller: "blast" },
 // which reserves headroom for whatever this file still has due today. See
 // cap.ts's GetDailyCapStatusOptions doc for the full mechanism.
 

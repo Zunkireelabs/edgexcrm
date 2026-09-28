@@ -49,7 +49,7 @@ export interface SendQueuedEmailBatchResult {
 
 export interface SendQueuedEmailBatchOptions {
   /**
-   * OUTREACH-PHASE2-BRIEF.md §5.3 — pass "blast" from email-blast-send.ts so
+   * OUTREACH-PHASE2-BRIEF.md §5.3 — pass "blast" from blast-runner.ts so
    * the shared daily cap reserves headroom for due drip sends first; the
    * drip worker (sequence-step-send.ts) omits this and always sees the full
    * remaining. See cap.ts's GetDailyCapStatusOptions doc for the mechanism.

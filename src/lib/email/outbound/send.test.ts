@@ -478,7 +478,7 @@ describe("send.ts — suppression safety net and daily cap (§4.6)", () => {
       const stillQueuedCount = final.filter((r) => r.status === "queued").length;
       // The function itself never reports/marks anything "sent" beyond the
       // cap — the blast-level 'throttled' status transition is the caller's
-      // (email-blast-send.ts's) job, but the row-level guarantee here is that
+      // (blast-runner.ts's) job, but the row-level guarantee here is that
       // the throttled rows are untouched, still 'queued', not silently
       // dropped or marked failed.
       expect(sentCount).toBe(1);
