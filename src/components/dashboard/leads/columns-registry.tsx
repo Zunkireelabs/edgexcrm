@@ -71,15 +71,25 @@ export interface LeadColumn {
 // pulling an industries/ import into this shared component for a value that's
 // already threaded through ctx.followUpStaleDays with the real default applied
 // upstream (leads-table.tsx).
-const FALLBACK_FOLLOW_UP_STALE_DAYS = 3;
+export const FALLBACK_FOLLOW_UP_STALE_DAYS = 3;
 
-function followUpBadgeLabel(lead: Lead, staleDays: number): string | null {
+// Exported for leads-table.tsx: the row-indicator bar (left-edge anchor column)
+// and the callback-due-floats-to-top display partition both need these outside
+// this file now that the dot they used to live next to has moved.
+export function followUpBadgeLabel(lead: Lead, staleDays: number): string | null {
+  // on_hold (migration 251) — "customer asked to wait" — suppresses this signal
+  // entirely, regardless of how stale last_touched_at is. Mirrors
+  // compileFollowUpNeeded's on_hold.eq.false clause (src/lib/filters/registry/leads.ts)
+  // so the row badge and the "Follow-up needed" filter/sort never disagree.
+  if (lead.on_hold) return null;
   if (!lead.last_touched_at) return "Never touched";
   const days = Math.floor((Date.now() - new Date(lead.last_touched_at).getTime()) / (1000 * 60 * 60 * 24));
   return days >= staleDays ? `${days}d since touch` : null;
 }
 
-function isCallbackDue(lead: Lead): boolean {
+// Callback-due is NEVER suppressed by on_hold — a missed-call callback stays
+// time-sensitive regardless of hold status.
+export function isCallbackDue(lead: Lead): boolean {
   return !!lead.callback_due_at && new Date(lead.callback_due_at).getTime() <= Date.now();
 }
 
@@ -174,11 +184,6 @@ const STATIC_COLUMNS: LeadColumn[] = [
       </th>
     ),
     renderTd: (lead, ctx) => {
-      const followUpLabel =
-        ctx.industryId === "education_consultancy"
-          ? followUpBadgeLabel(lead, ctx.followUpStaleDays ?? FALLBACK_FOLLOW_UP_STALE_DAYS)
-          : null;
-      const callbackDue = ctx.industryId === "education_consultancy" && isCallbackDue(lead);
       return (
         <td key="name" className="px-3 py-1.5">
           {/* @container: the inline preview icon only renders once this cell has room for it —
@@ -199,21 +204,6 @@ const STATIC_COLUMNS: LeadColumn[] = [
                 text={getLeadFullName(lead, "—")}
               />
             </Link>
-            {callbackDue ? (
-              <span
-                className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0"
-                role="img"
-                aria-label="Callback due"
-                title="Callback due"
-              />
-            ) : followUpLabel ? (
-              <span
-                className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"
-                role="img"
-                aria-label={followUpLabel}
-                title={followUpLabel}
-              />
-            ) : null}
             <button
               onClick={(e) => {
                 e.stopPropagation();
