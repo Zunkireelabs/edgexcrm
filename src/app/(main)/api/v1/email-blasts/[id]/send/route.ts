@@ -1,9 +1,9 @@
-import { NextRequest } from "next/server";
+import { NextRequest, after } from "next/server";
 import { requireEmailCampaignsAccess } from "@/lib/email/outbound/api-guard";
 import { apiSuccess, apiNotFound, apiConflict, apiError, apiValidationError } from "@/lib/api/response";
 import { leadQueryScope } from "@/lib/api/permissions";
 import { POSITION_ROUTE_MAP } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
-import { inngest } from "@/lib/inngest/client";
+import { processOneBlast } from "@/lib/email/outbound/blast-runner";
 import { createRequestLogger } from "@/lib/logger";
 
 interface RouteParams {
@@ -17,18 +17,21 @@ interface BlastRow {
   status: string;
 }
 
-// POST /api/v1/email-blasts/[id]/send — the ONLY thing this route does now is
-// validate + hand off. Everything that used to run here synchronously
-// (re-resolving the audience, the recipient-cap check, and materializing
-// every email_messages row) now runs as steps inside the Inngest worker
-// (materializeBlastAudience, src/lib/inngest/functions/email-blast-send.ts) —
-// moved there specifically so a client that disconnects (navigates away,
-// closes the tab, a proxy timeout) the instant after clicking Send can never
-// interrupt anything. Before this change, that slow work sat BEFORE the
-// Inngest handoff, inside the HTTP request itself — the exact window where a
-// dropped connection could leave a blast never actually queued. Now the
-// handoff is the first thing that happens after these cheap, synchronous
-// checks, so there is no such window regardless of audience size.
+// POST /api/v1/email-blasts/[id]/send — the ONLY thing this route does
+// synchronously is validate + flip status. Everything slow (re-resolving the
+// audience, the recipient-cap check, materializing every email_messages row,
+// and driving the actual send loop) runs in the background via
+// processOneBlast (src/lib/email/outbound/blast-runner.ts), scheduled with
+// Next's after() below — after() is guaranteed to keep running even if the
+// client disconnects (navigates away, closes the tab, a proxy timeout) the
+// instant after clicking Send, which is what makes "click Send, then leave
+// the page" safe regardless of audience size. This used to hand off to an
+// Inngest event instead (see git history / docs/SESSION-LOG.md's 2026-09-28
+// entry) — moved off Inngest because the shared Inngest account's execution
+// quota being exhausted was silently blocking every blast from ever starting.
+// The in-process timer in src/instrumentation.ts is the safety net if this
+// after() call never completes (e.g. the server process itself crashes in
+// that narrow window) — see blast-runner.ts's header comment.
 //
 // One synchronous check intentionally stays here rather than moving to the
 // background: whether the sender has full (unrestricted) lead-visibility
@@ -81,32 +84,10 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
     );
   }
 
-  // Hand off to the background FIRST — before any slow work — then flip the
-  // blast out of 'draft' so the UI switches from the composer to the (now
-  // live-polling) blast detail view. Order matters: emitting the event before
-  // the status update means a crash between the two still leaves a 'draft'
-  // blast an Inngest event was already sent for, which is a safe, re-visible
-  // failure (nothing silently lost) rather than the reverse (a 'queued' blast
-  // no event was ever sent for, which would hang forever with no worker
-  // coming to claim it).
-  // senderId: the person actually clicking Send right now, not necessarily
-  // who drafted the blast — materializeBlastAudience resolves permissions
-  // against THIS id, never blast.created_by (nullable, wiped on account
-  // deletion; also just the wrong person when someone other than the
-  // drafter is the one sending). See that function's header comment.
-  //
-  // There's no atomicity between the emit above and the update below, so the
-  // worker can start (and even finish) before this update ever runs — it can
-  // observe 'draft' at its own load-blast step (handled on that side by
-  // treating 'draft' as an equivalent fresh-run signal and a later
-  // confirm-queued step, see email-blast-send.ts), or it can race AHEAD and
-  // advance the blast past 'draft' entirely before this write lands. The
-  // .eq("status","draft") + maybeSingle() below guards the second case: if
-  // zero rows match, the worker already won and this update is not needed —
-  // return its current (worker-advanced) state instead of clobbering it back
-  // to 'queued'.
-  await inngest.send({ name: "email/blast.send", data: { tenantId: auth.tenantId, blastId: id, senderId: auth.userId } });
-
+  // Flip status FIRST (awaited), then schedule the background send via
+  // after() — unlike the old Inngest handoff, there's no separate async event
+  // to race against: this single request does the status write itself, so by
+  // the time after() fires, the row is guaranteed to already be 'queued'.
   const { data: updated, error: updateError } = await db
     .from("email_blasts")
     .update({ status: "queued", started_at: new Date().toISOString() })
@@ -116,34 +97,33 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
     .maybeSingle();
 
   if (updateError) {
-    log.error({ err: updateError, blastId: id }, "Failed to update blast status after handing off to the background worker");
+    log.error({ err: updateError, blastId: id }, "Failed to update blast status when handing off to the background sender");
     return apiError(
       "SERVICE_UNAVAILABLE",
-      `Blast was queued for background send but its status could not be updated — check email_blasts directly (ref: ${requestId})`,
+      `Blast could not be queued for background send — check email_blasts directly (ref: ${requestId})`,
       503
     );
   }
 
   if (!updated) {
-    // Not a DB error — zero rows matched .eq("status","draft") because the
-    // background worker already advanced this blast past 'draft' before this
-    // write landed. That's a successful handoff, not a failure: return the
-    // blast's actual current (worker-advanced) state rather than clobbering
-    // it back to 'queued'.
-    const { data: current, error: refetchError } = await db.from("email_blasts").select("*").eq("id", id).maybeSingle();
-    if (refetchError || !current) {
-      log.error({ err: refetchError, blastId: id }, "Blast handed off but its current status could not be confirmed");
-      return apiError(
-        "SERVICE_UNAVAILABLE",
-        `Blast was queued for background send but its current status could not be confirmed (ref: ${requestId})`,
-        503
-      );
-    }
-    log.info({ blastId: id }, "email blast handed off to the background worker (worker already advanced status before this request's own update landed)");
-    return apiSuccess({ blast: current });
+    return apiConflict(`Blast is "${blastRow.status}" — only a draft blast can be sent`);
   }
 
-  log.info({ blastId: id }, "email blast handed off to the background worker");
+  // senderId: the person actually clicking Send right now, not necessarily
+  // who drafted the blast — materializeBlastAudience resolves permissions
+  // against THIS id, never blast.created_by (nullable, wiped on account
+  // deletion; also just the wrong person when someone other than the drafter
+  // is the one sending). See that function's header comment.
+  //
+  // after() keeps running even if this response's client disconnects —
+  // that's the whole point (see this route's header comment).
+  after(() => {
+    processOneBlast(auth.tenantId, id, auth.userId).catch((err) => {
+      log.error({ err, blastId: id }, "background email-blast send threw");
+    });
+  });
+
+  log.info({ blastId: id }, "email blast queued and handed off to the background sender");
 
   return apiSuccess({ blast: updated });
 }

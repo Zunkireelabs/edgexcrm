@@ -22,7 +22,7 @@ export interface GetDailyCapStatusOptions {
    * cadence is a standing commitment to one person, a blast can afford to
    * throttle/resume across days without breaking anyone's cadence. Inngest
    * gives no ordering guarantee between the two independently-triggered
-   * workers (email-blast-send.ts and sequence-step-send.ts), so instead of
+   * workers (blast-runner.ts and sequence-step-send.ts), so instead of
    * relying on run order, the blast caller pre-reserves capacity: it asks
    * for `remaining` MINUS however many auto-send drip steps are due right
    * now, so a same-day blast batch never eats into a cadence's headroom.
