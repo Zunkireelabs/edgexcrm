@@ -98,6 +98,7 @@ import { ColumnManagerDialog } from "@/components/dashboard/leads/column-manager
 import { POSITION_ROUTE_MAP_WITH_ADMIN } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
 import { DESTINATION_SYNONYM_KEYS } from "@/lib/leads/destination-normalize";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
+import { DEFAULT_FOLLOW_UP_STALE_DAYS } from "@/industries/education-consultancy/features/team-performance/lib/thresholds";
 
 type SortField = "activity" | "created" | "updated" | "name" | "email";
 type SortDirection = "asc" | "desc";
@@ -206,6 +207,10 @@ interface LeadsTableProps {
   pageSubheading?: string;
   /** Extra content between the heading and the toolbar — e.g. leads-organise's ReconciliationPanel. */
   beforeTable?: ReactNode;
+  /** Team & Lead Performance's tenant-configurable stale threshold (days) — powers the
+   *  "Follow-up needed" row badge (education_consultancy only). Defaults to
+   *  DEFAULT_FOLLOW_UP_STALE_DAYS when omitted, same as resolveThresholds(). */
+  followUpStaleDays?: number;
 }
 
 // Maps a position slug to the list slug a lead should move to when assigned to that position (New Leads triage only).
@@ -387,6 +392,7 @@ export function LeadsTable({
   pageHeadingClassName = PAGE_HEADING_CLASSNAME,
   pageSubheading,
   beforeTable,
+  followUpStaleDays = DEFAULT_FOLLOW_UP_STALE_DAYS,
 }: LeadsTableProps) {
   const router = useRouter();
   const showTags = industryId === "education_consultancy" && !hideTagFilter;
@@ -1905,6 +1911,7 @@ export function LeadsTable({
       industryId,
       selectedIds,
       unreadLeadIds,
+      followUpStaleDays,
       onToggleSelect: (id: string) => {
         setSelectedIds((prev) => {
           const next = new Set(prev);
@@ -2031,7 +2038,7 @@ export function LeadsTable({
       openTaskLeadIds,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [memberMap, memberNames, formMap, entityMap, branchMap, memberBranchMap, roleMap, stages, industryId, selectedIds, unreadLeadIds, leadLists, viewMode, intakeListId, canEditRows, leads, openTaskLeadIds, assignableMembers, teamMembers, isAdmin],
+    [memberMap, memberNames, formMap, entityMap, branchMap, memberBranchMap, roleMap, stages, industryId, selectedIds, unreadLeadIds, followUpStaleDays, leadLists, viewMode, intakeListId, canEditRows, leads, openTaskLeadIds, assignableMembers, teamMembers, isAdmin],
   );
 
   // Total column count: 2 anchors (select + avatar) + visible data columns + 1 actions column

@@ -13,7 +13,8 @@ import { FEATURES } from "@/industries/_registry";
 import { POSITION_ROUTE_MAP as POSITION_HOME_LIST } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
 import { filterAssignableMembersByChain } from "@/lib/leads/assignable";
 import { canBypassProspectQualification } from "@/lib/leads/prospect-qualification";
-import type { TenantEntity, Industry, LeadList, PipelineWithCounts, Lead, PipelineLead } from "@/types/database";
+import { resolveThresholds } from "@/industries/education-consultancy/features/team-performance/lib/thresholds";
+import type { TenantEntity, Industry, LeadList, PipelineWithCounts, Lead, PipelineLead, TenantConfig } from "@/types/database";
 
 const FUNNEL_LABELS: Record<string, string> = {
   lead_processing: "Lead Processing",
@@ -234,7 +235,7 @@ export default async function LeadsPage({
     }
   }
 
-  const [leadsResult, teamMembers, stages, formConfigs, industryResult, entitiesResult] =
+  const [leadsResult, teamMembers, stages, formConfigs, industryResult, entitiesResult, tenantConfigResult] =
     await Promise.all([
       isKanban
         ? Promise.resolve({ leads: [] as Lead[], total: 0 })
@@ -255,8 +256,15 @@ export default async function LeadsPage({
         .eq("tenant_id", tenantData.tenant.id)
         .eq("is_active", true)
         .order("position", { ascending: true }),
+      // Follow-up-needed / callback-due row badges (education_consultancy only) need the
+      // same tenant-configurable thresholds the Team & Lead Performance dashboard reads —
+      // one threshold, one meaning (see resolveThresholds()'s own doc comment).
+      tenantData.tenant.industry_id === "education_consultancy"
+        ? serviceClient.from("tenants").select("config").eq("id", tenantData.tenant.id).single()
+        : Promise.resolve({ data: null }),
     ]);
   const { leads, total: leadsTotal } = leadsResult;
+  const touchThresholds = resolveThresholds((tenantConfigResult.data?.config ?? null) as TenantConfig | null);
 
   const leadCollaboratorsMap = await getLeadCollaboratorsMapForLeads(
     serviceClient,
@@ -422,6 +430,7 @@ export default async function LeadsPage({
         positionSlugMap={positionSlugMap}
         allLeadLists={allLists.filter((l) => !l.is_archive && !l.is_staging)}
         currentUserPositionSlug={tenantData.positionSlug}
+        followUpStaleDays={touchThresholds.followUpStaleDays}
       />
     </div>
   );

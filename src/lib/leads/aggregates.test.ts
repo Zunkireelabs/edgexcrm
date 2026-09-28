@@ -116,6 +116,8 @@ function makeLead(overrides: Partial<Lead>): Lead {
     stage_changed_at: THIS_WEEK_TS,
     created_at: THIS_WEEK_TS,
     updated_at: THIS_WEEK_TS,
+    last_touched_at: null,
+    callback_due_at: null,
   };
   return { ...base, ...overrides };
 }
