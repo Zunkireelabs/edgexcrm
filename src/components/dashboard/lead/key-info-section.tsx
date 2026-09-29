@@ -142,7 +142,6 @@ interface KeyInfoSectionProps {
   leadLists?: LeadList[];
   activeLeadLists?: LeadList[];
   onSaveTripFields?: (fields: Record<string, unknown>) => Promise<void>;
-  onSaveStudyFields?: (fields: Record<string, unknown>) => Promise<void>;
   onSaveSourceFields?: (fields: Record<string, unknown>) => Promise<void>;
   onQualify?: () => void;
   maxBranches?: number;
@@ -178,7 +177,6 @@ export function KeyInfoSection({
   leadLists,
   activeLeadLists,
   onSaveTripFields,
-  onSaveStudyFields,
   onSaveSourceFields,
   onQualify,
   maxBranches,
@@ -486,19 +484,6 @@ export function KeyInfoSection({
             />
           )}
 
-          {/* ── STUDY INTEREST — education_consultancy only, skipped for Other-tagged
-              walk-ins (Contacts) since they aren't applying to study anywhere. */}
-          {industryId === "education_consultancy" && !lead.tags?.includes("other") && (
-            <StudyInterestPanel
-              lead={lead}
-              isAdmin={isAdmin}
-              isEditor={isEditor ?? isAdmin}
-              leadScope={leadScope}
-              onSave={onSaveStudyFields}
-              submissionHistory={submissionHistory}
-            />
-          )}
-
           <LeadSourcePanel lead={lead} isAdmin={isAdmin} isEditor={isEditor ?? isAdmin} leadScope={leadScope} onSave={onSaveSourceFields} submissionHistory={submissionHistory} />
 
           {/* ── ON HOLD — education_consultancy only (migration 251) ─────────── */}
@@ -783,6 +768,8 @@ export function KeyInfoSection({
 }
 
 // ── Study Interest panel (education_consultancy only) ─────────────────────
+// Rendered inside the ContactCard (not in Key Information) as a flat, borderless
+// section — the card is the one container, so no nested card border or divider.
 
 interface StudyInterestPanelProps {
   lead: Lead;
@@ -793,7 +780,7 @@ interface StudyInterestPanelProps {
   submissionHistory?: LeadSubmissionSnapshot[];
 }
 
-function StudyInterestPanel({ lead, isAdmin, isEditor, leadScope, onSave, submissionHistory }: StudyInterestPanelProps) {
+export function StudyInterestPanel({ lead, isAdmin, isEditor, leadScope, onSave, submissionHistory }: StudyInterestPanelProps) {
   const canEditPanel = canEditLeadWorkingData({ isAdmin, leadScope, isOwnScopeEditor: isEditor ?? false });
   const leadWithEdu = lead as {
     destinations?: string[] | null;
@@ -910,10 +897,10 @@ function StudyInterestPanel({ lead, isAdmin, isEditor, leadScope, onSave, submis
 
   return (
     <>
-      <div className="border-t border-border" />
       <InfoSection
         title="Study Interest"
-        defaultOpen={false}
+        defaultOpen
+        className="border-0 rounded-none bg-transparent"
         titleClassName="text-[10px]"
         headerAction={
           canEditPanel && !editing ? (

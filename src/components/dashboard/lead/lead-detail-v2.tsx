@@ -30,7 +30,7 @@ import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 import { DestinationsMultiSelect } from "@/components/dashboard/destinations-multi-select";
 
 import { ContactCard } from "./contact-card";
-import { KeyInfoSection } from "./key-info-section";
+import { KeyInfoSection, StudyInterestPanel } from "./key-info-section";
 import { LeadTabs } from "./lead-tabs";
 import { ManagementPanel } from "./management-panel";
 import { ProspectQualificationDialog } from "@/components/dashboard/leads/prospect-qualification-dialog";
@@ -738,6 +738,30 @@ export function LeadDetailV2({
             onDraftChange={updateDraft}
             industryId={tenant.industry_id}
             onTagChange={(tags) => setCurrentLead((prev) => ({ ...prev, tags } as Lead))}
+            detailsSlot={
+              // Study Interest: education_consultancy only, skipped for Other-tagged
+              // walk-ins (Contacts) since they aren't applying to study anywhere.
+              tenant.industry_id === "education_consultancy" && !currentLead.tags?.includes("other") ? (
+                <StudyInterestPanel
+                  lead={currentLead}
+                  isAdmin={isAdmin}
+                  isEditor={isEditor ?? isAdmin}
+                  leadScope={leadScope}
+                  submissionHistory={submissionHistory}
+                  onSave={async (fields) => {
+                    const res = await fetch(`/api/v1/leads/${currentLead.id}`, {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify(fields),
+                    });
+                    if (!res.ok) throw new Error("Failed to save study details");
+                    const json = await res.json();
+                    setCurrentLead(json.data as Lead);
+                    toast.success("Study details saved");
+                  }}
+                />
+              ) : null
+            }
             onBack={() => router.push(backDestination.href)}
             backLabel={backDestination.label}
             isInvestor={isRealEstate}
@@ -828,17 +852,6 @@ export function LeadDetailV2({
               if (!res.ok) throw new Error("Failed to save trip details");
               setCustomFields(merged);
               toast.success("Trip details saved");
-            }}
-            onSaveStudyFields={async (fields) => {
-              const res = await fetch(`/api/v1/leads/${currentLead.id}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(fields),
-              });
-              if (!res.ok) throw new Error("Failed to save study details");
-              const json = await res.json();
-              setCurrentLead(json.data as Lead);
-              toast.success("Study details saved");
             }}
             onSaveSourceFields={async (fields) => {
               const res = await fetch(`/api/v1/leads/${currentLead.id}`, {

@@ -112,13 +112,13 @@ function LeadTypeBadge({
         <button
           type="button"
           disabled={saving}
-          className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors disabled:opacity-50"
+          className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border border-blue-300 bg-white text-blue-700 hover:bg-blue-50 transition-colors disabled:opacity-50 cursor-pointer"
         >
           {currentLabel}
           <ChevronDown className="h-3 w-3 opacity-60" />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="center" className="w-40 p-1">
+      <PopoverContent align="start" className="w-40 p-1">
         {options.map((opt) => (
           <button
             key={opt.slug}
@@ -158,6 +158,9 @@ interface ContactCardProps {
   /** Called after the Tag pill changes the lead type, so the parent can keep its
    * lead state in sync (Status/Stage gating depends on tags). */
   onTagChange?: (tags: string[]) => void;
+  /** Optional section rendered inside the card, under the contact details and above the
+   * quick actions (e.g. Study Interest). Hidden while editing the contact fields. */
+  detailsSlot?: React.ReactNode;
   /** Back-navigation handler, rendered top-left of the card. */
   onBack?: () => void;
   /** Label for the page the back button actually returns to (e.g. "Applications",
@@ -218,6 +221,7 @@ export function ContactCard({
   onDraftChange,
   industryId,
   onTagChange,
+  detailsSlot,
   onBack,
   backLabel,
   isInvestor = false,
@@ -271,40 +275,16 @@ export function ContactCard({
   return (
     <Card className="border border-border shadow-none rounded-lg py-0">
       <CardContent className="p-4">
-        {/* Top row: back arrow + status badges — replaces the page-level header */}
-        <div className="flex items-start justify-between mb-3">
-          {onBack ? (
+        {/* Top row: back arrow — replaces the page-level header. Status/type chips
+            live under the name (see below) so they never wrap away from the identity. */}
+        {onBack && (
+          <div className="flex items-start mb-3">
             <Button variant="ghost" size="sm" className="-ml-2 h-8 px-2 gap-1.5" onClick={onBack}>
               <ArrowLeft className="h-4 w-4" />
               {backLabel && <span className="text-xs">{backLabel}</span>}
             </Button>
-          ) : <span />}
-          {!isEditing && (
-            <div className="flex flex-wrap items-center justify-end gap-1.5 max-w-[70%]">
-              {/* Pipeline stage badge — meaningless for Other-tagged walk-ins, which
-                  never enter the funnel (same gate as Key Information's Status/Stage). */}
-              {currentStage && !isOtherLead(lead.tags, industryId) && (
-                <Badge
-                  variant="secondary"
-                  style={{
-                    backgroundColor: `${stageColor}20`,
-                    color: stageColor,
-                  }}
-                >
-                  {currentStage.name}
-                </Badge>
-              )}
-              {industryId === "education_consultancy" && (
-                <LeadTypeBadge leadId={lead.id} tags={lead.tags ?? []} onTagChange={onTagChange} />
-              )}
-              {isInvestor && (
-                <Badge variant="secondary" className="bg-violet-100 text-violet-800">
-                  Investor
-                </Badge>
-              )}
-            </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Avatar and Name */}
         <div className="flex flex-col items-start text-left mb-4">
@@ -415,6 +395,36 @@ export function ContactCard({
                 </div>
                 <h2 className="text-lg font-semibold text-foreground">{fullName}</h2>
               </div>
+              <div className="flex flex-wrap items-center gap-1.5 mt-3 empty:hidden">
+                {/* Pipeline stage badge — read-only, flat. Meaningless for Other-tagged
+                    walk-ins, which never enter the funnel (same gate as Key Information's
+                    Status/Stage). */}
+                {currentStage && !isOtherLead(lead.tags, industryId) && (
+                  <Badge
+                    variant="secondary"
+                    className="gap-1.5 font-medium"
+                    style={{
+                      backgroundColor: `${stageColor}20`,
+                      color: stageColor,
+                    }}
+                  >
+                    <span
+                      className="h-1.5 w-1.5 rounded-full"
+                      style={{ backgroundColor: stageColor }}
+                      aria-hidden="true"
+                    />
+                    {currentStage.name}
+                  </Badge>
+                )}
+                {industryId === "education_consultancy" && (
+                  <LeadTypeBadge leadId={lead.id} tags={lead.tags ?? []} onTagChange={onTagChange} />
+                )}
+                {isInvestor && (
+                  <Badge variant="secondary" className="bg-violet-100 text-violet-800">
+                    Investor
+                  </Badge>
+                )}
+              </div>
               <p className="text-[10px] text-muted-foreground mt-2">
                 Submitted {new Date(lead.created_at).toLocaleDateString()} at{" "}
                 {new Date(lead.created_at).toLocaleTimeString()}
@@ -465,6 +475,11 @@ export function ContactCard({
           })()}
         </div>
         )}
+
+        {/* Extra section (e.g. Study Interest) — flat, inside this card. The negative
+            margin cancels the section's own header padding so its text lines up with
+            the contact details above. */}
+        {!isEditing && detailsSlot && <div className="-mx-3 mb-2">{detailsSlot}</div>}
 
         {/* Quick Actions, or Save/Cancel while editing — page-level actions
             (Edit/Convert/Delete) live in the Action dropdown below instead
