@@ -179,6 +179,9 @@ export function ConsentCard({
       if (!res.ok) {
         const json = await res.json();
         toast.error(json.error?.message ?? "Failed to resend consent");
+        // The student signed while this card still showed "awaiting signature": re-read the status
+        // so the card (and the Applications "+") correct themselves instead of staying stale.
+        if (json.error?.code === "ALREADY_SIGNED") fetchStatus();
         return;
       }
       toast.success("Consent resent");
@@ -404,7 +407,11 @@ export function ConsentCard({
 
       <SendConsentDialog
         open={dialogOpen}
-        onOpenChange={setDialogOpen}
+        onOpenChange={(next) => {
+          setDialogOpen(next);
+          // Closing (also after an "already signed" refusal) re-reads the status so a stale card corrects itself.
+          if (!next) fetchStatus();
+        }}
         leadId={leadId}
         tenantId={tenantId}
         defaultTab={dialogTab}
@@ -447,7 +454,10 @@ export function ConsentCard({
 
       <InPersonConsentDialog
         open={inPersonOpen}
-        onOpenChange={setInPersonOpen}
+        onOpenChange={(next) => {
+          setInPersonOpen(next);
+          if (!next) fetchStatus();
+        }}
         leadId={leadId}
         onSuccess={() => {
           setInPersonOpen(false);
