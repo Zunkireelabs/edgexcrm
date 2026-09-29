@@ -7,5 +7,5 @@ export const outreachMeta: FeatureMeta = {
   // auto-send, OUTREACH-PHASE2-BRIEF.md). it_agency keeps the exact
   // manual-copy model it always had — auto_send is a per-sequence flag, not
   // an industry gate, so this list only controls feature *visibility*.
-  industries: [INDUSTRIES.IT_AGENCY, INDUSTRIES.EDUCATION_CONSULTANCY],
+  industries: [INDUSTRIES.IT_AGENCY, INDUSTRIES.EDUCATION_CONSULTANCY, INDUSTRIES.CONSTRUCTION],
 };
