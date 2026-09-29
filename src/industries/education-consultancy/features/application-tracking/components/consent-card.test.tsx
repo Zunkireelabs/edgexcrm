@@ -112,7 +112,7 @@ describe("ConsentCard — Copy consent link", () => {
     await waitFor(() => expect(getCalls().length).toBeGreaterThan(readsBefore));
   });
 
-  it("shows the server's message and refreshes when consent is already signed", async () => {
+  it("shows a big pop-up (not a fading toast) and refreshes when consent is already signed", async () => {
     postResponse = { ok: false, status: 409, body: { error: { code: "ALREADY_SIGNED", message: "Consent is already signed for this lead" } } };
     renderCard(true);
     await openCard();
@@ -120,8 +120,21 @@ describe("ConsentCard — Copy consent link", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Copy consent link" }));
 
-    await waitFor(() => expect(toastError).toHaveBeenCalledWith("Consent is already signed for this lead"));
+    expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
+    expect(screen.getByText("Consent is already signed")).toBeInTheDocument();
+    expect(toastError).not.toHaveBeenCalled();
     expect(writeText).not.toHaveBeenCalled();
     await waitFor(() => expect(getCalls().length).toBeGreaterThan(readsBefore));
+  });
+
+  it("keeps an ordinary failure as a normal toast, not a pop-up", async () => {
+    postResponse = { ok: false, status: 500, body: { error: { code: "DB_ERROR", message: "Failed to create consent record" } } };
+    renderCard(true);
+    await openCard();
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy consent link" }));
+
+    await waitFor(() => expect(toastError).toHaveBeenCalledWith("Failed to create consent record"));
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
   });
 });

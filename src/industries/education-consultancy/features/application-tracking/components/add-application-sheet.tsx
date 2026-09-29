@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
+import { useBlockingNotice } from "@/components/dashboard/blocking-notice";
+import { profileIncompleteNotice } from "@/lib/blocking-notice";
 import { Loader2, Search } from "lucide-react";
 import {
   Sheet,
@@ -71,6 +73,8 @@ export function AddApplicationSheet({
   const [intakeStartDate, setIntakeStartDate] = useState("");
   const [programSuggestions, setProgramSuggestions] = useState<string[]>([]);
   const [consentBlocked, setConsentBlocked] = useState(false);
+  const [profileMissing, setProfileMissing] = useState<string[]>([]);
+  const { notify, showNotice, noticeDialog } = useBlockingNotice();
   const [universityId, setUniversityId] = useState<string | null>(null);
   const [addUniversityDialogOpen, setAddUniversityDialogOpen] = useState(false);
   const [pendingUniversityName, setPendingUniversityName] = useState("");
@@ -166,6 +170,27 @@ export function AddApplicationSheet({
       .catch(() => {});
   }, [selectedLead]);
 
+  // Check the student's profile as soon as one is picked — BEFORE the form is filled — and show the
+  // big pop-up if something is missing. If the check can't run the form stays usable: the create API
+  // still enforces the rule when saving.
+  const checkProfile = useCallback(async (leadId: string) => {
+    try {
+      const res = await fetch(`/api/v1/leads/${leadId}/profile-completeness`);
+      if (!res.ok) { setProfileMissing([]); return; }
+      const { data } = await res.json();
+      const missing: string[] = data && data.complete === false ? (data.missing ?? []) : [];
+      setProfileMissing(missing);
+      if (missing.length > 0) showNotice(profileIncompleteNotice(missing));
+    } catch {
+      setProfileMissing([]);
+    }
+  }, [showNotice]);
+
+  useEffect(() => {
+    if (!selectedLead) { setProfileMissing([]); return; }
+    void checkProfile(selectedLead.id);
+  }, [selectedLead, checkProfile]);
+
   // Debounced lead search
   useEffect(() => {
     if (!open || leadSearch.length < 2) { setLeadOptions([]); return; }
@@ -233,8 +258,10 @@ export function AddApplicationSheet({
       });
 
       if (!res.ok) {
-        const { error } = await res.json();
-        throw new Error(error?.message ?? "Failed to create application");
+        // Rule-blocking errors (profile incomplete, consent required, ...) become a big pop-up; anything else a toast.
+        const { error } = await res.json().catch(() => ({ error: null }));
+        notify(error, "Failed to create application");
+        return;
       }
 
       toast.success("Application created");
@@ -494,6 +521,14 @@ export function AddApplicationSheet({
         </div>
 
         <SheetFooter className="shrink-0 border-t pt-4 space-y-3">
+          {profileMissing.length > 0 && selectedLead && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 w-full">
+              This student&apos;s profile is incomplete. Missing: {profileMissing.join(", ")}.{" "}
+              <button type="button" className="underline font-medium" onClick={() => void checkProfile(selectedLead.id)}>
+                Check again
+              </button>
+            </p>
+          )}
           {consentBlocked && selectedLead && (
             <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 w-full">
               This student must sign consent first.{" "}
@@ -513,7 +548,7 @@ export function AddApplicationSheet({
             </Button>
             <Button
               onClick={handleSubmit}
-              disabled={submitting || !selectedLead || !universityName.trim() || !programName.trim() || consentBlocked}
+              disabled={submitting || !selectedLead || !universityName.trim() || !programName.trim() || consentBlocked || profileMissing.length > 0}
               className="flex-1"
             >
               {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
@@ -537,6 +572,8 @@ export function AddApplicationSheet({
           if (programs.length === 1) setProgramName(programs[0].name);
         }}
       />
+
+      {noticeDialog}
     </Sheet>
   );
 }

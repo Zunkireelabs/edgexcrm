@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import { SendConsentDialog } from "./send-consent-dialog";
 import { InPersonConsentDialog } from "./in-person-consent-dialog";
+import { useBlockingNotice } from "@/components/dashboard/blocking-notice";
 
 type FeeStatus = "paid" | "unpaid" | "waiver";
 
@@ -142,6 +143,7 @@ export function ConsentCard({
   }
 
   const [creatingLink, setCreatingLink] = useState(false);
+  const { notify, noticeDialog } = useBlockingNotice();
 
   // One click: create the signing link WITHOUT emailing the student, copy it, and let the card move on to
   // "Awaiting signature" (which keeps its own Copy link button if the clipboard is unavailable).
@@ -155,7 +157,7 @@ export function ConsentCard({
       });
       const json = await res.json();
       if (!res.ok) {
-        toast.error(json.error?.message ?? "Failed to create consent link");
+        notify(json.error, "Failed to create consent link");
         if (json.error?.code === "ALREADY_SIGNED") fetchStatus();
         return;
       }
@@ -216,7 +218,7 @@ export function ConsentCard({
       });
       if (!res.ok) {
         const json = await res.json();
-        toast.error(json.error?.message ?? "Failed to resend consent");
+        notify(json.error, "Failed to resend consent");
         // The student signed while this card still showed "awaiting signature": re-read the status
         // so the card (and the Applications "+") correct themselves instead of staying stale.
         if (json.error?.code === "ALREADY_SIGNED") fetchStatus();
@@ -513,6 +515,8 @@ export function ConsentCard({
           fetchStatus();
         }}
       />
+
+      {noticeDialog}
     </>
   );
 }

@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { useBlockingNotice } from "@/components/dashboard/blocking-notice";
 
 interface SendConsentDialogProps {
   open: boolean;
@@ -40,6 +41,7 @@ export function SendConsentDialog({
   const [sentVia, setSentVia] = useState<string | null>(null);
   // True when the link was created with "Copy link instead" — it was deliberately NOT emailed.
   const [copyOnly, setCopyOnly] = useState(false);
+  const { notify, noticeDialog } = useBlockingNotice();
 
   // Manual tab state
   const [signerName, setSignerName] = useState("");
@@ -70,7 +72,7 @@ export function SendConsentDialog({
       });
       const json = await res.json();
       if (!res.ok) {
-        toast.error(json.error?.message ?? "Failed to send consent");
+        notify(json.error, "Failed to send consent");
         return;
       }
       const { link, sent_via } = json.data as { link: string; sent_via: string };
@@ -324,6 +326,8 @@ export function SendConsentDialog({
           </div>
         )}
       </DialogContent>
+
+      {noticeDialog}
     </Dialog>
   );
 }

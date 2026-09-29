@@ -25,6 +25,7 @@ import { AutocompleteInput } from "./autocomplete-input";
 import { AddUniversityWithProgramsDialog } from "./add-university-with-programs-dialog";
 import { useApplicationReferenceData, getCollegeSuggestions } from "../hooks/use-application-reference-data";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
+import { useBlockingNotice } from "@/components/dashboard/blocking-notice";
 import { DestinationsMultiSelect } from "@/components/dashboard/destinations-multi-select";
 import type { ApplicationStage, Lead } from "@/types/database";
 
@@ -65,6 +66,7 @@ export function AddApplicationToLeadSheet({
     createPartnerCollege, programsByUniversity, fetchPrograms, createProgram, fetchDistinctProgramNames,
   } = useApplicationReferenceData(open);
   const { studyLevels, fieldsOfStudy } = useEduTaxonomy();
+  const { notify, noticeDialog } = useBlockingNotice();
 
   // Fetch the lead's destinations when the sheet opens
   useEffect(() => {
@@ -187,8 +189,10 @@ export function AddApplicationToLeadSheet({
       });
 
       if (!res.ok) {
-        const { error } = await res.json();
-        throw new Error(error?.message ?? "Failed to create application");
+        // Rule-blocking errors (profile incomplete, consent required, ...) become a big pop-up; anything else a toast.
+        const { error } = await res.json().catch(() => ({ error: null }));
+        notify(error, "Failed to create application");
+        return;
       }
 
       toast.success("Application added");
@@ -401,6 +405,8 @@ export function AddApplicationToLeadSheet({
           if (programs.length === 1) setProgramName(programs[0].name);
         }}
       />
+
+      {noticeDialog}
     </Sheet>
   );
 }
