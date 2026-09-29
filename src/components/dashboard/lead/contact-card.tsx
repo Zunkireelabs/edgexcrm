@@ -44,6 +44,7 @@ import type { Lead, PipelineStage } from "@/types/database";
 import { getLeadFullName, getLeadInitials } from "./lead-name";
 import { isOtherLead } from "@/lib/leads/lead-type";
 import { formatDateTime } from "@/lib/date";
+import { displayCase } from "@/lib/display-case";
 
 interface LeadTypeOption {
   id: string;
@@ -404,7 +405,7 @@ export function ContactCard({
                     {initials}
                   </span>
                 </div>
-                <h2 className="text-lg font-semibold text-foreground">{fullName}</h2>
+                <h2 className="text-xl font-semibold tracking-tight text-foreground">{fullName}</h2>
               </div>
               <div className="flex flex-wrap items-center gap-1.5 mt-3 empty:hidden">
                 {/* Pipeline stage badge — read-only, flat. Meaningless for Other-tagged
@@ -436,7 +437,7 @@ export function ContactCard({
                   </Badge>
                 )}
               </div>
-              <p className="text-[10px] text-muted-foreground mt-2">
+              <p className="text-xs text-muted-foreground mt-2">
                 Created {formatDateTime(lead.created_at)}
               </p>
             </>
@@ -445,11 +446,11 @@ export function ContactCard({
 
         {/* Contact Info (read-only — inputs shown above when editing) */}
         {!isEditing && (
-        <div className="space-y-2 mb-4">
+        <div className="space-y-3 mb-4">
           {lead.email && (
             <div className="flex items-center justify-between gap-2 group">
               <a href={`mailto:${lead.email}`} className="min-w-0 flex-1 hover:text-primary">
-                <TruncatedText text={lead.email} className="text-sm text-muted-foreground" />
+                <TruncatedText text={lead.email} className="text-sm font-medium text-foreground" />
               </a>
               <CopyButton value={lead.email} label="Email" className="opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
@@ -458,7 +459,7 @@ export function ContactCard({
             <div className="flex items-center justify-between group">
               <a
                 href={`tel:${formatPhoneForTel(lead.phone)}`}
-                className="text-sm text-muted-foreground hover:text-primary"
+                className="text-sm font-medium text-foreground hover:text-primary"
               >
                 {lead.phone}
               </a>
@@ -472,13 +473,13 @@ export function ContactCard({
             return (
               <div className="flex items-center gap-1.5 pt-1">
                 {nationality && (
-                  <span className="text-xs text-muted-foreground">{nationality}</span>
+                  <span className="text-[13px] text-muted-foreground">{displayCase(nationality)}</span>
                 )}
                 {nationality && city && (
-                  <span className="text-xs text-muted-foreground">·</span>
+                  <span className="text-[13px] text-muted-foreground">·</span>
                 )}
                 {city && (
-                  <span className="text-xs text-muted-foreground">{city}</span>
+                  <span className="text-[13px] text-muted-foreground">{displayCase(city)}</span>
                 )}
               </div>
             );
@@ -490,7 +491,7 @@ export function ContactCard({
             margin cancels the section's own header padding so its text lines up with
             the contact details above. Stays visible while editing: it follows the same
             page-level edit mode as the fields above. */}
-        {detailsSlot && <div className="-mx-3 mb-2">{detailsSlot}</div>}
+        {detailsSlot && <div className="-mx-3 mt-3 mb-2">{detailsSlot}</div>}
 
         {/* Quick Actions, or Save/Cancel while editing — page-level actions
             (Edit/Convert/Delete) live in the Action dropdown below instead

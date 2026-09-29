@@ -59,6 +59,7 @@ import { normalizeDestinations, normalizeFieldOfStudy, normalizeDegreeLevel } fr
 import { BranchesBlock } from "./branches-block";
 import { CollaboratorsBlock } from "./collaborators-block";
 import { InfoSection } from "./info-section";
+import { SECTION_TITLE_CLASS, SUBHEADING_CLASS } from "./section-title";
 import { useEditSection, useEditSession } from "./edit-session";
 import { ListStepper } from "@/components/dashboard/leads/list-stepper";
 import { StageMoveSelector } from "@/components/dashboard/leads/stage-move-selector";
@@ -245,10 +246,10 @@ export function KeyInfoSection({
     <div className="border border-border rounded-lg bg-card shadow-none">
       <button
         type="button"
-        className="flex items-center justify-between w-full p-3 text-left"
+        className="flex items-center justify-between w-full p-4 text-left"
         onClick={() => setIsOpen(!isOpen)}
       >
-        <h3 className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+        <h3 className={SECTION_TITLE_CLASS}>
           Key Information
         </h3>
         <ChevronDown
@@ -260,7 +261,7 @@ export function KeyInfoSection({
       </button>
 
       {isOpen && (
-        <div className="px-3 pb-3 pt-0 space-y-4">
+        <div className="px-4 pb-4 pt-0 space-y-4">
 
           {/* ── INVESTOR badges — Offerings-industry tenants only (reads custom_fields, no fetch) ── */}
           {getFeatureAccess(industryId, FEATURES.OFFERINGS) && (() => {
@@ -606,7 +607,7 @@ export function KeyInfoSection({
 
           {/* ── DETAILS ─────────────────────────────────────────────── */}
           <div className="border-t border-border" />
-          <InfoSection title="Details" defaultOpen={false} titleClassName="text-[10px]">
+          <InfoSection title="Details" defaultOpen={false} titleClassName={SECTION_TITLE_CLASS}>
             <div className="space-y-2">
               {/* Residence Country */}
               {isEditing && draft ? (
@@ -826,7 +827,7 @@ export function StudyInterestPanel({ lead, isAdmin, isEditor, leadScope, submiss
         title="Study Interest"
         collapsible={false}
         className="border-0 rounded-none bg-transparent"
-        titleClassName="text-[10px]"
+        titleClassName={SECTION_TITLE_CLASS}
       >
       <div className="space-y-2">
       {hasAny ? (
@@ -836,7 +837,7 @@ export function StudyInterestPanel({ lead, isAdmin, isEditor, leadScope, submiss
               <p className="text-xs text-muted-foreground">Destinations</p>
               <div className="flex flex-wrap gap-1 mt-0.5">
                 {effectiveDestinations.map((d) => (
-                  <span key={d} className="px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-medium">
+                  <span key={d} className="px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[11px] font-medium">
                     {d}
                   </span>
                 ))}
@@ -863,7 +864,7 @@ export function StudyInterestPanel({ lead, isAdmin, isEditor, leadScope, submiss
         <div className="space-y-2 pt-1">
           {academicLevelRows.length > 0 && (
             <div className="space-y-1.5">
-              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+              <p className={SUBHEADING_CLASS}>
                 Academic Qualification
               </p>
               {academicLevelRows.map(({ level, gpa, institution, passedYear }) => (
@@ -877,7 +878,7 @@ export function StudyInterestPanel({ lead, isAdmin, isEditor, leadScope, submiss
           )}
           {testScoreRows.length > 0 && (
             <div className="space-y-1.5">
-              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+              <p className={SUBHEADING_CLASS}>
                 Test Report &amp; Score
               </p>
               {testScoreRows.map(({ test, score }) => (
@@ -1044,7 +1045,7 @@ function LeadSourcePanel({ lead, isAdmin, submissionHistory }: LeadSourcePanelPr
         title="Lead Source"
         defaultOpen={false}
         forceOpen={editing}
-        titleClassName="text-[10px]"
+        titleClassName={SECTION_TITLE_CLASS}
       >
       {editing ? (
         <div className="space-y-2">
@@ -1211,7 +1212,7 @@ function TripInquiryPanel({ lead, isAdmin, isEditor, leadScope, onSave }: TripIn
     <>
       <div className="border-t border-border" />
       <div className="flex items-center justify-between">
-        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+        <p className={SUBHEADING_CLASS}>
           Trip Inquiry
         </p>
         {canEditPanel && !editing && (
@@ -1478,15 +1479,15 @@ function LabeledInput({ label, value, placeholder, onChange }: LabeledInputProps
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="text-sm font-medium text-foreground">{value}</p>
+      <p className="text-xs text-muted-foreground mb-0.5">{label}</p>
+      <p className="text-sm font-medium text-foreground leading-snug">{value}</p>
     </div>
   );
 }
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+    <p className={SUBHEADING_CLASS}>
       {children}
     </p>
   );

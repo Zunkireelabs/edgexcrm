@@ -1,5 +1,6 @@
 "use client";
 
+import { SECTION_TITLE_CLASS } from "@/components/dashboard/lead/section-title";
 import { useState, useEffect, useCallback } from "react";
 import { AlertTriangle, Clock, CheckCircle2, Loader2, Copy, RefreshCw, FileText, Upload, PenLine, ChevronDown } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -256,7 +257,7 @@ export function ConsentCard({
             aria-expanded={open}
             className="flex w-full items-center justify-between"
           >
-            <span className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+            <span className={SECTION_TITLE_CLASS}>
               {L.sectionTitle}
             </span>
             <ChevronDown

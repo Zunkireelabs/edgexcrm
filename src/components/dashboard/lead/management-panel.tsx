@@ -1,5 +1,6 @@
 "use client";
 
+import { SECTION_TITLE_CLASS } from "@/components/dashboard/lead/section-title";
 import { forwardRef, useState } from "react";
 import { CheckSquare, Square, Plus, Trash2, FileDown, ExternalLink, AlarmClock, X } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -103,7 +104,7 @@ export function ManagementPanel({ lead }: ManagementPanelProps) {
   return (
     <Card className="shadow-none rounded-lg py-0">
       <CardHeader className="pt-4 pb-3">
-        <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+        <CardTitle className={SECTION_TITLE_CLASS}>
           Documents
         </CardTitle>
       </CardHeader>
@@ -235,7 +236,7 @@ export const ChecklistCard = forwardRef<HTMLInputElement, ChecklistCardProps>(
       <Card className="shadow-none rounded-lg py-0">
         <CardHeader className="pt-4 pb-3">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+            <CardTitle className={SECTION_TITLE_CLASS}>
               Checklist
             </CardTitle>
             {checklists.length > 0 && (
