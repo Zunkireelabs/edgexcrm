@@ -276,11 +276,11 @@ export function ConsentCard({
               </p>
               {canManage && (
                 <div className={showCopyLink ? "grid grid-cols-2 gap-2" : "flex gap-2 flex-wrap"}>
-                  <Button size="sm" variant="outline" onClick={() => openDialog("send")} className="h-7 text-xs">
+                  <Button size="sm" variant="outline" onClick={() => openDialog("send")} className={`h-7 text-xs${showCopyLink ? " px-2" : ""}`}>
                     Send consent link
                   </Button>
                   {showCopyLink && (
-                    <Button size="sm" variant="outline" onClick={handleCreateAndCopyLink} disabled={creatingLink} className="h-7 text-xs">
+                    <Button size="sm" variant="outline" onClick={handleCreateAndCopyLink} disabled={creatingLink} className="h-7 px-2 text-xs">
                       {creatingLink ? (
                         <Loader2 className="h-3 w-3 mr-1 animate-spin" />
                       ) : (
@@ -289,11 +289,11 @@ export function ConsentCard({
                       Copy consent link
                     </Button>
                   )}
-                  <Button size="sm" variant="outline" onClick={() => setInPersonOpen(true)} className="h-7 text-xs">
+                  <Button size="sm" variant="outline" onClick={() => setInPersonOpen(true)} className={`h-7 text-xs${showCopyLink ? " px-2" : ""}`}>
                     <PenLine className="h-3 w-3 mr-1" />
                     Sign here now
                   </Button>
-                  <Button size="sm" variant={showCopyLink ? "outline" : "ghost"} onClick={() => openDialog("manual")} className="h-7 text-xs">
+                  <Button size="sm" variant={showCopyLink ? "outline" : "ghost"} onClick={() => openDialog("manual")} className={`h-7 text-xs${showCopyLink ? " px-2" : ""}`}>
                     <Upload className="h-3 w-3 mr-1" />
                     Record manually
                   </Button>
