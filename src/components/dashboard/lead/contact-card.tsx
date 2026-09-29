@@ -277,12 +277,22 @@ export function ContactCard({
       <CardContent className="p-4">
         {/* Top row: back arrow — replaces the page-level header. Status/type chips
             live under the name (see below) so they never wrap away from the identity. */}
-        {onBack && (
-          <div className="flex items-start mb-3">
-            <Button variant="ghost" size="sm" className="-ml-2 h-8 px-2 gap-1.5" onClick={onBack}>
-              <ArrowLeft className="h-4 w-4" />
-              {backLabel && <span className="text-xs">{backLabel}</span>}
-            </Button>
+        {(onBack || (onEdit && !isEditing)) && (
+          <div className="flex items-start justify-between mb-3">
+            {onBack ? (
+              <Button variant="ghost" size="sm" className="-ml-2 h-8 px-2 gap-1.5" onClick={onBack}>
+                <ArrowLeft className="h-4 w-4" />
+                {backLabel && <span className="text-xs">{backLabel}</span>}
+              </Button>
+            ) : <span />}
+            {/* The one Edit for the whole profile: turns every editable section on at once.
+                Save/Cancel replace it (bottom of this card) while editing. */}
+            {onEdit && !isEditing && (
+              <Button variant="ghost" size="sm" className="-mr-2 h-8 px-2 gap-1.5 text-xs" onClick={onEdit}>
+                <Pencil className="h-3.5 w-3.5" />
+                Edit
+              </Button>
+            )}
           </div>
         )}
 
@@ -478,14 +488,15 @@ export function ContactCard({
 
         {/* Extra section (e.g. Study Interest) — flat, inside this card. The negative
             margin cancels the section's own header padding so its text lines up with
-            the contact details above. */}
-        {!isEditing && detailsSlot && <div className="-mx-3 mb-2">{detailsSlot}</div>}
+            the contact details above. Stays visible while editing: it follows the same
+            page-level edit mode as the fields above. */}
+        {detailsSlot && <div className="-mx-3 mb-2">{detailsSlot}</div>}
 
         {/* Quick Actions, or Save/Cancel while editing — page-level actions
             (Edit/Convert/Delete) live in the Action dropdown below instead
             of a separate floating header, to reclaim that space. */}
         {isEditing ? (
-          <div className="flex items-center justify-end gap-2 pt-4 border-t border-border">
+          <div className="sticky bottom-0 z-10 -mx-4 -mb-4 flex items-center justify-end gap-2 border-t border-border bg-card px-4 py-3">
             <Button variant="ghost" size="sm" onClick={onCancelEdit} disabled={isSaving}>
               <X className="h-4 w-4 mr-2" />
               Cancel
@@ -545,13 +556,7 @@ export function ContactCard({
                   WhatsApp
                 </DropdownMenuItem>
               )}
-              {(onEdit || isItAgency || canDelete) && <DropdownMenuSeparator />}
-              {onEdit && (
-                <DropdownMenuItem onClick={onEdit}>
-                  <Pencil className="h-4 w-4 mr-2" />
-                  Edit
-                </DropdownMenuItem>
-              )}
+              {(isItAgency || canDelete) && <DropdownMenuSeparator />}
               {isItAgency && (
                 convertedContactId ? (
                   <DropdownMenuItem asChild>

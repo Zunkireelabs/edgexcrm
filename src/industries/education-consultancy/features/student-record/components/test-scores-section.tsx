@@ -61,6 +61,20 @@ export function testScoresFromLead(lead: Lead): TestScore[] {
     .map(({ examType, value }) => ({ ...createTestScore(), examType, overall: value }));
 }
 
+/**
+ * The scores that map onto real `leads` columns, keyed by column name ("" = none).
+ * Only the five legacy exams have a column; Duolingo / "Other Tests" and the per-skill
+ * breakdown are preview-only and never reach the database. When an exam appears more
+ * than once, the first entry is the one saved.
+ */
+export function legacyScoreColumns(scores: TestScore[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const { key, examType } of LEGACY_SCORE_COLUMNS) {
+    out[key as string] = scores.find((s) => s.examType === examType)?.overall.trim() ?? "";
+  }
+  return out;
+}
+
 export function TestScoresSection({
   isEditing,
   value,

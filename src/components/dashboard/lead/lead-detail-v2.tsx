@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useLeadBackDestination } from "@/hooks/use-lead-back-destination";
 import { Loader2 } from "lucide-react";
@@ -31,7 +31,8 @@ import { DestinationsMultiSelect } from "@/components/dashboard/destinations-mul
 
 import { ContactCard } from "./contact-card";
 import { KeyInfoSection, StudyInterestPanel } from "./key-info-section";
-import { LeadTabs } from "./lead-tabs";
+import { EditSessionProvider, createEditRegistry } from "./edit-session";
+import { LeadTabs, type LeadTabsRef } from "./lead-tabs";
 import { ManagementPanel } from "./management-panel";
 import { ProspectQualificationDialog } from "@/components/dashboard/leads/prospect-qualification-dialog";
 import { hasProspectQualification, canBypassProspectQualification } from "@/lib/leads/prospect-qualification";
@@ -190,7 +191,7 @@ export function LeadDetailV2({
   const router = useRouter();
   const searchParams = useSearchParams();
   const backDestination = useLeadBackDestination();
-  const notesTabRef = useRef<{ focusComposer: () => void; focusTaskComposer: () => void }>(null);
+  const notesTabRef = useRef<LeadTabsRef>(null);
   const { destinations: destOptions, fieldsOfStudy, studyLevels } = useEduTaxonomy();
 
   const [notes, setNotes] = useState(initialNotes);
@@ -220,6 +221,13 @@ export function LeadDetailV2({
   const [currentLead, setCurrentLead] = useState(lead);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  // Sections (Study Interest, Lead Source, ...) register here so the one Save can collect
+  // everything they changed and send it in a single request.
+  const [editRegistry] = useState(createEditRegistry);
+  const editSession = useMemo(
+    () => ({ isEditing, register: editRegistry.register }),
+    [isEditing, editRegistry]
+  );
   const [draft, setDraft] = useState<LeadDraft>(() => makeDraft(lead));
   const [editErrors, setEditErrors] = useState<EditErrors>({});
   const [leaving, setLeaving] = useState(false);
@@ -419,8 +427,7 @@ export function LeadDetailV2({
   // Auto-open edit mode when ?edit=1 is present, then strip the param
   useEffect(() => {
     if (searchParams.get("edit") === "1") {
-      setIsEditing(true);
-      setDraft(makeDraft(currentLead));
+      handleEdit();
       const url = new URL(window.location.href);
       url.searchParams.delete("edit");
       router.replace(url.pathname + url.search);
@@ -438,6 +445,13 @@ export function LeadDetailV2({
   const cancelEditing = () => {
     setIsEditing(false);
     setEditErrors({});
+  };
+
+  // The page's single Edit button. Education tenants edit everything in the Student Details
+  // pop-up; every other industry uses the inline edit mode (contact fields + Lead Source).
+  const handleEdit = () => {
+    if (notesTabRef.current?.openStudentDetails()) return;
+    startEditing();
   };
 
   const updateDraft = (field: keyof LeadDraft, value: string) => {
@@ -477,7 +491,11 @@ export function LeadDetailV2({
       }
     }
 
-    if (Object.keys(changedFields).length === 0) {
+    // Fold in whatever the other sections (Study Interest, Lead Source, ...) changed, so the
+    // whole page saves in one request — and one all-or-nothing outcome.
+    const body: Record<string, unknown> = { ...changedFields, ...editRegistry.collectPatch() };
+
+    if (Object.keys(body).length === 0) {
       setIsEditing(false);
       return;
     }
@@ -487,7 +505,7 @@ export function LeadDetailV2({
       const res = await fetch(`/api/v1/leads/${currentLead.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(changedFields),
+        body: JSON.stringify(body),
       });
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
@@ -704,9 +722,10 @@ export function LeadDetailV2({
   }
 
   return (
+    <EditSessionProvider value={editSession}>
     <div className="space-y-6">
-      {/* Page-level actions (Edit/Convert/Delete) now live inside ContactCard's
-          Action dropdown — no separate floating header. */}
+      {/* Page-level actions: Edit is the single button at the top of ContactCard (it turns on
+          edit mode for every section); Convert/Delete live in its Action dropdown. */}
 
       {/* 3-Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] xl:grid-cols-[280px_1fr_320px] gap-6">
@@ -748,24 +767,13 @@ export function LeadDetailV2({
                   isEditor={isEditor ?? isAdmin}
                   leadScope={leadScope}
                   submissionHistory={submissionHistory}
-                  onSave={async (fields) => {
-                    const res = await fetch(`/api/v1/leads/${currentLead.id}`, {
-                      method: "PATCH",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify(fields),
-                    });
-                    if (!res.ok) throw new Error("Failed to save study details");
-                    const json = await res.json();
-                    setCurrentLead(json.data as Lead);
-                    toast.success("Study details saved");
-                  }}
                 />
               ) : null
             }
             onBack={() => router.push(backDestination.href)}
             backLabel={backDestination.label}
             isInvestor={isRealEstate}
-            onEdit={startEditing}
+            onEdit={handleEdit}
             onSave={handleSave}
             onCancelEdit={cancelEditing}
             isSaving={isSaving}
@@ -852,17 +860,6 @@ export function LeadDetailV2({
               if (!res.ok) throw new Error("Failed to save trip details");
               setCustomFields(merged);
               toast.success("Trip details saved");
-            }}
-            onSaveSourceFields={async (fields) => {
-              const res = await fetch(`/api/v1/leads/${currentLead.id}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(fields),
-              });
-              if (!res.ok) throw new Error("Failed to save source details");
-              const json = await res.json();
-              setCurrentLead(json.data as Lead);
-              toast.success("Lead source saved");
             }}
             onQualify={openQualifyDialog}
           />
@@ -1122,5 +1119,6 @@ export function LeadDetailV2({
         onCancel={() => setPendingAssignGate(null)}
       />
     </div>
+    </EditSessionProvider>
   );
 }

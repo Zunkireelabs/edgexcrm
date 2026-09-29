@@ -19,8 +19,6 @@ import { canEditLeadWorkingData } from "@/lib/leads/lead-edit-scope";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { SALUTATIONS } from "@/industries/it-agency/leads/salutations";
-import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
-import { DestinationsMultiSelect } from "@/components/dashboard/destinations-multi-select";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,6 +58,7 @@ import { normalizeDestinations, normalizeFieldOfStudy, normalizeDegreeLevel } fr
 import { BranchesBlock } from "./branches-block";
 import { CollaboratorsBlock } from "./collaborators-block";
 import { InfoSection } from "./info-section";
+import { useEditSection, useEditSession } from "./edit-session";
 import { ListStepper } from "@/components/dashboard/leads/list-stepper";
 import { StageMoveSelector } from "@/components/dashboard/leads/stage-move-selector";
 import { ACADEMIC_LEVELS, TEST_TYPES } from "@/lib/leads/prospect-qualification";
@@ -142,7 +141,6 @@ interface KeyInfoSectionProps {
   leadLists?: LeadList[];
   activeLeadLists?: LeadList[];
   onSaveTripFields?: (fields: Record<string, unknown>) => Promise<void>;
-  onSaveSourceFields?: (fields: Record<string, unknown>) => Promise<void>;
   onQualify?: () => void;
   maxBranches?: number;
   userBranchId?: string | null;
@@ -177,7 +175,6 @@ export function KeyInfoSection({
   leadLists,
   activeLeadLists,
   onSaveTripFields,
-  onSaveSourceFields,
   onQualify,
   maxBranches,
   userBranchId,
@@ -484,7 +481,7 @@ export function KeyInfoSection({
             />
           )}
 
-          <LeadSourcePanel lead={lead} isAdmin={isAdmin} isEditor={isEditor ?? isAdmin} leadScope={leadScope} onSave={onSaveSourceFields} submissionHistory={submissionHistory} />
+          <LeadSourcePanel lead={lead} isAdmin={isAdmin} submissionHistory={submissionHistory} />
 
           {/* ── ON HOLD — education_consultancy only (migration 251) ─────────── */}
           {industryId === "education_consultancy" && (
@@ -776,11 +773,10 @@ interface StudyInterestPanelProps {
   isAdmin: boolean;
   isEditor?: boolean;
   leadScope?: "all" | "own" | "team";
-  onSave?: (fields: Record<string, unknown>) => Promise<void>;
   submissionHistory?: LeadSubmissionSnapshot[];
 }
 
-export function StudyInterestPanel({ lead, isAdmin, isEditor, leadScope, onSave, submissionHistory }: StudyInterestPanelProps) {
+export function StudyInterestPanel({ lead, isAdmin, isEditor, leadScope, submissionHistory }: StudyInterestPanelProps) {
   const canEditPanel = canEditLeadWorkingData({ isAdmin, leadScope, isOwnScopeEditor: isEditor ?? false });
   const leadWithEdu = lead as {
     destinations?: string[] | null;
@@ -813,70 +809,7 @@ export function StudyInterestPanel({ lead, isAdmin, isEditor, leadScope, onSave,
   const effectiveDegreeLevel = normalizeDegreeLevel(leadWithEdu.degree_level) || distinctDegreeLevel.join(", ") || null;
   const effectiveIntakeTerm = leadWithEdu.intake_term?.trim() || null;
 
-  const { destinations: destOptions, fieldsOfStudy, studyLevels, intakeMonths, intakeYears } = useEduTaxonomy();
-  const [editing, setEditing] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [draftDests, setDraftDests] = useState<string[]>(leadWithEdu.destinations ?? []);
-  const [draftField, setDraftField] = useState(leadWithEdu.field_of_study ?? "");
-  const [draftDegree, setDraftDegree] = useState(leadWithEdu.degree_level ?? "");
-  const [draftIntakeMonth, setDraftIntakeMonth] = useState("");
-  const [draftIntakeYear, setDraftIntakeYear] = useState("");
-  const [draftAcademics, setDraftAcademics] = useState<Record<string, string>>({});
-  const [draftTestScores, setDraftTestScores] = useState<Record<string, string>>({});
   const leadRecord = lead as unknown as Record<string, unknown>;
-
-  // Seed the draft from the values actually shown on screen (effective*),
-  // not the raw columns — those are often empty on form-submitted leads,
-  // whose real answers only exist via the submission-history fallback above.
-  // Seeding from the empty raw columns meant Save silently erased them.
-  function openEdit() {
-    setDraftDests(effectiveDestinations);
-    setDraftField(leadWithEdu.field_of_study || distinctFieldOfStudy[0] || "");
-    setDraftDegree(leadWithEdu.degree_level || distinctDegreeLevel[0] || "");
-    // intake_term is stored as "<Month> <Year>" (e.g. "November 2026") — split
-    // back into the two pickers. Seeded from the raw stored value unconditionally
-    // (same reasoning as draftField/draftDegree above) — NOT gated on whether
-    // intakeMonths/intakeYears have finished loading yet, since useEduTaxonomy()
-    // fetches async and Edit can be clicked before it resolves; gating here would
-    // silently reset a real value to blank and Save would erase it. The free-text
-    // fallback SelectItems below keep a value not in the loaded catalog visible.
-    const [storedMonth, storedYear] = (leadWithEdu.intake_term ?? "").trim().split(/\s+/).filter(Boolean);
-    setDraftIntakeMonth(storedMonth ?? "");
-    setDraftIntakeYear(storedYear ?? "");
-    const academics: Record<string, string> = {};
-    for (const level of ACADEMIC_LEVELS) {
-      academics[`${level.key}_gpa`] = String(leadRecord[`${level.key}_gpa`] ?? "");
-      academics[`${level.key}_institution`] = String(leadRecord[`${level.key}_institution`] ?? "");
-      academics[`${level.key}_passed_year`] = String(leadRecord[`${level.key}_passed_year`] ?? "");
-    }
-    setDraftAcademics(academics);
-    const testScores: Record<string, string> = {};
-    for (const t of TEST_TYPES) {
-      testScores[`${t.key}_score`] = String(leadRecord[`${t.key}_score`] ?? "");
-    }
-    setDraftTestScores(testScores);
-    setEditing(true);
-  }
-
-
-  async function handleSave() {
-    if (!onSave) return;
-    setSaving(true);
-    try {
-      await onSave({
-        destinations: draftDests,
-        field_of_study: draftField || null,
-        degree_level: draftDegree || null,
-        intake_term: [draftIntakeMonth, draftIntakeYear].filter(Boolean).join(" ") || null,
-        ...draftAcademics,
-        ...draftTestScores,
-      });
-      setEditing(false);
-    } finally {
-      setSaving(false);
-    }
-  }
-
   const hasAny =
     effectiveDestinations.length > 0 ||
     effectiveFieldOfStudy ||
@@ -899,205 +832,12 @@ export function StudyInterestPanel({ lead, isAdmin, isEditor, leadScope, onSave,
     <>
       <InfoSection
         title="Study Interest"
-        defaultOpen
+        collapsible={false}
         className="border-0 rounded-none bg-transparent"
         titleClassName="text-[10px]"
-        headerAction={
-          canEditPanel && !editing ? (
-            <button
-              type="button"
-              onClick={openEdit}
-              className="text-[10px] text-primary hover:underline shrink-0"
-            >
-              Edit
-            </button>
-          ) : undefined
-        }
       >
       <div className="space-y-2">
-      {editing ? (
-        <div className="space-y-2">
-          {/* Destinations multi-select */}
-          <DestinationsMultiSelect
-            selected={draftDests}
-            onChange={setDraftDests}
-            options={destOptions}
-            label="Interested Destinations"
-            optional={false}
-          />
-          {/* Field of Study */}
-          <div>
-            <p className="text-xs text-muted-foreground mb-1">Field of Study</p>
-            <Select
-              value={draftField || "__none__"}
-              onValueChange={(v) => setDraftField(v === "__none__" ? "" : v)}
-            >
-              <SelectTrigger className="h-8 text-sm">
-                <SelectValue placeholder="Select field" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__">
-                  <span className="text-muted-foreground">Select field</span>
-                </SelectItem>
-                {/* Free-text answer from a form submission that isn't one of
-                    the canonical options — show it as-is so the trigger
-                    doesn't look blank for a lead that actually has data. */}
-                {draftField && !fieldsOfStudy.includes(draftField) && (
-                  <SelectItem value={draftField}>{draftField}</SelectItem>
-                )}
-                {fieldsOfStudy.map((f) => (
-                  <SelectItem key={f} value={f}>{f}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          {/* Degree Level */}
-          <div>
-            <p className="text-xs text-muted-foreground mb-1">Degree Level</p>
-            <Select
-              value={draftDegree || "__none__"}
-              onValueChange={(v) => setDraftDegree(v === "__none__" ? "" : v)}
-            >
-              <SelectTrigger className="h-8 text-sm">
-                <SelectValue placeholder="Select level" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__">
-                  <span className="text-muted-foreground">Select level</span>
-                </SelectItem>
-                {/* Same free-text fallback as Field of Study above. */}
-                {draftDegree && !studyLevels.includes(draftDegree) && (
-                  <SelectItem value={draftDegree}>{draftDegree}</SelectItem>
-                )}
-                {studyLevels.map((lvl) => (
-                  <SelectItem key={lvl} value={lvl}>{lvl}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          {/* Intake (Month + Year) — reuses the same intake_months/intake_years
-              catalogs Applications already uses (migration 139). */}
-          <div>
-            <p className="text-xs text-muted-foreground mb-1">Intake</p>
-            <div className="grid grid-cols-2 gap-1.5">
-              <Select
-                value={draftIntakeMonth || "__none__"}
-                onValueChange={(v) => setDraftIntakeMonth(v === "__none__" ? "" : v)}
-              >
-                <SelectTrigger className="h-8 text-sm">
-                  <SelectValue placeholder="Month" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">
-                    <span className="text-muted-foreground">Month</span>
-                  </SelectItem>
-                  {/* Same free-text fallback as Field of Study/Degree Level above —
-                      keeps a stored value visible even if the catalog hasn't
-                      loaded yet or no longer contains it. */}
-                  {draftIntakeMonth && !intakeMonths.includes(draftIntakeMonth) && (
-                    <SelectItem value={draftIntakeMonth}>{draftIntakeMonth}</SelectItem>
-                  )}
-                  {intakeMonths.map((m) => (
-                    <SelectItem key={m} value={m}>{m}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select
-                value={draftIntakeYear || "__none__"}
-                onValueChange={(v) => setDraftIntakeYear(v === "__none__" ? "" : v)}
-              >
-                <SelectTrigger className="h-8 text-sm">
-                  <SelectValue placeholder="Year" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">
-                    <span className="text-muted-foreground">Year</span>
-                  </SelectItem>
-                  {draftIntakeYear && !intakeYears.includes(draftIntakeYear) && (
-                    <SelectItem value={draftIntakeYear}>{draftIntakeYear}</SelectItem>
-                  )}
-                  {intakeYears.map((y) => (
-                    <SelectItem key={y} value={y}>{y}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          {/* Academic Qualification */}
-          <div className="pt-1 space-y-2">
-            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-              Academic Qualification
-            </p>
-            {ACADEMIC_LEVELS.map((level) => (
-              <div key={level.key} className="space-y-1">
-                <p className="text-xs text-muted-foreground">{level.label}</p>
-                <div className="grid grid-cols-3 gap-1.5">
-                  <Input
-                    className="h-7 text-xs"
-                    placeholder="%/GPA"
-                    value={draftAcademics[`${level.key}_gpa`] || ""}
-                    onChange={(e) =>
-                      setDraftAcademics((prev) => ({ ...prev, [`${level.key}_gpa`]: e.target.value }))
-                    }
-                  />
-                  <Input
-                    className="h-7 text-xs"
-                    placeholder="School / College"
-                    value={draftAcademics[`${level.key}_institution`] || ""}
-                    onChange={(e) =>
-                      setDraftAcademics((prev) => ({ ...prev, [`${level.key}_institution`]: e.target.value }))
-                    }
-                  />
-                  <Input
-                    className="h-7 text-xs"
-                    placeholder="Passed year"
-                    inputMode="numeric"
-                    value={draftAcademics[`${level.key}_passed_year`] || ""}
-                    onChange={(e) =>
-                      setDraftAcademics((prev) => ({ ...prev, [`${level.key}_passed_year`]: e.target.value }))
-                    }
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-          {/* Test Report & Score */}
-          <div className="pt-1 space-y-2">
-            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-              Test Report &amp; Score
-            </p>
-            <div className="grid grid-cols-2 gap-1.5">
-              {TEST_TYPES.map((t) => (
-                <div key={t.key} className="space-y-1">
-                  <p className="text-xs text-muted-foreground">{t.label}</p>
-                  <Input
-                    className="h-7 text-xs"
-                    placeholder="Score"
-                    value={draftTestScores[`${t.key}_score`] || ""}
-                    onChange={(e) =>
-                      setDraftTestScores((prev) => ({ ...prev, [`${t.key}_score`]: e.target.value }))
-                    }
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="flex gap-2 pt-1">
-            <Button size="sm" className="h-7 text-xs flex-1" onClick={handleSave} disabled={saving}>
-              {saving ? "Saving…" : "Save"}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 text-xs"
-              onClick={() => setEditing(false)}
-              disabled={saving}
-            >
-              Cancel
-            </Button>
-          </div>
-        </div>
-      ) : hasAny ? (
+      {hasAny ? (
         <div className="space-y-2">
           {effectiveDestinations.length > 0 && (
             <div>
@@ -1123,11 +863,11 @@ export function StudyInterestPanel({ lead, isAdmin, isEditor, leadScope, onSave,
         </div>
       ) : (
         <p className="text-xs text-muted-foreground italic">
-          No study details yet.{canEditPanel ? " Click Edit to add." : ""}
+          No study details yet.{canEditPanel ? " Use Edit to add." : ""}
         </p>
       )}
 
-      {!editing && hasAcademicData && (
+      {hasAcademicData && (
         <div className="space-y-2 pt-1">
           {academicLevelRows.length > 0 && (
             <div className="space-y-1.5">
@@ -1224,16 +964,17 @@ function OnHoldToggle({ lead, canEdit }: { lead: Lead; canEdit: boolean }) {
 interface LeadSourcePanelProps {
   lead: Lead;
   isAdmin: boolean;
-  isEditor?: boolean;
-  leadScope?: "all" | "own" | "team";
-  onSave?: (fields: Record<string, unknown>) => Promise<void>;
   submissionHistory?: LeadSubmissionSnapshot[];
 }
 
-function LeadSourcePanel({ lead, isAdmin, isEditor, leadScope, onSave, submissionHistory }: LeadSourcePanelProps) {
-  const canEditPanel = canEditLeadWorkingData({ isAdmin, leadScope, isOwnScopeEditor: isEditor ?? false });
-  const [editing, setEditing] = useState(false);
-  const [saving, setSaving] = useState(false);
+function LeadSourcePanel({ lead, isAdmin, submissionHistory }: LeadSourcePanelProps) {
+  // Lead Source is owner/admin-only on the server (applyLeadPatch rejects these fields for
+  // anyone else). Only offer it to those users: one forbidden field would reject the whole
+  // page-level Save.
+  const { isEditing: sessionEditing } = useEditSession();
+  const editing = sessionEditing && isAdmin;
+  const [wasEditing, setWasEditing] = useState(false);
+  const [seedSnapshot, setSeedSnapshot] = useState("");
   const [draftSource, setDraftSource] = useState(lead.intake_source ?? "");
   const [draftMedium, setDraftMedium] = useState(lead.intake_medium ?? "");
   const [draftAccount, setDraftAccount] = useState(lead.intake_account ?? "");
@@ -1269,24 +1010,40 @@ function LeadSourcePanel({ lead, isAdmin, isEditor, leadScope, onSave, submissio
     setDraftMedium(lead.intake_medium || distinctSourceChannel[0] || "");
     setDraftAccount(lead.intake_account ?? "");
     setDraftCampaign(lead.intake_campaign ?? "");
-    setEditing(true);
+    setSeedSnapshot(JSON.stringify(buildFields({
+      source: lead.intake_source ?? "",
+      medium: lead.intake_medium || distinctSourceChannel[0] || "",
+      account: lead.intake_account ?? "",
+      campaign: lead.intake_campaign ?? "",
+    })));
   }
 
-  async function handleSave() {
-    if (!onSave) return;
-    setSaving(true);
-    try {
-      await onSave({
-        intake_source: draftSource || null,
-        intake_medium: draftMedium || null,
-        intake_account: draftAccount || null,
-        intake_campaign: draftCampaign || null,
-      });
-      setEditing(false);
-    } finally {
-      setSaving(false);
-    }
+  // The exact fields this panel writes (see the note on the Study Interest panel).
+  function buildFields(v: { source: string; medium: string; account: string; campaign: string }) {
+    return {
+      intake_source: v.source || null,
+      intake_medium: v.medium || null,
+      intake_account: v.account || null,
+      intake_campaign: v.campaign || null,
+    };
   }
+
+  // Seed the drafts the moment page-level edit mode turns on (see the Study Interest panel).
+  if (editing !== wasEditing) {
+    setWasEditing(editing);
+    if (editing) openEdit();
+  }
+
+  useEditSection("lead-source", () => {
+    if (!editing) return null;
+    const fields = buildFields({
+      source: draftSource,
+      medium: draftMedium,
+      account: draftAccount,
+      campaign: draftCampaign,
+    });
+    return JSON.stringify(fields) === seedSnapshot ? null : fields;
+  });
 
   return (
     <>
@@ -1294,18 +1051,8 @@ function LeadSourcePanel({ lead, isAdmin, isEditor, leadScope, onSave, submissio
       <InfoSection
         title="Lead Source"
         defaultOpen={false}
+        forceOpen={editing}
         titleClassName="text-[10px]"
-        headerAction={
-          canEditPanel && !editing ? (
-            <button
-              type="button"
-              onClick={openEdit}
-              className="text-[10px] text-primary hover:underline shrink-0"
-            >
-              Edit
-            </button>
-          ) : undefined
-        }
       >
       {editing ? (
         <div className="space-y-2">
@@ -1344,20 +1091,6 @@ function LeadSourcePanel({ lead, isAdmin, isEditor, leadScope, onSave, submissio
               placeholder="e.g. spring-2025"
               onChange={(e) => setDraftCampaign(e.target.value)}
             />
-          </div>
-          <div className="flex gap-2 pt-1">
-            <Button size="sm" className="h-7 text-xs flex-1" onClick={handleSave} disabled={saving}>
-              {saving ? "Saving…" : "Save"}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 text-xs"
-              onClick={() => setEditing(false)}
-              disabled={saving}
-            >
-              Cancel
-            </Button>
           </div>
         </div>
       ) : (
