@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { AutocompleteInput } from "./autocomplete-input";
+import { useApplicationStatusOptions } from "../hooks/use-application-status-options";
 import { AddUniversityWithProgramsDialog } from "./add-university-with-programs-dialog";
 import { useApplicationReferenceData, getCollegeSuggestions } from "../hooks/use-application-reference-data";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
@@ -52,7 +53,6 @@ export function AddApplicationSheet({
   canManageApplications,
   onSuccess,
 }: AddApplicationSheetProps) {
-  const defaultStage = stages.find((s) => s.is_default) ?? stages[0];
 
   const [submitting, setSubmitting] = useState(false);
   const [leadSearch, setLeadSearch] = useState("");
@@ -66,7 +66,13 @@ export function AddApplicationSheet({
   const [countries, setCountries] = useState<string[]>([]);
   const [degreeLevel, setDegreeLevel] = useState("");
   const [fieldOfStudy, setFieldOfStudy] = useState("");
-  const [stageId, setStageId] = useState(defaultStage?.id ?? "");
+  const [stageId, setStageId] = useState("");
+  // Status list: only the statuses of the pipeline that matches the selected Destination (see the hook),
+  // so a name is never listed once per country and a status can never belong to a different pipeline.
+  const { stages: statusStages, loading: statusLoading } = useApplicationStatusOptions(countries[0], open, stages);
+  const defaultStage = statusStages.find((s) => s.is_default) ?? statusStages[0];
+  // Never submit a status that is not in the list shown (e.g. left over from a previous destination).
+  const selectedStageId = statusStages.some((s) => s.id === stageId) ? stageId : (defaultStage?.id ?? "");
   const [deadline, setDeadline] = useState("");
   const [agentId, setAgentId] = useState("");
   const [appliedDate, setAppliedDate] = useState("");
@@ -240,7 +246,7 @@ export function AddApplicationSheet({
         university_name: universityName.trim(),
         program_name: programName.trim(),
       };
-      if (stageId) body.stage_id = stageId;
+      if (selectedStageId) body.stage_id = selectedStageId;
       const intakeTerm = [intakeMonth, intakeYear].filter(Boolean).join(" ");
       if (intakeTerm) body.intake_term = intakeTerm;
       if (countries.length > 0) body.countries = countries;
@@ -450,12 +456,12 @@ export function AddApplicationSheet({
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-xs text-gray-600">Stage</Label>
-                <Select value={stageId} onValueChange={setStageId}>
+                <Select value={selectedStageId} onValueChange={setStageId} disabled={statusLoading}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select stage" />
                   </SelectTrigger>
                   <SelectContent>
-                    {stages.map((s) => (
+                    {statusStages.map((s) => (
                       <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                     ))}
                   </SelectContent>
