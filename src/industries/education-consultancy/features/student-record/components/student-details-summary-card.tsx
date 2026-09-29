@@ -3,7 +3,7 @@
 import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InfoSection } from "@/components/dashboard/lead/info-section";
-import { SectionGroup, CardSection, FieldGrid, EditableField } from "./form-primitives";
+import { CollapsibleGroups, SectionGroup, CardSection, FieldGrid, EditableField } from "./form-primitives";
 import { WorkExperienceSection } from "./work-experience-section";
 import { ReferencesSection } from "./references-section";
 import {
@@ -62,6 +62,8 @@ export function StudentDetailsSummaryCard({ onEdit, defaultOpen = true }: Studen
         ) : undefined
       }
     >
+      {/* Every section heading inside gets a collapse arrow — including any added later. */}
+      <CollapsibleGroups>
       <div className="space-y-7 pt-2">
         <SectionGroup title="Personal Information">
           <CardSection title="Basic Details">
@@ -100,6 +102,7 @@ export function StudentDetailsSummaryCard({ onEdit, defaultOpen = true }: Studen
           </CardSection>
         </SectionGroup>
       </div>
+      </CollapsibleGroups>
     </InfoSection>
   );
 }
