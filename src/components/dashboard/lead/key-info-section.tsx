@@ -16,6 +16,7 @@ import {
 } from "@/industries/real-estate/lib/investor-fields";
 import { isOtherLead } from "@/lib/leads/lead-type";
 import { canEditLeadWorkingData } from "@/lib/leads/lead-edit-scope";
+import { formatDateTime } from "@/lib/date";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { SALUTATIONS } from "@/industries/it-agency/leads/salutations";
@@ -694,16 +695,7 @@ export function KeyInfoSection({
               )}
 
               {/* Created */}
-              <InfoRow
-                label="Created"
-                value={new Date(lead.created_at).toLocaleDateString("en-US", {
-                  month: "short",
-                  day: "numeric",
-                  year: "numeric",
-                  hour: "numeric",
-                  minute: "2-digit",
-                })}
-              />
+              <InfoRow label="Created" value={formatDateTime(lead.created_at)} />
 
               {/* Last Updated */}
               <InfoRow

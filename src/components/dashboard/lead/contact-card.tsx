@@ -43,6 +43,7 @@ import { toast } from "sonner";
 import type { Lead, PipelineStage } from "@/types/database";
 import { getLeadFullName, getLeadInitials } from "./lead-name";
 import { isOtherLead } from "@/lib/leads/lead-type";
+import { formatDateTime } from "@/lib/date";
 
 interface LeadTypeOption {
   id: string;
@@ -436,8 +437,7 @@ export function ContactCard({
                 )}
               </div>
               <p className="text-[10px] text-muted-foreground mt-2">
-                Submitted {new Date(lead.created_at).toLocaleDateString()} at{" "}
-                {new Date(lead.created_at).toLocaleTimeString()}
+                Created {formatDateTime(lead.created_at)}
               </p>
             </>
           )}
