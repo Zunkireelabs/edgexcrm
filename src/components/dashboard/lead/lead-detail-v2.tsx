@@ -912,6 +912,7 @@ export function LeadDetailV2({
                       tenantId={tenant.id}
                       consentEnabled={consentEnabled}
                       consentSigned={consentSigned}
+                      showCopyLink
                       canManage={canManageApplications ?? isAdmin}
                       canManageFee={isAdmin}
                       onSignedChange={setConsentSignedState}

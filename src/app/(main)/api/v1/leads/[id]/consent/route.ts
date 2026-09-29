@@ -183,6 +183,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const db = await scopedClient(auth);
 
   if (action === "send") {
+    // deliver: "email" (default — today's behaviour: email the link when the lead has an email) or
+    // "none" (create the signing link only, so staff can hand it over themselves, e.g. on WhatsApp).
+    const deliver = body.deliver === undefined ? "email" : body.deliver;
+    if (deliver !== "email" && deliver !== "none") {
+      return apiError("INVALID_DELIVER", "deliver must be 'email' or 'none'", 400);
+    }
+
     // Require an active consent template
     const { data: tpl } = await db
       .from("consent_templates")
@@ -217,7 +224,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     const token = crypto.randomUUID();
     const expiresAt = new Date(Date.now() + tplRow.link_expiry_days * 24 * 60 * 60 * 1000).toISOString();
-    const leadEmail = leadRow.email;
+    const leadEmail = deliver === "email" ? leadRow.email : null;
     const sentVia = leadEmail ? "email" : "link";
 
     // Resolve the org name, then fill the dynamic template with this student's
