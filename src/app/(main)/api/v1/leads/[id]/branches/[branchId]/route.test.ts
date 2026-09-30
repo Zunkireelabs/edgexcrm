@@ -33,7 +33,7 @@ vi.mock("@/lib/logger", () => ({
 // Supabase's real query builder is itself thenable.
 function chain(result: { data?: unknown; error?: unknown } = { data: null, error: null }) {
   const obj: Record<string, unknown> = {};
-  for (const m of ["select", "eq", "is", "not", "update", "insert", "order", "limit"]) {
+  for (const m of ["select", "eq", "is", "not", "update", "insert", "upsert", "order", "limit"]) {
     obj[m] = vi.fn(() => obj);
   }
   obj.single = vi.fn(() => Promise.resolve(result));
