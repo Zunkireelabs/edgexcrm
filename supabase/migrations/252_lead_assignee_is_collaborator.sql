@@ -27,10 +27,15 @@
 --
 -- Additive only. Idempotent (safe to run twice).
 --   Expected before/after row counts: lead_collaborators grows by the number of
---     (lead, assignee/past-assignee) pairs that were missing — run the read-only check in
---     docs/FACET-COUNT-CONSISTENCY-BRIEF.md §9 on the target DB BEFORE applying to prod to
---     see the number; leads is untouched (row count unchanged). leads.collaborator_count
---     updates itself via migration 210's trigger for each inserted row.
+--     (lead, assignee/past-assignee) pairs that were missing; leads is untouched (row count
+--     unchanged). leads.collaborator_count updates itself via migration 210's trigger for
+--     each inserted row. To see the number BEFORE applying (read-only; run on the target DB):
+--       SELECT count(*) AS active_assigned_leads_missing_their_assignee
+--       FROM leads l
+--       WHERE l.assigned_to IS NOT NULL AND l.deleted_at IS NULL
+--         AND NOT EXISTS (SELECT 1 FROM lead_collaborators c
+--                         WHERE c.lead_id = l.id AND c.user_id = l.assigned_to);
+--     (Past assignees recovered from audit_logs are extra to this number.)
 --   Rollback: DROP TRIGGER IF EXISTS trg_leads_assignee_is_collaborator_ins ON leads;
 --             DROP TRIGGER IF EXISTS trg_leads_assignee_is_collaborator_upd ON leads;
 --             DROP FUNCTION IF EXISTS leads_assignee_is_collaborator();

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { countSuffix, isOfferedByCount } from "./facet-labels";
+import { countSuffix, isOfferedByCount, sortByCountDesc } from "./facet-labels";
 
 describe("facet label helpers", () => {
   const counts = new Map([["a", 1234], ["b", 0]]);
@@ -21,5 +21,16 @@ describe("facet label helpers", () => {
 
   it("offers every option when counts are unknown — hiding on an unknown count would drop real people", () => {
     expect(isOfferedByCount(null, "b")).toBe(true);
+  });
+
+  it("sortByCountDesc: biggest count first, zeros/ties alphabetical, nobody dropped", () => {
+    const people = [["b", "Bea"], ["a", "Al"], ["c", "Cy"], ["d", "Di"]] as const;
+    const out = sortByCountDesc([...people], new Map([["c", 9], ["b", 2]]), ([id]) => id, ([, name]) => name);
+    expect(out.map(([id]) => id)).toEqual(["c", "b", "a", "d"]);
+  });
+
+  it("sortByCountDesc: unknown counts keep the caller's order", () => {
+    const people = [["b"], ["a"]];
+    expect(sortByCountDesc(people, null, ([id]) => id, ([id]) => id)).toBe(people);
   });
 });
