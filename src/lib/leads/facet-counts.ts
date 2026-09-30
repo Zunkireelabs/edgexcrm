@@ -8,6 +8,10 @@
 export interface FacetOption {
   name: string;
   count: number;
+  /** Display name for options the client has no other name for — i.e. people who are no
+   * longer on the team (`former`). Team members are labelled from the team list instead. */
+  label?: string;
+  former?: boolean;
 }
 
 export interface CountResult {

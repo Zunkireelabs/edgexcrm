@@ -35,7 +35,7 @@ import { branchMemberIds, syncOriginMembership } from "@/lib/leads/branch-member
 import { POSITION_ROUTE_MAP } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
 import { addLeadCollaborator } from "@/lib/leads/collaborators";
 import { visibleLeadsBase } from "@/lib/leads/visibility-query";
-import { getSourceFacet, getDestinationFacet } from "@/lib/leads/aggregates";
+import { getSourceFacet, getDestinationFacet, getCollaboratorFacet } from "@/lib/leads/aggregates";
 import { countFacetOptions, type FacetOption } from "@/lib/leads/facet-counts";
 import { treeForFacetOption } from "@/lib/filters/facet-tree";
 import { compileFilter, planFilter } from "@/lib/filters/compile";
@@ -533,13 +533,12 @@ export async function GET(request: NextRequest) {
   // known, narrow gap (the recycle bin has no source/assignee dropdown today).
   //
   // FACET-COUNT-CONSISTENCY (supersedes the old "KNOWN GAP" note here): `assignee` and
-  // `collaborator` are no longer computed by lead_aggregates() at all — they are counted
-  // with buildScopedQuery() itself (below), so stage/pipeline/branch/list scope and every
-  // filter shape are honored by construction. `source` and `destination` still use
-  // lead_aggregates() (free-text option sets can't be enumerated one-count-each), which has
-  // no stage/pipeline param — so for those two, a `?stage=` (or an un-translatable ?f=
-  // tree) yields `null` = "no number", never a count that silently ignores the stage.
-  // The proper fix for those two is a migration (separate brief).
+  // `collaborator` are counted with buildScopedQuery() itself (below), so stage/pipeline/
+  // branch/list scope and every filter shape are honored by construction. `source` and
+  // `destination` still use lead_aggregates() (free-text option sets can't be enumerated
+  // one-count-each); as of migration 253 that function takes the same stage/pipeline scope, so
+  // `?stage=` / `?pipeline=` are honored there too. Only an un-translatable ?f= tree still
+  // yields `null` = "no number" for those two — never a count that ignores part of the filter.
   //
   // ?facets=source ALONE keeps the exact pre-existing single-dimension response shape
   // (`{facet:"source", options}`) byte-for-byte — KanbanBoard.tsx (Phase 4 territory,
@@ -581,12 +580,12 @@ export async function GET(request: NextRequest) {
         aggParams = translated.params;
       }
     }
-    // lead_aggregates() has no stage/pipeline-scope param, so a `?stage=` (or a pipeline
-    // scope the caller may not access) can't be mirrored into source/destination counts.
-    if (stageFilter) aggregateFacetsAvailable = false;
-    const pipelineAccessIds = auth.permissions.pipelineAccess !== "all" ? [...auth.permissions.pipelineAccess.ids] : null;
-    if (pipelineScope && pipelineAccessIds && !pipelineAccessIds.includes(pipelineScope)) aggregateFacetsAvailable = false;
-    const aggregatePipelineIds = pipelineScope && aggregateFacetsAvailable ? [pipelineScope] : pipelineAccessIds;
+    // Stage / pipeline scope reach lead_aggregates() via migration 253's p_stage_eq /
+    // p_pipeline_eq (see baseFacetParams below), so a `?stage=` / `?pipeline=` no longer has to
+    // hide Source/Destination counts. Pipeline ACCESS stays an allowlist array (pipelineIds);
+    // the requested pipeline is an additional equality — a pipeline outside the allowlist
+    // therefore yields zero, exactly like the list (`.in(...)` AND `.eq(...)`).
+    const aggregatePipelineIds = auth.permissions.pipelineAccess !== "all" ? [...auth.permissions.pipelineAccess.ids] : null;
 
     // Match route.ts's `.in("pipeline_id", [])` semantics exactly: an empty allowlist
     // means the page returns zero leads, so every requested facet must be empty too.
@@ -643,6 +642,8 @@ export async function GET(request: NextRequest) {
       branchId: facetScope === "branch" ? scope.branchId : null,
       sharedPoolAssignedToAny,
       pipelineIds: aggregatePipelineIds,
+      stageId: stageFilter,
+      pipelineId: pipelineScope,
       status: effectiveStatus,
       collaboratorIds: effectiveCollaboratorIds,
       tag: effectiveTag,
@@ -725,7 +726,47 @@ export async function GET(request: NextRequest) {
         };
 
         if (wantsAssignee) assigneeOptions = await countAxis("assignees", [...memberIds, "unassigned"]);
-        if (wantsCollaborator) collaboratorOptions = await countAxis("collaborators", memberIds);
+        if (wantsCollaborator) {
+          // FORMER MEMBERS: lead_collaborators rows outlive team membership (they persist so a
+          // user keeps view access after a reassignment, and outlive the user's removal from the
+          // tenant), so leads can carry collaborators who are no longer in tenant_users. The team
+          // list can't offer them, so DISCOVER their ids from lead_aggregates()'s collaborator
+          // dimension (which has no team-membership restriction) and then COUNT each one exactly
+          // with the list's own query like everyone else — discovery only names candidates, it
+          // never supplies a number. Best-effort: if discovery fails or the tree can't be
+          // translated, the picker simply lacks the former members (never a wrong count).
+          const memberSet = new Set(memberIds);
+          let formerIds: string[] = [];
+          if (aggregateFacetsAvailable) {
+            try {
+              const discovered = await getCollaboratorFacet({ ...baseFacetParams, collaboratorIds: null });
+              formerIds = discovered.map((o) => o.name).filter((id) => !memberSet.has(id)).slice(0, 50);
+            } catch (err) {
+              log.warn({ err }, "former-collaborator discovery failed; listing current members only");
+            }
+          }
+          const counted = await countAxis("collaborators", [...memberIds, ...formerIds]);
+          if (counted && formerIds.length > 0) {
+            const formerSet = new Set(formerIds);
+            const labels = new Map<string, string>();
+            await Promise.all(
+              counted.filter((o) => formerSet.has(o.name)).map(async (o) => {
+                try {
+                  const { data } = await supabase.auth.admin.getUserById(o.name);
+                  const meta = (data?.user?.user_metadata ?? {}) as { full_name?: string; name?: string };
+                  labels.set(o.name, meta.full_name || meta.name || data?.user?.email || "Former member");
+                } catch {
+                  labels.set(o.name, "Former member");
+                }
+              }),
+            );
+            collaboratorOptions = counted.map((o) =>
+              formerSet.has(o.name) ? { ...o, former: true, label: labels.get(o.name) ?? "Former member" } : o,
+            );
+          } else {
+            collaboratorOptions = counted;
+          }
+        }
       }
     } catch (err) {
       log.error({ err }, "Failed to fetch lead facets");

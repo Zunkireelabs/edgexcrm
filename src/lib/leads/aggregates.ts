@@ -283,6 +283,12 @@ export interface SourceFacetParams {
   excludeListIds?: string[] | null;
   search?: string | null;
   includeConverted?: boolean;
+  /** Restrict to one stage / one pipeline (migration 253's p_stage_eq / p_pipeline_eq) —
+   * the same `stage_id = X` / `pipeline_id = X` the list route applies for `?stage=` /
+   * `?pipeline=`. Sent to the RPC ONLY when set, so requests without them work even against
+   * a database that hasn't received migration 253 yet. */
+  stageId?: string | null;
+  pipelineId?: string | null;
   /** 'intake_source' (exact — the /leads view) or 'intake_source_part' (split on
    * " | " — the staging view). Defaults to 'intake_source'; only /leads uses this
    * facet today. */
@@ -331,6 +337,8 @@ async function fetchFacetRows(params: SourceFacetParams): Promise<AggregateRow[]
   if (params.excludeListIds && params.excludeListIds.length > 0) rpcParams.p_exclude_list_ids = params.excludeListIds;
   if (params.search) rpcParams.p_search = params.search;
   if (params.includeConverted) rpcParams.p_include_converted = true;
+  if (params.stageId) rpcParams.p_stage_eq = params.stageId;
+  if (params.pipelineId) rpcParams.p_pipeline_eq = params.pipelineId;
 
   const { data, error } = await supabase.rpc("lead_aggregates", rpcParams);
   if (error) {

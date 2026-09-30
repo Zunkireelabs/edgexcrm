@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { countSuffix, isOfferedByCount, sortByCountDesc } from "./facet-labels";
+import { countSuffix, isOfferedByCount, sortByCountDesc, formerCollaboratorOptions } from "./facet-labels";
 
 describe("facet label helpers", () => {
   const counts = new Map([["a", 1234], ["b", 0]]);
@@ -32,5 +32,23 @@ describe("facet label helpers", () => {
   it("sortByCountDesc: unknown counts keep the caller's order", () => {
     const people = [["b"], ["a"]];
     expect(sortByCountDesc(people, null, ([id]) => id, ([id]) => id)).toBe(people);
+  });
+
+  it("formerCollaboratorOptions: lists only former members the team can't name, labelled (former) with their count", () => {
+    const facet = [
+      { name: "team", count: 5 },
+      { name: "gone", count: 2, former: true, label: "ex@example.com" },
+      { name: "gone2", count: 1, former: true },
+      { name: "rejoined", count: 4, former: true, label: "R" },
+    ];
+    const out = formerCollaboratorOptions(facet, (id) => id === "rejoined"); // rejoined is on the team again
+    expect(out).toEqual([
+      { value: "gone", label: "ex@example.com (former) (2)" },
+      { value: "gone2", label: "Former member (former) (1)" },
+    ]);
+  });
+
+  it("formerCollaboratorOptions: no facet (server gave no answer) => no extra entries", () => {
+    expect(formerCollaboratorOptions(null, () => false)).toEqual([]);
   });
 });

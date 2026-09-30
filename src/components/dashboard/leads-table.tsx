@@ -1,6 +1,6 @@
 "use client";
 
-import { countSuffix, isOfferedByCount, sortByCountDesc } from "@/lib/leads/facet-labels";
+import { countSuffix, isOfferedByCount, sortByCountDesc, formerCollaboratorOptions, type FacetOptionLike } from "@/lib/leads/facet-labels";
 import { useState, useMemo, useEffect, useRef, useCallback, cloneElement, isValidElement, type ReactElement, type ReactNode, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -890,10 +890,10 @@ export function LeadsTable({
   } = useEduTaxonomy({
     enabled: wantsDestinationFacet,
   });
-  const [serverSourceFacet, setServerSourceFacet] = useState<{ name: string; count: number }[] | null>(null);
-  const [serverAssigneeFacet, setServerAssigneeFacet] = useState<{ name: string; count: number }[] | null>(null);
-  const [serverCollaboratorFacet, setServerCollaboratorFacet] = useState<{ name: string; count: number }[] | null>(null);
-  const [serverDestinationFacet, setServerDestinationFacet] = useState<{ name: string; count: number }[] | null>(null);
+  const [serverSourceFacet, setServerSourceFacet] = useState<FacetOptionLike[] | null>(null);
+  const [serverAssigneeFacet, setServerAssigneeFacet] = useState<FacetOptionLike[] | null>(null);
+  const [serverCollaboratorFacet, setServerCollaboratorFacet] = useState<FacetOptionLike[] | null>(null);
+  const [serverDestinationFacet, setServerDestinationFacet] = useState<FacetOptionLike[] | null>(null);
   const facetFetchParams = useMemo(() => {
     if (!serverPaginated || isStagingView) return null; // staging view isn't serverPaginated today
     const params = buildFetchParams(1, itemsPerPage, false);
@@ -937,13 +937,13 @@ export function LeadsTable({
         data?: {
           // Legacy single-dimension shape (facets=source alone).
           facet?: string;
-          options?: { name: string; count: number }[];
+          options?: FacetOptionLike[];
           // New multi-dimension shape (facets=source,assignee,collaborator,destination or a subset).
           facets?: {
-            source?: { options: { name: string; count: number }[] } | null;
-            assignee?: { options: { name: string; count: number }[] } | null;
-            collaborator?: { options: { name: string; count: number }[] } | null;
-            destination?: { options: { name: string; count: number }[] } | null;
+            source?: { options: FacetOptionLike[] } | null;
+            assignee?: { options: FacetOptionLike[] } | null;
+            collaborator?: { options: FacetOptionLike[] } | null;
+            destination?: { options: FacetOptionLike[] } | null;
           } | null;
         };
       }) => {
@@ -979,7 +979,7 @@ export function LeadsTable({
           // count (see the *Counts memos below) instead of an empty-but-truthy array
           // (which would blank the picker) or a page-scoped guess (which would be wrong).
           const f = body.data.facets;
-          const pick = (v: { options: { name: string; count: number }[] } | null | undefined, wanted: boolean) =>
+          const pick = (v: { options: FacetOptionLike[] } | null | undefined, wanted: boolean) =>
             !wanted || v === null ? null : (v?.options ?? []);
           if (f.source) setLastSourceNames(f.source.options.map((o) => o.name));
           if (f.destination) setLastDestinationNames(f.destination.options.map((o) => o.name));
@@ -2226,7 +2226,8 @@ export function LeadsTable({
                 value: userId,
                 label: `${memberNames[userId] || email.split("@")[0]}${countSuffix(collaboratorCounts, userId)}`,
                 description: eduStageGated ? (memberMeta(userId) || email) : email,
-              })),
+              }))
+              .concat(formerCollaboratorOptions(serverCollaboratorFacet, (id) => id in memberMap).map((o) => ({ ...o, description: "No longer on the team" }))),
           } satisfies FilterDef,
         ]
       : []),
@@ -2419,7 +2420,7 @@ export function LeadsTable({
       ).map(([userId, email]) => ({
         value: userId,
         label: `${memberNames[userId] || email.split("@")[0]}${countSuffix(collaboratorCounts, userId)}`,
-      })),
+      })).concat(formerCollaboratorOptions(serverCollaboratorFacet, (id) => id in memberMap)),
       // #1d4ed8 matches TAG_CLASSES_BY_VALUE's blue-700 in columns-registry.tsx
       // (the existing Student/Other tag toggle) — same color, same meaning.
       tags: [{ value: "student", label: "Student", color: "#1d4ed8" }],
@@ -2471,6 +2472,8 @@ export function LeadsTable({
     counselors,
     memberNames,
     collaboratorCounts,
+    serverCollaboratorFacet,
+    memberMap,
     formEntries,
     destinationCounts,
     lastDestinationNames,

@@ -55,7 +55,7 @@ import {
 } from "@/components/ui/popover";
 import { AddLeadSheet } from "@/components/dashboard/add-lead-sheet";
 import type { TenantEntity } from "@/types/database";
-import { countSuffix, isOfferedByCount, sortByCountDesc } from "@/lib/leads/facet-labels";
+import { countSuffix, isOfferedByCount, sortByCountDesc, formerCollaboratorOptions } from "@/lib/leads/facet-labels";
 
 interface TeamMemberData {
   user_id: string;
@@ -287,7 +287,7 @@ export function KanbanBoard({
   // hides every other column, so counts must too) and — for the classic board — the pipeline
   // (its columns are stage ids; the board-level request has no single stage to name).
   // Requesting all three in one round-trip always gets route.ts's multi-facet shape.
-  type FacetOptions = { name: string; count: number }[] | null;
+  type FacetOptions = { name: string; count: number; label?: string; former?: boolean }[] | null;
   const [sourceFacet, setSourceFacet] = useState<FacetOptions>(null);
   const [assigneeFacet, setAssigneeFacet] = useState<FacetOptions>(null);
   const [collaboratorFacet, setCollaboratorFacet] = useState<FacetOptions>(null);
@@ -308,7 +308,7 @@ export function KanbanBoard({
           facets?: {
             source?: { options: { name: string; count: number }[] } | null;
             assignee?: { options: { name: string; count: number }[] } | null;
-            collaborator?: { options: { name: string; count: number }[] } | null;
+            collaborator?: { options: { name: string; count: number; label?: string; former?: boolean }[] } | null;
           } | null;
         };
       }) => {
@@ -321,7 +321,7 @@ export function KanbanBoard({
           return;
         }
         // Per-facet null = "no faithful number" → keep null (uncounted), never [] (blank).
-        const pick = (v: { options: { name: string; count: number }[] } | null | undefined) =>
+        const pick = (v: { options: { name: string; count: number; label?: string; former?: boolean }[] } | null | undefined) =>
           v === null || v === undefined ? null : v.options;
         if (f.source) setLastSourceNames(f.source.options.map((o) => o.name));
         setSourceFacet(pick(f.source));
@@ -658,7 +658,8 @@ export function KanbanBoard({
                 value: uid,
                 label: `${memberNames[uid] || email.split("@")[0]}${countSuffix(collaboratorCounts, uid)}`,
                 description: email,
-              })),
+              }))
+              .concat(formerCollaboratorOptions(collaboratorFacet, (id) => id in memberNames).map((o) => ({ ...o, description: "No longer on the team" }))),
           } satisfies FilterDef,
         ]
       : []),

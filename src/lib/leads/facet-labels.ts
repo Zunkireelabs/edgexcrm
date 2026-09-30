@@ -29,3 +29,26 @@ export function sortByCountDesc<T>(items: T[], counts: FacetCounts, keyOf: (item
     (a, b) => (counts.get(keyOf(b)) ?? 0) - (counts.get(keyOf(a)) ?? 0) || labelOf(a).localeCompare(labelOf(b)),
   );
 }
+
+/** A facet option as the server returns it (route.ts): `former` marks a collaborator who is no
+ * longer on the team, with a server-resolved display `label`. */
+export interface FacetOptionLike {
+  name: string;
+  count: number;
+  label?: string;
+  former?: boolean;
+}
+
+/**
+ * Picker entries for people the team list can't name — former members who still collaborate on
+ * leads. Listed after the current team, labelled "(former)" so they can't be mistaken for staff.
+ */
+export function formerCollaboratorOptions(
+  facet: FacetOptionLike[] | null,
+  isCurrentMember: (userId: string) => boolean,
+): { value: string; label: string }[] {
+  if (!facet) return [];
+  return facet
+    .filter((o) => o.former && !isCurrentMember(o.name))
+    .map((o) => ({ value: o.name, label: `${o.label || "Former member"} (former) (${o.count.toLocaleString()})` }));
+}

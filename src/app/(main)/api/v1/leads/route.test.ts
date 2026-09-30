@@ -31,7 +31,7 @@ vi.mock("@/lib/supabase/server", () => ({
 vi.mock("@/industries/_loader", () => ({ getFeatureAccess: getFeatureAccessMock }));
 
 vi.mock("@/lib/logger", () => ({
-  createRequestLogger: vi.fn(() => ({ info: vi.fn(), error: vi.fn() })),
+  createRequestLogger: vi.fn(() => ({ info: vi.fn(), error: vi.fn(), warn: vi.fn() })),
 }));
 
 // route.ts's own-scope cross-branch-pool visibility used to call
@@ -917,6 +917,7 @@ describe("GET /api/v1/leads — ?f= compiles through the SAME compileFilter() as
     createClientMock.mockResolvedValue({
       rpc: (name: string, params: unknown, opts: unknown) => {
         rpcCalls.push([name, params, opts]);
+        if (name === "lead_aggregates") return Promise.reject(new Error("discovery unavailable")); // degrades to members only
         if (name !== "leads_visible_to_user") throw new Error(`unexpected rpc ${name}`);
         const chain: Record<string, unknown> = {
           select: () => chain,
@@ -940,9 +941,12 @@ describe("GET /api/v1/leads — ?f= compiles through the SAME compileFilter() as
     const body = await res.json();
 
     expect(res.status).toBe(200);
-    expect(rpcCalls).toHaveLength(2); // one per candidate (u1, u2)
-    for (const [name, , opts] of rpcCalls) {
-      expect(name).toBe("leads_visible_to_user");
+    // The one lead_aggregates() call is former-member DISCOVERY (ids only — this mock makes it
+    // fail, which must degrade silently); every COUNT is a head-only leads_visible_to_user().
+    expect(rpcCalls.filter(([name]) => name === "lead_aggregates")).toHaveLength(1);
+    const countCalls = rpcCalls.filter(([name]) => name === "leads_visible_to_user");
+    expect(countCalls).toHaveLength(2); // one per candidate (u1, u2)
+    for (const [, , opts] of countCalls) {
       expect(opts).toEqual({ head: true, count: "exact" });
     }
     expect(body.data.facets.collaborator.options).toEqual([
@@ -1099,7 +1103,7 @@ describe("GET /api/v1/leads — ?f= compiles through the SAME compileFilter() as
         { name: "unassigned", count: 7 },
       ],
     });
-    expect(rpcCalls.length).toBe(2); // source + destination only
+    expect(rpcCalls.length).toBe(3); // source + destination + the collaborator facet's former-member discovery
   });
 
   it("?facets=collaborator counts each person with the list's own filter, replacing the URL's ?collaborators= axis with that one person — the axis being faceted must not filter itself", async () => {
@@ -1131,23 +1135,95 @@ describe("GET /api/v1/leads — ?f= compiles through the SAME compileFilter() as
     expect(calls).toContainEqual(["eq", ["pipeline_id", pipeline]]);
   });
 
-  it("?facets=source,destination&stage=<id> returns null for both — lead_aggregates() has no stage param, so no number rather than a count that ignores the stage", async () => {
-    createClientMock.mockResolvedValue({ rpc: () => Promise.reject(new Error("lead_aggregates must not be called")) });
+  it("?facets=source,destination&stage=<id>&pipeline=<id> passes the stage and pipeline to lead_aggregates() (migration 253) — Source/Destination counts honor the same scope as the list, and are no longer hidden", async () => {
+    const stage = "44444444-4444-4444-4444-444444444444";
+    const pipeline = "55555555-5555-5555-5555-555555555555";
+    const rpcParams: Record<string, unknown>[] = [];
+    createClientMock.mockResolvedValue({
+      rpc: (_name: string, params: Record<string, unknown>) => {
+        rpcParams.push(params);
+        return Promise.resolve({
+          data: [
+            { dimension: "intake_source", key: "Facebook", bucket: "all", cnt: 3 },
+            { dimension: "destination", key: "UK", bucket: "all", cnt: 9 },
+          ],
+          error: null,
+        });
+      },
+    });
     createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
     const { GET } = await import("./route");
-    const res = await GET(fakeReq({ facets: "source,destination", stage: "44444444-4444-4444-4444-444444444444" }));
+    const res = await GET(fakeReq({ facets: "source,destination", stage, pipeline }));
     const body = await res.json();
     expect(res.status).toBe(200);
-    expect(body.data).toEqual({ facets: { source: null, destination: null } });
+    expect(body.data.facets.source).toEqual({ options: [{ name: "Facebook", count: 3 }] });
+    expect(body.data.facets.destination).toEqual({ options: [{ name: "UK", count: 9 }] });
+    expect(rpcParams).toHaveLength(2);
+    for (const p of rpcParams) {
+      expect(p.p_stage_eq).toBe(stage);
+      expect(p.p_pipeline_eq).toBe(pipeline);
+    }
   });
 
-  it("?facets=source&stage=<id> (legacy single-source shape) returns counts:null instead of stage-blind counts", async () => {
-    createClientMock.mockResolvedValue({ rpc: () => Promise.reject(new Error("lead_aggregates must not be called")) });
+  it("without ?stage=/?pipeline= the RPC call carries NO p_stage_eq/p_pipeline_eq — safe against a database that hasn't received migration 253", async () => {
+    const rpcParams: Record<string, unknown>[] = [];
+    createClientMock.mockResolvedValue({
+      rpc: (_name: string, params: Record<string, unknown>) => {
+        rpcParams.push(params);
+        return Promise.resolve({ data: [], error: null });
+      },
+    });
     createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
     const { GET } = await import("./route");
-    const res = await GET(fakeReq({ facets: "source", stage: "44444444-4444-4444-4444-444444444444" }));
+    await GET(fakeReq({ facets: "source" }));
+    expect(rpcParams[0]).not.toHaveProperty("p_stage_eq");
+    expect(rpcParams[0]).not.toHaveProperty("p_pipeline_eq");
+  });
+
+  // Former team members: lead_collaborators rows outlive team membership, so a collaborator can
+  // be absent from tenant_users. Their ids are DISCOVERED from lead_aggregates()'s collaborator
+  // dimension, but their NUMBER still comes from the list's own query — like every other person.
+  it("?facets=collaborator lists a former member (discovered via lead_aggregates, counted via the list query, labelled from their user record)", async () => {
+    const member = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1";
+    const former = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb2";
+    createClientMock.mockResolvedValue({
+      rpc: () =>
+        Promise.resolve({
+          data: [
+            { dimension: "collaborator", key: member, bucket: "all", cnt: 5 },
+            { dimension: "collaborator", key: former, bucket: "all", cnt: 4 },
+          ],
+          error: null,
+        }),
+    });
+    const db = facetDb({
+      memberIds: [member],
+      countFor: (calls) => (callsMention(calls, former) ? 3 : callsMention(calls, member) ? 5 : 0),
+    });
+    createServiceClientMock.mockResolvedValue({
+      ...db,
+      auth: { admin: { getUserById: async () => ({ data: { user: { email: "ex@example.com" } } }) } },
+    });
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ facets: "collaborator" }));
     const body = await res.json();
-    expect(body.data).toEqual({ facet: "source", options: [], counts: null });
+    expect(res.status).toBe(200);
+    expect(body.data.facets.collaborator.options).toEqual([
+      { name: member, count: 5 },
+      { name: former, count: 3, former: true, label: "ex@example.com" }, // 3 = the LIST's count, not the aggregate's 4
+    ]);
+    expect(db.countChains).toHaveLength(2);
+  });
+
+  it("a failed former-member discovery degrades to current members only — never an error, never a wrong count", async () => {
+    const member = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1";
+    createClientMock.mockResolvedValue({ rpc: () => Promise.reject(new Error("rpc down")) });
+    createServiceClientMock.mockResolvedValue(facetDb({ memberIds: [member], countFor: () => 2 }));
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ facets: "collaborator" }));
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data.facets.collaborator.options).toEqual([{ name: member, count: 2 }]);
   });
 
   // THE consistency guard. A facet count is only trustworthy if it is the list's own filter
@@ -1173,8 +1249,14 @@ describe("GET /api/v1/leads — ?f= compiles through the SAME compileFilter() as
 
   it.each(PARITY_CASES)("facet count chain == list chain (+ the person): %s", async (_name, params) => {
     const candidate = "77777777-7777-7777-7777-777777777777";
+    // Relative-date filters (`created=week`) compile a cutoff from `new Date()`, so two requests a
+    // millisecond apart differ only in that timestamp — normalise ISO timestamps so the comparison
+    // is about the SHAPE of the query, not the clock.
+    const ISO = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z/g;
     const strip = (calls: Call[]) =>
-      calls.filter(([m, args]) => m !== "select" && m !== "order" && !JSON.stringify(args).includes(candidate));
+      calls
+        .filter(([m, args]) => m !== "select" && m !== "order" && !JSON.stringify(args).includes(candidate))
+        .map(([m, args]) => JSON.parse(JSON.stringify([m, args]).replace(ISO, "<ts>")));
 
     const listCalls: Call[] = [];
     createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: listCalls }));
