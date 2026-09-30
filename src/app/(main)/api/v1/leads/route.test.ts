@@ -1273,6 +1273,47 @@ describe("GET /api/v1/leads — ?f= compiles through the SAME compileFilter() as
     expect(callsMention(db.countChains[0], candidate)).toBe(true);
   });
 
+  // The client's exact report: pick the Intake filter, then open Collaborators (and Assigned to) —
+  // no names. Cause: `intake_term` wasn't on the SQL counting function's short field whitelist, so
+  // counts were switched off and the pickers fell back to the 25 loaded rows. Facets are now the
+  // list's own query, so any filter — Intake included — must leave both pickers fully populated.
+  it("Intake filter + Collaborators/Assigned-to facets: both are counted, with the Intake condition applied to every count (regression: pickers went empty)", async () => {
+    const member = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1";
+    authenticateRequestMock.mockResolvedValue(
+      authFixture({
+        industryId: "education_consultancy", // Intake is an education-only field
+        role: "owner",
+        permissions: permissions({ leadScope: "all" }),
+      }),
+    );
+    createClientMock.mockResolvedValue({ rpc: () => Promise.resolve({ data: [], error: null }) });
+    const db = facetDb({ memberIds: [member], countFor: () => 7 });
+    createServiceClientMock.mockResolvedValue({
+      ...db,
+      from: (table: string) =>
+        table === "tenants"
+          ? { select: () => ({ eq: () => ({ single: () => Promise.resolve({ data: { config: null }, error: null }) }) }) }
+          : db.from(table),
+    });
+    const tree = {
+      conjunction: "and" as const,
+      conditions: [{ id: "i1", field: "intake_term", op: "is" as const, value: "November 2026" }],
+    };
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ facets: "collaborator,assignee", [FILTER_PARAM]: encodeFilterTree(tree) }));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    // Neither picker is "no answer" (null) and neither is empty — the member is listed with the count.
+    expect(body.data.facets.collaborator).toEqual({ options: [{ name: member, count: 7 }] });
+    expect(body.data.facets.assignee.options).toEqual(
+      expect.arrayContaining([{ name: member, count: 7 }, { name: "unassigned", count: 7 }]),
+    );
+    // Every one of those counts really carries the Intake condition (else the number would ignore it).
+    expect(db.countChains.length).toBeGreaterThanOrEqual(3);
+    for (const calls of db.countChains) expect(callsMention(calls, "November 2026")).toBe(true);
+  });
+
   it("a failing per-person count surfaces as 503 — a half-answered facet is never returned as if complete", async () => {
     createServiceClientMock.mockResolvedValue({
       from: (table: string) => {

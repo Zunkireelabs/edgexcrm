@@ -1,5 +1,6 @@
 "use client";
 
+import { matchesCollaboratorFilter } from "@/lib/leads/collaborator-filter";
 import { countSuffix, isOfferedByCount, sortByCountDesc, formerCollaboratorOptions, type FacetOptionLike } from "@/lib/leads/facet-labels";
 import { useState, useMemo, useEffect, useRef, useCallback, cloneElement, isValidElement, type ReactElement, type ReactNode, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import { useRouter } from "next/navigation";
@@ -1158,9 +1159,7 @@ export function LeadsTable({
         ? (lead.intake_source?.split(" | ").map((p) => p.trim()).some((p) => sourceFilter.includes(p)) ?? false)
         : (lead.intake_source ? sourceFilter.includes(lead.intake_source) : false));
 
-    const matchesCollaborator =
-      collaboratorFilter.length === 0 ||
-      (leadCollaborators[lead.id]?.some((userId) => collaboratorFilter.includes(userId)) ?? false);
+    const matchesCollaborator = matchesCollaboratorFilter(lead.id, collaboratorFilter, leadCollaborators);
 
     const matchesTag =
       tagFilter === "all" || (lead.tags && lead.tags.includes(tagFilter));
