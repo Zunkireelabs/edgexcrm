@@ -55,7 +55,7 @@ import {
 } from "@/components/ui/popover";
 import { AddLeadSheet } from "@/components/dashboard/add-lead-sheet";
 import type { TenantEntity } from "@/types/database";
-import { countSuffix, isOfferedByCount } from "@/lib/leads/facet-labels";
+import { countSuffix, isOfferedByCount, sortByCountDesc } from "@/lib/leads/facet-labels";
 
 interface TeamMemberData {
   user_id: string;
@@ -646,10 +646,14 @@ export function KanbanBoard({
             // Listed regardless of role — an owner/admin who is genuinely a
             // collaborator on some leads must be filterable here too (matches the
             // /leads Collaborators filter). Counts are exact (see the facet effect
-            // above); people with zero collaborator leads are hidden unless currently
-            // selected, and when the server can't count, everyone is listed uncounted.
-            options: counselors
-              .filter(([uid]) => isOfferedByCount(collaboratorCounts, uid, collaboratorFilter.includes(uid)))
+            // above). EVERY team member is listed — a name never vanishes because the
+            // active filters narrowed to zero; the count is just a label, biggest first.
+            options: sortByCountDesc(
+              counselors,
+              collaboratorCounts,
+              ([uid]) => uid,
+              ([uid, email]) => memberNames[uid] || email,
+            )
               .map(([uid, email]) => ({
                 value: uid,
                 label: `${memberNames[uid] || email.split("@")[0]}${countSuffix(collaboratorCounts, uid)}`,

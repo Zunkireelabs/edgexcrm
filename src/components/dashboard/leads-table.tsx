@@ -1,6 +1,6 @@
 "use client";
 
-import { countSuffix, isOfferedByCount } from "@/lib/leads/facet-labels";
+import { countSuffix, isOfferedByCount, sortByCountDesc } from "@/lib/leads/facet-labels";
 import { useState, useMemo, useEffect, useRef, useCallback, cloneElement, isValidElement, type ReactElement, type ReactNode, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -2199,7 +2199,10 @@ export function LeadsTable({
           } satisfies FilterDef,
         ]
       : []),
-    ...((isAdmin || isTeamScoped) && counselors.length > 0 && Object.keys(leadCollaborators).length > 0
+    // Server-faceted surfaces (/leads) offer the picker whenever the viewer may use it — it
+    // must not depend on whether the 25 LOADED leads happen to have collaborators (the old
+    // gate made the whole filter vanish on such a page). Other surfaces keep the map gate.
+    ...((isAdmin || isTeamScoped) && counselors.length > 0 && (serverFacetsActive || Object.keys(leadCollaborators).length > 0)
       ? [
           {
             id: "collaborator",
@@ -2210,12 +2213,15 @@ export function LeadsTable({
             onChange: (val: string[]) => {
               setCollaboratorFilter(val);
             },
-            // Anyone with >=1 collaborator lead is offered, regardless of role —
-            // an owner/admin who is genuinely a collaborator on some leads (their
-            // assignment writes a lead_collaborators row) must be filterable here,
-            // same as they already appear on the lead-detail Collaborators list.
-            options: counselors
-              .filter(([userId]) => isOfferedByCount(collaboratorCounts, userId))
+            // EVERY team member is offered, regardless of role or count — names never
+            // vanish because the active filters narrowed to zero; the count is only a
+            // label ("(0)" when nobody matches), biggest first.
+            options: sortByCountDesc(
+              counselors,
+              collaboratorCounts,
+              ([userId]) => userId,
+              ([userId, email]) => memberNames[userId] || email,
+            )
               .map(([userId, email]) => ({
                 value: userId,
                 label: `${memberNames[userId] || email.split("@")[0]}${countSuffix(collaboratorCounts, userId)}`,
@@ -2370,7 +2376,6 @@ export function LeadsTable({
   // regression against the toolbar it replaces.
   const advancedFilterOptionOverrides: Partial<Record<string, FilterOption[]>> = useMemo(() => {
     const selectedAssignees = new Set(selectedValuesForField("assignees"));
-    const selectedCollaborators = new Set(selectedValuesForField("collaborators"));
     const selectedStages = new Set(selectedValuesForField("stage"));
 
     return {
@@ -2401,20 +2406,20 @@ export function LeadsTable({
             label: `${memberNames[userId] || email.split("@")[0]}${countSuffix(counselorCounts, userId)}`,
           })),
       ],
-      // Collaborator counts: server-computed, tenant-wide (migration 207's
-      // `collaborator` dimension on lead_aggregates()) when serverPaginated, falling
-      // back to the page-scoped client computation otherwise — see collaboratorCounts
-      // above. Offered regardless of role: an owner/admin who is genuinely a
-      // collaborator on some leads must be filterable here (matches the lead-detail
-      // Collaborators list, which has never excluded them). A currently-selected
-      // collaborator stays offered even at 0 (same reasoning as assignees above) so
-      // its chip keeps a real name.
-      collaborators: counselors
-        .filter(([userId]) => isOfferedByCount(collaboratorCounts, userId, selectedCollaborators.has(userId)))
-        .map(([userId, email]) => ({
-          value: userId,
-          label: `${memberNames[userId] || email.split("@")[0]}${countSuffix(collaboratorCounts, userId)}`,
-        })),
+      // Collaborators: every team member is offered, regardless of role or count (an
+      // owner/admin who is genuinely a collaborator must be filterable, and a name must
+      // never vanish because the active filters narrowed to zero — that read as "the
+      // collaborator is missing"). Counts come from the server (the list's own query, see
+      // route.ts) and are only a label; biggest first. A selected chip always keeps its name.
+      collaborators: sortByCountDesc(
+        counselors,
+        collaboratorCounts,
+        ([userId]) => userId,
+        ([userId, email]) => memberNames[userId] || email,
+      ).map(([userId, email]) => ({
+        value: userId,
+        label: `${memberNames[userId] || email.split("@")[0]}${countSuffix(collaboratorCounts, userId)}`,
+      })),
       // #1d4ed8 matches TAG_CLASSES_BY_VALUE's blue-700 in columns-registry.tsx
       // (the existing Student/Other tag toggle) — same color, same meaning.
       tags: [{ value: "student", label: "Student", color: "#1d4ed8" }],

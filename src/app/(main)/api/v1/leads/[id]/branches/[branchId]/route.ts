@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { addLeadCollaborator } from "@/lib/leads/collaborators";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, requireAdmin, getClientIp } from "@/lib/api/auth";
 import { getLeadMembership } from "@/lib/leads/branch-membership";
@@ -198,6 +199,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       .update({ assigned_to: assignedTo })
       .eq("id", id)
       .eq("tenant_id", auth.tenantId);
+    // leads.assigned_to changed → the new assignee is a collaborator (migration 090; also
+    // enforced by migration 252's trigger, kept here for environments without it). Idempotent.
+    await addLeadCollaborator(supabase, auth.tenantId, id, assignedTo);
   }
 
   const { data: branch } = await supabase

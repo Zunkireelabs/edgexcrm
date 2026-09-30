@@ -17,3 +17,15 @@ export function countSuffix(counts: FacetCounts, key: string): string {
 export function isOfferedByCount(counts: FacetCounts, key: string, forceKeep = false): boolean {
   return counts === null || forceKeep || (counts.get(key) ?? 0) > 0;
 }
+
+/**
+ * People-pickers that list EVERY candidate (never hiding zero-count people, so a name can't
+ * vanish because the active filters narrowed to nothing): order them with the biggest count
+ * first, ties/zeros alphabetical by label. Unknown counts keep the caller's order untouched.
+ */
+export function sortByCountDesc<T>(items: T[], counts: FacetCounts, keyOf: (item: T) => string, labelOf: (item: T) => string): T[] {
+  if (counts === null) return items;
+  return [...items].sort(
+    (a, b) => (counts.get(keyOf(b)) ?? 0) - (counts.get(keyOf(a)) ?? 0) || labelOf(a).localeCompare(labelOf(b)),
+  );
+}

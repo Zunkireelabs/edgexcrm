@@ -17,6 +17,7 @@ import {
 } from "@/lib/api/response";
 import { requirePermission } from "@/lib/api/integration-permissions";
 import { validate, required, isUUID } from "@/lib/api/validation";
+import { addLeadCollaborator } from "@/lib/leads/collaborators";
 import type { Lead } from "@/types/database";
 
 // POST /api/v1/integrations/crm/leads/:id/assign
@@ -93,6 +94,11 @@ export const POST = withIntegrationErrorBoundary(async function POST(
   if (error) {
     return apiServiceUnavailable("Failed to assign lead");
   }
+
+  // Assignee is a collaborator (migration 090). Migration 252's trigger now guarantees
+  // this at the DB level for every path; recording it here too keeps the picker/filter
+  // correct on environments where 252 hasn't landed yet. Idempotent.
+  await addLeadCollaborator(ctx.supabase, tenantId, id, userId);
 
   await Promise.all([
     logIntegrationAudit(ctx, "integration.lead.assigned", "lead", id, {
