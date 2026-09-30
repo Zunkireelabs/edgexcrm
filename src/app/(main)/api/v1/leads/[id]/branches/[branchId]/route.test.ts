@@ -60,7 +60,7 @@ function setupDb(overrides: Partial<Record<string, ReturnType<typeof chain>>> = 
   const tables: Record<string, ReturnType<typeof chain>> = {
     leads: chain({ data: LEAD, error: null }),
     lead_branches: chain({ data: MEMBER_ROW, error: null }),
-    tenant_users: chain({ data: { user_id: "11111111-1111-1111-1111-111111111111" }, error: null }),
+    tenant_users: chain({ data: { user_id: "11111111-1111-1111-1111-111111111111", branch_id: "branch-birgunj", role: "staff" }, error: null }),
     branches: chain({ data: { name: "Birgunj" }, error: null }),
     ...overrides,
   };
@@ -141,6 +141,38 @@ describe("PATCH /api/v1/leads/[id]/branches/[branchId]", () => {
     const { PATCH } = await import("./route");
     const res = await PATCH(fakeReq({ assigned_to: "22222222-2222-2222-2222-222222222222" }), { params: params() });
     expect(res.status).toBe(422);
+  });
+
+  it("422 when the assignee belongs to a DIFFERENT branch (and isn't an admin)", async () => {
+    setupDb({ tenant_users: chain({ data: { user_id: "22222222-2222-2222-2222-222222222222", branch_id: "branch-ktm", role: "staff" }, error: null }) });
+    const { PATCH } = await import("./route");
+    const res = await PATCH(fakeReq({ assigned_to: "22222222-2222-2222-2222-222222222222" }), { params: params() });
+    expect(res.status).toBe(422);
+  });
+
+  it("a branchless ADMIN can be assigned on a receiving branch's row (education) — the reported gap", async () => {
+    authenticateRequestMock.mockResolvedValue({ ...OWNER_AUTH, industryId: "education_consultancy" });
+    setupDb({ tenant_users: chain({ data: { user_id: "33333333-3333-3333-3333-333333333333", branch_id: null, role: "admin" }, error: null }) });
+    const { PATCH } = await import("./route");
+    const res = await PATCH(fakeReq({ assigned_to: "33333333-3333-3333-3333-333333333333" }), { params: params() });
+    expect(res.status).toBe(200);
+  });
+
+  it("the admin exemption does NOT apply outside education_consultancy", async () => {
+    authenticateRequestMock.mockResolvedValue({ ...OWNER_AUTH, industryId: "it_agency" });
+    setupDb({ tenant_users: chain({ data: { user_id: "33333333-3333-3333-3333-333333333333", branch_id: null, role: "admin" }, error: null }) });
+    const { PATCH } = await import("./route");
+    const res = await PATCH(fakeReq({ assigned_to: "33333333-3333-3333-3333-333333333333" }), { params: params() });
+    expect(res.status).toBe(422);
+  });
+
+  it("the RECEIVING branch's manager can assign an admin onto their shared-in row", async () => {
+    requireAdminMock.mockReturnValue(false);
+    authenticateRequestMock.mockResolvedValue({ ...BRANCH_MANAGER_AUTH, industryId: "education_consultancy" });
+    setupDb({ tenant_users: chain({ data: { user_id: "33333333-3333-3333-3333-333333333333", branch_id: null, role: "admin" }, error: null }) });
+    const { PATCH } = await import("./route");
+    const res = await PATCH(fakeReq({ assigned_to: "33333333-3333-3333-3333-333333333333" }), { params: params() });
+    expect(res.status).toBe(200);
   });
 
   it("clearing an assignment (assigned_to: null) skips branch-membership validation", async () => {
