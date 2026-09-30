@@ -55,6 +55,7 @@ import {
 } from "@/components/ui/popover";
 import { AddLeadSheet } from "@/components/dashboard/add-lead-sheet";
 import type { TenantEntity } from "@/types/database";
+import { countSuffix, isOfferedByCount } from "@/lib/leads/facet-labels";
 
 interface TeamMemberData {
   user_id: string;
@@ -186,10 +187,6 @@ export function KanbanBoard({
       sourceFilter, tagFilter, formFilter, createdFilter, industryFilter,
     ],
   );
-  const buildColumnParams = useCallback(
-    (statusSlug: string) => buildKanbanColumnParams(filterState, { status: statusSlug }),
-    [filterState],
-  );
 
   const columnDefs = useMemo<KanbanColumnDef[]>(
     () =>
@@ -278,96 +275,79 @@ export function KanbanBoard({
     [stages]
   );
 
-  // Server-computed Source + Collaborator facets (mode "list" only) — exact,
-  // cross-filtered over every OTHER active filter, same mechanism leads-table.tsx
-  // uses (route.ts's `facets=` param, migration 207 for collaborator). Mode "stage"
-  // has no server facet for EITHER axis: lead_aggregates() (migration 194) has no
-  // per-pipeline/per-stage scoping param, so a tenant-wide facet would be WRONG for
-  // a multi-pipeline tenant (it would count every pipeline's leads, not just the
-  // selected one) — flagged in the pipeline-column-pagination Phase 1 report as a
-  // known gap, not silently worked around here. Falls back to the loaded-cards-only
-  // approximation below instead. Requesting BOTH facets in one round-trip (rather
-  // than "source" alone) always gets route.ts's multi-facet response shape
-  // (`{facets:{source:{options},collaborator:{options}}}`) — never its legacy
-  // single-facet shape (`{facet:"source",options}`) — so the response parsing below
-  // never has to branch on which shape came back.
-  const [sourceFacet, setSourceFacet] = useState<{ name: string; count: number }[]>([]);
-  const [collaboratorFacet, setCollaboratorFacet] = useState<{ name: string; count: number }[]>([]);
+  // Server-computed Source / Assigned-To / Collaborator facets, BOTH modes. Assigned-To and
+  // Collaborator counts are the list's own query run once per person (route.ts, FACET-COUNT-
+  // CONSISTENCY), so a number beside a name is exactly the row count that name gives — under
+  // the same Stage/Status/List/pipeline scope the columns use. The old loaded-cards-only
+  // approximation (which is what made these numbers disagree with the board) is gone: a facet
+  // the server can't count comes back `null` and the option is shown WITHOUT a number.
+  //
+  // The request mirrors the columns' filter params, plus what the columns get from their
+  // identity/toolbar rather than from the params: the global Status filter (a Status filter
+  // hides every other column, so counts must too) and — for the classic board — the pipeline
+  // (its columns are stage ids; the board-level request has no single stage to name).
+  // Requesting all three in one round-trip always gets route.ts's multi-facet shape.
+  type FacetOptions = { name: string; count: number }[] | null;
+  const [sourceFacet, setSourceFacet] = useState<FacetOptions>(null);
+  const [assigneeFacet, setAssigneeFacet] = useState<FacetOptions>(null);
+  const [collaboratorFacet, setCollaboratorFacet] = useState<FacetOptions>(null);
+  // Source values are free text only the server can enumerate: keep the last list when a
+  // later response can't count them, so the picker stays usable (uncounted).
+  const [lastSourceNames, setLastSourceNames] = useState<string[]>([]);
+  const facetPipelineId = mode === "stage" ? (pipelineId ?? stages[0]?.pipeline_id) : undefined;
   useEffect(() => {
-    if (mode !== "list") return;
-    const params = buildColumnParams("__all__"); // status placeholder, stripped below
-    params.delete("status");
-    params.set("facets", "source,collaborator");
+    const params = buildKanbanColumnParams(filterState, {});
+    if (statusFilter !== "all") params.set("status", statusFilter);
+    if (facetPipelineId) params.set("pipeline", facetPipelineId);
+    params.set("facets", "source,assignee,collaborator");
     const controller = new AbortController();
     fetch(`/api/v1/leads?${params.toString()}`, { signal: controller.signal })
       .then((res) => res.json())
       .then((body: {
         data?: {
           facets?: {
-            source?: { options: { name: string; count: number }[] };
-            collaborator?: { options: { name: string; count: number }[] };
-          };
+            source?: { options: { name: string; count: number }[] } | null;
+            assignee?: { options: { name: string; count: number }[] } | null;
+            collaborator?: { options: { name: string; count: number }[] } | null;
+          } | null;
         };
       }) => {
         if (controller.signal.aborted) return;
-        setSourceFacet(body.data?.facets?.source?.options ?? []);
-        setCollaboratorFacet(body.data?.facets?.collaborator?.options ?? []);
+        const f = body.data?.facets;
+        if (!f) {
+          setSourceFacet(null);
+          setAssigneeFacet(null);
+          setCollaboratorFacet(null);
+          return;
+        }
+        // Per-facet null = "no faithful number" → keep null (uncounted), never [] (blank).
+        const pick = (v: { options: { name: string; count: number }[] } | null | undefined) =>
+          v === null || v === undefined ? null : v.options;
+        if (f.source) setLastSourceNames(f.source.options.map((o) => o.name));
+        setSourceFacet(pick(f.source));
+        setAssigneeFacet(pick(f.assignee));
+        setCollaboratorFacet(pick(f.collaborator));
       })
       .catch((err: unknown) => {
         if (controller.signal.aborted) return;
-        console.error("Failed to load source/collaborator facets", err);
+        console.error("Failed to load source/assignee/collaborator facets", err);
       });
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, listSlug, debouncedSearch, counselorFilter, collaboratorFilter, tagFilter, formFilter, createdFilter, industryFilter]);
+  }, [mode, listSlug, facetPipelineId, statusFilter, debouncedSearch, counselorFilter, sourceFilter, collaboratorFilter, tagFilter, formFilter, createdFilter, industryFilter]);
 
-  // Approximate (loaded-cards-only) Source counts — the mode "stage" fallback, and
-  // also what mode "list" would show before its facet round-trip resolves.
-  const loadedSourceCounts = useMemo(() => {
-    const m = new Map<string, number>();
-    loadedCards.forEach((l) => {
-      if (l.intake_source) m.set(l.intake_source, (m.get(l.intake_source) ?? 0) + 1);
-    });
-    return m;
-  }, [loadedCards]);
-
-  const sourceOptions = useMemo(
-    () =>
-      mode === "list"
-        ? sourceFacet
-        : Array.from(loadedSourceCounts.entries())
-            .map(([name, count]) => ({ name, count }))
-            .sort((a, b) => b.count - a.count),
-    [mode, sourceFacet, loadedSourceCounts],
+  const sourceOptions = useMemo<{ name: string; count: number | null }[]>(
+    () => (sourceFacet ?? lastSourceNames.map((name) => ({ name, count: null }))),
+    [sourceFacet, lastSourceNames],
   );
-
-  // Exact, tenant-wide Collaborator counts (mode "list" only) — a Map keyed by
-  // user_id, same shape leads-table.tsx builds from its own server facet.
-  const collaboratorFacetMap = useMemo(
-    () => new Map(collaboratorFacet.map((o) => [o.name, o.count])),
+  const assigneeCounts = useMemo<Map<string, number> | null>(
+    () => (assigneeFacet ? new Map(assigneeFacet.map((o) => [o.name, o.count])) : null),
+    [assigneeFacet],
+  );
+  const collaboratorCounts = useMemo<Map<string, number> | null>(
+    () => (collaboratorFacet ? new Map(collaboratorFacet.map((o) => [o.name, o.count])) : null),
     [collaboratorFacet],
   );
-
-  // Per-counselor / per-collaborator counts — approximate (loaded cards only, see
-  // loadedCards comment above).
-  const counselorCounts = useMemo(() => {
-    const m = new Map<string, number>();
-    loadedCards.forEach((l) => {
-      const key = l.assigned_to ?? "unassigned";
-      m.set(key, (m.get(key) ?? 0) + 1);
-    });
-    return m;
-  }, [loadedCards]);
-
-  const collaboratorCounts = useMemo(() => {
-    const m = new Map<string, number>();
-    loadedCards.forEach((l) => {
-      (leadCollaborators[l.id] ?? []).forEach((u) => {
-        m.set(u, (m.get(u) ?? 0) + 1);
-      });
-    });
-    return m;
-  }, [loadedCards, leadCollaborators]);
 
   const clearFilters = () => {
     setSearchQuery("");
@@ -619,7 +599,7 @@ export function KanbanBoard({
             onChange: setSourceFilter,
             options: sourceOptions.map((s) => ({
               value: s.name,
-              label: `${s.name} (${s.count.toLocaleString()})`,
+              label: s.count === null ? s.name : `${s.name} (${s.count.toLocaleString()})`,
               description: `Leads from ${s.name}`,
             })),
           } satisfies FilterDef,
@@ -635,11 +615,11 @@ export function KanbanBoard({
             value: counselorFilter,
             onChange: setCounselorFilter,
             options: [
-              ...((counselorCounts.get("unassigned") ?? 0) > 0
+              ...(isOfferedByCount(assigneeCounts, "unassigned", counselorFilter.includes("unassigned"))
                 ? [
                     {
                       value: "unassigned",
-                      label: `Unassigned (${(counselorCounts.get("unassigned") ?? 0).toLocaleString()})`,
+                      label: `Unassigned${countSuffix(assigneeCounts, "unassigned")}`,
                       description: "Leads not assigned yet",
                     },
                   ]
@@ -647,7 +627,7 @@ export function KanbanBoard({
               ...counselors
                 .map(([uid, email]) => ({
                   value: uid,
-                  label: memberNames[uid] || email.split("@")[0],
+                  label: `${memberNames[uid] || email.split("@")[0]}${countSuffix(assigneeCounts, uid)}`,
                   description: email,
                 })),
             ],
@@ -665,37 +645,16 @@ export function KanbanBoard({
             onChange: setCollaboratorFilter,
             // Listed regardless of role — an owner/admin who is genuinely a
             // collaborator on some leads must be filterable here too (matches the
-            // /leads Collaborators filter).
-            //
-            // mode "list" has an exact, tenant-wide count (collaboratorFacetMap,
-            // migration 207 via the facets= round-trip above) — same data source the
-            // Leads page uses — so it's safe to apply the same ">0 or currently
-            // selected" gate the Leads page applies, hiding people with zero
-            // collaborator leads instead of listing everyone.
-            //
-            // mode "stage" has no such facet (see the facet effect's comment above)
-            // — counts stay loaded-cards-only and EVERY team member is still listed
-            // (no >0 gate), because hiding on an approximate count would incorrectly
-            // hide a real collaborator whose leads simply aren't loaded on screen.
-            options:
-              mode === "list"
-                ? counselors
-                    .filter(
-                      ([uid]) =>
-                        (collaboratorFacetMap.get(uid) ?? 0) > 0 || collaboratorFilter.includes(uid)
-                    )
-                    .map(([uid, email]) => ({
-                      value: uid,
-                      label: `${memberNames[uid] || email.split("@")[0]} (${(collaboratorFacetMap.get(uid) ?? 0).toLocaleString()})`,
-                      description: email,
-                    }))
-                : counselors.map(([uid, email]) => ({
-                    value: uid,
-                    label: (collaboratorCounts.get(uid) ?? 0) > 0
-                      ? `${memberNames[uid] || email.split("@")[0]} (${(collaboratorCounts.get(uid) ?? 0).toLocaleString()})`
-                      : memberNames[uid] || email.split("@")[0],
-                    description: email,
-                  })),
+            // /leads Collaborators filter). Counts are exact (see the facet effect
+            // above); people with zero collaborator leads are hidden unless currently
+            // selected, and when the server can't count, everyone is listed uncounted.
+            options: counselors
+              .filter(([uid]) => isOfferedByCount(collaboratorCounts, uid, collaboratorFilter.includes(uid)))
+              .map(([uid, email]) => ({
+                value: uid,
+                label: `${memberNames[uid] || email.split("@")[0]}${countSuffix(collaboratorCounts, uid)}`,
+                description: email,
+              })),
           } satisfies FilterDef,
         ]
       : []),

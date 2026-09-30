@@ -35,7 +35,9 @@ import { branchMemberIds, syncOriginMembership } from "@/lib/leads/branch-member
 import { POSITION_ROUTE_MAP } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
 import { addLeadCollaborator } from "@/lib/leads/collaborators";
 import { visibleLeadsBase } from "@/lib/leads/visibility-query";
-import { getSourceFacet, getAssigneeFacet, getCollaboratorFacet, getDestinationFacet } from "@/lib/leads/aggregates";
+import { getSourceFacet, getDestinationFacet } from "@/lib/leads/aggregates";
+import { countFacetOptions, type FacetOption } from "@/lib/leads/facet-counts";
+import { treeForFacetOption } from "@/lib/filters/facet-tree";
 import { compileFilter, planFilter } from "@/lib/filters/compile";
 import { decodeFilterTree, FILTER_PARAM } from "@/lib/filters/serialize";
 import { legacyLeadsParamsToTree } from "@/lib/filters/legacy-leads-params";
@@ -182,6 +184,10 @@ export async function GET(request: NextRequest) {
   // toolbar filter — it never enters the filter tree.
   const stageFilterRaw = searchParams.get("stage");
   const stageFilter = stageFilterRaw && UUID_RE.test(stageFilterRaw) ? stageFilterRaw : null;
+  // Board-level pipeline scope (classic Kanban's facets have no single stage to name) —
+  // SCOPE like `stage`, UUID-guarded the same way, never part of the filter tree.
+  const pipelineScopeRaw = searchParams.get("pipeline");
+  const pipelineScope = pipelineScopeRaw && UUID_RE.test(pipelineScopeRaw) ? pipelineScopeRaw : null;
   const tagFilter = searchParams.get("tag");
   const createdFilter = searchParams.get("created"); // today | week | month
   const industryFilter = searchParams.get("industry"); // prospect_industry value, or "__none__"
@@ -428,10 +434,30 @@ export async function GET(request: NextRequest) {
   // count, in one place. execOpts carries only the count/head shape (see the two call
   // sites below); every predicate this builds is otherwise identical either way, so a
   // split count call can never drift from the data it's counting.
-  const buildScopedQuery = (execOpts: { count?: "exact"; head?: boolean }) => {
+  //
+  // `variant` is how facet counts stay identical to the list (see facet-tree.ts): a facet
+  // option's count is THIS builder run with head:true over the list's own tree, own axis
+  // swapped for the option — so a count and the rows it promises are the same query.
+  // Only the tree (and the select needed for its embeds) may differ; every scope
+  // predicate below is shared, never re-implemented.
+  const buildScopedQuery = (
+    execOpts: { count?: "exact"; head?: boolean },
+    variant?: { tree: FilterTree },
+  ) => {
+    const tree = variant?.tree ?? filterTree;
+    let cols = selectColumns;
+    if (variant) {
+      const variantPlan = planFilter(variant.tree, filterRegistry, compileCtx);
+      // The variant is the already-validated list tree plus one registry-valid condition,
+      // so this can't fail in practice — throw (→ 503 via the facets try/catch) rather
+      // than ever count with a filter silently dropped.
+      if (!variantPlan.ok) throw new Error(`facet tree failed to plan: ${JSON.stringify(variantPlan.errors)}`);
+      // A head:true count never reads rows, so select only what the embeds need.
+      cols = ["id", ...variantPlan.embeds].join(",");
+    }
     let q = useVisibilityRpc
-      ? visibleLeadsBase({ user: userClient, service: supabase }, auth.tenantId, scope, execOpts).select(selectColumns)
-      : supabase.from("leads").select(selectColumns, execOpts).eq("tenant_id", auth.tenantId);
+      ? visibleLeadsBase({ user: userClient, service: supabase }, auth.tenantId, scope, execOpts).select(cols)
+      : supabase.from("leads").select(cols, execOpts).eq("tenant_id", auth.tenantId);
 
     q = onlyDeleted ? q.not("deleted_at", "is", null) : q.is("deleted_at", null);
 
@@ -476,6 +502,10 @@ export async function GET(request: NextRequest) {
       q = q.eq("stage_id", stageFilter);
     }
 
+    if (pipelineScope) {
+      q = q.eq("pipeline_id", pipelineScope);
+    }
+
     // ADVANCED-FILTERS-BRIEF Phase 2: every toolbar filter that used to be a
     // hand-written .eq/.in/.or/.contains/.gte chain here (status, search, form,
     // assignees, collaborators, source, tag, industry, created) now compiles
@@ -486,7 +516,7 @@ export async function GET(request: NextRequest) {
     // of which branch (visibleLeadsBase RPC vs plain service query) built it.
     // `stage`/`list`/`funnel`/branch/pipeline/shared-pool SCOPE filters above
     // and below this call are deliberately untouched.
-    return compileFilter(q, filterTree, filterRegistry, compileCtx);
+    return compileFilter(q, tree, filterRegistry, compileCtx);
   };
 
   const DAY_MS = 24 * 60 * 60 * 1000;
@@ -502,11 +532,14 @@ export async function GET(request: NextRequest) {
   // excluded from lead_aggregates unconditionally, so no facet is offered there — a
   // known, narrow gap (the recycle bin has no source/assignee dropdown today).
   //
-  // KNOWN GAP (pipeline-column-pagination Phase 1): lead_aggregates() (migration 194)
-  // has no `p_stage_eq` param, so a `?stage=` filter is NOT mirrored into these facets
-  // the way `status`/`list`/etc. are below. A caller combining `stage` with `facets=`
-  // gets facets computed WITHOUT the stage restriction — flagged, not silently fixed;
-  // closing it needs a migration (out of this PR's additive-only-locally scope).
+  // FACET-COUNT-CONSISTENCY (supersedes the old "KNOWN GAP" note here): `assignee` and
+  // `collaborator` are no longer computed by lead_aggregates() at all — they are counted
+  // with buildScopedQuery() itself (below), so stage/pipeline/branch/list scope and every
+  // filter shape are honored by construction. `source` and `destination` still use
+  // lead_aggregates() (free-text option sets can't be enumerated one-count-each), which has
+  // no stage/pipeline param — so for those two, a `?stage=` (or an un-translatable ?f=
+  // tree) yields `null` = "no number", never a count that silently ignores the stage.
+  // The proper fix for those two is a migration (separate brief).
   //
   // ?facets=source ALONE keeps the exact pre-existing single-dimension response shape
   // (`{facet:"source", options}`) byte-for-byte — KanbanBoard.tsx (Phase 4 territory,
@@ -527,20 +560,33 @@ export async function GET(request: NextRequest) {
     // gate for that. Any tree it can't express (OR groups, `contains`, unknown
     // fields/ops, …) keeps Phase 2's original counts:null behavior: passing a PARTIAL
     // translation would produce subtly WRONG counts, which is worse than none.
+    //
+    // FACET-COUNT-CONSISTENCY: that gate now only guards the two free-text facets that
+    // still ride lead_aggregates() (source, destination — their option sets are open-ended,
+    // so they can't be enumerated one-count-per-option). Assignee + collaborator no longer
+    // depend on it: they are counted with the list's own query below and are exact for ANY
+    // tree that can be faceted at all. When an aggregate-backed facet can't be answered
+    // faithfully it comes back as `null` (= "no number", never a wrong or page-scoped one).
     let aggParams: LeadAggregateFilterParams | null = null;
+    let aggregateFacetsAvailable = true;
     if (rawFilterParam !== null) {
       const translated = treeToAggregateParams(filterTree, filterRegistry, compileCtx.now);
       if (!translated.ok) {
         log.info(
           { tenantId: auth.tenantId, reason: translated.reason },
-          "facet counts skipped: ?f= tree not expressible in lead_aggregates()"
+          "source/destination facet counts skipped: ?f= tree not expressible in lead_aggregates()"
         );
-        return legacySingleSourceFacet
-          ? apiSuccess({ facet: "source", options: [], counts: null })
-          : apiSuccess({ facets: null, counts: null });
+        aggregateFacetsAvailable = false;
+      } else {
+        aggParams = translated.params;
       }
-      aggParams = translated.params;
     }
+    // lead_aggregates() has no stage/pipeline-scope param, so a `?stage=` (or a pipeline
+    // scope the caller may not access) can't be mirrored into source/destination counts.
+    if (stageFilter) aggregateFacetsAvailable = false;
+    const pipelineAccessIds = auth.permissions.pipelineAccess !== "all" ? [...auth.permissions.pipelineAccess.ids] : null;
+    if (pipelineScope && pipelineAccessIds && !pipelineAccessIds.includes(pipelineScope)) aggregateFacetsAvailable = false;
+    const aggregatePipelineIds = pipelineScope && aggregateFacetsAvailable ? [pipelineScope] : pipelineAccessIds;
 
     // Match route.ts's `.in("pipeline_id", [])` semantics exactly: an empty allowlist
     // means the page returns zero leads, so every requested facet must be empty too.
@@ -596,7 +642,7 @@ export async function GET(request: NextRequest) {
       crossPoolSlug: scope.crossBranchPoolListSlug,
       branchId: facetScope === "branch" ? scope.branchId : null,
       sharedPoolAssignedToAny,
-      pipelineIds: auth.permissions.pipelineAccess !== "all" ? [...auth.permissions.pipelineAccess.ids] : null,
+      pipelineIds: aggregatePipelineIds,
       status: effectiveStatus,
       collaboratorIds: effectiveCollaboratorIds,
       tag: effectiveTag,
@@ -619,38 +665,67 @@ export async function GET(request: NextRequest) {
       includeConverted,
     };
 
-    let sourceOptions: Awaited<ReturnType<typeof getSourceFacet>> | undefined;
-    let assigneeOptions: Awaited<ReturnType<typeof getAssigneeFacet>> | undefined;
-    let collaboratorOptions: Awaited<ReturnType<typeof getCollaboratorFacet>> | undefined;
-    let destinationOptions: Awaited<ReturnType<typeof getDestinationFacet>> | undefined;
+    // Facets that are `null` in the response are "no number available" — the UI must show
+    // the option without a count, never fall back to counting the loaded page.
+    let sourceOptions: Awaited<ReturnType<typeof getSourceFacet>> | null | undefined;
+    let assigneeOptions: FacetOption[] | null | undefined;
+    let collaboratorOptions: FacetOption[] | null | undefined;
+    let destinationOptions: Awaited<ReturnType<typeof getDestinationFacet>> | null | undefined;
     try {
       if (requestedFacets.includes("source")) {
         // Source facet: cross-filtered by the current assignee selection (there's no
         // "source" axis to exclude — it has no p_source param at all).
-        sourceOptions = await getSourceFacet({
-          ...baseFacetParams,
-          assigneesAny: effectiveAssigneesAny,
-          includeUnassigned: effectiveIncludeUnassigned,
-        });
-      }
-      if (requestedFacets.includes("assignee")) {
-        // Assignee facet: MUST NOT apply the assignees filter to itself (same
-        // "every filter except the one being faceted" rule source already follows) —
-        // assigneesAny/includeUnassigned are deliberately omitted here.
-        assigneeOptions = await getAssigneeFacet(baseFacetParams);
-      }
-      if (requestedFacets.includes("collaborator")) {
-        // Collaborator facet (migration 207): MUST NOT apply the collaborator filter
-        // to itself — same rule as assignee above. collaboratorIds is deliberately
-        // omitted here even though baseFacetParams carries it for source/assignee.
-        collaboratorOptions = await getCollaboratorFacet({ ...baseFacetParams, collaboratorIds: null });
+        sourceOptions = aggregateFacetsAvailable
+          ? await getSourceFacet({
+              ...baseFacetParams,
+              assigneesAny: effectiveAssigneesAny,
+              includeUnassigned: effectiveIncludeUnassigned,
+            })
+          : null;
       }
       if (requestedFacets.includes("destination")) {
         // Destination facet (migration 208): cross-filtered by every other active
         // axis via baseFacetParams, same as source — there is no p_destination self-
         // filter param on the RPC (this axis has no way to filter the base query yet,
         // matching source's own precedent), so nothing needs to be omitted here.
-        destinationOptions = await getDestinationFacet(baseFacetParams);
+        destinationOptions = aggregateFacetsAvailable ? await getDestinationFacet(baseFacetParams) : null;
+      }
+
+      // Assignee + collaborator: counted with the list's OWN query (buildScopedQuery),
+      // one head:true count per candidate person, own axis swapped for that person and
+      // every other filter/scope/stage/pipeline predicate shared with the page — so the
+      // number beside a name is, by construction, the row count that name will give.
+      // (Replaces lead_aggregates()'s `counselor` / `collaborator` dimensions here.)
+      const wantsAssignee = requestedFacets.includes("assignee");
+      const wantsCollaborator = requestedFacets.includes("collaborator");
+      if (wantsAssignee || wantsCollaborator) {
+        const { data: memberRows, error: memberErr } = await supabase
+          .from("tenant_users")
+          .select("user_id")
+          .eq("tenant_id", auth.tenantId);
+        if (memberErr) throw new Error(`facet candidates failed: ${memberErr.message}`);
+        const memberIds = (memberRows ?? []).map((m) => m.user_id as string);
+
+        const countAxis = async (field: "assignees" | "collaborators", candidates: string[]): Promise<FacetOption[] | null> => {
+          // A tree that can't be faceted faithfully (top-level OR) → "no number".
+          if (!treeForFacetOption(filterTree, field, candidates[0] ?? "probe")) return null;
+          const started = Date.now();
+          const options = await countFacetOptions(candidates, (candidate) =>
+            // COUNT-SPLIT rule: always a head-only count, never count:"exact" + data.
+            buildScopedQuery(
+              { head: true, count: "exact" },
+              { tree: treeForFacetOption(filterTree, field, candidate)! },
+            ),
+          );
+          log.info(
+            { tenantId: auth.tenantId, axis: field, queries: candidates.length, ms: Date.now() - started },
+            "Facet counted from list query"
+          );
+          return options;
+        };
+
+        if (wantsAssignee) assigneeOptions = await countAxis("assignees", [...memberIds, "unassigned"]);
+        if (wantsCollaborator) collaboratorOptions = await countAxis("collaborators", memberIds);
       }
     } catch (err) {
       log.error({ err }, "Failed to fetch lead facets");
@@ -659,16 +734,20 @@ export async function GET(request: NextRequest) {
 
     if (legacySingleSourceFacet) {
       log.info({ tenantId: auth.tenantId, options: sourceOptions?.length ?? 0 }, "Source facet fetched");
-      return apiSuccess({ facet: "source", options: sourceOptions ?? [] });
+      return sourceOptions === null
+        ? apiSuccess({ facet: "source", options: [], counts: null })
+        : apiSuccess({ facet: "source", options: sourceOptions ?? [] });
     }
 
     log.info({ tenantId: auth.tenantId, facets: requestedFacets }, "Lead facets fetched");
+    const facetEntry = <T,>(options: T[] | null | undefined) =>
+      options === undefined ? undefined : options === null ? null : { options };
     return apiSuccess({
       facets: {
-        ...(sourceOptions ? { source: { options: sourceOptions } } : {}),
-        ...(assigneeOptions ? { assignee: { options: assigneeOptions } } : {}),
-        ...(collaboratorOptions ? { collaborator: { options: collaboratorOptions } } : {}),
-        ...(destinationOptions ? { destination: { options: destinationOptions } } : {}),
+        ...(sourceOptions !== undefined ? { source: facetEntry(sourceOptions) } : {}),
+        ...(assigneeOptions !== undefined ? { assignee: facetEntry(assigneeOptions) } : {}),
+        ...(collaboratorOptions !== undefined ? { collaborator: facetEntry(collaboratorOptions) } : {}),
+        ...(destinationOptions !== undefined ? { destination: facetEntry(destinationOptions) } : {}),
       },
     });
   }
