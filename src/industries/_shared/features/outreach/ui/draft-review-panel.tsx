@@ -24,6 +24,8 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { TipTapEditor } from "@/industries/_shared/features/email/components/tiptap-editor";
+import { HtmlSourceEditor } from "@/industries/_shared/features/email/components/html-source-editor";
+import { detectBodyMode, type StepBodyMode } from "../lib/body-format";
 import type { Draft } from "./today-worklist";
 
 interface DraftReviewPanelProps {
@@ -61,12 +63,17 @@ export function DraftReviewPanel({ draft, isAdmin, onOpenChange, onSent, onSkipp
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
   const [templateSubject, setTemplateSubject] = useState("");
   const [templateBody, setTemplateBody] = useState("");
+  // Designed-HTML drafts (from an HTML-mode step) must not go through TipTap, which would
+  // strip the design on edit. Mode is fixed when the draft / template dialog loads.
+  const [bodyMode, setBodyMode] = useState<StepBodyMode>("rich");
+  const [templateMode, setTemplateMode] = useState<StepBodyMode>("rich");
   const [savingTemplate, setSavingTemplate] = useState(false);
 
   useEffect(() => {
     if (draft) {
       setSubject(draft.subject);
       setBodyHtml(draft.body_html);
+      setBodyMode(detectBodyMode(draft.body_html));
       setDirty(false);
     }
   }, [draft]);
@@ -184,6 +191,7 @@ export function DraftReviewPanel({ draft, isAdmin, onOpenChange, onSent, onSkipp
   const openSaveAsTemplate = () => {
     setTemplateSubject(subject);
     setTemplateBody(bodyHtml);
+    setTemplateMode(detectBodyMode(bodyHtml));
     setSaveTemplateOpen(true);
   };
 
@@ -257,14 +265,29 @@ export function DraftReviewPanel({ draft, isAdmin, onOpenChange, onSent, onSkipp
 
           <div className="space-y-1.5">
             <Label>Body</Label>
-            <TipTapEditor
-              value={bodyHtml}
-              onChange={(html) => {
-                setBodyHtml(html);
-                setDirty(true);
-              }}
-              minHeight={220}
-            />
+            {bodyMode === "html" ? (
+              <HtmlSourceEditor
+                value={bodyHtml}
+                onChange={(html) => {
+                  setBodyHtml(html);
+                  setDirty(true);
+                }}
+                format="html"
+                onFormatChange={() => {}}
+                showFormatToggle={false}
+                hideTestEmailHint
+                minHeight={220}
+              />
+            ) : (
+              <TipTapEditor
+                value={bodyHtml}
+                onChange={(html) => {
+                  setBodyHtml(html);
+                  setDirty(true);
+                }}
+                minHeight={220}
+              />
+            )}
           </div>
 
           <div className="flex flex-wrap gap-2">
@@ -323,7 +346,19 @@ export function DraftReviewPanel({ draft, isAdmin, onOpenChange, onSent, onSkipp
             </div>
             <div className="space-y-1.5">
               <Label>Body template</Label>
-              <TipTapEditor value={templateBody} onChange={setTemplateBody} minHeight={200} />
+              {templateMode === "html" ? (
+                <HtmlSourceEditor
+                  value={templateBody}
+                  onChange={setTemplateBody}
+                  format="html"
+                  onFormatChange={() => {}}
+                  showFormatToggle={false}
+                  hideTestEmailHint
+                  minHeight={200}
+                />
+              ) : (
+                <TipTapEditor value={templateBody} onChange={setTemplateBody} minHeight={200} />
+              )}
             </div>
           </div>
 

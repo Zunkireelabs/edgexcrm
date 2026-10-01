@@ -5,12 +5,21 @@
 
 export type StepBodyMode = "rich" | "html";
 
-// Markup TipTap's StarterKit can't round-trip. Plain TipTap output (p, strong, em, a, ul/ol/li,
-// br, h1-h6, blockquote, code/pre, hr) never contains any of these.
-const DESIGNED_HTML = /<\s*(html|head|body|style|table|img|div|span|center|font|section|td|tr)\b|\sstyle\s*=/i;
+// What TipTap's StarterKit + Link can round-trip. A body that uses any other tag, an HTML
+// comment / doctype (Outlook conditional comments), or presentational attributes is a
+// designed email and must open in HTML mode.
+const TIPTAP_TAGS = new Set([
+  "p", "br", "strong", "b", "em", "i", "s", "a", "ul", "ol", "li",
+  "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "code", "pre", "hr",
+]);
+const PRESENTATIONAL_ATTR = /\s(style|align|width|height|bgcolor|background|border|cellpadding|cellspacing|valign|color|face|size)\s*=/i;
 
 export function detectBodyMode(html: string): StepBodyMode {
-  return DESIGNED_HTML.test(html) ? "html" : "rich";
+  if (/<!/.test(html) || PRESENTATIONAL_ATTR.test(html)) return "html";
+  for (const m of html.matchAll(/<\/?\s*([a-zA-Z][\w:-]*)/g)) {
+    if (!TIPTAP_TAGS.has(m[1].toLowerCase())) return "html";
+  }
+  return "rich";
 }
 
 const SAMPLE_VALUES: Record<string, string> = {
