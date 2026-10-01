@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Plus, Trash2, ChevronUp, ChevronDown, Loader2, Eye } from "lucide-react";
+import { Plus, Trash2, ChevronUp, ChevronDown, Loader2, Eye, Monitor, Smartphone } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -25,11 +25,15 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { TipTapEditor, type TipTapEditorHandle } from "@/industries/_shared/features/email/components/tiptap-editor";
 import { HtmlSourceEditor, type HtmlSourceEditorHandle } from "@/industries/_shared/features/email/components/html-source-editor";
 import type { Sequence } from "../hooks/use-sequences";
 import { detectBodyMode, fillSampleMergeTags, type StepBodyMode } from "../lib/body-format";
+
+// Same height for the editor and the inline preview in both modes, so switching never makes the box jump.
+const BODY_HEIGHT = 420;
 
 const MERGE_TAGS = ["first_name", "last_name", "email", "phone", "city", "country", "tenant_name"];
 
@@ -88,6 +92,7 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
   const [steps, setSteps] = useState<StepDraft[]>([]);
   const [saving, setSaving] = useState(false);
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+  const [previewDevice, setPreviewDevice] = useState<"desktop" | "mobile">("desktop");
   const [pendingRichIndex, setPendingRichIndex] = useState<number | null>(null);
   const [lastFocused, setLastFocused] = useState<{ index: number; field: "subject" | "body" } | null>(null);
 
@@ -142,6 +147,12 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
     }
     updateStep(index, { mode });
   };
+
+  const fullPreviewButton = (index: number) => (
+    <Button type="button" variant="outline" size="sm" className="h-8 px-3 text-xs" onClick={() => setPreviewIndex(index)}>
+      <Eye className="h-3.5 w-3.5 mr-1.5" /> Full preview
+    </Button>
+  );
 
   const insertToken = (token: string) => {
     if (!lastFocused) {
@@ -226,7 +237,7 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
+      <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>{isEdit ? "Edit sequence" : "New sequence"}</DialogTitle>
         </DialogHeader>
@@ -355,23 +366,53 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
                             </button>
                           ))}
                         </div>
-                        {step.mode === "rich" && (
-                          <Button type="button" variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setPreviewIndex(index)}>
-                            <Eye className="h-3 w-3 mr-1" /> Preview
-                          </Button>
-                        )}
                       </div>
                     </div>
                     {step.mode === "rich" ? (
-                      <TipTapEditor
-                        key={`${step.key}-rich`}
-                        ref={(el) => {
-                          bodyRefs.current[index] = el;
-                        }}
-                        value={step.body_template}
-                        onChange={(html) => updateStep(index, { body_template: html })}
-                        minHeight={140}
-                      />
+                      <Tabs defaultValue="edit" className="gap-2" key={`${step.key}-rich`}>
+                        <div className="flex items-center justify-between gap-2">
+                          <TabsList className="h-8">
+                            <TabsTrigger value="edit" className="text-xs">
+                              Edit
+                            </TabsTrigger>
+                            <TabsTrigger value="preview" className="text-xs">
+                              Preview
+                            </TabsTrigger>
+                          </TabsList>
+                          {fullPreviewButton(index)}
+                        </div>
+                        {/* forceMount keeps the editor (and its insertText ref) alive while Preview is showing. */}
+                        <TabsContent value="edit" className="mt-0 data-[state=inactive]:hidden" forceMount>
+                          <TipTapEditor
+                            ref={(el) => {
+                              bodyRefs.current[index] = el;
+                            }}
+                            value={step.body_template}
+                            onChange={(html) => updateStep(index, { body_template: html })}
+                            minHeight={BODY_HEIGHT}
+                          />
+                        </TabsContent>
+                        <TabsContent value="preview" className="mt-0 data-[state=inactive]:hidden" forceMount>
+                          <div className="border border-input rounded-md overflow-hidden bg-white" style={{ minHeight: BODY_HEIGHT }}>
+                            {step.body_template ? (
+                              <iframe
+                                sandbox=""
+                                srcDoc={fillSampleMergeTags(step.body_template)}
+                                title="Email preview"
+                                className="w-full border-0"
+                                style={{ height: BODY_HEIGHT }}
+                              />
+                            ) : (
+                              <div className="flex items-center justify-center text-sm text-muted-foreground" style={{ minHeight: BODY_HEIGHT }}>
+                                Nothing to preview yet
+                              </div>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1.5">
+                            Sample data (Jane Doe). Structural preview only — real inboxes may render some CSS differently.
+                          </p>
+                        </TabsContent>
+                      </Tabs>
                     ) : (
                       <HtmlSourceEditor
                         key={`${step.key}-html`}
@@ -383,8 +424,11 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
                         format="html"
                         onFormatChange={() => {}}
                         showFormatToggle={false}
-                        minHeight={220}
-                        placeholder="Paste or write the email HTML here — merge tags like {{first_name}} work."
+                        minHeight={BODY_HEIGHT}
+                        previewHeight={BODY_HEIGHT}
+                        codeTools
+                        tabsExtra={fullPreviewButton(index)}
+                        placeholder="Paste or write the email HTML here, or drop a .html file — merge tags like {{first_name}} work."
                         previewTransform={fillSampleMergeTags}
                         hideTestEmailHint
                       />
@@ -438,21 +482,48 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
       </DialogContent>
 
       <Dialog open={previewIndex !== null} onOpenChange={(o) => !o && setPreviewIndex(null)}>
-        <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="flex h-[92vh] w-[96vw] max-w-none flex-col gap-3 sm:max-w-6xl">
           <DialogHeader>
-            <DialogTitle>Preview — Step {(previewIndex ?? 0) + 1}</DialogTitle>
+            <div className="flex items-center justify-between gap-3 pr-8">
+              <DialogTitle>Full preview — Step {(previewIndex ?? 0) + 1}</DialogTitle>
+              <div className="inline-flex rounded-md border p-0.5" role="group" aria-label="Preview width">
+                {(
+                  [
+                    ["desktop", "Desktop", Monitor],
+                    ["mobile", "Mobile", Smartphone],
+                  ] as const
+                ).map(([key, label, Icon]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    aria-pressed={previewDevice === key}
+                    onClick={() => setPreviewDevice(key)}
+                    className={`flex items-center gap-1 px-2 py-0.5 text-xs rounded transition-colors ${
+                      previewDevice === key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
+                    }`}
+                  >
+                    <Icon className="h-3 w-3" /> {label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </DialogHeader>
           {previewIndex !== null && steps[previewIndex] && (
-            <div className="space-y-2">
+            <div className="flex min-h-0 flex-1 flex-col gap-2">
               <p className="text-sm font-medium break-words">
+                <span className="text-muted-foreground font-normal">Subject: </span>
                 {fillSampleMergeTags(steps[previewIndex].subject_template) || "—"}
               </p>
-              <div className="rounded border bg-white">
+              <div className="min-h-0 flex-1 rounded-lg border bg-neutral-100 p-4 dark:bg-neutral-900">
                 <iframe
                   sandbox=""
                   srcDoc={fillSampleMergeTags(steps[previewIndex].body_template)}
                   title="Email preview"
-                  className="h-80 w-full border-0"
+                  className={`mx-auto block h-full w-full bg-white shadow-md ${
+                    previewDevice === "mobile"
+                      ? "max-w-[390px] rounded-2xl border-4 border-neutral-800"
+                      : "max-w-[760px] rounded border"
+                  }`}
                 />
               </div>
               <p className="text-xs text-muted-foreground">
