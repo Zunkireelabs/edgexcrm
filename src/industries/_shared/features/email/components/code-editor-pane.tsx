@@ -47,6 +47,7 @@ export function CodeEditorPane({ value, onChange, textareaRef, minHeight, placeh
 
   const matches = useMemo(() => findMatches(value, query), [value, query]);
   const total = lineCount(value);
+  const shownIdx = matches.length ? Math.min(activeIdx, matches.length - 1) : 0;
 
   const scrollToLine = (line: number) => {
     const el = textareaRef.current;
@@ -116,7 +117,13 @@ export function CodeEditorPane({ value, onChange, textareaRef, minHeight, placeh
       toast.error(problem);
       return;
     }
-    const text = await file.text();
+    let text: string;
+    try {
+      text = await file.text();
+    } catch {
+      toast.error("Couldn't read that file");
+      return;
+    }
     if (value.trim()) setPendingFile(text);
     else applyFile(text);
   };
@@ -161,7 +168,7 @@ export function CodeEditorPane({ value, onChange, textareaRef, minHeight, placeh
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
-                jumpToMatch(activeIdx + (e.shiftKey ? -1 : 1));
+                jumpToMatch(shownIdx + (e.shiftKey ? -1 : 1));
               } else if (e.key === "Escape") {
                 e.preventDefault();
                 closeFind();
@@ -172,12 +179,12 @@ export function CodeEditorPane({ value, onChange, textareaRef, minHeight, placeh
             aria-label="Find in code"
           />
           <span className="min-w-16 text-xs tabular-nums text-muted-foreground">
-            {query ? (matches.length ? `${activeIdx + 1} of ${matches.length}` : "No matches") : ""}
+            {query ? (matches.length ? `${shownIdx + 1} of ${matches.length}` : "No matches") : ""}
           </span>
-          <Button type="button" variant="ghost" size="icon" className="h-7 w-7" disabled={!matches.length} onClick={() => jumpToMatch(activeIdx - 1)} aria-label="Previous match">
+          <Button type="button" variant="ghost" size="icon" className="h-7 w-7" disabled={!matches.length} onClick={() => jumpToMatch(shownIdx - 1)} aria-label="Previous match">
             <ChevronUp className="h-3.5 w-3.5" />
           </Button>
-          <Button type="button" variant="ghost" size="icon" className="h-7 w-7" disabled={!matches.length} onClick={() => jumpToMatch(activeIdx + 1)} aria-label="Next match">
+          <Button type="button" variant="ghost" size="icon" className="h-7 w-7" disabled={!matches.length} onClick={() => jumpToMatch(shownIdx + 1)} aria-label="Next match">
             <ChevronDown className="h-3.5 w-3.5" />
           </Button>
           <Input
@@ -212,12 +219,13 @@ export function CodeEditorPane({ value, onChange, textareaRef, minHeight, placeh
         // would let the box grow to fit every line and the textarea would never scroll internally.
         style={{ height: minHeight, minHeight: 160 }}
         onDragOver={(e) => {
-          if (disabled) return;
+          if (disabled || !e.dataTransfer.types.includes("Files")) return;
           e.preventDefault();
           setDragging(true);
         }}
         onDragLeave={() => setDragging(false)}
         onDrop={(e) => {
+          if (!e.dataTransfer.types.includes("Files")) return;
           e.preventDefault();
           setDragging(false);
           void handleFile(e.dataTransfer.files?.[0]);
@@ -248,7 +256,10 @@ export function CodeEditorPane({ value, onChange, textareaRef, minHeight, placeh
           <textarea
             ref={textareaRef}
             value={value}
-            onChange={(e) => onChange(e.target.value)}
+            onChange={(e) => {
+              setHighlightLine(null);
+              onChange(e.target.value);
+            }}
             onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
             onKeyDown={(e) => {
               if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f") {
