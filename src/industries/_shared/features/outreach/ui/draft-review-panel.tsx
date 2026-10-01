@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Copy, Loader2, SkipForward, Send, Sparkles, BookmarkPlus } from "lucide-react";
+import { Copy, Loader2, SkipForward, Send, Sparkles, BookmarkPlus, Mail } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -37,6 +37,14 @@ interface DraftReviewPanelProps {
   onUpdated: (draft: Draft) => void;
 }
 
+interface SendCapability {
+  enabled: boolean;
+  sandbox: boolean;
+  from: string | null;
+  replyTo: string | null;
+  usingPlatformAddress: boolean;
+}
+
 interface SequenceStepPayload {
   step_order: number;
   delay_days: number;
@@ -60,6 +68,9 @@ export function DraftReviewPanel({ draft, isAdmin, onOpenChange, onSent, onSkipp
   const [skipping, setSkipping] = useState(false);
   const [drafting, setDrafting] = useState(false);
   const [aiDraftEnabled, setAiDraftEnabled] = useState(false);
+  const [sendCapability, setSendCapability] = useState<SendCapability | null>(null);
+  const [sendNowOpen, setSendNowOpen] = useState(false);
+  const [sendingNow, setSendingNow] = useState(false);
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
   const [templateSubject, setTemplateSubject] = useState("");
   const [templateBody, setTemplateBody] = useState("");
@@ -85,6 +96,15 @@ export function DraftReviewPanel({ draft, isAdmin, onOpenChange, onSent, onSkipp
       .then((res) => (res.ok ? res.json() : null))
       .then((json) => setAiDraftEnabled(json?.data?.enabled === true))
       .catch(() => setAiDraftEnabled(false));
+  }, []);
+
+  // Whether EdgeX can send for this tenant, and from which address. Hidden entirely when off, so the
+  // manual Copy / Mark sent flow is exactly as before. The send route re-checks everything server-side.
+  useEffect(() => {
+    fetch("/api/v1/outreach/send-capability")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => setSendCapability(json?.data?.enabled === true ? (json.data as SendCapability) : null))
+      .catch(() => setSendCapability(null));
   }, []);
 
   if (!draft) return null;
@@ -148,6 +168,39 @@ export function DraftReviewPanel({ draft, isAdmin, onOpenChange, onSent, onSkipp
       onSent(draft.id);
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleSendNow = async () => {
+    setSendingNow(true);
+    try {
+      if (dirty) {
+        const patchRes = await fetch(`/api/v1/outreach/drafts/${draft.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ subject, body_html: bodyHtml }),
+        });
+        if (!patchRes.ok) {
+          const json = await patchRes.json().catch(() => null);
+          toast.error(json?.error?.message ?? "Failed to save your edits");
+          return;
+        }
+      }
+
+      const res = await fetch(`/api/v1/outreach/drafts/${draft.id}/send`, { method: "POST" });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        // The draft stays pending on every failure, so the rep can retry, skip, or send it manually.
+        toast.error(json?.error?.message ?? "The email couldn't be sent");
+        setSendNowOpen(false);
+        return;
+      }
+
+      toast.success(sendCapability?.sandbox ? "Sent in sandbox (test address only)" : "Email sent");
+      setSendNowOpen(false);
+      onSent(draft.id);
+    } finally {
+      setSendingNow(false);
     }
   };
 
@@ -227,7 +280,7 @@ export function DraftReviewPanel({ draft, isAdmin, onOpenChange, onSent, onSkipp
     }
   };
 
-  const busy = sending || skipping;
+  const busy = sending || skipping || sendingNow;
 
   return (
     <Sheet open={!!draft} onOpenChange={onOpenChange}>
@@ -320,12 +373,61 @@ export function DraftReviewPanel({ draft, isAdmin, onOpenChange, onSent, onSkipp
             {skipping ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <SkipForward className="h-4 w-4 mr-1.5" />}
             Skip
           </Button>
-          <Button type="button" onClick={handleMarkSent} disabled={busy}>
+          <Button type="button" variant={sendCapability ? "outline" : "default"} onClick={handleMarkSent} disabled={busy}>
             {sending ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Send className="h-4 w-4 mr-1.5" />}
             Mark sent
           </Button>
+          {sendCapability && (
+            <Button type="button" onClick={() => setSendNowOpen(true)} disabled={busy}>
+              <Mail className="h-4 w-4 mr-1.5" />
+              Send now
+            </Button>
+          )}
         </SheetFooter>
       </SheetContent>
+
+      <Dialog open={sendNowOpen} onOpenChange={(o) => !sendingNow && setSendNowOpen(o)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Send this email now?</DialogTitle>
+            <DialogDescription>EdgeX will send it and log it on {leadName}&apos;s timeline.</DialogDescription>
+          </DialogHeader>
+          <dl className="space-y-1.5 text-sm">
+            <div className="flex gap-2">
+              <dt className="w-14 shrink-0 text-muted-foreground">To</dt>
+              <dd className="min-w-0 break-words">{draft.leads?.email ?? "—"}</dd>
+            </div>
+            <div className="flex gap-2">
+              <dt className="w-14 shrink-0 text-muted-foreground">From</dt>
+              <dd className="min-w-0 break-words">{sendCapability?.from ?? "—"}</dd>
+            </div>
+            <div className="flex gap-2">
+              <dt className="w-14 shrink-0 text-muted-foreground">Subject</dt>
+              <dd className="min-w-0 break-words font-medium">{subject || "—"}</dd>
+            </div>
+          </dl>
+          {sendCapability?.sandbox && (
+            <p className="rounded-md border border-red-200 bg-red-50 p-2.5 text-xs text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
+              Sandbox is on: this goes to the configured test address, <strong>not</strong> to {leadName}. The timeline
+              will still show it as sent.
+            </p>
+          )}
+          {sendCapability?.usingPlatformAddress && (
+            <p className="rounded-md border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+              Your own sending domain isn&apos;t verified yet, so this goes out from the shared EdgeX address.
+            </p>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setSendNowOpen(false)} disabled={sendingNow}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={handleSendNow} disabled={sendingNow}>
+              {sendingNow ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Mail className="h-4 w-4 mr-1.5" />}
+              Send email
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={saveTemplateOpen} onOpenChange={setSaveTemplateOpen}>
         <DialogContent className="sm:max-w-lg">
