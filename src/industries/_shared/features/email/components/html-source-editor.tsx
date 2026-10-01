@@ -14,6 +14,10 @@ interface HtmlSourceEditorProps {
   /** Hide the Rich text / HTML source toggle for callers whose body is always one format. */
   showFormatToggle?: boolean;
   disabled?: boolean;
+  /** Optional transform applied to the HTML before it is shown in the preview only (e.g. fill sample merge tags). */
+  previewTransform?: (html: string) => string;
+  /** Hide the "Use Send Test Email" sentence for callers that have no test-send button. */
+  hideTestEmailHint?: boolean;
 }
 
 export interface HtmlSourceEditorHandle {
@@ -23,10 +27,11 @@ export interface HtmlSourceEditorHandle {
 
 export const HtmlSourceEditor = forwardRef<HtmlSourceEditorHandle, HtmlSourceEditorProps>(
   function HtmlSourceEditor(
-    { value, onChange, placeholder, minHeight = 220, format, onFormatChange, showFormatToggle = true, disabled = false },
+    { value, onChange, placeholder, minHeight = 220, format, onFormatChange, showFormatToggle = true, disabled = false, previewTransform, hideTestEmailHint = false },
     ref
   ) {
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+    const previewValue = previewTransform ? previewTransform(value) : value;
 
     useImperativeHandle(
       ref,
@@ -99,7 +104,7 @@ export const HtmlSourceEditor = forwardRef<HtmlSourceEditorHandle, HtmlSourceEdi
               {value ? (
                 <iframe
                   sandbox=""
-                  srcDoc={preserveLineBreaks(value)}
+                  srcDoc={preserveLineBreaks(previewValue)}
                   title="Email preview"
                   className="w-full border-0"
                   style={{ minHeight: Math.min(minHeight, 140), height: Math.min(minHeight, 140) }}
@@ -154,7 +159,7 @@ export const HtmlSourceEditor = forwardRef<HtmlSourceEditorHandle, HtmlSourceEdi
                 {value ? (
                   <iframe
                     sandbox=""
-                    srcDoc={value}
+                    srcDoc={previewValue}
                     title="Email preview"
                     className="w-full border-0"
                     style={{ minHeight, height: minHeight }}
@@ -171,7 +176,7 @@ export const HtmlSourceEditor = forwardRef<HtmlSourceEditorHandle, HtmlSourceEdi
               <p className="text-xs text-muted-foreground mt-1.5">
                 Structural preview only — scripts are disabled and real inboxes (Gmail/Outlook/Apple Mail) may
                 render some CSS differently. Line breaks are sent verbatim in HTML mode (no auto-&lt;br&gt;).
-                Use &quot;Send Test Email&quot; to verify the real thing.
+                {!hideTestEmailHint && <> Use &quot;Send Test Email&quot; to verify the real thing.</>}
               </p>
             </TabsContent>
           </Tabs>

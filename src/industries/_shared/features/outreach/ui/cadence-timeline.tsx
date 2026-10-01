@@ -64,9 +64,13 @@ function SentPreview({ leadId, activityId }: { leadId: string; activityId: strin
             <p className="font-medium">{activity.email_subject || activity.subject || "Email"}</p>
             <p className="text-xs text-muted-foreground">Sent {formatDate(activity.created_at)}</p>
             {activity.email_body && (
-              <div
-                className="prose prose-sm max-w-none text-xs text-muted-foreground max-h-40 overflow-y-auto"
-                dangerouslySetInnerHTML={{ __html: activity.email_body }}
+              // Sandboxed (no scripts, no same-origin): a sequence step can now hold arbitrary
+              // HTML, so the sent body must never be injected into the app's own DOM.
+              <iframe
+                sandbox=""
+                srcDoc={activity.email_body}
+                title="Sent email"
+                className="h-40 w-full rounded border bg-white"
               />
             )}
           </div>
