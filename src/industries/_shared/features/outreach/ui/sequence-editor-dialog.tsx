@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Plus, Trash2, ChevronUp, ChevronDown, Loader2 } from "lucide-react";
+import { Plus, Trash2, ChevronUp, ChevronDown, Loader2, Eye } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -9,6 +9,16 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,7 +27,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
 import { TipTapEditor, type TipTapEditorHandle } from "@/industries/_shared/features/email/components/tiptap-editor";
+import { HtmlSourceEditor, type HtmlSourceEditorHandle } from "@/industries/_shared/features/email/components/html-source-editor";
 import type { Sequence } from "../hooks/use-sequences";
+import { detectBodyMode, fillSampleMergeTags, type StepBodyMode } from "../lib/body-format";
 
 const MERGE_TAGS = ["first_name", "last_name", "email", "phone", "city", "country", "tenant_name"];
 
@@ -26,6 +38,8 @@ interface StepDraft {
   delay_days: number;
   subject_template: string;
   body_template: string;
+  /** Editor mode only (not saved): "rich" = TipTap, "html" = source + preview. Inferred from the body on load. */
+  mode: StepBodyMode;
   draft_source: "template" | "ai";
   ai_instructions: string;
 }
@@ -46,7 +60,7 @@ function newKey() {
 
 function stepsFromSequence(sequence: Sequence | null): StepDraft[] {
   if (!sequence) {
-    return [{ key: newKey(), delay_days: 0, subject_template: "", body_template: "", draft_source: "template", ai_instructions: "" }];
+    return [{ key: newKey(), delay_days: 0, subject_template: "", body_template: "", mode: "rich", draft_source: "template", ai_instructions: "" }];
   }
   return [...sequence.email_sequence_steps]
     .sort((a, b) => a.step_order - b.step_order)
@@ -55,6 +69,7 @@ function stepsFromSequence(sequence: Sequence | null): StepDraft[] {
       delay_days: s.delay_days,
       subject_template: s.subject_template,
       body_template: s.body_template,
+      mode: detectBodyMode(s.body_template),
       draft_source: s.draft_source ?? "template",
       ai_instructions: s.ai_instructions ?? "",
     }));
@@ -72,10 +87,12 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
   const [autoSend, setAutoSend] = useState(false);
   const [steps, setSteps] = useState<StepDraft[]>([]);
   const [saving, setSaving] = useState(false);
+  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+  const [pendingRichIndex, setPendingRichIndex] = useState<number | null>(null);
   const [lastFocused, setLastFocused] = useState<{ index: number; field: "subject" | "body" } | null>(null);
 
   const subjectRefs = useRef<Record<number, HTMLInputElement | null>>({});
-  const bodyRefs = useRef<Record<number, TipTapEditorHandle | null>>({});
+  const bodyRefs = useRef<Record<number, TipTapEditorHandle | HtmlSourceEditorHandle | null>>({});
 
   useEffect(() => {
     if (open) {
@@ -84,6 +101,8 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
       setAutoSend(sequence?.auto_send ?? false);
       setSteps(stepsFromSequence(sequence));
       setLastFocused(null);
+      setPreviewIndex(null);
+      setPendingRichIndex(null);
     }
   }, [open, sequence]);
 
@@ -94,7 +113,7 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
   const addStep = () => {
     setSteps((prev) => [
       ...prev,
-      { key: newKey(), delay_days: 3, subject_template: "", body_template: "", draft_source: "template", ai_instructions: "" },
+      { key: newKey(), delay_days: 3, subject_template: "", body_template: "", mode: "rich", draft_source: "template", ai_instructions: "" },
     ]);
   };
 
@@ -110,6 +129,18 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
       [next[index], next[target]] = [next[target], next[index]];
       return next;
     });
+  };
+
+  // Rich text -> HTML is lossless (same HTML string). HTML -> Rich text can drop tables/styles,
+  // so confirm first when the body actually carries designed markup.
+  const switchMode = (index: number, mode: StepBodyMode) => {
+    const step = steps[index];
+    if (!step || step.mode === mode) return;
+    if (mode === "rich" && detectBodyMode(step.body_template) === "html") {
+      setPendingRichIndex(index);
+      return;
+    }
+    updateStep(index, { mode });
   };
 
   const insertToken = (token: string) => {
@@ -306,15 +337,58 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
                   </div>
 
                   <div className="space-y-1.5" onFocusCapture={() => setLastFocused({ index, field: "body" })}>
-                    <Label className="text-xs text-muted-foreground">Body</Label>
-                    <TipTapEditor
-                      ref={(el) => {
-                        bodyRefs.current[index] = el;
-                      }}
-                      value={step.body_template}
-                      onChange={(html) => updateStep(index, { body_template: html })}
-                      minHeight={140}
-                    />
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs text-muted-foreground">Body</Label>
+                      <div className="flex items-center gap-1">
+                        <div className="inline-flex rounded-md border p-0.5" role="group" aria-label="Body editor mode">
+                          {(["rich", "html"] as const).map((m) => (
+                            <button
+                              key={m}
+                              type="button"
+                              aria-pressed={step.mode === m}
+                              onClick={() => switchMode(index, m)}
+                              className={`px-2 py-0.5 text-xs rounded transition-colors ${
+                                step.mode === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
+                              }`}
+                            >
+                              {m === "rich" ? "Rich text" : "HTML"}
+                            </button>
+                          ))}
+                        </div>
+                        {step.mode === "rich" && (
+                          <Button type="button" variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setPreviewIndex(index)}>
+                            <Eye className="h-3 w-3 mr-1" /> Preview
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                    {step.mode === "rich" ? (
+                      <TipTapEditor
+                        key={`${step.key}-rich`}
+                        ref={(el) => {
+                          bodyRefs.current[index] = el;
+                        }}
+                        value={step.body_template}
+                        onChange={(html) => updateStep(index, { body_template: html })}
+                        minHeight={140}
+                      />
+                    ) : (
+                      <HtmlSourceEditor
+                        key={`${step.key}-html`}
+                        ref={(el) => {
+                          bodyRefs.current[index] = el;
+                        }}
+                        value={step.body_template}
+                        onChange={(html) => updateStep(index, { body_template: html })}
+                        format="html"
+                        onFormatChange={() => {}}
+                        showFormatToggle={false}
+                        minHeight={220}
+                        placeholder="Paste or write the email HTML here — merge tags like {{first_name}} work."
+                        previewTransform={fillSampleMergeTags}
+                        hideTestEmailHint
+                      />
+                    )}
                   </div>
 
                   <div className="space-y-2 pt-1 border-t">
@@ -362,6 +436,55 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      <Dialog open={previewIndex !== null} onOpenChange={(o) => !o && setPreviewIndex(null)}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Preview — Step {(previewIndex ?? 0) + 1}</DialogTitle>
+          </DialogHeader>
+          {previewIndex !== null && steps[previewIndex] && (
+            <div className="space-y-2">
+              <p className="text-sm font-medium break-words">
+                {fillSampleMergeTags(steps[previewIndex].subject_template) || "—"}
+              </p>
+              <div className="rounded border bg-white">
+                <iframe
+                  sandbox=""
+                  srcDoc={fillSampleMergeTags(steps[previewIndex].body_template)}
+                  title="Email preview"
+                  className="h-80 w-full border-0"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Sample data (Jane Doe). Structural preview only — Gmail / Outlook / Apple Mail may render some CSS differently.
+              </p>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={pendingRichIndex !== null} onOpenChange={(o) => !o && setPendingRichIndex(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Switch to Rich text?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This step contains designed HTML (tables, styles or images). The Rich text editor can&apos;t keep those, so
+              editing it there may strip the design. You can stay in HTML mode to keep it exactly as written.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Stay in HTML</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingRichIndex !== null) updateStep(pendingRichIndex, { mode: "rich" });
+                setPendingRichIndex(null);
+              }}
+            >
+              Switch anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }
