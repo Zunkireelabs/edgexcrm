@@ -10,6 +10,10 @@ import * as Sentry from "@sentry/nextjs";
 let emailBlastTimerStarted = false;
 const EMAIL_BLAST_POLL_INTERVAL_MS = 30_000;
 
+// Same idea for Outreach "Schedule send": an in-process timer, never Inngest.
+let sequenceScheduleTimerStarted = false;
+const SEQUENCE_SCHEDULE_POLL_INTERVAL_MS = 60_000;
+
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     await import("../sentry.server.config");
@@ -33,6 +37,17 @@ export async function register() {
       setInterval(() => {
         runEmailBlastQueue().catch((err) => logger.error({ err }, "[blast-runner] periodic scan threw"));
       }, EMAIL_BLAST_POLL_INTERVAL_MS);
+    }
+
+    // Sends sequence drafts a rep scheduled, within about a minute of the chosen time. See
+    // src/lib/email/outbound/sequence-schedule-runner.ts — no outside scheduler involved.
+    if (!sequenceScheduleTimerStarted) {
+      sequenceScheduleTimerStarted = true;
+      const { runScheduledSequenceSends } = await import("@/lib/email/outbound/sequence-schedule-runner");
+      const { logger } = await import("@/lib/logger");
+      setInterval(() => {
+        runScheduledSequenceSends().catch((err) => logger.error({ err }, "[sequence-schedule-runner] periodic scan threw"));
+      }, SEQUENCE_SCHEDULE_POLL_INTERVAL_MS);
     }
   }
 

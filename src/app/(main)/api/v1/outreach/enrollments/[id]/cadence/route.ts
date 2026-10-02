@@ -40,6 +40,8 @@ interface DraftRow {
   sent_activity_id: string | null;
   sent_via: string | null;
   email_message_id: string | null;
+  scheduled_send_at: string | null;
+  scheduled_error: string | null;
 }
 
 interface EmailMessageStatusRow {
@@ -95,7 +97,7 @@ export async function GET(_request: NextRequest, { params }: Props) {
       .order("step_order", { ascending: true }),
     db
       .from("sequence_step_drafts")
-      .select("id, step_order, status, due_at, subject, body_html, sent_at, sent_activity_id, sent_via, email_message_id")
+      .select("id, step_order, status, due_at, subject, body_html, sent_at, sent_activity_id, sent_via, email_message_id, scheduled_send_at, scheduled_error")
       .eq("enrollment_id", id)
       .order("step_order", { ascending: true }),
     db
@@ -157,6 +159,8 @@ export async function GET(_request: NextRequest, { params }: Props) {
         // Only pending drafts need body_html — it's what lets the "due now"
         // row reuse DraftReviewPanel (draft-review-panel.tsx) unforked.
         body_html: draft.status === "pending" ? draft.body_html : undefined,
+        scheduled_send_at: draft.status === "pending" ? draft.scheduled_send_at : null,
+        scheduled_error: draft.status === "pending" ? draft.scheduled_error : null,
       };
     }
 

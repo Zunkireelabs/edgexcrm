@@ -112,6 +112,8 @@ export function CadenceTimeline({
       body_html: item.body_html ?? "",
       status: "pending",
       draft_source: "template",
+      scheduled_send_at: item.scheduled_send_at ?? null,
+      scheduled_error: item.scheduled_error ?? null,
       leads: { first_name: leadFirstName, last_name: leadLastName, email: leadEmail },
       sequence_enrollments: {
         sequence_id: data?.sequence.id ?? "",

@@ -49,8 +49,9 @@ export async function sendDraftViaEdgeX(
   db: ScopedClient,
   tenantId: string,
   draft: SendableDraft,
-  // Set only for a person's "Send now" click; the cron omits it (timeline then says "automatically").
-  opts?: { sentBy: string }
+  // "Send now" passes { sentBy }; the schedule runner passes { sentBy: scheduled_by, scheduled: true };
+  // the auto-send cron omits it (timeline then says "automatically").
+  opts?: { sentBy?: string | null; scheduled?: boolean }
 ): Promise<SendDraftResult> {
   const markSent = (emailMessageId: string) =>
     opts

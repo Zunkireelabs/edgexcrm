@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Copy, Loader2, SkipForward, Send, Sparkles, BookmarkPlus, Mail } from "lucide-react";
+import { Copy, Loader2, SkipForward, Send, Sparkles, BookmarkPlus, Mail, CalendarClock } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -71,6 +71,9 @@ export function DraftReviewPanel({ draft, isAdmin, onOpenChange, onSent, onSkipp
   const [sendCapability, setSendCapability] = useState<SendCapability | null>(null);
   const [sendNowOpen, setSendNowOpen] = useState(false);
   const [sendingNow, setSendingNow] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [scheduleAt, setScheduleAt] = useState("");
+  const [scheduling, setScheduling] = useState(false);
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
   const [templateSubject, setTemplateSubject] = useState("");
   const [templateBody, setTemplateBody] = useState("");
@@ -210,6 +213,85 @@ export function DraftReviewPanel({ draft, isAdmin, onOpenChange, onSent, onSkipp
     }
   };
 
+  // <input type="datetime-local"> works in the user's local time with no zone; format a Date that way.
+  const toLocalInputValue = (d: Date) => {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
+  const openSchedule = () => {
+    // Re-opening keeps the current schedule; otherwise default to tomorrow 09:00 local.
+    const existing = draft.scheduled_send_at ? new Date(draft.scheduled_send_at) : null;
+    const tomorrow9 = new Date();
+    tomorrow9.setDate(tomorrow9.getDate() + 1);
+    tomorrow9.setHours(9, 0, 0, 0);
+    setScheduleAt(toLocalInputValue(existing ?? tomorrow9));
+    setScheduleOpen(true);
+  };
+
+  // Saves any unsaved edits first (the send reads the latest subject/body), then applies `change`.
+  const saveEditsThen = async (change: () => Promise<Response>) => {
+    if (dirty) {
+      const patchRes = await fetch(`/api/v1/outreach/drafts/${draft.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subject, body_html: bodyHtml }),
+      });
+      if (!patchRes.ok) {
+        const json = await patchRes.json().catch(() => null);
+        toast.error(json?.error?.message ?? "Failed to save your edits");
+        return null;
+      }
+    }
+    return change();
+  };
+
+  const handleSchedule = async () => {
+    const when = new Date(scheduleAt);
+    if (!scheduleAt || Number.isNaN(when.getTime())) {
+      toast.error("Pick a date and time");
+      return;
+    }
+    setScheduling(true);
+    try {
+      const res = await saveEditsThen(() =>
+        fetch(`/api/v1/outreach/drafts/${draft.id}/schedule`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ send_at: when.toISOString() }),
+        })
+      );
+      if (!res) return;
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        toast.error(json?.error?.message ?? "Couldn't schedule the send");
+        return;
+      }
+      toast.success(`Scheduled for ${when.toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}`);
+      setScheduleOpen(false);
+      setDirty(false);
+      onUpdated({ ...draft, subject, body_html: bodyHtml, scheduled_send_at: json.data.scheduled_send_at, scheduled_error: null });
+    } finally {
+      setScheduling(false);
+    }
+  };
+
+  const handleCancelSchedule = async () => {
+    setScheduling(true);
+    try {
+      const res = await fetch(`/api/v1/outreach/drafts/${draft.id}/schedule`, { method: "DELETE" });
+      if (!res.ok) {
+        const json = await res.json().catch(() => null);
+        toast.error(json?.error?.message ?? "Couldn't cancel the schedule");
+        return;
+      }
+      toast.success("Schedule cancelled");
+      onUpdated({ ...draft, subject, body_html: bodyHtml, scheduled_send_at: null, scheduled_error: null });
+    } finally {
+      setScheduling(false);
+    }
+  };
+
   const handleSkip = async () => {
     setSkipping(true);
     try {
@@ -286,7 +368,7 @@ export function DraftReviewPanel({ draft, isAdmin, onOpenChange, onSent, onSkipp
     }
   };
 
-  const busy = sending || skipping || sendingNow;
+  const busy = sending || skipping || sendingNow || scheduling;
 
   return (
     <Sheet open={!!draft} onOpenChange={onOpenChange}>
@@ -319,6 +401,25 @@ export function DraftReviewPanel({ draft, isAdmin, onOpenChange, onSent, onSkipp
               </>
             )}
           </p>
+
+          {draft.scheduled_send_at && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-blue-200 bg-blue-50 p-2.5 text-xs text-blue-900 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-200">
+              <span>
+                <CalendarClock className="mr-1.5 inline h-3.5 w-3.5" />
+                EdgeX will send this on{" "}
+                <strong>{new Date(draft.scheduled_send_at).toLocaleString([], { dateStyle: "full", timeStyle: "short" })}</strong>{" "}
+                (within about a minute). You can still edit it until then.
+              </span>
+              <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={handleCancelSchedule} disabled={busy}>
+                Cancel schedule
+              </Button>
+            </div>
+          )}
+          {draft.scheduled_error && !draft.scheduled_send_at && (
+            <p className="rounded-md border border-red-200 bg-red-50 p-2.5 text-xs text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
+              The scheduled send didn&apos;t go out: {draft.scheduled_error}
+            </p>
+          )}
 
           <div className="space-y-1.5">
             <Label htmlFor="draft-subject">Subject</Label>
@@ -396,6 +497,18 @@ export function DraftReviewPanel({ draft, isAdmin, onOpenChange, onSent, onSkipp
           {sendCapability && (
             <Button
               type="button"
+              variant="outline"
+              onClick={openSchedule}
+              disabled={busy || subjectMissing}
+              title={subjectMissing ? "Add a subject before scheduling" : undefined}
+            >
+              <CalendarClock className="h-4 w-4 mr-1.5" />
+              {draft.scheduled_send_at ? "Reschedule" : "Schedule send"}
+            </Button>
+          )}
+          {sendCapability && (
+            <Button
+              type="button"
               onClick={() => setSendNowOpen(true)}
               disabled={busy || subjectMissing}
               title={subjectMissing ? "Add a subject before sending" : undefined}
@@ -406,6 +519,52 @@ export function DraftReviewPanel({ draft, isAdmin, onOpenChange, onSent, onSkipp
           )}
         </SheetFooter>
       </SheetContent>
+
+      <Dialog open={scheduleOpen} onOpenChange={(o) => !scheduling && setScheduleOpen(o)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Schedule this email</DialogTitle>
+            <DialogDescription>EdgeX will send it by itself at the time you pick, then log it on {leadName}&apos;s timeline.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label htmlFor="schedule-at">Send on</Label>
+            <Input
+              id="schedule-at"
+              type="datetime-local"
+              value={scheduleAt}
+              min={toLocalInputValue(new Date(Date.now() + 5 * 60 * 1000))}
+              onChange={(e) => setScheduleAt(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Your local time ({Intl.DateTimeFormat().resolvedOptions().timeZone}). At least 5 minutes from now, within 90 days.
+            </p>
+          </div>
+          <dl className="space-y-1.5 text-sm">
+            <div className="flex gap-2">
+              <dt className="w-14 shrink-0 text-muted-foreground">To</dt>
+              <dd className="min-w-0 break-words">{draft.leads?.email ?? "—"}</dd>
+            </div>
+            <div className="flex gap-2">
+              <dt className="w-14 shrink-0 text-muted-foreground">From</dt>
+              <dd className="min-w-0 break-words">{sendCapability?.from ?? "—"}</dd>
+            </div>
+          </dl>
+          {sendCapability?.sandbox && (
+            <p className="rounded-md border border-red-200 bg-red-50 p-2.5 text-xs text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
+              Sandbox is on: it will go to the configured test address, <strong>not</strong> to {leadName}.
+            </p>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setScheduleOpen(false)} disabled={scheduling}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={handleSchedule} disabled={scheduling}>
+              {scheduling ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <CalendarClock className="h-4 w-4 mr-1.5" />}
+              Schedule
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={sendNowOpen} onOpenChange={(o) => !sendingNow && setSendNowOpen(o)}>
         <DialogContent className="sm:max-w-md">
