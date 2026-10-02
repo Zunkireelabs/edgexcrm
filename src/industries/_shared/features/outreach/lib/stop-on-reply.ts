@@ -13,7 +13,8 @@ import type { ScopedClient } from "@/lib/supabase/scoped";
 // out-of-office or bounce never reaches this function.
 //
 // Safe to call twice for the same reply: every update is guarded on status='active', so the
-// second call finds nothing to change. It never touches an enrollment a person already paused.
+// second call finds nothing to change. It never touches an enrollment a person already paused (but it does
+// record the reply on one the sequence-level "Pause all" froze, so "Resume all" skips that lead).
 
 export type OnReply = "pause" | "end" | "continue";
 
@@ -33,6 +34,8 @@ export interface ReplyStopResult {
 interface ActiveEnrollmentRow {
   id: string;
   sequence_id: string;
+  status: "active" | "paused";
+  stop_reason: string | null;
 }
 
 interface SequenceOnReplyRow {
@@ -48,14 +51,19 @@ export async function stopEnrollmentsOnReply(
 
   const { data: enrollments, error } = await db
     .from("sequence_enrollments")
-    .select("id, sequence_id")
+    .select("id, sequence_id, status, stop_reason")
     .eq("lead_id", params.leadId)
-    .eq("status", "active");
+    .in("status", ["active", "paused"]);
   if (error) {
     logger.error({ err: error, leadId: params.leadId }, "stopEnrollmentsOnReply: failed to load enrollments");
     return result;
   }
-  const active = (enrollments ?? []) as unknown as ActiveEnrollmentRow[];
+  // Active ones, plus the ones the sequence-level "Pause all" froze: a reply must be recorded on those too, or
+  // "Resume all" would later restart emails to someone who answered. A rep's own pause (stop_reason NULL) or an
+  // earlier reply stop is left alone.
+  const active = ((enrollments ?? []) as unknown as ActiveEnrollmentRow[]).filter(
+    (e) => e.status === "active" || e.stop_reason === "sequence_paused"
+  );
   if (active.length === 0) return result;
 
   const { data: sequences } = await db
@@ -76,7 +84,8 @@ export async function stopEnrollmentsOnReply(
     }
 
     try {
-      const { data: changed, error: updateError } = await db
+      // guarded on the state we read, so a person's change in between is never overwritten
+      let update = db
         .from("sequence_enrollments")
         .update({
           status: action === "pause" ? "paused" : "unenrolled",
@@ -84,8 +93,9 @@ export async function stopEnrollmentsOnReply(
           stopped_at: nowIso,
         })
         .eq("id", enrollment.id)
-        .eq("status", "active")
-        .select("id");
+        .eq("status", enrollment.status);
+      if (enrollment.status === "paused") update = update.eq("stop_reason", "sequence_paused");
+      const { data: changed, error: updateError } = await update.select("id");
       if (updateError) throw updateError;
       // Someone paused/ended it between our read and write — leave their decision alone.
       if (!changed || changed.length === 0) continue;

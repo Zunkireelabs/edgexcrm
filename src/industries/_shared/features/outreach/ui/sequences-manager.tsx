@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Pencil, Archive, Layers } from "lucide-react";
+import { Plus, Pencil, Archive, Layers, Pause, Play } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,6 +17,7 @@ import {
 import { toast } from "sonner";
 import { useSequences, type Sequence } from "../hooks/use-sequences";
 import { SequenceEditorDialog } from "./sequence-editor-dialog";
+import { SequencePauseDialog } from "./sequence-pause-dialog";
 import { formatDate } from "../lib/format-due";
 
 interface SequencesManagerProps {
@@ -29,6 +30,7 @@ export function SequencesManager({ isAdmin, industryId }: SequencesManagerProps)
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingSequence, setEditingSequence] = useState<Sequence | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<Sequence | null>(null);
+  const [pauseTarget, setPauseTarget] = useState<{ sequence: Sequence; action: "pause" | "resume" } | null>(null);
 
   const openCreate = () => {
     setEditingSequence(null);
@@ -123,6 +125,28 @@ export function SequencesManager({ isAdmin, industryId }: SequencesManagerProps)
                     size="sm"
                     onClick={(e) => {
                       e.stopPropagation();
+                      setPauseTarget({ sequence, action: "pause" });
+                    }}
+                  >
+                    <Pause className="h-3.5 w-3.5 mr-1.5" /> Pause all
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPauseTarget({ sequence, action: "resume" });
+                    }}
+                  >
+                    <Play className="h-3.5 w-3.5 mr-1.5" /> Resume all
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
                       openEdit(sequence);
                     }}
                   >
@@ -153,6 +177,12 @@ export function SequencesManager({ isAdmin, industryId }: SequencesManagerProps)
         sequence={editingSequence}
         onSaved={refresh}
         industryId={industryId}
+      />
+
+      <SequencePauseDialog
+        sequence={pauseTarget?.sequence ?? null}
+        action={pauseTarget?.action ?? "pause"}
+        onClose={() => setPauseTarget(null)}
       />
 
       <AlertDialog open={!!archiveTarget} onOpenChange={(open) => !open && setArchiveTarget(null)}>

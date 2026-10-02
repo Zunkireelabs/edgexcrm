@@ -61,7 +61,8 @@ function buildDb(tables: Record<string, Row[]>, opts: { failUpdateFor?: string }
                 result = { data: matched.map((r) => ({ id: r.id })), error: null };
               }
             } else {
-              result = { data: rows.filter(matches), error: null };
+              // copies, like a real database read — a later change to the row must not alter what was already read
+              result = { data: rows.filter(matches).map((r) => ({ ...r })), error: null };
             }
             Promise.resolve(result).then(resolve, reject);
           },
@@ -229,6 +230,37 @@ describe("stopEnrollmentsOnReply", () => {
     expect(result.paused).toBe(1);
     expect(tables.sequence_enrollments[0].status).toBe("active");
     expect(tables.sequence_enrollments[1].status).toBe("paused");
+  });
+
+  it("a lead frozen by the sequence-level 'Pause all' who then replies is marked as replied, so 'Resume all' skips them", async () => {
+    const tables: Record<string, Row[]> = {
+      sequence_enrollments: [
+        { id: "e1", sequence_id: "s1", lead_id: "lead-1", status: "paused", stop_reason: "sequence_paused" },
+      ],
+      email_sequences: [{ id: "s1", on_reply: "pause" }],
+    };
+    const { db, updates } = buildDb(tables);
+
+    const result = await stopEnrollmentsOnReply(db, P);
+
+    expect(result.paused).toBe(1);
+    expect(tables.sequence_enrollments[0]).toMatchObject({ status: "paused", stop_reason: "replied" });
+    // guarded on the state it read: paused AND still the stop-all marker
+    expect(updates[0].filters).toEqual(expect.arrayContaining([["id", "e1"], ["status", "paused"], ["stop_reason", "sequence_paused"]]));
+  });
+
+  it("a rep's own pause (no stop reason) and an earlier reply stop are never overwritten", async () => {
+    const tables: Record<string, Row[]> = {
+      sequence_enrollments: [
+        { id: "e1", sequence_id: "s1", lead_id: "lead-1", status: "paused", stop_reason: null },
+        { id: "e2", sequence_id: "s1", lead_id: "lead-1", status: "paused", stop_reason: "replied" },
+      ],
+      email_sequences: [{ id: "s1", on_reply: "pause" }],
+    };
+    const { db, updates } = buildDb(tables);
+    const result = await stopEnrollmentsOnReply(db, P);
+    expect(result).toEqual({ paused: 0, ended: 0, kept: 0 });
+    expect(updates).toHaveLength(0);
   });
 
   it("is idempotent: handling the same reply twice changes nothing the second time", async () => {
