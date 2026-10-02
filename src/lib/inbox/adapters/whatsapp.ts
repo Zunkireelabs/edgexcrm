@@ -12,7 +12,43 @@ import type {
   NormalizedInbound,
   StatusEventResult,
   SendResult,
+  TemplateContent,
 } from "./types";
+
+// Meta's actual template-message wire format (Cloud API `messages` endpoint,
+// type: "template"). Distinct from TemplateContent (our own input shape) —
+// this is what that input gets translated INTO for the provider call.
+interface WATemplatePayload {
+  messaging_product: "whatsapp";
+  recipient_type: "individual";
+  to: string;
+  type: "template";
+  template: {
+    name: string;
+    language: { code: string };
+    components?: {
+      type: string;
+      parameters: { type: string; text: string }[];
+    }[];
+  };
+}
+
+function buildTemplatePayload(to: string, template: TemplateContent): WATemplatePayload {
+  return {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to,
+    type: "template",
+    template: {
+      name: template.name,
+      language: { code: template.languageCode },
+      components: template.components?.map((c) => ({
+        type: c.type,
+        parameters: c.parameters.map((p) => ({ type: p.type, text: p.text })),
+      })),
+    },
+  };
+}
 
 const CAPABILITIES: ChannelCapabilities = {
   sessionWindowHours: 24,
@@ -165,13 +201,20 @@ export const whatsappAdapter: ChannelAdapter = {
     if (!token) throw new Error("WhatsApp channel missing access_token");
 
     const url = `https://graph.facebook.com/v19.0/${channel.external_account_id}/messages`;
-    const body = {
-      messaging_product: "whatsapp",
-      recipient_type: "individual",
-      to: conversation.external_contact_id,
-      type: "text",
-      text: { body: content.text },
-    };
+    // A template is required outside the 24h session window (enforced by the
+    // caller, send-message.ts) and optional-but-valid inside it — either way,
+    // if one was supplied, send it as a template rather than free text. Meta
+    // rejects a template name/language it hasn't approved, so a bad name here
+    // surfaces as a normal !res.ok failure below, same as any other send error.
+    const body = content.template
+      ? buildTemplatePayload(conversation.external_contact_id, content.template)
+      : {
+          messaging_product: "whatsapp",
+          recipient_type: "individual",
+          to: conversation.external_contact_id,
+          type: "text",
+          text: { body: content.text },
+        };
 
     const res = await fetch(url, {
       method: "POST",
