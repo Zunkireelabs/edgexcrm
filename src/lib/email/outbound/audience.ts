@@ -1,6 +1,11 @@
 import type { AuthContext } from "@/lib/api/auth";
 import type { FilterTree } from "@/lib/filters/types";
-import { resolveAudienceCore, type ChannelAdapter, type ResolveAudienceClients } from "@/lib/outbound/audience";
+import {
+  resolveAudienceCore,
+  resolveAudienceForLeadIdsCore,
+  type ChannelAdapter,
+  type ResolveAudienceClients,
+} from "@/lib/outbound/audience";
 import { normalizeEmail, loadSuppressedEmails } from "./suppression";
 
 // Audience resolution for email blasts — the channel-neutral mechanics
@@ -31,6 +36,8 @@ export interface AudienceBreakdown {
     suppressed: number;
     duplicateEmail: number;
   };
+  /** Per-lead version of `excluded` (no email / malformed / duplicate). Optional so existing mocks of this shape still type-check. */
+  excludedRows?: { leadId: string; reason: string }[];
 }
 
 export type ResolveAudienceResult = { ok: true; audience: AudienceBreakdown } | { ok: false; errors: Record<string, string[]> };
@@ -86,6 +93,44 @@ export async function resolveAudience(
         suppressed: result.audience.excluded.suppressed,
         duplicateEmail: result.audience.excluded.duplicate,
       },
+      excludedRows: result.audience.excludedRows,
+    },
+  };
+}
+
+export interface LeadIdsAudience {
+  /** Distinct ids asked for; `audience.matched` is how many of them the caller may see (and are not deleted). */
+  requested: number;
+  audience: {
+    matched: number;
+    sendable: AudienceRow[];
+    suppressed: AudienceRow[];
+    excluded: EmailExcluded;
+    /** Per-lead version of `excluded` (no email / malformed / duplicate) — see AudienceBreakdown.excludedRows. */
+    excludedRows: { leadId: string; reason: string }[];
+  };
+}
+
+/** Same email contactability rules as resolveAudience(), for a hand-picked set of lead ids. */
+export async function resolveAudienceForLeadIds(
+  auth: AuthContext,
+  leadIds: string[],
+  clients: ResolveAudienceClients
+): Promise<LeadIdsAudience> {
+  const { requested, audience } = await resolveAudienceForLeadIdsCore(auth, leadIds, clients, emailAdapter);
+  const toRow = (r: { leadId: string; contact: string; lead: Record<string, unknown> }): AudienceRow => ({
+    leadId: r.leadId,
+    email: r.contact,
+    lead: r.lead,
+  });
+  return {
+    requested,
+    audience: {
+      matched: audience.matched,
+      sendable: audience.sendable.map(toRow),
+      suppressed: audience.suppressed.map(toRow),
+      excluded: audience.excluded,
+      excludedRows: audience.excludedRows,
     },
   };
 }

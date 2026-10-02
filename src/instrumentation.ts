@@ -14,6 +14,11 @@ const EMAIL_BLAST_POLL_INTERVAL_MS = 30_000;
 let sequenceScheduleTimerStarted = false;
 const SEQUENCE_SCHEDULE_POLL_INTERVAL_MS = 60_000;
 
+// And for Outreach bulk enroll (OUTREACH-BULK-ENROLL-BRIEF.md): continues every queued / running run.
+// The Start route also kicks a first pass with after(); this timer is the safety net and does the rest.
+let bulkEnrollTimerStarted = false;
+const BULK_ENROLL_POLL_INTERVAL_MS = 30_000;
+
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     await import("../sentry.server.config");
@@ -48,6 +53,16 @@ export async function register() {
       setInterval(() => {
         runScheduledSequenceSends().catch((err) => logger.error({ err }, "[sequence-schedule-runner] periodic scan threw"));
       }, SEQUENCE_SCHEDULE_POLL_INTERVAL_MS);
+    }
+
+    // Enrolls the saved leads of bulk-enroll runs in chunks. See outreach/lib/bulk-enroll-runner.ts.
+    if (!bulkEnrollTimerStarted) {
+      bulkEnrollTimerStarted = true;
+      const { runBulkEnrollQueue } = await import("@/industries/_shared/features/outreach/lib/bulk-enroll-runner");
+      const { logger } = await import("@/lib/logger");
+      setInterval(() => {
+        runBulkEnrollQueue().catch((err) => logger.error({ err }, "[bulk-enroll-runner] periodic scan threw"));
+      }, BULK_ENROLL_POLL_INTERVAL_MS);
     }
   }
 
