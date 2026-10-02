@@ -198,6 +198,7 @@ export async function POST(request: NextRequest) {
   // The stage must belong to the first declared country's pipeline — same server-side rule as the
   // per-lead route, so a stage from another pipeline can never be stored (the UI only offers matching
   // ones, but the API must not rely on that).
+  let pipelineId: string | null = null;
   if (Array.isArray(body.countries) && body.countries.every((c) => typeof c === "string")) {
     const aligned = await alignStageToCountryPipeline(supabase, db, {
       tenantId: auth.tenantId,
@@ -207,6 +208,7 @@ export async function POST(request: NextRequest) {
     });
     stageId = aligned.stageId;
     stageSlug = aligned.stageSlug;
+    pipelineId = aligned.pipelineId;
   }
 
   // Append to the end of the lead's panel order (position = current max + 1).
@@ -229,6 +231,8 @@ export async function POST(request: NextRequest) {
     position: nextPosition,
     created_by: auth.userId,
   };
+  // Stamped server-side from the country's pipeline (never a client-supplied id), same as the per-lead route.
+  if (pipelineId) insert.pipeline_id = pipelineId;
   if (body.intake_term) insert.intake_term = String(body.intake_term);
   if (body.countries !== undefined) {
     if (!Array.isArray(body.countries) || !body.countries.every((c) => typeof c === "string")) {
