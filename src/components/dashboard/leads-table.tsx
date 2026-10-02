@@ -1,5 +1,7 @@
 "use client";
 
+import { matchesCollaboratorFilter } from "@/lib/leads/collaborator-filter";
+import { countSuffix, isOfferedByCount, sortByCountDesc, formerCollaboratorOptions, type FacetOptionLike } from "@/lib/leads/facet-labels";
 import { useState, useMemo, useEffect, useRef, useCallback, cloneElement, isValidElement, type ReactElement, type ReactNode, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -889,10 +891,10 @@ export function LeadsTable({
   } = useEduTaxonomy({
     enabled: wantsDestinationFacet,
   });
-  const [serverSourceFacet, setServerSourceFacet] = useState<{ name: string; count: number }[] | null>(null);
-  const [serverAssigneeFacet, setServerAssigneeFacet] = useState<{ name: string; count: number }[] | null>(null);
-  const [serverCollaboratorFacet, setServerCollaboratorFacet] = useState<{ name: string; count: number }[] | null>(null);
-  const [serverDestinationFacet, setServerDestinationFacet] = useState<{ name: string; count: number }[] | null>(null);
+  const [serverSourceFacet, setServerSourceFacet] = useState<FacetOptionLike[] | null>(null);
+  const [serverAssigneeFacet, setServerAssigneeFacet] = useState<FacetOptionLike[] | null>(null);
+  const [serverCollaboratorFacet, setServerCollaboratorFacet] = useState<FacetOptionLike[] | null>(null);
+  const [serverDestinationFacet, setServerDestinationFacet] = useState<FacetOptionLike[] | null>(null);
   const facetFetchParams = useMemo(() => {
     if (!serverPaginated || isStagingView) return null; // staging view isn't serverPaginated today
     const params = buildFetchParams(1, itemsPerPage, false);
@@ -914,6 +916,13 @@ export function LeadsTable({
     return params;
   }, [serverPaginated, isStagingView, buildFetchParams, itemsPerPage, wantsAssigneeFacet, wantsCollaboratorFacet, wantsDestinationFacet]);
 
+  const serverFacetsActive = !!facetFetchParams;
+  // Option NAMES survive a facet the server can't count (null): Source/Destination values
+  // are free text that only the server can enumerate, so keep the last enumerated list and
+  // just drop the numbers — an empty picker would be worse than an uncounted one.
+  const [lastSourceNames, setLastSourceNames] = useState<string[]>([]);
+  const [lastDestinationNames, setLastDestinationNames] = useState<string[]>([]);
+
   useEffect(() => {
     if (!facetFetchParams) {
       setServerSourceFacet(null);
@@ -929,19 +938,21 @@ export function LeadsTable({
         data?: {
           // Legacy single-dimension shape (facets=source alone).
           facet?: string;
-          options?: { name: string; count: number }[];
+          options?: FacetOptionLike[];
           // New multi-dimension shape (facets=source,assignee,collaborator,destination or a subset).
           facets?: {
-            source?: { options: { name: string; count: number }[] } | null;
-            assignee?: { options: { name: string; count: number }[] } | null;
-            collaborator?: { options: { name: string; count: number }[] } | null;
-            destination?: { options: { name: string; count: number }[] } | null;
+            source?: { options: FacetOptionLike[] } | null;
+            assignee?: { options: FacetOptionLike[] } | null;
+            collaborator?: { options: FacetOptionLike[] } | null;
+            destination?: { options: FacetOptionLike[] } | null;
           } | null;
         };
       }) => {
         if (controller.signal.aborted) return;
         if (body.data?.facet === "source") {
-          setServerSourceFacet(body.data.options ?? []);
+          // `counts: null` (Stage filter / un-translatable tree) = no faithful number: keep
+          // null so the picker lists options uncounted rather than blanking on `[]`.
+          setServerSourceFacet((body.data as { counts?: null }).counts === null ? null : (body.data.options ?? []));
           setServerAssigneeFacet(null);
           setServerCollaboratorFacet(null);
           setServerDestinationFacet(null);
@@ -963,10 +974,20 @@ export function LeadsTable({
           setServerCollaboratorFacet(null);
           setServerDestinationFacet(null);
         } else {
-          setServerSourceFacet(body.data.facets.source?.options ?? []);
-          setServerAssigneeFacet(wantsAssigneeFacet ? (body.data.facets.assignee?.options ?? []) : null);
-          setServerCollaboratorFacet(wantsCollaboratorFacet ? (body.data.facets.collaborator?.options ?? []) : null);
-          setServerDestinationFacet(wantsDestinationFacet ? (body.data.facets.destination?.options ?? []) : null);
+          // Per-facet `null` from the server means "no faithful number for this facet
+          // under the active filters" (e.g. a Stage filter on Source/Destination, or a
+          // top-level OR tree) — kept as null so the pickers list the options WITHOUT a
+          // count (see the *Counts memos below) instead of an empty-but-truthy array
+          // (which would blank the picker) or a page-scoped guess (which would be wrong).
+          const f = body.data.facets;
+          const pick = (v: { options: FacetOptionLike[] } | null | undefined, wanted: boolean) =>
+            !wanted || v === null ? null : (v?.options ?? []);
+          if (f.source) setLastSourceNames(f.source.options.map((o) => o.name));
+          if (f.destination) setLastDestinationNames(f.destination.options.map((o) => o.name));
+          setServerSourceFacet(pick(f.source, true));
+          setServerAssigneeFacet(pick(f.assignee, wantsAssigneeFacet));
+          setServerCollaboratorFacet(pick(f.collaborator, wantsCollaboratorFacet));
+          setServerDestinationFacet(pick(f.destination, wantsDestinationFacet));
         }
       })
       .catch((err: unknown) => {
@@ -979,13 +1000,23 @@ export function LeadsTable({
   }, [facetFetchParams, wantsAssigneeFacet, wantsCollaboratorFacet, wantsDestinationFacet]);
 
   const sources = useMemo(
-    () => (serverSourceFacet ? serverSourceFacet.map((o) => o.name) : clientSources),
-    [serverSourceFacet, clientSources],
+    () =>
+      serverSourceFacet
+        ? serverSourceFacet.map((o) => o.name)
+        : serverFacetsActive && lastSourceNames.length > 0
+          ? lastSourceNames
+          : clientSources,
+    [serverSourceFacet, clientSources, serverFacetsActive, lastSourceNames],
   );
-  const sourceCounts = useMemo(() => {
-    if (!serverSourceFacet) return clientSourceCounts;
-    return new Map(serverSourceFacet.map((o) => [o.name, o.count]));
-  }, [serverSourceFacet, clientSourceCounts]);
+  // FACET-COUNT-CONSISTENCY: on a server-faceted surface (`facetFetchParams` set) a count is
+  // shown ONLY if the server answered it. `null` = "no number" (still loading, or the
+  // server said it can't count faithfully) — labels drop the "(n)" and >0 gates are skipped.
+  // The old fallback to counting the loaded 25-row page is gone there: it produced numbers
+  // that disagreed with the rows. Surfaces with no server facets keep their client counts.
+  const sourceCounts = useMemo<Map<string, number> | null>(() => {
+    if (serverSourceFacet) return new Map(serverSourceFacet.map((o) => [o.name, o.count]));
+    return serverFacetsActive ? null : clientSourceCounts;
+  }, [serverSourceFacet, clientSourceCounts, serverFacetsActive]);
 
   // Per-counselor counts — cross-filtered: reflects all active filters except counselor
   // itself. Client-side fallback for surfaces that aren't serverPaginated (Contacts,
@@ -1022,10 +1053,10 @@ export function LeadsTable({
   // Server-computed Assigned-To facet takes priority when available (serverPaginated +
   // isAdmin/isTeamScoped) — exact, tenant-wide counts via lead_aggregates()'s `counselor`
   // dimension (ADVANCED-FILTERS-BRIEF Phase 3 addendum §C), not the 25-row page above.
-  const counselorCounts = useMemo(() => {
-    if (!serverAssigneeFacet) return clientCounselorCounts;
-    return new Map(serverAssigneeFacet.map((o) => [o.name, o.count]));
-  }, [serverAssigneeFacet, clientCounselorCounts]);
+  const counselorCounts = useMemo<Map<string, number> | null>(() => {
+    if (serverAssigneeFacet) return new Map(serverAssigneeFacet.map((o) => [o.name, o.count]));
+    return serverFacetsActive && wantsAssigneeFacet ? null : clientCounselorCounts;
+  }, [serverAssigneeFacet, clientCounselorCounts, serverFacetsActive, wantsAssigneeFacet]);
 
   // Get unique counselors (assigned_to users)
   const counselors = useMemo(() => {
@@ -1080,10 +1111,10 @@ export function LeadsTable({
   // the 25-row-page-scoped clientCollaboratorCounts above for the surface that matters
   // (the /leads Collaborators picker in both the Advanced Filter bar and the legacy
   // toolbar dropdown). Mirrors counselorCounts' server-preferred-with-client-fallback shape.
-  const collaboratorCounts = useMemo(() => {
-    if (!serverCollaboratorFacet) return clientCollaboratorCounts;
-    return new Map(serverCollaboratorFacet.map((o) => [o.name, o.count]));
-  }, [serverCollaboratorFacet, clientCollaboratorCounts]);
+  const collaboratorCounts = useMemo<Map<string, number> | null>(() => {
+    if (serverCollaboratorFacet) return new Map(serverCollaboratorFacet.map((o) => [o.name, o.count]));
+    return serverFacetsActive && wantsCollaboratorFacet ? null : clientCollaboratorCounts;
+  }, [serverCollaboratorFacet, clientCollaboratorCounts, serverFacetsActive, wantsCollaboratorFacet]);
 
   // Per-destination counts — client-side fallback for non-serverPaginated surfaces
   // (and the brief moment before the first facet fetch resolves), computed straight
@@ -1104,10 +1135,10 @@ export function LeadsTable({
   // Server-computed Destinations facet (serverPaginated + education_consultancy only,
   // migration 208) — closes the gap where "Destinations" had NO option source at all
   // (registry/leads.ts Gap 3): nothing previously fed this field's picker any values.
-  const destinationCounts = useMemo(() => {
-    if (!serverDestinationFacet) return clientDestinationCounts;
-    return new Map(serverDestinationFacet.map((o) => [o.name, o.count]));
-  }, [serverDestinationFacet, clientDestinationCounts]);
+  const destinationCounts = useMemo<Map<string, number> | null>(() => {
+    if (serverDestinationFacet) return new Map(serverDestinationFacet.map((o) => [o.name, o.count]));
+    return serverFacetsActive && wantsDestinationFacet ? null : clientDestinationCounts;
+  }, [serverDestinationFacet, clientDestinationCounts, serverFacetsActive, wantsDestinationFacet]);
 
   // Secondary toolbar filters (form/counselor/collaborator/source/tag/created/
   // prospect industry). serverPaginated mode sends these as query params (buildFetchParams
@@ -1128,9 +1159,7 @@ export function LeadsTable({
         ? (lead.intake_source?.split(" | ").map((p) => p.trim()).some((p) => sourceFilter.includes(p)) ?? false)
         : (lead.intake_source ? sourceFilter.includes(lead.intake_source) : false));
 
-    const matchesCollaborator =
-      collaboratorFilter.length === 0 ||
-      (leadCollaborators[lead.id]?.some((userId) => collaboratorFilter.includes(userId)) ?? false);
+    const matchesCollaborator = matchesCollaboratorFilter(lead.id, collaboratorFilter, leadCollaborators);
 
     const matchesTag =
       tagFilter === "all" || (lead.tags && lead.tags.includes(tagFilter));
@@ -2118,7 +2147,7 @@ export function LeadsTable({
             },
             options: sources.map((s) => ({
               value: s,
-              label: `${s} (${(sourceCounts.get(s) ?? 0).toLocaleString()})`,
+              label: `${s}${countSuffix(sourceCounts, s)}`,
               description: `Leads from ${s}`,
             })),
           } satisfies FilterDef,
@@ -2137,39 +2166,42 @@ export function LeadsTable({
             },
             options: allowedAssigneePositions
               ? [
-                  ...((counselorCounts.get("unassigned") ?? 0) > 0
+                  ...(isOfferedByCount(counselorCounts, "unassigned")
                     ? [
                         {
                           value: "unassigned",
-                          label: `Unassigned (${(counselorCounts.get("unassigned") ?? 0).toLocaleString()})`,
+                          label: `Unassigned${countSuffix(counselorCounts, "unassigned")}`,
                           description: "Leads not assigned yet",
                         },
                       ]
                     : []),
                   ...counselors
-                    .filter(([userId]) => (counselorCounts.get(userId) ?? 0) > 0)
+                    .filter(([userId]) => isOfferedByCount(counselorCounts, userId))
                     .map(([userId, email]) => ({
                       value: userId,
-                      label: `${memberNames[userId] || email.split("@")[0]} (${(counselorCounts.get(userId) ?? 0).toLocaleString()})`,
+                      label: `${memberNames[userId] || email.split("@")[0]}${countSuffix(counselorCounts, userId)}`,
                       description: memberMeta(userId) || email,
                     })),
                 ]
               : [
                   {
                     value: "unassigned",
-                    label: `Unassigned (${(counselorCounts.get("unassigned") ?? 0).toLocaleString()})`,
+                    label: `Unassigned${countSuffix(counselorCounts, "unassigned")}`,
                     description: "Leads not assigned yet",
                   },
                   ...counselors.map(([userId, email]) => ({
                     value: userId,
-                    label: `${memberNames[userId] || email.split("@")[0]} (${(counselorCounts.get(userId) ?? 0).toLocaleString()})`,
+                    label: `${memberNames[userId] || email.split("@")[0]}${countSuffix(counselorCounts, userId)}`,
                     description: email,
                   })),
                 ],
           } satisfies FilterDef,
         ]
       : []),
-    ...((isAdmin || isTeamScoped) && counselors.length > 0 && Object.keys(leadCollaborators).length > 0
+    // Server-faceted surfaces (/leads) offer the picker whenever the viewer may use it — it
+    // must not depend on whether the 25 LOADED leads happen to have collaborators (the old
+    // gate made the whole filter vanish on such a page). Other surfaces keep the map gate.
+    ...((isAdmin || isTeamScoped) && counselors.length > 0 && (serverFacetsActive || Object.keys(leadCollaborators).length > 0)
       ? [
           {
             id: "collaborator",
@@ -2180,17 +2212,21 @@ export function LeadsTable({
             onChange: (val: string[]) => {
               setCollaboratorFilter(val);
             },
-            // Anyone with >=1 collaborator lead is offered, regardless of role —
-            // an owner/admin who is genuinely a collaborator on some leads (their
-            // assignment writes a lead_collaborators row) must be filterable here,
-            // same as they already appear on the lead-detail Collaborators list.
-            options: counselors
-              .filter(([userId]) => (collaboratorCounts.get(userId) ?? 0) > 0)
+            // EVERY team member is offered, regardless of role or count — names never
+            // vanish because the active filters narrowed to zero; the count is only a
+            // label ("(0)" when nobody matches), biggest first.
+            options: sortByCountDesc(
+              counselors,
+              collaboratorCounts,
+              ([userId]) => userId,
+              ([userId, email]) => memberNames[userId] || email,
+            )
               .map(([userId, email]) => ({
                 value: userId,
-                label: `${memberNames[userId] || email.split("@")[0]} (${(collaboratorCounts.get(userId) ?? 0).toLocaleString()})`,
+                label: `${memberNames[userId] || email.split("@")[0]}${countSuffix(collaboratorCounts, userId)}`,
                 description: eduStageGated ? (memberMeta(userId) || email) : email,
-              })),
+              }))
+              .concat(formerCollaboratorOptions(serverCollaboratorFacet, (id) => id in memberMap).map((o) => ({ ...o, description: "No longer on the team" }))),
           } satisfies FilterDef,
         ]
       : []),
@@ -2340,9 +2376,7 @@ export function LeadsTable({
   // regression against the toolbar it replaces.
   const advancedFilterOptionOverrides: Partial<Record<string, FilterOption[]>> = useMemo(() => {
     const selectedAssignees = new Set(selectedValuesForField("assignees"));
-    const selectedCollaborators = new Set(selectedValuesForField("collaborators"));
     const selectedStages = new Set(selectedValuesForField("stage"));
-    const unassignedCount = counselorCounts.get("unassigned") ?? 0;
 
     return {
       status: statusFilterOptions,
@@ -2358,37 +2392,34 @@ export function LeadsTable({
       stage: leadLists
         .filter((l) => isAdmin || (!l.is_staging && !l.is_archive) || selectedStages.has(l.id))
         .map((l) => ({ value: l.id, label: l.name })),
-      source: sources.map((s) => ({ value: s, label: `${s} (${(sourceCounts.get(s) ?? 0).toLocaleString()})` })),
+      source: sources.map((s) => ({ value: s, label: `${s}${countSuffix(sourceCounts, s)}` })),
       assignees: [
-        ...(unassignedCount > 0 || selectedAssignees.has("unassigned")
-          ? [{ value: "unassigned", label: `Unassigned (${unassignedCount.toLocaleString()})` }]
+        ...(isOfferedByCount(counselorCounts, "unassigned", selectedAssignees.has("unassigned"))
+          ? [{ value: "unassigned", label: `Unassigned${countSuffix(counselorCounts, "unassigned")}` }]
           : []),
         ...counselors
           // A currently-selected assignee stays offered even at 0 — see
           // selectedValuesForField above — so its chip keeps a real name.
-          .filter(([userId]) => (counselorCounts.get(userId) ?? 0) > 0 || selectedAssignees.has(userId))
+          .filter(([userId]) => isOfferedByCount(counselorCounts, userId, selectedAssignees.has(userId)))
           .map(([userId, email]) => ({
             value: userId,
-            label: `${memberNames[userId] || email.split("@")[0]} (${(counselorCounts.get(userId) ?? 0).toLocaleString()})`,
+            label: `${memberNames[userId] || email.split("@")[0]}${countSuffix(counselorCounts, userId)}`,
           })),
       ],
-      // Collaborator counts: server-computed, tenant-wide (migration 207's
-      // `collaborator` dimension on lead_aggregates()) when serverPaginated, falling
-      // back to the page-scoped client computation otherwise — see collaboratorCounts
-      // above. Offered regardless of role: an owner/admin who is genuinely a
-      // collaborator on some leads must be filterable here (matches the lead-detail
-      // Collaborators list, which has never excluded them). A currently-selected
-      // collaborator stays offered even at 0 (same reasoning as assignees above) so
-      // its chip keeps a real name.
-      collaborators: counselors
-        .filter(
-          ([userId]) =>
-            (collaboratorCounts.get(userId) ?? 0) > 0 || selectedCollaborators.has(userId)
-        )
-        .map(([userId, email]) => ({
-          value: userId,
-          label: `${memberNames[userId] || email.split("@")[0]} (${(collaboratorCounts.get(userId) ?? 0).toLocaleString()})`,
-        })),
+      // Collaborators: every team member is offered, regardless of role or count (an
+      // owner/admin who is genuinely a collaborator must be filterable, and a name must
+      // never vanish because the active filters narrowed to zero — that read as "the
+      // collaborator is missing"). Counts come from the server (the list's own query, see
+      // route.ts) and are only a label; biggest first. A selected chip always keeps its name.
+      collaborators: sortByCountDesc(
+        counselors,
+        collaboratorCounts,
+        ([userId]) => userId,
+        ([userId, email]) => memberNames[userId] || email,
+      ).map(([userId, email]) => ({
+        value: userId,
+        label: `${memberNames[userId] || email.split("@")[0]}${countSuffix(collaboratorCounts, userId)}`,
+      })).concat(formerCollaboratorOptions(serverCollaboratorFacet, (id) => id in memberMap)),
       // #1d4ed8 matches TAG_CLASSES_BY_VALUE's blue-700 in columns-registry.tsx
       // (the existing Student/Other tag toggle) — same color, same meaning.
       tags: [{ value: "student", label: "Student", color: "#1d4ed8" }],
@@ -2401,10 +2432,14 @@ export function LeadsTable({
       // No selected-value carve-out needed here (unlike assignees/collaborators) —
       // a destination's raw value IS its display string (e.g. "UK"), so falling back
       // to the raw value on a 0-count exclusion is already readable, not a uuid.
-      destinations: Array.from(destinationCounts.entries())
-        .filter(([, count]) => count > 0)
-        .sort((a, b) => b[1] - a[1])
-        .map(([dest, count]) => ({ value: dest, label: `${dest} (${count.toLocaleString()})` })),
+      // destinationCounts === null (server can't count under the active filters, e.g. a
+      // Stage filter): keep the last enumerated names, uncounted, instead of an empty picker.
+      destinations: destinationCounts
+        ? Array.from(destinationCounts.entries())
+            .filter(([, count]) => count > 0)
+            .sort((a, b) => b[1] - a[1])
+            .map(([dest, count]) => ({ value: dest, label: `${dest} (${count.toLocaleString()})` }))
+        : lastDestinationNames.map((dest) => ({ value: dest, label: dest })),
       // Field of study / Level of study: fixed lists straight from Settings (see
       // eduFieldsOfStudy/eduStudyLevels above) — no counts, no cross-filtering,
       // just the tenant's configured catalog in its configured order. For a
@@ -2436,8 +2471,11 @@ export function LeadsTable({
     counselors,
     memberNames,
     collaboratorCounts,
+    serverCollaboratorFacet,
+    memberMap,
     formEntries,
     destinationCounts,
+    lastDestinationNames,
     selectedValuesForField,
     leadLists,
     isAdmin,

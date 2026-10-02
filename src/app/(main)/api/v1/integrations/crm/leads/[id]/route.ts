@@ -14,6 +14,7 @@ import {
   apiServiceUnavailable,
 } from "@/lib/api/response";
 import { requirePermission } from "@/lib/api/integration-permissions";
+import { addLeadCollaborator } from "@/lib/leads/collaborators";
 import type { Lead } from "@/types/database";
 
 const UPDATABLE_FIELDS = [
@@ -204,6 +205,12 @@ export const PATCH = withIntegrationErrorBoundary(async function PATCH(
   const assignedChanged =
     updatePayload.assigned_to !== undefined &&
     existingLead.assigned_to !== updated.assigned_to;
+
+  // A new assignee is a collaborator (migration 090) — see the assign route for why this is
+  // kept alongside migration 252's DB trigger. Idempotent.
+  if (assignedChanged && updated.assigned_to) {
+    await addLeadCollaborator(ctx.supabase, tenantId, id, updated.assigned_to as string);
+  }
 
   const promises: Promise<unknown>[] = [
     logIntegrationAudit(ctx, "integration.lead.updated", "lead", id, changes),

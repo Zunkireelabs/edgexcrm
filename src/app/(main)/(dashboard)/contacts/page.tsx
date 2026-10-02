@@ -6,7 +6,7 @@ import {
   getFormConfigsForTenant,
   getBranches,
 } from "@/lib/supabase/queries";
-import { getLeadCollaboratorsMap } from "@/lib/leads/collaborators";
+import { getLeadCollaboratorsMapForLeads } from "@/lib/leads/collaborators";
 import { createServiceClient } from "@/lib/supabase/server";
 import { LeadsTable } from "@/components/dashboard/leads-table";
 import { getFeatureAccess } from "@/industries/_loader";
@@ -60,7 +60,6 @@ export default async function ContactsRoutePage() {
       stages,
       formConfigs,
       branches,
-      leadCollaboratorsMap,
       industryResult,
       entitiesResult,
     ] = await Promise.all([
@@ -69,7 +68,6 @@ export default async function ContactsRoutePage() {
       getPipelineStages(tenantData.tenant.id),
       getFormConfigsForTenant(tenantData.tenant.id),
       tenantData.entitlements.maxBranches > 1 ? getBranches(tenantData.tenant.id) : Promise.resolve([]),
-      getLeadCollaboratorsMap(serviceClient, tenantData.tenant.id),
       industry
         ? serviceClient.from("industries").select("*").eq("id", industry).single()
         : Promise.resolve({ data: null }),
@@ -82,6 +80,14 @@ export default async function ContactsRoutePage() {
     ]);
 
     const leads = (otherLeads || []) as Lead[];
+
+    // Collaborators for exactly the contacts shown — exact and uncapped (the old tenant-wide
+    // map stopped at 10,000 rows and dropped older collaborators' contacts from the filter).
+    const leadCollaboratorsMap = await getLeadCollaboratorsMapForLeads(
+      serviceClient,
+      tenantData.tenant.id,
+      leads.map((l) => l.id),
+    );
     const memberMap = Object.fromEntries(teamMembers.map((m) => [m.user_id, m.email]));
     const memberNames = Object.fromEntries(teamMembers.map((m) => [m.user_id, m.name]));
     const memberBranchMap = Object.fromEntries(
