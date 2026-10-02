@@ -53,7 +53,7 @@ export async function POST(_request: NextRequest, { params }: Props) {
   if (draft.status !== "pending") return apiConflict("This step was already sent or skipped.");
   if (!draft.subject?.trim()) return apiError("SUBJECT_REQUIRED", "Add a subject before sending.", 422);
 
-  const result = await sendDraftViaEdgeX(db, auth.tenantId, draft);
+  const result = await sendDraftViaEdgeX(db, auth.tenantId, draft, { sentBy: auth.userId });
 
   switch (result.status) {
     case "sent":

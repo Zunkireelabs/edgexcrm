@@ -45,8 +45,15 @@ interface EmailMessageRow {
 export async function sendDraftViaEdgeX(
   db: ScopedClient,
   tenantId: string,
-  draft: SendableDraft
+  draft: SendableDraft,
+  // Set only for a person's "Send now" click; the cron omits it (timeline then says "automatically").
+  opts?: { sentBy: string }
 ): Promise<SendDraftResult> {
+  const markSent = (emailMessageId: string) =>
+    opts
+      ? markDraftSentViaEdgeX(db, tenantId, draft.id, emailMessageId, opts)
+      : markDraftSentViaEdgeX(db, tenantId, draft.id, emailMessageId);
+
   const { data: leadRow } = await db.from("leads").select("email").eq("id", draft.lead_id).maybeSingle();
   const email = (leadRow as LeadEmailRow | null)?.email;
   if (!email) {
@@ -92,7 +99,7 @@ export async function sendDraftViaEdgeX(
 
   if (message.status === "sent") {
     // Heal a crash between "provider accepted it" and "draft marked sent". No-op when already marked.
-    await markDraftSentViaEdgeX(db, tenantId, draft.id, message.id);
+    await markSent(message.id);
     return { status: "already_sent" };
   }
   if (message.status !== "queued" && message.status !== "sending") {
@@ -107,7 +114,7 @@ export async function sendDraftViaEdgeX(
   const result = await sendQueuedEmailBatch(tenantId, [message.id]);
 
   if (result.sent === 1) {
-    await markDraftSentViaEdgeX(db, tenantId, draft.id, message.id);
+    await markSent(message.id);
     return { status: "sent", emailMessageId: message.id };
   }
   if (result.throttled === 1) return { status: "throttled" };
