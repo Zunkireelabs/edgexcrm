@@ -35,12 +35,17 @@ interface Branch {
   name: string;
 }
 
-interface RosterMember {
+// One entry from GET /api/v1/leads/:id/branches/:branchId/assignees — the people THIS caller may
+// pick for that branch, decided on the server by the same rule the write routes enforce.
+interface Assignee {
   user_id: string;
-  branch_id: string | null;
   name: string | null;
   email: string;
+  /** Listed although they belong to another branch / none (an education admin). */
+  is_admin_exempt: boolean;
 }
+
+type AssigneeState = { status: "loading" } | { status: "error" } | { status: "ready"; people: Assignee[] };
 
 const UNASSIGNED_SENTINEL = "__unassigned__";
 
@@ -54,7 +59,9 @@ interface BranchesBlockProps {
 export function BranchesBlock({ leadId, isAdmin, userBranchId, leadScope }: BranchesBlockProps) {
   const [memberships, setMemberships] = useState<Membership[]>([]);
   const [allBranches, setAllBranches] = useState<Branch[]>([]);
-  const [roster, setRoster] = useState<RosterMember[]>([]);
+  // Assignable people per branch id. Loaded from the server (never derived from /api/v1/team,
+  // which 403s for a branch manager without that nav item and used to leave the picker empty).
+  const [assignees, setAssignees] = useState<Record<string, AssigneeState>>({});
   const [loading, setLoading] = useState(true);
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
   const [selectedBranch, setSelectedBranch] = useState("");
@@ -78,10 +85,9 @@ export function BranchesBlock({ leadId, isAdmin, userBranchId, leadScope }: Bran
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [membRes, branchRes, teamRes] = await Promise.all([
+      const [membRes, branchRes] = await Promise.all([
         fetch(`/api/v1/leads/${leadId}/branches`),
         fetch("/api/v1/branches"),
-        fetch("/api/v1/team"),
       ]);
       if (membRes.ok) {
         const json = await membRes.json();
@@ -91,13 +97,6 @@ export function BranchesBlock({ leadId, isAdmin, userBranchId, leadScope }: Bran
         const json = await branchRes.json();
         setAllBranches((json.data ?? []) as Branch[]);
       }
-      if (teamRes.ok) {
-        const json = await teamRes.json();
-        setRoster((json.data ?? []) as RosterMember[]);
-      }
-      // teamRes 403 (e.g. a branch manager without /team nav or canAssignLeads)
-      // is swallowed here same as the others — roster just stays empty and the
-      // assignee controls render with no options, non-critical degradation.
     } catch {
       // silent — block is non-critical
     } finally {
@@ -108,6 +107,29 @@ export function BranchesBlock({ leadId, isAdmin, userBranchId, leadScope }: Bran
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  const loadAssignees = useCallback(
+    async (branchId: string) => {
+      setAssignees((prev) => (prev[branchId]?.status === "ready" ? prev : { ...prev, [branchId]: { status: "loading" } }));
+      try {
+        const res = await fetch(`/api/v1/leads/${leadId}/branches/${branchId}/assignees`);
+        if (!res.ok) throw new Error(String(res.status));
+        const json = await res.json();
+        setAssignees((prev) => ({ ...prev, [branchId]: { status: "ready", people: (json.data?.assignees ?? []) as Assignee[] } }));
+      } catch {
+        // Say so — a silently empty dropdown reads as "there is nobody to assign".
+        setAssignees((prev) => ({ ...prev, [branchId]: { status: "error" } }));
+      }
+    },
+    [leadId],
+  );
+
+  // Fetch the assignable people for every row this user can act on, once the rows are known.
+  useEffect(() => {
+    for (const m of memberships) {
+      if (isAdmin || (isBranchManager && m.branch_id === userBranchId)) void loadAssignees(m.branch_id);
+    }
+  }, [memberships, loadAssignees, isAdmin, isBranchManager, userBranchId]);
 
   const memberBranchIds = new Set(memberships.map((m) => m.branch_id));
   const availableBranches = allBranches.filter((b) => !memberBranchIds.has(b.id));
@@ -202,7 +224,7 @@ export function BranchesBlock({ leadId, isAdmin, userBranchId, leadScope }: Bran
           <div className="space-y-2">
             {memberships.map((m) => {
               const isSaving = savingRow === m.branch_id;
-              const branchMembers = roster.filter((r) => r.branch_id === m.branch_id);
+              const rowAssignees = assignees[m.branch_id];
 
               return (
                 <div key={m.branch_id} className="flex items-start gap-2 min-w-0">
@@ -227,11 +249,19 @@ export function BranchesBlock({ leadId, isAdmin, userBranchId, leadScope }: Bran
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value={UNASSIGNED_SENTINEL}>Unassigned</SelectItem>
-                          {branchMembers.map((r) => (
-                            <SelectItem key={r.user_id} value={r.user_id}>
-                              {r.name || r.email}
-                            </SelectItem>
-                          ))}
+                          {/* The current assignee always stays selectable/visible, even if the
+                              list is still loading or (later) no longer includes them. */}
+                          {m.assigned_to &&
+                            !(rowAssignees?.status === "ready" && rowAssignees.people.some((r) => r.user_id === m.assigned_to)) && (
+                              <SelectItem value={m.assigned_to}>{m.assigned_to_name || m.assigned_to_email || "Current assignee"}</SelectItem>
+                            )}
+                          {rowAssignees?.status === "ready" &&
+                            rowAssignees.people.map((r) => (
+                              <SelectItem key={r.user_id} value={r.user_id}>
+                                {r.name || r.email}
+                                {r.is_admin_exempt ? " (admin)" : ""}
+                              </SelectItem>
+                            ))}
                         </SelectContent>
                       </Select>
                     ) : (
@@ -240,6 +270,14 @@ export function BranchesBlock({ leadId, isAdmin, userBranchId, leadScope }: Bran
                           {m.assigned_to_name || m.assigned_to_email}
                         </p>
                       )
+                    )}
+                    {canAssign(m) && rowAssignees?.status === "error" && (
+                      <p className="text-[10px] text-destructive mt-0.5">
+                        Couldn&apos;t load who can be assigned.{" "}
+                        <button type="button" className="underline" onClick={() => void loadAssignees(m.branch_id)}>
+                          Retry
+                        </button>
+                      </p>
                     )}
                   </div>
 
@@ -284,6 +322,7 @@ export function BranchesBlock({ leadId, isAdmin, userBranchId, leadScope }: Bran
               onValueChange={(value) => {
                 setSelectedBranch(value);
                 setSelectedAssignee(""); // candidate list changes with the branch
+                void loadAssignees(value); // the people this caller may pick for that branch
               }}
             >
               <SelectTrigger className="w-full">
@@ -304,11 +343,11 @@ export function BranchesBlock({ leadId, isAdmin, userBranchId, leadScope }: Bran
                   <SelectValue placeholder="Assign to (optional)…" />
                 </SelectTrigger>
                 <SelectContent>
-                  {roster
-                    .filter((r) => r.branch_id === selectedBranch)
-                    .map((r) => (
+                  {assignees[selectedBranch]?.status === "ready" &&
+                    (assignees[selectedBranch] as { status: "ready"; people: Assignee[] }).people.map((r) => (
                       <SelectItem key={r.user_id} value={r.user_id}>
                         {r.name || r.email}
+                        {r.is_admin_exempt ? " (admin)" : ""}
                       </SelectItem>
                     ))}
                 </SelectContent>

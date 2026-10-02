@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, requireLeadAccess, getClientIp } from "@/lib/api/auth";
 import { getLeadMembership, canManageLeadBranches } from "@/lib/leads/branch-membership";
+import { isValidBranchRowAssignee } from "@/lib/leads/branch-assign-policy";
 import {
   apiSuccess,
   apiValidationError,
@@ -89,18 +90,23 @@ export async function POST(
   const existingBranchIds = new Set(membership.map((m) => m.branch_id));
   const newBranchIds = branchIds.filter((b) => !existingBranchIds.has(b));
 
-  // Validate assigned_to membership in all newly-added target branches.
-  // If sharing into multiple branches with assigned_to, the user must be a member of all of them.
+  // Validate the assignee for every newly-added target branch, with the SAME rule the per-branch
+  // assign route uses (branch-assign-policy.ts): a member of that branch, or — education — an admin
+  // (who has no branch of their own but is always assignable). If sharing into several branches with
+  // assigned_to, the user must be valid for all of them.
   if (assignedTo && newBranchIds.length > 0) {
+    const { data: target } = await supabase
+      .from("tenant_users")
+      .select("user_id, branch_id, role")
+      .eq("tenant_id", auth.tenantId)
+      .eq("user_id", assignedTo)
+      .single();
+    const targetInfo = {
+      branchId: (target as { branch_id?: string | null } | null)?.branch_id ?? null,
+      role: (target as { role?: string | null } | null)?.role ?? null,
+    };
     for (const branchId of newBranchIds) {
-      const { data: branchMember } = await supabase
-        .from("tenant_users")
-        .select("user_id")
-        .eq("tenant_id", auth.tenantId)
-        .eq("user_id", assignedTo)
-        .eq("branch_id", branchId)
-        .single();
-      if (!branchMember) {
+      if (!target || !isValidBranchRowAssignee(targetInfo, branchId, auth.industryId)) {
         return apiValidationError({
           assigned_to: [`Assigned user is not a member of branch ${validBranchMap.get(branchId) ?? branchId}`],
         });
