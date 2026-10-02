@@ -58,6 +58,14 @@ describe("POST /api/v1/outreach/drafts/[id]/send", () => {
     expect(sendDraftMock).not.toHaveBeenCalled();
   });
 
+  it("422 and no send when the subject is blank", async () => {
+    draftRow = { ...draftRow, subject: "   " };
+    const res = await call();
+    expect(res.status).toBe(422);
+    expect(JSON.stringify(await res.json())).toContain("SUBJECT_REQUIRED");
+    expect(sendDraftMock).not.toHaveBeenCalled();
+  });
+
   it("200 on a real send", async () => {
     sendDraftMock.mockResolvedValue({ status: "sent", emailMessageId: "m1" });
     const res = await call();

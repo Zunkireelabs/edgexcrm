@@ -171,7 +171,13 @@ export function DraftReviewPanel({ draft, isAdmin, onOpenChange, onSent, onSkipp
     }
   };
 
+  const subjectMissing = !subject.trim();
+
   const handleSendNow = async () => {
+    if (subjectMissing) {
+      toast.error("Add a subject before sending");
+      return;
+    }
     setSendingNow(true);
     try {
       if (dirty) {
@@ -300,8 +306,18 @@ export function DraftReviewPanel({ draft, isAdmin, onOpenChange, onSent, onSkipp
 
         <div className="flex-1 overflow-y-auto px-4 space-y-3">
           <p className="text-xs text-muted-foreground bg-muted/50 rounded-md p-2">
-            EdgeX doesn&apos;t send this for you — copy it into your own inbox, send it, then come
-            back and mark it sent so the cadence advances and the lead timeline stays accurate.
+            {sendCapability ? (
+              <>
+                Click <strong>Send now</strong> to send this from EdgeX — it&apos;s logged and the next step is scheduled
+                automatically. Or copy it into your own inbox, send it there, then come back and click{" "}
+                <strong>Mark sent</strong> so the cadence advances and the lead timeline stays accurate.
+              </>
+            ) : (
+              <>
+                EdgeX doesn&apos;t send this for you — copy it into your own inbox, send it, then come back and mark
+                it sent so the cadence advances and the lead timeline stays accurate.
+              </>
+            )}
           </p>
 
           <div className="space-y-1.5">
@@ -378,7 +394,12 @@ export function DraftReviewPanel({ draft, isAdmin, onOpenChange, onSent, onSkipp
             Mark sent
           </Button>
           {sendCapability && (
-            <Button type="button" onClick={() => setSendNowOpen(true)} disabled={busy}>
+            <Button
+              type="button"
+              onClick={() => setSendNowOpen(true)}
+              disabled={busy || subjectMissing}
+              title={subjectMissing ? "Add a subject before sending" : undefined}
+            >
               <Mail className="h-4 w-4 mr-1.5" />
               Send now
             </Button>

@@ -51,6 +51,7 @@ export async function POST(_request: NextRequest, { params }: Props) {
     return apiConflict("Sending from EdgeX isn't turned on for your account. Use Copy body and Mark sent instead.");
   }
   if (draft.status !== "pending") return apiConflict("This step was already sent or skipped.");
+  if (!draft.subject?.trim()) return apiError("SUBJECT_REQUIRED", "Add a subject before sending.", 422);
 
   const result = await sendDraftViaEdgeX(db, auth.tenantId, draft);
 
