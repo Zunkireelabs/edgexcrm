@@ -129,8 +129,7 @@ export function BranchesBlock({ leadId, isAdmin, userBranchId, leadScope }: Bran
     for (const m of memberships) {
       if (isAdmin || (isBranchManager && m.branch_id === userBranchId)) void loadAssignees(m.branch_id);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [memberships, loadAssignees]);
+  }, [memberships, loadAssignees, isAdmin, isBranchManager, userBranchId]);
 
   const memberBranchIds = new Set(memberships.map((m) => m.branch_id));
   const availableBranches = allBranches.filter((b) => !memberBranchIds.has(b.id));

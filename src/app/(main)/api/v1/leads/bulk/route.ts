@@ -222,6 +222,9 @@ export async function PATCH(request: NextRequest) {
   // lead shouldn't lock its own branch manager out of it).
   let idsToUpdate = body.ids.filter((id) => existingMap.has(id));
   if (isTeamScoped) {
+    // Narrow for the type checker; the §4.1 guard above already guarantees this for team-scoped callers.
+    const managerBranchId = auth.branchId;
+    if (!managerBranchId) return apiForbidden();
     // Leads another branch SHARED IN to this manager's branch (lead_branches rows) are theirs to act
     // on too — the single-lead check has always counted them; without this, a receiving branch's
     // bulk assign silently dropped them ("No valid leads found to update"). ≤100 ids, URL-safe.
@@ -229,12 +232,12 @@ export async function PATCH(request: NextRequest) {
       .from("lead_branches")
       .select("lead_id")
       .eq("tenant_id", auth.tenantId)
-      .eq("branch_id", auth.branchId as string)
+      .eq("branch_id", managerBranchId)
       .in("lead_id", idsToUpdate);
     const heldViaSharing = new Set((sharedRows ?? []).map((r: { lead_id: string }) => r.lead_id));
     idsToUpdate = idsToUpdate.filter((id) => {
       const lead = existingMap.get(id);
-      return !!lead && isLeadInManagerBranch(lead, heldViaSharing.has(id), auth.branchId, auth.branchMemberIds);
+      return !!lead && isLeadInManagerBranch(lead, heldViaSharing.has(id), managerBranchId, auth.branchMemberIds);
     });
   }
 
