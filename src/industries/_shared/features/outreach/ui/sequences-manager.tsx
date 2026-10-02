@@ -20,6 +20,7 @@ import { SequenceEditorDialog } from "./sequence-editor-dialog";
 import { SequencePauseDialog } from "./sequence-pause-dialog";
 import { BulkEnrollDialog } from "./bulk-enroll-dialog";
 import { formatDate } from "../lib/format-due";
+import { describeSendWindow } from "../lib/send-window";
 
 interface SequencesManagerProps {
   isAdmin: boolean;
@@ -120,6 +121,7 @@ export function SequencesManager({ isAdmin, industryId }: SequencesManagerProps)
                 <p className="text-xs text-muted-foreground">
                   {sequence.email_sequence_steps.length} step
                   {sequence.email_sequence_steps.length === 1 ? "" : "s"} · created {formatDate(sequence.created_at)}
+                  {sequence.send_window && ` · sends ${describeSendWindow(sequence.send_window)}`}
                 </p>
               </div>
               <div className="shrink-0 flex items-center gap-1">

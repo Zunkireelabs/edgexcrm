@@ -52,7 +52,7 @@ interface Preview {
   sandbox: boolean;
   sendingEnabled: boolean;
   sampleNames: string[];
-  sequence: { id: string; name: string; auto_send: boolean };
+  sequence: { id: string; name: string; auto_send: boolean; send_window_text?: string | null };
 }
 
 interface Run {
@@ -339,6 +339,12 @@ export function BulkEnrollDialog({
                     {preview.estimatedExtraDays > 0
                       ? ` First emails will take about ${preview.estimatedExtraDays + 1} days to go out.`
                       : " All first emails fit within today's limit."}
+                  </p>
+                )}
+                {preview.sequence.send_window_text && (
+                  <p className="text-xs text-muted-foreground">
+                    This sequence sends {preview.sequence.send_window_text} (see its settings) — the first emails wait
+                    for that window too.
                   </p>
                 )}
                 {preview.sequence.auto_send && (

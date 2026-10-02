@@ -3,6 +3,7 @@ import { emitEvent } from "@/lib/api/audit";
 import { isOutreachDraftEnabledForTenant } from "@/lib/ai/flag";
 import { draftSequenceEmail } from "@/lib/ai/draft-email";
 import { logger } from "@/lib/logger";
+import { computeDueAt, resolveWindowTimeZone, validateSendWindow, type SendWindow } from "./send-window";
 import type { ScopedClient } from "@/lib/supabase/scoped";
 import type { AuthContext } from "@/lib/api/auth";
 import type { Lead } from "@/types/database";
@@ -126,21 +127,29 @@ async function loadLeadTemplateContext(
   return (data as LeadTemplateContext | null) ?? null;
 }
 
-async function loadTenantName(db: ScopedClient, tenantId: string): Promise<string> {
-  const { data } = await db.fromGlobal("tenants").select("name").eq("id", tenantId).maybeSingle();
-  return (data as { name: string } | null)?.name ?? "";
+async function loadTenantInfo(db: ScopedClient, tenantId: string): Promise<{ name: string; timezone: string | null }> {
+  const { data } = await db.fromGlobal("tenants").select("name, timezone").eq("id", tenantId).maybeSingle();
+  const row = data as { name: string; timezone: string | null } | null;
+  return { name: row?.name ?? "", timezone: row?.timezone ?? null };
 }
 
 async function loadSequenceMeta(
   db: ScopedClient,
   sequenceId: string
-): Promise<{ name: string; description: string | null; totalSteps: number }> {
+): Promise<{ name: string; description: string | null; totalSteps: number; sendWindow: SendWindow | null }> {
   const [{ data: seq }, { count }] = await Promise.all([
-    db.from("email_sequences").select("name, description").eq("id", sequenceId).maybeSingle(),
+    db.from("email_sequences").select("name, description, send_window").eq("id", sequenceId).maybeSingle(),
     db.from("email_sequence_steps").select("id", { count: "exact", head: true }).eq("sequence_id", sequenceId),
   ]);
-  const seqRow = seq as { name: string; description: string | null } | null;
-  return { name: seqRow?.name ?? "", description: seqRow?.description ?? null, totalSteps: count ?? 0 };
+  const seqRow = seq as { name: string; description: string | null; send_window?: unknown } | null;
+  // A stored window that no longer validates is ignored (the step goes out on the old schedule) rather than blocking enrollment.
+  const parsed = validateSendWindow(seqRow?.send_window ?? null);
+  return {
+    name: seqRow?.name ?? "",
+    description: seqRow?.description ?? null,
+    totalSteps: count ?? 0,
+    sendWindow: parsed.ok ? parsed.window : null,
+  };
 }
 
 async function createDraftForStep(
@@ -152,9 +161,9 @@ async function createDraftForStep(
   }
 ): Promise<SequenceStepDraftRow | null> {
   const { enrollment, step } = params;
-  const [lead, tenantName, sequenceMeta] = await Promise.all([
+  const [lead, tenant, sequenceMeta] = await Promise.all([
     loadLeadTemplateContext(db, enrollment.lead_id),
-    loadTenantName(db, auth.tenantId),
+    loadTenantInfo(db, auth.tenantId),
     loadSequenceMeta(db, step.sequence_id),
   ]);
   if (!lead) return null;
@@ -163,12 +172,21 @@ async function createDraftForStep(
     step,
     lead,
     tenantId: auth.tenantId,
-    tenantName,
+    tenantName: tenant.name,
     sequence: { name: sequenceMeta.name, description: sequenceMeta.description },
     stepOrder: step.step_order,
     totalSteps: sequenceMeta.totalSteps,
   });
-  const dueAt = new Date(Date.now() + step.delay_days * 24 * 60 * 60 * 1000).toISOString();
+  // WHEN this step is due: the old rule (now + wait) unless the sequence has a send window — then the next allowed
+  // day / time of day in the lead's (or office's) timezone, at this lead's stable minute in the spread.
+  const window = sequenceMeta.sendWindow;
+  const dueAt = computeDueAt({
+    now: new Date(),
+    delayDays: step.delay_days,
+    window,
+    timeZone: window ? resolveWindowTimeZone(window, { leadCountry: lead.country, officeTimeZone: tenant.timezone }) : undefined,
+    spreadKey: `${enrollment.lead_id}:${step.id}`,
+  }).toISOString();
 
   const { data, error } = await db
     .from("sequence_step_drafts")

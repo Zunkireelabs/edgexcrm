@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import type { SendWindow } from "../lib/send-window";
 
 export interface SequenceStep {
   id: string;
@@ -25,6 +26,8 @@ export interface Sequence {
   auto_send: boolean;
   // What a lead's reply does to their enrollment (migration 257).
   on_reply: "pause" | "end" | "continue";
+  // When steps may go out (migration 260); null = as soon as due.
+  send_window: SendWindow | null;
   email_sequence_steps: SequenceStep[];
 }
 

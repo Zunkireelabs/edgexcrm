@@ -4,6 +4,7 @@ import { apiSuccess, apiUnauthorized, apiForbidden, apiNotFound, apiError, apiVa
 import { scopedClient } from "@/lib/supabase/scoped";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getFeatureAccess } from "@/industries/_loader";
+import { describeSendWindow, validateSendWindow } from "@/industries/_shared/features/outreach/lib/send-window";
 import { FEATURES } from "@/industries/_registry";
 import {
   SUPPORTED_CONFLICT_POLICIES,
@@ -36,10 +37,16 @@ export async function POST(request: NextRequest) {
   const db = await scopedClient(auth);
   const { data: sequence } = await db
     .from("email_sequences")
-    .select("id, name, status, auto_send")
+    .select("id, name, status, auto_send, send_window")
     .eq("id", parsed.sequenceId)
     .maybeSingle();
-  const seq = sequence as unknown as { id: string; name: string; status: string; auto_send: boolean } | null;
+  const seq = sequence as unknown as {
+    id: string;
+    name: string;
+    status: string;
+    auto_send: boolean;
+    send_window?: unknown;
+  } | null;
   if (!seq || seq.status !== "active") return apiNotFound("Sequence");
 
   const planned = await planBulkEnroll(
@@ -50,5 +57,12 @@ export async function POST(request: NextRequest) {
   );
   if (!planned.ok) return apiValidationError(planned.errors);
 
-  return apiSuccess({ ...planned.plan.preview, sequence: { id: seq.id, name: seq.name, auto_send: seq.auto_send } });
+  // With a send window the first emails wait for it — the dialog says when ("Mon, Tue … at 10:00–12:00").
+  const parsedWindow = validateSendWindow(seq.send_window ?? null);
+  const windowText = parsedWindow.ok && parsedWindow.window ? describeSendWindow(parsedWindow.window) : null;
+
+  return apiSuccess({
+    ...planned.plan.preview,
+    sequence: { id: seq.id, name: seq.name, auto_send: seq.auto_send, send_window_text: windowText },
+  });
 }

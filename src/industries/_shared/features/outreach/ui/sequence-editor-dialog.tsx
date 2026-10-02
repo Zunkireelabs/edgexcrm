@@ -28,6 +28,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
+import { SendWindowEditor } from "./send-window-editor";
+import type { SendWindow } from "../lib/send-window";
 import { TipTapEditor, type TipTapEditorHandle } from "@/industries/_shared/features/email/components/tiptap-editor";
 import { HtmlSourceEditor, type HtmlSourceEditorHandle } from "@/industries/_shared/features/email/components/html-source-editor";
 import type { Sequence } from "../hooks/use-sequences";
@@ -92,6 +94,10 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
   const [description, setDescription] = useState("");
   const [autoSend, setAutoSend] = useState(false);
   const [onReply, setOnReply] = useState<"pause" | "end" | "continue">("pause");
+  // null = no window (send as soon as due). A NEW sequence starts with the tenant's default window ON; an existing one
+  // keeps whatever it has (usually none until someone turns it on).
+  const [sendWindow, setSendWindow] = useState<SendWindow | null>(null);
+  const [windowDefaults, setWindowDefaults] = useState<{ window: SendWindow; timezone: string } | null>(null);
   const [steps, setSteps] = useState<StepDraft[]>([]);
   const [saving, setSaving] = useState(false);
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
@@ -108,11 +114,30 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
       setDescription(sequence?.description ?? "");
       setAutoSend(sequence?.auto_send ?? false);
       setOnReply(sequence?.on_reply ?? "pause");
+      setSendWindow(sequence?.send_window ?? null);
       setSteps(stepsFromSequence(sequence));
       setLastFocused(null);
       setPreviewIndex(null);
       setPendingRichIndex(null);
     }
+  }, [open, sequence]);
+
+  // The tenant's working days / timezone, to pre-fill a new sequence's window.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    fetch("/api/v1/outreach/send-window-defaults")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => {
+        if (cancelled || !json?.data) return;
+        const d = json.data as { window: SendWindow; timezone: string };
+        setWindowDefaults(d);
+        if (!sequence) setSendWindow((current) => current ?? d.window);
+      })
+      .catch(() => void 0);
+    return () => {
+      cancelled = true;
+    };
   }, [open, sequence]);
 
   const updateStep = (index: number, patch: Partial<StepDraft>) => {
@@ -202,6 +227,7 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
       description: description.trim() || undefined,
       auto_send: autoSend,
       on_reply: onReply,
+      send_window: sendWindow,
       steps: steps.map((s, i) => ({
         step_order: i + 1,
         delay_days: i === 0 ? 0 : s.delay_days,
@@ -278,6 +304,13 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
               </div>
             </div>
           )}
+
+          <SendWindowEditor
+            value={sendWindow}
+            onChange={setSendWindow}
+            defaultWindow={windowDefaults?.window}
+            officeTimeZone={windowDefaults?.timezone}
+          />
 
           <div className="space-y-1.5 rounded-md border p-3">
             <Label htmlFor="seq-on-reply" className="text-sm font-normal">

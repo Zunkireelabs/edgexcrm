@@ -18,6 +18,7 @@ import {
   type SequenceStepInput,
 } from "@/industries/_shared/features/outreach/lib/validate-steps";
 import { ON_REPLY_VALUES, type OnReply } from "@/industries/_shared/features/outreach/lib/stop-on-reply";
+import { validateSendWindow } from "@/industries/_shared/features/outreach/lib/send-window";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -86,6 +87,10 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     return apiValidationError({ on_reply: ["Must be one of: pause, end, continue"] });
   }
 
+  // Only validated when sent; an edit that doesn't mention it leaves the stored window alone.
+  const sendWindow = body.send_window !== undefined ? validateSendWindow(body.send_window) : null;
+  if (sendWindow && !sendWindow.ok) return apiValidationError({ send_window: [sendWindow.error] });
+
   const db = await scopedClient(auth);
 
   const { data: existing } = await db.from("email_sequences").select("id").eq("id", id).maybeSingle();
@@ -96,6 +101,8 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   if (body.description !== undefined) updates.description = body.description ? String(body.description) : null;
   if (body.auto_send !== undefined) updates.auto_send = body.auto_send === true;
   if (body.on_reply !== undefined) updates.on_reply = body.on_reply as OnReply;
+  // Takes effect for drafts created from now on; drafts already created keep the due time they have.
+  if (sendWindow && sendWindow.ok) updates.send_window = sendWindow.window;
 
   if (Object.keys(updates).length > 0) {
     const { error: updateError } = await db.from("email_sequences").update(updates).eq("id", id);

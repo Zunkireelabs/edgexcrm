@@ -11,6 +11,9 @@ const emitEventMock = vi.fn().mockResolvedValue(null);
 vi.mock("@/lib/api/audit", () => ({ emitEvent: (...args: unknown[]) => emitEventMock(...args) }));
 vi.mock("@/lib/ai/flag", () => ({ isOutreachDraftEnabledForTenant: vi.fn() }));
 vi.mock("@/lib/ai/draft-email", () => ({ draftSequenceEmail: vi.fn() }));
+// advanceEnrollment now starts a "queued next" sequence when an enrollment completes (queue-next.ts) — that module
+// has its own tests; here it must not reach for a real database client.
+vi.mock("./queue-next", () => ({ promoteQueuedEnrollment: vi.fn().mockResolvedValue(undefined) }));
 
 interface DraftRow {
   id: string;
