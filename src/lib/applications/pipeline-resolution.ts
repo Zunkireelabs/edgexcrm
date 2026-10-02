@@ -61,6 +61,41 @@ export async function resolveApplicationPipelineAndStage(
   return { ok: true, pipelineId: pipeline.id, stageId: entryStage.id };
 }
 
+/**
+ * Server-side guard: the stage an application is saved with must belong to the pipeline of its first
+ * declared country. A client-sent stage from another pipeline (a stale form, a hand-written request)
+ * is swapped for that pipeline's entry stage, so the stored application can never sit in a pipeline
+ * that disagrees with its Destination. No countries, or no pipeline for the country and no default
+ * pipeline: the stage is left exactly as given.
+ */
+export async function alignStageToCountryPipeline(
+  supabase: SupabaseServiceClient,
+  db: ScopedClient,
+  args: { tenantId: string; countries: string[] | undefined; stageId: string; stageSlug: string }
+): Promise<{ stageId: string; stageSlug: string }> {
+  const { tenantId, countries, stageId, stageSlug } = args;
+  const unchanged = { stageId, stageSlug };
+  if (!countries || countries.length === 0) return unchanged;
+
+  const resolution = await resolveApplicationPipelineAndStage(supabase, { tenantId, countryName: countries[0] });
+  if (!resolution.ok) return unchanged;
+
+  const { data: current } = await db
+    .from("application_stages")
+    .select("id, pipeline_id")
+    .eq("id", stageId)
+    .maybeSingle();
+  if ((current as unknown as { pipeline_id: string | null } | null)?.pipeline_id === resolution.pipelineId) return unchanged;
+
+  const { data: entry } = await db
+    .from("application_stages")
+    .select("id, slug")
+    .eq("id", resolution.stageId)
+    .maybeSingle();
+  const entryRow = entry as unknown as { id: string; slug: string } | null;
+  return entryRow ? { stageId: entryRow.id, stageSlug: entryRow.slug } : unchanged;
+}
+
 type DefaultStageRow = {
   name: string;
   slug: string;
