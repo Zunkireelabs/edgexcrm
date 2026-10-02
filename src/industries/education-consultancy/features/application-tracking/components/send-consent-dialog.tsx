@@ -20,6 +20,8 @@ interface SendConsentDialogProps {
   leadId: string;
   tenantId: string;
   defaultTab?: "send" | "manual";
+  /** Shows "Copy link instead" — creates the signing link without emailing it. Off by default. */
+  allowCopyOnly?: boolean;
   onSuccess: () => void;
 }
 
@@ -29,12 +31,15 @@ export function SendConsentDialog({
   leadId,
   tenantId,
   defaultTab = "send",
+  allowCopyOnly = false,
   onSuccess,
 }: SendConsentDialogProps) {
   const [tab, setTab] = useState<"send" | "manual">(defaultTab);
   const [sending, setSending] = useState(false);
   const [sentLink, setSentLink] = useState<string | null>(null);
   const [sentVia, setSentVia] = useState<string | null>(null);
+  // True when the link was created with "Copy link instead" — it was deliberately NOT emailed.
+  const [copyOnly, setCopyOnly] = useState(false);
 
   // Manual tab state
   const [signerName, setSignerName] = useState("");
@@ -48,19 +53,20 @@ export function SendConsentDialog({
       setTab(defaultTab);
       setSentLink(null);
       setSentVia(null);
+      setCopyOnly(false);
       setSignerName("");
       setSignedAt("");
       setDocumentUrl("");
     }
   }, [open, defaultTab]);
 
-  async function handleSend() {
+  async function handleSend(deliver: "email" | "none" = "email") {
     setSending(true);
     try {
       const res = await fetch(`/api/v1/leads/${leadId}/consent`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "send" }),
+        body: JSON.stringify({ action: "send", deliver }),
       });
       const json = await res.json();
       if (!res.ok) {
@@ -70,6 +76,7 @@ export function SendConsentDialog({
       const { link, sent_via } = json.data as { link: string; sent_via: string };
       setSentLink(link);
       setSentVia(sent_via);
+      setCopyOnly(deliver === "none");
       if (sent_via === "email") {
         toast.success("Consent link sent via email");
       }
@@ -196,14 +203,24 @@ export function SendConsentDialog({
                 <p className="text-sm text-muted-foreground">
                   Send the student a secure link to review and sign the consent document.
                 </p>
-                <Button onClick={handleSend} disabled={sending} className="w-full">
+                <Button onClick={() => handleSend("email")} disabled={sending} className="w-full">
                   {sending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                   Send Consent Link
                 </Button>
+                {allowCopyOnly && (
+                  <Button variant="outline" onClick={() => handleSend("none")} disabled={sending} className="w-full">
+                    <Copy className="h-4 w-4 mr-2" />
+                    Copy link instead
+                  </Button>
+                )}
               </>
             ) : (
               <div className="space-y-3">
-                {sentVia === "email" ? (
+                {copyOnly ? (
+                  <p className="text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+                    Link created — copy it and share it with the student. No email was sent.
+                  </p>
+                ) : sentVia === "email" ? (
                   <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
                     Consent link sent via email.
                   </p>

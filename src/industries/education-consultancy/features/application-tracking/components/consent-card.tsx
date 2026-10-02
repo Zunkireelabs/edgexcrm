@@ -73,6 +73,8 @@ interface ConsentCardProps {
   // Cross-industry reuse — optional label overrides + fee-section toggle.
   labels?: ConsentCardLabels;
   showProcessingFee?: boolean; // default true (education); false hides the fee block
+  /** Education: adds "Copy consent link" (create the signing link without emailing it) and lays the first-state buttons out two per row. */
+  showCopyLink?: boolean;
 }
 
 export function ConsentCard({
@@ -86,6 +88,7 @@ export function ConsentCard({
   feeNotes: initialFeeNotes = null,
   labels,
   showProcessingFee = true,
+  showCopyLink = false,
 }: ConsentCardProps) {
   // Effective labels — education wording unless a caller overrides.
   const L = {
@@ -138,6 +141,41 @@ export function ConsentCard({
     }
   }
 
+  const [creatingLink, setCreatingLink] = useState(false);
+
+  // One click: create the signing link WITHOUT emailing the student, copy it, and let the card move on to
+  // "Awaiting signature" (which keeps its own Copy link button if the clipboard is unavailable).
+  async function handleCreateAndCopyLink() {
+    setCreatingLink(true);
+    try {
+      const res = await fetch(`/api/v1/leads/${leadId}/consent`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "send", deliver: "none" }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        toast.error(json.error?.message ?? "Failed to create consent link");
+        if (json.error?.code === "ALREADY_SIGNED") fetchStatus();
+        return;
+      }
+      const link = (json.data as { link?: string }).link;
+      try {
+        if (!link) throw new Error("no link");
+        await navigator.clipboard.writeText(link);
+        toast.success("Consent link copied");
+      } catch {
+        // Some browsers refuse clipboard writes after a network round-trip; the link exists either way.
+        toast.info("Link created — use Copy link");
+      }
+      fetchStatus();
+    } catch {
+      toast.error("Failed to create consent link");
+    } finally {
+      setCreatingLink(false);
+    }
+  }
+
   const fetchStatus = useCallback(async () => {
     try {
       const res = await fetch(`/api/v1/leads/${leadId}/consent`);
@@ -179,6 +217,9 @@ export function ConsentCard({
       if (!res.ok) {
         const json = await res.json();
         toast.error(json.error?.message ?? "Failed to resend consent");
+        // The student signed while this card still showed "awaiting signature": re-read the status
+        // so the card (and the Applications "+") correct themselves instead of staying stale.
+        if (json.error?.code === "ALREADY_SIGNED") fetchStatus();
         return;
       }
       toast.success("Consent resent");
@@ -234,15 +275,25 @@ export function ConsentCard({
                 {L.requiredHelp}
               </p>
               {canManage && (
-                <div className="flex gap-2 flex-wrap">
-                  <Button size="sm" variant="outline" onClick={() => openDialog("send")} className="h-7 text-xs">
+                <div className={showCopyLink ? "grid grid-cols-2 gap-2" : "flex gap-2 flex-wrap"}>
+                  <Button size="sm" variant="outline" onClick={() => openDialog("send")} className={`h-7 text-xs${showCopyLink ? " px-2" : ""}`}>
                     Send consent link
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => setInPersonOpen(true)} className="h-7 text-xs">
+                  {showCopyLink && (
+                    <Button size="sm" variant="outline" onClick={handleCreateAndCopyLink} disabled={creatingLink} className="h-7 px-2 text-xs">
+                      {creatingLink ? (
+                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                      ) : (
+                        <Copy className="h-3 w-3 mr-1" />
+                      )}
+                      Copy consent link
+                    </Button>
+                  )}
+                  <Button size="sm" variant="outline" onClick={() => setInPersonOpen(true)} className={`h-7 text-xs${showCopyLink ? " px-2" : ""}`}>
                     <PenLine className="h-3 w-3 mr-1" />
                     Sign here now
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => openDialog("manual")} className="h-7 text-xs">
+                  <Button size="sm" variant={showCopyLink ? "outline" : "ghost"} onClick={() => openDialog("manual")} className={`h-7 text-xs${showCopyLink ? " px-2" : ""}`}>
                     <Upload className="h-3 w-3 mr-1" />
                     Record manually
                   </Button>
@@ -404,10 +455,15 @@ export function ConsentCard({
 
       <SendConsentDialog
         open={dialogOpen}
-        onOpenChange={setDialogOpen}
+        onOpenChange={(next) => {
+          setDialogOpen(next);
+          // Closing (also after an "already signed" refusal) re-reads the status so a stale card corrects itself.
+          if (!next) fetchStatus();
+        }}
         leadId={leadId}
         tenantId={tenantId}
         defaultTab={dialogTab}
+        allowCopyOnly={showCopyLink}
         onSuccess={() => {
           setDialogOpen(false);
           fetchStatus();
@@ -447,7 +503,10 @@ export function ConsentCard({
 
       <InPersonConsentDialog
         open={inPersonOpen}
-        onOpenChange={setInPersonOpen}
+        onOpenChange={(next) => {
+          setInPersonOpen(next);
+          if (!next) fetchStatus();
+        }}
         leadId={leadId}
         onSuccess={() => {
           setInPersonOpen(false);

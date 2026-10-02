@@ -202,16 +202,20 @@ export function ApplicationsCard({ leadId, canManage, disabled = false }: Applic
               )}
             </span>
             {canManage && (
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-6 w-6 p-0"
-                onClick={() => !disabled && setAddOpen(true)}
-                title={disabled ? "Sign consent first" : "Add Application"}
-                disabled={disabled}
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </Button>
+              // The tooltip lives on the wrapper: a disabled Button has pointer-events-none, so a
+              // title on the button itself never shows and the "+" looked dead with no explanation.
+              <span title={disabled ? "Sign consent first" : "Add Application"}>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 w-6 p-0"
+                  onClick={() => !disabled && setAddOpen(true)}
+                  aria-label={disabled ? "Add Application (sign consent first)" : "Add Application"}
+                  disabled={disabled}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+              </span>
             )}
           </div>
         </CardHeader>
