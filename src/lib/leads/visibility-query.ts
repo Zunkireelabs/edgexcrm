@@ -35,12 +35,27 @@ export interface VisibleLeadsClients {
   service: SupabaseClient<any>;
 }
 
+export interface VisibleLeadsExtra {
+  /**
+   * Narrow the visible set to leads that have at least one of these collaborators, IN SQL
+   * (leads_visible_to_user_with_collaborators(), migration 255). Only used on the own / branch
+   * RPC paths. The owner/admin path ignores it — there the caller filters with a normal
+   * embedded-resource filter, which works over a plain table.
+   * Why not an embed filter on the RPC: PostgREST resolves it against `pgrst_call` (42703).
+   */
+  collaboratorIds?: readonly string[] | null;
+}
+
 export function visibleLeadsBase(
   clients: VisibleLeadsClients,
   tenantId: string,
   scope: LeadVisibilityScope | undefined,
   rpcOpts?: { count?: "exact" | "planned" | "estimated"; head?: boolean },
+  extra?: VisibleLeadsExtra,
 ) {
+  const collaboratorIds = extra?.collaboratorIds && extra.collaboratorIds.length > 0 ? [...extra.collaboratorIds] : null;
+  // Same arguments either way — the collaborators variant only adds p_collaborator_ids.
+  const rpcName = collaboratorIds ? "leads_visible_to_user_with_collaborators" : "leads_visible_to_user";
   if (scope?.restrictToSelf) {
     // Fail closed: restrictToSelf with no userId must never fall through to the
     // unrestricted tenant-wide query below — that would leak the whole tenant to a
@@ -49,20 +64,22 @@ export function visibleLeadsBase(
     if (!scope.userId) {
       throw new Error("visibleLeadsBase: scope.restrictToSelf requires scope.userId");
     }
-    const params: Record<string, string> = {
+    const params: Record<string, string | string[]> = {
       p_tenant: tenantId,
       p_user: scope.userId,
       p_scope: "own",
     };
     if (scope.userBranchId) params.p_user_branch_id = scope.userBranchId;
     if (scope.crossBranchPoolListSlug) params.p_cross_pool_slug = scope.crossBranchPoolListSlug;
-    return clients.user.rpc("leads_visible_to_user", params, rpcOpts);
+    if (collaboratorIds) params.p_collaborator_ids = collaboratorIds;
+    return clients.user.rpc(rpcName, params, rpcOpts);
   }
   if (scope?.branchId) {
-    return clients.user.rpc("leads_visible_to_user", {
+    return clients.user.rpc(rpcName, {
       p_tenant: tenantId,
       p_scope: "branch",
       p_branch_id: scope.branchId,
+      ...(collaboratorIds ? { p_collaborator_ids: collaboratorIds } : {}),
     }, rpcOpts);
   }
   return clients.service.from("leads").select("*", rpcOpts).eq("tenant_id", tenantId);
