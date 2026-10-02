@@ -1,9 +1,7 @@
 import { inngest } from "@/lib/inngest/client";
 import { createServiceClient } from "@/lib/supabase/server";
 import { scopedClientForTenant } from "@/lib/supabase/scoped";
-import { sendQueuedEmailBatch } from "@/lib/email/outbound/send";
-import { normalizeEmail } from "@/lib/email/outbound/suppression";
-import { markDraftSentViaEdgeX } from "@/industries/_shared/features/outreach/lib/engine";
+import { sendDraftViaEdgeX } from "@/industries/_shared/features/outreach/lib/send-draft";
 import { logger } from "@/lib/logger";
 
 // Durable auto-send worker for Outreach drip sequences — OUTREACH-PHASE2-BRIEF.md
@@ -38,15 +36,6 @@ interface DueDraftRow {
   lead_id: string;
   subject: string;
   body_html: string;
-}
-
-interface LeadEmailRow {
-  email: string | null;
-}
-
-interface EmailMessageIdRow {
-  id: string;
-  status: string;
 }
 
 // Three plain sequential queries rather than a doubly-nested PostgREST embed
@@ -132,72 +121,34 @@ export async function processTenantAutoSendDrafts(
   let skipped = 0;
 
   for (const draft of (dueDrafts ?? []) as unknown as DueDraftRow[]) {
-    const { data: leadRow } = await db.from("leads").select("email").eq("id", draft.lead_id).maybeSingle();
-    const email = (leadRow as LeadEmailRow | null)?.email;
-    if (!email) {
-      logger.warn({ tenantId, draftId: draft.id }, "sequence-step-send: lead has no email — leaving draft pending");
-      skipped++;
-      continue;
-    }
+    const result = await sendDraftViaEdgeX(db, tenantId, draft);
 
-    // Idempotent materialization — mirrors the blast /send route's upsert
-    // convention exactly: (source_id, lead_id) unique, ignoreDuplicates makes
-    // a re-scanned draft (e.g. after a mid-cycle crash) a safe no-op. Draft
-    // content is already fully rendered by createDraftForStep at
-    // enrollment/advance time — no template re-render needed here.
-    const { error: upsertError } = await db.from("email_messages").upsert(
-      {
-        lead_id: draft.lead_id,
-        source: "sequence",
-        source_id: draft.id,
-        to_email: normalizeEmail(email),
-        to_email_stored: email,
-        subject: draft.subject,
-        body_html: draft.body_html,
-        status: "queued",
-      },
-      { onConflict: "source_id,lead_id", ignoreDuplicates: true }
-    );
-    if (upsertError) {
-      logger.error({ err: upsertError, tenantId, draftId: draft.id }, "sequence-step-send: failed to materialize email_messages row");
-      failed++;
-      continue;
-    }
-
-    const { data: messageRow } = await db
-      .from("email_messages")
-      .select("id, status")
-      .eq("source_id", draft.id)
-      .eq("lead_id", draft.lead_id)
-      .maybeSingle();
-    const message = messageRow as EmailMessageIdRow | null;
-    if (!message) {
-      logger.error({ tenantId, draftId: draft.id }, "sequence-step-send: email_messages row missing right after upsert");
-      failed++;
-      continue;
-    }
-    if (message.status !== "queued" && message.status !== "sending") {
-      // Already sent/failed/suppressed by a previous run — nothing to do.
-      continue;
-    }
-
-    const result = await sendQueuedEmailBatch(tenantId, [message.id]);
-
-    if (result.sent === 1) {
-      await markDraftSentViaEdgeX(db, tenantId, draft.id, message.id);
-      sent++;
-    } else if (result.throttled === 1) {
-      // §5.5 — daily cap hit: draft stays 'pending', never marked sent or
-      // dropped. The due-draft bell (runOutreachDraftReminders) already
-      // flags this as "due" — no new code needed there.
-      throttled++;
-    } else {
-      // Failed or suppressed — the underlying email_messages row carries the
-      // reason. Draft stays 'pending'; a human resolves via the cadence
-      // timeline's existing skip action. Known gap: a permanently-failing
-      // address stays pending forever rather than auto-skipping — flagged
-      // in the phase report, not fixed here.
-      failed++;
+    switch (result.status) {
+      case "sent":
+        sent++;
+        break;
+      case "no_email":
+        skipped++;
+        break;
+      case "throttled":
+        // §5.5 — daily cap hit: draft stays 'pending', never marked sent or
+        // dropped. The due-draft bell (runOutreachDraftReminders) already
+        // flags this as "due" — no new code needed there.
+        throttled++;
+        break;
+      case "failed":
+        // Failed or suppressed — the underlying email_messages row carries the
+        // reason. Draft stays 'pending'; a human resolves via the cadence
+        // timeline's existing skip action. Known gap: a permanently-failing
+        // address stays pending forever rather than auto-skipping — flagged
+        // in the phase report, not fixed here.
+        failed++;
+        break;
+      case "already_sent":
+      case "already_handled":
+      case "in_progress":
+        // Already sent/failed/suppressed by a previous run — nothing to do.
+        break;
     }
   }
 
