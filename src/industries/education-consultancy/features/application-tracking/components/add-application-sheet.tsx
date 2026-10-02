@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
+import { useBlockingNotice } from "@/components/dashboard/blocking-notice";
+import { profileIncompleteNotice } from "@/lib/blocking-notice";
 import { Loader2, Search } from "lucide-react";
 import {
   Sheet,
@@ -22,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { AutocompleteInput } from "./autocomplete-input";
+import { useApplicationStatusOptions } from "../hooks/use-application-status-options";
 import { AddUniversityWithProgramsDialog } from "./add-university-with-programs-dialog";
 import { useApplicationReferenceData, getCollegeSuggestions } from "../hooks/use-application-reference-data";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
@@ -50,7 +53,6 @@ export function AddApplicationSheet({
   canManageApplications,
   onSuccess,
 }: AddApplicationSheetProps) {
-  const defaultStage = stages.find((s) => s.is_default) ?? stages[0];
 
   const [submitting, setSubmitting] = useState(false);
   const [leadSearch, setLeadSearch] = useState("");
@@ -64,13 +66,21 @@ export function AddApplicationSheet({
   const [countries, setCountries] = useState<string[]>([]);
   const [degreeLevel, setDegreeLevel] = useState("");
   const [fieldOfStudy, setFieldOfStudy] = useState("");
-  const [stageId, setStageId] = useState(defaultStage?.id ?? "");
+  const [stageId, setStageId] = useState("");
+  // Status list: only the statuses of the pipeline that matches the selected Destination (see the hook),
+  // so a name is never listed once per country and a status can never belong to a different pipeline.
+  const { stages: statusStages, loading: statusLoading } = useApplicationStatusOptions(countries[0], open, stages);
+  const defaultStage = statusStages.find((s) => s.is_default) ?? statusStages[0];
+  // Never submit a status that is not in the list shown (e.g. left over from a previous destination).
+  const selectedStageId = statusStages.some((s) => s.id === stageId) ? stageId : (defaultStage?.id ?? "");
   const [deadline, setDeadline] = useState("");
   const [agentId, setAgentId] = useState("");
   const [appliedDate, setAppliedDate] = useState("");
   const [intakeStartDate, setIntakeStartDate] = useState("");
   const [programSuggestions, setProgramSuggestions] = useState<string[]>([]);
   const [consentBlocked, setConsentBlocked] = useState(false);
+  const [profileMissing, setProfileMissing] = useState<string[]>([]);
+  const { notify, showNotice, noticeDialog } = useBlockingNotice();
   const [universityId, setUniversityId] = useState<string | null>(null);
   const [addUniversityDialogOpen, setAddUniversityDialogOpen] = useState(false);
   const [pendingUniversityName, setPendingUniversityName] = useState("");
@@ -166,6 +176,27 @@ export function AddApplicationSheet({
       .catch(() => {});
   }, [selectedLead]);
 
+  // Check the student's profile as soon as one is picked — BEFORE the form is filled — and show the
+  // big pop-up if something is missing. If the check can't run the form stays usable: the create API
+  // still enforces the rule when saving.
+  const checkProfile = useCallback(async (leadId: string) => {
+    try {
+      const res = await fetch(`/api/v1/leads/${leadId}/profile-completeness`);
+      if (!res.ok) { setProfileMissing([]); return; }
+      const { data } = await res.json();
+      const missing: string[] = data && data.complete === false ? (data.missing ?? []) : [];
+      setProfileMissing(missing);
+      if (missing.length > 0) showNotice(profileIncompleteNotice(missing));
+    } catch {
+      setProfileMissing([]);
+    }
+  }, [showNotice]);
+
+  useEffect(() => {
+    if (!selectedLead) { setProfileMissing([]); return; }
+    void checkProfile(selectedLead.id);
+  }, [selectedLead, checkProfile]);
+
   // Debounced lead search
   useEffect(() => {
     if (!open || leadSearch.length < 2) { setLeadOptions([]); return; }
@@ -215,7 +246,7 @@ export function AddApplicationSheet({
         university_name: universityName.trim(),
         program_name: programName.trim(),
       };
-      if (stageId) body.stage_id = stageId;
+      if (selectedStageId) body.stage_id = selectedStageId;
       const intakeTerm = [intakeMonth, intakeYear].filter(Boolean).join(" ");
       if (intakeTerm) body.intake_term = intakeTerm;
       if (countries.length > 0) body.countries = countries;
@@ -233,8 +264,10 @@ export function AddApplicationSheet({
       });
 
       if (!res.ok) {
-        const { error } = await res.json();
-        throw new Error(error?.message ?? "Failed to create application");
+        // Rule-blocking errors (profile incomplete, consent required, ...) become a big pop-up; anything else a toast.
+        const { error } = await res.json().catch(() => ({ error: null }));
+        notify(error, "Failed to create application");
+        return;
       }
 
       toast.success("Application created");
@@ -423,12 +456,12 @@ export function AddApplicationSheet({
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-xs text-gray-600">Stage</Label>
-                <Select value={stageId} onValueChange={setStageId}>
+                <Select value={selectedStageId} onValueChange={setStageId} disabled={statusLoading}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select stage" />
                   </SelectTrigger>
                   <SelectContent>
-                    {stages.map((s) => (
+                    {statusStages.map((s) => (
                       <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                     ))}
                   </SelectContent>
@@ -494,6 +527,14 @@ export function AddApplicationSheet({
         </div>
 
         <SheetFooter className="shrink-0 border-t pt-4 space-y-3">
+          {profileMissing.length > 0 && selectedLead && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 w-full">
+              This student&apos;s profile is incomplete. Missing: {profileMissing.join(", ")}.{" "}
+              <button type="button" className="underline font-medium" onClick={() => void checkProfile(selectedLead.id)}>
+                Check again
+              </button>
+            </p>
+          )}
           {consentBlocked && selectedLead && (
             <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 w-full">
               This student must sign consent first.{" "}
@@ -513,7 +554,7 @@ export function AddApplicationSheet({
             </Button>
             <Button
               onClick={handleSubmit}
-              disabled={submitting || !selectedLead || !universityName.trim() || !programName.trim() || consentBlocked}
+              disabled={submitting || !selectedLead || !universityName.trim() || !programName.trim() || consentBlocked || profileMissing.length > 0}
               className="flex-1"
             >
               {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
@@ -537,6 +578,8 @@ export function AddApplicationSheet({
           if (programs.length === 1) setProgramName(programs[0].name);
         }}
       />
+
+      {noticeDialog}
     </Sheet>
   );
 }

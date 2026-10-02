@@ -24,6 +24,8 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "./status-badge";
 import { AddApplicationToLeadSheet } from "./add-application-to-lead-sheet";
+import { useBlockingNotice } from "@/components/dashboard/blocking-notice";
+import { profileIncompleteNotice } from "@/lib/blocking-notice";
 import type { Application, ApplicationStage } from "@/types/database";
 import { normalizeDestinations } from "@/lib/leads/destination-normalize";
 
@@ -133,6 +135,31 @@ export function ApplicationsCard({ leadId, canManage, disabled = false }: Applic
   const [stages, setStages] = useState<ApplicationStage[]>([]);
   const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
+  const [checkingProfile, setCheckingProfile] = useState(false);
+  const { showNotice, noticeDialog } = useBlockingNotice();
+
+  // Check the student's profile BEFORE opening the form, so a missing item is shown up front in a big
+  // pop-up instead of as a small message after the whole form is filled. If the check can't run we
+  // open the form anyway — the create API still enforces the rule when saving.
+  async function handleAddClick() {
+    if (disabled || checkingProfile) return;
+    setCheckingProfile(true);
+    try {
+      const res = await fetch(`/api/v1/leads/${leadId}/profile-completeness`);
+      if (res.ok) {
+        const { data } = await res.json();
+        if (data && data.complete === false) {
+          showNotice(profileIncompleteNotice(data.missing ?? []));
+          return;
+        }
+      }
+      setAddOpen(true);
+    } catch {
+      setAddOpen(true);
+    } finally {
+      setCheckingProfile(false);
+    }
+  }
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
@@ -209,9 +236,9 @@ export function ApplicationsCard({ leadId, canManage, disabled = false }: Applic
                   size="sm"
                   variant="ghost"
                   className="h-6 w-6 p-0"
-                  onClick={() => !disabled && setAddOpen(true)}
+                  onClick={handleAddClick}
                   aria-label={disabled ? "Add Application (sign consent first)" : "Add Application"}
-                  disabled={disabled}
+                  disabled={disabled || checkingProfile}
                 >
                   <Plus className="h-3.5 w-3.5" />
                 </Button>
@@ -262,6 +289,8 @@ export function ApplicationsCard({ leadId, canManage, disabled = false }: Applic
           fetchApplications();
         }}
       />
+
+      {noticeDialog}
     </>
   );
 }

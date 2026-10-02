@@ -25,6 +25,8 @@ import { AutocompleteInput } from "./autocomplete-input";
 import { AddUniversityWithProgramsDialog } from "./add-university-with-programs-dialog";
 import { useApplicationReferenceData, getCollegeSuggestions } from "../hooks/use-application-reference-data";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
+import { useApplicationStatusOptions } from "../hooks/use-application-status-options";
+import { useBlockingNotice } from "@/components/dashboard/blocking-notice";
 import { DestinationsMultiSelect } from "@/components/dashboard/destinations-multi-select";
 import type { ApplicationStage, Lead } from "@/types/database";
 
@@ -65,6 +67,7 @@ export function AddApplicationToLeadSheet({
     createPartnerCollege, programsByUniversity, fetchPrograms, createProgram, fetchDistinctProgramNames,
   } = useApplicationReferenceData(open);
   const { studyLevels, fieldsOfStudy } = useEduTaxonomy();
+  const { notify, noticeDialog } = useBlockingNotice();
 
   // Fetch the lead's destinations when the sheet opens
   useEffect(() => {
@@ -83,7 +86,12 @@ export function AddApplicationToLeadSheet({
   // misses one — see getCollegeSuggestions().
   const collegeSuggestions = getCollegeSuggestions(partnerColleges, countries);
 
-  const defaultStage = stages.find((s) => s.is_default) ?? stages[0];
+  // Status list: only the statuses of the pipeline that matches the selected Destination (see the hook),
+  // so a name is never listed once per country and a status can never belong to a different pipeline.
+  const { stages: statusStages, loading: statusLoading } = useApplicationStatusOptions(countries[0], open, stages);
+  const defaultStage = statusStages.find((s) => s.is_default) ?? statusStages[0];
+  // Never submit a status that is not in the list shown (e.g. left over from a previous destination).
+  const selectedStageId = statusStages.some((s) => s.id === stageId) ? stageId : (defaultStage?.id ?? "");
 
   useEffect(() => {
     if (!open) {
@@ -169,7 +177,7 @@ export function AddApplicationToLeadSheet({
         university_name: universityName.trim(),
         program_name: programName.trim(),
       };
-      if (stageId) body.stage_id = stageId;
+      if (selectedStageId) body.stage_id = selectedStageId;
       const intakeTerm = [intakeMonth, intakeYear].filter(Boolean).join(" ");
       if (intakeTerm) body.intake_term = intakeTerm;
       if (countries.length > 0) body.countries = countries;
@@ -187,8 +195,10 @@ export function AddApplicationToLeadSheet({
       });
 
       if (!res.ok) {
-        const { error } = await res.json();
-        throw new Error(error?.message ?? "Failed to create application");
+        // Rule-blocking errors (profile incomplete, consent required, ...) become a big pop-up; anything else a toast.
+        const { error } = await res.json().catch(() => ({ error: null }));
+        notify(error, "Failed to create application");
+        return;
       }
 
       toast.success("Application added");
@@ -306,12 +316,12 @@ export function AddApplicationToLeadSheet({
 
           <div className="space-y-1.5">
             <Label className="text-xs text-gray-600">Status</Label>
-            <Select value={stageId} onValueChange={setStageId}>
+            <Select value={selectedStageId} onValueChange={setStageId} disabled={statusLoading}>
               <SelectTrigger>
                 <SelectValue placeholder="Select status" />
               </SelectTrigger>
               <SelectContent>
-                {stages.map((s) => (
+                {statusStages.map((s) => (
                   <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                 ))}
               </SelectContent>
@@ -401,6 +411,8 @@ export function AddApplicationToLeadSheet({
           if (programs.length === 1) setProgramName(programs[0].name);
         }}
       />
+
+      {noticeDialog}
     </Sheet>
   );
 }
