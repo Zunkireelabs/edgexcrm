@@ -7,7 +7,15 @@ import type { ScopedClient } from "@/lib/supabase/scoped";
 // after /send). Two callers computing this independently is how they drift;
 // this is the one place the math lives.
 
-const DEFAULT_DAILY_CAP = 2000;
+export const DEFAULT_DAILY_CAP = 2000;
+/**
+ * Bounds for the admin-editable daily send limit (Settings -> Communications). The upper bound is a platform
+ * guard, not the tenant's own preference: every tenant sends through the same provider account and sending
+ * domain, so one tenant raising its limit without bound could burn the shared sender reputation / provider
+ * quota. Raise it only after checking the provider plan.
+ */
+export const DAILY_SEND_CAP_MIN = 50;
+export const DAILY_SEND_CAP_MAX = 5000;
 
 export interface DailyCapStatus {
   dailyCap: number;

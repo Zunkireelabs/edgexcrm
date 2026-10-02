@@ -1,6 +1,6 @@
 # OUTREACH-BULK-ENROLL-BRIEF — enroll many leads into a sequence at once (Phase 2)
 
-Status: **2a + 2b built** on branch `feat/outreach-scale` (Phase 1 = reply-stop, mig 257; 2a = mig 258; 2b = mig 259). 2c (daily cap setting) not started.
+Status: **Phase 2 (2a + 2b + 2c) built** on branch `feat/outreach-scale` (Phase 1 = reply-stop, mig 257; 2a = mig 258; 2b = mig 259; 2c = no migration).
 
 > **2a build notes (what changed from the plan):**
 > - **"All matching" from the leads list = the ids the table already collects** (`selectAllMatching` pages the real `/api/v1/leads` with the table's own params), sent as `selected` mode (<= 10,000). Reason: the table's scope params (list tab, funnel, stage, status, search, include_converted, the master view's staging/archive exclusion) are NOT part of the FilterTree, so a tree alone would not reproduce what the rep sees. Server re-checks visibility + contactability on those ids.
@@ -105,7 +105,7 @@ Replies already pause enrollments (Phase 1), so a bulk enroll into an auto-send 
 
 - **2a** core: ids helper, run/item tables, preview, start, worker, progress, result + CSV, cancel, **leads-list entry point**, conflict policy = skip only. **BUILT.**
 - **2b** switch + queue next, a **Pause all / Resume all** for a sequence, and the **Sequences-tab / post-create entry points** (filter mode + the filter bar). **BUILT** (mig 259).
-- **2c** `daily_send_cap` field in the email settings UI (admin-only, bounded, reputation warning) and the finish-time estimate wired to it.
+- **2c** `daily_send_cap` field in the email settings UI (admin-only, bounded 50..5,000, reputation warning); the preview's finish-time estimate already reads it. **BUILT.**
 
 ## 10. Tests
 
