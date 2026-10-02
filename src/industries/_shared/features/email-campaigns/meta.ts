@@ -6,5 +6,5 @@ import type { FeatureMeta } from "../../../_types";
 // avoid (docs/OUTREACH-PHASE1-BRIEF.md §7.1) — same precedent as sms/meta.ts.
 export const emailCampaignsMeta: FeatureMeta = {
   id: FEATURES.EMAIL_CAMPAIGNS,
-  industries: [INDUSTRIES.EDUCATION_CONSULTANCY],
+  industries: [INDUSTRIES.EDUCATION_CONSULTANCY, INDUSTRIES.CONSTRUCTION],
 };
