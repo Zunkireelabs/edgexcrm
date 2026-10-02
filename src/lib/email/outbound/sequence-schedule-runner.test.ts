@@ -35,7 +35,8 @@ vi.mock("@/lib/supabase/scoped", () => ({
 import { runScheduledSequenceSends } from "./sequence-schedule-runner";
 
 const draft = (over: Record<string, unknown> = {}) => ({
-  id: "d1", lead_id: "l1", subject: "Hi", body_html: "<p/>", scheduled_by: "u9", ...over,
+  id: "d1", lead_id: "l1", subject: "Hi", body_html: "<p/>", scheduled_by: "u9",
+  scheduled_send_at: new Date(Date.now() - 60_000).toISOString(), ...over,
 });
 
 describe("runScheduledSequenceSends", () => {
@@ -81,6 +82,19 @@ describe("runScheduledSequenceSends", () => {
     expect(updates[0].patch.scheduled_error).toBe("Mailbox unavailable");
     expect(String(updates[1].patch.scheduled_error)).toMatch(/no email/i);
     expect(String(updates[2].patch.scheduled_error)).toMatch(/not sent again/i);
+  });
+
+  it("keeps the schedule untouched while another run is mid-send (never clears an in-flight email)", async () => {
+    sendDraftMock.mockResolvedValue({ status: "in_progress" });
+    expect((await runScheduledSequenceSends()).t1).toEqual({ sent: 0, throttled: 0, cleared: 0 });
+    expect(updates).toHaveLength(0);
+  });
+
+  it("does not send a draft that missed its time by more than a day (e.g. after an outage)", async () => {
+    dueDrafts = [draft({ scheduled_send_at: new Date(Date.now() - 25 * 3600_000).toISOString() })];
+    await runScheduledSequenceSends();
+    expect(sendDraftMock).not.toHaveBeenCalled();
+    expect(String(updates[0].patch.scheduled_error)).toMatch(/more than a day/i);
   });
 
   it("never sends when sending is switched off at fire time; it clears the schedule with a reason instead", async () => {

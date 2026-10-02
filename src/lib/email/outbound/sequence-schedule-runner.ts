@@ -15,6 +15,8 @@ import { sendDraftViaEdgeX } from "@/industries/_shared/features/outreach/lib/se
 // (never held back to fire unexpectedly later).
 
 const MAX_DUE_PER_TENANT_PER_RUN = 50;
+// If the server was down for a long time, a scheduled email must not go out days late as a surprise.
+const MAX_OVERDUE_MS = 24 * 60 * 60 * 1000;
 
 interface TenantIdRow {
   tenant_id: string;
@@ -26,6 +28,7 @@ interface ScheduledDraftRow {
   subject: string;
   body_html: string;
   scheduled_by: string | null;
+  scheduled_send_at: string;
 }
 
 export interface ScheduleRunSummary {
@@ -61,7 +64,7 @@ export async function processTenantScheduledDrafts(tenantId: string): Promise<Sc
   // enrollment never sends.
   const { data, error } = await db
     .from("sequence_step_drafts")
-    .select("id, lead_id, subject, body_html, scheduled_by, leads!inner(deleted_at), sequence_enrollments!inner(status)")
+    .select("id, lead_id, subject, body_html, scheduled_by, scheduled_send_at, leads!inner(deleted_at), sequence_enrollments!inner(status)")
     .eq("status", "pending")
     .not("scheduled_send_at", "is", null)
     .lte("scheduled_send_at", nowIso)
@@ -91,6 +94,10 @@ export async function processTenantScheduledDrafts(tenantId: string): Promise<Sc
       await clearSchedule(draft.id, "Sending from EdgeX was turned off when this was due, so it was not sent.");
       continue;
     }
+    if (Date.now() - new Date(draft.scheduled_send_at).getTime() > MAX_OVERDUE_MS) {
+      await clearSchedule(draft.id, "This missed its scheduled time by more than a day, so it was not sent. Reschedule it if you still want it sent.");
+      continue;
+    }
     if (!draft.subject?.trim()) {
       await clearSchedule(draft.id, "The subject was blank when this was due, so it was not sent.");
       continue;
@@ -106,6 +113,10 @@ export async function processTenantScheduledDrafts(tenantId: string): Promise<Sc
       case "throttled":
         // Daily cap reached: stays scheduled and is retried on the next pass.
         summary.throttled++;
+        break;
+      case "in_progress":
+        // Another run is mid-send for this message: stays scheduled; retried next pass (a crashed
+        // 'sending' row is reclaimed after 15 minutes). Never clear it — the email may be going out.
         break;
       case "no_email":
         await clearSchedule(draft.id, "This lead has no email address, so it was not sent.");
