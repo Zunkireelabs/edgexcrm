@@ -31,6 +31,7 @@ const existingRow = {
   id: "app-1",
   lead_id: "lead-1",
   stage_id: "stage-new",
+  pipeline_id: "pipe-a",
   status: "new",
   notes: "old notes",
   assigned_to: null,
@@ -47,23 +48,33 @@ vi.mock("@/lib/api/applications", () => ({
   canManageApplicationForLead: () => true,
 }));
 
-function fakeScopedClient(opts: { updatedRow: Record<string, unknown> }) {
+function fakeScopedClient(opts: {
+  updatedRow: Record<string, unknown>;
+  /** The stage row the route reads for the requested stage_id. */
+  stage?: { id: string; slug: string; terminal_type: string | null; pipeline_id: string | null };
+  /** Receives the patch the route writes to `applications`. */
+  onUpdate?: (patch: Record<string, unknown>) => void;
+}) {
+  const stage = opts.stage ?? { id: "stage-qualified", slug: "qualified", terminal_type: null, pipeline_id: "pipe-a" };
   return {
     from(table: string) {
       if (table === "application_stages") {
         return {
           select: () => ({
-            eq: () => ({ maybeSingle: async () => ({ data: { id: "stage-qualified", slug: "qualified", terminal_type: null } }) }),
+            eq: () => ({ maybeSingle: async () => ({ data: stage }) }),
           }),
         };
       }
       if (table === "applications") {
         return {
-          update: () => ({
-            eq: () => ({
-              select: () => ({ single: async () => ({ data: opts.updatedRow, error: null }) }),
-            }),
-          }),
+          update: (patch: Record<string, unknown>) => {
+            opts.onUpdate?.(patch);
+            return {
+              eq: () => ({
+                select: () => ({ single: async () => ({ data: opts.updatedRow, error: null }) }),
+              }),
+            };
+          },
         };
       }
       throw new Error(`unexpected table: ${table}`);
@@ -148,5 +159,55 @@ describe("PATCH /api/v1/applications/[id] — audit-log dedup on stage move", ()
 
     const auditActions = createAuditLogMock.mock.calls.map((c) => (c[0] as { action: string }).action);
     expect(auditActions).toEqual(["application.updated"]);
+  });
+});
+
+// The application's pipeline follows its stage. Before this, moving an application into a stage of
+// another pipeline left applications.pipeline_id as it was, so the pipeline's application count and the
+// board disagreed. pipeline_id is stage bookkeeping, so it must not add a second audit row either.
+describe("PATCH /api/v1/applications/[id] — pipeline follows the stage", () => {
+  async function move(stage: { id: string; slug: string; terminal_type: string | null; pipeline_id: string | null }, extraBody: Record<string, unknown> = {}) {
+    let written: Record<string, unknown> | null = null;
+    createAuditLogMock.mockReset();
+    emitEventMock.mockReset();
+    const { scopedClient } = await import("@/lib/supabase/scoped");
+    vi.mocked(scopedClient).mockResolvedValue(
+      fakeScopedClient({
+        updatedRow: { ...existingRow, stage_id: stage.id, status: stage.slug },
+        stage,
+        onUpdate: (p) => { written = p; },
+      }) as never
+    );
+    const { PATCH } = await import("./route");
+    await PATCH(fakeReq({ stage_id: stage.id, ...extraBody }), { params });
+    return written as Record<string, unknown> | null;
+  }
+
+  it("a move into a stage of ANOTHER pipeline updates pipeline_id too", async () => {
+    const patch = await move({ id: "stage-b1", slug: "visa", terminal_type: null, pipeline_id: "pipe-b" });
+    expect(patch).toMatchObject({ stage_id: "stage-b1", status: "visa", pipeline_id: "pipe-b" });
+  });
+
+  it("a move inside the SAME pipeline does not touch pipeline_id", async () => {
+    const patch = await move({ id: "stage-a2", slug: "qualified", terminal_type: null, pipeline_id: "pipe-a" });
+    expect(patch).toMatchObject({ stage_id: "stage-a2", status: "qualified" });
+    expect(patch).not.toHaveProperty("pipeline_id");
+  });
+
+  it("a stage with no pipeline recorded never wipes the application's pipeline_id", async () => {
+    const patch = await move({ id: "stage-legacy", slug: "legacy", terminal_type: null, pipeline_id: null });
+    expect(patch).toMatchObject({ stage_id: "stage-legacy" });
+    expect(patch).not.toHaveProperty("pipeline_id");
+  });
+
+  it("a client-supplied pipeline_id is ignored (it only ever follows the stage)", async () => {
+    const patch = await move({ id: "stage-a2", slug: "qualified", terminal_type: null, pipeline_id: "pipe-a" }, { pipeline_id: "pipe-evil" });
+    expect(patch).not.toHaveProperty("pipeline_id");
+  });
+
+  it("a cross-pipeline move still writes exactly ONE audit row (pipeline_id is stage bookkeeping)", async () => {
+    await move({ id: "stage-b1", slug: "visa", terminal_type: null, pipeline_id: "pipe-b" });
+    const actions = createAuditLogMock.mock.calls.map((c) => (c[0] as { action: string }).action);
+    expect(actions).toEqual(["application.stage_changed"]);
   });
 });
