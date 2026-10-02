@@ -27,6 +27,9 @@ export type SendDraftResult =
   | { status: "no_email" }
   // Daily cap reached: the draft stays pending and is picked up again later.
   | { status: "throttled" }
+  // Another run is mid-send for this very message (its row is 'sending' and not yet stale), so
+  // nothing was sent or failed here. Not an error: never treat it as a failure.
+  | { status: "in_progress" }
   // A previous run already finished this message as failed/suppressed - nothing was re-sent.
   | { status: "already_handled"; messageStatus: string; errorCode: string | null; errorMessage: string | null }
   | { status: "failed"; suppressed: boolean; errorCode: string | null; errorMessage: string | null };
@@ -118,6 +121,10 @@ export async function sendDraftViaEdgeX(
     return { status: "sent", emailMessageId: message.id };
   }
   if (result.throttled === 1) return { status: "throttled" };
+  // sendQueuedEmailBatch leaves a non-stale 'sending' row untouched and reports all zeros.
+  if (result.sent === 0 && result.failed === 0 && result.suppressed === 0 && result.throttled === 0) {
+    return { status: "in_progress" };
+  }
 
   // Failed or suppressed: the email_messages row carries the reason. The draft stays pending so a
   // human can resolve it (skip, or fall back to a manual send).

@@ -146,6 +146,7 @@ export async function processTenantAutoSendDrafts(
         break;
       case "already_sent":
       case "already_handled":
+      case "in_progress":
         // Already sent/failed/suppressed by a previous run — nothing to do.
         break;
     }

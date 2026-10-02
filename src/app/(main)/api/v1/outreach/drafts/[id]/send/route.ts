@@ -17,6 +17,8 @@ interface DraftRow {
   body_html: string;
   status: string;
   assigned_to: string | null;
+  leads: { deleted_at: string | null } | null;
+  sequence_enrollments: { status: string } | null;
 }
 
 // POST /api/v1/outreach/drafts/[id]/send — send one pending sequence draft through the EdgeX
@@ -38,7 +40,7 @@ export async function POST(_request: NextRequest, { params }: Props) {
 
   const { data } = await db
     .from("sequence_step_drafts")
-    .select("id, lead_id, subject, body_html, status, assigned_to")
+    .select("id, lead_id, subject, body_html, status, assigned_to, leads!inner(deleted_at), sequence_enrollments!inner(status)")
     .eq("id", id)
     .maybeSingle();
   if (!data) return apiNotFound("Draft");
@@ -51,6 +53,10 @@ export async function POST(_request: NextRequest, { params }: Props) {
     return apiConflict("Sending from EdgeX isn't turned on for your account. Use Copy body and Mark sent instead.");
   }
   if (draft.status !== "pending") return apiConflict("This step was already sent or skipped.");
+  // Same eligibility as the Today list: a deleted lead or a paused/completed/unenrolled enrollment never sends.
+  if (draft.leads?.deleted_at || draft.sequence_enrollments?.status !== "active") {
+    return apiConflict("This lead's sequence isn't active, so this email can't be sent.");
+  }
   if (!draft.subject?.trim()) return apiError("SUBJECT_REQUIRED", "Add a subject before sending.", 422);
 
   const result = await sendDraftViaEdgeX(db, auth.tenantId, draft, { sentBy: auth.userId });
@@ -61,6 +67,8 @@ export async function POST(_request: NextRequest, { params }: Props) {
       return apiSuccess({ sent: true, email_message_id: result.emailMessageId });
     case "already_sent":
       return apiConflict("This email was already sent.");
+    case "in_progress":
+      return apiConflict("This email is already being sent. Refresh in a moment.");
     case "no_email":
       return apiError("NO_EMAIL", "This lead has no email address, so it can't be sent.", 422);
     case "throttled":

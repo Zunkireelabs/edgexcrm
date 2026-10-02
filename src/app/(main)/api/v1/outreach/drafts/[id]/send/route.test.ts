@@ -26,7 +26,10 @@ describe("POST /api/v1/outreach/drafts/[id]/send", () => {
     authMock.mockReset().mockResolvedValue(education);
     bulkEnabledMock.mockReset().mockResolvedValue(true);
     sendDraftMock.mockReset();
-    draftRow = { id: "d1", lead_id: "l1", subject: "s", body_html: "<p/>", status: "pending", assigned_to: "u1" };
+    draftRow = {
+      id: "d1", lead_id: "l1", subject: "s", body_html: "<p/>", status: "pending", assigned_to: "u1",
+      leads: { deleted_at: null }, sequence_enrollments: { status: "active" },
+    };
   });
 
   it("401 when signed out", async () => {
@@ -64,6 +67,21 @@ describe("POST /api/v1/outreach/drafts/[id]/send", () => {
     expect(res.status).toBe(422);
     expect(JSON.stringify(await res.json())).toContain("SUBJECT_REQUIRED");
     expect(sendDraftMock).not.toHaveBeenCalled();
+  });
+
+  it("409 for a deleted lead or an enrollment that is not active, without sending", async () => {
+    draftRow = { ...draftRow, leads: { deleted_at: "2026-10-01T00:00:00Z" } };
+    expect((await call()).status).toBe(409);
+    draftRow = { ...draftRow, leads: { deleted_at: null }, sequence_enrollments: { status: "paused" } };
+    expect((await call()).status).toBe(409);
+    expect(sendDraftMock).not.toHaveBeenCalled();
+  });
+
+  it("409 (not a failure) when the same email is already being sent by another run", async () => {
+    sendDraftMock.mockResolvedValue({ status: "in_progress" });
+    const res = await call();
+    expect(res.status).toBe(409);
+    expect(JSON.stringify(await res.json())).toContain("already being sent");
   });
 
   it("200 on a real send", async () => {

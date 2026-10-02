@@ -61,6 +61,13 @@ describe("sendDraftViaEdgeX", () => {
     expect(markDraftSentViaEdgeXMock).toHaveBeenCalledWith(db, "t1", "d1", "m1", { sentBy: "user-9" });
   });
 
+  it("reports in_progress (not a failure) when another run is mid-send and nothing was sent or failed here", async () => {
+    sendQueuedEmailBatchMock.mockResolvedValue({ sent: 0, failed: 0, suppressed: 0, throttled: 0 });
+    const { db } = fakeDb({ messages: [{ id: "m1", status: "sending" }] });
+    expect(await sendDraftViaEdgeX(db, "t1", draft)).toEqual({ status: "in_progress" });
+    expect(markDraftSentViaEdgeXMock).not.toHaveBeenCalled();
+  });
+
   it("does nothing when the lead has no email", async () => {
     const { db } = fakeDb({ email: null });
     expect(await sendDraftViaEdgeX(db, "t1", draft)).toEqual({ status: "no_email" });
