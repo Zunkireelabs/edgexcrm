@@ -13,29 +13,37 @@ interface InfoSectionProps {
   headerAction?: React.ReactNode;
   /** Override for the title's default small-caps sidebar styling. */
   titleClassName?: string;
+  /** Keeps the section open regardless of the toggle (e.g. while editing) so a form is never hidden. */
+  forceOpen?: boolean;
+  /** Set false for a section that is always shown: no toggle button and no chevron, just the title. */
+  collapsible?: boolean;
 }
 
-export function InfoSection({ title, children, defaultOpen = true, className, headerAction, titleClassName }: InfoSectionProps) {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
+export function InfoSection({ title, children, defaultOpen = true, className, headerAction, titleClassName, forceOpen = false, collapsible = true }: InfoSectionProps) {
+  const [isOpenState, setIsOpen] = useState(defaultOpen);
+  const isOpen = !collapsible || forceOpen || isOpenState;
+  const titleClasses = cn("text-[11px] font-medium text-muted-foreground uppercase tracking-wide", titleClassName);
 
   return (
     <div className={cn("border border-border rounded-lg bg-card shadow-none", className)}>
       <div className="flex items-center justify-between w-full p-3 gap-2">
-        <button
-          type="button"
-          className="flex items-center justify-between flex-1 text-left min-w-0"
-          onClick={() => setIsOpen(!isOpen)}
-        >
-          <h3 className={cn("text-[11px] font-medium text-muted-foreground uppercase tracking-wide", titleClassName)}>
-            {title}
-          </h3>
-          <ChevronDown
-            className={cn(
-              "h-4 w-4 text-muted-foreground transition-transform duration-200 ml-2 shrink-0",
-              isOpen && "rotate-180"
-            )}
-          />
-        </button>
+        {collapsible ? (
+          <button
+            type="button"
+            className="flex items-center justify-between flex-1 text-left min-w-0"
+            onClick={() => setIsOpen(!isOpenState)}
+          >
+            <h3 className={titleClasses}>{title}</h3>
+            <ChevronDown
+              className={cn(
+                "h-4 w-4 text-muted-foreground transition-transform duration-200 ml-2 shrink-0",
+                isOpen && "rotate-180"
+              )}
+            />
+          </button>
+        ) : (
+          <h3 className={cn(titleClasses, "flex-1 min-w-0")}>{title}</h3>
+        )}
         {headerAction}
       </div>
       {isOpen && (

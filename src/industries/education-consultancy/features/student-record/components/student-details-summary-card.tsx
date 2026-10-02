@@ -3,7 +3,7 @@
 import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InfoSection } from "@/components/dashboard/lead/info-section";
-import { SectionGroup, CardSection, FieldGrid, EditableField } from "./form-primitives";
+import { CollapsibleGroups, SectionGroup, CardSection, FieldGrid, EditableField } from "./form-primitives";
 import { WorkExperienceSection } from "./work-experience-section";
 import { ReferencesSection } from "./references-section";
 import {
@@ -14,7 +14,8 @@ import {
 
 interface StudentDetailsSummaryCardProps {
   /** Opens the existing Student Details dialog — the single source of truth for editing. */
-  onEdit: () => void;
+  /** Omit to hide the card's own Edit button — the page's single Edit (top of the contact card) opens the pop-up instead. */
+  onEdit?: () => void;
   defaultOpen?: boolean;
 }
 
@@ -53,12 +54,16 @@ export function StudentDetailsSummaryCard({ onEdit, defaultOpen = true }: Studen
       className="rounded-lg"
       titleClassName="text-base font-semibold text-foreground normal-case tracking-normal"
       headerAction={
-        <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs shrink-0" onClick={onEdit}>
-          <Pencil className="h-3 w-3 mr-1" />
-          Edit
-        </Button>
+        onEdit ? (
+          <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs shrink-0" onClick={onEdit}>
+            <Pencil className="h-3 w-3 mr-1" />
+            Edit
+          </Button>
+        ) : undefined
       }
     >
+      {/* Every section heading inside gets a collapse arrow — including any added later. */}
+      <CollapsibleGroups>
       <div className="space-y-7 pt-2">
         <SectionGroup title="Personal Information">
           <CardSection title="Basic Details">
@@ -97,6 +102,7 @@ export function StudentDetailsSummaryCard({ onEdit, defaultOpen = true }: Studen
           </CardSection>
         </SectionGroup>
       </div>
+      </CollapsibleGroups>
     </InfoSection>
   );
 }

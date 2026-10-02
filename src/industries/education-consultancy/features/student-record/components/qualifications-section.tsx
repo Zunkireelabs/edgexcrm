@@ -13,6 +13,7 @@ export interface QualificationEntry {
   startDate: string;
   endDate: string;
   percentageGrade: string;
+  passedYear: string;
   streamFaculty: string;
 }
 
@@ -24,7 +25,7 @@ export interface Qualifications {
 }
 
 function emptyEntry(): QualificationEntry {
-  return { institution: "", address: "", awardingBody: "", startDate: "", endDate: "", percentageGrade: "", streamFaculty: "" };
+  return { institution: "", address: "", awardingBody: "", startDate: "", endDate: "", percentageGrade: "", passedYear: "", streamFaculty: "" };
 }
 
 export function emptyQualifications(): Qualifications {
@@ -36,12 +37,16 @@ export function emptyQualifications(): Qualifications {
  * GPA/institution columns) — Address, Awarding Body, Start Date, and End Date
  * have no existing data anywhere, so they start blank rather than guessing.
  */
+function yearText(year: number | string | null | undefined): string {
+  return year === null || year === undefined ? "" : String(year);
+}
+
 export function qualificationsFromLead(lead: Lead): Qualifications {
   return {
-    see: { ...emptyEntry(), institution: lead.see_institution ?? "", percentageGrade: lead.see_gpa ?? "" },
-    plusTwo: { ...emptyEntry(), institution: lead.plus_two_institution ?? "", percentageGrade: lead.plus_two_gpa ?? "" },
-    bachelor: { ...emptyEntry(), institution: lead.bachelor_institution ?? "", percentageGrade: lead.bachelor_gpa ?? "" },
-    masters: { ...emptyEntry(), institution: lead.masters_institution ?? "", percentageGrade: lead.masters_gpa ?? "" },
+    see: { ...emptyEntry(), institution: lead.see_institution ?? "", percentageGrade: lead.see_gpa ?? "", passedYear: yearText(lead.see_passed_year) },
+    plusTwo: { ...emptyEntry(), institution: lead.plus_two_institution ?? "", percentageGrade: lead.plus_two_gpa ?? "", passedYear: yearText(lead.plus_two_passed_year) },
+    bachelor: { ...emptyEntry(), institution: lead.bachelor_institution ?? "", percentageGrade: lead.bachelor_gpa ?? "", passedYear: yearText(lead.bachelor_passed_year) },
+    masters: { ...emptyEntry(), institution: lead.masters_institution ?? "", percentageGrade: lead.masters_gpa ?? "", passedYear: yearText(lead.masters_passed_year) },
   };
 }
 
@@ -95,6 +100,7 @@ function levelFields(meta: LevelMeta): FieldDef[] {
     { key: "startDate", label: "Start Date", type: "date" },
     { key: "endDate", label: "End Date", type: "date" },
     { key: "percentageGrade", label: "Percentage / Grade", type: "text" },
+    { key: "passedYear", label: "Passed Year", type: "text", placeholder: "e.g. 2021" },
   ];
   if (meta.hasStream) fields.push({ key: "streamFaculty", label: "Stream / Faculty / Degree", type: "text" });
   return fields;

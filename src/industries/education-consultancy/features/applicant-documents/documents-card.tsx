@@ -1,5 +1,6 @@
 "use client";
 
+import { SECTION_TITLE_CLASS, SUBHEADING_CLASS } from "@/components/dashboard/lead/section-title";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FileText, Upload, Trash2, Loader2, Download, LayoutGrid, List as ListIcon, Image as ImageIcon, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
@@ -118,7 +119,7 @@ export function ApplicantDocumentsCard({
       <Card className="shadow-none rounded-lg py-0">
         <CardHeader className="pt-4 pb-3">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+            <span className={`${SECTION_TITLE_CLASS} flex items-center gap-2`}>
               Documents
               {!loading && (
                 <Badge variant="secondary" className="h-5 px-1.5 text-xs normal-case">
@@ -177,7 +178,7 @@ export function ApplicantDocumentsCard({
             <div className="space-y-4">
               {grouped.map(({ category, docs: catDocs }) => (
                 <div key={category}>
-                  <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5">
+                  <p className={`${SUBHEADING_CLASS} mb-1.5`}>
                     {DOCUMENT_CATEGORY_LABELS[category]}
                   </p>
                   <div className={viewMode === "grid" ? "grid grid-cols-2 gap-2" : "space-y-1.5"}>

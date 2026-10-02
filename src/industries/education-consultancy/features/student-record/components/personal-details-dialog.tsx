@@ -23,7 +23,7 @@ import { DestinationsMultiSelect } from "@/components/dashboard/destinations-mul
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 import { getDistinctFormValues, type LeadSubmissionSnapshot } from "@/lib/leads/submission-history";
 import { normalizeDestinations, normalizeFieldOfStudy, normalizeDegreeLevel } from "@/lib/leads/destination-normalize";
-import { TestScoresSection, testScoresFromLead, type TestScore } from "./test-scores-section";
+import { TestScoresSection, testScoresFromLead, legacyScoreColumns, type TestScore } from "./test-scores-section";
 import { QualificationsSection, qualificationsFromLead, type Qualifications } from "./qualifications-section";
 import { WorkExperienceSection, type WorkExperienceEntry } from "./work-experience-section";
 import { ReferencesSection, type ReferenceEntry } from "./references-section";
@@ -41,15 +41,24 @@ import { AttachDocumentButton } from "./attach-document-button";
  * pre-filled from the real lead record, matching the auto-fill rule applied
  * everywhere else in this dialog.
  */
-// Already editable elsewhere (the page's main "Edit" button) — this is a
-// convenience second editor for the same real columns, so it saves live the
-// same way Study Interest does, not preview-only.
+// Real `leads` columns — this pop-up is the page's single editor (the one Edit button on
+// the contact card opens it), so these save live the same way Study Interest does.
 export const CORE_IDENTITY_FIELDS = [
   { key: "firstName", label: "First Name", type: "text" },
   { key: "lastName", label: "Last Name", type: "text" },
   { key: "email", label: "Email", type: "email" },
   { key: "phone", label: "Phone", type: "tel" },
   { key: "nationality", label: "Nationality", type: "text" },
+  { key: "city", label: "City", type: "text" },
+] as const;
+
+// Owner/admin-only on the server (applyLeadPatch rejects these fields for anyone else), so
+// this whole section is only shown — and only ever sent — for admins.
+export const LEAD_SOURCE_FIELDS = [
+  { key: "source", label: "Source Category", type: "text", placeholder: "e.g. Social Media, Referral" },
+  { key: "medium", label: "Source Channel", type: "text", placeholder: "e.g. Facebook, Google" },
+  { key: "account", label: "Source Page / Account", type: "text", placeholder: "e.g. admizz.edu.np" },
+  { key: "campaign", label: "Campaign", type: "text", placeholder: "e.g. spring-2025" },
 ] as const;
 
 export const PERSONAL_DETAIL_FIELDS = [
@@ -134,6 +143,7 @@ export interface CoreIdentity {
   email: string;
   phone: string;
   nationality: string;
+  city: string;
 }
 
 export function coreIdentityFromLead(lead: Lead): CoreIdentity {
@@ -143,6 +153,26 @@ export function coreIdentityFromLead(lead: Lead): CoreIdentity {
     email: lead.email ?? "",
     phone: lead.phone ?? "",
     nationality: lead.nationality ?? "",
+    city: lead.city ?? "",
+  };
+}
+
+export interface LeadSourceValues {
+  source: string;
+  medium: string;
+  account: string;
+  campaign: string;
+}
+
+export function leadSourceFromLead(lead: Lead, submissionHistory?: LeadSubmissionSnapshot[]): LeadSourceValues {
+  const cf = (lead.custom_fields || {}) as Record<string, unknown>;
+  return {
+    source: lead.intake_source ?? "",
+    // Same fallback the read-only Lead Source panel shows: the raw column, else what the
+    // lead's form submissions answered.
+    medium: lead.intake_medium || getDistinctFormValues(cf, submissionHistory, "source")[0] || "",
+    account: lead.intake_account ?? "",
+    campaign: lead.intake_campaign ?? "",
   };
 }
 
@@ -157,11 +187,11 @@ const QUALIFICATION_COLUMN_PREFIX: Record<keyof Qualifications, string> = {
  * Only the fields that already have a real column on `leads` today go into
  * this patch — core identity (Full Name/Email/Phone/Nationality), Study
  * Interest, and the legacy per-level Institution/GPA values, all already
- * whitelisted in apply-lead-patch.ts. Core identity is also already editable
- * today via the page's main "Edit" button — this is a second, convenience
- * editor for the same fields, not the only one, so it's held to the same
- * "only send what's whitelisted, never guess" rule as the rest of this
- * function. Everything else this dialog collects (new Personal Information
+ * whitelisted in apply-lead-patch.ts. This pop-up is the page's single editor
+ * (opened by the one Edit button on the contact card), so it also carries City, each
+ * level's Passed Year, the five exam scores that have a column, and — for admins
+ * only — Lead Source. It's held to the "only send what's whitelisted, never guess"
+ * rule. Everything else this dialog collects (new Personal Information
  * fields, the richer Qualification fields, Test Scores/Work
  * Experience/References) has no live column or table yet (migrations
  * 234-239 aren't applied anywhere), so it deliberately stays out of this
@@ -180,13 +210,18 @@ const QUALIFICATION_COLUMN_PREFIX: Record<keyof Qualifications, string> = {
  * fixes it structurally: an untouched field is never sent, so it can never
  * fail a check nobody asked it to run.
  */
-function buildLivePatch(
+export function buildLivePatch(
   core: CoreIdentity,
   coreOriginal: CoreIdentity,
   study: StudyInterest,
   studyOriginal: StudyInterest,
   qualifications: Qualifications,
-  qualificationsOriginal: Qualifications
+  qualificationsOriginal: Qualifications,
+  testScores: TestScore[],
+  testScoresOriginal: TestScore[],
+  /** null for non-admins: Lead Source fields are owner/admin-only, so they're never sent. */
+  source: LeadSourceValues | null,
+  sourceOriginal: LeadSourceValues
 ): Record<string, unknown> {
   const patch: Record<string, unknown> = {};
   const setIfChanged = (key: string, next: unknown, prev: unknown) => {
@@ -198,6 +233,7 @@ function buildLivePatch(
   setIfChanged("email", core.email || null, coreOriginal.email || null);
   setIfChanged("phone", core.phone || null, coreOriginal.phone || null);
   setIfChanged("nationality", core.nationality || null, coreOriginal.nationality || null);
+  setIfChanged("city", core.city || null, coreOriginal.city || null);
 
   setIfChanged("destinations", study.destinations, studyOriginal.destinations);
   setIfChanged("field_of_study", study.fieldOfStudy || null, studyOriginal.fieldOfStudy || null);
@@ -211,6 +247,21 @@ function buildLivePatch(
     const entryOriginal = qualificationsOriginal[level];
     setIfChanged(`${prefix}_institution`, entry.institution || null, entryOriginal.institution || null);
     setIfChanged(`${prefix}_gpa`, entry.percentageGrade || null, entryOriginal.percentageGrade || null);
+    setIfChanged(`${prefix}_passed_year`, entry.passedYear.trim() || null, entryOriginal.passedYear.trim() || null);
+  }
+
+  // Exam scores: only the five exams with a real column are saved (see legacyScoreColumns).
+  const scores = legacyScoreColumns(testScores);
+  const scoresOriginal = legacyScoreColumns(testScoresOriginal);
+  for (const column of Object.keys(scores)) {
+    setIfChanged(column, scores[column] || null, scoresOriginal[column] || null);
+  }
+
+  if (source) {
+    setIfChanged("intake_source", source.source || null, sourceOriginal.source || null);
+    setIfChanged("intake_medium", source.medium || null, sourceOriginal.medium || null);
+    setIfChanged("intake_account", source.account || null, sourceOriginal.account || null);
+    setIfChanged("intake_campaign", source.campaign || null, sourceOriginal.campaign || null);
   }
   return patch;
 }
@@ -227,9 +278,11 @@ interface PersonalDetailsDialogProps {
   canUploadDocuments?: boolean;
   /** When true, the dialog enters edit mode as soon as it opens instead of showing the preview first — used by the inline summary card's "Edit" button so it's a single click, not open-then-click-Edit-again. */
   openInEditMode?: boolean;
+  /** Owner/admin — unlocks the Lead Source section (the server only accepts those fields from admins). */
+  isAdmin?: boolean;
 }
 
-export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHistory, onLeadUpdate, canUploadDocuments, openInEditMode }: PersonalDetailsDialogProps) {
+export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHistory, onLeadUpdate, canUploadDocuments, openInEditMode, isAdmin = false }: PersonalDetailsDialogProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [values, setValues] = useState<FieldValues>({});
@@ -246,6 +299,8 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
   const [workExperienceDraft, setWorkExperienceDraft] = useState<WorkExperienceEntry[]>([]);
   const [references, setReferences] = useState<ReferenceEntry[]>([]);
   const [referencesDraft, setReferencesDraft] = useState<ReferenceEntry[]>([]);
+  const [leadSource, setLeadSource] = useState<LeadSourceValues>(() => leadSourceFromLead(lead, submissionHistory));
+  const [leadSourceDraft, setLeadSourceDraft] = useState<LeadSourceValues>(leadSource);
 
   const startEditing = () => {
     setDraft(values);
@@ -255,6 +310,7 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
     setQualificationsDraft(qualifications);
     setWorkExperienceDraft(workExperience);
     setReferencesDraft(references);
+    setLeadSourceDraft(leadSource);
     setIsEditing(true);
   };
 
@@ -277,11 +333,18 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
     setQualificationsDraft(qualifications);
     setWorkExperienceDraft(workExperience);
     setReferencesDraft(references);
+    setLeadSourceDraft(leadSource);
     setIsEditing(false);
   };
 
   const save = async () => {
-    const patch = buildLivePatch(coreIdentityDraft, coreIdentity, studyDraft, studyInterest, qualificationsDraft, qualifications);
+    const patch = buildLivePatch(
+      coreIdentityDraft, coreIdentity,
+      studyDraft, studyInterest,
+      qualificationsDraft, qualifications,
+      testScoresDraft, testScores,
+      isAdmin ? leadSourceDraft : null, leadSource
+    );
     const hasLiveChanges = Object.keys(patch).length > 0;
     setIsSaving(true);
     try {
@@ -305,10 +368,11 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
       setQualifications(qualificationsDraft);
       setWorkExperience(workExperienceDraft);
       setReferences(referencesDraft);
+      setLeadSource(leadSourceDraft);
       setIsEditing(false);
       toast.success(
         hasLiveChanges
-          ? "Full Name/Email/Phone/Nationality, Study Interest, and Academic Qualification institution/grade saved. Other new fields are saved locally for preview only until the database update is live."
+          ? "Saved. Fields without a database column yet (birth date, passport, work experience, etc.) are kept locally for preview only until the database update is live."
           : "Saved locally for preview only — nothing in the real-save fields changed."
       );
     } catch {
@@ -324,6 +388,10 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
 
   const handleCoreChange = (key: keyof CoreIdentity, value: string) => {
     setCoreIdentityDraft((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleSourceChange = (key: keyof LeadSourceValues, value: string) => {
+    setLeadSourceDraft((prev) => ({ ...prev, [key]: value }));
   };
 
   const handleOpenChange = (next: boolean) => {
@@ -368,7 +436,7 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
             </div>
           </div>
           <p className="text-xs text-muted-foreground">
-            Full Name/Email/Phone/Nationality, Study Interest, and Academic Qualification (institution/grade) save for real. Everything else here is a preview — it saves locally for now and will start saving for real once the database update for it is live.
+            Name, email, phone, nationality, city, Study Interest, qualifications (institution, grade, passed year), the main exam scores{isAdmin ? " and Lead Source" : ""} save for real. Everything else here is a preview — it saves locally for now and will start saving for real once the database update for it is live.
           </p>
         </DialogHeader>
 
@@ -433,6 +501,24 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
               />
             </CardSection>
           </SectionGroup>
+
+          {isAdmin && (
+            <SectionGroup title="Lead Source">
+              <CardSection>
+                <FieldGrid>
+                  {LEAD_SOURCE_FIELDS.map((field) => (
+                    <EditableField
+                      key={field.key}
+                      field={field}
+                      isEditing={isEditing}
+                      value={(isEditing ? leadSourceDraft : leadSource)[field.key]}
+                      onChange={(v) => handleSourceChange(field.key, v)}
+                    />
+                  ))}
+                </FieldGrid>
+              </CardSection>
+            </SectionGroup>
+          )}
 
           <SectionGroup title="Academic Information">
             <QualificationsSection
