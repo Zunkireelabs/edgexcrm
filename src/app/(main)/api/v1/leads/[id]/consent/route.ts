@@ -52,6 +52,16 @@ async function hasSignedConsent(db: Awaited<ReturnType<typeof scopedClient>>, le
   return !!data;
 }
 
+// Migration 254 allows at most one active unsigned consent per lead. When two sends race, the
+// loser's insert fails with a unique violation; that is "someone just did this", not a server error.
+function isUniqueViolation(error: unknown): boolean {
+  return (error as { code?: string } | null)?.code === "23505";
+}
+
+function consentInProgress() {
+  return apiError("CONSENT_IN_PROGRESS", "A consent request for this lead was just created. Please refresh and try again.", 409);
+}
+
 export async function GET(_request: NextRequest, context: RouteContext) {
   const { id } = await context.params;
 
@@ -267,6 +277,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .select()
       .single();
 
+    if (isUniqueViolation(insertError)) return consentInProgress();
     if (insertError || !newRecord) {
       log.error({ error: insertError }, "Failed to create consent record");
       return apiError("DB_ERROR", "Failed to create consent record", 500);
@@ -396,6 +407,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .select()
       .single();
 
+    if (isUniqueViolation(insertError)) return consentInProgress();
     if (insertError || !newRecord) {
       log.error({ error: insertError }, "Failed to create in-person consent record");
       return apiError("DB_ERROR", "Failed to create consent record", 500);

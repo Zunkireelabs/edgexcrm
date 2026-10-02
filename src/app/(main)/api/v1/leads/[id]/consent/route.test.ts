@@ -55,7 +55,7 @@ const row = (over: Record<string, unknown>) => ({
  * really returns only the newest one and a query for `status = signed` returns only signed rows —
  * that is what makes these tests fail against the old "newest row only" code.
  */
-function fakeDb(records: ReturnType<typeof row>[]) {
+function fakeDb(records: ReturnType<typeof row>[], opts: { insertError?: { code?: string; message: string } } = {}) {
   const writes = vi.fn();
   const template = {
     select: vi.fn(() => template),
@@ -82,7 +82,9 @@ function fakeDb(records: ReturnType<typeof row>[]) {
     let inserted: Record<string, unknown> | null = null;
     t.insert = vi.fn((row: Record<string, unknown>) => { writes(row); inserted = row; return t; });
     t.update = vi.fn((...args: unknown[]) => { writes(...args); return t; });
-    t.single = vi.fn(async () => ({ data: inserted ? { id: "new-consent", ...inserted } : null, error: null }));
+    t.single = vi.fn(async () =>
+      opts.insertError ? { data: null, error: opts.insertError } : { data: inserted ? { id: "new-consent", ...inserted } : null, error: null },
+    );
     return t;
   };
   return {
@@ -246,5 +248,37 @@ describe("POST /api/v1/leads/[id]/consent — delivery (action: send)", () => {
     expect(res.status).toBe(409);
     expect(body.error.code).toBe("ALREADY_SIGNED");
     expect(writes).not.toHaveBeenCalled();
+  });
+});
+
+// Migration 254: at most one active unsigned consent per lead. Two sends racing each other make the
+// loser's insert fail with a unique violation (Postgres 23505) — that must read as "someone just did
+// this" (409), not as a server error, and must not go on to email anybody.
+describe("POST /api/v1/leads/[id]/consent — concurrent send (migration 254 unique index)", () => {
+  const UNIQUE = { code: "23505", message: 'duplicate key value violates unique constraint "uq_lead_consents_one_active_unsigned"' };
+
+  it.each(["send", "send_in_person"])("'%s': a unique violation on insert becomes 409 CONSENT_IN_PROGRESS, not a 500", async (action) => {
+    const { db } = fakeDb([], { insertError: UNIQUE });
+    scopedClientMock.mockResolvedValue(db);
+
+    const { POST } = await import("./route");
+    const res = await POST(post(action), params());
+    const body = await res.json();
+
+    expect(res.status).toBe(409);
+    expect(body.error.code).toBe("CONSENT_IN_PROGRESS");
+    expect(sendConsentEmailMock).not.toHaveBeenCalled();
+  });
+
+  it.each(["send", "send_in_person"])("'%s': any other insert failure is still a 500 DB_ERROR", async (action) => {
+    const { db } = fakeDb([], { insertError: { code: "XX000", message: "boom" } });
+    scopedClientMock.mockResolvedValue(db);
+
+    const { POST } = await import("./route");
+    const res = await POST(post(action), params());
+    const body = await res.json();
+
+    expect(res.status).toBe(500);
+    expect(body.error.code).toBe("DB_ERROR");
   });
 });

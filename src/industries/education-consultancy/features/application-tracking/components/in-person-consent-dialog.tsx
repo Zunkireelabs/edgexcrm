@@ -52,13 +52,23 @@ export function InPersonConsentDialog({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "send_in_person" }),
         });
-        if (sendRes.status === 409) {
-          // Already signed (a stale card): closing the dialog makes the card refetch its status.
-          toast.info("Consent is already signed for this lead");
-          onOpenChange(false);
-          return;
+        if (!sendRes.ok) {
+          const json = await sendRes.json().catch(() => null);
+          const code = json?.error?.code;
+          if (code === "ALREADY_SIGNED") {
+            // Already signed (a stale card): closing the dialog makes the card refetch its status.
+            toast.info("Consent is already signed for this lead");
+            onOpenChange(false);
+            return;
+          }
+          if (code === "CONSENT_IN_PROGRESS") {
+            // Someone else just started a consent request for this lead.
+            toast.error(json.error.message ?? "A consent request for this lead was just created");
+            onOpenChange(false);
+            return;
+          }
+          throw new Error("send_failed");
         }
-        if (!sendRes.ok) throw new Error("send_failed");
         const sendJson = await sendRes.json();
         const token = (sendJson.data as { token: string }).token;
 
