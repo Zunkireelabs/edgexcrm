@@ -35,6 +35,7 @@ import { branchMemberIds, syncOriginMembership } from "@/lib/leads/branch-member
 import { POSITION_ROUTE_MAP } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
 import { addLeadCollaborator } from "@/lib/leads/collaborators";
 import { visibleLeadsBase } from "@/lib/leads/visibility-query";
+import { splitCollaboratorAnyOf } from "@/lib/filters/collaborator-split";
 import { getSourceFacet, getDestinationFacet, getCollaboratorFacet } from "@/lib/leads/aggregates";
 import { countFacetOptions, type FacetOption } from "@/lib/leads/facet-counts";
 import { treeForFacetOption } from "@/lib/filters/facet-tree";
@@ -373,8 +374,22 @@ export async function GET(request: NextRequest) {
   // to add to the select. `.select()` must be called before compileFilter (which
   // itself never calls .select() — see compile.ts's module doc comment), hence
   // filterPlan is computed above, before the query is even built.
-  const hasCollaboratorsEmbed = filterPlan.embeds.includes("lead_collaborators!inner(user_id)");
-  const selectColumns: string = filterPlan.embeds.length > 0 ? `${LEADS_LIST_COLUMNS},${filterPlan.embeds.join(",")}` : LEADS_LIST_COLUMNS;
+  //
+  // OWN / BRANCH SCOPE (useVisibilityRpc): a PostgREST filter on an EMBEDDED table cannot run over
+  // an RPC base — it is resolved against the RPC's own `pgrst_call` alias (42703 "column
+  // pgrst_call.user_id does not exist", the 2026-08-25 prod incident, still failing for the data
+  // request itself on some PostgREST versions). So for those callers the Collaborators "is any of"
+  // condition is lifted out of the tree and applied in SQL by
+  // leads_visible_to_user_with_collaborators() (migration 255); only the REST of the tree is compiled,
+  // and no collaborators embed is selected for it. Owner/admin (plain table) keep the embed filter.
+  const listSplit = useVisibilityRpc
+    ? splitCollaboratorAnyOf(filterTree)
+    : { collaboratorIds: null as string[] | null, rest: filterTree };
+  const listPlan = listSplit.collaboratorIds ? planFilter(listSplit.rest, filterRegistry, compileCtx) : filterPlan;
+  // planFilter already accepted the full tree, and removing a condition can't make the rest invalid.
+  const listEmbeds = listPlan.ok ? listPlan.embeds : filterPlan.embeds;
+  const hasCollaboratorsEmbed = listEmbeds.includes("lead_collaborators!inner(user_id)");
+  const selectColumns: string = listEmbeds.length > 0 ? `${LEADS_LIST_COLUMNS},${listEmbeds.join(",")}` : LEADS_LIST_COLUMNS;
 
   // §COUNT-SPLIT (2026-08-25, prod incident): PostgREST composes `count: "exact"` over
   // an RPC-based FROM (useVisibilityRpc — own/branch scope) by wrapping the call as
@@ -444,10 +459,18 @@ export async function GET(request: NextRequest) {
     execOpts: { count?: "exact"; head?: boolean },
     variant?: { tree: FilterTree },
   ) => {
-    const tree = variant?.tree ?? filterTree;
+    // Own / branch scope: the Collaborators "is any of" condition is applied in SQL, not as an
+    // embedded-resource filter over the RPC (see listSplit above). The list reuses the split computed
+    // once there; a facet variant (own axis swapped for one person) is split the same way.
+    const split = variant
+      ? useVisibilityRpc
+        ? splitCollaboratorAnyOf(variant.tree)
+        : { collaboratorIds: null as string[] | null, rest: variant.tree }
+      : listSplit;
+    const tree = split.rest;
     let cols = selectColumns;
     if (variant) {
-      const variantPlan = planFilter(variant.tree, filterRegistry, compileCtx);
+      const variantPlan = planFilter(tree, filterRegistry, compileCtx);
       // The variant is the already-validated list tree plus one registry-valid condition,
       // so this can't fail in practice — throw (→ 503 via the facets try/catch) rather
       // than ever count with a filter silently dropped.
@@ -456,7 +479,9 @@ export async function GET(request: NextRequest) {
       cols = ["id", ...variantPlan.embeds].join(",");
     }
     let q = useVisibilityRpc
-      ? visibleLeadsBase({ user: userClient, service: supabase }, auth.tenantId, scope, execOpts).select(cols)
+      ? visibleLeadsBase({ user: userClient, service: supabase }, auth.tenantId, scope, execOpts, {
+          collaboratorIds: split.collaboratorIds,
+        }).select(cols)
       : supabase.from("leads").select(cols, execOpts).eq("tenant_id", auth.tenantId);
 
     q = onlyDeleted ? q.not("deleted_at", "is", null) : q.is("deleted_at", null);

@@ -840,72 +840,19 @@ describe("GET /api/v1/leads — ?f= compiles through the SAME compileFilter() as
     expect(legacyCalls.some(([m, a]) => m === "select" && String(a[0]).includes("lead_collaborators!inner(user_id)"))).toBe(true);
   });
 
-  // §COUNT-SPLIT regression (prod incident 2026-08-25): a branch/own-scope caller
-  // (routed through leads_visible_to_user()) combining the Collaborators embed with an
-  // exact count used to send ONE combined data+count request — PostgREST resolves that
-  // combination's referencedTable filter against the RPC's own `pgrst_call` alias
-  // instead of the joined table (42703 "column pgrst_call.user_id does not exist"),
-  // 503ing the whole list for the exact scope+filter combo a real branch manager hit
-  // live. This proves the fix: the count is split into its own head:true request built
-  // from the SAME filter chain, so the total is still correct and no combined call with
-  // this shape is ever sent.
-  it("branch-scope + ?collaborators= splits the exact count into its own head:true RPC call instead of combining it with the data fetch", async () => {
+  // §COUNT-SPLIT / PGRST-EMBED regression (prod incident 2026-08-25, still reproducible 2026-10-02): a
+  // branch/own-scope caller (routed through the leads_visible_to_user() RPC) used to apply the
+  // Collaborators filter as a PostgREST embedded-resource filter (`lead_collaborators!inner(user_id)` +
+  // an `.or(..., { referencedTable })`). PostgREST resolves such a filter against the RPC's own
+  // `pgrst_call` alias instead of the joined table (42703 "column pgrst_call.user_id does not exist"),
+  // 503ing the list — for the data request itself on some PostgREST versions, not just the count.
+  // Mocked chains cannot prove PostgREST's behaviour, so the fix is asserted by SHAPE: for scoped callers
+  // the "is any of" condition never reaches the PostgREST builder at all — it is passed to
+  // leads_visible_to_user_with_collaborators() (migration 255) as p_collaborator_ids, and neither an
+  // embed select nor a referencedTable filter is sent.
+  it("branch-scope + ?collaborators= applies the filter IN SQL (leads_visible_to_user_with_collaborators) — no embed select, no referencedTable filter", async () => {
     const rpcCalls: RpcCall[] = [];
-    authenticateRequestMock.mockResolvedValue(
-      authFixture({
-        userId: "user-1",
-        branchId: "branch-1",
-        branchMemberIds: ["u1", "u2"],
-        permissions: permissions({ leadScope: "team" }),
-      }),
-    );
-    createClientMock.mockResolvedValue({
-      rpc: (name: string, params: unknown, opts: { head?: boolean; count?: string }) => {
-        rpcCalls.push([name, params, opts]);
-        const isHeadCount = !!opts?.head;
-        const chain: Record<string, unknown> = {
-          select: () => chain,
-          is: () => chain,
-          not: () => chain,
-          eq: () => chain,
-          in: () => chain,
-          or: () => chain,
-          order: () => chain,
-          range: () => Promise.resolve({ data: [], error: null, count: 0 }),
-          // Real postgrest-js builders are thenable — route.ts awaits the head-only
-          // call directly, with no .range() tail (a head request has no rows to page).
-          then: (resolve: (v: { data: null; error: null; count: number | null }) => void) =>
-            resolve({ data: null, error: null, count: isHeadCount ? 761 : null }),
-        };
-        return chain;
-      },
-    });
-    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
-
-    const { GET } = await import("./route");
-    const res = await GET(fakeReq({ collaborators: "11111111-1111-1111-1111-111111111111" }));
-    const body = await res.json();
-
-    expect(res.status).toBe(200);
-    // Two RPC calls, not one: the split-out exact count, then the data page.
-    expect(rpcCalls).toHaveLength(2);
-    expect(rpcCalls[0][2]).toEqual({ head: true, count: "exact" });
-    expect(rpcCalls[1][2]).toEqual({}); // data call requests no inline count
-    // Both calls carry the identical scope + embed — the count can never drift from
-    // what the data query is actually filtering.
-    expect(rpcCalls[0][1]).toEqual(rpcCalls[1][1]);
-    expect(rpcCalls[0][0]).toBe("leads_visible_to_user");
-    // The total in the response comes from the split head:true call's count, not a
-    // (missing/undefined) count on the data call.
-    expect(body.meta.total).toBe(761);
-  });
-
-  // Facet counts come from the list's own query (buildScopedQuery), so under branch scope
-  // they go through leads_visible_to_user() — and, because that's the RPC-based shape the
-  // §COUNT-SPLIT incident is about, EVERY one of those calls must be a head-only count:
-  // never a combined data+count call, never a data page, never lead_aggregates().
-  it("branch-scope ?facets=collaborator&collaborators=<id> counts each candidate with a head:true leads_visible_to_user() call — never a combined data+count call (§COUNT-SPLIT), never lead_aggregates()", async () => {
-    const rpcCalls: RpcCall[] = [];
+    const chainCalls: Call[] = [];
     authenticateRequestMock.mockResolvedValue(
       authFixture({
         userId: "user-1",
@@ -917,8 +864,116 @@ describe("GET /api/v1/leads — ?f= compiles through the SAME compileFilter() as
     createClientMock.mockResolvedValue({
       rpc: (name: string, params: unknown, opts: unknown) => {
         rpcCalls.push([name, params, opts]);
+        const record = (m: string) => (...args: unknown[]) => {
+          chainCalls.push([m, args]);
+          return chain;
+        };
+        const chain: Record<string, unknown> = {
+          select: record("select"),
+          is: record("is"),
+          not: record("not"),
+          eq: record("eq"),
+          in: record("in"),
+          or: record("or"),
+          order: record("order"),
+          range: () => Promise.resolve({ data: [], error: null, count: 761 }),
+        };
+        return chain;
+      },
+    });
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
+
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ collaborators: "11111111-1111-1111-1111-111111111111" }));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    // ONE rpc call (the normal combined data+count — there is no embed filter left to split around).
+    expect(rpcCalls).toHaveLength(1);
+    expect(rpcCalls[0][0]).toBe("leads_visible_to_user_with_collaborators");
+    expect(rpcCalls[0][1]).toEqual({
+      p_tenant: "tenant-1",
+      p_scope: "branch",
+      p_branch_id: "branch-1",
+      p_collaborator_ids: ["11111111-1111-1111-1111-111111111111"],
+    });
+    expect(rpcCalls[0][2]).toEqual({ count: "exact" });
+    // Nothing embed-shaped reaches the PostgREST builder.
+    expect(JSON.stringify(chainCalls)).not.toContain("lead_collaborators");
+    expect(chainCalls.some(([m]) => m === "or")).toBe(false);
+    expect(body.meta.total).toBe(761);
+  });
+
+  it("without a collaborators filter, branch-scope still calls the plain leads_visible_to_user() with no p_collaborator_ids (unchanged)", async () => {
+    const rpcCalls: RpcCall[] = [];
+    authenticateRequestMock.mockResolvedValue(
+      authFixture({
+        userId: "user-1",
+        branchId: "branch-1",
+        branchMemberIds: ["u1", "u2"],
+        permissions: permissions({ leadScope: "team" }),
+      }),
+    );
+    createClientMock.mockResolvedValue(fakeUserClient(rpcCalls));
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
+
+    const { GET } = await import("./route");
+    await GET(fakeReq({}));
+
+    expect(rpcCalls[0][0]).toBe("leads_visible_to_user");
+    expect(rpcCalls[0][1]).not.toHaveProperty("p_collaborator_ids");
+  });
+
+  it("own-scope (counselor) + ?collaborators= uses the same SQL-side filter, with p_scope 'own' and their own userId", async () => {
+    const rpcCalls: RpcCall[] = [];
+    authenticateRequestMock.mockResolvedValue(
+      authFixture({ userId: "user-1", permissions: permissions({ leadScope: "own" }) }),
+    );
+    createClientMock.mockResolvedValue(fakeUserClient(rpcCalls));
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
+
+    const { GET } = await import("./route");
+    await GET(fakeReq({ collaborators: "11111111-1111-1111-1111-111111111111,22222222-2222-2222-2222-222222222222" }));
+
+    expect(rpcCalls[0][0]).toBe("leads_visible_to_user_with_collaborators");
+    expect(rpcCalls[0][1]).toMatchObject({
+      p_scope: "own",
+      p_user: "user-1",
+      p_collaborator_ids: ["11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222"],
+    });
+  });
+
+  it("owner/admin (plain leads table) keeps the embedded-resource filter — the SQL-side path is only for scoped callers", async () => {
+    const leadsCalls: Call[] = [];
+    authenticateRequestMock.mockResolvedValue(authFixture({ userId: "admin-1", permissions: permissions({ leadScope: "all" }) }));
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls }));
+    createClientMock.mockResolvedValue({ rpc: () => Promise.reject(new Error("no rpc for owner/admin")) });
+
+    const { GET } = await import("./route");
+    await GET(fakeReq({ collaborators: "11111111-1111-1111-1111-111111111111" }));
+
+    expect(leadsCalls.some(([m, a]) => m === "select" && String(a[0]).includes("lead_collaborators!inner(user_id)"))).toBe(true);
+  });
+
+  // Facet counts come from the list's own query (buildScopedQuery), so under branch scope
+  // they go through leads_visible_to_user() — and, because that's the RPC-based shape the
+  // §COUNT-SPLIT incident is about, EVERY one of those calls must be a head-only count:
+  // never a combined data+count call, never a data page, never lead_aggregates().
+  it("branch-scope ?facets=collaborator&collaborators=<id> counts each candidate with a head:true leads_visible_to_user_with_collaborators() call (the person as p_collaborator_ids) — never an embed filter, never lead_aggregates()", async () => {
+    const rpcCalls: RpcCall[] = [];
+    authenticateRequestMock.mockResolvedValue(
+      authFixture({
+        userId: "user-1",
+        branchId: "branch-1",
+        branchMemberIds: ["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2"],
+        permissions: permissions({ leadScope: "team" }),
+      }),
+    );
+    createClientMock.mockResolvedValue({
+      rpc: (name: string, params: unknown, opts: unknown) => {
+        rpcCalls.push([name, params, opts]);
         if (name === "lead_aggregates") return Promise.reject(new Error("discovery unavailable")); // degrades to members only
-        if (name !== "leads_visible_to_user") throw new Error(`unexpected rpc ${name}`);
+        if (name !== "leads_visible_to_user_with_collaborators") throw new Error(`unexpected rpc ${name}`);
         const chain: Record<string, unknown> = {
           select: () => chain,
           is: () => chain,
@@ -932,7 +987,7 @@ describe("GET /api/v1/leads — ?f= compiles through the SAME compileFilter() as
         return chain;
       },
     });
-    createServiceClientMock.mockResolvedValue(facetDb({ memberIds: ["u1", "u2"], countFor: () => 0 }));
+    createServiceClientMock.mockResolvedValue(facetDb({ memberIds: ["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2"], countFor: () => 0 }));
 
     const { GET } = await import("./route");
     const res = await GET(
@@ -944,14 +999,17 @@ describe("GET /api/v1/leads — ?f= compiles through the SAME compileFilter() as
     // The one lead_aggregates() call is former-member DISCOVERY (ids only — this mock makes it
     // fail, which must degrade silently); every COUNT is a head-only leads_visible_to_user().
     expect(rpcCalls.filter(([name]) => name === "lead_aggregates")).toHaveLength(1);
-    const countCalls = rpcCalls.filter(([name]) => name === "leads_visible_to_user");
-    expect(countCalls).toHaveLength(2); // one per candidate (u1, u2)
+    const countCalls = rpcCalls.filter(([name]) => name === "leads_visible_to_user_with_collaborators");
+    expect(countCalls).toHaveLength(2); // one per candidate
     for (const [, , opts] of countCalls) {
       expect(opts).toEqual({ head: true, count: "exact" });
     }
+    // Each count asks for exactly ONE person: the facet's own axis (the ?collaborators= selection) is
+    // swapped for the candidate, never added to it.
+    expect(countCalls.map(([, params]) => (params as { p_collaborator_ids: string[] }).p_collaborator_ids)).toEqual([["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1"], ["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2"]]);
     expect(body.data.facets.collaborator.options).toEqual([
-      { name: "u1", count: 4 },
-      { name: "u2", count: 4 },
+      { name: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1", count: 4 },
+      { name: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2", count: 4 },
     ]);
   });
 
