@@ -33,15 +33,18 @@ interface Enrollment {
   lead_id: string;
   assigned_to: string | null;
   status: EnrollmentStatus;
+  // Set when the system (not a person) stopped it because the lead replied — migration 257.
+  stop_reason?: "replied" | null;
   current_step_order: number;
   started_at: string;
   email_sequences: { name: string } | null;
   leads: { first_name: string | null; last_name: string | null } | null;
 }
 
-const STATUS_FILTERS: { value: EnrollmentStatus | "all"; label: string }[] = [
+const STATUS_FILTERS: { value: EnrollmentStatus | "all" | "replied"; label: string }[] = [
   { value: "active", label: "Active" },
   { value: "paused", label: "Paused" },
+  { value: "replied", label: "Replied" },
   { value: "completed", label: "Completed" },
   { value: "all", label: "All" },
 ];
@@ -61,14 +64,14 @@ interface EnrollmentsTableProps {
 export function EnrollmentsTable({ isAdmin, currentUserId }: EnrollmentsTableProps) {
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [status, setStatus] = useState<EnrollmentStatus | "all">("active");
+  const [status, setStatus] = useState<EnrollmentStatus | "all" | "replied">("active");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [unenrollTarget, setUnenrollTarget] = useState<Enrollment | null>(null);
 
   const fetchEnrollments = useCallback(async () => {
     setLoading(true);
     try {
-      const params = status === "all" ? "" : `?status=${status}`;
+      const params = status === "all" ? "" : status === "replied" ? "?stop_reason=replied" : `?status=${status}`;
       const res = await fetch(`/api/v1/outreach/enrollments${params}`);
       if (res.ok) {
         const json = await res.json();
@@ -162,6 +165,11 @@ export function EnrollmentsTable({ isAdmin, currentUserId }: EnrollmentsTablePro
                     <TableCell>{enrollment.current_step_order}</TableCell>
                     <TableCell>
                       <Badge variant={STATUS_VARIANT[enrollment.status]}>{enrollment.status}</Badge>
+                      {enrollment.stop_reason === "replied" && (
+                        <Badge variant="outline" className="ml-1.5">
+                          Lead replied
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell>{formatDate(enrollment.started_at)}</TableCell>
                     <TableCell className="text-right">

@@ -23,6 +23,8 @@ export interface Sequence {
   // industry manifest registers Outreach with the flag surfaced in the
   // editor (currently education_consultancy) can ever set this true.
   auto_send: boolean;
+  // What a lead's reply does to their enrollment (migration 257).
+  on_reply: "pause" | "end" | "continue";
   email_sequence_steps: SequenceStep[];
 }
 

@@ -16,6 +16,7 @@ import {
   validateSequenceSteps,
   type SequenceStepInput,
 } from "@/industries/_shared/features/outreach/lib/validate-steps";
+import { ON_REPLY_VALUES, type OnReply } from "@/industries/_shared/features/outreach/lib/stop-on-reply";
 
 export async function GET() {
   const auth = await authenticateRequest();
@@ -58,6 +59,10 @@ export async function POST(request: NextRequest) {
   const stepsError = validateSequenceSteps(body.steps);
   if (stepsError) return apiValidationError({ steps: [stepsError] });
 
+  if (body.on_reply !== undefined && !ON_REPLY_VALUES.includes(body.on_reply as OnReply)) {
+    return apiValidationError({ on_reply: ["Must be one of: pause, end, continue"] });
+  }
+
   const db = await scopedClient(auth);
 
   const { data: sequence, error: seqError } = await db
@@ -69,6 +74,8 @@ export async function POST(request: NextRequest) {
       // per-tenant. Defaults false so a tenant that never sets it (every
       // it_agency sequence today) keeps the exact manual-copy behavior.
       auto_send: body.auto_send === true,
+      // What a lead's reply does to their enrollment (migration 257). Omitted -> the column default, 'pause'.
+      ...(body.on_reply !== undefined ? { on_reply: body.on_reply as OnReply } : {}),
       created_by: auth.userId,
     })
     .select("*")

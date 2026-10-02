@@ -17,6 +17,7 @@ import {
   validateSequenceSteps,
   type SequenceStepInput,
 } from "@/industries/_shared/features/outreach/lib/validate-steps";
+import { ON_REPLY_VALUES, type OnReply } from "@/industries/_shared/features/outreach/lib/stop-on-reply";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -81,6 +82,10 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     return apiError("INVALID_JSON", "Request body must be valid JSON", 400);
   }
 
+  if (body.on_reply !== undefined && !ON_REPLY_VALUES.includes(body.on_reply as OnReply)) {
+    return apiValidationError({ on_reply: ["Must be one of: pause, end, continue"] });
+  }
+
   const db = await scopedClient(auth);
 
   const { data: existing } = await db.from("email_sequences").select("id").eq("id", id).maybeSingle();
@@ -90,6 +95,7 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   if (body.name !== undefined) updates.name = String(body.name).trim();
   if (body.description !== undefined) updates.description = body.description ? String(body.description) : null;
   if (body.auto_send !== undefined) updates.auto_send = body.auto_send === true;
+  if (body.on_reply !== undefined) updates.on_reply = body.on_reply as OnReply;
 
   if (Object.keys(updates).length > 0) {
     const { error: updateError } = await db.from("email_sequences").update(updates).eq("id", id);

@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
@@ -89,6 +90,7 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [autoSend, setAutoSend] = useState(false);
+  const [onReply, setOnReply] = useState<"pause" | "end" | "continue">("pause");
   const [steps, setSteps] = useState<StepDraft[]>([]);
   const [saving, setSaving] = useState(false);
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
@@ -104,6 +106,7 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
       setName(sequence?.name ?? "");
       setDescription(sequence?.description ?? "");
       setAutoSend(sequence?.auto_send ?? false);
+      setOnReply(sequence?.on_reply ?? "pause");
       setSteps(stepsFromSequence(sequence));
       setLastFocused(null);
       setPreviewIndex(null);
@@ -197,6 +200,7 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
       name: name.trim(),
       description: description.trim() || undefined,
       auto_send: autoSend,
+      on_reply: onReply,
       steps: steps.map((s, i) => ({
         step_order: i + 1,
         delay_days: i === 0 ? 0 : s.delay_days,
@@ -272,6 +276,26 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
               </div>
             </div>
           )}
+
+          <div className="space-y-1.5 rounded-md border p-3">
+            <Label htmlFor="seq-on-reply" className="text-sm font-normal">
+              When a lead replies
+            </Label>
+            <Select value={onReply} onValueChange={(v) => setOnReply(v as "pause" | "end" | "continue")}>
+              <SelectTrigger id="seq-on-reply" className="h-8 w-full sm:w-72">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pause">Pause the sequence (recommended)</SelectItem>
+                <SelectItem value="end">End the sequence</SelectItem>
+                <SelectItem value="continue">Keep sending</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Out-of-office and other automatic replies are ignored. A paused lead sends nothing until you resume
+              it from the lead&apos;s page or the Enrollments tab.
+            </p>
+          </div>
 
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground">Merge tags — click to insert at cursor</p>
