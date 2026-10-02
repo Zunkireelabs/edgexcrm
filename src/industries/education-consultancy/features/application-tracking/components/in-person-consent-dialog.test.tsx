@@ -39,6 +39,32 @@ describe("InPersonConsentDialog — start session", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1); // never goes on to fetch a signing token
   });
 
+  it("409 CONSENT_IN_PROGRESS (a concurrent send won): shows the server's message, not 'already signed'", async () => {
+    fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 409,
+      json: async () => ({ error: { code: "CONSENT_IN_PROGRESS", message: "A consent request for this lead was just created. Please refresh and try again." } }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const onOpenChange = vi.fn();
+    renderOpen(onOpenChange);
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+    expect(toastError).toHaveBeenCalledWith("A consent request for this lead was just created. Please refresh and try again.");
+    expect(toastInfo).not.toHaveBeenCalled();
+  });
+
+  it("an unrelated 409 is no longer mistaken for 'already signed' — generic error", async () => {
+    fetchMock = vi.fn(async () => ({ ok: false, status: 409, json: async () => ({ error: { code: "SOMETHING_ELSE" } }) }));
+    vi.stubGlobal("fetch", fetchMock);
+    const onOpenChange = vi.fn();
+    renderOpen(onOpenChange);
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+    expect(toastError).toHaveBeenCalledWith("Failed to start signing session");
+    expect(toastInfo).not.toHaveBeenCalled();
+  });
+
   it("any other failure still shows the generic error and closes", async () => {
     fetchMock = vi.fn(async () => ({ ok: false, status: 500, json: async () => ({}) }));
     vi.stubGlobal("fetch", fetchMock);
