@@ -383,13 +383,14 @@ export async function markDraftSent(
  *
  * `opts.sentBy` is passed only when a person clicked "Send now": the timeline then credits that
  * user and says "sent via EdgeX" instead of "sent automatically via EdgeX" (the cron's wording).
+ * `opts.scheduled` marks a send the rep scheduled ("sent via EdgeX (scheduled)", credited to whoever scheduled it).
  */
 export async function markDraftSentViaEdgeX(
   db: ScopedClient,
   tenantId: string,
   draftId: string,
   emailMessageId: string,
-  opts?: { sentBy: string }
+  opts?: { sentBy?: string | null; scheduled?: boolean }
 ): Promise<{ activityId: string | null } | null> {
   const { data: draft } = await db
     .from("sequence_step_drafts")
@@ -418,9 +419,11 @@ export async function markDraftSentViaEdgeX(
         user_id: actorUserId,
         activity_type: "email",
         subject: draftRow.subject,
-        description: opts?.sentBy
-          ? `Sequence step ${draftRow.step_order} sent via EdgeX`
-          : `Sequence step ${draftRow.step_order} sent automatically via EdgeX`,
+        description: opts?.scheduled
+          ? `Sequence step ${draftRow.step_order} sent via EdgeX (scheduled)`
+          : opts?.sentBy
+            ? `Sequence step ${draftRow.step_order} sent via EdgeX`
+            : `Sequence step ${draftRow.step_order} sent automatically via EdgeX`,
         email_subject: draftRow.subject,
         email_body: draftRow.body_html,
         completed_at: new Date().toISOString(),

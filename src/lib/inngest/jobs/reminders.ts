@@ -166,6 +166,8 @@ export async function runOutreachDraftReminders(): Promise<{ processed: number; 
     .select("id, lead_id, tenant_id, assigned_to, subject, sequence_enrollments!inner(status), leads!inner(deleted_at)")
     .lte("due_at", nowIso)
     .is("notified_at", null)
+    // A scheduled draft is sent by EdgeX itself, so it must not ping a rep as "due".
+    .is("scheduled_send_at", null)
     .eq("status", "pending")
     .eq("sequence_enrollments.status", "active")
     .is("leads.deleted_at", null)
