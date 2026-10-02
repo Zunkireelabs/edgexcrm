@@ -53,7 +53,8 @@ interface SequenceEditorDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   sequence: Sequence | null;
-  onSaved: () => void;
+  /** `saved` is the sequence that was just created or edited — callers use `created` to offer "who should get it?". */
+  onSaved: (saved?: { id: string; name: string; created: boolean }) => void;
   industryId: string | null;
 }
 
@@ -232,7 +233,8 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
       }
 
       toast.success(isEdit ? "Sequence updated" : "Sequence created");
-      onSaved();
+      const savedRow = json?.data as { id?: string; name?: string } | undefined;
+      onSaved(savedRow?.id ? { id: savedRow.id, name: savedRow.name ?? "", created: !isEdit } : undefined);
       onOpenChange(false);
     } finally {
       setSaving(false);

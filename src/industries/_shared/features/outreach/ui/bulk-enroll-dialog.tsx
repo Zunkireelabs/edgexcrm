@@ -16,6 +16,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { useSequences } from "../hooks/use-sequences";
+import { AudienceFilterPicker } from "./audience-picker";
+import type { FilterTree } from "@/lib/filters/types";
 
 // "Enroll in sequence" for MANY leads (OUTREACH-BULK-ENROLL-BRIEF.md §4). Steps:
 //   pick a sequence -> preview (nothing is written) -> Start (type-to-confirm from `confirmFrom` leads)
@@ -23,9 +25,7 @@ import { useSequences } from "../hooks/use-sequences";
 // Closing the dialog never stops a running enrollment; reopening is not needed — the result is also in the
 // Enrollments tab.
 
-export type BulkEnrollSource =
-  | { mode: "selected"; leadIds: string[] }
-  | { mode: "filter"; tree: unknown };
+export type BulkEnrollSource = { mode: "selected"; leadIds: string[] } | { mode: "filter"; tree: unknown };
 
 type Policy = "skip" | "switch" | "queue";
 
@@ -33,7 +33,13 @@ interface Preview {
   matched: number;
   notVisible: number;
   willEnroll: number;
-  skipped: { noEmail: number; malformedEmail: number; duplicateEmail: number; suppressed: number; alreadyInSequence: number };
+  skipped: {
+    noEmail: number;
+    malformedEmail: number;
+    duplicateEmail: number;
+    suppressed: number;
+    alreadyInSequence: number;
+  };
   overLimit: boolean;
   limit: number;
   confirmFrom: number;
@@ -68,7 +74,10 @@ const POLL_MS = 2000;
 interface BulkEnrollDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  source: BulkEnrollSource;
+  /** Ignored when `audiencePicker` is set — then the audience is whatever the picked filters match. */
+  source?: BulkEnrollSource;
+  /** Started from a sequence (not from ticked rows): show the filter bar so the rep chooses who. */
+  audiencePicker?: { industryId: string | null; isAdmin: boolean };
   /** e.g. "42 selected leads" */
   sourceLabel: string;
   presetSequenceId?: string;
@@ -79,7 +88,15 @@ function isFinal(status: Run["status"]) {
   return status === "completed" || status === "cancelled" || status === "failed";
 }
 
-export function BulkEnrollDialog({ open, onOpenChange, source, sourceLabel, presetSequenceId, onFinished }: BulkEnrollDialogProps) {
+export function BulkEnrollDialog({
+  open,
+  onOpenChange,
+  source,
+  audiencePicker,
+  sourceLabel,
+  presetSequenceId,
+  onFinished,
+}: BulkEnrollDialogProps) {
   const { sequences, loading: sequencesLoading } = useSequences();
   const [sequenceId, setSequenceId] = useState(presetSequenceId ?? "");
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -91,6 +108,15 @@ export function BulkEnrollDialog({ open, onOpenChange, source, sourceLabel, pres
   const [run, setRun] = useState<Run | null>(null);
   const [runId, setRunId] = useState<string | null>(null);
   const finishedRef = useRef(false);
+  const [pickerTree, setPickerTree] = useState<FilterTree | null>(null);
+
+  // The audience actually used. With the picker it is the filter tree — but never an EMPTY one: an empty filter
+  // means "every lead", which must be an explicit choice, not the starting state.
+  const activeSource: BulkEnrollSource | null = audiencePicker
+    ? pickerTree && pickerTree.conditions.length > 0
+      ? { mode: "filter", tree: pickerTree }
+      : null
+    : (source ?? null);
 
   // reset whenever the dialog opens
   useEffect(() => {
@@ -100,6 +126,7 @@ export function BulkEnrollDialog({ open, onOpenChange, source, sourceLabel, pres
       setError(null);
       setConfirmText("");
       setPolicy("skip");
+      setPickerTree(null);
       setRun(null);
       setRunId(null);
       setStarting(false);
@@ -107,37 +134,51 @@ export function BulkEnrollDialog({ open, onOpenChange, source, sourceLabel, pres
     }
   }, [open, presetSequenceId]);
 
-  const sourceKey = JSON.stringify(source);
+  const sourceKey = JSON.stringify(activeSource);
 
   // Preview whenever the sequence (or the source) changes — only before a run exists.
   useEffect(() => {
     if (!open || !sequenceId || runId) return;
+    if (!activeSource) {
+      setPreview(null);
+      setPreviewLoading(false);
+      return;
+    }
     let cancelled = false;
     setPreviewLoading(true);
     setError(null);
     setPreview(null);
-    (async () => {
-      try {
-        const res = await fetch("/api/v1/outreach/bulk-enroll/preview", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sequence_id: sequenceId, source: toApiSource(source), conflict_policy: policy }),
-        });
-        const json = await res.json().catch(() => null);
-        if (cancelled) return;
-        if (!res.ok) {
-          setError(extractError(json) ?? "Couldn't prepare the preview");
-          return;
+    // the picker changes as the rep edits filters — wait for a pause; ticked rows are already final
+    const delay = audiencePicker ? 600 : 0;
+    const timer = setTimeout(() => {
+      (async () => {
+        try {
+          const res = await fetch("/api/v1/outreach/bulk-enroll/preview", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sequence_id: sequenceId,
+              source: toApiSource(activeSource),
+              conflict_policy: policy,
+            }),
+          });
+          const json = await res.json().catch(() => null);
+          if (cancelled) return;
+          if (!res.ok) {
+            setError(extractError(json) ?? "Couldn't prepare the preview");
+            return;
+          }
+          setPreview(json.data as Preview);
+        } catch {
+          if (!cancelled) setError("Couldn't prepare the preview");
+        } finally {
+          if (!cancelled) setPreviewLoading(false);
         }
-        setPreview(json.data as Preview);
-      } catch {
-        if (!cancelled) setError("Couldn't prepare the preview");
-      } finally {
-        if (!cancelled) setPreviewLoading(false);
-      }
-    })();
+      })();
+    }, delay);
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, sequenceId, sourceKey, runId, policy]);
@@ -173,10 +214,14 @@ export function BulkEnrollDialog({ open, onOpenChange, source, sourceLabel, pres
 
   const needsConfirm = !!preview && preview.willEnroll >= preview.confirmFrom;
   const canStart =
-    !!preview && !starting && !preview.overLimit && preview.willEnroll > 0 && (!needsConfirm || confirmText.trim().toUpperCase() === CONFIRM_WORD);
+    !!preview &&
+    !starting &&
+    !preview.overLimit &&
+    preview.willEnroll > 0 &&
+    (!needsConfirm || confirmText.trim().toUpperCase() === CONFIRM_WORD);
 
   const start = async () => {
-    if (!preview) return;
+    if (!preview || !activeSource) return;
     setStarting(true);
     setError(null);
     try {
@@ -185,7 +230,7 @@ export function BulkEnrollDialog({ open, onOpenChange, source, sourceLabel, pres
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           sequence_id: sequenceId,
-          source: toApiSource(source),
+          source: toApiSource(activeSource),
           conflict_policy: policy,
           confirm: needsConfirm ? true : undefined,
         }),
@@ -205,7 +250,9 @@ export function BulkEnrollDialog({ open, onOpenChange, source, sourceLabel, pres
 
   const cancel = async () => {
     if (!runId) return;
-    const res = await fetch(`/api/v1/outreach/bulk-enroll/${runId}/cancel`, { method: "POST" });
+    const res = await fetch(`/api/v1/outreach/bulk-enroll/${runId}/cancel`, {
+      method: "POST",
+    });
     if (res.ok) toast.success("Cancelling — leads already enrolled stay enrolled");
     else toast.error("Couldn't cancel");
   };
@@ -224,6 +271,21 @@ export function BulkEnrollDialog({ open, onOpenChange, source, sourceLabel, pres
 
         {!runId && (
           <div className="space-y-4">
+            {audiencePicker && (
+              <div className="space-y-1.5">
+                <Label>Which leads?</Label>
+                <AudienceFilterPicker
+                  industryId={audiencePicker.industryId}
+                  isAdmin={audiencePicker.isAdmin}
+                  onChange={setPickerTree}
+                />
+                {!activeSource && (
+                  <p className="text-xs text-muted-foreground">
+                    Add at least one filter to choose who gets this sequence.
+                  </p>
+                )}
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label htmlFor="bulk-seq">Sequence</Label>
               <Select value={sequenceId} onValueChange={setSequenceId} disabled={sequencesLoading}>
@@ -262,14 +324,18 @@ export function BulkEnrollDialog({ open, onOpenChange, source, sourceLabel, pres
                 )}
                 {preview.willQueue > 0 && (
                   <p className="text-xs text-muted-foreground">
-                    {preview.willQueue.toLocaleString()} of them are queued — this sequence starts when their current one ends.
+                    {preview.willQueue.toLocaleString()} of them are queued — this sequence starts when their current
+                    one ends.
                   </p>
                 )}
                 <SkippedList preview={preview} />
-                {preview.inOtherSequence > 0 && <PolicyChoice count={preview.inOtherSequence} value={policy} onChange={setPolicy} />}
+                {preview.inOtherSequence > 0 && (
+                  <PolicyChoice count={preview.inOtherSequence} value={policy} onChange={setPolicy} />
+                )}
                 {preview.willEnroll > 0 && (
                   <p className="text-xs text-muted-foreground">
-                    The daily send limit is {preview.cap.dailyCap.toLocaleString()} ({preview.cap.remaining.toLocaleString()} left today).
+                    The daily send limit is {preview.cap.dailyCap.toLocaleString()} (
+                    {preview.cap.remaining.toLocaleString()} left today).
                     {preview.estimatedExtraDays > 0
                       ? ` First emails will take about ${preview.estimatedExtraDays + 1} days to go out.`
                       : " All first emails fit within today's limit."}
@@ -286,7 +352,8 @@ export function BulkEnrollDialog({ open, onOpenChange, source, sourceLabel, pres
                 )}
                 {preview.overLimit && (
                   <Warning>
-                    That is more than the {preview.limit.toLocaleString()} leads one run can enroll — narrow the selection.
+                    That is more than the {preview.limit.toLocaleString()} leads one run can enroll — narrow the
+                    selection.
                   </Warning>
                 )}
               </div>
@@ -297,7 +364,12 @@ export function BulkEnrollDialog({ open, onOpenChange, source, sourceLabel, pres
                 <Label htmlFor="bulk-confirm">
                   Type <strong>{CONFIRM_WORD}</strong> to confirm enrolling {preview?.willEnroll.toLocaleString()} leads
                 </Label>
-                <Input id="bulk-confirm" value={confirmText} onChange={(e) => setConfirmText(e.target.value)} autoComplete="off" />
+                <Input
+                  id="bulk-confirm"
+                  value={confirmText}
+                  onChange={(e) => setConfirmText(e.target.value)}
+                  autoComplete="off"
+                />
               </div>
             )}
 
@@ -308,7 +380,12 @@ export function BulkEnrollDialog({ open, onOpenChange, source, sourceLabel, pres
         {runId && (
           <div className="space-y-3">
             <div className="h-2 w-full overflow-hidden rounded bg-muted">
-              <div className="h-full bg-primary transition-all" style={{ width: `${run && isFinal(run.status) && run.status === "completed" ? 100 : pct}%` }} />
+              <div
+                className="h-full bg-primary transition-all"
+                style={{
+                  width: `${run && isFinal(run.status) && run.status === "completed" ? 100 : pct}%`,
+                }}
+              />
             </div>
             <p className="text-sm">
               {run?.status === "completed" && "Done."}
@@ -318,12 +395,16 @@ export function BulkEnrollDialog({ open, onOpenChange, source, sourceLabel, pres
             </p>
             {run && (
               <p className="text-xs text-muted-foreground">
-                Enrolled {run.enrolled_count.toLocaleString()} · Skipped {run.skipped_count.toLocaleString()} · Failed {run.failed_count.toLocaleString()}
-                {(run.queued_count ?? 0) > 0 && ` · Queued next ${run.queued_count!.toLocaleString()} (included in skipped)`}
+                Enrolled {run.enrolled_count.toLocaleString()} · Skipped {run.skipped_count.toLocaleString()} · Failed{" "}
+                {run.failed_count.toLocaleString()}
+                {(run.queued_count ?? 0) > 0 &&
+                  ` · Queued next ${run.queued_count!.toLocaleString()} (included in skipped)`}
               </p>
             )}
             {run && !isFinal(run.status) && (
-              <p className="text-xs text-muted-foreground">You can close this window — it keeps running in the background.</p>
+              <p className="text-xs text-muted-foreground">
+                You can close this window — it keeps running in the background.
+              </p>
             )}
             {run && isFinal(run.status) && (run.skipped_count > 0 || run.failed_count > 0) && (
               <Button asChild variant="outline" size="sm">
@@ -365,9 +446,21 @@ export function BulkEnrollDialog({ open, onOpenChange, source, sourceLabel, pres
 }
 
 const POLICY_OPTIONS: { value: Policy; label: string; hint: string }[] = [
-  { value: "skip", label: "Skip them", hint: "Leave them in their current sequence." },
-  { value: "switch", label: "Switch them", hint: "End their current sequence now and start this one." },
-  { value: "queue", label: "Queue next", hint: "Start this one automatically when their current sequence ends." },
+  {
+    value: "skip",
+    label: "Skip them",
+    hint: "Leave them in their current sequence.",
+  },
+  {
+    value: "switch",
+    label: "Switch them",
+    hint: "End their current sequence now and start this one.",
+  },
+  {
+    value: "queue",
+    label: "Queue next",
+    hint: "Start this one automatically when their current sequence ends.",
+  },
 ];
 
 function PolicyChoice({ count, value, onChange }: { count: number; value: Policy; onChange: (p: Policy) => void }) {
@@ -378,7 +471,13 @@ function PolicyChoice({ count, value, onChange }: { count: number; value: Policy
       </legend>
       {POLICY_OPTIONS.map((o) => (
         <label key={o.value} className="flex cursor-pointer items-start gap-2 text-sm">
-          <input type="radio" name="bulk-policy" className="mt-1" checked={value === o.value} onChange={() => onChange(o.value)} />
+          <input
+            type="radio"
+            name="bulk-policy"
+            className="mt-1"
+            checked={value === o.value}
+            onChange={() => onChange(o.value)}
+          />
           <span>
             <span className="font-medium">{o.label}</span>
             <span className="block text-xs text-muted-foreground">{o.hint}</span>
@@ -431,7 +530,9 @@ function toApiSource(source: BulkEnrollSource) {
 }
 
 function extractError(json: unknown): string | null {
-  const j = json as { error?: { message?: string; details?: Record<string, string[]> } } | null;
+  const j = json as {
+    error?: { message?: string; details?: Record<string, string[]> };
+  } | null;
   const details = j?.error?.details;
   if (details) {
     const first = Object.values(details).flat()[0];
