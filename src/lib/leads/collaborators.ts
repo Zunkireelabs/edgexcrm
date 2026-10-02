@@ -61,33 +61,18 @@ export async function collaboratorLeadIdsForUser(
   return (data ?? []).map((r: { lead_id: string }) => r.lead_id);
 }
 
-// lead_collaborators rows persist forever (see addLeadCollaborator above), so an unbounded
-// scan grows every reassignment. Cap it like INLINE_ID_CAP above; most-recent pairings win.
-const COLLABORATORS_MAP_CAP = 10000;
-
-/** Batch: every lead→collaborator pairing in a tenant, keyed by lead_id. Powers the Collaborators filter on the leads list. */
-export async function getLeadCollaboratorsMap(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  db: SupabaseClient<any>,
-  tenantId: string,
-): Promise<Record<string, string[]>> {
-  const { data } = await db.from("lead_collaborators")
-    .select("lead_id, user_id")
-    .eq("tenant_id", tenantId)
-    .order("created_at", { ascending: false })
-    .limit(COLLABORATORS_MAP_CAP);
-  const map: Record<string, string[]> = {};
-  (data ?? []).forEach((r: { lead_id: string; user_id: string }) => {
-    (map[r.lead_id] ??= []).push(r.user_id);
-  });
-  return map;
-}
+// PostgREST returns at most this many rows per request (its `max-rows` default) and does
+// NOT error when it truncates — a result of exactly this size therefore means "there may be
+// more", never "that's all". Every multi-row read below pages until a short page comes back.
+const POSTGREST_PAGE = 1000;
 
 /**
- * Collaborators for a specific set of leads, keyed by lead_id. Chunks the id
- * list (PostgREST URL limit ~440 ids) and runs chunks in parallel. Use to build
- * a map that exactly covers the leads shown on a page, so per-view counts are
- * accurate with no dependency on the global COLLABORATORS_MAP_CAP.
+ * Collaborators for a specific set of leads, keyed by lead_id — exact, with no global cap.
+ * Chunks the id list (PostgREST URL limit ~440 ids) and runs chunks in parallel; each chunk
+ * is then PAGED, because 300 leads can easily carry more than 1,000 collaborator rows
+ * (rows persist forever — every reassignment adds one) and a single request would silently
+ * drop the tail, making those people's leads vanish from client-side Collaborators filters.
+ * (Replaces the old tenant-wide getLeadCollaboratorsMap, whose 10,000-row cap did the same.)
  */
 export async function getLeadCollaboratorsMapForLeads(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -100,12 +85,28 @@ export async function getLeadCollaboratorsMapForLeads(
   const CHUNK = 300;
   const chunks: string[][] = [];
   for (let i = 0; i < leadIds.length; i += CHUNK) chunks.push(leadIds.slice(i, i + CHUNK));
-  const results = await Promise.all(
-    chunks.map((slice) =>
-      db.from("lead_collaborators").select("lead_id, user_id").eq("tenant_id", tenantId).in("lead_id", slice)),
-  );
-  results.forEach(({ data }) => {
-    (data ?? []).forEach((r: { lead_id: string; user_id: string }) => {
+
+  const fetchChunk = async (slice: string[]) => {
+    const rows: { lead_id: string; user_id: string }[] = [];
+    for (let from = 0; ; from += POSTGREST_PAGE) {
+      const { data } = await db.from("lead_collaborators")
+        .select("lead_id, user_id")
+        .eq("tenant_id", tenantId)
+        .in("lead_id", slice)
+        // Deterministic order — without it, range() pages of an unordered scan can
+        // skip/duplicate rows between requests.
+        .order("lead_id", { ascending: true })
+        .order("user_id", { ascending: true })
+        .range(from, from + POSTGREST_PAGE - 1);
+      const page = (data ?? []) as { lead_id: string; user_id: string }[];
+      rows.push(...page);
+      if (page.length < POSTGREST_PAGE) return rows;
+    }
+  };
+
+  const results = await Promise.all(chunks.map(fetchChunk));
+  results.forEach((rows) => {
+    rows.forEach((r) => {
       (map[r.lead_id] ??= []).push(r.user_id);
     });
   });

@@ -1,5 +1,6 @@
 "use client";
 
+import { SECTION_TITLE_CLASS } from "@/components/dashboard/lead/section-title";
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { Plus, Loader2, GripVertical } from "lucide-react";
@@ -24,6 +25,8 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "./status-badge";
 import { AddApplicationToLeadSheet } from "./add-application-to-lead-sheet";
+import { useBlockingNotice } from "@/components/dashboard/blocking-notice";
+import { profileIncompleteNotice } from "@/lib/blocking-notice";
 import type { Application, ApplicationStage } from "@/types/database";
 import { normalizeDestinations } from "@/lib/leads/destination-normalize";
 
@@ -133,6 +136,31 @@ export function ApplicationsCard({ leadId, canManage, disabled = false }: Applic
   const [stages, setStages] = useState<ApplicationStage[]>([]);
   const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
+  const [checkingProfile, setCheckingProfile] = useState(false);
+  const { showNotice, noticeDialog } = useBlockingNotice();
+
+  // Check the student's profile BEFORE opening the form, so a missing item is shown up front in a big
+  // pop-up instead of as a small message after the whole form is filled. If the check can't run we
+  // open the form anyway — the create API still enforces the rule when saving.
+  async function handleAddClick() {
+    if (disabled || checkingProfile) return;
+    setCheckingProfile(true);
+    try {
+      const res = await fetch(`/api/v1/leads/${leadId}/profile-completeness`);
+      if (res.ok) {
+        const { data } = await res.json();
+        if (data && data.complete === false) {
+          showNotice(profileIncompleteNotice(data.missing ?? []));
+          return;
+        }
+      }
+      setAddOpen(true);
+    } catch {
+      setAddOpen(true);
+    } finally {
+      setCheckingProfile(false);
+    }
+  }
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
@@ -193,7 +221,7 @@ export function ApplicationsCard({ leadId, canManage, disabled = false }: Applic
       <Card className="shadow-none rounded-lg py-0">
         <CardHeader className="pt-4 pb-3">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+            <span className={`${SECTION_TITLE_CLASS} flex items-center gap-2`}>
               Applications
               {!loading && (
                 <Badge variant="secondary" className="h-5 px-1.5 text-xs normal-case">
@@ -202,16 +230,20 @@ export function ApplicationsCard({ leadId, canManage, disabled = false }: Applic
               )}
             </span>
             {canManage && (
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-6 w-6 p-0"
-                onClick={() => !disabled && setAddOpen(true)}
-                title={disabled ? "Sign consent first" : "Add Application"}
-                disabled={disabled}
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </Button>
+              // The tooltip lives on the wrapper: a disabled Button has pointer-events-none, so a
+              // title on the button itself never shows and the "+" looked dead with no explanation.
+              <span title={disabled ? "Sign consent first" : "Add Application"}>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 w-6 p-0"
+                  onClick={handleAddClick}
+                  aria-label={disabled ? "Add Application (sign consent first)" : "Add Application"}
+                  disabled={disabled || checkingProfile}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+              </span>
             )}
           </div>
         </CardHeader>
@@ -258,6 +290,8 @@ export function ApplicationsCard({ leadId, canManage, disabled = false }: Applic
           fetchApplications();
         }}
       />
+
+      {noticeDialog}
     </>
   );
 }

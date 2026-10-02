@@ -1,5 +1,8 @@
 "use client";
 
+import { createContext, useContext, useState } from "react";
+import { ChevronDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -11,11 +14,46 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
  * instead of each one reinventing its own card/grid/field styling.
  */
 
+const CollapsibleGroupsContext = createContext(false);
+
+/**
+ * Wrap a region to make every SectionGroup inside it collapsible (open by default) —
+ * including groups added to that region later, with nothing to remember per section.
+ * Outside a <CollapsibleGroups>, a SectionGroup is a plain heading (e.g. in the dialog).
+ */
+export function CollapsibleGroups({ children }: { children: React.ReactNode }) {
+  return <CollapsibleGroupsContext.Provider value={true}>{children}</CollapsibleGroupsContext.Provider>;
+}
+
 export function SectionGroup({ title, children }: { title: string; children: React.ReactNode }) {
+  const collapsible = useContext(CollapsibleGroupsContext);
+  const [open, setOpen] = useState(true);
+  const isOpen = !collapsible || open;
+
   return (
     <div className="space-y-3">
-      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-      {children}
+      <h3 className="text-sm font-semibold text-foreground">
+        {collapsible ? (
+          <button
+            type="button"
+            aria-expanded={isOpen}
+            onClick={() => setOpen(!open)}
+            className="flex w-full items-center justify-between gap-2 text-left"
+          >
+            {title}
+            <ChevronDown
+              aria-hidden="true"
+              className={cn(
+                "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
+                isOpen && "rotate-180"
+              )}
+            />
+          </button>
+        ) : (
+          title
+        )}
+      </h3>
+      {isOpen && children}
     </div>
   );
 }

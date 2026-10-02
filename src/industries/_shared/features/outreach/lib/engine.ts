@@ -380,12 +380,17 @@ export async function markDraftSent(
  * plain tenantId and attributes the lead_activities row to the enrollment's
  * assigned_to (falling back to enrolled_by) rather than a live session user.
  * Reuses advanceEnrollment exactly as markDraftSent does; never duplicates it.
+ *
+ * `opts.sentBy` is passed only when a person clicked "Send now": the timeline then credits that
+ * user and says "sent via EdgeX" instead of "sent automatically via EdgeX" (the cron's wording).
+ * `opts.scheduled` marks a send the rep scheduled ("sent via EdgeX (scheduled)", credited to whoever scheduled it).
  */
 export async function markDraftSentViaEdgeX(
   db: ScopedClient,
   tenantId: string,
   draftId: string,
-  emailMessageId: string
+  emailMessageId: string,
+  opts?: { sentBy?: string | null; scheduled?: boolean }
 ): Promise<{ activityId: string | null } | null> {
   const { data: draft } = await db
     .from("sequence_step_drafts")
@@ -404,7 +409,7 @@ export async function markDraftSentViaEdgeX(
   if (!enrollment) return null;
   const enrollmentRow = enrollment as unknown as SequenceEnrollmentRow;
 
-  const actorUserId = enrollmentRow.assigned_to ?? enrollmentRow.enrolled_by;
+  const actorUserId = opts?.sentBy ?? enrollmentRow.assigned_to ?? enrollmentRow.enrolled_by;
   let activityId: string | null = null;
   if (actorUserId) {
     const { data: activity, error: activityError } = await db
@@ -414,7 +419,11 @@ export async function markDraftSentViaEdgeX(
         user_id: actorUserId,
         activity_type: "email",
         subject: draftRow.subject,
-        description: `Sequence step ${draftRow.step_order} sent automatically via EdgeX`,
+        description: opts?.scheduled
+          ? `Sequence step ${draftRow.step_order} sent via EdgeX (scheduled)`
+          : opts?.sentBy
+            ? `Sequence step ${draftRow.step_order} sent via EdgeX`
+            : `Sequence step ${draftRow.step_order} sent automatically via EdgeX`,
         email_subject: draftRow.subject,
         email_body: draftRow.body_html,
         completed_at: new Date().toISOString(),

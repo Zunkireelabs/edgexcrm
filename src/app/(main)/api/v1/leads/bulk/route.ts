@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, requireAdmin, getClientIp } from "@/lib/api/auth";
 import { syncOriginMembership } from "@/lib/leads/branch-membership";
+import { isAdminAssignmentTarget, isLeadInManagerBranch } from "@/lib/leads/branch-assign-policy";
 import { addLeadCollaborators } from "@/lib/leads/collaborators";
 import { assignDisplayIds } from "@/lib/leads/assign-display-ids";
 import { getPipelineLandingStage } from "@/lib/leads/pipeline-stage";
@@ -105,7 +106,7 @@ export async function PATCH(request: NextRequest) {
   if (body.assigned_to) {
     const { data: member } = await supabase
       .from("tenant_users")
-      .select("id, branch_id, positions(slug)")
+      .select("id, branch_id, role, positions(slug)")
       .eq("tenant_id", auth.tenantId)
       .eq("user_id", body.assigned_to)
       .single();
@@ -114,8 +115,13 @@ export async function PATCH(request: NextRequest) {
       return apiValidationError({ assigned_to: ["User is not a member of this tenant"] });
     }
 
-    // §4.2: branch manager may only assign to users in their own branch
-    if (isTeamScoped && member.branch_id !== auth.branchId) {
+    // §4.2: branch manager may only assign to users in their own branch — or, in education, an admin
+    // (always a valid target; the single-lead PATCH already allows it, bulk used to refuse it).
+    if (
+      isTeamScoped &&
+      member.branch_id !== auth.branchId &&
+      !isAdminAssignmentTarget(auth.industryId, (member as unknown as { role?: string | null }).role ?? null)
+    ) {
       return apiForbidden();
     }
 
@@ -216,12 +222,22 @@ export async function PATCH(request: NextRequest) {
   // lead shouldn't lock its own branch manager out of it).
   let idsToUpdate = body.ids.filter((id) => existingMap.has(id));
   if (isTeamScoped) {
+    // Narrow for the type checker; the §4.1 guard above already guarantees this for team-scoped callers.
+    const managerBranchId = auth.branchId;
+    if (!managerBranchId) return apiForbidden();
+    // Leads another branch SHARED IN to this manager's branch (lead_branches rows) are theirs to act
+    // on too — the single-lead check has always counted them; without this, a receiving branch's
+    // bulk assign silently dropped them ("No valid leads found to update"). ≤100 ids, URL-safe.
+    const { data: sharedRows } = await supabase
+      .from("lead_branches")
+      .select("lead_id")
+      .eq("tenant_id", auth.tenantId)
+      .eq("branch_id", managerBranchId)
+      .in("lead_id", idsToUpdate);
+    const heldViaSharing = new Set((sharedRows ?? []).map((r: { lead_id: string }) => r.lead_id));
     idsToUpdate = idsToUpdate.filter((id) => {
       const lead = existingMap.get(id);
-      return (
-        lead?.branch_id === auth.branchId ||
-        (lead?.assigned_to != null && auth.branchMemberIds.includes(lead.assigned_to))
-      );
+      return !!lead && isLeadInManagerBranch(lead, heldViaSharing.has(id), managerBranchId, auth.branchMemberIds);
     });
   }
 

@@ -18,6 +18,7 @@ import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { sendConsentEmail } from "@/lib/email/send-consent";
 import { APP_URL } from "@/lib/email";
 import { fillConsentTemplate, buildConsentMergeData } from "@/lib/consent/merge";
+import { resolveConsentStatus, type ConsentRecordRow } from "@/lib/consent/resolve-status";
 import { touchLeadUpdatedAt } from "@/lib/leads/touch-updated-at";
 
 interface RouteContext {
@@ -34,6 +35,31 @@ function consentAccessAllowed(industryId: string | null): boolean {
     getFeatureAccess(industryId, FEATURES.APPLICATION_TRACKING) ||
     getFeatureAccess(industryId, FEATURES.OFFERINGS)
   );
+}
+
+// A lead that has already signed must never get a second, UNSIGNED consent record. A newer
+// "sent" row next to the signed one used to make the consent card report "not signed" and
+// block Applications, even though the lead page and the applications APIs count the signed row.
+async function hasSignedConsent(db: Awaited<ReturnType<typeof scopedClient>>, leadId: string): Promise<boolean> {
+  const { data } = await db
+    .from("lead_consents")
+    .select("id")
+    .eq("lead_id", leadId)
+    .eq("status", "signed")
+    .is("deleted_at", null)
+    .limit(1)
+    .maybeSingle();
+  return !!data;
+}
+
+// Migration 254 allows at most one active unsigned consent per lead. When two sends race, the
+// loser's insert fails with a unique violation; that is "someone just did this", not a server error.
+function isUniqueViolation(error: unknown): boolean {
+  return (error as { code?: string } | null)?.code === "23505";
+}
+
+function consentInProgress() {
+  return apiError("CONSENT_IN_PROGRESS", "A consent request for this lead was just created. Please refresh and try again.", 409);
 }
 
 export async function GET(_request: NextRequest, context: RouteContext) {
@@ -82,49 +108,20 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
   const consentEnabled = (tpl as { is_active: boolean } | null)?.is_active === true;
 
-  // Fetch latest non-deleted consent record for this lead
-  const { data: record } = await db
+  // Every non-deleted consent row for this lead, newest first. The status is resolved by the same
+  // "any signed record counts" rule the lead page and applications APIs use (see resolve-status.ts).
+  // A lead only ever has a handful of rows (a resend soft-deletes the previous unsigned one); the
+  // cap is a safety net, not a real limit.
+  const { data: records } = await db
     .from("lead_consents")
     .select("id, status, method, token, signer_name, signed_at, document_url, link_expires_at, sent_at, sent_via")
     .eq("lead_id", id)
     .is("deleted_at", null)
     .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(100);
 
-  const consentRecord = record as {
-    id: string;
-    status: string;
-    method: string | null;
-    token: string | null;
-    signer_name: string | null;
-    signed_at: string | null;
-    document_url: string | null;
-    link_expires_at: string | null;
-    sent_at: string | null;
-    sent_via: string | null;
-  } | null;
-
-  // Compute effective status
-  let status: "none" | "sent" | "signed" | "expired" = "none";
-  let link: string | null = null;
-
-  if (consentRecord) {
-    if (consentRecord.status === "signed") {
-      status = "signed";
-    } else if (
-      consentRecord.status === "sent" &&
-      consentRecord.link_expires_at &&
-      new Date(consentRecord.link_expires_at) < new Date()
-    ) {
-      status = "expired";
-    } else if (consentRecord.status === "sent") {
-      status = "sent";
-      if (consentRecord.token) {
-        link = `${APP_URL}/consent/${consentRecord.token}`;
-      }
-    }
-  }
+  const { status, record: consentRecord } = resolveConsentStatus((records ?? []) as unknown as ConsentRecordRow[]);
+  const link = status === "sent" && consentRecord?.token ? `${APP_URL}/consent/${consentRecord.token}` : null;
 
   return apiSuccess({
     consent_enabled: consentEnabled,
@@ -196,6 +193,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const db = await scopedClient(auth);
 
   if (action === "send") {
+    // deliver: "email" (default — today's behaviour: email the link when the lead has an email) or
+    // "none" (create the signing link only, so staff can hand it over themselves, e.g. on WhatsApp).
+    const deliver = body.deliver === undefined ? "email" : body.deliver;
+    if (deliver !== "email" && deliver !== "none") {
+      return apiError("INVALID_DELIVER", "deliver must be 'email' or 'none'", 400);
+    }
+
     // Require an active consent template
     const { data: tpl } = await db
       .from("consent_templates")
@@ -215,6 +219,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return apiError("NO_TEMPLATE", "Configure consent in Settings first", 400);
     }
 
+    if (await hasSignedConsent(db, id)) {
+      return apiError("ALREADY_SIGNED", "Consent is already signed for this lead", 409);
+    }
+
     // Soft-delete any prior unsigned consent for this lead
     await db
       .from("lead_consents")
@@ -226,7 +234,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     const token = crypto.randomUUID();
     const expiresAt = new Date(Date.now() + tplRow.link_expiry_days * 24 * 60 * 60 * 1000).toISOString();
-    const leadEmail = leadRow.email;
+    const leadEmail = deliver === "email" ? leadRow.email : null;
     const sentVia = leadEmail ? "email" : "link";
 
     // Resolve the org name, then fill the dynamic template with this student's
@@ -269,6 +277,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .select()
       .single();
 
+    if (isUniqueViolation(insertError)) return consentInProgress();
     if (insertError || !newRecord) {
       log.error({ error: insertError }, "Failed to create consent record");
       return apiError("DB_ERROR", "Failed to create consent record", 500);
@@ -343,6 +352,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return apiError("NO_TEMPLATE", "Configure consent in Settings first", 400);
     }
 
+    if (await hasSignedConsent(db, id)) {
+      return apiError("ALREADY_SIGNED", "Consent is already signed for this lead", 409);
+    }
+
     await db
       .from("lead_consents")
       .update({ deleted_at: new Date().toISOString() })
@@ -394,6 +407,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .select()
       .single();
 
+    if (isUniqueViolation(insertError)) return consentInProgress();
     if (insertError || !newRecord) {
       log.error({ error: insertError }, "Failed to create in-person consent record");
       return apiError("DB_ERROR", "Failed to create consent record", 500);

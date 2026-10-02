@@ -1,5 +1,6 @@
 "use client";
 
+import { SECTION_TITLE_CLASS } from "@/components/dashboard/lead/section-title";
 import { useState, useEffect, useCallback } from "react";
 import { Plus, Loader2, MoreHorizontal, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -166,7 +167,7 @@ export function ClassesCard({ leadId, canManage }: ClassesCardProps) {
       <Card className="shadow-none rounded-lg py-0">
         <CardHeader className="pt-4 pb-3">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+            <span className={`${SECTION_TITLE_CLASS} flex items-center gap-2`}>
               Classes
               {!loading && (
                 <Badge variant="secondary" className="h-5 px-1.5 text-xs normal-case">

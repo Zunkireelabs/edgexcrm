@@ -55,6 +55,8 @@ interface LeadTabsProps {
 export interface LeadTabsRef {
   focusComposer: () => void;
   focusTaskComposer: () => void;
+  /** Opens the Student Details pop-up in edit mode. Returns false when this tenant has no student record (the caller then falls back to inline edit). */
+  openStudentDetails: () => boolean;
 }
 
 export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
@@ -65,10 +67,12 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
     const activitiesPanelRef = useRef<ActivitiesPanelRef>(null);
     const router = useRouter();
     const [isPersonalDetailsOpen, setIsPersonalDetailsOpen] = useState(false);
-    // True only when opened via the Student Details summary card's own "Edit"
-    // button, so that path skips straight to the editable form instead of the
-    // preview — the top-of-tab "Details" button still opens to preview first.
+    // True when opened by the page's single Edit button (top of the contact card), so the
+    // pop-up skips straight to the editable form instead of the preview.
     const [personalDetailsOpenInEditMode, setPersonalDetailsOpenInEditMode] = useState(false);
+
+    const canUploadDocuments = getFeatureAccess(industryId, FEATURES.APPLICANT_DOCUMENTS) && (canEdit ?? isAdmin);
+    const studentRecordActive = getFeatureAccess(industryId, FEATURES.STUDENT_RECORD);
 
     useImperativeHandle(ref, () => ({
       focusComposer: () => {
@@ -77,10 +81,13 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
       focusTaskComposer: () => {
         activitiesPanelRef.current?.openTasks(true);
       },
+      openStudentDetails: () => {
+        if (!studentRecordActive) return false;
+        setPersonalDetailsOpenInEditMode(true);
+        setIsPersonalDetailsOpen(true);
+        return true;
+      },
     }));
-
-    const canUploadDocuments = getFeatureAccess(industryId, FEATURES.APPLICANT_DOCUMENTS) && (canEdit ?? isAdmin);
-    const studentRecordActive = getFeatureAccess(industryId, FEATURES.STUDENT_RECORD);
 
     const hasEmail = getFeatureAccess(industryId, FEATURES.EMAIL);
     const { threads, setThreads, loading: threadsLoading } = useEmailThreads(hasEmail ? lead.id : "");
@@ -165,14 +172,9 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
             </Card>
           )}
 
-          {/* Student Details summary — read-only; Edit opens the same Student Details dialog as the "Details" button above */}
+          {/* Student Details summary — read-only. Editing happens in the Student Details pop-up, opened by the page's single Edit button (top of the contact card). */}
           {studentRecordActive && (
-            <StudentDetailsSummaryCard
-              onEdit={() => {
-                setPersonalDetailsOpenInEditMode(true);
-                setIsPersonalDetailsOpen(true);
-              }}
-            />
+            <StudentDetailsSummaryCard />
           )}
 
           {/* Possible Duplicates — admin-only */}
@@ -232,6 +234,7 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
           onLeadUpdate={onLeadUpdate}
           canUploadDocuments={canUploadDocuments}
           openInEditMode={personalDetailsOpenInEditMode}
+          isAdmin={isAdmin}
         />
       )}
       </>

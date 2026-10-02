@@ -43,6 +43,8 @@ import { toast } from "sonner";
 import type { Lead, PipelineStage } from "@/types/database";
 import { getLeadFullName, getLeadInitials } from "./lead-name";
 import { isOtherLead } from "@/lib/leads/lead-type";
+import { formatDateTime } from "@/lib/date";
+import { displayCase } from "@/lib/display-case";
 
 interface LeadTypeOption {
   id: string;
@@ -112,13 +114,13 @@ function LeadTypeBadge({
         <button
           type="button"
           disabled={saving}
-          className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors disabled:opacity-50"
+          className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border border-blue-300 bg-white text-blue-700 hover:bg-blue-50 transition-colors disabled:opacity-50 cursor-pointer"
         >
           {currentLabel}
           <ChevronDown className="h-3 w-3 opacity-60" />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="center" className="w-40 p-1">
+      <PopoverContent align="start" className="w-40 p-1">
         {options.map((opt) => (
           <button
             key={opt.slug}
@@ -158,6 +160,9 @@ interface ContactCardProps {
   /** Called after the Tag pill changes the lead type, so the parent can keep its
    * lead state in sync (Status/Stage gating depends on tags). */
   onTagChange?: (tags: string[]) => void;
+  /** Optional section rendered inside the card, under the contact details and above the
+   * quick actions (e.g. Study Interest). Hidden while editing the contact fields. */
+  detailsSlot?: React.ReactNode;
   /** Back-navigation handler, rendered top-left of the card. */
   onBack?: () => void;
   /** Label for the page the back button actually returns to (e.g. "Applications",
@@ -218,6 +223,7 @@ export function ContactCard({
   onDraftChange,
   industryId,
   onTagChange,
+  detailsSlot,
   onBack,
   backLabel,
   isInvestor = false,
@@ -271,40 +277,26 @@ export function ContactCard({
   return (
     <Card className="border border-border shadow-none rounded-lg py-0">
       <CardContent className="p-4">
-        {/* Top row: back arrow + status badges — replaces the page-level header */}
-        <div className="flex items-start justify-between mb-3">
-          {onBack ? (
-            <Button variant="ghost" size="sm" className="-ml-2 h-8 px-2 gap-1.5" onClick={onBack}>
-              <ArrowLeft className="h-4 w-4" />
-              {backLabel && <span className="text-xs">{backLabel}</span>}
-            </Button>
-          ) : <span />}
-          {!isEditing && (
-            <div className="flex flex-wrap items-center justify-end gap-1.5 max-w-[70%]">
-              {/* Pipeline stage badge — meaningless for Other-tagged walk-ins, which
-                  never enter the funnel (same gate as Key Information's Status/Stage). */}
-              {currentStage && !isOtherLead(lead.tags, industryId) && (
-                <Badge
-                  variant="secondary"
-                  style={{
-                    backgroundColor: `${stageColor}20`,
-                    color: stageColor,
-                  }}
-                >
-                  {currentStage.name}
-                </Badge>
-              )}
-              {industryId === "education_consultancy" && (
-                <LeadTypeBadge leadId={lead.id} tags={lead.tags ?? []} onTagChange={onTagChange} />
-              )}
-              {isInvestor && (
-                <Badge variant="secondary" className="bg-violet-100 text-violet-800">
-                  Investor
-                </Badge>
-              )}
-            </div>
-          )}
-        </div>
+        {/* Top row: back arrow — replaces the page-level header. Status/type chips
+            live under the name (see below) so they never wrap away from the identity. */}
+        {(onBack || (onEdit && !isEditing)) && (
+          <div className="flex items-start justify-between mb-3">
+            {onBack ? (
+              <Button variant="ghost" size="sm" className="-ml-2 h-8 px-2 gap-1.5" onClick={onBack}>
+                <ArrowLeft className="h-4 w-4" />
+                {backLabel && <span className="text-xs">{backLabel}</span>}
+              </Button>
+            ) : <span />}
+            {/* The one Edit for the whole profile: turns every editable section on at once.
+                Save/Cancel replace it (bottom of this card) while editing. */}
+            {onEdit && !isEditing && (
+              <Button variant="ghost" size="sm" className="-mr-2 h-8 px-2 gap-1.5 text-xs" onClick={onEdit}>
+                <Pencil className="h-3.5 w-3.5" />
+                Edit
+              </Button>
+            )}
+          </div>
+        )}
 
         {/* Avatar and Name */}
         <div className="flex flex-col items-start text-left mb-4">
@@ -413,11 +405,40 @@ export function ContactCard({
                     {initials}
                   </span>
                 </div>
-                <h2 className="text-lg font-semibold text-foreground">{fullName}</h2>
+                <h2 className="text-xl font-semibold tracking-tight text-foreground">{fullName}</h2>
               </div>
-              <p className="text-[10px] text-muted-foreground mt-2">
-                Submitted {new Date(lead.created_at).toLocaleDateString()} at{" "}
-                {new Date(lead.created_at).toLocaleTimeString()}
+              <div className="flex flex-wrap items-center gap-1.5 mt-3 empty:hidden">
+                {/* Pipeline stage badge — read-only, flat. Meaningless for Other-tagged
+                    walk-ins, which never enter the funnel (same gate as Key Information's
+                    Status/Stage). */}
+                {currentStage && !isOtherLead(lead.tags, industryId) && (
+                  <Badge
+                    variant="secondary"
+                    className="gap-1.5 font-medium"
+                    style={{
+                      backgroundColor: `${stageColor}20`,
+                      color: stageColor,
+                    }}
+                  >
+                    <span
+                      className="h-1.5 w-1.5 rounded-full"
+                      style={{ backgroundColor: stageColor }}
+                      aria-hidden="true"
+                    />
+                    {currentStage.name}
+                  </Badge>
+                )}
+                {industryId === "education_consultancy" && (
+                  <LeadTypeBadge leadId={lead.id} tags={lead.tags ?? []} onTagChange={onTagChange} />
+                )}
+                {isInvestor && (
+                  <Badge variant="secondary" className="bg-violet-100 text-violet-800">
+                    Investor
+                  </Badge>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Created {formatDateTime(lead.created_at)}
               </p>
             </>
           )}
@@ -425,11 +446,11 @@ export function ContactCard({
 
         {/* Contact Info (read-only — inputs shown above when editing) */}
         {!isEditing && (
-        <div className="space-y-2 mb-4">
+        <div className="space-y-3 mb-4">
           {lead.email && (
             <div className="flex items-center justify-between gap-2 group">
               <a href={`mailto:${lead.email}`} className="min-w-0 flex-1 hover:text-primary">
-                <TruncatedText text={lead.email} className="text-sm text-muted-foreground" />
+                <TruncatedText text={lead.email} className="text-sm font-medium text-foreground" />
               </a>
               <CopyButton value={lead.email} label="Email" className="opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
@@ -438,7 +459,7 @@ export function ContactCard({
             <div className="flex items-center justify-between group">
               <a
                 href={`tel:${formatPhoneForTel(lead.phone)}`}
-                className="text-sm text-muted-foreground hover:text-primary"
+                className="text-sm font-medium text-foreground hover:text-primary"
               >
                 {lead.phone}
               </a>
@@ -452,13 +473,13 @@ export function ContactCard({
             return (
               <div className="flex items-center gap-1.5 pt-1">
                 {nationality && (
-                  <span className="text-xs text-muted-foreground">{nationality}</span>
+                  <span className="text-[13px] text-muted-foreground">{displayCase(nationality)}</span>
                 )}
                 {nationality && city && (
-                  <span className="text-xs text-muted-foreground">·</span>
+                  <span className="text-[13px] text-muted-foreground">·</span>
                 )}
                 {city && (
-                  <span className="text-xs text-muted-foreground">{city}</span>
+                  <span className="text-[13px] text-muted-foreground">{displayCase(city)}</span>
                 )}
               </div>
             );
@@ -466,11 +487,17 @@ export function ContactCard({
         </div>
         )}
 
+        {/* Extra section (e.g. Study Interest) — flat, inside this card. The negative
+            margin cancels the section's own header padding so its text lines up with
+            the contact details above. Stays visible while editing: it follows the same
+            page-level edit mode as the fields above. */}
+        {detailsSlot && <div className="-mx-3 mt-3 mb-2">{detailsSlot}</div>}
+
         {/* Quick Actions, or Save/Cancel while editing — page-level actions
             (Edit/Convert/Delete) live in the Action dropdown below instead
             of a separate floating header, to reclaim that space. */}
         {isEditing ? (
-          <div className="flex items-center justify-end gap-2 pt-4 border-t border-border">
+          <div className="sticky bottom-0 z-10 -mx-4 -mb-4 flex items-center justify-end gap-2 border-t border-border bg-card px-4 py-3">
             <Button variant="ghost" size="sm" onClick={onCancelEdit} disabled={isSaving}>
               <X className="h-4 w-4 mr-2" />
               Cancel
@@ -530,13 +557,7 @@ export function ContactCard({
                   WhatsApp
                 </DropdownMenuItem>
               )}
-              {(onEdit || isItAgency || canDelete) && <DropdownMenuSeparator />}
-              {onEdit && (
-                <DropdownMenuItem onClick={onEdit}>
-                  <Pencil className="h-4 w-4 mr-2" />
-                  Edit
-                </DropdownMenuItem>
-              )}
+              {(isItAgency || canDelete) && <DropdownMenuSeparator />}
               {isItAgency && (
                 convertedContactId ? (
                   <DropdownMenuItem asChild>

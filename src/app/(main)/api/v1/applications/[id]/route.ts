@@ -81,16 +81,22 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   if (body.stage_id !== undefined && body.stage_id !== existingRow.stage_id) {
     const { data: stage } = await db
       .from("application_stages")
-      .select("id, slug, terminal_type")
+      .select("id, slug, terminal_type, pipeline_id")
       .eq("id", String(body.stage_id))
       .maybeSingle();
-    const stageRow = stage as { id: string; slug: string; terminal_type: string | null } | null;
+    const stageRow = stage as { id: string; slug: string; terminal_type: string | null; pipeline_id: string | null } | null;
     if (!stageRow) return apiError("NOT_FOUND", "Application stage not found", 404);
     patch.stage_id = body.stage_id;
     patch.status = stageRow.slug;
     // Stage-age badge tracks stage moves only, not every field edit — set it here
     // (not via the updated_at trigger) so notes/deadline/etc. edits don't reset it.
     patch.stage_changed_at = new Date().toISOString();
+    // The application's pipeline follows its stage: a move into a stage of another pipeline must not
+    // leave the application counted in its old pipeline. A stage with no pipeline recorded (legacy
+    // rows) never wipes the application's own pipeline_id.
+    if (stageRow.pipeline_id && stageRow.pipeline_id !== existingRow.pipeline_id) {
+      patch.pipeline_id = stageRow.pipeline_id;
+    }
   }
 
   // Scalar fields
@@ -154,7 +160,7 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   }
 
   // Stage-move bookkeeping fields (stage_id + the status/stage_changed_at this
-  // route derives from it above) get their own dedicated "application.
+  // route derives from it above, incl. pipeline_id when the move crosses pipelines) get their own dedicated "application.
   // stage_changed" audit-log row below — they must NOT also count toward the
   // generic "application.updated" one, or a plain drag-a-card action (which
   // touches exactly these 3 fields and nothing else) writes TWO audit_logs
@@ -165,7 +171,7 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   // PATCH still gets both rows, but the generic one's `patch` only reflects
   // the genuinely-separate field(s), so its own "Updated N fields" count
   // isn't inflated by bookkeeping it doesn't actually describe.
-  const STAGE_BOOKKEEPING_FIELDS = new Set(["stage_id", "status", "stage_changed_at"]);
+  const STAGE_BOOKKEEPING_FIELDS = new Set(["stage_id", "status", "stage_changed_at", "pipeline_id"]);
   const isStageMove = patch.stage_id !== undefined;
   const nonStageFields = Object.fromEntries(Object.entries(patch).filter(([k]) => !STAGE_BOOKKEEPING_FIELDS.has(k)));
   const nonStageFieldKeys = Object.keys(nonStageFields);

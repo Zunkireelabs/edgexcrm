@@ -13,6 +13,8 @@ export interface CadenceStepItem {
   sent_via?: string | null;
   email_message_status?: string | null;
   body_html?: string;
+  scheduled_send_at?: string | null;
+  scheduled_error?: string | null;
   projected_due_at?: string;
 }
 

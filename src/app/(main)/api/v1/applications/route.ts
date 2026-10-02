@@ -19,6 +19,7 @@ import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { shouldRestrictToSelf, canManageApplications } from "@/lib/api/permissions";
 import { getLeadMembership } from "@/lib/leads/branch-membership";
 import { checkLeadProfileCompleteness } from "@/lib/leads/profile-completeness";
+import { alignStageToCountryPipeline } from "@/lib/applications/pipeline-resolution";
 import { normalizeDestinations, normalizeFieldOfStudy, normalizeDegreeLevel } from "@/lib/leads/destination-normalize";
 
 export async function GET(request: NextRequest) {
@@ -194,6 +195,22 @@ export async function POST(request: NextRequest) {
 
   if (!stageId) return apiError("NO_STAGES", "No application stages found for this tenant", 500);
 
+  // The stage must belong to the first declared country's pipeline — same server-side rule as the
+  // per-lead route, so a stage from another pipeline can never be stored (the UI only offers matching
+  // ones, but the API must not rely on that).
+  let pipelineId: string | null = null;
+  if (Array.isArray(body.countries) && body.countries.every((c) => typeof c === "string")) {
+    const aligned = await alignStageToCountryPipeline(supabase, db, {
+      tenantId: auth.tenantId,
+      countries: body.countries as string[],
+      stageId,
+      stageSlug,
+    });
+    stageId = aligned.stageId;
+    stageSlug = aligned.stageSlug;
+    pipelineId = aligned.pipelineId;
+  }
+
   // Append to the end of the lead's panel order (position = current max + 1).
   const { data: maxRow } = await db
     .from("applications")
@@ -214,6 +231,8 @@ export async function POST(request: NextRequest) {
     position: nextPosition,
     created_by: auth.userId,
   };
+  // Stamped server-side from the country's pipeline (never a client-supplied id), same as the per-lead route.
+  if (pipelineId) insert.pipeline_id = pipelineId;
   if (body.intake_term) insert.intake_term = String(body.intake_term);
   if (body.countries !== undefined) {
     if (!Array.isArray(body.countries) || !body.countries.every((c) => typeof c === "string")) {

@@ -1,5 +1,6 @@
 "use client";
 
+import { SECTION_TITLE_CLASS } from "@/components/dashboard/lead/section-title";
 import { useState, useEffect, useCallback } from "react";
 import { Clock, Loader2, ChevronRight } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -54,7 +55,7 @@ export function CheckInHistoryCard({ leadId, teamMemberNames, teamMemberEmails }
     <Card className="shadow-none rounded-lg py-0">
       <CardHeader className="pt-4 pb-3">
         <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+          <span className={`${SECTION_TITLE_CLASS} flex items-center gap-2`}>
             <Clock className="h-3.5 w-3.5" />
             Check-In History
             {!loading && (

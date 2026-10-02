@@ -6,5 +6,5 @@ import type { FeatureMeta } from "../../../_types";
 // avoid (docs/SMS-PHASE3A-BRIEF.md §2).
 export const smsMeta: FeatureMeta = {
   id: FEATURES.SMS,
-  industries: [INDUSTRIES.EDUCATION_CONSULTANCY],
+  industries: [INDUSTRIES.EDUCATION_CONSULTANCY, INDUSTRIES.CONSTRUCTION],
 };

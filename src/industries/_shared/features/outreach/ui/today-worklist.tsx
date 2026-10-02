@@ -17,6 +17,10 @@ export interface Draft {
   body_html: string;
   status: "pending" | "sent" | "skipped";
   draft_source: "template" | "ai";
+  // Set when the rep scheduled an EdgeX send for this draft (Schedule send). `scheduled_error` explains
+  // a scheduled send that did NOT go out.
+  scheduled_send_at?: string | null;
+  scheduled_error?: string | null;
   leads: { first_name: string | null; last_name: string | null; email: string | null } | null;
   sequence_enrollments: {
     sequence_id: string;
@@ -110,6 +114,11 @@ export function TodayWorklist({ isAdmin }: TodayWorklistProps) {
                   <Badge variant="secondary" className="whitespace-nowrap">
                     {draft.sequence_enrollments?.email_sequences?.name ?? "Sequence"} · Step {draft.step_order}
                   </Badge>
+                  {draft.scheduled_send_at && (
+                    <Badge variant="outline" className="whitespace-nowrap border-blue-300 text-blue-700 dark:border-blue-800 dark:text-blue-300">
+                      Scheduled · {new Date(draft.scheduled_send_at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}
+                    </Badge>
+                  )}
                   <Badge variant={isDueYet ? "default" : "outline"} className="whitespace-nowrap">
                     {formatRelativeDay(draft.due_at)}
                   </Badge>
