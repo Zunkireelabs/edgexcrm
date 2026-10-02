@@ -97,6 +97,9 @@ export async function stopEnrollmentsOnReply(
           .eq("enrollment_id", enrollment.id)
           .eq("status", "pending");
         result.ended++;
+        // the lead is free again — start a sequence queued behind this one, if any
+        const { promoteQueuedEnrollment } = await import("./queue-next");
+        await promoteQueuedEnrollment(params.tenantId, params.leadId);
       } else {
         result.paused++;
       }

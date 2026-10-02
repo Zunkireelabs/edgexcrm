@@ -1,8 +1,9 @@
-import { buildUserAuthContext } from "@/lib/api/auth";
+import { buildUserAuthContext, type AuthContext } from "@/lib/api/auth";
 import { logger } from "@/lib/logger";
 import { createServiceClient } from "@/lib/supabase/server";
 import { scopedClientForTenant, type ScopedClient } from "@/lib/supabase/scoped";
-import { enrollLead, EnrollmentConflictError } from "./engine";
+import { enrollLead, unenrollLead, EnrollmentConflictError } from "./engine";
+import { queueNextSequence } from "./queue-next";
 
 // Worker for bulk enroll (OUTREACH-BULK-ENROLL-BRIEF.md §7). NOT an Inngest function — like blast-runner.ts and
 // sequence-schedule-runner.ts it is driven by an in-process timer (src/instrumentation.ts) plus an immediate
@@ -25,6 +26,7 @@ interface RunRow {
   id: string;
   sequence_id: string;
   created_by: string | null;
+  conflict_policy: "skip" | "switch" | "queue";
   status: "queued" | "running" | "completed" | "cancelled" | "failed";
   cancel_requested: boolean;
 }
@@ -45,6 +47,65 @@ export interface RunPassSummary {
   skipped: number;
   failed: number;
   finished: boolean;
+}
+
+interface EnrollInput {
+  sequenceId: string;
+  leadId: string;
+  assignedTo: string;
+  enrolledBy: string;
+}
+
+interface Resolved {
+  outcome: "enrolled" | "skipped" | "failed";
+  reason: string | null;
+}
+
+const errorReason = (err: unknown) => (err instanceof Error ? err.message : String(err)).slice(0, 200);
+
+/**
+ * The lead is already in a running sequence (a lead can be in only one). What happens is the run's conflict
+ * policy: skip leaves them, queue parks this sequence to start when theirs ends, switch ends theirs and
+ * enrolls them here.
+ */
+async function resolveConflict(
+  ctx: { db: ScopedClient; auth: AuthContext; run: RunRow },
+  input: EnrollInput
+): Promise<Resolved> {
+  const { db, auth, run } = ctx;
+
+  if (run.conflict_policy === "queue") {
+    try {
+      const queued = await queueNextSequence(db, { leadId: input.leadId, sequenceId: run.sequence_id, queuedBy: auth.userId, runId: run.id });
+      return { outcome: "skipped", reason: queued === "queued" ? "queued_next" : "already_queued" };
+    } catch (err) {
+      logger.error({ err, runId: run.id, leadId: input.leadId }, "bulk-enroll: failed to queue a lead");
+      return { outcome: "failed", reason: errorReason(err) };
+    }
+  }
+
+  if (run.conflict_policy === "switch") {
+    try {
+      const { data: current } = await db
+        .from("sequence_enrollments")
+        .select("id, sequence_id")
+        .eq("lead_id", input.leadId)
+        .in("status", ["active", "paused"])
+        .maybeSingle();
+      const cur = current as unknown as { id: string; sequence_id: string } | null;
+      if (cur && cur.sequence_id === run.sequence_id) return { outcome: "skipped", reason: "already_in_this_sequence" };
+      // promoteQueue:false — we enroll them somewhere else right now, so a queued sequence must not jump in first
+      if (cur) await unenrollLead(db, cur.id, { promoteQueue: false });
+      await enrollLead(db, auth, input);
+      return { outcome: "enrolled", reason: "switched" };
+    } catch (err) {
+      if (err instanceof EnrollmentConflictError) return { outcome: "skipped", reason: "already_in_sequence" };
+      logger.error({ err, runId: run.id, leadId: input.leadId }, "bulk-enroll: failed to switch a lead");
+      return { outcome: "failed", reason: errorReason(err) };
+    }
+  }
+
+  return { outcome: "skipped", reason: "already_in_sequence" };
 }
 
 async function refreshCounts(db: ScopedClient, runId: string): Promise<void> {
@@ -93,7 +154,7 @@ export async function processBulkEnrollRun(
 
   const { data: runData } = await db
     .from("sequence_bulk_enrollments")
-    .select("id, sequence_id, created_by, status, cancel_requested")
+    .select("id, sequence_id, created_by, conflict_policy, status, cancel_requested")
     .eq("id", runId)
     .maybeSingle();
   const run = runData as unknown as RunRow | null;
@@ -176,20 +237,22 @@ export async function processBulkEnrollRun(
         await mark("skipped", "lead_deleted");
         continue;
       }
+      const enrollInput = {
+        sequenceId: run.sequence_id,
+        leadId: lead.id,
+        assignedTo: lead.assigned_to ?? auth.userId,
+        enrolledBy: auth.userId,
+      };
       try {
-        await enrollLead(db, auth, {
-          sequenceId: run.sequence_id,
-          leadId: lead.id,
-          assignedTo: lead.assigned_to ?? auth.userId,
-          enrolledBy: auth.userId,
-        });
+        await enrollLead(db, auth, enrollInput);
         await mark("enrolled", null);
       } catch (err) {
         if (err instanceof EnrollmentConflictError) {
-          await mark("skipped", "already_in_sequence");
+          const resolved = await resolveConflict({ db, auth, run }, enrollInput);
+          await mark(resolved.outcome, resolved.reason);
         } else {
           logger.error({ err, runId, leadId: item.lead_id }, "bulk-enroll: failed to enroll a lead");
-          await mark("failed", (err instanceof Error ? err.message : String(err)).slice(0, 200));
+          await mark("failed", errorReason(err));
         }
       }
     }

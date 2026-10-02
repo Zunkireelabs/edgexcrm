@@ -78,10 +78,20 @@ describe("POST /api/v1/outreach/bulk-enroll", () => {
     expect(createRunMock).not.toHaveBeenCalled();
   });
 
-  it("422 for a malformed body and for a conflict policy that is not supported yet", async () => {
+  it("422 for a malformed body and for an unknown conflict policy", async () => {
     expect((await post({ sequence_id: "nope", source: { mode: "selected", lead_ids: [LEAD] } })).status).toBe(422);
-    expect((await post(validBody({ conflict_policy: "switch" }))).status).toBe(422);
+    expect((await post(validBody({ conflict_policy: "replace" }))).status).toBe(422);
     expect(createRunMock).not.toHaveBeenCalled();
+  });
+
+  it("switch and queue are accepted and reach both the plan and the saved run", async () => {
+    for (const policy of ["switch", "queue"] as const) {
+      planMock.mockClear();
+      createRunMock.mockClear();
+      expect((await post(validBody({ conflict_policy: policy }))).status).toBe(201);
+      expect(planMock).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.anything(), { sequenceId: SEQ, conflictPolicy: policy });
+      expect(createRunMock).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.objectContaining({ conflictPolicy: policy }));
+    }
   });
 
   it("404 when the sequence does not exist or is archived", async () => {

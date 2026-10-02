@@ -39,9 +39,12 @@ function row(id: string, first = "A") {
 }
 
 /** Fake db: sequence_enrollments (for the already-in-sequence lookup) + the two bulk tables. */
-function makeDb(inSequence: string[] = []) {
+function makeDb(inSequence: Array<string | [string, string]> = []) {
   const tables: Record<string, Row[]> = {
-    sequence_enrollments: inSequence.map((lead_id) => ({ lead_id, status: "active" })),
+    sequence_enrollments: inSequence.map((e) => {
+      const [lead_id, sequence_id] = typeof e === "string" ? [e, "seq-OTHER"] : e;
+      return { lead_id, sequence_id, status: "active" };
+    }),
     sequence_bulk_enrollments: [],
     sequence_bulk_enrollment_items: [],
   };
@@ -180,6 +183,7 @@ describe("planBulkEnroll", () => {
       estimatedExtraDays: 0,
     });
     expect(preview.skipped).toEqual({ noEmail: 1, malformedEmail: 0, duplicateEmail: 0, suppressed: 1, alreadyInSequence: 1 });
+    expect(preview).toMatchObject({ conflictPolicy: "skip", inOtherSequence: 1, willSwitch: 0, willQueue: 0 });
     expect(items).toEqual([
       { leadId: "l1", outcome: "pending", reason: null },
       { leadId: "l2", outcome: "skipped", reason: "already_in_sequence" },
@@ -228,6 +232,56 @@ describe("planBulkEnroll", () => {
     resolveAudienceMock.mockResolvedValue({ ok: false, errors: { f: ["bad"] } });
     const bad = await planBulkEnroll(AUTH, { mode: "filter", tree: {} } as never, { db } as never);
     expect(bad).toEqual({ ok: false, errors: { f: ["bad"] } });
+  });
+});
+
+describe("planBulkEnroll — conflict policies", () => {
+  const resolved = () => ({
+    requested: 4,
+    audience: {
+      matched: 4,
+      sendable: [row("new"), row("other"), row("this"), row("other2")],
+      suppressed: [],
+      excluded: { noEmail: 0, malformed: 0, suppressed: 0, duplicate: 0 },
+      excludedRows: [],
+    },
+  });
+  const inSeq: Array<[string, string]> = [["other", "seq-OTHER"], ["other2", "seq-OTHER"], ["this", "seq-TARGET"]];
+  const run = async (conflictPolicy?: "skip" | "switch" | "queue") => {
+    resolveAudienceForLeadIdsMock.mockResolvedValue(resolved());
+    const { db } = makeDb(inSeq);
+    const planned = await planBulkEnroll(AUTH, { mode: "selected", leadIds: ["x"] }, { db } as never, { sequenceId: "seq-TARGET", conflictPolicy });
+    if (!planned.ok) throw new Error("plan failed");
+    return planned.plan;
+  };
+  const reasonOf = (plan: Awaited<ReturnType<typeof run>>, id: string) => plan.items.find((i) => i.leadId === id);
+
+  it("skip (the default): leads in another sequence are left alone", async () => {
+    const plan = await run();
+    expect(plan.preview).toMatchObject({ conflictPolicy: "skip", willEnroll: 1, inOtherSequence: 2, willSwitch: 0, willQueue: 0 });
+    expect(plan.preview.skipped.alreadyInSequence).toBe(3); // 2 elsewhere + 1 already in this one
+    expect(reasonOf(plan, "other")).toEqual({ leadId: "other", outcome: "skipped", reason: "already_in_sequence" });
+  });
+
+  it("switch: they become pending (the worker swaps them) and are counted as switches", async () => {
+    const plan = await run("switch");
+    expect(plan.preview).toMatchObject({ conflictPolicy: "switch", willEnroll: 3, inOtherSequence: 2, willSwitch: 2, willQueue: 0 });
+    expect(reasonOf(plan, "other")).toEqual({ leadId: "other", outcome: "pending", reason: null });
+  });
+
+  it("queue: they become pending (the worker parks them) and are counted as queued", async () => {
+    const plan = await run("queue");
+    expect(plan.preview).toMatchObject({ conflictPolicy: "queue", willEnroll: 3, willSwitch: 0, willQueue: 2 });
+  });
+
+  it("a lead already in THIS sequence is skipped under every policy (restarting them helps nobody)", async () => {
+    for (const policy of ["skip", "switch", "queue"] as const) {
+      const plan = await run(policy);
+      expect(reasonOf(plan, "this")).toEqual({ leadId: "this", outcome: "skipped", reason: "already_in_this_sequence" });
+      expect(plan.preview.skipped.alreadyInSequence).toBeGreaterThanOrEqual(1);
+    }
+    // under switch / queue ONLY the this-sequence lead counts as "already in sequence"
+    expect((await run("switch")).preview.skipped.alreadyInSequence).toBe(1);
   });
 });
 

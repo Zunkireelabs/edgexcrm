@@ -55,11 +55,12 @@ export async function POST(request: NextRequest) {
   const { data: sequence } = await db.from("email_sequences").select("id, status").eq("id", parsed.sequenceId).maybeSingle();
   if (!sequence || (sequence as unknown as { status: string }).status !== "active") return apiNotFound("Sequence");
 
-  const planned = await planBulkEnroll(auth, parsed.source, {
-    user: await createClient(),
-    service: await createServiceClient(),
-    db,
-  });
+  const planned = await planBulkEnroll(
+    auth,
+    parsed.source,
+    { user: await createClient(), service: await createServiceClient(), db },
+    { sequenceId: parsed.sequenceId, conflictPolicy }
+  );
   if (!planned.ok) return apiValidationError(planned.errors);
   const { plan } = planned;
 

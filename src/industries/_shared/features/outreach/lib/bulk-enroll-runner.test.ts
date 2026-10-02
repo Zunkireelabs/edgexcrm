@@ -14,6 +14,9 @@ let enrollCalls: Array<{ leadId: string; assignedTo: string | null; enrolledBy: 
 let enrollBehavior: (leadId: string) => Promise<unknown>;
 let authResult: { userId: string; tenantId: string } | null;
 let onChunk: (() => void) | null;
+let unenrollCalls: Array<{ enrollmentId: string; opts: unknown }>;
+let queueCalls: Array<{ leadId: string; sequenceId: string; queuedBy: string; runId: string | null }>;
+let queueResult: "queued" | "already_queued";
 
 // vi.mock factories are hoisted above every other top-level statement, so anything they touch at factory time
 // must come from vi.hoisted.
@@ -21,9 +24,18 @@ const { FakeConflict } = vi.hoisted(() => ({ FakeConflict: class FakeConflict ex
 
 vi.mock("./engine", () => ({
   EnrollmentConflictError: FakeConflict,
+  unenrollLead: async (_db: unknown, enrollmentId: string, opts: unknown) => {
+    unenrollCalls.push({ enrollmentId, opts });
+  },
   enrollLead: async (_db: unknown, _auth: unknown, params: { leadId: string; assignedTo: string | null; enrolledBy: string }) => {
     enrollCalls.push({ leadId: params.leadId, assignedTo: params.assignedTo, enrolledBy: params.enrolledBy });
     return enrollBehavior(params.leadId);
+  },
+}));
+vi.mock("./queue-next", () => ({
+  queueNextSequence: async (_db: unknown, params: { leadId: string; sequenceId: string; queuedBy: string; runId: string | null }) => {
+    queueCalls.push(params);
+    return queueResult;
   },
 }));
 vi.mock("@/lib/api/auth", () => ({ buildUserAuthContext: async () => authResult }));
@@ -117,6 +129,9 @@ beforeEach(() => {
   enrollBehavior = async () => ({});
   authResult = { userId: "user-1", tenantId: T };
   onChunk = null;
+  unenrollCalls = [];
+  queueCalls = [];
+  queueResult = "queued";
 });
 
 describe("processBulkEnrollRun", () => {
@@ -240,6 +255,85 @@ describe("processBulkEnrollRun", () => {
     expect(summary.enrolled).toBe(0);
     expect(run().status).toBe("running");
     expect(outcomes()).toEqual(["pending", "pending", "pending"]);
+  });
+});
+
+describe("conflict policies (a lead already in a running sequence)", () => {
+  /** lead-1 throws a conflict on its FIRST enroll; later calls succeed unless `again` is set. */
+  function conflictOnFirst(leadId: string, again = false) {
+    const seen = new Map<string, number>();
+    enrollBehavior = async (id) => {
+      const n = (seen.get(id) ?? 0) + 1;
+      seen.set(id, n);
+      if (id === leadId && (n === 1 || again)) throw new FakeConflict("already");
+      return {};
+    };
+  }
+
+  it("skip (default): the lead is left where it is", async () => {
+    seed({ leads: 1, runOverrides: { conflict_policy: "skip" } });
+    conflictOnFirst("lead-1");
+    await processBulkEnrollRun(T, RUN);
+    expect(outcomes()).toEqual(["skipped"]);
+    expect(tables.sequence_bulk_enrollment_items[0].reason).toBe("already_in_sequence");
+    expect(unenrollCalls).toHaveLength(0);
+    expect(queueCalls).toHaveLength(0);
+  });
+
+  it("switch: ends the current enrollment WITHOUT promoting the queue, then enrolls here", async () => {
+    seed({ leads: 1, runOverrides: { conflict_policy: "switch" } });
+    tables.sequence_enrollments = [{ id: "enr-old", lead_id: "lead-1", sequence_id: "seq-OTHER", status: "active" }];
+    conflictOnFirst("lead-1");
+
+    await processBulkEnrollRun(T, RUN);
+
+    expect(unenrollCalls).toEqual([{ enrollmentId: "enr-old", opts: { promoteQueue: false } }]);
+    expect(enrollCalls.map((c) => c.leadId)).toEqual(["lead-1", "lead-1"]); // refused once, then enrolled
+    expect(outcomes()).toEqual(["enrolled"]);
+    expect(tables.sequence_bulk_enrollment_items[0].reason).toBe("switched");
+  });
+
+  it("switch: a lead already in THIS sequence is never restarted", async () => {
+    seed({ leads: 1, runOverrides: { conflict_policy: "switch" } });
+    tables.sequence_enrollments = [{ id: "enr-same", lead_id: "lead-1", sequence_id: "seq-1", status: "paused" }];
+    conflictOnFirst("lead-1");
+
+    await processBulkEnrollRun(T, RUN);
+
+    expect(unenrollCalls).toHaveLength(0);
+    expect(outcomes()).toEqual(["skipped"]);
+    expect(tables.sequence_bulk_enrollment_items[0].reason).toBe("already_in_this_sequence");
+  });
+
+  it("switch: if the lead lands in another sequence in between, it is skipped, not duplicated", async () => {
+    seed({ leads: 1, runOverrides: { conflict_policy: "switch" } });
+    tables.sequence_enrollments = [{ id: "enr-old", lead_id: "lead-1", sequence_id: "seq-OTHER", status: "active" }];
+    conflictOnFirst("lead-1", true); // every enroll attempt conflicts
+
+    await processBulkEnrollRun(T, RUN);
+
+    expect(outcomes()).toEqual(["skipped"]);
+    expect(tables.sequence_bulk_enrollment_items[0].reason).toBe("already_in_sequence");
+  });
+
+  it("queue: parks this sequence behind the current one and records it as queued_next", async () => {
+    seed({ leads: 1, runOverrides: { conflict_policy: "queue" } });
+    conflictOnFirst("lead-1");
+
+    await processBulkEnrollRun(T, RUN);
+
+    expect(queueCalls).toEqual([{ leadId: "lead-1", sequenceId: "seq-1", queuedBy: "user-1", runId: RUN }]);
+    expect(outcomes()).toEqual(["skipped"]);
+    expect(tables.sequence_bulk_enrollment_items[0].reason).toBe("queued_next");
+    expect(unenrollCalls).toHaveLength(0);
+  });
+
+  it("queue: a lead that already has a waiting queued sequence is reported as already_queued", async () => {
+    seed({ leads: 1, runOverrides: { conflict_policy: "queue" } });
+    queueResult = "already_queued";
+    conflictOnFirst("lead-1");
+    await processBulkEnrollRun(T, RUN);
+    expect(tables.sequence_bulk_enrollment_items[0].reason).toBe("already_queued");
   });
 });
 

@@ -18,8 +18,13 @@ import { isBulkEmailEnabledForTenant, isEmailOutboundSandbox } from "@/lib/email
 export const BULK_ENROLL_MAX_LEADS = 10_000;
 /** From this many leads up the rep must type a confirmation word before Start. */
 export const BULK_ENROLL_CONFIRM_FROM = 100;
-/** Phase 2a: leads already in a sequence are skipped. Switch / Queue next arrive in 2b. */
-export const SUPPORTED_CONFLICT_POLICIES = ["skip"] as const;
+/**
+ * What to do with a lead that is already in a running sequence (a lead can be in only one):
+ *   skip   leave them where they are
+ *   switch end their current enrollment and enroll them in this sequence
+ *   queue  start this sequence automatically when their current one ends ("Queue next")
+ */
+export const SUPPORTED_CONFLICT_POLICIES = ["skip", "switch", "queue"] as const;
 export type ConflictPolicy = (typeof SUPPORTED_CONFLICT_POLICIES)[number];
 
 export type BulkSource = { mode: "selected"; leadIds: string[] } | { mode: "filter"; tree: FilterTree };
@@ -30,6 +35,9 @@ export type SkipReason =
   | "duplicate_email"
   | "suppressed"
   | "already_in_sequence"
+  | "already_in_this_sequence"
+  | "queued_next"
+  | "already_queued"
   | "lead_deleted"
   | "cancelled";
 
@@ -45,8 +53,17 @@ export interface BulkEnrollPreview {
     malformedEmail: number;
     duplicateEmail: number;
     suppressed: number;
+    /** In a running sequence and left alone: always the ones already in THIS sequence, plus the others when the policy is skip. */
     alreadyInSequence: number;
   };
+  /** The policy this preview was computed for. */
+  conflictPolicy: ConflictPolicy;
+  /** Leads that are in a running sequence OTHER than this one — the ones the policy decides about. */
+  inOtherSequence: number;
+  /** Of `willEnroll`, how many replace a running enrollment (policy switch). */
+  willSwitch: number;
+  /** Of `willEnroll`, how many are parked to start when their current sequence ends (policy queue). */
+  willQueue: number;
   overLimit: boolean;
   limit: number;
   confirmFrom: number;
@@ -112,17 +129,19 @@ async function resolveSource(auth: AuthContext, source: BulkSource, clients: Res
   };
 }
 
-/** Ids (of `leadIds`) that already have a running (active / paused) enrollment — chunked so the URL stays short. */
-export async function findLeadsInSequence(db: ScopedClient, leadIds: string[]): Promise<Set<string>> {
-  const inSequence = new Set<string>();
+/** lead id -> the sequence they are currently running (active / paused), for the ids that have one. Chunked so the URL stays short. */
+export async function findLeadsInSequence(db: ScopedClient, leadIds: string[]): Promise<Map<string, string>> {
+  const inSequence = new Map<string, string>();
   for (let i = 0; i < leadIds.length; i += 200) {
     const { data, error } = await db
       .from("sequence_enrollments")
-      .select("lead_id")
+      .select("lead_id, sequence_id")
       .in("lead_id", leadIds.slice(i, i + 200))
       .in("status", ["active", "paused"]);
     if (error) throw new Error(`findLeadsInSequence failed: ${error.message}`);
-    for (const row of (data ?? []) as unknown as { lead_id: string }[]) inSequence.add(row.lead_id);
+    for (const row of (data ?? []) as unknown as { lead_id: string; sequence_id: string }[]) {
+      inSequence.set(row.lead_id, row.sequence_id);
+    }
   }
   return inSequence;
 }
@@ -144,22 +163,38 @@ function sampleName(row: AudienceRow): string {
 export async function planBulkEnroll(
   auth: AuthContext,
   source: BulkSource,
-  clients: ResolveAudienceClients
+  clients: ResolveAudienceClients,
+  opts: { sequenceId?: string; conflictPolicy?: ConflictPolicy } = {}
 ): Promise<{ ok: true; plan: BulkPlan } | { ok: false; errors: Record<string, string[]> }> {
   const resolved = await resolveSource(auth, source, clients);
   if ("ok" in resolved && resolved.ok === false) return { ok: false, errors: resolved.errors };
   const r = resolved as Exclude<typeof resolved, { ok: false }>;
 
+  const policy: ConflictPolicy = opts.conflictPolicy ?? "skip";
   const inSequence = await findLeadsInSequence(clients.db, r.sendable.map((row) => row.leadId));
 
   const items: PlannedItem[] = [];
   const enrollable: AudienceRow[] = [];
+  let inOtherSequence = 0;
+  let inThisSequence = 0;
   for (const row of r.sendable) {
-    if (inSequence.has(row.leadId)) {
-      items.push({ leadId: row.leadId, outcome: "skipped", reason: "already_in_sequence" });
-    } else {
+    const current = inSequence.get(row.leadId);
+    if (current === undefined) {
       items.push({ leadId: row.leadId, outcome: "pending", reason: null });
       enrollable.push(row);
+    } else if (opts.sequenceId && current === opts.sequenceId) {
+      // already running THIS sequence: switching / queueing would only restart them — leave them alone
+      inThisSequence++;
+      items.push({ leadId: row.leadId, outcome: "skipped", reason: "already_in_this_sequence" });
+    } else {
+      inOtherSequence++;
+      if (policy === "skip") {
+        items.push({ leadId: row.leadId, outcome: "skipped", reason: "already_in_sequence" });
+      } else {
+        // switch / queue: the worker handles the conflict when it reaches this lead
+        items.push({ leadId: row.leadId, outcome: "pending", reason: null });
+        enrollable.push(row);
+      }
     }
   }
   for (const row of r.suppressed) items.push({ leadId: row.leadId, outcome: "skipped", reason: "suppressed" });
@@ -183,8 +218,12 @@ export async function planBulkEnroll(
           malformedEmail: r.excluded.malformed,
           duplicateEmail: r.excluded.duplicate,
           suppressed: r.excluded.suppressed,
-          alreadyInSequence: r.sendable.length - willEnroll,
+          alreadyInSequence: inThisSequence + (policy === "skip" ? inOtherSequence : 0),
         },
+        conflictPolicy: policy,
+        inOtherSequence,
+        willSwitch: policy === "switch" ? inOtherSequence : 0,
+        willQueue: policy === "queue" ? inOtherSequence : 0,
         overLimit: willEnroll > BULK_ENROLL_MAX_LEADS,
         limit: BULK_ENROLL_MAX_LEADS,
         confirmFrom: BULK_ENROLL_CONFIRM_FROM,

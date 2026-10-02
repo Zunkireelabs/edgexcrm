@@ -284,6 +284,22 @@ export async function advanceEnrollment(
     entityId: enrollment.id,
     payload: { sequence_id: enrollment.sequence_id, lead_id: enrollment.lead_id },
   });
+
+  // The lead is free again: if a sequence was queued behind this one ("Queue next"), start it.
+  await promoteQueued(auth.tenantId, enrollment.lead_id);
+}
+
+/**
+ * Starts the sequence queued behind a lead's just-ended enrollment (queue-next.ts). Dynamic import: that
+ * module calls enrollLead from here, so a static import would be a cycle. Never throws.
+ */
+async function promoteQueued(tenantId: string, leadId: string): Promise<void> {
+  try {
+    const { promoteQueuedEnrollment } = await import("./queue-next");
+    await promoteQueuedEnrollment(tenantId, leadId);
+  } catch (err) {
+    logger.error({ err, tenantId, leadId }, "engine: starting the queued sequence failed (non-fatal)");
+  }
 }
 
 /**
@@ -512,8 +528,22 @@ export async function skipDraft(db: ScopedClient, auth: AuthContext, draftId: st
   return true;
 }
 
-/** Unenrolls a lead and skips any drafts still pending (interrupts the cadence). */
-export async function unenrollLead(db: ScopedClient, enrollmentId: string): Promise<void> {
+/**
+ * Unenrolls a lead and skips any drafts still pending (interrupts the cadence). Unless told not to, it then
+ * starts the sequence queued behind this one ("Queue next"). `promoteQueue: false` is for a caller that is
+ * about to enroll the lead somewhere else itself (bulk "Switch").
+ */
+export async function unenrollLead(
+  db: ScopedClient,
+  enrollmentId: string,
+  opts: { promoteQueue?: boolean } = {}
+): Promise<void> {
+  const { data: existing } = await db
+    .from("sequence_enrollments")
+    .select("lead_id, tenant_id")
+    .eq("id", enrollmentId)
+    .maybeSingle();
+
   await db.from("sequence_enrollments").update({ status: "unenrolled" }).eq("id", enrollmentId);
 
   await db
@@ -521,4 +551,7 @@ export async function unenrollLead(db: ScopedClient, enrollmentId: string): Prom
     .update({ status: "skipped" })
     .eq("enrollment_id", enrollmentId)
     .eq("status", "pending");
+
+  const row = existing as unknown as { lead_id: string; tenant_id: string } | null;
+  if (row && opts.promoteQueue !== false) await promoteQueued(row.tenant_id, row.lead_id);
 }

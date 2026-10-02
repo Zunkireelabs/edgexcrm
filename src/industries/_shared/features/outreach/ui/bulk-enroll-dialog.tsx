@@ -27,6 +27,8 @@ export type BulkEnrollSource =
   | { mode: "selected"; leadIds: string[] }
   | { mode: "filter"; tree: unknown };
 
+type Policy = "skip" | "switch" | "queue";
+
 interface Preview {
   matched: number;
   notVisible: number;
@@ -37,6 +39,10 @@ interface Preview {
   confirmFrom: number;
   cap: { dailyCap: number; sentToday: number; remaining: number };
   estimatedExtraDays: number;
+  conflictPolicy: Policy;
+  inOtherSequence: number;
+  willSwitch: number;
+  willQueue: number;
   sandbox: boolean;
   sendingEnabled: boolean;
   sampleNames: string[];
@@ -52,6 +58,8 @@ interface Run {
   failed_count: number;
   cancel_requested: boolean;
   error: string | null;
+  /** leads parked to start when their current sequence ends (policy "queue") */
+  queued_count?: number;
 }
 
 const CONFIRM_WORD = "ENROLL";
@@ -78,6 +86,7 @@ export function BulkEnrollDialog({ open, onOpenChange, source, sourceLabel, pres
   const [previewLoading, setPreviewLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmText, setConfirmText] = useState("");
+  const [policy, setPolicy] = useState<Policy>("skip");
   const [starting, setStarting] = useState(false);
   const [run, setRun] = useState<Run | null>(null);
   const [runId, setRunId] = useState<string | null>(null);
@@ -90,6 +99,7 @@ export function BulkEnrollDialog({ open, onOpenChange, source, sourceLabel, pres
       setPreview(null);
       setError(null);
       setConfirmText("");
+      setPolicy("skip");
       setRun(null);
       setRunId(null);
       setStarting(false);
@@ -111,7 +121,7 @@ export function BulkEnrollDialog({ open, onOpenChange, source, sourceLabel, pres
         const res = await fetch("/api/v1/outreach/bulk-enroll/preview", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sequence_id: sequenceId, source: toApiSource(source) }),
+          body: JSON.stringify({ sequence_id: sequenceId, source: toApiSource(source), conflict_policy: policy }),
         });
         const json = await res.json().catch(() => null);
         if (cancelled) return;
@@ -130,7 +140,7 @@ export function BulkEnrollDialog({ open, onOpenChange, source, sourceLabel, pres
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, sequenceId, sourceKey, runId]);
+  }, [open, sequenceId, sourceKey, runId, policy]);
 
   // Poll a running enrollment.
   const fetchRun = useCallback(async (id: string) => {
@@ -176,7 +186,7 @@ export function BulkEnrollDialog({ open, onOpenChange, source, sourceLabel, pres
         body: JSON.stringify({
           sequence_id: sequenceId,
           source: toApiSource(source),
-          conflict_policy: "skip",
+          conflict_policy: policy,
           confirm: needsConfirm ? true : undefined,
         }),
       });
@@ -245,7 +255,18 @@ export function BulkEnrollDialog({ open, onOpenChange, source, sourceLabel, pres
                     <span className="text-muted-foreground"> — e.g. {preview.sampleNames.join(", ")}</span>
                   )}
                 </p>
+                {preview.willSwitch > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {preview.willSwitch.toLocaleString()} of them leave their current sequence and start this one.
+                  </p>
+                )}
+                {preview.willQueue > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {preview.willQueue.toLocaleString()} of them are queued — this sequence starts when their current one ends.
+                  </p>
+                )}
                 <SkippedList preview={preview} />
+                {preview.inOtherSequence > 0 && <PolicyChoice count={preview.inOtherSequence} value={policy} onChange={setPolicy} />}
                 {preview.willEnroll > 0 && (
                   <p className="text-xs text-muted-foreground">
                     The daily send limit is {preview.cap.dailyCap.toLocaleString()} ({preview.cap.remaining.toLocaleString()} left today).
@@ -298,6 +319,7 @@ export function BulkEnrollDialog({ open, onOpenChange, source, sourceLabel, pres
             {run && (
               <p className="text-xs text-muted-foreground">
                 Enrolled {run.enrolled_count.toLocaleString()} · Skipped {run.skipped_count.toLocaleString()} · Failed {run.failed_count.toLocaleString()}
+                {(run.queued_count ?? 0) > 0 && ` · Queued next ${run.queued_count!.toLocaleString()} (included in skipped)`}
               </p>
             )}
             {run && !isFinal(run.status) && (
@@ -339,6 +361,31 @@ export function BulkEnrollDialog({ open, onOpenChange, source, sourceLabel, pres
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+const POLICY_OPTIONS: { value: Policy; label: string; hint: string }[] = [
+  { value: "skip", label: "Skip them", hint: "Leave them in their current sequence." },
+  { value: "switch", label: "Switch them", hint: "End their current sequence now and start this one." },
+  { value: "queue", label: "Queue next", hint: "Start this one automatically when their current sequence ends." },
+];
+
+function PolicyChoice({ count, value, onChange }: { count: number; value: Policy; onChange: (p: Policy) => void }) {
+  return (
+    <fieldset className="space-y-1.5 rounded border p-2.5">
+      <legend className="px-1 text-xs font-medium">
+        {count.toLocaleString()} {count === 1 ? "lead is" : "leads are"} already in another sequence
+      </legend>
+      {POLICY_OPTIONS.map((o) => (
+        <label key={o.value} className="flex cursor-pointer items-start gap-2 text-sm">
+          <input type="radio" name="bulk-policy" className="mt-1" checked={value === o.value} onChange={() => onChange(o.value)} />
+          <span>
+            <span className="font-medium">{o.label}</span>
+            <span className="block text-xs text-muted-foreground">{o.hint}</span>
+          </span>
+        </label>
+      ))}
+    </fieldset>
   );
 }
 

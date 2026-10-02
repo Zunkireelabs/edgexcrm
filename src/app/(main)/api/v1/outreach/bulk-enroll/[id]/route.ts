@@ -29,5 +29,12 @@ export async function GET(_request: NextRequest, { params }: Props) {
   const isAdminTier = auth.role === "owner" || auth.role === "admin";
   if (!isAdminTier && run.created_by !== auth.userId) return apiNotFound("Bulk enrollment");
 
-  return apiSuccess(data);
+  // Leads parked behind their current sequence ("Queue next") are recorded as skipped with this reason.
+  const { count: queuedCount } = await db
+    .from("sequence_bulk_enrollment_items")
+    .select("id", { count: "exact", head: true })
+    .eq("run_id", id)
+    .eq("reason", "queued_next");
+
+  return apiSuccess({ ...(data as object), queued_count: queuedCount ?? 0 });
 }

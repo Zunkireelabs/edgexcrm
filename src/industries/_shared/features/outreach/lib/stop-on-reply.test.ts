@@ -9,6 +9,8 @@ import type { ScopedClient } from "@/lib/supabase/scoped";
 const emitEventMock = vi.fn().mockResolvedValue(null);
 vi.mock("@/lib/api/audit", () => ({ emitEvent: (...args: unknown[]) => emitEventMock(...args) }));
 vi.mock("@/lib/logger", () => ({ logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() } }));
+const promoteQueuedMock = vi.fn().mockResolvedValue(undefined);
+vi.mock("./queue-next", () => ({ promoteQueuedEnrollment: (...a: unknown[]) => promoteQueuedMock(...a) }));
 
 import { stopEnrollmentsOnReply, normalizeOnReply } from "./stop-on-reply";
 
@@ -77,7 +79,10 @@ function buildDb(tables: Record<string, Row[]>, opts: { failUpdateFor?: string }
 
 const P = { tenantId: "t1", leadId: "lead-1", emailId: "email-1" };
 
-beforeEach(() => emitEventMock.mockClear());
+beforeEach(() => {
+  emitEventMock.mockClear();
+  promoteQueuedMock.mockClear();
+});
 
 describe("normalizeOnReply", () => {
   it("keeps the three valid values and falls back to pause for anything else", () => {
@@ -140,6 +145,8 @@ describe("stopEnrollmentsOnReply", () => {
     expect(tables.sequence_enrollments[0]).toMatchObject({ status: "unenrolled", stop_reason: "replied" });
     expect(tables.sequence_step_drafts.map((d) => d.status)).toEqual(["skipped", "sent", "pending"]);
     expect(emitEventMock).toHaveBeenCalledWith(expect.objectContaining({ type: "sequence.ended_on_reply" }));
+    // ending frees the lead: a sequence queued behind this one starts
+    expect(promoteQueuedMock).toHaveBeenCalledWith("t1", "lead-1");
   });
 
   it("'continue' leaves the enrollment completely alone", async () => {
