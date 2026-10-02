@@ -3,6 +3,7 @@ import { validate, isPhoneForCountry } from "@/lib/api/validation";
 import { normalizePhoneForStorage } from "@/lib/phone-utils";
 import { requireAdmin, requireLeadAccess, resolvePositionSlug, type AuthContext } from "@/lib/api/auth";
 import { getLeadMembership, syncOriginMembership } from "@/lib/leads/branch-membership";
+import { isAdminAssignmentTarget } from "@/lib/leads/branch-assign-policy";
 import { addLeadCollaborator } from "@/lib/leads/collaborators";
 import { canAccessPipeline, canAccessList } from "@/lib/api/permissions";
 import { getFeatureAccess } from "@/industries/_loader";
@@ -431,7 +432,7 @@ export async function applyLeadPatch(
 
     // Admins are always a valid assignment target (education_consultancy only) —
     // bypasses the chain/branch restrictions below, forward or revert.
-    const isAdminTarget = auth.industryId === "education_consultancy" && targetRole === "admin";
+    const isAdminTarget = isAdminAssignmentTarget(auth.industryId, targetRole);
 
     if (isChainCaller && isRevert) {
       // Revert: the assignee must be the previous holder or a same-position peer in
@@ -538,7 +539,7 @@ export async function applyLeadPatch(
           .eq("user_id", body.assigned_to as string)
           .single();
         // Admins are always a valid target, regardless of branch (education_consultancy only).
-        const isAdminTarget = auth.industryId === "education_consultancy" && targetMember?.role === "admin";
+        const isAdminTarget = isAdminAssignmentTarget(auth.industryId, targetMember?.role);
         if (!targetMember || (targetMember.branch_id !== auth.branchId && !isAdminTarget)) {
           return { kind: "forbidden" };
         }

@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, requireAdmin, getClientIp } from "@/lib/api/auth";
 import { getLeadMembership } from "@/lib/leads/branch-membership";
+import { canAssignOnBranchRow, isValidBranchRowAssignee } from "@/lib/leads/branch-assign-policy";
 import {
   apiSuccess,
   apiValidationError,
@@ -140,16 +141,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
   const membership = await getLeadMembership(supabase, auth.tenantId, id);
 
-  const isAdmin = requireAdmin(auth);
-  if (!isAdmin) {
-    // Branch manager may only set assignee on their own branch's row,
-    // and only when the lead is already held by their branch.
-    const isBranchManager =
-      auth.permissions.leadScope === "team" && auth.permissions.baseTier === "member";
-    if (!isBranchManager) return apiForbidden();
-    if (!auth.branchId || branchId !== auth.branchId) return apiForbidden();
-    if (!membership.some((m) => m.branch_id === auth.branchId)) return apiForbidden();
-  }
+  // Who may act on this row — the single shared rule (branch-assign-policy.ts): owner/admin on any
+  // row; a branch manager only on their OWN branch's row, and only when their branch holds the lead
+  // (which includes a lead another branch shared in to them).
+  if (!canAssignOnBranchRow(auth, branchId, membership)) return apiForbidden();
 
   // Load the target membership row — 404 if lead not in this branch
   const { data: memberRow } = await supabase
@@ -162,15 +157,23 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   if (!memberRow) return apiNotFound("Branch membership");
 
   // Validate assignedTo is a member of the target branch (when non-null)
+  // Who may be picked — same shared rule: a member of this branch, or (education) an admin, who
+  // has no branch of their own but is always assignable.
   if (assignedTo !== null) {
-    const { data: branchMember } = await supabase
+    const { data: target } = await supabase
       .from("tenant_users")
-      .select("user_id")
+      .select("user_id, branch_id, role")
       .eq("tenant_id", auth.tenantId)
       .eq("user_id", assignedTo)
-      .eq("branch_id", branchId)
       .single();
-    if (!branchMember) {
+    const targetOk =
+      !!target &&
+      isValidBranchRowAssignee(
+        { branchId: (target as { branch_id?: string | null }).branch_id ?? null, role: (target as { role?: string | null }).role ?? null },
+        branchId,
+        auth.industryId,
+      );
+    if (!targetOk) {
       return apiValidationError({ assigned_to: ["User is not a member of this branch"] });
     }
   }

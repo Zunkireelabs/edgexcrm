@@ -1,8 +1,9 @@
 "use client";
 
-import { forwardRef, useImperativeHandle, useRef } from "react";
+import { forwardRef, useImperativeHandle, useRef, type ReactNode } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { preserveLineBreaks } from "@/lib/email/render-template";
+import { CodeEditorPane } from "./code-editor-pane";
 
 interface HtmlSourceEditorProps {
   value: string;
@@ -14,6 +15,16 @@ interface HtmlSourceEditorProps {
   /** Hide the Rich text / HTML source toggle for callers whose body is always one format. */
   showFormatToggle?: boolean;
   disabled?: boolean;
+  /** Optional transform applied to the HTML before it is shown in the preview only (e.g. fill sample merge tags). */
+  previewTransform?: (html: string) => string;
+  /** Hide the "Use Send Test Email" sentence for callers that have no test-send button. */
+  hideTestEmailHint?: boolean;
+  /** HTML mode only: line numbers, find / go-to-line and .html file drop on the Source box. Off by default. */
+  codeTools?: boolean;
+  /** HTML mode only: height of the inline Preview tab (defaults to minHeight). */
+  previewHeight?: number;
+  /** HTML mode only: extra controls shown at the right end of the Source / Preview tab row. */
+  tabsExtra?: ReactNode;
 }
 
 export interface HtmlSourceEditorHandle {
@@ -23,10 +34,12 @@ export interface HtmlSourceEditorHandle {
 
 export const HtmlSourceEditor = forwardRef<HtmlSourceEditorHandle, HtmlSourceEditorProps>(
   function HtmlSourceEditor(
-    { value, onChange, placeholder, minHeight = 220, format, onFormatChange, showFormatToggle = true, disabled = false },
+    { value, onChange, placeholder, minHeight = 220, format, onFormatChange, showFormatToggle = true, disabled = false, previewTransform, hideTestEmailHint = false, codeTools = false, previewHeight, tabsExtra },
     ref
   ) {
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+    const previewValue = previewTransform ? previewTransform(value) : value;
+    const htmlPreviewHeight = previewHeight ?? minHeight;
 
     useImperativeHandle(
       ref,
@@ -99,7 +112,7 @@ export const HtmlSourceEditor = forwardRef<HtmlSourceEditorHandle, HtmlSourceEdi
               {value ? (
                 <iframe
                   sandbox=""
-                  srcDoc={preserveLineBreaks(value)}
+                  srcDoc={preserveLineBreaks(previewValue)}
                   title="Email preview"
                   className="w-full border-0"
                   style={{ minHeight: Math.min(minHeight, 140), height: Math.min(minHeight, 140) }}
@@ -119,14 +132,17 @@ export const HtmlSourceEditor = forwardRef<HtmlSourceEditorHandle, HtmlSourceEdi
           </div>
         ) : (
           <Tabs defaultValue="source" className="gap-2">
-            <TabsList className="h-8">
-              <TabsTrigger value="source" className="text-xs">
-                Source
-              </TabsTrigger>
-              <TabsTrigger value="preview" className="text-xs">
-                Preview
-              </TabsTrigger>
-            </TabsList>
+            <div className="flex items-center justify-between gap-2">
+              <TabsList className="h-8">
+                <TabsTrigger value="source" className="text-xs">
+                  Source
+                </TabsTrigger>
+                <TabsTrigger value="preview" className="text-xs">
+                  Preview
+                </TabsTrigger>
+              </TabsList>
+              {tabsExtra}
+            </div>
 
             {/*
               forceMount on both panels keeps the Source textarea (and its ref)
@@ -138,31 +154,42 @@ export const HtmlSourceEditor = forwardRef<HtmlSourceEditorHandle, HtmlSourceEdi
               CSS instead of unmounting it.
             */}
             <TabsContent value="source" className="mt-0 data-[state=inactive]:hidden" forceMount>
-              <textarea
-                ref={textareaRef}
-                value={value}
-                onChange={(e) => onChange(e.target.value)}
-                placeholder={placeholder}
-                disabled={disabled}
-                style={{ minHeight }}
-                className="w-full px-3 py-2 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring resize-y font-mono disabled:opacity-50"
-              />
+              {codeTools ? (
+                <CodeEditorPane
+                  value={value}
+                  onChange={onChange}
+                  textareaRef={textareaRef}
+                  minHeight={minHeight}
+                  placeholder={placeholder}
+                  disabled={disabled}
+                />
+              ) : (
+                <textarea
+                  ref={textareaRef}
+                  value={value}
+                  onChange={(e) => onChange(e.target.value)}
+                  placeholder={placeholder}
+                  disabled={disabled}
+                  style={{ minHeight }}
+                  className="w-full px-3 py-2 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring resize-y font-mono disabled:opacity-50"
+                />
+              )}
             </TabsContent>
 
             <TabsContent value="preview" className="mt-0 data-[state=inactive]:hidden" forceMount>
-              <div className="border border-input rounded-md overflow-hidden bg-white" style={{ minHeight }}>
+              <div className="border border-input rounded-md overflow-hidden bg-white" style={{ minHeight: htmlPreviewHeight }}>
                 {value ? (
                   <iframe
                     sandbox=""
-                    srcDoc={value}
+                    srcDoc={previewValue}
                     title="Email preview"
                     className="w-full border-0"
-                    style={{ minHeight, height: minHeight }}
+                    style={{ minHeight: htmlPreviewHeight, height: htmlPreviewHeight }}
                   />
                 ) : (
                   <div
                     className="flex items-center justify-center text-sm text-muted-foreground"
-                    style={{ minHeight }}
+                    style={{ minHeight: htmlPreviewHeight }}
                   >
                     Nothing to preview yet
                   </div>
@@ -171,7 +198,7 @@ export const HtmlSourceEditor = forwardRef<HtmlSourceEditorHandle, HtmlSourceEdi
               <p className="text-xs text-muted-foreground mt-1.5">
                 Structural preview only — scripts are disabled and real inboxes (Gmail/Outlook/Apple Mail) may
                 render some CSS differently. Line breaks are sent verbatim in HTML mode (no auto-&lt;br&gt;).
-                Use &quot;Send Test Email&quot; to verify the real thing.
+                {!hideTestEmailHint && <> Use &quot;Send Test Email&quot; to verify the real thing.</>}
               </p>
             </TabsContent>
           </Tabs>
