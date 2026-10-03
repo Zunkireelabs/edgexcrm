@@ -150,8 +150,25 @@ export function InboxUI({
     };
   }, [tenantId, selectedId, reloadConversations]);
 
-  const handleSend = async (content: string, approveDraftId?: string) => {
+  const handleSend = async (content: string, approveDraftId?: string, files?: File[]) => {
     if (!selectedId) return;
+
+    // The provider only lets ONE attachment ride a single message, so multiple picked
+    // files become multiple sequential sends — the caption/content text rides with the
+    // FIRST file only (or alone, if there's no file at all).
+    if (files && files.length > 0) {
+      let ok = true;
+      for (let i = 0; i < files.length; i++) {
+        const form = new FormData();
+        if (i === 0 && content) form.append("content", content);
+        form.append("file", files[i]);
+        const res = await fetch(`/api/v1/inbox/conversations/${selectedId}/messages`, { method: "POST", body: form });
+        if (!res.ok) ok = false;
+      }
+      if (ok) reloadConversations();
+      return;
+    }
+
     const body: Record<string, string> = { content };
     if (approveDraftId) body.approve_draft_id = approveDraftId;
     const res = await fetch(`/api/v1/inbox/conversations/${selectedId}/messages`, {
