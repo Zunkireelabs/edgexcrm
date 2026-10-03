@@ -117,3 +117,23 @@ next to `mem_limit`, not in the Dockerfile — the same image runs at two differ
 (prod 2 GB, stage 1 GB), so the heap ceiling can't be baked in at build time. The Dockerfile's
 `NODE_OPTIONS` on the **builder** stage is a separate, correct setting for the build process
 itself and is not touched by this.
+
+## Background timers — runner health (added 2026-10, Outreach Phase 4)
+
+The email-blast, scheduled-send, bulk-enroll (and, from Phase 4b, auto-send) workers are **in-process timers** started
+from `src/instrumentation.ts` via `startRunnerTimer` (`src/lib/ops/runner-timer.ts`) — **not Inngest** (its shared quota
+was exhausted once and silently blocked every blast). A timer that stops or wedges fails *silently*: scheduled emails
+simply never go out. So every pass records a heartbeat row (`runner_heartbeats`, mig 261) and
+**`GET /api/health/runners`** returns:
+
+- `200 {"status":"ok", …}` — every runner finished a pass in the last 5 minutes (or 5 intervals), measured from the later
+  of its last pass and this process's start (a fresh restart gets a grace period);
+- `503 {"status":"stale", …}` — at least one runner has not; the body names which;
+- `503 {"status":"error"}` — the heartbeat table can't be read.
+
+**To get alerted, add a second UptimeRobot keyword monitor (nothing alerts until someone does this):**
+URL `https://<host>/api/health/runners` · type **Keyword** · keyword `"status":"ok"` (including the quotes) · alert when
+the keyword is **missing** · 5-minute interval · same contacts as the login monitor. Do it for prod and, if wanted,
+stage. The route is public and returns only runner names and ages (never error text).
+
+Detection only: nothing restarts the container on its own for this — a wedged timer needs a human (or `docker restart`).

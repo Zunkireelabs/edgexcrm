@@ -71,6 +71,12 @@ export interface AudienceBreakdown<TContact, TExcluded> {
   sendable: AudienceRow<TContact>[];
   suppressed: AudienceRow<TContact>[];
   excluded: TExcluded;
+  /**
+   * The same exclusions as `excluded`, but per lead (reason = the `excluded` key it was counted under;
+   * suppressed leads are listed in `suppressed`, not here). Lets a caller report WHICH leads were left out
+   * (e.g. the bulk-enroll "skipped" download). Purely additive — existing callers ignore it.
+   */
+  excludedRows: { leadId: string; reason: string }[];
 }
 
 export type ResolveAudienceResult<TContact, TExcluded> =
@@ -169,8 +175,25 @@ export async function resolveAudienceCore<TContact, TExcluded extends Record<str
     return byCreated !== 0 ? byCreated : a.id.localeCompare(b.id);
   });
 
+  return { ok: true, audience: await classifyLeads(leads, auth.tenantId, clients.db, adapter) };
+}
+
+/**
+ * The contactability / duplicate / suppression passes, split out of resolveAudienceCore UNCHANGED so a
+ * caller that already holds the lead rows (e.g. a hand-picked set of ids — see
+ * resolveAudienceForLeadIds in src/lib/email/outbound/audience.ts) classifies them with exactly the
+ * same rules, never a second copy. `leads` must already be sorted by (created_at, id): the duplicate
+ * collapse keeps the first.
+ */
+export async function classifyLeads<TContact, TExcluded extends Record<string, number> & { suppressed: number; duplicate: number }>(
+  leads: LeadRow[],
+  tenantId: string,
+  db: ScopedClient,
+  adapter: ChannelAdapter<TContact, TExcluded>
+): Promise<AudienceBreakdown<TContact, TExcluded>> {
   const matched = leads.length;
   const excluded = adapter.emptyExcluded();
+  const excludedRows: { leadId: string; reason: string }[] = [];
 
   // Pass 1: contactability classification. Every rejection lands in its
   // bucket, none silently dropped.
@@ -181,6 +204,7 @@ export async function resolveAudienceCore<TContact, TExcluded extends Record<str
     if (!result.ok) {
       const key = result.reason;
       (excluded as Record<string, number>)[key as string] = ((excluded[key] as number) ?? 0) + 1;
+      excludedRows.push({ leadId: lead.id, reason: key as string });
       continue;
     }
     candidates.push({ lead, contact: result.contact });
@@ -194,6 +218,7 @@ export async function resolveAudienceCore<TContact, TExcluded extends Record<str
     const key = adapter.dedupeKey(c.contact);
     if (seenKeys.has(key)) {
       excluded.duplicate++;
+      excludedRows.push({ leadId: c.lead.id, reason: "duplicate" });
       continue;
     }
     seenKeys.add(key);
@@ -202,8 +227,8 @@ export async function resolveAudienceCore<TContact, TExcluded extends Record<str
 
   // Pass 3: one batched suppression lookup, never per-recipient.
   const suppressedSet = await adapter.loadSuppressed(
-    clients.db,
-    auth.tenantId,
+    db,
+    tenantId,
     deduped.map((c) => adapter.dedupeKey(c.contact))
   );
 
@@ -219,5 +244,50 @@ export async function resolveAudienceCore<TContact, TExcluded extends Record<str
     sendable.push(row);
   }
 
-  return { ok: true, audience: { matched, sendable, suppressed, excluded } };
+  return { matched, sendable, suppressed, excluded, excludedRows };
+}
+
+const IDS_PER_REQUEST = 100;
+
+/**
+ * The audience for a HAND-PICKED set of leads (ticked rows). The leads filter registry has no `id` field, so
+ * a selection cannot be expressed as a FilterTree; this loads the ids through the SAME visibility rules as
+ * resolveAudienceCore (a rep can never resolve a lead they cannot see — ids outside their scope simply
+ * don't come back) and hands the rows to the SAME classifyLeads, so contactability / duplicate /
+ * suppression rules have one home. `requested` is the number of distinct ids asked for, so a caller can
+ * report how many were not visible / not found.
+ */
+export async function resolveAudienceForLeadIdsCore<TContact, TExcluded extends Record<string, number> & { suppressed: number; duplicate: number }>(
+  auth: AuthContext,
+  leadIds: string[],
+  clients: ResolveAudienceClients,
+  adapter: ChannelAdapter<TContact, TExcluded>
+): Promise<{ requested: number; audience: AudienceBreakdown<TContact, TExcluded> }> {
+  const ids = [...new Set(leadIds)];
+  const { user: userClient, service } = clients;
+
+  const poolSlug =
+    auth.industryId === "education_consultancy" && auth.positionSlug && auth.branchId
+      ? (POSITION_ROUTE_MAP[auth.positionSlug] ?? null)
+      : null;
+  const scope = leadQueryScope(auth.permissions, auth.userId, auth.branchId, poolSlug);
+  // Same split as resolveAudienceCore: only own/branch scope goes through the RLS-context RPC.
+  const useVisibilityRpc = !!(scope.restrictToSelf || scope.branchId);
+
+  const leads: LeadRow[] = [];
+  for (let i = 0; i < ids.length; i += IDS_PER_REQUEST) {
+    const chunk = ids.slice(i, i + IDS_PER_REQUEST);
+    const base = useVisibilityRpc
+      ? visibleLeadsBase({ user: userClient, service }, auth.tenantId, scope).select("*")
+      : service.from("leads").select("*").eq("tenant_id", auth.tenantId);
+    const { data, error } = await base.is("deleted_at", null).in("id", chunk);
+    if (error) throw new Error(`resolveAudienceForLeadIdsCore: lead query failed: ${error.message}`);
+    leads.push(...((data ?? []) as unknown as LeadRow[]));
+  }
+  leads.sort((a, b) => {
+    const byCreated = a.created_at.localeCompare(b.created_at);
+    return byCreated !== 0 ? byCreated : a.id.localeCompare(b.id);
+  });
+
+  return { requested: ids.length, audience: await classifyLeads(leads, auth.tenantId, clients.db, adapter) };
 }

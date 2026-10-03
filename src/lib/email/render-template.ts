@@ -50,14 +50,20 @@ function htmlEscape(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
+/** {{token}} or {{token|fallback text}} — the fallback is anything up to the closing braces. */
+export const MERGE_TAG_RE = /\{\{(\w+)(?:\|([^{}]*))?\}\}/g;
+
 /**
  * Replace {{token}} placeholders in a template string.
  *
  * Lookup precedence (lowest → highest):
  *   lead.custom_fields → standard lead columns → tenant_name → extra
  *
- * Missing/empty token → empty string (never leaves raw {{token}} in output).
- * opts.escape: HTML-escape each substituted value (not the template itself).
+ * Missing/empty token → empty string (never leaves raw {{token}} in output),
+ * unless the tag carries a FALLBACK: {{first_name|there}} renders "there" when the
+ * lead has no first name (empty or only spaces). A tag without "|" behaves exactly
+ * as before.
+ * opts.escape: HTML-escape each substituted value and fallback (not the template itself).
  */
 export function renderTemplate(
   template: string,
@@ -95,8 +101,9 @@ export function renderTemplate(
     }
   }
 
-  return template.replace(/\{\{(\w+)\}\}/g, (_match, key: string) => {
-    const value = vars[key] ?? "";
+  return template.replace(MERGE_TAG_RE, (_match, key: string, fallback: string | undefined) => {
+    const raw = vars[key] ?? "";
+    const value = raw.trim() === "" && fallback !== undefined ? fallback.trim() : raw;
     return opts?.escape ? htmlEscape(value) : value;
   });
 }

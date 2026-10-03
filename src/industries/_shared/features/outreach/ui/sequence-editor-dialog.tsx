@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Plus, Trash2, ChevronUp, ChevronDown, Loader2, Eye, Monitor, Smartphone } from "lucide-react";
+import { Plus, Trash2, ChevronUp, ChevronDown, Loader2, Eye, Monitor, Smartphone, Send } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -24,13 +24,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
+import { SendWindowEditor } from "./send-window-editor";
+import { TimeOfDayPicker } from "./time-of-day-picker";
+import type { SendWindow } from "../lib/send-window";
 import { TipTapEditor, type TipTapEditorHandle } from "@/industries/_shared/features/email/components/tiptap-editor";
 import { HtmlSourceEditor, type HtmlSourceEditorHandle } from "@/industries/_shared/features/email/components/html-source-editor";
 import type { Sequence } from "../hooks/use-sequences";
-import { detectBodyMode, fillSampleMergeTags, type StepBodyMode } from "../lib/body-format";
+import { detectBodyMode, fillSampleMergeTags, findTagsWithoutFallback, type StepBodyMode } from "../lib/body-format";
 
 // Same height for the editor and the inline preview in both modes, so switching never makes the box jump.
 const BODY_HEIGHT = 420;
@@ -40,6 +44,8 @@ const MERGE_TAGS = ["first_name", "last_name", "email", "phone", "city", "countr
 interface StepDraft {
   key: string;
   delay_days: number;
+  /** Own send time (HH:MM), or "" = the sequence window's time. */
+  send_time: string;
   subject_template: string;
   body_template: string;
   /** Editor mode only (not saved): "rich" = TipTap, "html" = source + preview. Inferred from the body on load. */
@@ -52,7 +58,8 @@ interface SequenceEditorDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   sequence: Sequence | null;
-  onSaved: () => void;
+  /** `saved` is the sequence that was just created or edited — callers use `created` to offer "who should get it?". */
+  onSaved: (saved?: { id: string; name: string; created: boolean }) => void;
   industryId: string | null;
 }
 
@@ -64,13 +71,14 @@ function newKey() {
 
 function stepsFromSequence(sequence: Sequence | null): StepDraft[] {
   if (!sequence) {
-    return [{ key: newKey(), delay_days: 0, subject_template: "", body_template: "", mode: "rich", draft_source: "template", ai_instructions: "" }];
+    return [{ key: newKey(), delay_days: 0, send_time: "", subject_template: "", body_template: "", mode: "rich", draft_source: "template", ai_instructions: "" }];
   }
   return [...sequence.email_sequence_steps]
     .sort((a, b) => a.step_order - b.step_order)
     .map((s) => ({
       key: newKey(),
       delay_days: s.delay_days,
+      send_time: s.send_time ?? "",
       subject_template: s.subject_template,
       body_template: s.body_template,
       mode: detectBodyMode(s.body_template),
@@ -89,6 +97,17 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [autoSend, setAutoSend] = useState(false);
+  const [onReply, setOnReply] = useState<"pause" | "end" | "continue">("pause");
+  // null = no window (send as soon as due). A NEW sequence starts with the tenant's default window ON; an existing one
+  // keeps whatever it has (usually none until someone turns it on).
+  const [sendWindow, setSendWindow] = useState<SendWindow | null>(null);
+  const [windowDefaults, setWindowDefaults] = useState<{ window: SendWindow; timezone: string } | null>(null);
+  // Steps 1..lockedUpTo are in use by running leads: their order, wait and drafting can't change (their wording can).
+  const [lockedUpTo, setLockedUpTo] = useState(0);
+  const [liveEnrollments, setLiveEnrollments] = useState(0);
+  // "Send me a test": only offered where EdgeX can actually send (education, and sending turned on for the account).
+  const [canSendTest, setCanSendTest] = useState(false);
+  const [testingIndex, setTestingIndex] = useState<number | null>(null);
   const [steps, setSteps] = useState<StepDraft[]>([]);
   const [saving, setSaving] = useState(false);
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
@@ -104,12 +123,72 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
       setName(sequence?.name ?? "");
       setDescription(sequence?.description ?? "");
       setAutoSend(sequence?.auto_send ?? false);
+      setOnReply(sequence?.on_reply ?? "pause");
+      setSendWindow(sequence?.send_window ?? null);
       setSteps(stepsFromSequence(sequence));
       setLastFocused(null);
       setPreviewIndex(null);
       setPendingRichIndex(null);
     }
   }, [open, sequence]);
+
+  // Can this account send at all? Decides whether "Send me a test" is shown.
+  useEffect(() => {
+    setCanSendTest(false);
+    if (!open || !canAutoSend) return;
+    let cancelled = false;
+    fetch("/api/v1/outreach/send-capability")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => {
+        if (!cancelled) setCanSendTest(json?.data?.enabled === true);
+      })
+      .catch(() => void 0);
+    return () => {
+      cancelled = true;
+    };
+  }, [open, canAutoSend]);
+
+  // How far running leads have got — which steps' structure is locked. Only meaningful when editing.
+  useEffect(() => {
+    setLockedUpTo(0);
+    setLiveEnrollments(0);
+    if (!open || !sequence) return;
+    let cancelled = false;
+    fetch(`/api/v1/outreach/sequences/${sequence.id}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => {
+        if (cancelled || !json?.data) return;
+        setLockedUpTo(Number(json.data.locked_up_to) || 0);
+        setLiveEnrollments(Number(json.data.live_enrollments) || 0);
+      })
+      .catch(() => void 0);
+    return () => {
+      cancelled = true;
+    };
+  }, [open, sequence]);
+
+  // The tenant's working days / timezone, to pre-fill a new sequence's window.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    fetch("/api/v1/outreach/send-window-defaults")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => {
+        if (cancelled || !json?.data) return;
+        const d = json.data as { window: SendWindow; timezone: string };
+        setWindowDefaults(d);
+        if (!sequence) setSendWindow((current) => current ?? d.window);
+      })
+      .catch(() => void 0);
+    return () => {
+      cancelled = true;
+    };
+  }, [open, sequence]);
+
+  // often-empty merge tags used with no fallback, across every step's subject and body (a gentle hint, never a block)
+  const tagsWithoutFallback = [
+    ...new Set(steps.flatMap((s) => [...findTagsWithoutFallback(s.subject_template), ...findTagsWithoutFallback(s.body_template)])),
+  ];
 
   const updateStep = (index: number, patch: Partial<StepDraft>) => {
     setSteps((prev) => prev.map((s, i) => (i === index ? { ...s, ...patch } : s)));
@@ -118,7 +197,7 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
   const addStep = () => {
     setSteps((prev) => [
       ...prev,
-      { key: newKey(), delay_days: 3, subject_template: "", body_template: "", mode: "rich", draft_source: "template", ai_instructions: "" },
+      { key: newKey(), delay_days: 3, send_time: "", subject_template: "", body_template: "", mode: "rich", draft_source: "template", ai_instructions: "" },
     ]);
   };
 
@@ -148,10 +227,62 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
     updateStep(index, { mode });
   };
 
+  const sendTest = async (index: number) => {
+    const step = steps[index];
+    setTestingIndex(index);
+    try {
+      const res = await fetch("/api/v1/outreach/sequences/test-send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subject_template: step.subject_template,
+          body_template: step.body_template,
+          step_label: `Step ${index + 1} of ${name.trim() || "this sequence"}`,
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        const first = json?.errors ? (Object.values(json.errors).flat()[0] as string | undefined) : undefined;
+        toast.error(first ?? json?.error?.message ?? "Couldn't send the test");
+        return;
+      }
+      toast.success(
+        json.data?.sandbox
+          ? "Test sent in sandbox mode — it went to the configured test address, not to your inbox."
+          : `Test sent to ${json.data?.to ?? "you"}`
+      );
+    } finally {
+      setTestingIndex(null);
+    }
+  };
+
+  const testButton = (index: number) =>
+    canSendTest ? (
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="h-8 px-3 text-xs"
+        disabled={testingIndex !== null || !steps[index].subject_template.trim() || !steps[index].body_template.trim()}
+        title={!steps[index].subject_template.trim() ? "Add a subject first" : "Email this step to yourself, with sample data"}
+        onClick={() => sendTest(index)}
+      >
+        {testingIndex === index ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Send className="h-3.5 w-3.5 mr-1.5" />} Send me a test
+      </Button>
+    ) : null;
+
   const fullPreviewButton = (index: number) => (
     <Button type="button" variant="outline" size="sm" className="h-8 px-3 text-xs" onClick={() => setPreviewIndex(index)}>
       <Eye className="h-3.5 w-3.5 mr-1.5" /> Full preview
     </Button>
+  );
+
+  // Full preview + (where sending is possible) "Send me a test", side by side wherever the preview button used to be.
+  const previewActions = (index: number) => (
+    <>
+      {fullPreviewButton(index)}
+      {testButton(index)}
+    </>
   );
 
   const insertToken = (token: string) => {
@@ -197,9 +328,12 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
       name: name.trim(),
       description: description.trim() || undefined,
       auto_send: autoSend,
+      on_reply: onReply,
+      send_window: sendWindow,
       steps: steps.map((s, i) => ({
         step_order: i + 1,
         delay_days: i === 0 ? 0 : s.delay_days,
+        send_time: s.send_time || null,
         subject_template: s.subject_template,
         body_template: s.body_template,
         draft_source: s.draft_source,
@@ -220,7 +354,7 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
 
       if (!res.ok) {
         if (res.status === 409) {
-          toast.error("Can't edit steps while leads are enrolled");
+          toast.error(json?.error?.message ?? "Some of these steps are in use by leads and can't be changed that way");
         } else {
           toast.error(json?.error?.message ?? "Failed to save sequence");
         }
@@ -228,7 +362,8 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
       }
 
       toast.success(isEdit ? "Sequence updated" : "Sequence created");
-      onSaved();
+      const savedRow = json?.data as { id?: string; name?: string } | undefined;
+      onSaved(savedRow?.id ? { id: savedRow.id, name: savedRow.name ?? "", created: !isEdit } : undefined);
       onOpenChange(false);
     } finally {
       setSaving(false);
@@ -273,6 +408,33 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
             </div>
           )}
 
+          <SendWindowEditor
+            value={sendWindow}
+            onChange={setSendWindow}
+            defaultWindow={windowDefaults?.window}
+            officeTimeZone={windowDefaults?.timezone}
+          />
+
+          <div className="space-y-1.5 rounded-md border p-3">
+            <Label htmlFor="seq-on-reply" className="text-sm font-normal">
+              When a lead replies
+            </Label>
+            <Select value={onReply} onValueChange={(v) => setOnReply(v as "pause" | "end" | "continue")}>
+              <SelectTrigger id="seq-on-reply" className="h-8 w-full sm:w-72">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pause">Pause the sequence (recommended)</SelectItem>
+                <SelectItem value="end">End the sequence</SelectItem>
+                <SelectItem value="continue">Keep sending</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Out-of-office and other automatic replies are ignored. A paused lead sends nothing until you resume
+              it from the lead&apos;s page or the Enrollments tab.
+            </p>
+          </div>
+
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground">Merge tags — click to insert at cursor</p>
             <div className="flex flex-wrap gap-1.5">
@@ -288,18 +450,41 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
                 </button>
               ))}
             </div>
+            <p className="text-xs text-muted-foreground">
+              A lead may have no value for a tag. Add a fallback after a bar: <span className="font-mono">{"{{first_name|there}}"}</span>{" "}
+              writes &ldquo;there&rdquo; when the first name is empty.
+            </p>
+            {tagsWithoutFallback.length > 0 && (
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                No fallback for {tagsWithoutFallback.map((t) => `{{${t}}}`).join(", ")} — a lead missing it would get a gap such as
+                &ldquo;Hi ,&rdquo;. Write it as <span className="font-mono">{`{{${tagsWithoutFallback[0]}|…}}`}</span> instead.
+              </p>
+            )}
           </div>
 
           <div className="space-y-3">
             <Label>Steps</Label>
-            {steps.map((step, index) => (
+            {lockedUpTo > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {liveEnrollments.toLocaleString()} lead{liveEnrollments === 1 ? " is" : "s are"} running this sequence. Steps 1–{lockedUpTo} are
+                in use: you can edit their wording, but not their order, wait or drafting. Later steps can be changed freely.
+              </p>
+            )}
+            {steps.map((step, index) => {
+              const locked = index + 1 <= lockedUpTo;
+              return (
               <Card key={step.key} className="shadow-none">
                 <CardContent className="p-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium">Step {index + 1}</span>
+                      {locked && (
+                        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground" title="Leads have reached this step, so its order, wait and drafting are fixed. Its wording can still change.">
+                          In use
+                        </span>
+                      )}
                       {index === 0 ? (
-                        <span className="text-xs text-muted-foreground">Sends when enrolled</span>
+                        <span className="text-xs text-muted-foreground">Starts when enrolled</span>
                       ) : (
                         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                           Wait
@@ -307,18 +492,34 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
                             type="number"
                             min={0}
                             value={step.delay_days}
+                            disabled={locked}
                             onChange={(e) => updateStep(index, { delay_days: Math.max(0, Number(e.target.value)) })}
                             className="h-7 w-16"
                           />
                           days
                         </div>
                       )}
+                      <div
+                        className="flex items-center gap-1.5 text-xs text-muted-foreground"
+                        title="Optional. The time of day this email goes out. Leave empty to use the sequence's send window time."
+                      >
+                        Send at
+                        <TimeOfDayPicker
+                          ariaLabel={`Step ${index + 1} send time`}
+                          allowEmpty
+                          emptyLabel="Window time"
+                          value={step.send_time}
+                          disabled={locked}
+                          onChange={(t) => updateStep(index, { send_time: t })}
+                        />
+                        
+                      </div>
                     </div>
                     <div className="flex items-center gap-1">
-                      <Button type="button" variant="ghost" size="icon" className="h-7 w-7" disabled={index === 0} onClick={() => moveStep(index, -1)}>
+                      <Button type="button" variant="ghost" size="icon" className="h-7 w-7" disabled={index === 0 || locked || index === lockedUpTo} onClick={() => moveStep(index, -1)}>
                         <ChevronUp className="h-3.5 w-3.5" />
                       </Button>
-                      <Button type="button" variant="ghost" size="icon" className="h-7 w-7" disabled={index === steps.length - 1} onClick={() => moveStep(index, 1)}>
+                      <Button type="button" variant="ghost" size="icon" className="h-7 w-7" disabled={index === steps.length - 1 || locked} onClick={() => moveStep(index, 1)}>
                         <ChevronDown className="h-3.5 w-3.5" />
                       </Button>
                       <Button
@@ -326,7 +527,7 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
                         variant="ghost"
                         size="icon"
                         className="h-7 w-7 text-destructive"
-                        disabled={steps.length === 1}
+                        disabled={steps.length === 1 || locked}
                         onClick={() => removeStep(index)}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -379,7 +580,7 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
                               Preview
                             </TabsTrigger>
                           </TabsList>
-                          {fullPreviewButton(index)}
+                          {previewActions(index)}
                         </div>
                         {/* forceMount keeps the editor (and its insertText ref) alive while Preview is showing. */}
                         <TabsContent value="edit" className="mt-0 data-[state=inactive]:hidden" forceMount>
@@ -427,7 +628,7 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
                         minHeight={BODY_HEIGHT}
                         previewHeight={BODY_HEIGHT}
                         codeTools
-                        tabsExtra={fullPreviewButton(index)}
+                        tabsExtra={previewActions(index)}
                         placeholder="Paste or write the email HTML here, or drop a .html file — merge tags like {{first_name}} work."
                         previewTransform={fillSampleMergeTags}
                         hideTestEmailHint
@@ -440,6 +641,7 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
                       <Checkbox
                         id={`auto-ai-${step.key}`}
                         checked={step.draft_source === "ai"}
+                        disabled={locked}
                         onCheckedChange={(checked) => updateStep(index, { draft_source: checked === true ? "ai" : "template" })}
                       />
                       <Label htmlFor={`auto-ai-${step.key}`} className="text-xs font-normal text-muted-foreground cursor-pointer">
@@ -462,7 +664,8 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
                   </div>
                 </CardContent>
               </Card>
-            ))}
+              );
+            })}
 
             <Button type="button" variant="outline" size="sm" onClick={addStep}>
               <Plus className="h-3.5 w-3.5 mr-1.5" /> Add step

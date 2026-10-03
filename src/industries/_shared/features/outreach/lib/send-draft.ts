@@ -5,7 +5,7 @@ import { logger } from "@/lib/logger";
 import { markDraftSentViaEdgeX } from "./engine";
 
 // The one place a sequence draft is handed to the outbound email spine. Used by BOTH the
-// auto-send cron (sequence-step-send.ts) and the rep's "Send now" button
+// auto-send cron (sequence-autosend-runner.ts) and the rep's "Send now" button
 // (POST /api/v1/outreach/drafts/[id]/send) so the two can never drift apart.
 //
 // Flow: look up the lead's email -> idempotently materialize an email_messages row (unique on

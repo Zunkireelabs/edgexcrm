@@ -39,6 +39,8 @@ const EXEMPT_SITES: Record<string, "rpc-only" | "auth-only"> = {
   "src/app/(main)/api/v1/sms/blasts/[id]/audience-preview/route.ts": "rpc-only", // resolveAudience() -> visibleLeadsBase() call site (Phase 3B)
   "src/app/(main)/api/v1/sms/blasts/[id]/send/route.ts": "rpc-only", // resolveAudience() -> visibleLeadsBase() call site
   "src/app/(main)/api/v1/email-blasts/[id]/preview/route.ts": "rpc-only", // resolveAudience() -> visibleLeadsBase() call site (OUTREACH-PHASE1-BRIEF.md §4)
+  "src/app/(main)/api/v1/outreach/bulk-enroll/route.ts": "rpc-only", // planBulkEnroll() -> resolveAudienceForLeadIdsCore() -> visibleLeadsBase() call site (the user client is only handed to the visibility RPC)
+  "src/app/(main)/api/v1/outreach/bulk-enroll/preview/route.ts": "rpc-only", // same planBulkEnroll() call site, preview only
   "src/app/(main)/api/v1/email-blasts/[id]/audience-count/route.ts": "rpc-only", // resolveAudience() -> visibleLeadsBase() call site
   "src/app/(main)/api/v1/email-blasts/[id]/audience-preview/route.ts": "rpc-only", // resolveAudience() -> visibleLeadsBase() call site
   // email-blasts/[id]/send/route.ts REMOVED from this list: it no longer calls

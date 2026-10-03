@@ -73,7 +73,11 @@ import {
   RotateCcw,
   Columns4,
   ArrowUpCircle,
+  GitBranch,
 } from "lucide-react";
+import { getFeatureAccess } from "@/industries/_loader";
+import { FEATURES } from "@/industries/_registry";
+import { BulkEnrollDialog } from "@/industries/_shared/features/outreach/ui/bulk-enroll-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -577,6 +581,9 @@ export function LeadsTable({
   const [isDeleting, setIsDeleting] = useState(false);
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [mergeDialogOpen, setMergeDialogOpen] = useState(false);
+  // Outreach bulk enroll (OUTREACH-BULK-ENROLL-BRIEF.md): the selected leads (or "all matching" via selectAllMatching) -> a sequence.
+  const [bulkEnrollOpen, setBulkEnrollOpen] = useState(false);
+  const hasOutreach = getFeatureAccess(industryId ?? null, FEATURES.OUTREACH);
   const [isAssigning, setIsAssigning] = useState(false);
   const [assignTo, setAssignTo] = useState<string>("");
   // Staging (Leads Organise) only — Branch + Stage are required to leave staging via
@@ -2691,6 +2698,15 @@ export function LeadsTable({
               </>
             ) : (
             <>
+            {hasOutreach && !isStagingView && (
+              <button
+                onClick={() => setBulkEnrollOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
+              >
+                <GitBranch className="h-4 w-4" />
+                Enroll in sequence
+              </button>
+            )}
             {(isAdmin || isTeamScoped) && teamMembers.length > 0 && (
               <button
                 onClick={() => setAssignDialogOpen(true)}
@@ -3000,6 +3016,16 @@ export function LeadsTable({
           )}
         </div>
       </div>
+
+      {/* Mounted only while open: it holds the selected ids (up to 10,000) and a polling loop, so keep it off every table render. */}
+      {hasOutreach && bulkEnrollOpen && (
+        <BulkEnrollDialog
+          open={bulkEnrollOpen}
+          onOpenChange={setBulkEnrollOpen}
+          source={{ mode: "selected", leadIds: Array.from(selectedIds) }}
+          sourceLabel={`${selectedCount} selected lead${selectedCount !== 1 ? "s" : ""}`}
+        />
+      )}
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

@@ -1,4 +1,5 @@
 import type { ScopedClient } from "@/lib/supabase/scoped";
+import { logger } from "@/lib/logger";
 
 // The do-not-contact list. Direct analogue of src/lib/sms/suppression.ts.
 
@@ -77,5 +78,22 @@ export async function suppressEmail(db: ScopedClient, tenantId: string, params: 
 
   if (error) {
     throw new Error(`suppressEmail: failed to suppress ${params.email} for tenant ${tenantId}: ${error.message}`);
+  }
+
+  // A suppressed address can never be emailed again, so end the sequences its leads are running (Outreach Phase 4,
+  // migration 262) — otherwise they stay "active" with every remaining step failing, and block any other sequence.
+  // Runs on every call (suppressing is idempotent and so is this) and must never undo or fail the suppression itself.
+  try {
+    const { stopEnrollmentsForSuppressedEmail } = await import(
+      "@/industries/_shared/features/outreach/lib/stop-on-suppression"
+    );
+    await stopEnrollmentsForSuppressedEmail(db, {
+      tenantId,
+      email: params.email,
+      leadId: params.leadId ?? null,
+      reason: params.reason,
+    });
+  } catch (err) {
+    logger.warn({ err, tenantId }, "suppressEmail: failed to end sequences for a suppressed address (non-fatal)");
   }
 }

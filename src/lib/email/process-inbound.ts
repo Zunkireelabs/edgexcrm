@@ -27,6 +27,7 @@ import { getInboundDomains, mintToken, buildInboundAddress, type InboundVerb } f
 import { processBccDropbox } from "./inbound/bcc-route";
 import { processFwdRelay } from "./inbound/fwd-route";
 import { sanitizeDisplayName } from "./reply-to-label";
+import { stopEnrollmentsOnReply } from "@/industries/_shared/features/outreach/lib/stop-on-reply";
 
 interface InboundEnvelope {
   to: string[];
@@ -411,6 +412,17 @@ async function processOneEvent(evt: EventRow): Promise<void> {
       provider: "edgex_native",
     },
   });
+
+  // A genuine reply (auto-replies were dead-lettered by the guard above) from a known lead pauses —
+  // or ends, per sequence — that lead's running outreach sequences, so Step 2 doesn't land on
+  // someone who just answered. Non-fatal: a failure here must never lose the inbound email.
+  if (thread.lead_id) {
+    try {
+      await stopEnrollmentsOnReply(db, { tenantId: p.tenant_id, leadId: thread.lead_id, emailId: emailRow.id });
+    } catch (stopErr) {
+      logger.warn({ err: stopErr, thread_id: thread.id }, "Failed to stop sequence enrollments on reply (non-fatal)");
+    }
+  }
 
   // Connected-account context (only threads that started life as a Gmail send
   // carry one) — used both for the notification recipient and the tail
