@@ -4,6 +4,8 @@
 >
 > **Status:** not started as of 2026-08-16. Owner: Sadin.
 > **Engineering side:** `docs/WHATSAPP-ADMIZZ-PHASE0-BRIEF.md` (the code plan, which waits on this).
+>
+> **Correction (2026-10-03):** the status line above is stale. Zunkiree's Business Verification is now **in review** (PR #588, 2026-10-02), not "not started."
 
 ⚠️ Meta changes these flows and their naming regularly. Treat this as the map, but trust what the Meta console actually shows you on the day. Where this doc and the console disagree, the console is right — and please update this file.
 
@@ -103,6 +105,8 @@ Planned first set (all **Utility** category — easier approval, better delivery
 
 Deliberately **no Marketing-category templates in the first round.** Marketing gets stricter review, needs demonstrable opt-in, and poor marketing sending damages the number's quality rating — which throttles *everything*, including the utility templates.
 
+> **Correction (2026-10-03):** the backend to *send* an approved template already exists on stage (`src/lib/inbox/send-message.ts`, adapter `type: "template"`, shipped in PR #588) — there is no UI yet to pick one and fill its parameters. Once a template clears approval, the remaining engineering work is the picker UI, not the send path.
+
 ---
 
 ## 5. Payment method
@@ -142,6 +146,8 @@ WhatsApp Cloud API is **not free beyond the free tier**. Meta bills per conversa
 ## 8. What we can and cannot do before this clears
 
 **Can** (and largely have): the inbox, branch scoping, attachments, reply-only flows — all buildable and testable against the Meta **test** number, capped at **5 verified recipients**.
+
+> **Correction (2026-10-03):** branch-manager inbox scoping is not just "largely have" — it shipped in PR #394.
 
 **Cannot, at all:** message a single real Admizz student. The test number's 5-recipient cap is absolute.
 
