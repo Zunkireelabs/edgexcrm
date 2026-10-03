@@ -26,6 +26,14 @@ export function lockedUpToStep(maxCurrentStepOrder: number | null, existingStepC
   return Math.min(maxCurrentStepOrder + 1, existingStepCount);
 }
 
+/** The plain-words reason an edit is refused (also built from the database's STEPS_LOCKED error). */
+export function stepsLockedMessage(lockedUpTo: number): string {
+  return (
+    `Steps 1–${lockedUpTo} are already in use by leads in this sequence, so their order, wait, send time and drafting can't change. ` +
+    `You can still edit their wording, and change anything from step ${lockedUpTo + 1} on.`
+  );
+}
+
 export type StepEditCheck = { ok: true } | { ok: false; message: string };
 
 /** Is `incoming` an allowed edit of `existing` given that steps 1..lockedUpTo are in use? */
@@ -40,14 +48,7 @@ export function checkStepEdit(existing: ExistingStep[], incoming: SequenceStepIn
       !!next && (next.delay_days ?? 0) === step.delay_days &&
       (next.draft_source ?? "template") === step.draft_source &&
       (next.send_time || null) === (step.send_time || null);
-    if (!same) {
-      return {
-        ok: false,
-        message:
-          `Steps 1–${lockedUpTo} are already in use by leads in this sequence, so their order, wait, send time and drafting can't change. ` +
-          `You can still edit their wording, and change anything from step ${lockedUpTo + 1} on.`,
-      };
-    }
+    if (!same) return { ok: false, message: stepsLockedMessage(lockedUpTo) };
   }
   return { ok: true };
 }

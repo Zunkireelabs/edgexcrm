@@ -2,7 +2,7 @@ import { buildUserAuthContext, type AuthContext } from "@/lib/api/auth";
 import { logger } from "@/lib/logger";
 import { createServiceClient } from "@/lib/supabase/server";
 import { scopedClientForTenant, type ScopedClient } from "@/lib/supabase/scoped";
-import { enrollLead, unenrollLead, EnrollmentConflictError } from "./engine";
+import { enrollLead, switchEnrollment, EnrollmentConflictError } from "./engine";
 import { queueNextSequence } from "./queue-next";
 
 // Worker for bulk enroll (OUTREACH-BULK-ENROLL-BRIEF.md §7). NOT an Inngest function — like blast-runner.ts and
@@ -97,9 +97,14 @@ async function resolveConflict(
 
   if (run.conflict_policy === "switch") {
     try {
-      // promoteQueue:false — we enroll them somewhere else right now, so a queued sequence must not jump in first
-      if (current) await unenrollLead(db, current.id, { promoteQueue: false });
-      await enrollLead(db, auth, input);
+      // One transaction: the current enrollment ends and the new one starts, or neither happens. (Ending first and
+      // enrolling second could leave a lead in NO sequence if the second step failed.) The queued sequence is not
+      // promoted — the lead is moving on right now.
+      if (current) {
+        await switchEnrollment(db, auth, { oldEnrollmentId: current.id, ...input });
+      } else {
+        await enrollLead(db, auth, input);
+      }
       return { outcome: "enrolled", reason: "switched" };
     } catch (err) {
       if (err instanceof EnrollmentConflictError) return { outcome: "skipped", reason: "already_in_sequence" };

@@ -14,7 +14,8 @@ let enrollCalls: Array<{ leadId: string; assignedTo: string | null; enrolledBy: 
 let enrollBehavior: (leadId: string) => Promise<unknown>;
 let authResult: { userId: string; tenantId: string } | null;
 let onChunk: (() => void) | null;
-let unenrollCalls: Array<{ enrollmentId: string; opts: unknown }>;
+let switchCalls: Array<Record<string, unknown>>;
+let switchBehavior: (leadId: string) => Promise<unknown>;
 let queueCalls: Array<{ leadId: string; sequenceId: string; queuedBy: string; runId: string | null }>;
 let queueResult: "queued" | "already_queued";
 
@@ -24,8 +25,9 @@ const { FakeConflict } = vi.hoisted(() => ({ FakeConflict: class FakeConflict ex
 
 vi.mock("./engine", () => ({
   EnrollmentConflictError: FakeConflict,
-  unenrollLead: async (_db: unknown, enrollmentId: string, opts: unknown) => {
-    unenrollCalls.push({ enrollmentId, opts });
+  switchEnrollment: async (_db: unknown, _auth: unknown, params: { leadId: string }) => {
+    switchCalls.push(params);
+    return switchBehavior(params.leadId);
   },
   enrollLead: async (_db: unknown, _auth: unknown, params: { leadId: string; assignedTo: string | null; enrolledBy: string }) => {
     enrollCalls.push({ leadId: params.leadId, assignedTo: params.assignedTo, enrolledBy: params.enrolledBy });
@@ -129,7 +131,8 @@ beforeEach(() => {
   enrollBehavior = async () => ({});
   authResult = { userId: "user-1", tenantId: T };
   onChunk = null;
-  unenrollCalls = [];
+  switchCalls = [];
+  switchBehavior = async () => ({});
   queueCalls = [];
   queueResult = "queued";
 });
@@ -315,7 +318,7 @@ describe("conflict policies (a lead already in a running sequence)", () => {
     await processBulkEnrollRun(T, RUN);
     expect(outcomes()).toEqual(["skipped"]);
     expect(tables.sequence_bulk_enrollment_items[0].reason).toBe("already_in_sequence");
-    expect(unenrollCalls).toHaveLength(0);
+    expect(switchCalls).toHaveLength(0);
     expect(queueCalls).toHaveLength(0);
   });
 
@@ -326,8 +329,10 @@ describe("conflict policies (a lead already in a running sequence)", () => {
 
     await processBulkEnrollRun(T, RUN);
 
-    expect(unenrollCalls).toEqual([{ enrollmentId: "enr-old", opts: { promoteQueue: false } }]);
-    expect(enrollCalls.map((c) => c.leadId)).toEqual(["lead-1", "lead-1"]); // refused once, then enrolled
+    expect(switchCalls).toEqual([
+      { oldEnrollmentId: "enr-old", sequenceId: "seq-1", leadId: "lead-1", assignedTo: "rep-1", enrolledBy: "user-1" },
+    ]);
+    expect(enrollCalls.map((c) => c.leadId)).toEqual(["lead-1"]); // refused once; the switch is ONE call, not unenroll + enroll
     expect(outcomes()).toEqual(["enrolled"]);
     expect(tables.sequence_bulk_enrollment_items[0].reason).toBe("switched");
   });
@@ -339,7 +344,7 @@ describe("conflict policies (a lead already in a running sequence)", () => {
 
     await processBulkEnrollRun(T, RUN);
 
-    expect(unenrollCalls).toHaveLength(0);
+    expect(switchCalls).toHaveLength(0);
     expect(outcomes()).toEqual(["skipped"]);
     expect(tables.sequence_bulk_enrollment_items[0].reason).toBe("already_in_this_sequence");
   });
@@ -347,7 +352,10 @@ describe("conflict policies (a lead already in a running sequence)", () => {
   it("switch: if the lead lands in another sequence in between, it is skipped, not duplicated", async () => {
     seed({ leads: 1, runOverrides: { conflict_policy: "switch" } });
     tables.sequence_enrollments = [{ id: "enr-old", lead_id: "lead-1", sequence_id: "seq-OTHER", status: "active" }];
-    conflictOnFirst("lead-1", true); // every enroll attempt conflicts
+    conflictOnFirst("lead-1");
+    switchBehavior = async () => {
+      throw new FakeConflict("already"); // the transaction refuses: someone enrolled the lead meanwhile
+    };
 
     await processBulkEnrollRun(T, RUN);
 
@@ -364,7 +372,7 @@ describe("conflict policies (a lead already in a running sequence)", () => {
     expect(queueCalls).toEqual([{ leadId: "lead-1", sequenceId: "seq-1", queuedBy: "user-1", runId: RUN }]);
     expect(outcomes()).toEqual(["skipped"]);
     expect(tables.sequence_bulk_enrollment_items[0].reason).toBe("queued_next");
-    expect(unenrollCalls).toHaveLength(0);
+    expect(switchCalls).toHaveLength(0);
   });
 
   it("queue: a lead that already has a waiting queued sequence is reported as already_queued", async () => {

@@ -19,7 +19,7 @@ import {
 } from "@/industries/_shared/features/outreach/lib/validate-steps";
 import { ON_REPLY_VALUES, type OnReply } from "@/industries/_shared/features/outreach/lib/stop-on-reply";
 import { validateSendWindow } from "@/industries/_shared/features/outreach/lib/send-window";
-import { checkStepEdit, lockedUpToStep } from "@/industries/_shared/features/outreach/lib/step-edit-rules";
+import { checkStepEdit, lockedUpToStep, stepsLockedMessage } from "@/industries/_shared/features/outreach/lib/step-edit-rules";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -136,11 +136,12 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     const check = checkStepEdit(existing, body.steps as SequenceStepInput[], lock.lockedUpTo);
     if (!check.ok) return apiConflict(check.message);
 
-    // Apply the new step list WITHOUT ever emptying the table: add the new steps, update the ones that stay, then remove
-    // the ones that went. (The old delete-everything-then-insert left a moment with no steps — a lead advancing in that
-    // instant found no next step and was completed early — and gave every step a new id.)
+    // Apply the new step list in ONE database transaction (apply_sequence_steps, migration 265): it takes a lock on the
+    // sequence, re-checks which steps leads have reached, then adds the new steps, updates the ones that stay and
+    // removes the ones that went — never an empty table in between. Doing the lock check and the write as separate
+    // calls left a window where a lead could advance to a step that was just being changed; the transaction closes it,
+    // and a draft built from an older version of the steps is refused and rebuilt (see engine.ts).
     const incoming = (body.steps as SequenceStepInput[]).map((s) => ({
-      sequence_id: id,
       step_order: s.step_order,
       delay_days: s.delay_days ?? 0,
       send_time: s.send_time || null,
@@ -149,48 +150,12 @@ export async function PATCH(request: NextRequest, { params }: Props) {
       draft_source: s.draft_source ?? "template",
       ai_instructions: s.ai_instructions ?? null,
     }));
-    const existingOrders = new Set(existing.map((e) => e.step_order));
-    const incomingOrders = new Set(incoming.map((i) => i.step_order));
-
-    const added = incoming.filter((i) => !existingOrders.has(i.step_order));
-    if (added.length > 0) {
-      const { error: insertError } = await db.from("email_sequence_steps").insert(added);
-      if (insertError) {
-        log.error({ error: insertError }, "Failed to add sequence steps");
-        return apiError("DB_ERROR", "Failed to add sequence steps", 500);
-      }
-    }
-
-    for (const step of incoming.filter((i) => existingOrders.has(i.step_order))) {
-      const { error: updateStepError } = await db
-        .from("email_sequence_steps")
-        .update({
-          delay_days: step.delay_days,
-          send_time: step.send_time,
-          subject_template: step.subject_template,
-          body_template: step.body_template,
-          draft_source: step.draft_source,
-          ai_instructions: step.ai_instructions,
-        })
-        .eq("sequence_id", id)
-        .eq("step_order", step.step_order);
-      if (updateStepError) {
-        log.error({ error: updateStepError }, "Failed to update a sequence step");
-        return apiError("DB_ERROR", "Failed to update sequence steps", 500);
-      }
-    }
-
-    const removed = [...existingOrders].filter((o) => !incomingOrders.has(o));
-    if (removed.length > 0) {
-      const { error: deleteError } = await db
-        .from("email_sequence_steps")
-        .delete()
-        .eq("sequence_id", id)
-        .in("step_order", removed);
-      if (deleteError) {
-        log.error({ error: deleteError }, "Failed to remove sequence steps");
-        return apiError("DB_ERROR", "Failed to remove sequence steps", 500);
-      }
+    const { error: applyError } = await db.rpc("apply_sequence_steps", { p_sequence_id: id, p_steps: incoming });
+    if (applyError) {
+      // the authoritative lock check inside the transaction (our read above may be a moment stale)
+      if (applyError.message?.includes("STEPS_LOCKED")) return apiConflict(stepsLockedMessage(Number(applyError.hint) || 0));
+      log.error({ error: applyError }, "Failed to apply sequence steps");
+      return apiError("DB_ERROR", "Failed to update sequence steps", 500);
     }
   }
 
