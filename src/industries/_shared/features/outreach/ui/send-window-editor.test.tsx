@@ -52,7 +52,7 @@ describe("SendWindowEditor", () => {
     expect(screen.getByLabelText("Send at set times")).toBeChecked();
     expect(screen.getByRole("button", { name: "Mon" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "Sat" })).toHaveAttribute("aria-pressed", "false");
-    expect(screen.getByText(/Emails go out Mon, Tue, Wed, Thu, Fri at 10:00–12:00, in the lead's timezone/)).toBeInTheDocument();
+    expect(screen.getByText(/Emails go out Mon, Tue, Wed, Thu, Fri at 10:00 AM–12:00 PM, in the lead's timezone/)).toBeInTheDocument();
     expect(screen.getByText(/office's timezone \(Asia\/Kathmandu\) is used/)).toBeInTheDocument();
   });
 
@@ -76,10 +76,13 @@ describe("SendWindowEditor", () => {
     const onChange = vi.fn();
     const { container } = render(<SendWindowEditor value={current} onChange={onChange} />);
 
-    fireEvent.change(screen.getByLabelText("From"), { target: { value: "09:15" } });
-    expect(onChange).toHaveBeenLastCalledWith({ ...current, time: "09:15" });
+    fireEvent.change(screen.getByLabelText("Send window start — minute"), { target: { value: "15" } });
+    expect(onChange).toHaveBeenLastCalledWith({ ...current, time: "10:15" });
+    fireEvent.change(screen.getByLabelText("Send window start — AM or PM"), { target: { value: "PM" } });
+    expect(onChange).toHaveBeenLastCalledWith({ ...current, time: "22:00" });
 
-    const [spread, tz] = Array.from(container.querySelectorAll("select")) as HTMLSelectElement[];
+    // the first three selects are the time picker (hour, minute, AM/PM)
+    const [, , , spread, tz] = Array.from(container.querySelectorAll("select")) as HTMLSelectElement[];
     fireEvent.change(spread, { target: { value: "240" } });
     expect(onChange).toHaveBeenLastCalledWith({ ...current, spread_minutes: 240 });
     fireEvent.change(tz, { target: { value: "office" } });

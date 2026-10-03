@@ -2,6 +2,7 @@
 
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { TimeOfDayPicker } from "./time-of-day-picker";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DEFAULT_SEND_WINDOW, describeSendWindow, type SendWindow } from "../lib/send-window";
@@ -103,12 +104,11 @@ export function SendWindowEditor({ value, onChange, defaultWindow, officeTimeZon
               <Label htmlFor="seq-window-time" className="text-xs">
                 From
               </Label>
-              <Input
+              <TimeOfDayPicker
                 id="seq-window-time"
-                type="time"
+                ariaLabel="Send window start"
                 value={value.time}
-                onChange={(e) => e.target.value && onChange({ ...value, time: e.target.value })}
-                className="h-8"
+                onChange={(t) => t && onChange({ ...value, time: t })}
               />
             </div>
             <div className="space-y-1.5">

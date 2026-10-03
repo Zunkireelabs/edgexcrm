@@ -103,10 +103,14 @@ describe("Send now", () => {
 describe("Schedule", () => {
   it("sends the chosen time as an ISO instant and says when", async () => {
     const { onDone } = open("schedule", 3);
-    const input = screen.getByLabelText("Send on") as HTMLInputElement;
-    expect(input.value).toMatch(/^\d{4}-\d{2}-\d{2}T09:00$/); // tomorrow 09:00 local by default
+    const date = screen.getByLabelText("Send on — date") as HTMLInputElement;
+    expect(date.value).toMatch(/^\d{4}-\d{2}-\d{2}$/); // tomorrow, 9:00 AM by default
+    expect(screen.getByLabelText("Send on — hour")).toHaveValue("9");
+    expect(screen.getByLabelText("Send on — AM or PM")).toHaveValue("AM");
 
-    fireEvent.change(input, { target: { value: "2030-01-02T10:30" } });
+    fireEvent.change(date, { target: { value: "2030-01-02" } });
+    fireEvent.change(screen.getByLabelText("Send on — hour"), { target: { value: "10" } });
+    fireEvent.change(screen.getByLabelText("Send on — minute"), { target: { value: "30" } });
     fireEvent.click(screen.getByRole("button", { name: "Schedule" }));
 
     await waitFor(() => expect(onDone).toHaveBeenCalled());
@@ -116,7 +120,7 @@ describe("Schedule", () => {
 
   it("can't be submitted without a time", () => {
     open("schedule", 3);
-    fireEvent.change(screen.getByLabelText("Send on"), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText("Send on — date"), { target: { value: "" } });
     expect(screen.getByRole("button", { name: "Schedule" })).toBeDisabled();
   });
 });

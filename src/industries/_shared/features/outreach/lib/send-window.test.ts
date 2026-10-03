@@ -190,9 +190,9 @@ describe("timezone from the lead's country", () => {
 
 describe("describeSendWindow", () => {
   it("lists the days Monday first, with the release range", () => {
-    expect(describeSendWindow({ time: "10:00", days: [5, 1, 2, 3, 4], timezone_mode: "lead", spread_minutes: 120 })).toBe("Mon, Tue, Wed, Thu, Fri at 10:00–12:00");
-    expect(describeSendWindow({ time: "09:30", days: [0, 1, 2, 3, 4, 5], timezone_mode: "office", spread_minutes: 0 })).toBe("Mon, Tue, Wed, Thu, Fri, Sun at 09:30");
-    expect(describeSendWindow({ time: "23:00", days: [0, 1, 2, 3, 4, 5, 6], timezone_mode: "office", spread_minutes: 120 })).toBe("every day at 23:00–01:00");
+    expect(describeSendWindow({ time: "10:00", days: [5, 1, 2, 3, 4], timezone_mode: "lead", spread_minutes: 120 })).toBe("Mon, Tue, Wed, Thu, Fri at 10:00 AM–12:00 PM");
+    expect(describeSendWindow({ time: "09:30", days: [0, 1, 2, 3, 4, 5], timezone_mode: "office", spread_minutes: 0 })).toBe("Mon, Tue, Wed, Thu, Fri, Sun at 9:30 AM");
+    expect(describeSendWindow({ time: "23:00", days: [0, 1, 2, 3, 4, 5, 6], timezone_mode: "office", spread_minutes: 120 })).toBe("every day at 11:00 PM–1:00 AM");
   });
 });
 

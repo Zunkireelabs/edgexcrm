@@ -199,10 +199,10 @@ describe("BulkEnrollDialog — conflict policy", () => {
   });
 
   it("tells the rep when the first emails will go out when the sequence has a send window", async () => {
-    previewData = { ...basePreview, sequence: { id: "seq-1", name: "Welcome", auto_send: false, send_window_text: "Mon, Tue, Wed, Thu, Fri at 10:00–12:00" } };
+    previewData = { ...basePreview, sequence: { id: "seq-1", name: "Welcome", auto_send: false, send_window_text: "Mon, Tue, Wed, Thu, Fri at 10:00 AM–12:00 PM" } };
     open();
     fireEvent.change(screen.getByLabelText("Sequence"), { target: { value: "seq-1" } });
-    await screen.findByText(/This sequence sends Mon, Tue, Wed, Thu, Fri at 10:00–12:00/);
+    await screen.findByText(/This sequence sends Mon, Tue, Wed, Thu, Fri at 10:00 AM–12:00 PM/);
     expect(screen.getByText(/first emails wait/)).toBeInTheDocument();
   });
 

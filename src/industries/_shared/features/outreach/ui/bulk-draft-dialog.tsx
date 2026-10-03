@@ -15,6 +15,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { BULK_DRAFT_CONFIRM_FROM } from "../lib/bulk-draft-constants";
+import { formatDateTime12 } from "../lib/time-format";
+import { DateTimePicker } from "./time-of-day-picker";
 
 // Confirm + run a bulk action on drafts in Outreach -> Today (Send now / Schedule / Skip for many).
 // send / schedule are ONE request (the server only sets the send time — the scheduled-send timer does the sending);
@@ -146,7 +148,7 @@ export function BulkDraftDialog({
         const when = new Date(sendAt);
         const data = await request({ send_at: when.toISOString() });
         toast.success(
-          `${data.applied.toLocaleString()} email${data.applied === 1 ? "" : "s"} scheduled for ${when.toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}.${describeLeftOut(data.skipped)}`,
+          `${data.applied.toLocaleString()} email${data.applied === 1 ? "" : "s"} scheduled for ${formatDateTime12(when)}.${describeLeftOut(data.skipped)}`,
         );
       }
       onDone();
@@ -185,12 +187,7 @@ export function BulkDraftDialog({
           {action === "schedule" && (
             <div className="space-y-1.5">
               <Label htmlFor="bulk-draft-send-at">Send on</Label>
-              <Input
-                id="bulk-draft-send-at"
-                type="datetime-local"
-                value={sendAt}
-                onChange={(e) => setSendAt(e.target.value)}
-              />
+              <DateTimePicker id="bulk-draft-send-at" value={sendAt} onChange={setSendAt} min={toLocalInputValue(new Date())} />
               <p className="text-xs text-muted-foreground">
                 Your local time. At least 5 minutes from now, within 90 days.
               </p>

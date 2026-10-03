@@ -16,6 +16,8 @@
 // No window (NULL) = the old behaviour, unchanged. Everything here is pure (no I/O) so it can be tested to the edge:
 // weekends, month ends, daylight-saving changes, timezones on the other side of midnight.
 
+import { formatMinutes12, formatTime12 } from "./time-format";
+
 export interface SendWindow {
   time: string;
   days: number[];
@@ -236,13 +238,12 @@ export function computeDueAt(input: DueAtInput): Date {
 const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0]; // Monday first
 const DAY_NAMES: Record<number, string> = { 0: "Sun", 1: "Mon", 2: "Tue", 3: "Wed", 4: "Thu", 5: "Fri", 6: "Sat" };
 
-/** "Mon, Tue, Wed, Thu, Fri at 10:00–12:00" — a short human description (the zone is not included). */
+/** "Mon, Tue, Wed, Thu, Fri at 10:00 AM–12:00 PM" — a short human description (the zone is not included). */
 export function describeSendWindow(w: SendWindow): string {
   const days = DAY_ORDER.filter((d) => w.days.includes(d));
   const dayText = days.length === 7 ? "every day" : days.map((d) => DAY_NAMES[d]).join(", ");
   const [h, m] = w.time.split(":").map(Number);
   const endMinutes = h * 60 + m + w.spread_minutes;
-  const clock = (n: number) => `${String(Math.floor(n / 60) % 24).padStart(2, "0")}:${String(n % 60).padStart(2, "0")}`;
-  const when = w.spread_minutes > 0 ? `${w.time}–${clock(endMinutes)}` : w.time;
+  const when = w.spread_minutes > 0 ? `${formatTime12(w.time)}–${formatMinutes12(endMinutes)}` : formatTime12(w.time);
   return `${dayText} at ${when}`;
 }

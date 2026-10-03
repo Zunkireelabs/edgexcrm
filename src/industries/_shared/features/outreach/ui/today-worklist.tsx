@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { DraftReviewPanel } from "./draft-review-panel";
 import { BulkDraftDialog, type BulkDraftAction, type BulkDraftSelection } from "./bulk-draft-dialog";
 import { formatRelativeDay } from "../lib/format-due";
+import { formatDateTime12 } from "../lib/time-format";
 
 export interface Draft {
   id: string;
@@ -241,7 +242,7 @@ export function TodayWorklist({ isAdmin }: TodayWorklistProps) {
                     </Badge>
                     {draft.scheduled_send_at && (
                       <Badge variant="outline" className="whitespace-nowrap border-blue-300 text-blue-700 dark:border-blue-800 dark:text-blue-300">
-                        Scheduled · {new Date(draft.scheduled_send_at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}
+                        Scheduled · {formatDateTime12(new Date(draft.scheduled_send_at))}
                       </Badge>
                     )}
                     <Badge variant={isDueYet ? "default" : "outline"} className="whitespace-nowrap">

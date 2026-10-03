@@ -29,6 +29,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { SendWindowEditor } from "./send-window-editor";
+import { TimeOfDayPicker } from "./time-of-day-picker";
 import type { SendWindow } from "../lib/send-window";
 import { TipTapEditor, type TipTapEditorHandle } from "@/industries/_shared/features/email/components/tiptap-editor";
 import { HtmlSourceEditor, type HtmlSourceEditorHandle } from "@/industries/_shared/features/email/components/html-source-editor";
@@ -503,13 +504,12 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
                         title="Optional. The time of day this email goes out. Leave empty to use the sequence's send window time."
                       >
                         at
-                        <Input
-                          type="time"
-                          aria-label={`Step ${index + 1} send time`}
+                        <TimeOfDayPicker
+                          ariaLabel={`Step ${index + 1} send time`}
+                          allowEmpty
                           value={step.send_time}
                           disabled={locked}
-                          onChange={(e) => updateStep(index, { send_time: e.target.value })}
-                          className="h-7 w-28"
+                          onChange={(t) => updateStep(index, { send_time: t })}
                         />
                         {!step.send_time && <span>(window time)</span>}
                       </div>
