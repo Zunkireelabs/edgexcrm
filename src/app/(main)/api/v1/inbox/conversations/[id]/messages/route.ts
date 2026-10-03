@@ -12,8 +12,15 @@ import {
   apiError,
 } from "@/lib/api/response";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { sendMessage } from "@/lib/inbox/send-message";
+import { sendMessage, type OutboundAttachmentInput } from "@/lib/inbox/send-message";
 import { canAccessConversationLead, type InboxScopeClients } from "@/lib/inbox/scope";
+
+function mediaTypeFor(mimeType: string): OutboundAttachmentInput["type"] {
+  if (mimeType.startsWith("image/")) return "image";
+  if (mimeType.startsWith("audio/")) return "audio";
+  if (mimeType.startsWith("video/")) return "video";
+  return "document";
+}
 
 async function checkConversationAccess(
   clients: InboxScopeClients,
@@ -92,12 +99,36 @@ export async function POST(
   const access = await checkConversationAccess({ user: userClient, service: supabase }, auth, id);
   if (!access.ok) return access.response;
 
-  const body = await request.json().catch(() => ({})) as { content?: string; approve_draft_id?: string };
-  const content = body.content?.trim();
-  const approveDraftId = body.approve_draft_id;
+  const contentType = request.headers.get("content-type") ?? "";
+  let content: string | undefined;
+  let approveDraftId: string | undefined;
+  let attachment: OutboundAttachmentInput | undefined;
 
-  if (!content && !approveDraftId) {
-    return apiError("VALIDATION_ERROR", "content or approve_draft_id is required", 422);
+  // A file picked in the composer arrives as multipart/form-data (D4); the plain-text
+  // send path is unchanged JSON. At most ONE file per send — matches the composer's
+  // one-attachment-per-message UX; sending several files is several sends.
+  if (contentType.includes("multipart/form-data")) {
+    const form = await request.formData().catch(() => null);
+    if (!form) return apiError("VALIDATION_ERROR", "invalid multipart body", 422);
+    content = (form.get("content") as string | null)?.trim() ?? undefined;
+    const file = form.get("file");
+    if (file instanceof File) {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      attachment = {
+        bytes,
+        filename: file.name || null,
+        mimeType: file.type || "application/octet-stream",
+        type: mediaTypeFor(file.type),
+      };
+    }
+  } else {
+    const body = await request.json().catch(() => ({})) as { content?: string; approve_draft_id?: string };
+    content = body.content?.trim();
+    approveDraftId = body.approve_draft_id;
+  }
+
+  if (!content && !approveDraftId && !attachment) {
+    return apiError("VALIDATION_ERROR", "content, approve_draft_id, or a file is required", 422);
   }
 
   // If approving a draft, fetch its content
@@ -120,6 +151,7 @@ export async function POST(
     content: messageContent,
     author: { type: "human_agent", userId: auth.userId },
     fromDraftMessageId: approveDraftId,
+    attachment,
   });
 
   return apiSuccess(result);

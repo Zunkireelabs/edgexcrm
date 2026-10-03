@@ -190,3 +190,138 @@ describe("sendMessage — session-window guard", () => {
     expect(content.template).toBeUndefined();
   });
 });
+
+// D4 (docs/WHATSAPP-GOLIVE-SONNET-BRIEF.md / docs/INBOX-ATTACHMENTS-BRIEF.md): outbound
+// is the mirror of inbound — upload bytes to the provider FIRST (it hands back a media
+// id only after it has the bytes), THEN send a message referencing that id, THEN store
+// our own copy so the thread renders consistently and survives the provider's retention.
+describe("sendMessage — outbound attachments (D4)", () => {
+  const putBytesMock = vi.fn();
+  vi.doMock("@/lib/storage/provider", () => ({ getStorageProvider: () => ({ putBytes: putBytesMock }) }));
+
+  beforeEach(() => {
+    getAdapterMock.mockReset();
+    decryptTokenMock.mockClear();
+    putBytesMock.mockReset();
+    putBytesMock.mockResolvedValue(undefined);
+  });
+
+  const ATTACHMENT = {
+    bytes: new Uint8Array([1, 2, 3, 4]),
+    filename: "passport.jpg",
+    mimeType: "image/jpeg",
+    type: "image" as const,
+  };
+
+  it("uploads to the provider first, sends referencing the returned media id, then stores our own copy", async () => {
+    const uploadMediaMock = vi.fn().mockResolvedValue({ providerMediaId: "media-xyz" });
+    const adapterSendMock = vi.fn().mockResolvedValue({ providerMessageId: "wamid.img1", sentAt: new Date().toISOString() });
+    getAdapterMock.mockReturnValue({ capabilities: WHATSAPP_CAPABILITIES, sendMessage: adapterSendMock, uploadMedia: uploadMediaMock });
+    const fake = fakeSupabase({ lastInboundTs: new Date().toISOString() });
+    vi.resetModules();
+    vi.doMock("@/lib/supabase/server", () => ({ createServiceClient: () => Promise.resolve(fake.db) }));
+    vi.doMock("@/lib/storage/provider", () => ({ getStorageProvider: () => ({ putBytes: putBytesMock }) }));
+    vi.doMock("./adapters", () => ({ getAdapter: getAdapterMock }));
+    vi.doMock("./crypto", () => ({ decryptToken: decryptTokenMock }));
+    const { sendMessage } = await import("./send-message");
+
+    const result = await sendMessage({
+      tenantId: "tenant-1",
+      conversationId: "conv-1",
+      content: "my passport",
+      author: { type: "human_agent", userId: "user-1" },
+      attachment: ATTACHMENT,
+    });
+
+    expect(uploadMediaMock).toHaveBeenCalledWith(expect.anything(), ATTACHMENT.bytes, "image/jpeg", "passport.jpg");
+    // Upload happens BEFORE sendMessage — the media id it returns must already be on
+    // the content sendMessage is called with.
+    expect(adapterSendMock).toHaveBeenCalledTimes(1);
+    const [, , content] = adapterSendMock.mock.calls[0];
+    expect(content.media).toEqual({ type: "image", providerMediaId: "media-xyz", filename: "passport.jpg" });
+
+    expect(putBytesMock).toHaveBeenCalledWith("inbox-media", expect.stringContaining("tenant-1/inbox/conv-1/msg-1-0"), ATTACHMENT.bytes, "image/jpeg");
+    expect(result.status).toBe("sent");
+
+    const finalUpdate = fake.messageUpdates[fake.messageUpdates.length - 1];
+    expect(finalUpdate.attachments).toEqual([
+      expect.objectContaining({ type: "image", provider_media_id: "media-xyz", bucket: "inbox-media", filename: "passport.jpg" }),
+    ]);
+  });
+
+  it("fails cleanly (never calls sendMessage) when the provider upload itself fails", async () => {
+    const uploadMediaMock = vi.fn().mockRejectedValue(new Error("Meta rejected the upload"));
+    const adapterSendMock = vi.fn();
+    getAdapterMock.mockReturnValue({ capabilities: WHATSAPP_CAPABILITIES, sendMessage: adapterSendMock, uploadMedia: uploadMediaMock });
+    const fake = fakeSupabase({ lastInboundTs: new Date().toISOString() });
+    vi.resetModules();
+    vi.doMock("@/lib/supabase/server", () => ({ createServiceClient: () => Promise.resolve(fake.db) }));
+    vi.doMock("@/lib/storage/provider", () => ({ getStorageProvider: () => ({ putBytes: putBytesMock }) }));
+    vi.doMock("./adapters", () => ({ getAdapter: getAdapterMock }));
+    vi.doMock("./crypto", () => ({ decryptToken: decryptTokenMock }));
+    const { sendMessage } = await import("./send-message");
+
+    const result = await sendMessage({
+      tenantId: "tenant-1",
+      conversationId: "conv-1",
+      content: "",
+      author: { type: "human_agent", userId: "user-1" },
+      attachment: ATTACHMENT,
+    });
+
+    expect(result.status).toBe("failed");
+    expect(result.error).toMatch(/Meta rejected the upload/);
+    expect(adapterSendMock).not.toHaveBeenCalled();
+    expect(putBytesMock).not.toHaveBeenCalled();
+  });
+
+  it("fails cleanly when the provider doesn't support attachments at all", async () => {
+    const adapterSendMock = vi.fn();
+    getAdapterMock.mockReturnValue({ capabilities: WHATSAPP_CAPABILITIES, sendMessage: adapterSendMock }); // no uploadMedia
+    const fake = fakeSupabase({ lastInboundTs: new Date().toISOString() });
+    vi.resetModules();
+    vi.doMock("@/lib/supabase/server", () => ({ createServiceClient: () => Promise.resolve(fake.db) }));
+    vi.doMock("@/lib/storage/provider", () => ({ getStorageProvider: () => ({ putBytes: putBytesMock }) }));
+    vi.doMock("./adapters", () => ({ getAdapter: getAdapterMock }));
+    vi.doMock("./crypto", () => ({ decryptToken: decryptTokenMock }));
+    const { sendMessage } = await import("./send-message");
+
+    const result = await sendMessage({
+      tenantId: "tenant-1",
+      conversationId: "conv-1",
+      content: "",
+      author: { type: "human_agent", userId: "user-1" },
+      attachment: ATTACHMENT,
+    });
+
+    expect(result.status).toBe("failed");
+    expect(result.error).toMatch(/does not support attachments/);
+    expect(adapterSendMock).not.toHaveBeenCalled();
+  });
+
+  it("an attachment outside the session window still requires a template — media alone does not clear the guard", async () => {
+    const uploadMediaMock = vi.fn();
+    const adapterSendMock = vi.fn();
+    getAdapterMock.mockReturnValue({ capabilities: WHATSAPP_CAPABILITIES, sendMessage: adapterSendMock, uploadMedia: uploadMediaMock });
+    const fake = fakeSupabase({ lastInboundTs: new Date(Date.now() - 48 * 3600 * 1000).toISOString() });
+    vi.resetModules();
+    vi.doMock("@/lib/supabase/server", () => ({ createServiceClient: () => Promise.resolve(fake.db) }));
+    vi.doMock("@/lib/storage/provider", () => ({ getStorageProvider: () => ({ putBytes: putBytesMock }) }));
+    vi.doMock("./adapters", () => ({ getAdapter: getAdapterMock }));
+    vi.doMock("./crypto", () => ({ decryptToken: decryptTokenMock }));
+    const { sendMessage } = await import("./send-message");
+
+    const result = await sendMessage({
+      tenantId: "tenant-1",
+      conversationId: "conv-1",
+      content: "",
+      author: { type: "human_agent", userId: "user-1" },
+      attachment: ATTACHMENT,
+    });
+
+    expect(result.status).toBe("failed");
+    expect(result.error).toMatch(/OUTSIDE_SESSION_WINDOW/);
+    expect(uploadMediaMock).not.toHaveBeenCalled();
+    expect(adapterSendMock).not.toHaveBeenCalled();
+  });
+});
