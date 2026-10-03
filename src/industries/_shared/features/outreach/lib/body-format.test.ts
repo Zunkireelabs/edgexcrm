@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectBodyMode, fillSampleMergeTags } from "./body-format";
+import { detectBodyMode, fillSampleMergeTags, findTagsWithoutFallback } from "./body-format";
 
 describe("detectBodyMode", () => {
   it("keeps plain TipTap output in rich mode", () => {
@@ -24,5 +24,18 @@ describe("detectBodyMode", () => {
 describe("fillSampleMergeTags", () => {
   it("fills known tags and blanks unknown ones", () => {
     expect(fillSampleMergeTags("Hi {{first_name}} {{last_name}} {{nope}}!")).toBe("Hi Jane Doe !");
+  });
+});
+
+describe("fallbacks in the preview and the editor hint", () => {
+  it("preview: a known tag shows its sample (never the fallback); an unknown tag shows its fallback, else nothing", () => {
+    expect(fillSampleMergeTags("Hi {{first_name|there}} {{nickname|friend}} {{nope}}!")).toBe("Hi Jane friend !");
+  });
+
+  it("findTagsWithoutFallback lists often-empty tags used with no fallback", () => {
+    expect(findTagsWithoutFallback("Hi {{first_name}}, from {{city}} — {{tenant_name}} {{email}}")).toEqual(["first_name", "city"]);
+    expect(findTagsWithoutFallback("Hi {{first_name|there}}, {{last_name | }}")).toEqual([]);
+    expect(findTagsWithoutFallback("no tags at all")).toEqual([]);
+    expect(findTagsWithoutFallback("{{first_name}} {{first_name}}")).toEqual(["first_name"]);
   });
 });

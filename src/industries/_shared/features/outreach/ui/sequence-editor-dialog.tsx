@@ -33,7 +33,7 @@ import type { SendWindow } from "../lib/send-window";
 import { TipTapEditor, type TipTapEditorHandle } from "@/industries/_shared/features/email/components/tiptap-editor";
 import { HtmlSourceEditor, type HtmlSourceEditorHandle } from "@/industries/_shared/features/email/components/html-source-editor";
 import type { Sequence } from "../hooks/use-sequences";
-import { detectBodyMode, fillSampleMergeTags, type StepBodyMode } from "../lib/body-format";
+import { detectBodyMode, fillSampleMergeTags, findTagsWithoutFallback, type StepBodyMode } from "../lib/body-format";
 
 // Same height for the editor and the inline preview in both modes, so switching never makes the box jump.
 const BODY_HEIGHT = 420;
@@ -139,6 +139,11 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
       cancelled = true;
     };
   }, [open, sequence]);
+
+  // often-empty merge tags used with no fallback, across every step's subject and body (a gentle hint, never a block)
+  const tagsWithoutFallback = [
+    ...new Set(steps.flatMap((s) => [...findTagsWithoutFallback(s.subject_template), ...findTagsWithoutFallback(s.body_template)])),
+  ];
 
   const updateStep = (index: number, patch: Partial<StepDraft>) => {
     setSteps((prev) => prev.map((s, i) => (i === index ? { ...s, ...patch } : s)));
@@ -347,6 +352,16 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
                 </button>
               ))}
             </div>
+            <p className="text-xs text-muted-foreground">
+              A lead may have no value for a tag. Add a fallback after a bar: <span className="font-mono">{"{{first_name|there}}"}</span>{" "}
+              writes &ldquo;there&rdquo; when the first name is empty.
+            </p>
+            {tagsWithoutFallback.length > 0 && (
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                No fallback for {tagsWithoutFallback.map((t) => `{{${t}}}`).join(", ")} — a lead missing it would get a gap such as
+                &ldquo;Hi ,&rdquo;. Write it as <span className="font-mono">{`{{${tagsWithoutFallback[0]}|…}}`}</span> instead.
+              </p>
+            )}
           </div>
 
           <div className="space-y-3">
