@@ -97,6 +97,7 @@ export async function POST(request: NextRequest) {
     sequence_id: sequenceRow.id,
     step_order: s.step_order,
     delay_days: s.delay_days ?? 0,
+    send_time: s.send_time || null,
     subject_template: s.subject_template ?? "",
     body_template: s.body_template ?? "",
     draft_source: s.draft_source ?? "template",

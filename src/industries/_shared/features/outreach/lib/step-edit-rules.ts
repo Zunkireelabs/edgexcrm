@@ -12,6 +12,7 @@ import type { SequenceStepInput } from "./validate-steps";
 export interface ExistingStep {
   step_order: number;
   delay_days: number;
+  send_time?: string | null;
   draft_source: string;
 }
 
@@ -36,12 +37,14 @@ export function checkStepEdit(existing: ExistingStep[], incoming: SequenceStepIn
     if (step.step_order > lockedUpTo) continue;
     const next = byOrder.get(step.step_order);
     const same =
-      !!next && (next.delay_days ?? 0) === step.delay_days && (next.draft_source ?? "template") === step.draft_source;
+      !!next && (next.delay_days ?? 0) === step.delay_days &&
+      (next.draft_source ?? "template") === step.draft_source &&
+      (next.send_time || null) === (step.send_time || null);
     if (!same) {
       return {
         ok: false,
         message:
-          `Steps 1–${lockedUpTo} are already in use by leads in this sequence, so their order, wait and drafting can't change. ` +
+          `Steps 1–${lockedUpTo} are already in use by leads in this sequence, so their order, wait, send time and drafting can't change. ` +
           `You can still edit their wording, and change anything from step ${lockedUpTo + 1} on.`,
       };
     }

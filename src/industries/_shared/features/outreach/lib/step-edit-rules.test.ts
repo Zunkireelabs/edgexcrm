@@ -79,3 +79,21 @@ describe("checkStepEdit", () => {
     expect(checkStepEdit(existing.slice(0, 2), incoming, 2)).toEqual({ ok: true });
   });
 });
+
+describe("checkStepEdit — send time", () => {
+  it("changing the send time of a locked step is refused", () => {
+    const next = same();
+    next[1].send_time = "15:00"; // step 2 is locked (lockedUpTo 3)
+    expect(checkStepEdit(existing, next, 3).ok).toBe(false);
+  });
+  it("changing the send time of a step after the lock is allowed", () => {
+    const next = same();
+    next[3].send_time = "15:00"; // step 4 is free
+    expect(checkStepEdit(existing, next, 3).ok).toBe(true);
+  });
+  it("empty and missing send time count as the same", () => {
+    const next = same();
+    next[1].send_time = "";
+    expect(checkStepEdit(existing, next, 3).ok).toBe(true);
+  });
+});

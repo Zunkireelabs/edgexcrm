@@ -3,7 +3,7 @@ import { emitEvent } from "@/lib/api/audit";
 import { isOutreachDraftEnabledForTenant } from "@/lib/ai/flag";
 import { draftSequenceEmail } from "@/lib/ai/draft-email";
 import { logger } from "@/lib/logger";
-import { computeDueAt, resolveWindowTimeZone, validateSendWindow, type SendWindow } from "./send-window";
+import { computeDueAt, effectiveWindow, resolveWindowTimeZone, validateSendWindow, type SendWindow } from "./send-window";
 import type { ScopedClient } from "@/lib/supabase/scoped";
 import type { AuthContext } from "@/lib/api/auth";
 import type { Lead } from "@/types/database";
@@ -19,6 +19,7 @@ export interface SequenceStepRow {
   sequence_id: string;
   step_order: number;
   delay_days: number;
+  send_time?: string | null;
   channel: string;
   draft_source: string;
   subject_template: string;
@@ -179,7 +180,7 @@ async function createDraftForStep(
   });
   // WHEN this step is due: the old rule (now + wait) unless the sequence has a send window — then the next allowed
   // day / time of day in the lead's (or office's) timezone, at this lead's stable minute in the spread.
-  const window = sequenceMeta.sendWindow;
+  const window = effectiveWindow(sequenceMeta.sendWindow, step.send_time);
   const dueAt = computeDueAt({
     now: new Date(),
     delayDays: step.delay_days,

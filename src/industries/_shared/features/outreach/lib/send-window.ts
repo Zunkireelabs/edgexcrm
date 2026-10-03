@@ -42,6 +42,13 @@ export function isValidTimeZone(tz: string): boolean {
   }
 }
 
+/** A step's own send time: "HH:MM" or null/undefined/"" (= use the sequence window's time). */
+export function validateStepSendTime(input: unknown): { ok: true; time: string | null } | { ok: false; error: string } {
+  if (input === null || input === undefined || input === "") return { ok: true, time: null };
+  if (typeof input !== "string" || !TIME_RE.test(input)) return { ok: false, error: "send_time must be HH:MM (24 h)" };
+  return { ok: true, time: input };
+}
+
 /** Shape-checks a window coming from the API. `null` / undefined mean "no window". */
 export function validateSendWindow(
   input: unknown
@@ -180,9 +187,19 @@ export interface DueAtInput {
   timeZone?: string;
   /** Stable per-lead-and-step key for the spread (e.g. `${leadId}:${stepId}`). */
   spreadKey?: string;
+  /** This step's own clock time (HH:MM). Overrides the window's time; with no window, every day is allowed. */
+  stepTime?: string | null;
 }
 
 const MAX_DAYS_AHEAD = 21;
+
+/** The window to use for one step: the sequence window with the step's own time laid over it. */
+export function effectiveWindow(window: SendWindow | null, stepTime?: string | null): SendWindow | null {
+  if (!stepTime) return window;
+  if (window) return { ...window, time: stepTime };
+  // a step time on a sequence with no window: any day, exactly at that time, the lead's own zone
+  return { time: stepTime, days: [0, 1, 2, 3, 4, 5, 6], timezone_mode: "lead", spread_minutes: 0 };
+}
 
 /**
  * When a step becomes due. Without a window: exactly the old rule, now + delayDays × 24 h. With one: the first
@@ -191,7 +208,7 @@ const MAX_DAYS_AHEAD = 21;
  */
 export function computeDueAt(input: DueAtInput): Date {
   const base = input.now.getTime() + input.delayDays * 24 * 60 * 60 * 1000;
-  const window = input.window;
+  const window = effectiveWindow(input.window, input.stepTime);
   if (!window) return new Date(base);
 
   const tz = input.timeZone && isValidTimeZone(input.timeZone) ? input.timeZone : "UTC";

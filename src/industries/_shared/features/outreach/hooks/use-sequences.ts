@@ -7,6 +7,7 @@ export interface SequenceStep {
   id: string;
   step_order: number;
   delay_days: number;
+  send_time?: string | null;
   subject_template: string;
   body_template: string;
   draft_source: "template" | "ai";

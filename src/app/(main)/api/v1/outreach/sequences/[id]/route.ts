@@ -126,10 +126,10 @@ export async function PATCH(request: NextRequest, { params }: Props) {
 
     const { data: existingSteps } = await db
       .from("email_sequence_steps")
-      .select("step_order, delay_days, draft_source")
+      .select("step_order, delay_days, draft_source, send_time")
       .eq("sequence_id", id)
       .order("step_order", { ascending: true });
-    const existing = (existingSteps ?? []) as unknown as Array<{ step_order: number; delay_days: number; draft_source: string }>;
+    const existing = (existingSteps ?? []) as unknown as Array<{ step_order: number; delay_days: number; draft_source: string; send_time: string | null }>;
 
     // Steps leads have already reached keep their order, wait and kind; their wording and everything after them can change.
     const lock = await loadStepLock(db, id, existing.length);
@@ -143,6 +143,7 @@ export async function PATCH(request: NextRequest, { params }: Props) {
       sequence_id: id,
       step_order: s.step_order,
       delay_days: s.delay_days ?? 0,
+      send_time: s.send_time || null,
       subject_template: s.subject_template ?? "",
       body_template: s.body_template ?? "",
       draft_source: s.draft_source ?? "template",
@@ -165,6 +166,7 @@ export async function PATCH(request: NextRequest, { params }: Props) {
         .from("email_sequence_steps")
         .update({
           delay_days: step.delay_days,
+          send_time: step.send_time,
           subject_template: step.subject_template,
           body_template: step.body_template,
           draft_source: step.draft_source,

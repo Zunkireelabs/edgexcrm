@@ -7,6 +7,7 @@ import {
   resolveWindowTimeZone,
   spreadOffsetMinutes,
   validateSendWindow,
+  validateStepSendTime,
   type SendWindow,
 } from "./send-window";
 
@@ -192,5 +193,58 @@ describe("describeSendWindow", () => {
     expect(describeSendWindow({ time: "10:00", days: [5, 1, 2, 3, 4], timezone_mode: "lead", spread_minutes: 120 })).toBe("Mon, Tue, Wed, Thu, Fri at 10:00–12:00");
     expect(describeSendWindow({ time: "09:30", days: [0, 1, 2, 3, 4, 5], timezone_mode: "office", spread_minutes: 0 })).toBe("Mon, Tue, Wed, Thu, Fri, Sun at 09:30");
     expect(describeSendWindow({ time: "23:00", days: [0, 1, 2, 3, 4, 5, 6], timezone_mode: "office", spread_minutes: 120 })).toBe("every day at 23:00–01:00");
+  });
+});
+
+describe("computeDueAt — a step's own send time", () => {
+  it("overrides the window's time of day for that step (same day, later time)", () => {
+    // Thu 1 Oct 08:45 NPT, window opens 10:00 — this step asks for 15:00 NPT = 09:15 UTC
+    const due = computeDueAt({ now: at("2026-10-01T03:00:00Z"), delayDays: 0, window: weekdays10, timeZone: NPT, stepTime: "15:00" });
+    expect(iso(due)).toBe("2026-10-01T09:15:00.000Z");
+  });
+
+  it("still moves a step that lands on a closed day to the next allowed day, at the step's time", () => {
+    // +2 days from Thu = Sat; weekdays only -> Mon 5 Oct 15:00 NPT
+    const due = computeDueAt({ now: at("2026-10-01T05:00:00Z"), delayDays: 2, window: weekdays10, timeZone: NPT, stepTime: "15:00" });
+    expect(iso(due)).toBe("2026-10-05T09:15:00.000Z");
+  });
+
+  it("keeps the window's spread on top of the step's time", () => {
+    const w = { ...weekdays10, spread_minutes: 60 };
+    const due = computeDueAt({ now: at("2026-10-01T03:00:00Z"), delayDays: 0, window: w, timeZone: NPT, stepTime: "15:00", spreadKey: "lead:step" });
+    const startMs = at("2026-10-01T09:15:00Z").getTime();
+    expect(due.getTime()).toBeGreaterThanOrEqual(startMs);
+    expect(due.getTime()).toBeLessThan(startMs + 60 * 60_000);
+  });
+
+  it("no step time = exactly the window's time (nothing changes for existing steps)", () => {
+    const a = computeDueAt({ now: at("2026-10-01T03:00:00Z"), delayDays: 0, window: weekdays10, timeZone: NPT });
+    const b = computeDueAt({ now: at("2026-10-01T03:00:00Z"), delayDays: 0, window: weekdays10, timeZone: NPT, stepTime: null });
+    expect(iso(a)).toBe("2026-10-01T04:15:00.000Z");
+    expect(iso(b)).toBe(iso(a));
+  });
+
+  it("a step time on a sequence with NO window: that time, any day", () => {
+    // +1 day from Thu 03:00Z = Fri 08:45 NPT; 16:00 NPT = 10:15 UTC
+    const due = computeDueAt({ now: at("2026-10-01T03:00:00Z"), delayDays: 1, window: null, timeZone: NPT, stepTime: "16:00" });
+    expect(iso(due)).toBe("2026-10-02T10:15:00.000Z");
+  });
+
+  it("two steps of one sequence get two different times of day", () => {
+    const one = computeDueAt({ now: at("2026-10-01T03:00:00Z"), delayDays: 0, window: weekdays10, timeZone: NPT, stepTime: "10:00" });
+    const two = computeDueAt({ now: at("2026-10-01T03:00:00Z"), delayDays: 0, window: weekdays10, timeZone: NPT, stepTime: "15:00" });
+    expect(two.getTime() - one.getTime()).toBe(5 * 60 * 60_000);
+  });
+});
+
+describe("validateStepSendTime", () => {
+  it("accepts HH:MM and treats empty as none", () => {
+    expect(validateStepSendTime("09:30")).toEqual({ ok: true, time: "09:30" });
+    expect(validateStepSendTime(null)).toEqual({ ok: true, time: null });
+    expect(validateStepSendTime("")).toEqual({ ok: true, time: null });
+    expect(validateStepSendTime(undefined)).toEqual({ ok: true, time: null });
+  });
+  it("rejects anything else", () => {
+    for (const bad of ["9:30", "24:00", "12:60", "noon", 930, {}]) expect(validateStepSendTime(bad).ok).toBe(false);
   });
 });

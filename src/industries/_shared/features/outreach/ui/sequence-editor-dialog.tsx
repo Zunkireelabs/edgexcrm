@@ -43,6 +43,8 @@ const MERGE_TAGS = ["first_name", "last_name", "email", "phone", "city", "countr
 interface StepDraft {
   key: string;
   delay_days: number;
+  /** Own send time (HH:MM), or "" = the sequence window's time. */
+  send_time: string;
   subject_template: string;
   body_template: string;
   /** Editor mode only (not saved): "rich" = TipTap, "html" = source + preview. Inferred from the body on load. */
@@ -68,13 +70,14 @@ function newKey() {
 
 function stepsFromSequence(sequence: Sequence | null): StepDraft[] {
   if (!sequence) {
-    return [{ key: newKey(), delay_days: 0, subject_template: "", body_template: "", mode: "rich", draft_source: "template", ai_instructions: "" }];
+    return [{ key: newKey(), delay_days: 0, send_time: "", subject_template: "", body_template: "", mode: "rich", draft_source: "template", ai_instructions: "" }];
   }
   return [...sequence.email_sequence_steps]
     .sort((a, b) => a.step_order - b.step_order)
     .map((s) => ({
       key: newKey(),
       delay_days: s.delay_days,
+      send_time: s.send_time ?? "",
       subject_template: s.subject_template,
       body_template: s.body_template,
       mode: detectBodyMode(s.body_template),
@@ -193,7 +196,7 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
   const addStep = () => {
     setSteps((prev) => [
       ...prev,
-      { key: newKey(), delay_days: 3, subject_template: "", body_template: "", mode: "rich", draft_source: "template", ai_instructions: "" },
+      { key: newKey(), delay_days: 3, send_time: "", subject_template: "", body_template: "", mode: "rich", draft_source: "template", ai_instructions: "" },
     ]);
   };
 
@@ -329,6 +332,7 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
       steps: steps.map((s, i) => ({
         step_order: i + 1,
         delay_days: i === 0 ? 0 : s.delay_days,
+        send_time: s.send_time || null,
         subject_template: s.subject_template,
         body_template: s.body_template,
         draft_source: s.draft_source,
@@ -494,6 +498,21 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
                           days
                         </div>
                       )}
+                      <div
+                        className="flex items-center gap-1.5 text-xs text-muted-foreground"
+                        title="Optional. The time of day this email goes out. Leave empty to use the sequence's send window time."
+                      >
+                        at
+                        <Input
+                          type="time"
+                          aria-label={`Step ${index + 1} send time`}
+                          value={step.send_time}
+                          disabled={locked}
+                          onChange={(e) => updateStep(index, { send_time: e.target.value })}
+                          className="h-7 w-28"
+                        />
+                        {!step.send_time && <span>(window time)</span>}
+                      </div>
                     </div>
                     <div className="flex items-center gap-1">
                       <Button type="button" variant="ghost" size="icon" className="h-7 w-7" disabled={index === 0 || locked || index === lockedUpTo} onClick={() => moveStep(index, -1)}>
