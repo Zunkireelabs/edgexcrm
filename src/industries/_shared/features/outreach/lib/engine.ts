@@ -408,7 +408,7 @@ export async function markDraftSent(
 
 /**
  * Auto-send counterpart to markDraftSent — OUTREACH-PHASE2-BRIEF.md §5.4.
- * Called by sequence-step-send.ts (an Inngest worker, not a request) once a
+ * Called by sequence-autosend-runner.ts (a background timer, not a request) once a
  * step's email_messages row has actually been sent via sendQueuedEmailBatch.
  * No AuthContext exists in that context — only tenantId — so this takes a
  * plain tenantId and attributes the lead_activities row to the enrollment's

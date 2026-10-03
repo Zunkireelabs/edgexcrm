@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // OUTREACH-PHASE2-BRIEF.md §5.4 — markDraftSentViaEdgeX is the auto-send
-// counterpart to markDraftSent, called by sequence-step-send.ts (a
+// counterpart to markDraftSent, called by sequence-autosend-runner.ts (a
 // tenantId-only Inngest worker context, no AuthContext). Pins: it attributes
 // the lead_activities row to the enrollment's assigned_to/enrolled_by (never
 // a live session user), sets sent_via='edgex_send' + the email_message_id

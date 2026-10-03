@@ -41,7 +41,7 @@ describe("staleAfterMs", () => {
     expect(staleAfterMs(120_000)).toBe(600_000);
   });
   it("every registered runner has an interval", () => {
-    expect(Object.keys(RUNNERS).sort()).toEqual(["bulk-enroll", "email-blast", "sequence-schedule"]);
+    expect(Object.keys(RUNNERS).sort()).toEqual(["bulk-enroll", "email-blast", "sequence-autosend", "sequence-schedule"]);
   });
 });
 

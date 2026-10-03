@@ -15,7 +15,7 @@ import { GET } from "./route";
 
 const NOW = new Date("2026-10-04T12:00:00Z").getTime();
 const ago = (s: number) => new Date(NOW - s * 1000).toISOString();
-const names = ["email-blast", "sequence-schedule", "bulk-enroll"];
+const names = ["email-blast", "sequence-schedule", "bulk-enroll", "sequence-autosend"];
 const allFresh = () => names.map((name) => ({ name, last_finished_at: ago(20), last_ok_at: ago(20), last_error_at: null }));
 
 beforeEach(() => {

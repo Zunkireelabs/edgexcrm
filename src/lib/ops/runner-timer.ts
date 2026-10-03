@@ -14,6 +14,7 @@ export const RUNNERS = {
   "email-blast": { intervalMs: 30_000 },
   "sequence-schedule": { intervalMs: 60_000 },
   "bulk-enroll": { intervalMs: 30_000 },
+  "sequence-autosend": { intervalMs: 60_000 },
 } as const;
 
 export type RunnerName = keyof typeof RUNNERS;

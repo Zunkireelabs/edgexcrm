@@ -36,6 +36,13 @@ export async function register() {
       await runScheduledSequenceSends();
     });
 
+    // Auto-send sequences: every due step of an `auto_send` sequence goes out within about a minute (it used to be an
+    // Inngest cron every 15 minutes) — src/lib/email/outbound/sequence-autosend-runner.ts
+    startRunnerTimer("sequence-autosend", async () => {
+      const { runAutoSendSequenceSteps } = await import("@/lib/email/outbound/sequence-autosend-runner");
+      await runAutoSendSequenceSteps();
+    });
+
     // Outreach bulk enroll: continues every queued / running run (the Start route also kicks a first pass with after()) —
     // outreach/lib/bulk-enroll-runner.ts
     startRunnerTimer("bulk-enroll", async () => {
