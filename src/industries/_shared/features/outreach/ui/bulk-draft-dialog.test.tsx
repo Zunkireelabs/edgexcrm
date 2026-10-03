@@ -37,6 +37,8 @@ beforeEach(() => {
     return { ok: r.status < 400, status: r.status, json: async () => r.body } as Response;
   }) as typeof fetch;
 });
+vi.mock("@/components/ui/select", async () => await import("./test-select-mock"));
+
 afterEach(cleanup);
 
 const ids = (n: number): BulkDraftSelection => ({ mode: "ids", ids: Array.from({ length: n }, (_, i) => `id-${i}`) });

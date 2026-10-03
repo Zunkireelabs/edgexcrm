@@ -4,6 +4,8 @@ import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { DateTimePicker, TimeOfDayPicker } from "./time-of-day-picker";
 
+vi.mock("@/components/ui/select", async () => await import("./test-select-mock"));
+
 afterEach(cleanup);
 
 describe("TimeOfDayPicker", () => {
@@ -37,7 +39,7 @@ describe("TimeOfDayPicker", () => {
     expect(onChange).toHaveBeenLastCalledWith("09:00");
 
     rerender(<TimeOfDayPicker value="09:00" onChange={onChange} allowEmpty ariaLabel="T" />);
-    fireEvent.change(screen.getByLabelText("T — hour"), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText("T — hour"), { target: { value: "none" } });
     expect(onChange).toHaveBeenLastCalledWith("");
   });
 

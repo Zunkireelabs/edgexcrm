@@ -484,7 +484,7 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
                         </span>
                       )}
                       {index === 0 ? (
-                        <span className="text-xs text-muted-foreground">Sends when enrolled</span>
+                        <span className="text-xs text-muted-foreground">Starts when enrolled</span>
                       ) : (
                         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                           Wait
@@ -503,7 +503,7 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
                         className="flex items-center gap-1.5 text-xs text-muted-foreground"
                         title="Optional. The time of day this email goes out. Leave empty to use the sequence's send window time."
                       >
-                        at
+                        Send at
                         <TimeOfDayPicker
                           ariaLabel={`Step ${index + 1} send time`}
                           allowEmpty
@@ -511,7 +511,7 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
                           disabled={locked}
                           onChange={(t) => updateStep(index, { send_time: t })}
                         />
-                        {!step.send_time && <span>(window time)</span>}
+                        {!step.send_time && <span>(uses the send window time)</span>}
                       </div>
                     </div>
                     <div className="flex items-center gap-1">

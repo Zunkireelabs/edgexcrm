@@ -1,12 +1,14 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { joinTime, splitTime } from "../lib/time-format";
 
 // A 12-hour time picker with an explicit AM / PM — the browser's <input type="time"> shows a 24-hour list (no AM / PM)
 // on many machines, which is easy to misread. The value in and out is still the 24-hour "HH:MM" the rest of the
 // system uses, or "" when `allowEmpty` and nothing is chosen.
 
+const triggerClass = "h-8 w-auto min-w-[3.75rem] px-2";
 const selectClass =
   "h-8 rounded-md border border-input bg-transparent px-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50";
 
@@ -24,6 +26,8 @@ interface TimeOfDayPickerProps {
   className?: string;
 }
 
+const NONE = "none"; // Radix items can't have an empty value
+
 export function TimeOfDayPicker({ value, onChange, allowEmpty = false, disabled, id, ariaLabel = "Time", className }: TimeOfDayPickerProps) {
   const parts = splitTime(value);
   const empty = !parts;
@@ -36,48 +40,53 @@ export function TimeOfDayPicker({ value, onChange, allowEmpty = false, disabled,
 
   return (
     <div className={cn("inline-flex items-center gap-1", className)} role="group" aria-label={ariaLabel}>
-      <select
-        id={id}
-        aria-label={`${ariaLabel} — hour`}
-        className={selectClass}
+      <Select
+        value={empty ? NONE : String(hour)}
         disabled={disabled}
-        value={empty ? "" : String(hour)}
-        onChange={(e) => {
-          if (e.target.value === "") return onChange("");
-          onChange(joinTime(Number(e.target.value), minute, pm));
-        }}
+        onValueChange={(v) => (v === NONE ? onChange("") : onChange(joinTime(Number(v), minute, pm)))}
       >
-        {(allowEmpty || empty) && <option value="">{allowEmpty ? "—" : "Hour"}</option>}
-        {HOURS.map((h) => (
-          <option key={h} value={h}>
-            {h}
-          </option>
-        ))}
-      </select>
+        <SelectTrigger id={id} aria-label={`${ariaLabel} — hour`} className={triggerClass}>
+          <SelectValue placeholder="Hour" />
+        </SelectTrigger>
+        <SelectContent className="max-h-60">
+          {(allowEmpty || empty) && <SelectItem value={NONE}>{allowEmpty ? "—" : "Hour"}</SelectItem>}
+          {HOURS.map((h) => (
+            <SelectItem key={h} value={String(h)}>
+              {h}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
       <span aria-hidden>:</span>
-      <select
-        aria-label={`${ariaLabel} — minute`}
-        className={selectClass}
-        disabled={disabled || empty}
+      <Select
         value={String(minute)}
-        onChange={(e) => onChange(joinTime(hour, Number(e.target.value), pm))}
-      >
-        {minutes.map((m) => (
-          <option key={m} value={m}>
-            {String(m).padStart(2, "0")}
-          </option>
-        ))}
-      </select>
-      <select
-        aria-label={`${ariaLabel} — AM or PM`}
-        className={selectClass}
         disabled={disabled || empty}
-        value={pm ? "PM" : "AM"}
-        onChange={(e) => onChange(joinTime(hour, minute, e.target.value === "PM"))}
+        onValueChange={(v) => onChange(joinTime(hour, Number(v), pm))}
       >
-        <option value="AM">AM</option>
-        <option value="PM">PM</option>
-      </select>
+        <SelectTrigger aria-label={`${ariaLabel} — minute`} className={triggerClass}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent className="max-h-60">
+          {minutes.map((m) => (
+            <SelectItem key={m} value={String(m)}>
+              {String(m).padStart(2, "0")}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Select
+        value={pm ? "PM" : "AM"}
+        disabled={disabled || empty}
+        onValueChange={(v) => onChange(joinTime(hour, minute, v === "PM"))}
+      >
+        <SelectTrigger aria-label={`${ariaLabel} — AM or PM`} className={triggerClass}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="AM">AM</SelectItem>
+          <SelectItem value="PM">PM</SelectItem>
+        </SelectContent>
+      </Select>
     </div>
   );
 }

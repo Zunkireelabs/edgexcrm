@@ -15,17 +15,7 @@ class ResizeObserverStub {
 }
 (global as unknown as { ResizeObserver: typeof ResizeObserverStub }).ResizeObserver = ResizeObserverStub;
 
-vi.mock("@/components/ui/select", () => ({
-  Select: ({ value, onValueChange, children }: { value: string; onValueChange: (v: string) => void; children: React.ReactNode }) => (
-    <select value={value} onChange={(e) => onValueChange(e.target.value)}>
-      {children}
-    </select>
-  ),
-  SelectTrigger: () => null,
-  SelectValue: () => null,
-  SelectContent: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  SelectItem: ({ value, children }: { value: string; children: React.ReactNode }) => <option value={value}>{children}</option>,
-}));
+vi.mock("@/components/ui/select", async () => await import("./test-select-mock"));
 
 import { SendWindowEditor } from "./send-window-editor";
 import type { SendWindow } from "../lib/send-window";
@@ -82,7 +72,8 @@ describe("SendWindowEditor", () => {
     expect(onChange).toHaveBeenLastCalledWith({ ...current, time: "22:00" });
 
     // the first three selects are the time picker (hour, minute, AM/PM)
-    const [, , , spread, tz] = Array.from(container.querySelectorAll("select")) as HTMLSelectElement[];
+    const spread = screen.getByLabelText("Release") as HTMLSelectElement;
+    const tz = container.querySelector("#seq-window-tz") as HTMLSelectElement;
     fireEvent.change(spread, { target: { value: "240" } });
     expect(onChange).toHaveBeenLastCalledWith({ ...current, spread_minutes: 240 });
     fireEvent.change(tz, { target: { value: "office" } });
