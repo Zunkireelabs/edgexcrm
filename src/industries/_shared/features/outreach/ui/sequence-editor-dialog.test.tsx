@@ -17,11 +17,13 @@ class ResizeObserverStub {
 (global as unknown as { ResizeObserver: typeof ResizeObserverStub }).ResizeObserver = ResizeObserverStub;
 
 const toastError = vi.fn();
-vi.mock("sonner", () => ({ toast: { error: (...a: unknown[]) => toastError(...a), success: vi.fn(), message: vi.fn() } }));
+const toastSuccess = vi.fn();
+vi.mock("sonner", () => ({ toast: { error: (...a: unknown[]) => toastError(...a), success: (...a: unknown[]) => toastSuccess(...a), message: vi.fn(), info: vi.fn() } }));
 
 // the rich editors are not under test
-vi.mock("@/industries/_shared/features/email/components/tiptap-editor", () => ({ TipTapEditor: () => <div data-testid="tiptap" /> }));
-vi.mock("@/industries/_shared/features/email/components/html-source-editor", () => ({ HtmlSourceEditor: () => <div data-testid="html" /> }));
+// they render `tabsExtra` because that is where the Full preview / Send me a test buttons live
+vi.mock("@/industries/_shared/features/email/components/tiptap-editor", () => ({ TipTapEditor: ({ tabsExtra }: { tabsExtra?: React.ReactNode }) => <div data-testid="tiptap">{tabsExtra}</div> }));
+vi.mock("@/industries/_shared/features/email/components/html-source-editor", () => ({ HtmlSourceEditor: ({ tabsExtra }: { tabsExtra?: React.ReactNode }) => <div data-testid="html">{tabsExtra}</div> }));
 vi.mock("@/components/ui/select", () => ({
   Select: ({ value, onValueChange, children }: { value: string; onValueChange: (v: string) => void; children: React.ReactNode }) => (
     <select value={value} onChange={(e) => onValueChange(e.target.value)}>{children}</select>
@@ -45,16 +47,28 @@ const sequence: Sequence = {
 let fetchCalls: string[];
 let lock: { locked_up_to: number; live_enrollments: number };
 let patchResponse: { status: number; body: unknown };
+let capability: { enabled: boolean };
+let testResponse: { status: number; body: unknown };
+let testBodies: Record<string, unknown>[];
 
 beforeEach(() => {
   fetchCalls = [];
   toastError.mockReset();
+  toastSuccess.mockReset();
+  capability = { enabled: true };
+  testResponse = { status: 200, body: { data: { sent: true, to: "rep@admizz.org", sandbox: false } } };
+  testBodies = [];
   lock = { locked_up_to: 2, live_enrollments: 1500 };
   patchResponse = { status: 200, body: { data: {} } };
   globalThis.fetch = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
     const u = String(url);
     fetchCalls.push(`${init?.method ?? "GET"} ${u}`);
     if (u.includes("send-window-defaults")) return { ok: true, json: async () => ({ data: { timezone: "Asia/Kathmandu", window: { time: "10:00", days: [0, 1, 2, 3, 4, 5], timezone_mode: "lead", spread_minutes: 120 } } }) } as Response;
+    if (u.includes("send-capability")) return { ok: true, json: async () => ({ data: capability }) } as Response;
+    if (u.includes("/sequences/test-send")) {
+      testBodies.push(JSON.parse(String(init?.body)));
+      return { ok: testResponse.status < 400, status: testResponse.status, json: async () => testResponse.body } as Response;
+    }
     if (init?.method === "PATCH") return { ok: patchResponse.status < 400, status: patchResponse.status, json: async () => patchResponse.body } as Response;
     if (u.endsWith("/sequences/seq-1")) return { ok: true, json: async () => ({ data: { ...sequence, ...lock } }) } as Response;
     return { ok: false, status: 404, json: async () => ({}) } as Response;
@@ -118,5 +132,63 @@ describe("SequenceEditorDialog — steps in use", () => {
     fireEvent.click(screen.getByRole("button", { name: /Save/ }));
 
     await waitFor(() => expect(toastError).toHaveBeenCalledWith(expect.stringMatching(/Steps 1–2 are already in use/)));
+  });
+});
+
+describe("SequenceEditorDialog — Send me a test", () => {
+  const openEdu = (seq: Sequence | null = sequence, industry = "education_consultancy") =>
+    render(<SequenceEditorDialog open onOpenChange={() => {}} sequence={seq} onSaved={() => {}} industryId={industry} />);
+
+  it("offers one button per step when EdgeX can send, and none when it can't", async () => {
+    lock = { locked_up_to: 0, live_enrollments: 0 };
+    openEdu();
+    expect(await screen.findAllByRole("button", { name: /Send me a test/ })).toHaveLength(4);
+
+    cleanup();
+    capability = { enabled: false };
+    openEdu();
+    await waitFor(() => expect(fetchCalls.some((c) => c.includes("send-capability"))).toBe(true));
+    expect(screen.queryByRole("button", { name: /Send me a test/ })).toBeNull();
+  });
+
+  it("never offers it outside education (and does not even ask whether sending is on)", async () => {
+    openEdu(sequence, "it_agency");
+    await waitFor(() => expect(fetchCalls.some((c) => c.includes("send-window-defaults"))).toBe(true));
+    expect(fetchCalls.some((c) => c.includes("send-capability"))).toBe(false);
+    expect(screen.queryByRole("button", { name: /Send me a test/ })).toBeNull();
+  });
+
+  it("is disabled for a step with no subject", async () => {
+    const blank: Sequence = { ...sequence, email_sequence_steps: [{ ...sequence.email_sequence_steps[0], subject_template: "" }] };
+    openEdu(blank);
+    const button = await screen.findByRole("button", { name: /Send me a test/ });
+    expect(button).toBeDisabled();
+  });
+
+  it("sends the step's CURRENT text with a label, and says it arrived", async () => {
+    lock = { locked_up_to: 0, live_enrollments: 0 };
+    openEdu();
+    const buttons = await screen.findAllByRole("button", { name: /Send me a test/ });
+    fireEvent.click(buttons[1]); // step 2
+
+    await waitFor(() => expect(testBodies).toHaveLength(1));
+    expect(testBodies[0]).toEqual({ subject_template: "Subject 2", body_template: "<p>Body 2</p>", step_label: "Step 2 of Welcome" });
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith("Test sent to rep@admizz.org"));
+  });
+
+  it("in sandbox mode it says the test did NOT go to the person's own inbox", async () => {
+    lock = { locked_up_to: 0, live_enrollments: 0 };
+    testResponse = { status: 200, body: { data: { sent: true, to: "rep@admizz.org", sandbox: true } } };
+    openEdu();
+    fireEvent.click((await screen.findAllByRole("button", { name: /Send me a test/ }))[0]);
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith(expect.stringMatching(/sandbox mode .* not to your inbox/)));
+  });
+
+  it("shows the server's plain-words reason when the test can't be sent", async () => {
+    lock = { locked_up_to: 0, live_enrollments: 0 };
+    testResponse = { status: 429, body: { error: { message: "The daily send limit has been reached — the test can't go out until tomorrow." } } };
+    openEdu();
+    fireEvent.click((await screen.findAllByRole("button", { name: /Send me a test/ }))[0]);
+    await waitFor(() => expect(toastError).toHaveBeenCalledWith(expect.stringMatching(/daily send limit/)));
   });
 });

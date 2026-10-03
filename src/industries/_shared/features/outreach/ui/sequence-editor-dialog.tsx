@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Plus, Trash2, ChevronUp, ChevronDown, Loader2, Eye, Monitor, Smartphone } from "lucide-react";
+import { Plus, Trash2, ChevronUp, ChevronDown, Loader2, Eye, Monitor, Smartphone, Send } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -101,6 +101,9 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
   // Steps 1..lockedUpTo are in use by running leads: their order, wait and drafting can't change (their wording can).
   const [lockedUpTo, setLockedUpTo] = useState(0);
   const [liveEnrollments, setLiveEnrollments] = useState(0);
+  // "Send me a test": only offered where EdgeX can actually send (education, and sending turned on for the account).
+  const [canSendTest, setCanSendTest] = useState(false);
+  const [testingIndex, setTestingIndex] = useState<number | null>(null);
   const [steps, setSteps] = useState<StepDraft[]>([]);
   const [saving, setSaving] = useState(false);
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
@@ -124,6 +127,22 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
       setPendingRichIndex(null);
     }
   }, [open, sequence]);
+
+  // Can this account send at all? Decides whether "Send me a test" is shown.
+  useEffect(() => {
+    setCanSendTest(false);
+    if (!open || !canAutoSend) return;
+    let cancelled = false;
+    fetch("/api/v1/outreach/send-capability")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => {
+        if (!cancelled) setCanSendTest(json?.data?.enabled === true);
+      })
+      .catch(() => void 0);
+    return () => {
+      cancelled = true;
+    };
+  }, [open, canAutoSend]);
 
   // How far running leads have got — which steps' structure is locked. Only meaningful when editing.
   useEffect(() => {
@@ -204,10 +223,62 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
     updateStep(index, { mode });
   };
 
+  const sendTest = async (index: number) => {
+    const step = steps[index];
+    setTestingIndex(index);
+    try {
+      const res = await fetch("/api/v1/outreach/sequences/test-send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subject_template: step.subject_template,
+          body_template: step.body_template,
+          step_label: `Step ${index + 1} of ${name.trim() || "this sequence"}`,
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        const first = json?.errors ? (Object.values(json.errors).flat()[0] as string | undefined) : undefined;
+        toast.error(first ?? json?.error?.message ?? "Couldn't send the test");
+        return;
+      }
+      toast.success(
+        json.data?.sandbox
+          ? "Test sent in sandbox mode — it went to the configured test address, not to your inbox."
+          : `Test sent to ${json.data?.to ?? "you"}`
+      );
+    } finally {
+      setTestingIndex(null);
+    }
+  };
+
+  const testButton = (index: number) =>
+    canSendTest ? (
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="h-8 px-3 text-xs"
+        disabled={testingIndex !== null || !steps[index].subject_template.trim() || !steps[index].body_template.trim()}
+        title={!steps[index].subject_template.trim() ? "Add a subject first" : "Email this step to yourself, with sample data"}
+        onClick={() => sendTest(index)}
+      >
+        {testingIndex === index ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Send className="h-3.5 w-3.5 mr-1.5" />} Send me a test
+      </Button>
+    ) : null;
+
   const fullPreviewButton = (index: number) => (
     <Button type="button" variant="outline" size="sm" className="h-8 px-3 text-xs" onClick={() => setPreviewIndex(index)}>
       <Eye className="h-3.5 w-3.5 mr-1.5" /> Full preview
     </Button>
+  );
+
+  // Full preview + (where sending is possible) "Send me a test", side by side wherever the preview button used to be.
+  const previewActions = (index: number) => (
+    <>
+      {fullPreviewButton(index)}
+      {testButton(index)}
+    </>
   );
 
   const insertToken = (token: string) => {
@@ -489,7 +560,7 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
                               Preview
                             </TabsTrigger>
                           </TabsList>
-                          {fullPreviewButton(index)}
+                          {previewActions(index)}
                         </div>
                         {/* forceMount keeps the editor (and its insertText ref) alive while Preview is showing. */}
                         <TabsContent value="edit" className="mt-0 data-[state=inactive]:hidden" forceMount>
@@ -537,7 +608,7 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
                         minHeight={BODY_HEIGHT}
                         previewHeight={BODY_HEIGHT}
                         codeTools
-                        tabsExtra={fullPreviewButton(index)}
+                        tabsExtra={previewActions(index)}
                         placeholder="Paste or write the email HTML here, or drop a .html file — merge tags like {{first_name}} work."
                         previewTransform={fillSampleMergeTags}
                         hideTestEmailHint

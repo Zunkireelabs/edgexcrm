@@ -22,7 +22,7 @@ export function detectBodyMode(html: string): StepBodyMode {
   return "rich";
 }
 
-const SAMPLE_VALUES: Record<string, string> = {
+export const SAMPLE_VALUES: Record<string, string> = {
   first_name: "Jane",
   last_name: "Doe",
   email: "jane.doe@example.com",
