@@ -19,32 +19,36 @@ import {
 } from "@/industries/_shared/features/outreach/lib/validate-steps";
 import { ON_REPLY_VALUES, type OnReply } from "@/industries/_shared/features/outreach/lib/stop-on-reply";
 import { validateSendWindow } from "@/industries/_shared/features/outreach/lib/send-window";
+import { checkStepEdit, lockedUpToStep } from "@/industries/_shared/features/outreach/lib/step-edit-rules";
 
 type Props = { params: Promise<{ id: string }> };
 
 /**
- * True when the incoming step array differs from the stored steps ONLY in
- * subject_template/body_template/ai_instructions — never in step_order,
- * delay_days, draft_source, or step count. Structural changes affect the
- * cadence math for in-flight enrollments and stay blocked while any are
- * active/paused; text-only edits affect only newly-generated drafts, so they
- * proceed even with active enrollments.
+ * How far into this sequence running leads have got: steps 1..lockedUpTo are in use (see step-edit-rules.ts). Counts
+ * active AND paused enrollments. `live` is how many leads that is.
  */
-function isTextOnlyStepDiff(
-  existing: Array<{ step_order: number; delay_days: number; draft_source: string }>,
-  incoming: SequenceStepInput[]
-): boolean {
-  if (existing.length !== incoming.length) return false;
-  const sortedExisting = [...existing].sort((a, b) => a.step_order - b.step_order);
-  const sortedIncoming = [...incoming].sort((a, b) => a.step_order - b.step_order);
-  for (let i = 0; i < sortedExisting.length; i++) {
-    const e = sortedExisting[i];
-    const n = sortedIncoming[i];
-    if (e.step_order !== n.step_order) return false;
-    if (e.delay_days !== (n.delay_days ?? 0)) return false;
-    if (e.draft_source !== (n.draft_source ?? "template")) return false;
-  }
-  return true;
+async function loadStepLock(
+  db: Awaited<ReturnType<typeof scopedClient>>,
+  sequenceId: string,
+  stepCount: number
+): Promise<{ lockedUpTo: number; live: number }> {
+  const { data: furthest } = await db
+    .from("sequence_enrollments")
+    .select("current_step_order")
+    .eq("sequence_id", sequenceId)
+    .in("status", ["active", "paused"])
+    .order("current_step_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const max = (furthest as unknown as { current_step_order: number } | null)?.current_step_order ?? null;
+
+  const { count } = await db
+    .from("sequence_enrollments")
+    .select("id", { count: "exact", head: true })
+    .eq("sequence_id", sequenceId)
+    .in("status", ["active", "paused"]);
+
+  return { lockedUpTo: lockedUpToStep(max, stepCount), live: count ?? 0 };
 }
 
 export async function GET(_request: NextRequest, { params }: Props) {
@@ -63,7 +67,11 @@ export async function GET(_request: NextRequest, { params }: Props) {
 
   if (error) return apiError("DB_ERROR", "Failed to fetch sequence", 500);
   if (!data) return apiNotFound("Sequence");
-  return apiSuccess(data);
+
+  // Which steps running leads depend on — the editor locks those steps' structure (their wording stays editable).
+  const steps = (data as unknown as { email_sequence_steps?: unknown[] }).email_sequence_steps ?? [];
+  const lock = await loadStepLock(db, id, steps.length);
+  return apiSuccess({ ...(data as object), locked_up_to: lock.lockedUpTo, live_enrollments: lock.live });
 }
 
 export async function PATCH(request: NextRequest, { params }: Props) {
@@ -121,30 +129,17 @@ export async function PATCH(request: NextRequest, { params }: Props) {
       .select("step_order, delay_days, draft_source")
       .eq("sequence_id", id)
       .order("step_order", { ascending: true });
+    const existing = (existingSteps ?? []) as unknown as Array<{ step_order: number; delay_days: number; draft_source: string }>;
 
-    const textOnlyEdit = isTextOnlyStepDiff(
-      (existingSteps ?? []) as unknown as Array<{ step_order: number; delay_days: number; draft_source: string }>,
-      body.steps as SequenceStepInput[]
-    );
+    // Steps leads have already reached keep their order, wait and kind; their wording and everything after them can change.
+    const lock = await loadStepLock(db, id, existing.length);
+    const check = checkStepEdit(existing, body.steps as SequenceStepInput[], lock.lockedUpTo);
+    if (!check.ok) return apiConflict(check.message);
 
-    if (!textOnlyEdit) {
-      const { count: liveEnrollmentCount } = await db
-        .from("sequence_enrollments")
-        .select("id", { count: "exact", head: true })
-        .eq("sequence_id", id)
-        .in("status", ["active", "paused"]);
-      if ((liveEnrollmentCount ?? 0) > 0) {
-        return apiConflict("Cannot edit steps while the sequence has active enrollments");
-      }
-    }
-
-    const { error: deleteError } = await db.from("email_sequence_steps").delete().eq("sequence_id", id);
-    if (deleteError) {
-      log.error({ error: deleteError }, "Failed to replace sequence steps");
-      return apiError("DB_ERROR", "Failed to replace sequence steps", 500);
-    }
-
-    const steps = (body.steps as SequenceStepInput[]).map((s) => ({
+    // Apply the new step list WITHOUT ever emptying the table: add the new steps, update the ones that stay, then remove
+    // the ones that went. (The old delete-everything-then-insert left a moment with no steps — a lead advancing in that
+    // instant found no next step and was completed early — and gave every step a new id.)
+    const incoming = (body.steps as SequenceStepInput[]).map((s) => ({
       sequence_id: id,
       step_order: s.step_order,
       delay_days: s.delay_days ?? 0,
@@ -153,10 +148,47 @@ export async function PATCH(request: NextRequest, { params }: Props) {
       draft_source: s.draft_source ?? "template",
       ai_instructions: s.ai_instructions ?? null,
     }));
-    const { error: insertError } = await db.from("email_sequence_steps").insert(steps);
-    if (insertError) {
-      log.error({ error: insertError }, "Failed to insert sequence steps");
-      return apiError("DB_ERROR", "Failed to insert sequence steps", 500);
+    const existingOrders = new Set(existing.map((e) => e.step_order));
+    const incomingOrders = new Set(incoming.map((i) => i.step_order));
+
+    const added = incoming.filter((i) => !existingOrders.has(i.step_order));
+    if (added.length > 0) {
+      const { error: insertError } = await db.from("email_sequence_steps").insert(added);
+      if (insertError) {
+        log.error({ error: insertError }, "Failed to add sequence steps");
+        return apiError("DB_ERROR", "Failed to add sequence steps", 500);
+      }
+    }
+
+    for (const step of incoming.filter((i) => existingOrders.has(i.step_order))) {
+      const { error: updateStepError } = await db
+        .from("email_sequence_steps")
+        .update({
+          delay_days: step.delay_days,
+          subject_template: step.subject_template,
+          body_template: step.body_template,
+          draft_source: step.draft_source,
+          ai_instructions: step.ai_instructions,
+        })
+        .eq("sequence_id", id)
+        .eq("step_order", step.step_order);
+      if (updateStepError) {
+        log.error({ error: updateStepError }, "Failed to update a sequence step");
+        return apiError("DB_ERROR", "Failed to update sequence steps", 500);
+      }
+    }
+
+    const removed = [...existingOrders].filter((o) => !incomingOrders.has(o));
+    if (removed.length > 0) {
+      const { error: deleteError } = await db
+        .from("email_sequence_steps")
+        .delete()
+        .eq("sequence_id", id)
+        .in("step_order", removed);
+      if (deleteError) {
+        log.error({ error: deleteError }, "Failed to remove sequence steps");
+        return apiError("DB_ERROR", "Failed to remove sequence steps", 500);
+      }
     }
   }
 

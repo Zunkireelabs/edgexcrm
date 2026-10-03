@@ -98,6 +98,9 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
   // keeps whatever it has (usually none until someone turns it on).
   const [sendWindow, setSendWindow] = useState<SendWindow | null>(null);
   const [windowDefaults, setWindowDefaults] = useState<{ window: SendWindow; timezone: string } | null>(null);
+  // Steps 1..lockedUpTo are in use by running leads: their order, wait and drafting can't change (their wording can).
+  const [lockedUpTo, setLockedUpTo] = useState(0);
+  const [liveEnrollments, setLiveEnrollments] = useState(0);
   const [steps, setSteps] = useState<StepDraft[]>([]);
   const [saving, setSaving] = useState(false);
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
@@ -120,6 +123,25 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
       setPreviewIndex(null);
       setPendingRichIndex(null);
     }
+  }, [open, sequence]);
+
+  // How far running leads have got — which steps' structure is locked. Only meaningful when editing.
+  useEffect(() => {
+    setLockedUpTo(0);
+    setLiveEnrollments(0);
+    if (!open || !sequence) return;
+    let cancelled = false;
+    fetch(`/api/v1/outreach/sequences/${sequence.id}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => {
+        if (cancelled || !json?.data) return;
+        setLockedUpTo(Number(json.data.locked_up_to) || 0);
+        setLiveEnrollments(Number(json.data.live_enrollments) || 0);
+      })
+      .catch(() => void 0);
+    return () => {
+      cancelled = true;
+    };
   }, [open, sequence]);
 
   // The tenant's working days / timezone, to pre-fill a new sequence's window.
@@ -256,7 +278,7 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
 
       if (!res.ok) {
         if (res.status === 409) {
-          toast.error("Can't edit steps while leads are enrolled");
+          toast.error(json?.error?.message ?? "Some of these steps are in use by leads and can't be changed that way");
         } else {
           toast.error(json?.error?.message ?? "Failed to save sequence");
         }
@@ -366,12 +388,25 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
 
           <div className="space-y-3">
             <Label>Steps</Label>
-            {steps.map((step, index) => (
+            {lockedUpTo > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {liveEnrollments.toLocaleString()} lead{liveEnrollments === 1 ? " is" : "s are"} running this sequence. Steps 1–{lockedUpTo} are
+                in use: you can edit their wording, but not their order, wait or drafting. Later steps can be changed freely.
+              </p>
+            )}
+            {steps.map((step, index) => {
+              const locked = index + 1 <= lockedUpTo;
+              return (
               <Card key={step.key} className="shadow-none">
                 <CardContent className="p-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium">Step {index + 1}</span>
+                      {locked && (
+                        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground" title="Leads have reached this step, so its order, wait and drafting are fixed. Its wording can still change.">
+                          In use
+                        </span>
+                      )}
                       {index === 0 ? (
                         <span className="text-xs text-muted-foreground">Sends when enrolled</span>
                       ) : (
@@ -381,6 +416,7 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
                             type="number"
                             min={0}
                             value={step.delay_days}
+                            disabled={locked}
                             onChange={(e) => updateStep(index, { delay_days: Math.max(0, Number(e.target.value)) })}
                             className="h-7 w-16"
                           />
@@ -389,10 +425,10 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
                       )}
                     </div>
                     <div className="flex items-center gap-1">
-                      <Button type="button" variant="ghost" size="icon" className="h-7 w-7" disabled={index === 0} onClick={() => moveStep(index, -1)}>
+                      <Button type="button" variant="ghost" size="icon" className="h-7 w-7" disabled={index === 0 || locked || index === lockedUpTo} onClick={() => moveStep(index, -1)}>
                         <ChevronUp className="h-3.5 w-3.5" />
                       </Button>
-                      <Button type="button" variant="ghost" size="icon" className="h-7 w-7" disabled={index === steps.length - 1} onClick={() => moveStep(index, 1)}>
+                      <Button type="button" variant="ghost" size="icon" className="h-7 w-7" disabled={index === steps.length - 1 || locked} onClick={() => moveStep(index, 1)}>
                         <ChevronDown className="h-3.5 w-3.5" />
                       </Button>
                       <Button
@@ -400,7 +436,7 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
                         variant="ghost"
                         size="icon"
                         className="h-7 w-7 text-destructive"
-                        disabled={steps.length === 1}
+                        disabled={steps.length === 1 || locked}
                         onClick={() => removeStep(index)}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -514,6 +550,7 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
                       <Checkbox
                         id={`auto-ai-${step.key}`}
                         checked={step.draft_source === "ai"}
+                        disabled={locked}
                         onCheckedChange={(checked) => updateStep(index, { draft_source: checked === true ? "ai" : "template" })}
                       />
                       <Label htmlFor={`auto-ai-${step.key}`} className="text-xs font-normal text-muted-foreground cursor-pointer">
@@ -536,7 +573,8 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
                   </div>
                 </CardContent>
               </Card>
-            ))}
+              );
+            })}
 
             <Button type="button" variant="outline" size="sm" onClick={addStep}>
               <Plus className="h-3.5 w-3.5 mr-1.5" /> Add step
