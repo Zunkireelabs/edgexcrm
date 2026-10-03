@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Pencil, Archive, Layers, Pause, Play, UserPlus } from "lucide-react";
+import { Plus, Pencil, Archive, Layers, Pause, Play, UserPlus, BarChart3 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { useSequences, type Sequence } from "../hooks/use-sequences";
 import { SequenceEditorDialog } from "./sequence-editor-dialog";
 import { SequencePauseDialog } from "./sequence-pause-dialog";
+import { SequenceReportDialog } from "./sequence-report-dialog";
 import { BulkEnrollDialog } from "./bulk-enroll-dialog";
 import { formatDate } from "../lib/format-due";
 import { describeSendWindow } from "../lib/send-window";
@@ -36,6 +37,7 @@ export function SequencesManager({ isAdmin, industryId }: SequencesManagerProps)
   const [enrollTarget, setEnrollTarget] = useState<Sequence | null>(null);
   // offered right after a sequence is CREATED (not edited)
   const [justCreated, setJustCreated] = useState<{ id: string; name: string } | null>(null);
+  const [reportTarget, setReportTarget] = useState<Sequence | null>(null);
   const [pauseTarget, setPauseTarget] = useState<{ sequence: Sequence; action: "pause" | "resume" } | null>(null);
 
   const openCreate = () => {
@@ -145,6 +147,17 @@ export function SequencesManager({ isAdmin, industryId }: SequencesManagerProps)
                     size="sm"
                     onClick={(e) => {
                       e.stopPropagation();
+                      setReportTarget(sequence);
+                    }}
+                  >
+                    <BarChart3 className="h-3.5 w-3.5 mr-1.5" /> Report
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
                       setPauseTarget({ sequence, action: "pause" });
                     }}
                   >
@@ -234,6 +247,8 @@ export function SequencesManager({ isAdmin, industryId }: SequencesManagerProps)
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <SequenceReportDialog sequence={reportTarget} onClose={() => setReportTarget(null)} />
 
       <SequencePauseDialog
         sequence={pauseTarget?.sequence ?? null}

@@ -46,6 +46,9 @@ vi.mock("./bulk-enroll-dialog", () => ({
   },
 }));
 vi.mock("./sequence-pause-dialog", () => ({ SequencePauseDialog: () => null }));
+vi.mock("./sequence-report-dialog", () => ({
+  SequenceReportDialog: ({ sequence }: { sequence: { name: string } | null }) => (sequence ? <div data-testid="report-dialog">{sequence.name}</div> : null),
+}));
 
 import { SequencesManager } from "./sequences-manager";
 
@@ -108,5 +111,15 @@ describe("SequencesManager — bulk enroll entry points", () => {
     render(<SequencesManager isAdmin industryId="education_consultancy" />);
     expect(screen.getAllByRole("button", { name: "Pause all" })).toHaveLength(2);
     expect(screen.getAllByRole("button", { name: "Resume all" })).toHaveLength(2);
+  });
+
+  it("admins get a Report button that opens the report for that sequence; non-admins do not see it", () => {
+    const { unmount } = render(<SequencesManager isAdmin industryId="education_consultancy" />);
+    fireEvent.click(screen.getAllByRole("button", { name: "Report" })[1]);
+    expect(screen.getByTestId("report-dialog")).toHaveTextContent("Brand new");
+    unmount();
+
+    render(<SequencesManager isAdmin={false} industryId="education_consultancy" />);
+    expect(screen.queryByRole("button", { name: "Report" })).toBeNull();
   });
 });
