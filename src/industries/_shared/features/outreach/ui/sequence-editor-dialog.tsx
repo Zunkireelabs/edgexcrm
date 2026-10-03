@@ -507,11 +507,12 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
                         <TimeOfDayPicker
                           ariaLabel={`Step ${index + 1} send time`}
                           allowEmpty
+                          emptyLabel="Window time"
                           value={step.send_time}
                           disabled={locked}
                           onChange={(t) => updateStep(index, { send_time: t })}
                         />
-                        {!step.send_time && <span>(uses the send window time)</span>}
+                        
                       </div>
                     </div>
                     <div className="flex items-center gap-1">

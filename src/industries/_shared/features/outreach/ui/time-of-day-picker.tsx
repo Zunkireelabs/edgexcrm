@@ -2,92 +2,60 @@
 
 import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { joinTime, splitTime } from "../lib/time-format";
+import { formatTime12 } from "../lib/time-format";
 
-// A 12-hour time picker with an explicit AM / PM — the browser's <input type="time"> shows a 24-hour list (no AM / PM)
-// on many machines, which is easy to misread. The value in and out is still the 24-hour "HH:MM" the rest of the
-// system uses, or "" when `allowEmpty` and nothing is chosen.
+// One simple dropdown of readable times — "9:00 AM", "9:30 AM", "3:00 PM" — in half-hour steps. (The browser's own
+// <input type="time"> shows a 24-hour list with no AM / PM on many machines, and separate hour / minute / AM-PM boxes
+// were confusing.) The value in and out is still the 24-hour "HH:MM" the rest of the system uses, or "" when
+// `allowEmpty` and nothing is chosen.
 
-const triggerClass = "h-8 w-auto min-w-[3.75rem] px-2";
 const selectClass =
   "h-8 rounded-md border border-input bg-transparent px-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50";
 
-const HOURS = Array.from({ length: 12 }, (_, i) => i + 1);
-const MINUTES = Array.from({ length: 12 }, (_, i) => i * 5);
+/** Every half hour of the day as 24-hour "HH:MM", midnight first. */
+const HALF_HOURS = Array.from({ length: 48 }, (_, i) => `${String(Math.floor(i / 2)).padStart(2, "0")}:${i % 2 === 0 ? "00" : "30"}`);
+
+const NONE = "none"; // Radix items can't have an empty value
 
 interface TimeOfDayPickerProps {
   value: string; // "HH:MM" 24 h, or ""
   onChange: (value: string) => void;
-  /** Show a "—" hour that clears the value. */
+  /** Offer an entry that clears the value (its text is `emptyLabel`). */
   allowEmpty?: boolean;
+  emptyLabel?: string;
   disabled?: boolean;
   id?: string;
   ariaLabel?: string;
   className?: string;
 }
 
-const NONE = "none"; // Radix items can't have an empty value
-
-export function TimeOfDayPicker({ value, onChange, allowEmpty = false, disabled, id, ariaLabel = "Time", className }: TimeOfDayPickerProps) {
-  const parts = splitTime(value);
-  const empty = !parts;
-  // a minute that isn't on the 5-minute grid (an older value) is still shown, not silently changed
-  const minutes = parts && !MINUTES.includes(parts.minute) ? [...MINUTES, parts.minute].sort((a, b) => a - b) : MINUTES;
-
-  const hour = parts?.hour12 ?? 0;
-  const minute = parts?.minute ?? 0;
-  const pm = parts?.pm ?? false;
+export function TimeOfDayPicker({
+  value,
+  onChange,
+  allowEmpty = false,
+  emptyLabel = "Window time",
+  disabled,
+  id,
+  ariaLabel = "Time",
+  className,
+}: TimeOfDayPickerProps) {
+  // a value that isn't on the half-hour grid (e.g. 10:15 saved earlier) is still listed, not silently changed
+  const options = value && !HALF_HOURS.includes(value) && /^([01]\d|2[0-3]):[0-5]\d$/.test(value) ? [...HALF_HOURS, value].sort() : HALF_HOURS;
 
   return (
-    <div className={cn("inline-flex items-center gap-1", className)} role="group" aria-label={ariaLabel}>
-      <Select
-        value={empty ? NONE : String(hour)}
-        disabled={disabled}
-        onValueChange={(v) => (v === NONE ? onChange("") : onChange(joinTime(Number(v), minute, pm)))}
-      >
-        <SelectTrigger id={id} aria-label={`${ariaLabel} — hour`} className={triggerClass}>
-          <SelectValue placeholder="Hour" />
-        </SelectTrigger>
-        <SelectContent className="max-h-60">
-          {(allowEmpty || empty) && <SelectItem value={NONE}>{allowEmpty ? "—" : "Hour"}</SelectItem>}
-          {HOURS.map((h) => (
-            <SelectItem key={h} value={String(h)}>
-              {h}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <span aria-hidden>:</span>
-      <Select
-        value={String(minute)}
-        disabled={disabled || empty}
-        onValueChange={(v) => onChange(joinTime(hour, Number(v), pm))}
-      >
-        <SelectTrigger aria-label={`${ariaLabel} — minute`} className={triggerClass}>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent className="max-h-60">
-          {minutes.map((m) => (
-            <SelectItem key={m} value={String(m)}>
-              {String(m).padStart(2, "0")}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Select
-        value={pm ? "PM" : "AM"}
-        disabled={disabled || empty}
-        onValueChange={(v) => onChange(joinTime(hour, minute, v === "PM"))}
-      >
-        <SelectTrigger aria-label={`${ariaLabel} — AM or PM`} className={triggerClass}>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="AM">AM</SelectItem>
-          <SelectItem value="PM">PM</SelectItem>
-        </SelectContent>
-      </Select>
-    </div>
+    <Select value={value || NONE} disabled={disabled} onValueChange={(v) => onChange(v === NONE ? "" : v)}>
+      <SelectTrigger id={id} aria-label={ariaLabel} className={cn("h-8 w-auto min-w-[7.5rem] px-2", className)}>
+        <SelectValue placeholder="Pick a time" />
+      </SelectTrigger>
+      <SelectContent className="max-h-64">
+        {(allowEmpty || !value) && <SelectItem value={NONE}>{allowEmpty ? emptyLabel : "Pick a time"}</SelectItem>}
+        {options.map((t) => (
+          <SelectItem key={t} value={t}>
+            {formatTime12(t)}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 
@@ -116,7 +84,7 @@ export function DateTimePicker({ value, onChange, min, id, ariaLabel = "Send on"
         onChange={(e) => onChange(e.target.value ? `${e.target.value}T${time || "09:00"}` : "")}
       />
       <TimeOfDayPicker
-        ariaLabel={ariaLabel}
+        ariaLabel={`${ariaLabel} — time`}
         value={time}
         onChange={(t) => onChange(date ? `${date}T${t || "09:00"}` : "")}
       />

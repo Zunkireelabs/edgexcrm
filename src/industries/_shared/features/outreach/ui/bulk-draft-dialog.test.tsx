@@ -107,12 +107,10 @@ describe("Schedule", () => {
     const { onDone } = open("schedule", 3);
     const date = screen.getByLabelText("Send on — date") as HTMLInputElement;
     expect(date.value).toMatch(/^\d{4}-\d{2}-\d{2}$/); // tomorrow, 9:00 AM by default
-    expect(screen.getByLabelText("Send on — hour")).toHaveValue("9");
-    expect(screen.getByLabelText("Send on — AM or PM")).toHaveValue("AM");
+    expect(screen.getByLabelText("Send on — time")).toHaveValue("09:00");
 
     fireEvent.change(date, { target: { value: "2030-01-02" } });
-    fireEvent.change(screen.getByLabelText("Send on — hour"), { target: { value: "10" } });
-    fireEvent.change(screen.getByLabelText("Send on — minute"), { target: { value: "30" } });
+    fireEvent.change(screen.getByLabelText("Send on — time"), { target: { value: "10:30" } });
     fireEvent.click(screen.getByRole("button", { name: "Schedule" }));
 
     await waitFor(() => expect(onDone).toHaveBeenCalled());

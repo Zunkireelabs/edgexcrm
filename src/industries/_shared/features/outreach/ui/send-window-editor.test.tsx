@@ -66,10 +66,8 @@ describe("SendWindowEditor", () => {
     const onChange = vi.fn();
     const { container } = render(<SendWindowEditor value={current} onChange={onChange} />);
 
-    fireEvent.change(screen.getByLabelText("Send window start — minute"), { target: { value: "15" } });
-    expect(onChange).toHaveBeenLastCalledWith({ ...current, time: "10:15" });
-    fireEvent.change(screen.getByLabelText("Send window start — AM or PM"), { target: { value: "PM" } });
-    expect(onChange).toHaveBeenLastCalledWith({ ...current, time: "22:00" });
+    fireEvent.change(screen.getByLabelText("Send window start"), { target: { value: "15:30" } });
+    expect(onChange).toHaveBeenLastCalledWith({ ...current, time: "15:30" });
 
     // the first three selects are the time picker (hour, minute, AM/PM)
     const spread = screen.getByLabelText("Release") as HTMLSelectElement;
