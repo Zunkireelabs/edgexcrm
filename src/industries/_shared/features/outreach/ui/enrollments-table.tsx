@@ -34,7 +34,7 @@ interface Enrollment {
   assigned_to: string | null;
   status: EnrollmentStatus;
   // Set when the system (not a person) stopped it because the lead replied — migration 257.
-  stop_reason?: "replied" | null;
+  stop_reason?: "replied" | "sequence_paused" | "suppressed" | null;
   current_step_order: number;
   started_at: string;
   email_sequences: { name: string } | null;
@@ -165,6 +165,11 @@ export function EnrollmentsTable({ isAdmin, currentUserId }: EnrollmentsTablePro
                     <TableCell>{enrollment.current_step_order}</TableCell>
                     <TableCell>
                       <Badge variant={STATUS_VARIANT[enrollment.status]}>{enrollment.status}</Badge>
+                      {enrollment.stop_reason === "suppressed" && (
+                        <Badge variant="outline" className="ml-1.5" title="This address unsubscribed, bounced or complained, so the sequence ended.">
+                          Do not contact
+                        </Badge>
+                      )}
                       {enrollment.stop_reason === "replied" && (
                         <Badge variant="outline" className="ml-1.5">
                           Lead replied

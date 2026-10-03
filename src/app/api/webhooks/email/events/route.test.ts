@@ -7,6 +7,10 @@ type Row = Record<string, any>;
 let messageRows: Row[];
 let suppressionInserts: Row[];
 
+const stopMock = vi.fn().mockResolvedValue({ leads: 0, ended: 0, queueCancelled: 0 });
+vi.mock("@/industries/_shared/features/outreach/lib/stop-on-suppression", () => ({
+  stopEnrollmentsForSuppressedEmail: (...a: unknown[]) => stopMock(...a),
+}));
 vi.mock("@/lib/supabase/server", () => ({
   createServiceClient: vi.fn(async () => ({
     from(table: string) {
@@ -103,6 +107,7 @@ beforeEach(() => {
   process.env.RESEND_EVENTS_WEBHOOK_SECRET = WEBHOOK_SECRET;
   messageRows = [];
   suppressionInserts = [];
+  stopMock.mockClear();
 });
 
 describe("POST /api/webhooks/email/events — verify-first", () => {
@@ -180,6 +185,11 @@ describe("POST /api/webhooks/email/events — tenant derived from the matched ro
     expect(messageRows[0].status).toBe("bounced");
     expect(suppressionInserts).toHaveLength(1);
     expect(suppressionInserts[0]).toMatchObject({ email: "bounced@example.com", reason: "hard_bounce", tenant_id: "tenant-a" });
+    // a hard-bounced address ends the sequences its leads are running
+    expect(stopMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ tenantId: "tenant-a", email: "bounced@example.com", leadId: "lead-1", reason: "hard_bounce" })
+    );
   });
 
   it("email.bounced with a Transient bounce does NOT suppress on the first occurrence", async () => {
@@ -192,6 +202,7 @@ describe("POST /api/webhooks/email/events — tenant derived from the matched ro
     await POST(req);
     expect(suppressionInserts).toHaveLength(0);
     expect(messageRows[0].status).toBe("bounced");
+    expect(stopMock).not.toHaveBeenCalled(); // a soft bounce suppresses nothing, so it ends nothing
   });
 
   it("email.bounced with an ambiguous/unrecognized bounce type does NOT suppress", async () => {

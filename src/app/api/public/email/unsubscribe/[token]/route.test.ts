@@ -7,6 +7,10 @@ let tokenRows: Row[];
 let tenantRows: Row[];
 let suppressionInserts: Row[];
 
+const stopMock = vi.fn().mockResolvedValue({ leads: 0, ended: 0, queueCancelled: 0 });
+vi.mock("@/industries/_shared/features/outreach/lib/stop-on-suppression", () => ({
+  stopEnrollmentsForSuppressedEmail: (...a: unknown[]) => stopMock(...a),
+}));
 vi.mock("@/lib/supabase/server", () => ({
   createServiceClient: vi.fn(async () => ({
     from(table: string) {
@@ -63,6 +67,7 @@ beforeEach(() => {
   tokenRows = [];
   tenantRows = [{ id: "tenant-a", name: "Admizz Education" }];
   suppressionInserts = [];
+  stopMock.mockClear();
 });
 
 describe("GET /api/public/email/unsubscribe/[token]", () => {
@@ -85,6 +90,7 @@ describe("GET /api/public/email/unsubscribe/[token]", () => {
     expect(body.data.maskedEmail).toMatch(/@example\.com$/);
     expect(body.data.maskedEmail).not.toBe("student@example.com");
     expect(suppressionInserts).toHaveLength(0); // GET NEVER mutates
+    expect(stopMock).not.toHaveBeenCalled();
   });
 });
 
@@ -98,6 +104,11 @@ describe("POST /api/public/email/unsubscribe/[token]", () => {
     expect(body.data.unsubscribed).toBe(true);
     expect(suppressionInserts).toHaveLength(1);
     expect(suppressionInserts[0]).toMatchObject({ email: "student@example.com", reason: "unsubscribe", lead_id: "lead-1" });
+    // unsubscribing ends the sequences that address is running
+    expect(stopMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ email: "student@example.com", leadId: "lead-1", reason: "unsubscribe" })
+    );
     expect(tokenRows[0].used_at).toBeDefined();
   });
 

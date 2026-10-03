@@ -25,7 +25,7 @@ interface Enrollment {
   current_step_order: number;
   assigned_to: string | null;
   // Set when the system stopped the enrollment because the lead replied (migration 257).
-  stop_reason?: "replied" | null;
+  stop_reason?: "replied" | "sequence_paused" | "suppressed" | null;
   email_sequences: { name: string } | null;
 }
 
