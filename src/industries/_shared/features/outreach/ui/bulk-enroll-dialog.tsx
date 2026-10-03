@@ -374,6 +374,7 @@ export function BulkEnrollDialog({
                   id="bulk-confirm"
                   value={confirmText}
                   onChange={(e) => setConfirmText(e.target.value)}
+                  placeholder={CONFIRM_WORD}
                   autoComplete="off"
                 />
               </div>

@@ -213,6 +213,7 @@ export function BulkDraftDialog({
                 id="bulk-draft-confirm"
                 value={confirmText}
                 onChange={(e) => setConfirmText(e.target.value)}
+                placeholder={WORD[action]}
                 autoComplete="off"
               />
             </div>
