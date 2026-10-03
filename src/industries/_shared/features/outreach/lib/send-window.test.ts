@@ -248,3 +248,46 @@ describe("validateStepSendTime", () => {
     for (const bad of ["9:30", "24:00", "12:60", "noon", 930, {}]) expect(validateStepSendTime(bad).ok).toBe(false);
   });
 });
+
+describe("computeDueAt — daylight saving", () => {
+  const every = (time: string): SendWindow => ({ time, days: [0, 1, 2, 3, 4, 5, 6], timezone_mode: "office", spread_minutes: 0 });
+  const NY = "America/New_York";
+
+  it("a clock time that happens twice (clocks go back) uses the first one", () => {
+    // Sun 1 Nov 2026, 01:30 NY happens at 05:30Z (EDT) and again at 06:30Z (EST)
+    const due = computeDueAt({ now: at("2026-11-01T03:00:00Z"), delayDays: 0, window: every("01:30"), timeZone: NY });
+    expect(iso(due)).toBe("2026-11-01T05:30:00.000Z");
+  });
+
+  it("a clock time that never happens (clocks go forward) moves FORWARD, not earlier", () => {
+    // Sun 8 Mar 2026, 02:30 NY does not exist (02:00 jumps to 03:00): it becomes 03:30 EDT = 07:30Z, not 01:30 EST
+    const due = computeDueAt({ now: at("2026-03-08T03:00:00Z"), delayDays: 0, window: every("02:30"), timeZone: NY });
+    expect(iso(due)).toBe("2026-03-08T07:30:00.000Z");
+  });
+
+  it("an ordinary time on the day the clocks change is right on both sides of the change", () => {
+    // 10:00 NY: EDT (UTC-4) before 1 Nov, EST (UTC-5) after
+    expect(iso(computeDueAt({ now: at("2026-10-31T03:00:00Z"), delayDays: 0, window: every("10:00"), timeZone: NY }))).toBe("2026-10-31T14:00:00.000Z");
+    expect(iso(computeDueAt({ now: at("2026-11-01T03:00:00Z"), delayDays: 0, window: every("10:00"), timeZone: NY }))).toBe("2026-11-01T15:00:00.000Z");
+    // and in spring: EST before 8 Mar, EDT after
+    expect(iso(computeDueAt({ now: at("2026-03-07T03:00:00Z"), delayDays: 0, window: every("10:00"), timeZone: NY }))).toBe("2026-03-07T15:00:00.000Z");
+    expect(iso(computeDueAt({ now: at("2026-03-08T03:00:00Z"), delayDays: 0, window: every("10:00"), timeZone: NY }))).toBe("2026-03-08T14:00:00.000Z");
+  });
+
+  it("London: the same two rules (clocks forward 29 Mar 2026 01:00 -> 02:00; back 25 Oct 2026 02:00 -> 01:00)", () => {
+    // 01:30 London on 29 Mar does not exist -> 02:30 BST = 01:30Z
+    expect(iso(computeDueAt({ now: at("2026-03-29T00:00:00Z"), delayDays: 0, window: every("01:30"), timeZone: "Europe/London" }))).toBe("2026-03-29T01:30:00.000Z");
+    // 01:30 London on 25 Oct happens twice -> the first (BST) = 00:30Z
+    expect(iso(computeDueAt({ now: at("2026-10-25T00:00:00Z"), delayDays: 0, window: every("01:30"), timeZone: "Europe/London" }))).toBe("2026-10-25T00:30:00.000Z");
+  });
+
+  it("southern hemisphere: Sydney clocks go forward on 4 Oct 2026 (02:00 -> 03:00)", () => {
+    // 02:30 Sydney does not exist -> 03:30 AEDT (UTC+11) = 16:30Z the day before
+    expect(iso(computeDueAt({ now: at("2026-10-03T00:00:00Z"), delayDays: 0, window: every("02:30"), timeZone: "Australia/Sydney" }))).toBe("2026-10-03T16:30:00.000Z");
+  });
+
+  it("a zone with no daylight saving never shifts (Kathmandu, UTC+5:45)", () => {
+    expect(iso(computeDueAt({ now: at("2026-03-07T00:00:00Z"), delayDays: 0, window: every("02:30"), timeZone: "Asia/Kathmandu" }))).toBe("2026-03-07T20:45:00.000Z");
+    expect(iso(computeDueAt({ now: at("2026-10-31T00:00:00Z"), delayDays: 0, window: every("02:30"), timeZone: "Asia/Kathmandu" }))).toBe("2026-10-31T20:45:00.000Z");
+  });
+});

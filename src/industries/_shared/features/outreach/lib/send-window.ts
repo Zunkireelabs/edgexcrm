@@ -151,12 +151,25 @@ function tzOffsetMs(utcMs: number, tz: string): number {
   return asUtc - Math.floor(utcMs / 1000) * 1000;
 }
 
-/** The UTC instant at which the wall clock in `tz` reads y-m-d h:mi (a clock time that doesn't exist in a DST gap moves forward). */
+/**
+ * The UTC instant at which the wall clock in `tz` reads y-m-d h:mi. Daylight saving makes two clock times special:
+ *   - a time that happens TWICE (clocks go back, e.g. 01:30 on 1 Nov 2026 in New York): the FIRST one is used;
+ *   - a time that NEVER happens (clocks go forward, e.g. 02:30 on 8 Mar 2026 in New York): it moves FORWARD by the
+ *     length of the jump (to 03:30), never earlier.
+ * Candidates are the instants implied by the offset a day before and a day after (a zone changes offset at most once in
+ * that span); a candidate is genuine only if the zone really shows that offset at that instant.
+ */
 function zonedTimeToUtcMs(y: number, m: number, d: number, h: number, mi: number, tz: string): number {
   const guess = Date.UTC(y, m - 1, d, h, mi, 0);
-  const first = guess - tzOffsetMs(guess, tz);
-  const second = guess - tzOffsetMs(first, tz);
-  return second;
+  const DAY = 24 * 60 * 60 * 1000;
+  const before = tzOffsetMs(guess - DAY, tz);
+  const after = tzOffsetMs(guess + DAY, tz);
+
+  const genuine = [guess - before, guess - after].filter((utc, i) => tzOffsetMs(utc, tz) === (i === 0 ? before : after));
+  if (genuine.length > 0) return Math.min(...genuine);
+
+  // inside a forward jump: read the clock with the offset from BEFORE the jump, which lands after it
+  return guess - before;
 }
 
 /** The local calendar date (and weekday) of the instant `utcMs` in `tz`. */
