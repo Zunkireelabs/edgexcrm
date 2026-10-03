@@ -258,6 +258,45 @@ describe("processBulkEnrollRun", () => {
   });
 });
 
+describe("two passes over the same run at once (Start route's first pass + the timer)", () => {
+  it("only one works the run: every lead ends enrolled, none is mislabelled as skipped", async () => {
+    seed({ leads: 60 });
+    tables.sequence_enrollments = [];
+    // like the real unique index: a lead can be enrolled once; a second attempt conflicts. Each enroll yields to the
+    // event loop so two unguarded passes would genuinely interleave.
+    enrollBehavior = async (leadId) => {
+      await new Promise((r) => setTimeout(r, 0));
+      if (tables.sequence_enrollments.some((e) => e.lead_id === leadId)) throw new FakeConflict("already");
+      tables.sequence_enrollments.push({ id: `enr-${leadId}`, lead_id: leadId, sequence_id: "seq-1", status: "active" });
+      return {};
+    };
+
+    const [a, b] = await Promise.all([processBulkEnrollRun(T, RUN), processBulkEnrollRun(T, RUN)]);
+
+    expect(a.enrolled + b.enrolled).toBe(60);
+    expect(outcomes().every((o) => o === "enrolled")).toBe(true);
+    expect(enrollCalls).toHaveLength(60); // nobody attempted twice
+    expect(run()).toMatchObject({ status: "completed", enrolled_count: 60, skipped_count: 0, failed_count: 0 });
+  });
+
+  it("the lock is released afterwards, so a later pass can continue a run", async () => {
+    seed({ leads: 3 });
+    await processBulkEnrollRun(T, RUN, 0); // no time: nothing done, run left running
+    const second = await processBulkEnrollRun(T, RUN);
+    expect(second.enrolled).toBe(3);
+  });
+
+  it("a lead already in THIS sequence is labelled as such under the default skip policy", async () => {
+    seed({ leads: 1, runOverrides: { conflict_policy: "skip" } });
+    tables.sequence_enrollments = [{ id: "enr-same", lead_id: "lead-1", sequence_id: "seq-1", status: "active" }];
+    enrollBehavior = async () => {
+      throw new FakeConflict("already");
+    };
+    await processBulkEnrollRun(T, RUN);
+    expect(tables.sequence_bulk_enrollment_items[0].reason).toBe("already_in_this_sequence");
+  });
+});
+
 describe("conflict policies (a lead already in a running sequence)", () => {
   /** lead-1 throws a conflict on its FIRST enroll; later calls succeed unless `again` is set. */
   function conflictOnFirst(leadId: string, again = false) {

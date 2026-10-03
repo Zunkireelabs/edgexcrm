@@ -20,7 +20,7 @@ const CHUNK_SIZE = 25;
 const PASS_BUDGET_MS = 25_000;
 const MAX_RUNS_PER_SCAN = 20;
 
-let running = false;
+const g = globalThis as unknown as { __edgexBulkEnrollActiveRuns?: Set<string>; __edgexBulkEnrollScanRunning?: boolean };
 
 interface RunRow {
   id: string;
@@ -74,6 +74,17 @@ async function resolveConflict(
 ): Promise<Resolved> {
   const { db, auth, run } = ctx;
 
+  // Already running THIS sequence (e.g. another pass got there first): say so, rather than "in a sequence" (which
+  // implies some other one) — and never switch / queue a lead onto the sequence they are already in.
+  const { data: currentRow } = await db
+    .from("sequence_enrollments")
+    .select("id, sequence_id")
+    .eq("lead_id", input.leadId)
+    .in("status", ["active", "paused"])
+    .maybeSingle();
+  const current = currentRow as unknown as { id: string; sequence_id: string } | null;
+  if (current && current.sequence_id === run.sequence_id) return { outcome: "skipped", reason: "already_in_this_sequence" };
+
   if (run.conflict_policy === "queue") {
     try {
       const queued = await queueNextSequence(db, { leadId: input.leadId, sequenceId: run.sequence_id, queuedBy: auth.userId, runId: run.id });
@@ -86,16 +97,8 @@ async function resolveConflict(
 
   if (run.conflict_policy === "switch") {
     try {
-      const { data: current } = await db
-        .from("sequence_enrollments")
-        .select("id, sequence_id")
-        .eq("lead_id", input.leadId)
-        .in("status", ["active", "paused"])
-        .maybeSingle();
-      const cur = current as unknown as { id: string; sequence_id: string } | null;
-      if (cur && cur.sequence_id === run.sequence_id) return { outcome: "skipped", reason: "already_in_this_sequence" };
       // promoteQueue:false — we enroll them somewhere else right now, so a queued sequence must not jump in first
-      if (cur) await unenrollLead(db, cur.id, { promoteQueue: false });
+      if (current) await unenrollLead(db, current.id, { promoteQueue: false });
       await enrollLead(db, auth, input);
       return { outcome: "enrolled", reason: "switched" };
     } catch (err) {
@@ -141,14 +144,30 @@ async function finish(db: ScopedClient, runId: string, status: "completed" | "ca
 }
 
 /**
- * Works through one run for up to `budgetMs`. Safe to call repeatedly / concurrently with the same run id
- * (see the header). Returns what this pass did.
+ * Works through one run for up to `budgetMs`. Safe to call repeatedly: a call for a run that is already being worked on
+ * (by the Start route's first pass or the timer) returns at once. Returns what this pass did.
  */
 export async function processBulkEnrollRun(
   tenantId: string,
   runId: string,
   budgetMs: number = PASS_BUDGET_MS
 ): Promise<RunPassSummary> {
+  // ONE pass per run at a time. The Start route kicks a first pass (after()) while the 30 s timer also scans for the run;
+  // without this both took the same pending leads at once — every lead was still enrolled exactly once (the unique index
+  // saw to that) but the loser of each race marked its lead "skipped: already in a sequence", so a run of 1,000 reported
+  // 524 enrolled / 476 skipped. The lock lives on globalThis: the route and the timer are separate bundles in the same
+  // process and do not share module variables.
+  const active = (g.__edgexBulkEnrollActiveRuns ??= new Set<string>());
+  if (active.has(runId)) return { enrolled: 0, skipped: 0, failed: 0, finished: false };
+  active.add(runId);
+  try {
+    return await runOnePass(tenantId, runId, budgetMs);
+  } finally {
+    active.delete(runId);
+  }
+}
+
+async function runOnePass(tenantId: string, runId: string, budgetMs: number): Promise<RunPassSummary> {
   const summary: RunPassSummary = { enrolled: 0, skipped: 0, failed: 0, finished: false };
   const db = await scopedClientForTenant(tenantId);
 
@@ -265,8 +284,8 @@ export async function processBulkEnrollRun(
 
 /** One scan: continue every queued / running run (all tenants), oldest first. */
 export async function runBulkEnrollQueue(): Promise<void> {
-  if (running) return;
-  running = true;
+  if (g.__edgexBulkEnrollScanRunning) return;
+  g.__edgexBulkEnrollScanRunning = true;
   try {
     const supabase = await createServiceClient();
     const { data, error } = await supabase
@@ -287,6 +306,6 @@ export async function runBulkEnrollQueue(): Promise<void> {
       }
     }
   } finally {
-    running = false;
+    g.__edgexBulkEnrollScanRunning = false;
   }
 }
