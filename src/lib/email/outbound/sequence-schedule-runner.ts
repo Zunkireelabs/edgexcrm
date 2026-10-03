@@ -141,19 +141,37 @@ export async function processTenantScheduledDrafts(tenantId: string): Promise<Sc
   return summary;
 }
 
-// One pass over every tenant with a due scheduled draft. The module-level guard stops two passes
-// overlapping inside this process; the idempotent upsert covers a second process.
-export async function runScheduledSequenceSends(): Promise<Record<string, ScheduleRunSummary>> {
+/** One pass works for at most this long, then returns; the timer calls it again. */
+const PASS_BUDGET_MS = 20_000;
+
+// One pass over every tenant with a due scheduled draft. For each tenant it keeps taking batches (MAX_DUE_PER_TENANT_PER_RUN)
+// while a batch was full, the daily cap allows and the pass budget lasts — so a bulk "Send now" / "Schedule" of thousands is
+// released as fast as the cap permits instead of 50 drafts a minute. A batch that sent or cleared fewer than a full batch
+// means the due list is drained (drafts another run is mid-send stay scheduled and are skipped); a throttled one means the cap
+// is reached. The module-level guard stops two passes overlapping inside this process; the idempotent upsert covers a
+// second process.
+export async function runScheduledSequenceSends(budgetMs: number = PASS_BUDGET_MS): Promise<Record<string, ScheduleRunSummary>> {
   if (running) return {};
   running = true;
   const results: Record<string, ScheduleRunSummary> = {};
+  const deadline = Date.now() + budgetMs;
   try {
     for (const tenantId of await findTenantsWithDueScheduledDrafts()) {
+      const total: ScheduleRunSummary = { sent: 0, throttled: 0, cleared: 0 };
       try {
-        results[tenantId] = await processTenantScheduledDrafts(tenantId);
+        do {
+          const batch = await processTenantScheduledDrafts(tenantId);
+          total.sent += batch.sent;
+          total.throttled += batch.throttled;
+          total.cleared += batch.cleared;
+          if (batch.throttled > 0 || batch.sent + batch.cleared < MAX_DUE_PER_TENANT_PER_RUN) break;
+        } while (Date.now() < deadline);
+        results[tenantId] = total;
       } catch (err) {
         logger.error({ err, tenantId }, "sequence-schedule-runner: tenant pass threw");
+        results[tenantId] = total;
       }
+      if (Date.now() >= deadline) break;
     }
     return results;
   } finally {

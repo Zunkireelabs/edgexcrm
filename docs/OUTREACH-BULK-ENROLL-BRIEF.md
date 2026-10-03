@@ -118,7 +118,7 @@ sequence on staging (staging uses a stub transport — nothing leaves it); check
 ## 11. Out of scope here
 
 Send window / timezone / spread (Phase 3 — BUILT, mig 260; see FEATURE-CATALOG) · moving auto-send off Inngest (Phase 4) · live-edit of a running
-sequence, test-send, reporting (Phase 5 — BUILT, mig 263; see FEATURE-CATALOG) · bulk draft actions (Phase 6).
+sequence, test-send, reporting (Phase 5 — BUILT, mig 263; see FEATURE-CATALOG) · bulk draft actions (Phase 6 — BUILT, no migration; see FEATURE-CATALOG).
 
 ## 12. Open decisions
 

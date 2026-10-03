@@ -70,7 +70,8 @@ export function LeadCadenceStrip({
         setEnrollment(live ?? null);
 
         if (live && live.status === "active") {
-          const draftsRes = await fetch(`/api/v1/outreach/drafts?due=all`);
+          // narrowed to THIS lead: the unfiltered list is capped at 1,000 rows and would miss the lead on a big tenant
+          const draftsRes = await fetch(`/api/v1/outreach/drafts?due=all&lead_id=${leadId}`);
           if (draftsRes.ok) {
             const draftsJson = await draftsRes.json();
             const pending = (draftsJson.data ?? []) as DraftRow[];
