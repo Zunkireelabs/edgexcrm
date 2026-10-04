@@ -1,10 +1,11 @@
 import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingTitle } from "@/components/ui/loading-percent";
 
 export default function Loading() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <Skeleton className="h-7 w-48" />
+        <LoadingTitle />
         <Skeleton className="h-9 w-32" />
       </div>
       <Skeleton className="h-10 w-full max-w-md" />
