@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { preserveLineBreaks, renderEmailBody } from "./render-template";
+import { preserveLineBreaks, renderEmailBody, renderTemplate } from "./render-template";
 import type { Lead } from "@/types/database";
 
 function makeLead(overrides: Partial<Lead> = {}): Lead {
@@ -142,5 +142,42 @@ describe("renderEmailBody", () => {
     expect(renderEmailBody(template, { lead: xssLead }, "html")).toBe(
       "Hi &lt;img src=x onerror=alert(1)&gt;"
     );
+  });
+});
+
+describe("renderTemplate — merge-tag fallbacks {{tag|fallback}}", () => {
+  const lead = (o: Partial<Lead> = {}) => ({ lead: makeLead(o) });
+
+  it("uses the fallback when the lead has no value (empty, null or only spaces)", () => {
+    expect(renderTemplate("Hi {{first_name|there}},", lead({ first_name: "" }))).toBe("Hi there,");
+    expect(renderTemplate("Hi {{first_name|there}},", lead({ first_name: null as unknown as string }))).toBe("Hi there,");
+    expect(renderTemplate("Hi {{first_name|there}},", lead({ first_name: "   " }))).toBe("Hi there,");
+  });
+
+  it("uses the lead's value when there is one — the fallback is ignored", () => {
+    expect(renderTemplate("Hi {{first_name|there}},", lead({ first_name: "Sita" }))).toBe("Hi Sita,");
+  });
+
+  it("a tag WITHOUT a fallback behaves exactly as before: empty when missing", () => {
+    expect(renderTemplate("Hi {{first_name}},", lead({ first_name: "" }))).toBe("Hi ,");
+    expect(renderTemplate("Hi {{first_name}},", lead({ first_name: "Sita" }))).toBe("Hi Sita,");
+  });
+
+  it("works for custom fields, unknown tags and several tags in one template", () => {
+    expect(renderTemplate("{{nickname|friend}} / {{city|your city}} / {{last_name|}}", lead({ city: "", last_name: "" }))).toBe("friend / your city / ");
+    expect(renderTemplate("{{nickname|friend}}", lead({ custom_fields: { nickname: "Sam" } }))).toBe("Sam");
+  });
+
+  it("trims the fallback text and allows spaces and punctuation inside it", () => {
+    expect(renderTemplate("Hi {{first_name| dear student! }}", lead({ first_name: "" }))).toBe("Hi dear student!");
+  });
+
+  it("escapes the fallback too when escaping is on (a template can't smuggle markup in through it)", () => {
+    expect(renderTemplate("{{first_name|<b>x</b>}}", lead({ first_name: "" }), { escape: true })).toBe("&lt;b&gt;x&lt;/b&gt;");
+    expect(renderTemplate("{{first_name|a & b}}", lead({ first_name: "" }), { escape: true })).toBe("a &amp; b");
+  });
+
+  it("reaches the email body path too (html format keeps the markup around it)", () => {
+    expect(renderEmailBody("<p>Hi {{first_name|there}}</p>", lead({ first_name: "" }), "html")).toBe("<p>Hi there</p>");
   });
 });

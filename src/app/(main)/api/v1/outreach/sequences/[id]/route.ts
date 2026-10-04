@@ -17,32 +17,38 @@ import {
   validateSequenceSteps,
   type SequenceStepInput,
 } from "@/industries/_shared/features/outreach/lib/validate-steps";
+import { ON_REPLY_VALUES, type OnReply } from "@/industries/_shared/features/outreach/lib/stop-on-reply";
+import { validateSendWindow } from "@/industries/_shared/features/outreach/lib/send-window";
+import { checkStepEdit, lockedUpToStep, stepsLockedMessage } from "@/industries/_shared/features/outreach/lib/step-edit-rules";
 
 type Props = { params: Promise<{ id: string }> };
 
 /**
- * True when the incoming step array differs from the stored steps ONLY in
- * subject_template/body_template/ai_instructions — never in step_order,
- * delay_days, draft_source, or step count. Structural changes affect the
- * cadence math for in-flight enrollments and stay blocked while any are
- * active/paused; text-only edits affect only newly-generated drafts, so they
- * proceed even with active enrollments.
+ * How far into this sequence running leads have got: steps 1..lockedUpTo are in use (see step-edit-rules.ts). Counts
+ * active AND paused enrollments. `live` is how many leads that is.
  */
-function isTextOnlyStepDiff(
-  existing: Array<{ step_order: number; delay_days: number; draft_source: string }>,
-  incoming: SequenceStepInput[]
-): boolean {
-  if (existing.length !== incoming.length) return false;
-  const sortedExisting = [...existing].sort((a, b) => a.step_order - b.step_order);
-  const sortedIncoming = [...incoming].sort((a, b) => a.step_order - b.step_order);
-  for (let i = 0; i < sortedExisting.length; i++) {
-    const e = sortedExisting[i];
-    const n = sortedIncoming[i];
-    if (e.step_order !== n.step_order) return false;
-    if (e.delay_days !== (n.delay_days ?? 0)) return false;
-    if (e.draft_source !== (n.draft_source ?? "template")) return false;
-  }
-  return true;
+async function loadStepLock(
+  db: Awaited<ReturnType<typeof scopedClient>>,
+  sequenceId: string,
+  stepCount: number
+): Promise<{ lockedUpTo: number; live: number }> {
+  const { data: furthest } = await db
+    .from("sequence_enrollments")
+    .select("current_step_order")
+    .eq("sequence_id", sequenceId)
+    .in("status", ["active", "paused"])
+    .order("current_step_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const max = (furthest as unknown as { current_step_order: number } | null)?.current_step_order ?? null;
+
+  const { count } = await db
+    .from("sequence_enrollments")
+    .select("id", { count: "exact", head: true })
+    .eq("sequence_id", sequenceId)
+    .in("status", ["active", "paused"]);
+
+  return { lockedUpTo: lockedUpToStep(max, stepCount), live: count ?? 0 };
 }
 
 export async function GET(_request: NextRequest, { params }: Props) {
@@ -61,7 +67,11 @@ export async function GET(_request: NextRequest, { params }: Props) {
 
   if (error) return apiError("DB_ERROR", "Failed to fetch sequence", 500);
   if (!data) return apiNotFound("Sequence");
-  return apiSuccess(data);
+
+  // Which steps running leads depend on — the editor locks those steps' structure (their wording stays editable).
+  const steps = (data as unknown as { email_sequence_steps?: unknown[] }).email_sequence_steps ?? [];
+  const lock = await loadStepLock(db, id, steps.length);
+  return apiSuccess({ ...(data as object), locked_up_to: lock.lockedUpTo, live_enrollments: lock.live });
 }
 
 export async function PATCH(request: NextRequest, { params }: Props) {
@@ -81,6 +91,14 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     return apiError("INVALID_JSON", "Request body must be valid JSON", 400);
   }
 
+  if (body.on_reply !== undefined && !ON_REPLY_VALUES.includes(body.on_reply as OnReply)) {
+    return apiValidationError({ on_reply: ["Must be one of: pause, end, continue"] });
+  }
+
+  // Only validated when sent; an edit that doesn't mention it leaves the stored window alone.
+  const sendWindow = body.send_window !== undefined ? validateSendWindow(body.send_window) : null;
+  if (sendWindow && !sendWindow.ok) return apiValidationError({ send_window: [sendWindow.error] });
+
   const db = await scopedClient(auth);
 
   const { data: existing } = await db.from("email_sequences").select("id").eq("id", id).maybeSingle();
@@ -90,6 +108,9 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   if (body.name !== undefined) updates.name = String(body.name).trim();
   if (body.description !== undefined) updates.description = body.description ? String(body.description) : null;
   if (body.auto_send !== undefined) updates.auto_send = body.auto_send === true;
+  if (body.on_reply !== undefined) updates.on_reply = body.on_reply as OnReply;
+  // Takes effect for drafts created from now on; drafts already created keep the due time they have.
+  if (sendWindow && sendWindow.ok) updates.send_window = sendWindow.window;
 
   if (Object.keys(updates).length > 0) {
     const { error: updateError } = await db.from("email_sequences").update(updates).eq("id", id);
@@ -105,45 +126,36 @@ export async function PATCH(request: NextRequest, { params }: Props) {
 
     const { data: existingSteps } = await db
       .from("email_sequence_steps")
-      .select("step_order, delay_days, draft_source")
+      .select("step_order, delay_days, draft_source, send_time")
       .eq("sequence_id", id)
       .order("step_order", { ascending: true });
+    const existing = (existingSteps ?? []) as unknown as Array<{ step_order: number; delay_days: number; draft_source: string; send_time: string | null }>;
 
-    const textOnlyEdit = isTextOnlyStepDiff(
-      (existingSteps ?? []) as unknown as Array<{ step_order: number; delay_days: number; draft_source: string }>,
-      body.steps as SequenceStepInput[]
-    );
+    // Steps leads have already reached keep their order, wait and kind; their wording and everything after them can change.
+    const lock = await loadStepLock(db, id, existing.length);
+    const check = checkStepEdit(existing, body.steps as SequenceStepInput[], lock.lockedUpTo);
+    if (!check.ok) return apiConflict(check.message);
 
-    if (!textOnlyEdit) {
-      const { count: liveEnrollmentCount } = await db
-        .from("sequence_enrollments")
-        .select("id", { count: "exact", head: true })
-        .eq("sequence_id", id)
-        .in("status", ["active", "paused"]);
-      if ((liveEnrollmentCount ?? 0) > 0) {
-        return apiConflict("Cannot edit steps while the sequence has active enrollments");
-      }
-    }
-
-    const { error: deleteError } = await db.from("email_sequence_steps").delete().eq("sequence_id", id);
-    if (deleteError) {
-      log.error({ error: deleteError }, "Failed to replace sequence steps");
-      return apiError("DB_ERROR", "Failed to replace sequence steps", 500);
-    }
-
-    const steps = (body.steps as SequenceStepInput[]).map((s) => ({
-      sequence_id: id,
+    // Apply the new step list in ONE database transaction (apply_sequence_steps, migration 265): it takes a lock on the
+    // sequence, re-checks which steps leads have reached, then adds the new steps, updates the ones that stay and
+    // removes the ones that went — never an empty table in between. Doing the lock check and the write as separate
+    // calls left a window where a lead could advance to a step that was just being changed; the transaction closes it,
+    // and a draft built from an older version of the steps is refused and rebuilt (see engine.ts).
+    const incoming = (body.steps as SequenceStepInput[]).map((s) => ({
       step_order: s.step_order,
       delay_days: s.delay_days ?? 0,
+      send_time: s.send_time || null,
       subject_template: s.subject_template ?? "",
       body_template: s.body_template ?? "",
       draft_source: s.draft_source ?? "template",
       ai_instructions: s.ai_instructions ?? null,
     }));
-    const { error: insertError } = await db.from("email_sequence_steps").insert(steps);
-    if (insertError) {
-      log.error({ error: insertError }, "Failed to insert sequence steps");
-      return apiError("DB_ERROR", "Failed to insert sequence steps", 500);
+    const { error: applyError } = await db.rpc("apply_sequence_steps", { p_sequence_id: id, p_steps: incoming });
+    if (applyError) {
+      // the authoritative lock check inside the transaction (our read above may be a moment stale)
+      if (applyError.message?.includes("STEPS_LOCKED")) return apiConflict(stepsLockedMessage(Number(applyError.hint) || 0));
+      log.error({ error: applyError }, "Failed to apply sequence steps");
+      return apiError("DB_ERROR", "Failed to update sequence steps", 500);
     }
   }
 

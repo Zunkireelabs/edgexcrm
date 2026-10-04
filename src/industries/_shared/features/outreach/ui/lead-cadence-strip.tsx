@@ -24,6 +24,8 @@ interface Enrollment {
   status: EnrollmentStatus;
   current_step_order: number;
   assigned_to: string | null;
+  // Set when the system stopped the enrollment because the lead replied (migration 257).
+  stop_reason?: "replied" | "sequence_paused" | "suppressed" | null;
   email_sequences: { name: string } | null;
 }
 
@@ -68,7 +70,8 @@ export function LeadCadenceStrip({
         setEnrollment(live ?? null);
 
         if (live && live.status === "active") {
-          const draftsRes = await fetch(`/api/v1/outreach/drafts?due=all`);
+          // narrowed to THIS lead: the unfiltered list is capped at 1,000 rows and would miss the lead on a big tenant
+          const draftsRes = await fetch(`/api/v1/outreach/drafts?due=all&lead_id=${leadId}`);
           if (draftsRes.ok) {
             const draftsJson = await draftsRes.json();
             const pending = (draftsJson.data ?? []) as DraftRow[];
@@ -192,6 +195,11 @@ export function LeadCadenceStrip({
 
         <div className="flex items-center gap-2">
           <Badge variant={enrollment.status === "active" ? "default" : "secondary"}>{enrollment.status}</Badge>
+          {enrollment.stop_reason === "replied" && (
+            <span className="text-xs text-muted-foreground">
+              {enrollment.status === "paused" ? "Paused — the lead replied. Resume or unenroll when you've followed up." : "Ended — the lead replied."}
+            </span>
+          )}
 
           {canManage && (
             <div className="ml-auto flex items-center gap-1 shrink-0">

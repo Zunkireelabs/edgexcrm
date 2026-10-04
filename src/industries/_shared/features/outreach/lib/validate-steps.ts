@@ -1,6 +1,9 @@
+import { validateStepSendTime } from "./send-window";
+
 export interface SequenceStepInput {
   step_order: number;
   delay_days?: number;
+  send_time?: string | null;
   subject_template?: string;
   body_template?: string;
   draft_source?: "template" | "ai";
@@ -23,6 +26,8 @@ export function validateSequenceSteps(steps: unknown): string | null {
     ) {
       return "delay_days must be a non-negative integer";
     }
+    const time = validateStepSendTime(s.send_time);
+    if (!time.ok) return time.error;
     if (s.draft_source !== undefined && s.draft_source !== "template" && s.draft_source !== "ai") {
       return "draft_source must be 'template' or 'ai'";
     }

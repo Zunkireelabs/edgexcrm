@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Pencil, Archive, Layers } from "lucide-react";
+import { Plus, Pencil, Archive, Layers, Pause, Play, UserPlus, BarChart3 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,7 +17,11 @@ import {
 import { toast } from "sonner";
 import { useSequences, type Sequence } from "../hooks/use-sequences";
 import { SequenceEditorDialog } from "./sequence-editor-dialog";
+import { SequencePauseDialog } from "./sequence-pause-dialog";
+import { SequenceReportDialog } from "./sequence-report-dialog";
+import { BulkEnrollDialog } from "./bulk-enroll-dialog";
 import { formatDate } from "../lib/format-due";
+import { describeSendWindow } from "../lib/send-window";
 
 interface SequencesManagerProps {
   isAdmin: boolean;
@@ -29,6 +33,12 @@ export function SequencesManager({ isAdmin, industryId }: SequencesManagerProps)
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingSequence, setEditingSequence] = useState<Sequence | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<Sequence | null>(null);
+  // "Who should get it?" — bulk enroll started from a sequence, with a filter picker
+  const [enrollTarget, setEnrollTarget] = useState<Sequence | null>(null);
+  // offered right after a sequence is CREATED (not edited)
+  const [justCreated, setJustCreated] = useState<{ id: string; name: string } | null>(null);
+  const [reportTarget, setReportTarget] = useState<Sequence | null>(null);
+  const [pauseTarget, setPauseTarget] = useState<{ sequence: Sequence; action: "pause" | "resume" } | null>(null);
 
   const openCreate = () => {
     setEditingSequence(null);
@@ -113,10 +123,57 @@ export function SequencesManager({ isAdmin, industryId }: SequencesManagerProps)
                 <p className="text-xs text-muted-foreground">
                   {sequence.email_sequence_steps.length} step
                   {sequence.email_sequence_steps.length === 1 ? "" : "s"} · created {formatDate(sequence.created_at)}
+                  {sequence.send_window && ` · sends ${describeSendWindow(sequence.send_window)}`}
                 </p>
+              </div>
+              <div className="shrink-0 flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEnrollTarget(sequence);
+                  }}
+                >
+                  <UserPlus className="h-3.5 w-3.5 mr-1.5" /> Enroll leads
+                </Button>
               </div>
               {isAdmin && (
                 <div className="shrink-0 flex items-center gap-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setReportTarget(sequence);
+                    }}
+                  >
+                    <BarChart3 className="h-3.5 w-3.5 mr-1.5" /> Report
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPauseTarget({ sequence, action: "pause" });
+                    }}
+                  >
+                    <Pause className="h-3.5 w-3.5 mr-1.5" /> Pause all
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPauseTarget({ sequence, action: "resume" });
+                    }}
+                  >
+                    <Play className="h-3.5 w-3.5 mr-1.5" /> Resume all
+                  </Button>
                   <Button
                     type="button"
                     variant="ghost"
@@ -151,8 +208,52 @@ export function SequencesManager({ isAdmin, industryId }: SequencesManagerProps)
         open={editorOpen}
         onOpenChange={setEditorOpen}
         sequence={editingSequence}
-        onSaved={refresh}
+        onSaved={(saved) => {
+          refresh();
+          if (saved?.created) setJustCreated({ id: saved.id, name: saved.name });
+        }}
         industryId={industryId}
+      />
+
+      {enrollTarget && (
+        <BulkEnrollDialog
+          open
+          onOpenChange={(open) => !open && setEnrollTarget(null)}
+          audiencePicker={{ industryId, isAdmin }}
+          sourceLabel={`Enroll leads in “${enrollTarget.name}”`}
+          presetSequenceId={enrollTarget.id}
+        />
+      )}
+
+      <AlertDialog open={!!justCreated} onOpenChange={(open) => !open && setJustCreated(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Who should get &ldquo;{justCreated?.name}&rdquo;?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Your sequence is ready. Pick the leads to enroll now, or do it later from the leads list or the Enroll leads button.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Skip for now</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const created = sequences.find((s) => s.id === justCreated?.id);
+                if (created) setEnrollTarget(created);
+                setJustCreated(null);
+              }}
+            >
+              Choose leads
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <SequenceReportDialog sequence={reportTarget} onClose={() => setReportTarget(null)} />
+
+      <SequencePauseDialog
+        sequence={pauseTarget?.sequence ?? null}
+        action={pauseTarget?.action ?? "pause"}
+        onClose={() => setPauseTarget(null)}
       />
 
       <AlertDialog open={!!archiveTarget} onOpenChange={(open) => !open && setArchiveTarget(null)}>

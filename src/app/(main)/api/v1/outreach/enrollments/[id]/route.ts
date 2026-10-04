@@ -41,7 +41,12 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     await unenrollLead(db, id);
   } else {
     const status = action === "pause" ? "paused" : "active";
-    const { error } = await db.from("sequence_enrollments").update({ status }).eq("id", id);
+    // A person acting on the enrollment takes over from the automatic reply-stop: clear its marker
+    // (a manual pause is not "paused because they replied"; a resume is no longer stopped).
+    const { error } = await db
+      .from("sequence_enrollments")
+      .update({ status, stop_reason: null, stopped_at: null })
+      .eq("id", id);
     if (error) return apiError("DB_ERROR", "Failed to update enrollment", 500);
   }
 
