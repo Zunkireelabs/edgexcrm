@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback } from "react";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
+import { SIGNER_FILLABLE_FIELDS, applySignerDetails, type SignerFillableKey } from "@/lib/consent/merge";
 
 interface ConsentSignFormProps {
   token: string;
@@ -11,6 +12,8 @@ interface ConsentSignFormProps {
   title: string;
   bodySnapshot: string;
   requireDrawnSignature: boolean;
+  /** Profile details the student is asked to type in (input keys from SIGNER_FILLABLE_FIELDS). */
+  missingFields?: string[];
   compact?: boolean;
   onComplete?: (signerName: string) => void;
 }
@@ -22,9 +25,14 @@ export function ConsentSignForm({
   title,
   bodySnapshot,
   requireDrawnSignature,
+  missingFields = [],
   compact,
   onComplete,
 }: ConsentSignFormProps) {
+  const askFor = missingFields.filter((k): k is SignerFillableKey => k in SIGNER_FILLABLE_FIELDS);
+  const [details, setDetails] = useState<Partial<Record<SignerFillableKey, string>>>({});
+  // The document updates as the student types; anything still empty shows as a blank line.
+  const shownBody = askFor.length > 0 ? applySignerDetails(bodySnapshot, details, askFor, "________") : bodySnapshot;
   const [signerName, setSignerName] = useState("");
   const [agreed, setAgreed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -150,6 +158,7 @@ export function ConsentSignForm({
         agreed: true,
       };
       if (signatureImageUrl) body.signature_image_url = signatureImageUrl;
+      if (askFor.length > 0) body.signer_details = details;
 
       const res = await fetch(`/api/public/consent/${token}`, {
         method: "POST",
@@ -216,7 +225,7 @@ export function ConsentSignForm({
           </div>
           <div className="p-6 max-h-96 overflow-y-auto">
             <pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans leading-relaxed">
-              {bodySnapshot}
+              {shownBody}
             </pre>
           </div>
         </div>
@@ -224,6 +233,30 @@ export function ConsentSignForm({
         {/* Signature form */}
         <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm border p-6 space-y-5">
           <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">Sign Consent</h2>
+
+          {/* Details missing from the student's profile (optional) */}
+          {askFor.length > 0 && (
+            <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <p className="text-sm text-gray-700">
+                Please complete these details — they will appear in the document above.
+              </p>
+              {askFor.map((key) => (
+                <div key={key} className="space-y-1.5">
+                  <label htmlFor={`detail-${key}`} className="text-sm font-medium text-gray-700">
+                    {SIGNER_FILLABLE_FIELDS[key].label}
+                  </label>
+                  <input
+                    id={`detail-${key}`}
+                    type={key === "guardian_email" ? "email" : key.endsWith("_phone") ? "tel" : "text"}
+                    value={details[key] ?? ""}
+                    maxLength={200}
+                    onChange={(e) => setDetails((d) => ({ ...d, [key]: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Full name */}
           <div className="space-y-1.5">

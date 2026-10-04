@@ -14,6 +14,7 @@ import {
 import { FileText, ToggleLeft, ToggleRight } from "lucide-react";
 import { toast } from "sonner";
 import { DEFAULT_CONSENT_TEMPLATE } from "@/lib/consent/default-template";
+import { CONSENT_MERGE_FIELDS } from "@/lib/consent/merge";
 
 interface ConsentTemplate {
   id: string;
@@ -204,14 +205,12 @@ export function ConsentManager() {
           />
           <p className="text-xs text-muted-foreground">
             Merge fields auto-fill per student when the link is sent:{" "}
-            <code className="text-foreground">{"{{student_name}}"}</code>,{" "}
-            <code className="text-foreground">{"{{student_email}}"}</code>,{" "}
-            <code className="text-foreground">{"{{student_phone}}"}</code>,{" "}
-            <code className="text-foreground">{"{{city}}"}</code>,{" "}
-            <code className="text-foreground">{"{{country}}"}</code>,{" "}
-            <code className="text-foreground">{"{{organization}}"}</code>,{" "}
-            <code className="text-foreground">{"{{date}}"}</code>,{" "}
-            <code className="text-foreground">{"{{consent_version}}"}</code>
+            {CONSENT_MERGE_FIELDS.map((field, i) => (
+              <span key={field}>
+                <code className="text-foreground">{`{{${field}}}`}</code>
+                {i < CONSENT_MERGE_FIELDS.length - 1 ? ", " : ""}
+              </span>
+            ))}
           </p>
         </div>
 

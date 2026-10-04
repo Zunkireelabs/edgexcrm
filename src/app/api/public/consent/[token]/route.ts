@@ -5,6 +5,7 @@ import { apiSuccess, apiError } from "@/lib/api/response";
 import { createRequestLogger } from "@/lib/logger";
 import { emitEvent } from "@/lib/api/audit";
 import { generateConsentPdf } from "@/lib/consent/pdf";
+import { applySignerDetails, validateSignerDetails } from "@/lib/consent/merge";
 
 interface RouteContext {
   params: Promise<{ token: string }>;
@@ -13,7 +14,7 @@ interface RouteContext {
 async function lookupToken(supabase: Awaited<ReturnType<typeof createServiceClient>>, token: string) {
   const { data, error } = await supabase
     .from("lead_consents")
-    .select("id, tenant_id, lead_id, status, body_snapshot, template_version, signed_at, link_expires_at, method")
+    .select("id, tenant_id, lead_id, status, body_snapshot, template_version, signed_at, link_expires_at, method, missing_fields")
     .eq("token", token)
     .is("deleted_at", null)
     .single();
@@ -42,6 +43,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     signed_at: string | null;
     link_expires_at: string | null;
     method: string | null;
+    missing_fields: string[] | null;
   };
 
   if (row.status === "signed") {
@@ -76,6 +78,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     title: tpl?.title ?? "Student Consent & Authorization",
     body_snapshot: row.body_snapshot ?? "",
     require_drawn_signature: tpl?.require_drawn_signature ?? false,
+    missing_fields: row.missing_fields ?? [],
   });
 }
 
@@ -106,6 +109,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     template_version: number | null;
     signed_at: string | null;
     link_expires_at: string | null;
+    missing_fields: string[] | null;
   };
 
   if (row.status === "signed") {
@@ -142,6 +146,18 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return apiError("SIGNATURE_REQUIRED", "A drawn signature is required.", 400);
   }
 
+  // Details the student typed for fields their profile was missing. Only the keys this
+  // consent asked for are accepted; they live with the signed consent, never on the lead.
+  const missingFields = row.missing_fields ?? [];
+  const signerDetails = validateSignerDetails(body.signer_details, missingFields);
+  if (Object.keys(signerDetails.errors).length > 0) {
+    return apiError("VALIDATION_ERROR", "Some of the details you entered are not valid.", 422, signerDetails.errors);
+  }
+  const consentBody =
+    missingFields.length > 0
+      ? applySignerDetails(row.body_snapshot ?? "", signerDetails.values, missingFields)
+      : (row.body_snapshot ?? "");
+
   const signedAt = new Date().toISOString();
   const signerName = String(body.signer_name).trim();
   const signatureImageUrl = body.signature_image_url ? String(body.signature_image_url) : null;
@@ -155,6 +171,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
     signature_value: body.signature_value ? String(body.signature_value) : null,
     ip_address: ip,
   };
+  if (missingFields.length > 0) {
+    update.body_snapshot = consentBody;
+    update.signer_details = signerDetails.values;
+  }
   if (signatureImageUrl) update.signature_image_url = signatureImageUrl;
 
   const { error: updateError } = await supabase
@@ -180,7 +200,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
   // signature image + audit block) and store it. The consent is already
   // recorded as signed above, so a PDF failure never blocks the student.
   try {
-    const consentBody = row.body_snapshot ?? "";
     const textHash = createHash("sha256").update(consentBody, "utf8").digest("hex");
 
     const [tenantRes, tplRes] = await Promise.all([

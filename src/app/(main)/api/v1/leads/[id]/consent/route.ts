@@ -17,7 +17,7 @@ import { FEATURES } from "@/industries/_registry";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { sendConsentEmail } from "@/lib/email/send-consent";
 import { APP_URL } from "@/lib/email";
-import { fillConsentTemplate, buildConsentMergeData } from "@/lib/consent/merge";
+import { prepareConsentBody, buildConsentMergeData } from "@/lib/consent/merge";
 import { resolveConsentStatus, type ConsentRecordRow } from "@/lib/consent/resolve-status";
 import { touchLeadUpdatedAt } from "@/lib/leads/touch-updated-at";
 
@@ -147,7 +147,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   // Verify lead belongs to tenant
   const { data: lead } = await supabase
     .from("leads")
-    .select("id, assigned_to, branch_id, email, first_name, last_name, phone, city, country")
+    .select("id, assigned_to, branch_id, email, first_name, last_name, phone, city, country, nationality, passport_number, full_address, father_name, mother_name, emergency_contact_name, emergency_contact_phone, date_of_birth, guardian_phone, guardian_email, guardian_relationship")
     .eq("id", id)
     .eq("tenant_id", auth.tenantId)
     .is("deleted_at", null)
@@ -164,6 +164,17 @@ export async function POST(request: NextRequest, context: RouteContext) {
     phone: string | null;
     city: string | null;
     country: string | null;
+    nationality: string | null;
+    passport_number: string | null;
+    full_address: string | null;
+    father_name: string | null;
+    mother_name: string | null;
+    emergency_contact_name: string | null;
+    emergency_contact_phone: string | null;
+    date_of_birth: string | null;
+    guardian_phone: string | null;
+    guardian_email: string | null;
+    guardian_relationship: string | null;
   };
 
   const membership = await getLeadMembership(supabase, auth.tenantId, id);
@@ -246,7 +257,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .eq("id", auth.tenantId)
       .single();
     const organization = (orgRes.data as { name: string } | null)?.name ?? "Your Consultant";
-    const filledBody = fillConsentTemplate(
+    const prepared = prepareConsentBody(
       tplRow.body ?? "",
       buildConsentMergeData({
         firstName: leadRow.first_name,
@@ -255,6 +266,17 @@ export async function POST(request: NextRequest, context: RouteContext) {
         phone: leadRow.phone,
         city: leadRow.city,
         country: leadRow.country,
+        nationality: leadRow.nationality,
+        passportNumber: leadRow.passport_number,
+        fullAddress: leadRow.full_address,
+        fatherName: leadRow.father_name,
+        motherName: leadRow.mother_name,
+        emergencyContactName: leadRow.emergency_contact_name,
+        emergencyContactPhone: leadRow.emergency_contact_phone,
+        dateOfBirth: leadRow.date_of_birth,
+        guardianPhone: leadRow.guardian_phone,
+        guardianEmail: leadRow.guardian_email,
+        guardianRelationship: leadRow.guardian_relationship,
         organization,
         consentVersion: tplRow.version,
       }),
@@ -267,7 +289,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
         lead_id: id,
         status: "sent",
         token,
-        body_snapshot: filledBody,
+        body_snapshot: prepared.body,
+        missing_fields: prepared.missingFields,
         template_version: tplRow.version,
         sent_at: new Date().toISOString(),
         sent_via: sentVia,
@@ -376,7 +399,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .eq("id", auth.tenantId)
       .single();
     const organization = (orgRes.data as { name: string } | null)?.name ?? "Your Consultant";
-    const filledBody = fillConsentTemplate(
+    const prepared = prepareConsentBody(
       tplRow.body ?? "",
       buildConsentMergeData({
         firstName: leadRow.first_name,
@@ -385,6 +408,17 @@ export async function POST(request: NextRequest, context: RouteContext) {
         phone: leadRow.phone,
         city: leadRow.city,
         country: leadRow.country,
+        nationality: leadRow.nationality,
+        passportNumber: leadRow.passport_number,
+        fullAddress: leadRow.full_address,
+        fatherName: leadRow.father_name,
+        motherName: leadRow.mother_name,
+        emergencyContactName: leadRow.emergency_contact_name,
+        emergencyContactPhone: leadRow.emergency_contact_phone,
+        dateOfBirth: leadRow.date_of_birth,
+        guardianPhone: leadRow.guardian_phone,
+        guardianEmail: leadRow.guardian_email,
+        guardianRelationship: leadRow.guardian_relationship,
         organization,
         consentVersion: tplRow.version,
       }),
@@ -397,7 +431,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
         lead_id: id,
         status: "sent",
         token,
-        body_snapshot: filledBody,
+        body_snapshot: prepared.body,
+        missing_fields: prepared.missingFields,
         template_version: tplRow.version,
         sent_at: new Date().toISOString(),
         sent_via: "in_person",

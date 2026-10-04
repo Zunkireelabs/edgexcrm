@@ -14,6 +14,7 @@ interface ConsentData {
   title?: string;
   body_snapshot?: string;
   require_drawn_signature?: boolean;
+  missing_fields?: string[];
 }
 
 async function fetchConsentData(token: string): Promise<ConsentData> {
@@ -56,6 +57,7 @@ export default async function ConsentTokenPage({ params }: PageProps) {
       title={data.title!}
       bodySnapshot={data.body_snapshot!}
       requireDrawnSignature={data.require_drawn_signature ?? false}
+      missingFields={data.missing_fields ?? []}
     />
   );
 }
