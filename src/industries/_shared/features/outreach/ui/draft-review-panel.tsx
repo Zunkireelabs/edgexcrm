@@ -27,6 +27,8 @@ import { TipTapEditor } from "@/industries/_shared/features/email/components/tip
 import { HtmlSourceEditor } from "@/industries/_shared/features/email/components/html-source-editor";
 import { detectBodyMode, type StepBodyMode } from "../lib/body-format";
 import type { Draft } from "./today-worklist";
+import { formatDateTime12 } from "../lib/time-format";
+import { DateTimePicker } from "./time-of-day-picker";
 
 interface DraftReviewPanelProps {
   draft: Draft | null;
@@ -267,7 +269,7 @@ export function DraftReviewPanel({ draft, isAdmin, onOpenChange, onSent, onSkipp
         toast.error(json?.error?.message ?? "Couldn't schedule the send");
         return;
       }
-      toast.success(`Scheduled for ${when.toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}`);
+      toast.success(`Scheduled for ${formatDateTime12(when)}`);
       setScheduleOpen(false);
       setDirty(false);
       onUpdated({ ...draft, subject, body_html: bodyHtml, scheduled_send_at: json.data.scheduled_send_at, scheduled_error: null });
@@ -407,7 +409,7 @@ export function DraftReviewPanel({ draft, isAdmin, onOpenChange, onSent, onSkipp
               <span>
                 <CalendarClock className="mr-1.5 inline h-3.5 w-3.5" />
                 EdgeX will send this on{" "}
-                <strong>{new Date(draft.scheduled_send_at).toLocaleString([], { dateStyle: "full", timeStyle: "short" })}</strong>{" "}
+                <strong>{formatDateTime12(new Date(draft.scheduled_send_at))}</strong>{" "}
                 (within about a minute). You can still edit it until then.
               </span>
               <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={handleCancelSchedule} disabled={busy}>
@@ -528,12 +530,11 @@ export function DraftReviewPanel({ draft, isAdmin, onOpenChange, onSent, onSkipp
           </DialogHeader>
           <div className="space-y-1.5">
             <Label htmlFor="schedule-at">Send on</Label>
-            <Input
+            <DateTimePicker
               id="schedule-at"
-              type="datetime-local"
               value={scheduleAt}
               min={toLocalInputValue(new Date(Date.now() + 5 * 60 * 1000))}
-              onChange={(e) => setScheduleAt(e.target.value)}
+              onChange={setScheduleAt}
             />
             <p className="text-xs text-muted-foreground">
               Your local time ({Intl.DateTimeFormat().resolvedOptions().timeZone}). At least 5 minutes from now, within 90 days.

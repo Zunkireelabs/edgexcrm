@@ -22,7 +22,7 @@ export function detectBodyMode(html: string): StepBodyMode {
   return "rich";
 }
 
-const SAMPLE_VALUES: Record<string, string> = {
+export const SAMPLE_VALUES: Record<string, string> = {
   first_name: "Jane",
   last_name: "Doe",
   email: "jane.doe@example.com",
@@ -32,7 +32,27 @@ const SAMPLE_VALUES: Record<string, string> = {
   tenant_name: "Your Organisation",
 };
 
-/** Fills {{merge_tags}} with fixed sample values for preview only. Unknown tags become empty, like the real renderer. */
+/**
+ * Fills {{merge_tags}} with fixed sample values for preview only. Unknown tags become empty — or their fallback, if they
+ * have one ({{nickname|friend}}) — like the real renderer. A known tag always shows its sample value, so the preview
+ * never shows the fallback (that is what a lead with no value would get).
+ */
 export function fillSampleMergeTags(html: string): string {
-  return html.replace(/\{\{(\w+)\}\}/g, (_m, key: string) => SAMPLE_VALUES[key] ?? "");
+  return html.replace(/\{\{(\w+)(?:\|([^{}]*))?\}\}/g, (_m, key: string, fallback: string | undefined) => {
+    const sample = SAMPLE_VALUES[key];
+    if (sample !== undefined) return sample;
+    return fallback !== undefined ? fallback.trim() : "";
+  });
+}
+
+/** Merge tags that are often empty on a real lead — worth a fallback so an email never reads "Hi ,". */
+const OFTEN_EMPTY_TAGS = ["first_name", "last_name", "city", "country", "phone"];
+
+/** The often-empty tags this text uses WITHOUT a fallback, e.g. ["first_name"] for "Hi {{first_name}}". */
+export function findTagsWithoutFallback(text: string): string[] {
+  const found = new Set<string>();
+  for (const m of text.matchAll(/\{\{(\w+)(\|[^{}]*)?\}\}/g)) {
+    if (m[2] === undefined && OFTEN_EMPTY_TAGS.includes(m[1])) found.add(m[1]);
+  }
+  return [...found];
 }

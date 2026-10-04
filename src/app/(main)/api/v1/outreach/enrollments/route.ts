@@ -26,12 +26,15 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const leadId = searchParams.get("lead_id");
   const status = searchParams.get("status");
+  const stopReason = searchParams.get("stop_reason");
 
   let query = db
     .from("sequence_enrollments")
     .select("*, email_sequences(name), leads(first_name, last_name)");
   if (leadId) query = query.eq("lead_id", leadId);
   if (status) query = query.eq("status", status);
+  // "Lead replied" worklist: enrollments the system stopped because the lead replied (migration 257).
+  if (stopReason === "replied") query = query.eq("stop_reason", "replied");
 
   // Owner/admin see all tenant enrollments; everyone else is forced to their own
   // — same convention as the drafts worklist.

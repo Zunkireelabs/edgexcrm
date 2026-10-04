@@ -3,6 +3,7 @@ import { emitEvent } from "@/lib/api/audit";
 import { isOutreachDraftEnabledForTenant } from "@/lib/ai/flag";
 import { draftSequenceEmail } from "@/lib/ai/draft-email";
 import { logger } from "@/lib/logger";
+import { computeDueAt, effectiveWindow, resolveWindowTimeZone, validateSendWindow, type SendWindow } from "./send-window";
 import type { ScopedClient } from "@/lib/supabase/scoped";
 import type { AuthContext } from "@/lib/api/auth";
 import type { Lead } from "@/types/database";
@@ -18,6 +19,7 @@ export interface SequenceStepRow {
   sequence_id: string;
   step_order: number;
   delay_days: number;
+  send_time?: string | null;
   channel: string;
   draft_source: string;
   subject_template: string;
@@ -126,22 +128,41 @@ async function loadLeadTemplateContext(
   return (data as LeadTemplateContext | null) ?? null;
 }
 
-async function loadTenantName(db: ScopedClient, tenantId: string): Promise<string> {
-  const { data } = await db.fromGlobal("tenants").select("name").eq("id", tenantId).maybeSingle();
-  return (data as { name: string } | null)?.name ?? "";
+async function loadTenantInfo(db: ScopedClient, tenantId: string): Promise<{ name: string; timezone: string | null }> {
+  const { data } = await db.fromGlobal("tenants").select("name, timezone").eq("id", tenantId).maybeSingle();
+  const row = data as { name: string; timezone: string | null } | null;
+  return { name: row?.name ?? "", timezone: row?.timezone ?? null };
 }
 
 async function loadSequenceMeta(
   db: ScopedClient,
   sequenceId: string
-): Promise<{ name: string; description: string | null; totalSteps: number }> {
+): Promise<{ name: string; description: string | null; totalSteps: number; sendWindow: SendWindow | null }> {
   const [{ data: seq }, { count }] = await Promise.all([
-    db.from("email_sequences").select("name, description").eq("id", sequenceId).maybeSingle(),
+    db.from("email_sequences").select("name, description, send_window").eq("id", sequenceId).maybeSingle(),
     db.from("email_sequence_steps").select("id", { count: "exact", head: true }).eq("sequence_id", sequenceId),
   ]);
-  const seqRow = seq as { name: string; description: string | null } | null;
-  return { name: seqRow?.name ?? "", description: seqRow?.description ?? null, totalSteps: count ?? 0 };
+  const seqRow = seq as { name: string; description: string | null; send_window?: unknown } | null;
+  // A stored window that no longer validates is ignored (the step goes out on the old schedule) rather than blocking enrollment.
+  const parsed = validateSendWindow(seqRow?.send_window ?? null);
+  return {
+    name: seqRow?.name ?? "",
+    description: seqRow?.description ?? null,
+    totalSteps: count ?? 0,
+    sendWindow: parsed.ok ? parsed.window : null,
+  };
 }
+
+/** A step row plus the sequence's steps_version at the moment it was read (one query = one consistent snapshot). */
+const STEP_WITH_VERSION = "*, email_sequences!inner(steps_version)";
+
+function stepsVersionOf(step: SequenceStepRow): number | null {
+  const v = (step as unknown as { email_sequences?: { steps_version?: number | string } | null }).email_sequences?.steps_version;
+  return v === undefined || v === null ? null : Number(v);
+}
+
+/** How many times a draft is rebuilt when the sequence's steps are edited while it is being built. */
+const DRAFT_ATTEMPTS = 3;
 
 async function createDraftForStep(
   db: ScopedClient,
@@ -151,44 +172,90 @@ async function createDraftForStep(
     step: SequenceStepRow;
   }
 ): Promise<SequenceStepDraftRow | null> {
-  const { enrollment, step } = params;
-  const [lead, tenantName, sequenceMeta] = await Promise.all([
-    loadLeadTemplateContext(db, enrollment.lead_id),
-    loadTenantName(db, auth.tenantId),
-    loadSequenceMeta(db, step.sequence_id),
-  ]);
-  if (!lead) return null;
+  const { enrollment } = params;
+  let step = params.step;
 
-  const drafted = await generateStepDraft({
-    step,
-    lead,
+  // The draft is built from `step` and stamped with the sequence's steps_version it was read at. The database refuses
+  // the insert (STEPS_CHANGED) if someone edited the steps meanwhile — it waits for a running edit first — and then we
+  // read the step again and rebuild, so a draft is never made from a step that has already changed.
+  for (let attempt = 1; attempt <= DRAFT_ATTEMPTS; attempt++) {
+    const [lead, tenant, sequenceMeta] = await Promise.all([
+      loadLeadTemplateContext(db, enrollment.lead_id),
+      loadTenantInfo(db, auth.tenantId),
+      loadSequenceMeta(db, step.sequence_id),
+    ]);
+    if (!lead) return null;
+
+    const drafted = await generateStepDraft({
+      step,
+      lead,
+      tenantId: auth.tenantId,
+      tenantName: tenant.name,
+      sequence: { name: sequenceMeta.name, description: sequenceMeta.description },
+      stepOrder: step.step_order,
+      totalSteps: sequenceMeta.totalSteps,
+    });
+    // WHEN this step is due: the old rule (now + wait) unless the sequence has a send window — then the next allowed
+    // day / time of day in the lead's (or office's) timezone, at this lead's stable minute in the spread.
+    const window = effectiveWindow(sequenceMeta.sendWindow, step.send_time);
+    const dueAt = computeDueAt({
+      now: new Date(),
+      delayDays: step.delay_days,
+      window,
+      timeZone: window ? resolveWindowTimeZone(window, { leadCountry: lead.country, officeTimeZone: tenant.timezone }) : undefined,
+      spreadKey: `${enrollment.lead_id}:${step.id}`,
+    }).toISOString();
+
+    const { data, error } = await db
+      .from("sequence_step_drafts")
+      .insert({
+        enrollment_id: enrollment.id,
+        step_id: step.id,
+        lead_id: enrollment.lead_id,
+        assigned_to: enrollment.assigned_to,
+        step_order: step.step_order,
+        status: "pending",
+        due_at: dueAt,
+        draft_source: drafted.source,
+        subject: drafted.subject,
+        body_html: drafted.body_html,
+        steps_version: stepsVersionOf(step),
+      })
+      .select("*")
+      .single();
+
+    if (!error) return data as unknown as SequenceStepDraftRow;
+    if (!error.message?.includes("STEPS_CHANGED") || attempt === DRAFT_ATTEMPTS) return null;
+
+    // the steps were edited while we were building: take the step as it is now (gone = nothing to draft)
+    const { data: fresh } = await db.from("email_sequence_steps").select(STEP_WITH_VERSION).eq("id", step.id).maybeSingle();
+    if (!fresh) return null;
+    step = fresh as unknown as SequenceStepRow;
+  }
+  return null;
+}
+
+/**
+ * Starts a lead on a sequence whose step 1 `step1` was just read: creates the step-1 draft and announces the enrollment.
+ * Shared by enrollLead and switchEnrollment.
+ */
+async function startEnrollment(
+  db: ScopedClient,
+  auth: AuthContext,
+  enrollmentRow: SequenceEnrollmentRow,
+  step1: SequenceStepRow
+): Promise<SequenceEnrollmentRow> {
+  await createDraftForStep(db, auth, { enrollment: enrollmentRow, step: step1 });
+
+  await emitEvent({
     tenantId: auth.tenantId,
-    tenantName,
-    sequence: { name: sequenceMeta.name, description: sequenceMeta.description },
-    stepOrder: step.step_order,
-    totalSteps: sequenceMeta.totalSteps,
+    type: "sequence.enrolled",
+    entityType: "sequence_enrollment",
+    entityId: enrollmentRow.id,
+    payload: { sequence_id: enrollmentRow.sequence_id, lead_id: enrollmentRow.lead_id },
   });
-  const dueAt = new Date(Date.now() + step.delay_days * 24 * 60 * 60 * 1000).toISOString();
 
-  const { data, error } = await db
-    .from("sequence_step_drafts")
-    .insert({
-      enrollment_id: enrollment.id,
-      step_id: step.id,
-      lead_id: enrollment.lead_id,
-      assigned_to: enrollment.assigned_to,
-      step_order: step.step_order,
-      status: "pending",
-      due_at: dueAt,
-      draft_source: drafted.source,
-      subject: drafted.subject,
-      body_html: drafted.body_html,
-    })
-    .select("*")
-    .single();
-
-  if (error) return null;
-  return data as unknown as SequenceStepDraftRow;
+  return enrollmentRow;
 }
 
 /**
@@ -206,7 +273,7 @@ export async function enrollLead(
 
   const { data: step1 } = await db
     .from("email_sequence_steps")
-    .select("*")
+    .select(STEP_WITH_VERSION)
     .eq("sequence_id", sequenceId)
     .eq("step_order", 1)
     .maybeSingle();
@@ -230,22 +297,46 @@ export async function enrollLead(
     throw new Error(`Failed to create enrollment: ${error.message}`);
   }
 
-  const enrollmentRow = enrollment as unknown as SequenceEnrollmentRow;
+  return startEnrollment(db, auth, enrollment as unknown as SequenceEnrollmentRow, step1 as unknown as SequenceStepRow);
+}
 
-  await createDraftForStep(db, auth, {
-    enrollment: enrollmentRow,
-    step: step1 as unknown as SequenceStepRow,
+/**
+ * "Switch": ends the lead's current enrollment AND starts them on `sequenceId` in ONE database transaction
+ * (switch_lead_enrollment, migration 265). If the new enrollment cannot be created — typically because another process
+ * enrolled the lead in between (EnrollmentConflictError) — nothing changes: the lead stays in their current sequence,
+ * never in neither. The queued sequence is not promoted (the lead is moving on right now).
+ */
+export async function switchEnrollment(
+  db: ScopedClient,
+  auth: AuthContext,
+  params: { oldEnrollmentId: string; sequenceId: string; leadId: string; assignedTo: string | null; enrolledBy: string }
+): Promise<SequenceEnrollmentRow> {
+  const { oldEnrollmentId, sequenceId, leadId, assignedTo, enrolledBy } = params;
+
+  const { data: step1 } = await db
+    .from("email_sequence_steps")
+    .select(STEP_WITH_VERSION)
+    .eq("sequence_id", sequenceId)
+    .eq("step_order", 1)
+    .maybeSingle();
+  if (!step1) throw new Error("Sequence has no step 1");
+
+  const { data: newId, error } = await db.rpc("switch_lead_enrollment", {
+    p_lead_id: leadId,
+    p_old_enrollment_id: oldEnrollmentId,
+    p_sequence_id: sequenceId,
+    p_assigned_to: assignedTo,
+    p_enrolled_by: enrolledBy,
   });
+  if (error) {
+    if (error.code === "23505") throw new EnrollmentConflictError();
+    throw new Error(`Failed to switch enrollment: ${error.message}`);
+  }
 
-  await emitEvent({
-    tenantId: auth.tenantId,
-    type: "sequence.enrolled",
-    entityType: "sequence_enrollment",
-    entityId: enrollmentRow.id,
-    payload: { sequence_id: sequenceId, lead_id: leadId },
-  });
+  const { data: enrollment, error: readError } = await db.from("sequence_enrollments").select("*").eq("id", newId as unknown as string).single();
+  if (readError || !enrollment) throw new Error("Failed to read the new enrollment");
 
-  return enrollmentRow;
+  return startEnrollment(db, auth, enrollment as unknown as SequenceEnrollmentRow, step1 as unknown as SequenceStepRow);
 }
 
 /**
@@ -260,7 +351,7 @@ export async function advanceEnrollment(
 ): Promise<void> {
   const { data: nextStep } = await db
     .from("email_sequence_steps")
-    .select("*")
+    .select(STEP_WITH_VERSION)
     .eq("sequence_id", enrollment.sequence_id)
     .gt("step_order", fromStepOrder)
     .order("step_order", { ascending: true })
@@ -284,6 +375,22 @@ export async function advanceEnrollment(
     entityId: enrollment.id,
     payload: { sequence_id: enrollment.sequence_id, lead_id: enrollment.lead_id },
   });
+
+  // The lead is free again: if a sequence was queued behind this one ("Queue next"), start it.
+  await promoteQueued(auth.tenantId, enrollment.lead_id);
+}
+
+/**
+ * Starts the sequence queued behind a lead's just-ended enrollment (queue-next.ts). Dynamic import: that
+ * module calls enrollLead from here, so a static import would be a cycle. Never throws.
+ */
+async function promoteQueued(tenantId: string, leadId: string): Promise<void> {
+  try {
+    const { promoteQueuedEnrollment } = await import("./queue-next");
+    await promoteQueuedEnrollment(tenantId, leadId);
+  } catch (err) {
+    logger.error({ err, tenantId, leadId }, "engine: starting the queued sequence failed (non-fatal)");
+  }
 }
 
 /**
@@ -374,7 +481,7 @@ export async function markDraftSent(
 
 /**
  * Auto-send counterpart to markDraftSent — OUTREACH-PHASE2-BRIEF.md §5.4.
- * Called by sequence-step-send.ts (an Inngest worker, not a request) once a
+ * Called by sequence-autosend-runner.ts (a background timer, not a request) once a
  * step's email_messages row has actually been sent via sendQueuedEmailBatch.
  * No AuthContext exists in that context — only tenantId — so this takes a
  * plain tenantId and attributes the lead_activities row to the enrollment's
@@ -512,8 +619,22 @@ export async function skipDraft(db: ScopedClient, auth: AuthContext, draftId: st
   return true;
 }
 
-/** Unenrolls a lead and skips any drafts still pending (interrupts the cadence). */
-export async function unenrollLead(db: ScopedClient, enrollmentId: string): Promise<void> {
+/**
+ * Unenrolls a lead and skips any drafts still pending (interrupts the cadence). Unless told not to, it then
+ * starts the sequence queued behind this one ("Queue next"). `promoteQueue: false` is for a caller that is
+ * about to enroll the lead somewhere else itself (bulk "Switch").
+ */
+export async function unenrollLead(
+  db: ScopedClient,
+  enrollmentId: string,
+  opts: { promoteQueue?: boolean } = {}
+): Promise<void> {
+  const { data: existing } = await db
+    .from("sequence_enrollments")
+    .select("lead_id, tenant_id")
+    .eq("id", enrollmentId)
+    .maybeSingle();
+
   await db.from("sequence_enrollments").update({ status: "unenrolled" }).eq("id", enrollmentId);
 
   await db
@@ -521,4 +642,7 @@ export async function unenrollLead(db: ScopedClient, enrollmentId: string): Prom
     .update({ status: "skipped" })
     .eq("enrollment_id", enrollmentId)
     .eq("status", "pending");
+
+  const row = existing as unknown as { lead_id: string; tenant_id: string } | null;
+  if (row && opts.promoteQueue !== false) await promoteQueued(row.tenant_id, row.lead_id);
 }

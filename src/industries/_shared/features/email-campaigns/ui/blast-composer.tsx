@@ -67,7 +67,7 @@ export function withDraft(tree: FilterTree, draft: FilterCondition | null): Filt
   };
 }
 
-type ComposerLeadList = { id: string; name: string; slug: string; is_staging?: boolean; is_archive: boolean };
+export type ComposerLeadList = { id: string; name: string; slug: string; is_staging?: boolean; is_archive: boolean };
 
 /** Which of the 4 picker categories a lead list belongs to — drives the
  *  chip's prefix label (FilterOption.groupLabel, resolved by
@@ -82,7 +82,7 @@ function stageGroupLabel(list: ComposerLeadList): string {
   return "Stage";
 }
 
-function buildAudienceOptionOverrides(input: {
+export function buildAudienceOptionOverrides(input: {
   forms: { id: string; name: string }[];
   sourceFacet: { name: string; count: number }[];
   assigneeFacet: { name: string; count: number }[];
@@ -133,7 +133,7 @@ function buildAudienceOptionOverrides(input: {
  *  expandable to STATUS_OPTIONS) groups for the "Add filter" picker's stage
  *  field — mirrors the leads-page sidebar grouping. Email-blast composer
  *  only; SMS composer and leads-table keep the flat picker unaffected. */
-function buildStageHierarchy(leadLists: ComposerLeadList[], isAdmin: boolean): HierarchicalFieldGroups {
+export function buildStageHierarchy(leadLists: ComposerLeadList[], isAdmin: boolean): HierarchicalFieldGroups {
   const statusLeaves = STATUS_OPTIONS.filter((o) => o.value !== "all").map((o) => ({ value: o.value, label: o.label }));
   const archiveList = leadLists.find((l) => !l.is_staging && l.is_archive === true);
   const deleteList = leadLists.find((l) => !l.is_staging && l.slug === "delete");

@@ -227,6 +227,21 @@ vi.mock("./inbound/fwd-route", () => ({
   processFwdRelay: (params: FwdRelayCallArgs, ...rest: unknown[]) => processFwdRelayMock(params, ...rest),
 }));
 
+// The reply-stop algorithm is unit-tested in isolation in
+// outreach/lib/stop-on-reply.test.ts — here only the WIRING is pinned (when it's called, and that a
+// failure in it never costs us the inbound email).
+const stopEnrollmentsOnReplyMock = vi.fn(
+  async (db: unknown, params: { tenantId: string; leadId: string; emailId: string }) => {
+    void db;
+    void params;
+    return { paused: 0, ended: 0, kept: 0 };
+  },
+);
+vi.mock("@/industries/_shared/features/outreach/lib/stop-on-reply", () => ({
+  stopEnrollmentsOnReply: (db: unknown, params: { tenantId: string; leadId: string; emailId: string }) =>
+    stopEnrollmentsOnReplyMock(db, params),
+}));
+
 import { processInboundEmailEvents } from "./process-inbound";
 
 const BASE_RECEIVING = {
@@ -272,6 +287,7 @@ beforeEach(() => {
   upsertThreadNotificationMock.mockReset().mockResolvedValue(undefined);
   processBccDropboxMock.mockReset().mockResolvedValue(undefined);
   processFwdRelayMock.mockReset().mockResolvedValue(undefined);
+  stopEnrollmentsOnReplyMock.mockReset().mockResolvedValue({ paused: 0, ended: 0, kept: 0 });
 });
 
 describe("processInboundEmailEvents — happy path (verb=reply, thread_id, authoritative)", () => {
@@ -324,6 +340,77 @@ describe("processInboundEmailEvents — happy path (verb=reply, thread_id, autho
     );
 
     expect(serviceTables.events[0].status).toBe("completed");
+  });
+});
+
+describe("processInboundEmailEvents — sequence reply-stop wiring", () => {
+  const replyEvent = (threadId: string | null) =>
+    makeEvent({
+      resend_email_id: "resend-1",
+      tenant_id: "tenant-a",
+      inbound_address_id: "addr-1",
+      kind: "thread",
+      verb: "reply",
+      thread_id: threadId,
+      user_id: null,
+      envelope: { to: BASE_RECEIVING.to, cc: [], bcc: [], from: BASE_RECEIVING.from, subject: BASE_RECEIVING.subject },
+    });
+
+  it("calls stopEnrollmentsOnReply with the thread's lead and the stored email id", async () => {
+    scopedTables.email_threads = [
+      { id: "thread-1", tenant_id: "tenant-a", connected_email_account_id: null, gmail_thread_id: null, lead_id: "lead-1", contact_id: null, message_count: 1 },
+    ];
+    serviceTables.events = [replyEvent("thread-1")];
+
+    const result = await processInboundEmailEvents();
+
+    expect(result).toEqual({ processed: 1, skipped: 0, errors: 0 });
+    expect(stopEnrollmentsOnReplyMock).toHaveBeenCalledTimes(1);
+    expect(stopEnrollmentsOnReplyMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ tenantId: "tenant-a", leadId: "lead-1", emailId: scopedTables.emails[0].id }),
+    );
+  });
+
+  it("does not call it when the thread has no lead", async () => {
+    scopedTables.email_threads = [
+      { id: "thread-1", tenant_id: "tenant-a", connected_email_account_id: null, gmail_thread_id: null, lead_id: null, contact_id: null, message_count: 1 },
+    ];
+    serviceTables.events = [replyEvent("thread-1")];
+
+    await processInboundEmailEvents();
+
+    expect(scopedTables.emails).toHaveLength(1);
+    expect(stopEnrollmentsOnReplyMock).not.toHaveBeenCalled();
+  });
+
+  it("never calls it for an auto-reply (out-of-office) — the guard dead-letters it first", async () => {
+    getReceivingEmailMock.mockResolvedValue({ ...BASE_RECEIVING, headers: { "Auto-Submitted": "auto-replied" } });
+    scopedTables.email_threads = [
+      { id: "thread-1", tenant_id: "tenant-a", connected_email_account_id: null, gmail_thread_id: null, lead_id: "lead-1", contact_id: null, message_count: 1 },
+    ];
+    serviceTables.events = [replyEvent("thread-1")];
+
+    await processInboundEmailEvents();
+
+    expect(stopEnrollmentsOnReplyMock).not.toHaveBeenCalled();
+    expect(scopedTables.emails ?? []).toHaveLength(0);
+  });
+
+  it("a failure inside it is non-fatal: the email is stored, the event completes, the rep is still notified", async () => {
+    stopEnrollmentsOnReplyMock.mockRejectedValue(new Error("boom"));
+    scopedTables.email_threads = [
+      { id: "thread-1", tenant_id: "tenant-a", connected_email_account_id: null, gmail_thread_id: null, lead_id: "lead-1", contact_id: null, message_count: 1 },
+    ];
+    scopedTables.leads = [{ id: "lead-1", tenant_id: "tenant-a", assigned_to: "user-2" }];
+    serviceTables.events = [replyEvent("thread-1")];
+
+    const result = await processInboundEmailEvents();
+
+    expect(result).toEqual({ processed: 1, skipped: 0, errors: 0 });
+    expect(scopedTables.emails).toHaveLength(1);
+    expect(serviceTables.events[0].status).toBe("completed");
+    expect(upsertThreadNotificationMock).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -45,6 +45,17 @@ Each cron job has a matching HTTP route (`/api/internal/reminders/run`, `/api/in
 those routes exist for manual/scripted invocation (`workflow_dispatch`-style debugging via `curl` +
 `INTERNAL_CRON_SECRET`), not as a scheduling fallback.
 
+### Work that is NOT Inngest (in-process timers)
+
+These run as timers inside the app container, started from `src/instrumentation.ts` by `startRunnerTimer`
+(`src/lib/ops/runner-timer.ts`), with a heartbeat per pass and `GET /api/health/runners` for monitoring (see
+`04-PROD-RESILIENCE.md`, "Background timers"): **email blasts** (30 s), **scheduled sequence sends** (60 s),
+**Outreach bulk enroll** (30 s) and **auto-send sequence steps** (60 s). The last one was the Inngest function
+`sequence-step-send` (every 15 minutes, so an email could be 15 minutes late) and was **removed from the serve route in
+Outreach Phase 4** — after that deploy, re-sync the Inngest app (`PUT /api/inngest`, see "Deploy & sync") so Inngest Cloud
+drops the stale registration. Reason for timers over Inngest here: the shared Inngest execution quota was exhausted once
+and silently blocked every blast.
+
 ## Adding a new background job
 
 1. Create `src/lib/inngest/functions/<name>.ts` exporting `inngest.createFunction(...)`. If the

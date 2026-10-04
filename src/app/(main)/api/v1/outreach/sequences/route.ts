@@ -16,6 +16,8 @@ import {
   validateSequenceSteps,
   type SequenceStepInput,
 } from "@/industries/_shared/features/outreach/lib/validate-steps";
+import { ON_REPLY_VALUES, type OnReply } from "@/industries/_shared/features/outreach/lib/stop-on-reply";
+import { validateSendWindow } from "@/industries/_shared/features/outreach/lib/send-window";
 
 export async function GET() {
   const auth = await authenticateRequest();
@@ -58,6 +60,13 @@ export async function POST(request: NextRequest) {
   const stepsError = validateSequenceSteps(body.steps);
   if (stepsError) return apiValidationError({ steps: [stepsError] });
 
+  if (body.on_reply !== undefined && !ON_REPLY_VALUES.includes(body.on_reply as OnReply)) {
+    return apiValidationError({ on_reply: ["Must be one of: pause, end, continue"] });
+  }
+
+  const sendWindow = validateSendWindow(body.send_window);
+  if (!sendWindow.ok) return apiValidationError({ send_window: [sendWindow.error] });
+
   const db = await scopedClient(auth);
 
   const { data: sequence, error: seqError } = await db
@@ -69,6 +78,10 @@ export async function POST(request: NextRequest) {
       // per-tenant. Defaults false so a tenant that never sets it (every
       // it_agency sequence today) keeps the exact manual-copy behavior.
       auto_send: body.auto_send === true,
+      // What a lead's reply does to their enrollment (migration 257). Omitted -> the column default, 'pause'.
+      ...(body.on_reply !== undefined ? { on_reply: body.on_reply as OnReply } : {}),
+      // When steps may go out (migration 260). Omitted / null = no window = send as soon as due.
+      send_window: sendWindow.window,
       created_by: auth.userId,
     })
     .select("*")
@@ -84,6 +97,7 @@ export async function POST(request: NextRequest) {
     sequence_id: sequenceRow.id,
     step_order: s.step_order,
     delay_days: s.delay_days ?? 0,
+    send_time: s.send_time || null,
     subject_template: s.subject_template ?? "",
     body_template: s.body_template ?? "",
     draft_source: s.draft_source ?? "template",

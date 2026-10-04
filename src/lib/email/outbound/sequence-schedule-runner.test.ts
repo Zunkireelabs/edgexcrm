@@ -111,4 +111,56 @@ describe("runScheduledSequenceSends", () => {
     expect(sendDraftMock).not.toHaveBeenCalled();
     expect(String(updates[0].patch.scheduled_error)).toMatch(/subject/i);
   });
+
+  describe("draining a big bulk schedule (Phase 6)", () => {
+    const many = (n: number, from = 0) => Array.from({ length: n }, (_, i) => draft({ id: `d${from + i}`, lead_id: `l${from + i}` }));
+
+    it("keeps taking batches while a batch was full: 70 due drafts all go out in ONE pass (50 + 20)", async () => {
+      tenantScan = [{ tenant_id: "t1" }];
+      dueDrafts = many(50);
+      let calls = 0;
+      sendDraftMock.mockImplementation(async () => {
+        calls++;
+        if (calls === 50) dueDrafts = many(20, 50); // the next batch the database would return
+        if (calls === 70) dueDrafts = [];
+        return { status: "sent", emailMessageId: `m${calls}` };
+      });
+
+      const out = await runScheduledSequenceSends();
+
+      expect(out.t1).toEqual({ sent: 70, throttled: 0, cleared: 0 });
+      expect(sendDraftMock).toHaveBeenCalledTimes(70);
+    });
+
+    it("stops as soon as the daily cap is reached instead of hammering the provider path", async () => {
+      tenantScan = [{ tenant_id: "t1" }];
+      dueDrafts = many(50);
+      sendDraftMock.mockResolvedValue({ status: "throttled" });
+
+      const out = await runScheduledSequenceSends();
+
+      expect(out.t1.sent).toBe(0);
+      expect(out.t1.throttled).toBe(50);
+      expect(sendDraftMock).toHaveBeenCalledTimes(50); // one batch, not repeated
+    });
+
+    it("respects the pass budget: with no time left it finishes the batch in hand and stops", async () => {
+      tenantScan = [{ tenant_id: "t1" }];
+      dueDrafts = many(50);
+      sendDraftMock.mockResolvedValue({ status: "sent", emailMessageId: "m" });
+
+      const out = await runScheduledSequenceSends(0);
+
+      expect(out.t1.sent).toBe(50);
+      expect(sendDraftMock).toHaveBeenCalledTimes(50);
+    });
+
+    it("a short batch means the list is drained — no needless second query round", async () => {
+      tenantScan = [{ tenant_id: "t1" }];
+      dueDrafts = many(3);
+      sendDraftMock.mockResolvedValue({ status: "sent", emailMessageId: "m" });
+      await runScheduledSequenceSends();
+      expect(sendDraftMock).toHaveBeenCalledTimes(3);
+    });
+  });
 });
