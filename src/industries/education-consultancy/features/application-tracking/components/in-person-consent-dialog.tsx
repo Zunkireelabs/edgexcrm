@@ -23,6 +23,7 @@ interface ConsentSessionData {
   title: string;
   body_snapshot: string;
   require_drawn_signature: boolean;
+  missing_fields: string[];
 }
 
 export function InPersonConsentDialog({
@@ -82,6 +83,7 @@ export function InPersonConsentDialog({
           title?: string;
           body_snapshot?: string;
           require_drawn_signature?: boolean;
+          missing_fields?: string[];
         };
 
         if (!data.valid) throw new Error("invalid");
@@ -93,6 +95,7 @@ export function InPersonConsentDialog({
           title: data.title!,
           body_snapshot: data.body_snapshot!,
           require_drawn_signature: data.require_drawn_signature ?? false,
+          missing_fields: data.missing_fields ?? [],
         });
         setState("ready");
       } catch {
@@ -136,6 +139,7 @@ export function InPersonConsentDialog({
                 title={consentData.title}
                 bodySnapshot={consentData.body_snapshot}
                 requireDrawnSignature={consentData.require_drawn_signature}
+                missingFields={consentData.missing_fields}
                 compact
                 onComplete={handleSigned}
               />
