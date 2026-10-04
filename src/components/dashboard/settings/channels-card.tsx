@@ -31,7 +31,6 @@ interface InboxChannel {
   status: string;
   access_token_set: boolean;
   webhook_url: string;
-  verify_token: string;
   created_at: string;
   updated_at: string;
 }

@@ -29,7 +29,7 @@ const state = vi.hoisted(() => ({
 function queryBuilder(table: string) {
   return {
     select: () => ({
-      eq: (_col: string, _val: string) => ({
+      eq: () => ({
         maybeSingle: async () => ({ data: table === "inbox_channels" ? state.existingChannel : null }),
       }),
     }),

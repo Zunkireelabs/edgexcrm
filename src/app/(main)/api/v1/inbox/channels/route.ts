@@ -54,7 +54,6 @@ export async function GET() {
       // blob reveals nothing useful but looks like a real token fragment).
       access_token_set: !!row.access_token,
       webhook_url: webhookUrl(row.provider),
-      verify_token: process.env.META_WEBHOOK_VERIFY_TOKEN ?? "",
       created_at: row.created_at,
       updated_at: row.updated_at,
     };
