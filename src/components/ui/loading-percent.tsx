@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useSyncExternalStore } from "react";
-import { Loader2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import {
@@ -13,10 +12,11 @@ import {
 } from "@/lib/route-progress-store";
 
 /**
- * The "Loading… NN%" chip. Render it inside a page's `loading.tsx` (via `LoadingTitle`), in the spot
- * where the page's real title will appear, so the percentage lives in the destination page's own
- * layout instead of floating over content. While it is mounted the navigation counts as in flight;
- * when the real page replaces the loading screen it unmounts, which completes the navigation.
+ * The loading percentage — just the number ("66%"), nothing else. Render it inside a page's
+ * `loading.tsx` (via `LoadingTitle`), in the spot where the page's real title will appear, so it
+ * lives in the destination page's own layout instead of floating over content. While it is mounted
+ * the navigation counts as in flight; when the real page replaces the loading screen it unmounts,
+ * which completes the navigation.
  */
 export function LoadingPercent({ className }: { className?: string }) {
   const { progress } = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
@@ -35,21 +35,19 @@ export function LoadingPercent({ className }: { className?: string }) {
       // Fades in after ~200ms so a near-instant page doesn't flash a number.
       style={{ animationDelay: "200ms" }}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border bg-card px-2.5 py-0.5 text-xs font-medium text-muted-foreground shadow-xs",
+        "min-w-[3ch] text-sm font-medium tabular-nums text-muted-foreground",
         "motion-safe:animate-in motion-safe:fade-in motion-safe:duration-300 motion-safe:fill-mode-backwards",
         className,
       )}
     >
-      <Loader2 className="h-3.5 w-3.5 animate-spin text-primary motion-reduce:animate-none" aria-hidden="true" />
-      <span>Loading…</span>
-      <span className="min-w-[2.5ch] text-right tabular-nums text-foreground">{rounded}%</span>
+      {rounded}%
     </span>
   );
 }
 
 /**
  * The title row of a page's loading screen: the page's real title (when `label` is given — it is
- * already known, so there is nothing to shimmer) with the loading chip beside it. Without a label
+ * already known, so there is nothing to shimmer) with the loading percentage beside it. Without a label
  * (e.g. Home's personalised greeting, or the generic fallback) it keeps a grey title block.
  * Height is fixed at h-7 to match the grey block it replaces, so nothing shifts.
  */

@@ -142,8 +142,10 @@ describe("LoadingPercent / LoadingTitle (in-page chip)", () => {
     ms(3000);
     expect(screen.getByRole("heading", { name: "Pipeline" })).toBeInTheDocument();
     const now = Math.round(state().progress);
-    expect(screen.getByRole("status")).toHaveTextContent(`Loading…${now}%`);
+    expect(screen.getByRole("status")).toHaveTextContent(new RegExp(`^${now}%$`)); // just the number
     expect(screen.getByRole("status")).toHaveAccessibleName(`Loading ${now}%`);
+    expect(screen.queryByText(/Loading…/)).toBeNull(); // no label text
+    expect(document.querySelector("svg")).toBeNull(); // no spinner icon
   });
 
   it("a loading screen appearing on its own (programmatic navigation) starts the indicator", () => {
