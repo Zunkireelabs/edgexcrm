@@ -1,23 +1,17 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useSyncExternalStore } from "react";
+import { Suspense, useEffect, useRef } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { shouldStartForClick } from "@/lib/route-progress";
-import {
-  getServerSnapshot,
-  getSnapshot,
-  routeChanged,
-  start,
-  subscribe,
-} from "@/lib/route-progress-store";
+import { routeChanged, start } from "@/lib/route-progress-store";
 
 /**
- * Global half of the route-loading indicator: the thin top bar, plus STARTING a navigation on a
- * plain click on an internal link or back/forward. The "Loading… NN%" number is not here — it is
- * rendered inside each page's own `loading.tsx` (see `LoadingPercent`), so it sits in the
- * destination page's layout instead of floating over content. This bar finishes (100%) when that
- * loading screen is replaced by the real page. Programmatic router.push/replace need no wiring:
- * any loading screen appearing starts the indicator on its own.
+ * Global half of the route-loading indicator. It renders nothing itself: it only STARTS a
+ * navigation (plain click on an internal link, or back/forward) and tells the store when the URL
+ * changes. The visible "Loading… NN%" lives inside each page's own `loading.tsx` (see
+ * `LoadingPercent`), so it sits in the destination page's layout instead of over content; it
+ * finishes when that loading screen is replaced by the real page. Programmatic router.push/replace
+ * need no wiring: any loading screen appearing starts the indicator on its own.
  *
  * Add `data-no-progress` to a link to opt it out.
  */
@@ -25,7 +19,6 @@ function RouteProgressInner() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const routeKey = `${pathname}?${searchParams.toString()}`;
-  const { status, progress } = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   const reducedMotion = useRef(false);
 
@@ -74,23 +67,7 @@ function RouteProgressInner() {
     routeChanged();
   }, [routeKey]);
 
-  if (status === "idle") return null;
-
-  return (
-    <div
-      role="progressbar"
-      aria-label="Page loading"
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-valuenow={Math.round(progress)}
-      className="pointer-events-none fixed inset-x-0 top-0 z-[100] h-0.5 bg-transparent"
-    >
-      <div
-        className="h-full bg-primary motion-safe:transition-[width] motion-safe:duration-200 motion-safe:ease-out"
-        style={{ width: `${progress}%` }}
-      />
-    </div>
-  );
+  return null;
 }
 
 /** Mount once in the dashboard layout. `useSearchParams` needs a Suspense boundary. */

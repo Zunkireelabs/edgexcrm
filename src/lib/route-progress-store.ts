@@ -1,10 +1,11 @@
 import { PROGRESS_CAP, nextProgress } from "@/lib/route-progress";
 
 /**
- * Shared state for the route-loading indicator. One module-level store, read through
- * `useSyncExternalStore` by two consumers:
- *   - the global top bar (`RouteProgress`), which STARTS a navigation on a link click / back-forward;
- *   - the in-page "Loading… NN%" chip (`LoadingPercent`), rendered inside each page's `loading.tsx`.
+ * Shared state for the route-loading indicator. One module-level store:
+ *   - the navigation tracker (`RouteProgress`) STARTS it on a link click / back-forward and reports
+ *     URL changes;
+ *   - the in-page "Loading… NN%" chip (`LoadingPercent`), rendered inside each page's `loading.tsx`,
+ *     reads it through `useSyncExternalStore` and is the only visible indicator.
  *
  * "Done" means the destination's loading screen has been replaced by the real page. Detected by the
  * chip unmounting (every `loading.tsx` renders one). If a route renders without ever showing a

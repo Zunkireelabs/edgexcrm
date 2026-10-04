@@ -14,7 +14,7 @@ vi.mock("next/navigation", () => ({
 
 import { RouteProgress } from "./route-progress";
 import { LoadingPercent, LoadingTitle } from "./loading-percent";
-import { reset } from "@/lib/route-progress-store";
+import { getSnapshot, reset } from "@/lib/route-progress-store";
 
 // One stable tree so `rerender(tree())` updates the same instances (a different tree would remount).
 const tree = (loadingScreen = false) => (
@@ -33,7 +33,7 @@ const tree = (loadingScreen = false) => (
 // the component's capture-phase listener still sees every click first).
 const stopNavigation = (e: Event) => e.preventDefault();
 
-const bar = () => screen.queryByRole("progressbar");
+const state = () => getSnapshot();
 const ms = (n: number) => act(() => { vi.advanceTimersByTime(n); });
 
 beforeEach(() => {
@@ -54,18 +54,27 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("RouteProgress (global top bar)", () => {
+describe("RouteProgress (navigation tracker)", () => {
   it("renders nothing until a navigation starts", () => {
     render(tree());
-    expect(bar()).toBeNull();
+    expect(state().status).toBe("idle");
+  });
+
+  it("draws no bar of its own — the in-page chip is the only visible indicator", () => {
+    const { container } = render(tree());
+    fireEvent.click(screen.getByText("Pipeline"));
+    ms(1000);
+    expect(state().status).toBe("loading");
+    expect(screen.queryByRole("progressbar")).toBeNull();
+    expect(container.querySelector(".fixed")).toBeNull();
   });
 
   it("starts on a plain internal link click and climbs, never past 90 on its own", () => {
     render(tree());
     fireEvent.click(screen.getByText("Pipeline"));
-    expect(bar()).toBeInTheDocument();
+    expect(state().status).toBe("loading");
     ms(6000);
-    const now = Number(bar()!.getAttribute("aria-valuenow"));
+    const now = state().progress;
     expect(now).toBeGreaterThan(50);
     expect(now).toBeLessThanOrEqual(90);
   });
@@ -78,13 +87,13 @@ describe("RouteProgress (global top bar)", () => {
     fireEvent.click(screen.getByText("Opt out"));
     fireEvent.click(screen.getByText("Pipeline"), { ctrlKey: true });
     fireEvent.click(screen.getByText("Pipeline"), { metaKey: true });
-    expect(bar()).toBeNull();
+    expect(state().status).toBe("idle");
   });
 
   it("starts on back/forward (popstate)", () => {
     render(tree());
     act(() => { window.dispatchEvent(new PopStateEvent("popstate")); });
-    expect(bar()).toBeInTheDocument();
+    expect(state().status).toBe("loading");
   });
 
   it("with no loading screen, finishes shortly after the route changes", () => {
@@ -94,52 +103,52 @@ describe("RouteProgress (global top bar)", () => {
     mockPathname = "/pipeline";
     rerender(tree());
     ms(150);
-    expect(bar()!.getAttribute("aria-valuenow")).toBe("100");
+    expect(state()).toEqual({ status: "done", progress: 100 });
     ms(400);
-    expect(bar()).toBeNull();
+    expect(state().status).toBe("idle");
   });
 
-  it("with a loading screen, the URL change does not finish it — the real page replacing the loading screen does", () => {
+  it("with a loading screen, the URL change does not finish it; the real page replacing the loading screen does", () => {
     const { rerender } = render(tree());
     fireEvent.click(screen.getByText("Pipeline"));
     // destination renders its loading screen; URL changes in the same commit
     mockPathname = "/pipeline";
     rerender(tree(true));
     ms(2000);
-    expect(bar()).toBeInTheDocument();
-    expect(Number(bar()!.getAttribute("aria-valuenow"))).toBeLessThanOrEqual(90);
+    expect(state().status).toBe("loading");
+    expect(state().progress).toBeLessThanOrEqual(90);
 
     // real page arrives -> loading screen unmounts
     rerender(tree(false));
     ms(200);
-    expect(bar()!.getAttribute("aria-valuenow")).toBe("100");
+    expect(state()).toEqual({ status: "done", progress: 100 });
     ms(400);
-    expect(bar()).toBeNull();
+    expect(state().status).toBe("idle");
   });
 
   it("gives up after the safety timeout if nothing happens, instead of sticking", () => {
     render(tree());
     fireEvent.click(screen.getByText("Pipeline"));
     ms(10_500);
-    expect(bar()).toBeNull();
+    expect(state().status).toBe("idle");
   });
 });
 
 describe("LoadingPercent / LoadingTitle (in-page chip)", () => {
-  it("shows the page's own title and the same percentage as the top bar", () => {
+  it("shows the page's own title and the live percentage", () => {
     const { rerender } = render(tree());
     fireEvent.click(screen.getByText("Pipeline"));
     rerender(tree(true));
     ms(3000);
     expect(screen.getByRole("heading", { name: "Pipeline" })).toBeInTheDocument();
-    const now = Number(bar()!.getAttribute("aria-valuenow"));
+    const now = Math.round(state().progress);
     expect(screen.getByRole("status")).toHaveTextContent(`Loading…${now}%`);
     expect(screen.getByRole("status")).toHaveAccessibleName(`Loading ${now}%`);
   });
 
-  it("a loading screen appearing on its own (programmatic navigation) starts the bar", () => {
+  it("a loading screen appearing on its own (programmatic navigation) starts the indicator", () => {
     render(<div><RouteProgress /><LoadingPercent /></div>);
-    expect(bar()).toBeInTheDocument();
+    expect(state().status).toBe("loading");
   });
 
   it("without a label it keeps a grey title block instead of inventing a title", () => {

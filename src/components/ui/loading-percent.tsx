@@ -16,7 +16,7 @@ import {
  * The "Loading… NN%" chip. Render it inside a page's `loading.tsx` (via `LoadingTitle`), in the spot
  * where the page's real title will appear, so the percentage lives in the destination page's own
  * layout instead of floating over content. While it is mounted the navigation counts as in flight;
- * when the real page replaces the loading screen it unmounts, which completes the top bar.
+ * when the real page replaces the loading screen it unmounts, which completes the navigation.
  */
 export function LoadingPercent({ className }: { className?: string }) {
   const { progress } = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
