@@ -29,7 +29,7 @@ import { WorkExperienceSection, type WorkExperienceEntry } from "./work-experien
 import { ReferencesSection, type ReferenceEntry } from "./references-section";
 import { SectionGroup, CardSection, FieldGrid, EditableField } from "./form-primitives";
 import { AttachDocumentButton } from "./attach-document-button";
-import { PERSONAL_DETAIL_COLUMNS } from "@/lib/leads/personal-details";
+import { PERSONAL_DETAIL_COLUMNS, PERSONAL_DETAIL_DATE_COLUMNS } from "@/lib/leads/personal-details";
 
 /**
  * Personal / passport / citizenship details are real `leads` columns
@@ -167,10 +167,18 @@ export function coreIdentityFromLead(lead: Lead): CoreIdentity {
   };
 }
 
-/** Seeds the Personal / Passport & Citizenship fields from the lead's real columns. */
+/**
+ * Seeds the Personal / Passport & Citizenship fields from the lead's real columns.
+ * DATE columns arrive as `YYYY-MM-DD`; if a source ever hands back a longer value (a timestamp),
+ * keep just the calendar date so the date input shows it and change-detection stays accurate.
+ */
 export function personalDetailsFromLead(lead: Lead): FieldValues {
+  const dateColumns: readonly string[] = PERSONAL_DETAIL_DATE_COLUMNS;
   const out: FieldValues = {};
-  for (const col of PERSONAL_DETAIL_COLUMNS) out[col] = lead[col] ?? "";
+  for (const col of PERSONAL_DETAIL_COLUMNS) {
+    const raw = lead[col];
+    out[col] = dateColumns.includes(col) ? (/^\d{4}-\d{2}-\d{2}/.exec(raw ?? "")?.[0] ?? "") : (raw ?? "");
+  }
   return out;
 }
 
