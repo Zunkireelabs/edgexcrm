@@ -141,6 +141,11 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
             />
           )}
 
+          {/* Student Details summary — read-only. Editing happens in the Student Details pop-up, opened by the page's single Edit button (top of the contact card). */}
+          {studentRecordActive && (
+            <StudentDetailsSummaryCard lead={lead} />
+          )}
+
           {/* Recent Notes Preview */}
           {notes.length > 0 && (
             <Card className="shadow-none rounded-lg py-0">
@@ -170,11 +175,6 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
                 )}
               </CardContent>
             </Card>
-          )}
-
-          {/* Student Details summary — read-only. Editing happens in the Student Details pop-up, opened by the page's single Edit button (top of the contact card). */}
-          {studentRecordActive && (
-            <StudentDetailsSummaryCard lead={lead} />
           )}
 
           {/* Possible Duplicates — admin-only */}
