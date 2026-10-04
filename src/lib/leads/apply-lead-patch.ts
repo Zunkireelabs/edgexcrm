@@ -26,6 +26,7 @@ import {
   hasProspectQualification,
   canBypassProspectQualification,
 } from "@/lib/leads/prospect-qualification";
+import { PERSONAL_DETAIL_COLUMNS, coercePersonalDetailsPayload } from "@/lib/leads/personal-details";
 import { normalizeDestinations, normalizeFieldOfStudy, normalizeDegreeLevel } from "@/lib/leads/destination-normalize";
 import type { Lead } from "@/types/database";
 
@@ -87,6 +88,8 @@ const UPDATABLE_FIELDS = [
   "sat_score",
   "gre_gmat_score",
   "on_hold",
+  // Student personal / passport / citizenship details (migration 234) — normalised below.
+  ...PERSONAL_DETAIL_COLUMNS,
 ] as const;
 
 // Blocked for plain counselors/viewers but NOT for team-scoped branch managers
@@ -598,6 +601,14 @@ export async function applyLeadPatch(
     updatePayload.degree_level = normalizeDegreeLevel(updatePayload.degree_level as string | null);
   }
   Object.assign(updatePayload, coerceAcademicPayload(body));
+
+  // Personal / passport / citizenship details: trim, null-out blanks, reject bad dates
+  // before they reach Postgres (an invalid DATE would surface as an opaque 500).
+  const personal = coercePersonalDetailsPayload(body);
+  if (Object.keys(personal.errors).length > 0) {
+    return { kind: "validation", errors: personal.errors };
+  }
+  Object.assign(updatePayload, personal.values);
 
   // Mirror lead_type on list move (keeps existing education UI working during transition)
   // Also resolve list names for the audit log so the activity timeline can render them.

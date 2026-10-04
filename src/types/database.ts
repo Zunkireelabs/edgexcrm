@@ -210,6 +210,26 @@ export interface Lead {
   degree_level: string | null;
   // Nationality + intake page/account (migration 087)
   nationality: string | null;
+  // Student personal / passport / citizenship details (education_consultancy — migration 234).
+  // DATE columns come back as ISO `YYYY-MM-DD` strings.
+  date_of_birth: string | null;
+  marital_status: string | null;
+  father_name: string | null;
+  mother_name: string | null;
+  full_address: string | null;
+  emergency_contact_name: string | null;
+  emergency_contact_phone: string | null;
+  passport_number: string | null;
+  passport_issued_by: string | null;
+  passport_issued_date: string | null;
+  passport_expiry_date: string | null;
+  citizenship_number: string | null;
+  citizenship_issued_by: string | null;
+  citizenship_issued_date: string | null;
+  // Guardian contact (education_consultancy — migration 266)
+  guardian_phone: string | null;
+  guardian_email: string | null;
+  guardian_relationship: string | null;
   intake_account: string | null;
   // Pre-Application fee (education_consultancy — migration 084)
   pre_app_fee_status: "paid" | "unpaid" | "waiver" | null;
