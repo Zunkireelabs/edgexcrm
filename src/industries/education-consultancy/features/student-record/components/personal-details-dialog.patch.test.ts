@@ -68,3 +68,32 @@ describe("buildLivePatch", () => {
     ).toEqual({ bachelor_passed_year: null });
   });
 });
+
+describe("buildLivePatch — personal / passport details (migration 234)", () => {
+  const build = (personal: Record<string, string>, original: Record<string, string> = {}) =>
+    buildLivePatch(core, core, study, study, emptyQualifications(), emptyQualifications(), [], [], source, source, personal, original);
+
+  it("sends only the personal fields that changed", () => {
+    expect(build({ passport_number: "PA123", father_name: "Ram" }, { father_name: "Ram" })).toEqual({ passport_number: "PA123" });
+  });
+
+  it("sends nothing when untouched", () => {
+    expect(build({ passport_number: "PA123" }, { passport_number: "PA123" })).toEqual({});
+  });
+
+  it("trims, and sends null when a value is cleared", () => {
+    expect(build({ full_address: "  Baneshwor " })).toEqual({ full_address: "Baneshwor" });
+    expect(build({ passport_number: "" }, { passport_number: "PA123" })).toEqual({ passport_number: null });
+  });
+
+  it("sends guardian contact fields when changed", () => {
+    expect(build({ guardian_phone: " 9800000000 ", guardian_relationship: "Uncle" })).toEqual({
+      guardian_phone: "9800000000",
+      guardian_relationship: "Uncle",
+    });
+  });
+
+  it("never sends fields that have no column (e.g. sponsor_name)", () => {
+    expect(build({ sponsor_name: "Uncle" })).toEqual({});
+  });
+});
