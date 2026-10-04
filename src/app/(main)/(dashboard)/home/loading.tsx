@@ -1,4 +1,5 @@
 import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingTitle } from "@/components/ui/loading-percent";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 
 function CardSkeleton({ titleWidth = "w-20", rows = 3, withAction = false }: { titleWidth?: string; rows?: number; withAction?: boolean }) {
@@ -76,7 +77,7 @@ export default function Loading() {
     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px] gap-6 lg:gap-0 items-start">
       <div className="min-w-0 space-y-3 lg:pr-6">
         <div className="mb-6">
-          <Skeleton className="h-7 w-56 mb-1" />
+          <LoadingTitle skeletonClassName="w-56" className="mb-1" />
           <Skeleton className="h-3 w-48" />
         </div>
 

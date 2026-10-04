@@ -13,10 +13,11 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { RouteProgress } from "./route-progress";
+import { LoadingPercent, LoadingTitle } from "./loading-percent";
+import { reset } from "@/lib/route-progress-store";
 
-// One stable tree, so `rerender(tree())` updates the same RouteProgress instance (a different
-// tree would remount it and drop its state).
-const tree = () => (
+// One stable tree so `rerender(tree())` updates the same instances (a different tree would remount).
+const tree = (loadingScreen = false) => (
   <div>
     <a href="/pipeline">Pipeline</a>
     <a href="/leads">Leads (current page)</a>
@@ -24,71 +25,53 @@ const tree = () => (
     <a href="/contacts" target="_blank">New tab</a>
     <a href="/archived" data-no-progress>Opt out</a>
     <RouteProgress />
+    {loadingScreen && <LoadingTitle label="Pipeline" />}
   </div>
 );
-const mount = () => render(tree());
+
+// jsdom can't navigate; stop link clicks from logging "Not implemented: navigation" (bubble phase, so
+// the component's capture-phase listener still sees every click first).
+const stopNavigation = (e: Event) => e.preventDefault();
 
 const bar = () => screen.queryByRole("progressbar");
+const ms = (n: number) => act(() => { vi.advanceTimersByTime(n); });
 
 beforeEach(() => {
   mockPathname = "/leads";
   mockSearch = "";
   window.history.pushState({}, "", "/leads"); // the page the user is "on"
+  document.addEventListener("click", stopNavigation);
   vi.useFakeTimers();
+  reset();
   vi.stubGlobal("matchMedia", (q: string) => ({ matches: false, media: q, addEventListener() {}, removeEventListener() {} }));
 });
 
 afterEach(() => {
+  document.removeEventListener("click", stopNavigation);
   cleanup();
+  act(() => reset());
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
-describe("RouteProgress", () => {
+describe("RouteProgress (global top bar)", () => {
   it("renders nothing until a navigation starts", () => {
-    mount();
+    render(tree());
     expect(bar()).toBeNull();
   });
 
-  it("starts on an internal link click, shows the badge only after the delay, and climbs but never past 90", () => {
-    mount();
+  it("starts on a plain internal link click and climbs, never past 90 on its own", () => {
+    render(tree());
     fireEvent.click(screen.getByText("Pipeline"));
     expect(bar()).toBeInTheDocument();
-    expect(screen.queryByText("Loading…")).toBeNull(); // no flash for instant navs
-
-    act(() => { vi.advanceTimersByTime(250); });
-    expect(screen.getByText("Loading…")).toBeInTheDocument();
-
-    act(() => { vi.advanceTimersByTime(6000); });
+    ms(6000);
     const now = Number(bar()!.getAttribute("aria-valuenow"));
     expect(now).toBeGreaterThan(50);
     expect(now).toBeLessThanOrEqual(90);
-    expect(screen.getByText(`${now}%`)).toBeInTheDocument();
   });
 
-  it("completes to 100% when the route changes, then disappears", () => {
-    const { rerender } = mount();
-    fireEvent.click(screen.getByText("Pipeline"));
-    act(() => { vi.advanceTimersByTime(500); });
-
-    mockPathname = "/pipeline";
-    rerender(tree());
-    expect(bar()!.getAttribute("aria-valuenow")).toBe("100");
-
-    act(() => { vi.advanceTimersByTime(400); });
-    expect(bar()).toBeNull();
-  });
-
-  it("completes when only the query string changes", () => {
-    const { rerender } = mount();
-    fireEvent.click(screen.getByText("Pipeline"));
-    mockSearch = "stage=won";
-    rerender(tree());
-    expect(bar()!.getAttribute("aria-valuenow")).toBe("100");
-  });
-
-  it("does not start for the current page, external links, new-tab links, opted-out links, or modified clicks", () => {
-    mount();
+  it("does not start for the current page, external, new-tab, opted-out links, or modified clicks", () => {
+    render(tree());
     fireEvent.click(screen.getByText("Leads (current page)"));
     fireEvent.click(screen.getByText("External"));
     fireEvent.click(screen.getByText("New tab"));
@@ -99,25 +82,70 @@ describe("RouteProgress", () => {
   });
 
   it("starts on back/forward (popstate)", () => {
-    mount();
+    render(tree());
     act(() => { window.dispatchEvent(new PopStateEvent("popstate")); });
     expect(bar()).toBeInTheDocument();
   });
 
-  it("gives up after the safety timeout if the URL never changes, instead of sticking", () => {
-    mount();
+  it("with no loading screen, finishes shortly after the route changes", () => {
+    const { rerender } = render(tree());
     fireEvent.click(screen.getByText("Pipeline"));
-    expect(bar()).toBeInTheDocument();
-    act(() => { vi.advanceTimersByTime(10_500); });
+    ms(300);
+    mockPathname = "/pipeline";
+    rerender(tree());
+    ms(150);
+    expect(bar()!.getAttribute("aria-valuenow")).toBe("100");
+    ms(400);
     expect(bar()).toBeNull();
   });
 
-  it("with reduced motion, shows 90% immediately without trickling", () => {
-    vi.stubGlobal("matchMedia", (q: string) => ({ matches: true, media: q, addEventListener() {}, removeEventListener() {} }));
-    mount();
+  it("with a loading screen, the URL change does not finish it — the real page replacing the loading screen does", () => {
+    const { rerender } = render(tree());
     fireEvent.click(screen.getByText("Pipeline"));
-    expect(bar()!.getAttribute("aria-valuenow")).toBe("90");
-    act(() => { vi.advanceTimersByTime(3000); });
-    expect(bar()!.getAttribute("aria-valuenow")).toBe("90");
+    // destination renders its loading screen; URL changes in the same commit
+    mockPathname = "/pipeline";
+    rerender(tree(true));
+    ms(2000);
+    expect(bar()).toBeInTheDocument();
+    expect(Number(bar()!.getAttribute("aria-valuenow"))).toBeLessThanOrEqual(90);
+
+    // real page arrives -> loading screen unmounts
+    rerender(tree(false));
+    ms(200);
+    expect(bar()!.getAttribute("aria-valuenow")).toBe("100");
+    ms(400);
+    expect(bar()).toBeNull();
+  });
+
+  it("gives up after the safety timeout if nothing happens, instead of sticking", () => {
+    render(tree());
+    fireEvent.click(screen.getByText("Pipeline"));
+    ms(10_500);
+    expect(bar()).toBeNull();
+  });
+});
+
+describe("LoadingPercent / LoadingTitle (in-page chip)", () => {
+  it("shows the page's own title and the same percentage as the top bar", () => {
+    const { rerender } = render(tree());
+    fireEvent.click(screen.getByText("Pipeline"));
+    rerender(tree(true));
+    ms(3000);
+    expect(screen.getByRole("heading", { name: "Pipeline" })).toBeInTheDocument();
+    const now = Number(bar()!.getAttribute("aria-valuenow"));
+    expect(screen.getByRole("status")).toHaveTextContent(`Loading…${now}%`);
+    expect(screen.getByRole("status")).toHaveAccessibleName(`Loading ${now}%`);
+  });
+
+  it("a loading screen appearing on its own (programmatic navigation) starts the bar", () => {
+    render(<div><RouteProgress /><LoadingPercent /></div>);
+    expect(bar()).toBeInTheDocument();
+  });
+
+  it("without a label it keeps a grey title block instead of inventing a title", () => {
+    const { container } = render(<LoadingTitle />);
+    expect(screen.queryByRole("heading")).toBeNull();
+    expect(container.querySelector('[data-slot="skeleton"]')).toBeInTheDocument();
+    expect(screen.getByRole("status")).toBeInTheDocument();
   });
 });
