@@ -125,6 +125,17 @@ export async function POST(
     return NextResponse.json({ received: true }, { status: 200 });
   }
 
+  const phoneNumberIds = Array.from(new Set(messages.map((m) => m.channelRef)));
+  logger.info(
+    {
+      provider,
+      phoneNumberIds,
+      statusUpdateCount: statusResults.length,
+      messageCount: messages.length,
+    },
+    "meta webhook: accepted"
+  );
+
   if (messages.length === 0) {
     return NextResponse.json({ received: true }, { status: 200 });
   }

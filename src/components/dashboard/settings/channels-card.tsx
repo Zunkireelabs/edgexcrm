@@ -19,7 +19,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { MessageSquare, Plus, Trash2, Copy, Check } from "lucide-react";
+import { MessageSquare, Plus, Trash2, Copy, Check, KeyRound } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 
@@ -29,10 +29,11 @@ interface InboxChannel {
   external_account_id: string;
   display_name: string;
   status: string;
-  access_token_masked: string;
+  access_token_set: boolean;
   webhook_url: string;
   verify_token: string;
   created_at: string;
+  updated_at: string;
 }
 
 interface ConnectResult {
@@ -75,6 +76,10 @@ export function ChannelsCard() {
 
   const [form, setForm] = useState({ phone_number_id: "", access_token: "", display_name: "" });
   const [saving, setSaving] = useState(false);
+
+  const [tokenTarget, setTokenTarget] = useState<InboxChannel | null>(null);
+  const [newToken, setNewToken] = useState("");
+  const [updatingToken, setUpdatingToken] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -121,6 +126,33 @@ export function ChannelsCard() {
       router.refresh();
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleUpdateToken() {
+    if (!tokenTarget || !newToken.trim()) {
+      toast.error("Enter a new access token");
+      return;
+    }
+    setUpdatingToken(true);
+    try {
+      const res = await fetch(`/api/v1/inbox/channels/${tokenTarget.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ access_token: newToken.trim() }),
+      });
+      const json = await res.json() as { message?: string; error?: string };
+      if (!res.ok) {
+        toast.error(json.message ?? json.error ?? "Failed to update token");
+        return;
+      }
+      toast.success(`${tokenTarget.display_name} token updated`);
+      setTokenTarget(null);
+      setNewToken("");
+      await load();
+      router.refresh();
+    } finally {
+      setUpdatingToken(false);
     }
   }
 
@@ -186,17 +218,31 @@ export function ChannelsCard() {
                       </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      {ch.provider} · ID: {ch.external_account_id} · Token: {ch.access_token_masked}
+                      {ch.provider} · ID: {ch.external_account_id} · Token:{" "}
+                      {ch.access_token_set
+                        ? `set · updated ${new Date(ch.updated_at).toLocaleDateString()}`
+                        : "not set"}
                     </p>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                    onClick={() => setDeleteTarget(ch)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 w-8 p-0"
+                      title="Update token"
+                      onClick={() => { setTokenTarget(ch); setNewToken(""); }}
+                    >
+                      <KeyRound className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                      onClick={() => setDeleteTarget(ch)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -265,21 +311,45 @@ export function ChannelsCard() {
           </DialogHeader>
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Paste these values into your Meta app under{" "}
-              <strong>WhatsApp → Configuration → Webhook</strong>.
+              The webhook for this app is already configured — no action needed in Meta.
+              The callback URL below is shown for reference only.
             </p>
             {successResult && (
-              <>
-                <CopyBox label="Callback URL" value={successResult.webhook_url} />
-                <CopyBox label="Verify Token" value={successResult.verify_token} />
-              </>
+              <CopyBox label="Callback URL (reference only)" value={successResult.webhook_url} />
             )}
-            <p className="text-xs text-muted-foreground">
-              Subscribe to the <strong>messages</strong> field after saving.
-            </p>
           </div>
           <DialogFooter>
             <Button onClick={() => setSuccessResult(null)}>Done</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Update token */}
+      <Dialog open={!!tokenTarget} onOpenChange={(open) => { if (!open) { setTokenTarget(null); setNewToken(""); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Update token for {tokenTarget?.display_name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label htmlFor="new_access_token">New Access Token</Label>
+            <Input
+              id="new_access_token"
+              type="password"
+              placeholder="EAAxxxxxxxxxxxxxx"
+              value={newToken}
+              onChange={(e) => setNewToken(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              This keeps the channel&apos;s conversation history, unlike disconnecting and reconnecting.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setTokenTarget(null); setNewToken(""); }}>
+              Cancel
+            </Button>
+            <Button onClick={handleUpdateToken} disabled={updatingToken}>
+              {updatingToken ? "Updating…" : "Update token"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
