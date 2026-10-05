@@ -625,18 +625,38 @@ export function ApplicationDetailPage({
                 )}
               </div>
 
-              {/* Created by */}
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Created by</Label>
-                <p className="text-sm font-medium">
-                  {application.created_by
-                    ? (teamMemberNames[application.created_by] ?? teamMemberEmails[application.created_by] ?? "—")
-                    : "—"}
-                </p>
+              {/* Study details — two compact columns (long fields span both); Created by lives in the left "Created By" card. */}
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+              {/* University */}
+              <div className="col-span-2 space-y-1">
+                <Label className="text-xs text-muted-foreground">University</Label>
+                {editing ? (
+                  <AutocompleteInput
+                    value={universityName}
+                    onChange={setUniversityName}
+                    suggestions={collegeSuggestions}
+                    placeholder="e.g. University of Melbourne"
+                    onCreateNew={handleCreateCollege}
+                    createLabel="university"
+                    skipConfirm
+                  />
+                ) : (
+                  <p className="text-sm">{application.university_name}</p>
+                )}
+              </div>
+
+              {/* Program */}
+              <div className="col-span-2 space-y-1">
+                <Label className="text-xs text-muted-foreground">Program</Label>
+                {editing ? (
+                  <Input value={programName} onChange={(e) => setProgramName(e.target.value)} />
+                ) : (
+                  <p className="text-sm">{application.program_name}</p>
+                )}
               </div>
 
               {/* Country */}
-              <div className="space-y-1">
+              <div className={`space-y-1${editing ? " col-span-2" : ""}`}>
                 {editing ? (
                   <DestinationsMultiSelect
                     selected={countries}
@@ -657,76 +677,8 @@ export function ApplicationDetailPage({
                 )}
               </div>
 
-              {/* University */}
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">University</Label>
-                {editing ? (
-                  <AutocompleteInput
-                    value={universityName}
-                    onChange={setUniversityName}
-                    suggestions={collegeSuggestions}
-                    placeholder="e.g. University of Melbourne"
-                    onCreateNew={handleCreateCollege}
-                    createLabel="university"
-                    skipConfirm
-                  />
-                ) : (
-                  <p className="text-sm">{application.university_name}</p>
-                )}
-              </div>
-
-              {/* Interested Degree Level */}
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Interested Degree Level</Label>
-                {editing ? (
-                  <Select value={degreeLevel || "__none__"} onValueChange={setDegreeLevel}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select level" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">Select level</SelectItem>
-                      {studyLevels.map((lvl) => (
-                        <SelectItem key={lvl} value={lvl}>{lvl}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <p className="text-sm">{normalizeDegreeLevel(application.degree_level) ?? "—"}</p>
-                )}
-              </div>
-
-              {/* Field of Study */}
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Field of Study</Label>
-                {editing ? (
-                  <Select value={fieldOfStudy || "__none__"} onValueChange={setFieldOfStudy}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select field" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">Select field</SelectItem>
-                      {fieldsOfStudy.map((f) => (
-                        <SelectItem key={f} value={f}>{f}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <p className="text-sm">{normalizeFieldOfStudy(application.field_of_study) ?? "—"}</p>
-                )}
-              </div>
-
-              {/* Program */}
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Program</Label>
-                {editing ? (
-                  <Input value={programName} onChange={(e) => setProgramName(e.target.value)} />
-                ) : (
-                  <p className="text-sm">{application.program_name}</p>
-                )}
-              </div>
-
               {/* Intake */}
-              <div className="space-y-1">
+              <div className={`space-y-1${editing ? " col-span-2" : ""}`}>
                 <Label className="text-xs text-muted-foreground">Intake</Label>
                 {editing ? (
                   <div className="grid grid-cols-2 gap-2">
@@ -764,6 +716,46 @@ export function ApplicationDetailPage({
                 )}
               </div>
 
+              {/* Degree Level */}
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Degree Level</Label>
+                {editing ? (
+                  <Select value={degreeLevel || "__none__"} onValueChange={setDegreeLevel}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select level" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">Select level</SelectItem>
+                      {studyLevels.map((lvl) => (
+                        <SelectItem key={lvl} value={lvl}>{lvl}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <p className="text-sm">{normalizeDegreeLevel(application.degree_level) ?? "—"}</p>
+                )}
+              </div>
+
+              {/* Field of Study */}
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Field of Study</Label>
+                {editing ? (
+                  <Select value={fieldOfStudy || "__none__"} onValueChange={setFieldOfStudy}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select field" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">Select field</SelectItem>
+                      {fieldsOfStudy.map((f) => (
+                        <SelectItem key={f} value={f}>{f}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <p className="text-sm">{normalizeFieldOfStudy(application.field_of_study) ?? "—"}</p>
+                )}
+              </div>
+
               {/* Deadline */}
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">Deadline</Label>
@@ -776,7 +768,7 @@ export function ApplicationDetailPage({
 
               {/* Offer Type */}
               {(showOfferType || editing) && (
-                <div className={showOfferType && editing ? "rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2" : "space-y-1"}>
+                <div className={showOfferType && editing ? "col-span-2 rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2" : `space-y-1${editing ? " col-span-2" : ""}`}>
                   <Label className={`text-xs ${showOfferType && editing ? "text-amber-800 font-semibold" : "text-muted-foreground"}`}>
                     Offer Type
                   </Label>
@@ -812,6 +804,7 @@ export function ApplicationDetailPage({
                   )}
                 </div>
               )}
+              </div>
 
               {/* Financials */}
               <div className="rounded-lg border p-3 space-y-3">
