@@ -43,7 +43,7 @@ import { toast } from "sonner";
 import type { Lead, PipelineStage } from "@/types/database";
 import { getLeadFullName, getLeadInitials } from "./lead-name";
 import { isOtherLead } from "@/lib/leads/lead-type";
-import { formatDateTime } from "@/lib/date";
+import { formatDateTime, formatRelativeTime } from "@/lib/date";
 import { displayCase } from "@/lib/display-case";
 
 interface LeadTypeOption {
@@ -440,6 +440,11 @@ export function ContactCard({
               <p className="text-xs text-muted-foreground mt-2">
                 Created {formatDateTime(lead.created_at)}
               </p>
+              {industryId === "education_consultancy" && lead.updated_at && (
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Last updated {formatRelativeTime(lead.updated_at)}
+                </p>
+              )}
             </>
           )}
         </div>

@@ -16,7 +16,7 @@ import {
 } from "@/industries/real-estate/lib/investor-fields";
 import { isOtherLead } from "@/lib/leads/lead-type";
 import { canEditLeadWorkingData } from "@/lib/leads/lead-edit-scope";
-import { formatDateTime } from "@/lib/date";
+import { formatDateTime, formatRelativeTime } from "@/lib/date";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { SALUTATIONS } from "@/industries/it-agency/leads/salutations";
@@ -604,7 +604,10 @@ export function KeyInfoSection({
             />
           )}
 
-          {/* ── DETAILS ─────────────────────────────────────────────── */}
+          {/* ── DETAILS ───────────────────────────────────────────────
+              Education tenants don't use this box: Created / Last Updated live in the
+              contact card and the study fields in Study Interest. Other industries keep it. */}
+          {industryId !== "education_consultancy" && (<>
           <div className="border-t border-border" />
           <InfoSection title="Details" defaultOpen={false} titleClassName={SECTION_TITLE_CLASS}>
             <div className="space-y-2">
@@ -691,6 +694,7 @@ export function KeyInfoSection({
               />
             </div>
           </InfoSection>
+          </>)}
 
           {/* ── ADDITIONAL DETAILS (true extras only) ───────────────── */}
           {customFields.length > 0 && (
@@ -1439,30 +1443,6 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 }
 
 // Utility functions
-function formatRelativeTime(dateString: string): string {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-  if (diffDays === 0) {
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    if (diffHours === 0) {
-      const diffMinutes = Math.floor(diffMs / (1000 * 60));
-      return diffMinutes <= 1 ? "Just now" : `${diffMinutes} minutes ago`;
-    }
-    return diffHours === 1 ? "1 hour ago" : `${diffHours} hours ago`;
-  }
-  if (diffDays === 1) return "Yesterday";
-  if (diffDays < 7) return `${diffDays} days ago`;
-
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
 function formatFieldLabel(key: string): string {
   return key
     .replace(/_/g, " ")
