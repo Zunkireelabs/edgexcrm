@@ -26,6 +26,7 @@ import {
 import { SendConsentDialog } from "./send-consent-dialog";
 import { InPersonConsentDialog } from "./in-person-consent-dialog";
 import { useBlockingNotice } from "@/components/dashboard/blocking-notice";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 type FeeStatus = "paid" | "unpaid" | "waiver";
 
@@ -44,6 +45,21 @@ interface ConsentStatus {
   link: string | null;
   /** Education only: is the profile complete enough to generate a consent document? null/absent = no gate. */
   readiness?: { ready: boolean; missing: string[] } | null;
+}
+
+/** Disabled buttons don't receive hover, so the tooltip lives on a wrapper. No `hint` = no wrapper at all. */
+function BlockedHint({ hint, className, children }: { hint: string | null; className: string; children: React.ReactNode }) {
+  if (!hint) return <>{children}</>;
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span tabIndex={0} className={className}>{children}</span>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-xs">{hint}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 }
 
 /**
@@ -264,6 +280,9 @@ export function ConsentCard({
   const profileIncomplete = consentStatus === "none" && !!readiness && !readiness.ready;
   const actionsBlocked = profileIncomplete && !overrideProfile;
   const canOverride = canManageFee; // owner/admin only — the API re-checks the role
+  const blockedHint =
+    actionsBlocked && readiness ? `Complete the student profile first. Missing: ${readiness.missing.join(", ")}` : null;
+  const hintWrapClass = showCopyLink ? "block [&>button]:w-full" : "inline-block";
 
   return (
     <>
@@ -432,11 +451,14 @@ export function ConsentCard({
               )}
               {canManage && (
                 <div className={showCopyLink ? "grid grid-cols-2 gap-2" : "flex gap-2 flex-wrap"}>
-                  <Button size="sm" variant="outline" disabled={actionsBlocked} onClick={() => openDialog("send")} className={`h-7 text-xs${showCopyLink ? " px-2" : ""}`}>
+                  <BlockedHint hint={blockedHint} className={hintWrapClass}>
+<Button size="sm" variant="outline" disabled={actionsBlocked} onClick={() => openDialog("send")} className={`h-7 text-xs${showCopyLink ? " px-2" : ""}`}>
                     Send consent link
                   </Button>
+</BlockedHint>
                   {showCopyLink && (
-                    <Button size="sm" variant="outline" onClick={handleCreateAndCopyLink} disabled={creatingLink || actionsBlocked} className="h-7 px-2 text-xs">
+                    <BlockedHint hint={blockedHint} className={hintWrapClass}>
+<Button size="sm" variant="outline" onClick={handleCreateAndCopyLink} disabled={creatingLink || actionsBlocked} className="h-7 px-2 text-xs">
                       {creatingLink ? (
                         <Loader2 className="h-3 w-3 mr-1 animate-spin" />
                       ) : (
@@ -444,15 +466,20 @@ export function ConsentCard({
                       )}
                       Copy consent link
                     </Button>
+</BlockedHint>
                   )}
-                  <Button size="sm" variant="outline" disabled={actionsBlocked} onClick={() => setInPersonOpen(true)} className={`h-7 text-xs${showCopyLink ? " px-2" : ""}`}>
+                  <BlockedHint hint={blockedHint} className={hintWrapClass}>
+<Button size="sm" variant="outline" disabled={actionsBlocked} onClick={() => setInPersonOpen(true)} className={`h-7 text-xs${showCopyLink ? " px-2" : ""}`}>
                     <PenLine className="h-3 w-3 mr-1" />
                     Sign here now
                   </Button>
-                  <Button size="sm" variant={showCopyLink ? "outline" : "ghost"} disabled={actionsBlocked} onClick={() => openDialog("manual")} className={`h-7 text-xs${showCopyLink ? " px-2" : ""}`}>
+</BlockedHint>
+                  <BlockedHint hint={blockedHint} className={hintWrapClass}>
+<Button size="sm" variant={showCopyLink ? "outline" : "ghost"} disabled={actionsBlocked} onClick={() => openDialog("manual")} className={`h-7 text-xs${showCopyLink ? " px-2" : ""}`}>
                     <Upload className="h-3 w-3 mr-1" />
                     Record manually
                   </Button>
+</BlockedHint>
                 </div>
               )}
             </>
