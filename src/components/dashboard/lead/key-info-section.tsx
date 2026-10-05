@@ -813,11 +813,12 @@ export function StudyInterestPanel({ lead, isAdmin, isEditor, leadScope, submiss
         title="Study Interest"
         defaultOpen
         className="border-0 rounded-none bg-transparent"
+        headerClassName="px-3 pt-1 pb-1"
         titleClassName={SECTION_TITLE_CLASS}
       >
-      <div className="space-y-2">
+      <div>
       {hasAny ? (
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           {effectiveDestinations.length > 0 && (
             <div>
               <p className="text-xs text-muted-foreground">Destinations</p>
