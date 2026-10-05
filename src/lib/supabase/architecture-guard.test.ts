@@ -53,6 +53,7 @@ const EXEMPT_SITES: Record<string, "rpc-only" | "auth-only"> = {
   "src/app/(main)/api/v1/inbox/conversations/[id]/route.ts": "rpc-only", // canAccessConversationLead() -> visibleLeadsBase() call site
   "src/app/(main)/api/v1/inbox/conversations/[id]/messages/route.ts": "rpc-only", // canAccessConversationLead() -> visibleLeadsBase() call site
   "src/app/(main)/api/v1/inbox/conversations/[id]/draft/route.ts": "rpc-only", // canAccessConversationLead() -> visibleLeadsBase() call site
+  "src/app/(main)/api/v1/inbox/conversations/[id]/attachments/signed-url/route.ts": "rpc-only", // canAccessConversationLead() -> visibleLeadsBase() call site
   "src/app/(main)/(dashboard)/inbox/page.tsx": "rpc-only", // visibleLeadIdsAmong() -> visibleLeadsBase() call site
   // auth-only: the createClient() binding is only ever used for `.auth.*` calls —
   // never a table read, so there is nothing for RLS-vs-app-filter to protect.

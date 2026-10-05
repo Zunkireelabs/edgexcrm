@@ -15,6 +15,7 @@ function fakeClient(overrides: Record<string, unknown> = {}) {
       data: { arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer },
       error: null,
     })),
+    upload: vi.fn(async () => ({ data: { path: "x" }, error: null })),
     remove: vi.fn(async () => ({ error: null })),
     ...overrides,
   }));
@@ -95,6 +96,29 @@ describe("SupabaseStorageProvider", () => {
     await provider.remove("knowledge-base-files", []);
 
     expect(remove).not.toHaveBeenCalled();
+  });
+
+  it("putBytes uploads with the given content type, never overwriting an existing object", async () => {
+    const upload = vi.fn(async () => ({ data: { path: "tenant/inbox/conv/msg-0.jpg" }, error: null }));
+    const client = fakeClient({ upload });
+    const provider = new SupabaseStorageProvider(async () => client as never);
+
+    await provider.putBytes("inbox-media", "tenant/inbox/conv/msg-0.jpg", new Uint8Array([1, 2, 3]), "image/jpeg");
+
+    expect(client.storage.from).toHaveBeenCalledWith("inbox-media");
+    const [path, bytes, options] = upload.mock.calls[0] as unknown as [string, Uint8Array, { contentType: string; upsert: boolean }];
+    expect(path).toBe("tenant/inbox/conv/msg-0.jpg");
+    expect(Array.from(bytes)).toEqual([1, 2, 3]);
+    expect(options).toEqual({ contentType: "image/jpeg", upsert: false });
+  });
+
+  it("putBytes throws when the vendor upload returns an error", async () => {
+    const client = fakeClient({ upload: vi.fn(async () => ({ data: null, error: { message: "size limit exceeded" } })) });
+    const provider = new SupabaseStorageProvider(async () => client as never);
+
+    await expect(
+      provider.putBytes("inbox-media", "tenant/inbox/conv/msg-0.jpg", new Uint8Array([1]), "image/jpeg")
+    ).rejects.toThrow(/size limit exceeded/);
   });
 
   it("throws when the vendor call returns an error", async () => {

@@ -15,7 +15,6 @@ interface SandboxMessage {
   message_id: string;     // provider_message_id
   timestamp?: string;     // ISO timestamp
   text?: string;
-  attachments?: unknown[];
 }
 
 interface SandboxPayload {
@@ -103,7 +102,7 @@ export const sandboxAdapter: ChannelAdapter = {
         providerMessageId: m.message_id,
         providerTimestamp: m.timestamp ?? null,
         contentText: m.text ?? null,
-        attachments: m.attachments ?? [],
+        attachments: [], // sandbox never carries real media — no provider to resolve a media id against
         channelRef: "",  // sandbox routes by X-Channel-ID header; channelRef unused
       }));
   },
