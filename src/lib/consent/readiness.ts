@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getLeadCity, getLeadNationality } from "@/lib/leads/lead-location";
+import { logger } from "@/lib/logger";
 
 /**
  * Is a student's profile complete enough to generate a consent document?
@@ -103,21 +104,25 @@ export async function loadConsentReadiness(
   tenantId: string,
   leadId: string,
 ): Promise<ConsentReadiness | null> {
-  const { data: tpl } = await supabase
+  const { data: tpl, error: tplErr } = await supabase
     .from("consent_templates")
     .select("body, is_active")
     .eq("tenant_id", tenantId)
     .maybeSingle();
   const template = tpl as { body: string | null; is_active: boolean } | null;
+  if (tplErr) logger.error({ err: tplErr, tenantId }, "consent readiness: could not load the consent template");
   if (!template?.is_active) return null;
 
-  const { data: lead } = await supabase
+  const { data: lead, error: leadErr } = await supabase
     .from("leads")
     .select(CONSENT_PROFILE_COLUMNS)
     .eq("id", leadId)
     .eq("tenant_id", tenantId)
     .is("deleted_at", null)
     .maybeSingle();
+  // A failed query must be loud: it silently turns the profile gate OFF (e.g. a missing column on an
+  // out-of-date database), which is exactly the bug this log exists to catch.
+  if (leadErr) logger.error({ err: leadErr, tenantId, leadId }, "consent readiness: could not load the lead profile — gate not applied");
   if (!lead) return null;
 
   return computeConsentReadiness(template.body, lead as unknown as ConsentProfile);
