@@ -167,7 +167,7 @@ describe("ConsentCard — incomplete student profile gate", () => {
 
     expect(screen.getByText("Complete the student profile first")).toBeInTheDocument();
     expect(screen.getByText(/half-filled profile/i)).toBeInTheDocument();
-    expect(screen.getByText("Still missing:")).toBeInTheDocument();
+    expect(screen.getByText("Fill in all of these before consent can go out:")).toBeInTheDocument();
     expect(screen.getByText("Passport Number, Father's Name")).toBeInTheDocument();
     for (const name of ACTIONS) expect(screen.getByRole("button", { name })).toBeDisabled();
   });

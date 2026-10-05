@@ -94,6 +94,7 @@ function BlockedHintTooltip({ groups, className, children }: { groups: MissingGr
         </TooltipTrigger>
         <TooltipContent side="top" sideOffset={8} className="max-w-xs">
           <p className="font-medium">Complete the student profile first</p>
+          <p className="mt-1">Fill in all of these before consent can go out:</p>
           <ul className="mt-1 list-disc pl-4">
             {groups.map((group) => (
               <li key={group.section || group.fields.join()}>
@@ -490,7 +491,7 @@ export function ConsentCard({
                     </div>
                   </div>
                   <div className="text-xs">
-                    <p className="font-medium">Still missing:</p>
+                    <p className="font-medium">Fill in all of these before consent can go out:</p>
                     <ul className="mt-0.5 list-disc pl-4">
                       {missingGroups.map((group) => (
                         <li key={group.section || group.fields.join()}>
