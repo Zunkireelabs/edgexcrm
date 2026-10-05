@@ -4,6 +4,7 @@ import { createContext, useContext, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -132,6 +133,9 @@ export function EditableField({
               ))}
             </SelectContent>
           </Select>
+        ) : field.type === "tel" ? (
+          // Same country-code dropdown + number box the forms use; stored as "+977-98…".
+          <PhoneInput value={value} onChange={onChange} placeholder={field.placeholder ?? "Phone number"} />
         ) : (
           <>
             <Label htmlFor={field.key} className="sr-only">{field.label}</Label>
