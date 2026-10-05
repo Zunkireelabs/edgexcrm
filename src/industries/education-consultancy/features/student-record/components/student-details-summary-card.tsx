@@ -88,7 +88,7 @@ export function StudentDetailsSummaryCard({ lead, onEdit, defaultOpen = true }: 
       <div className="space-y-7 pt-2">
         <SectionGroup title="Personal Information">
           <CardSection title="Basic Details">
-            <FieldGrid>
+            <FieldGrid columns={2}>
               {PERSONAL_DETAIL_FIELDS.map((field) => (
                 <EditableField key={field.key} field={field} isEditing={false} value={values[field.key] || ""} onChange={noop} />
               ))}

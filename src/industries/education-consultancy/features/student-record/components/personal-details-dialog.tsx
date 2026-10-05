@@ -490,7 +490,7 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
             </CardSection>
 
             <CardSection title="Basic Details">
-              <FieldGrid>
+              <FieldGrid columns={2}>
                 {PERSONAL_DETAIL_FIELDS.map((field) => (
                   <EditableField
                     key={field.key}

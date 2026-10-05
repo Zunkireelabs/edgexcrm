@@ -81,8 +81,9 @@ export function CardSection({
   );
 }
 
-export function FieldGrid({ children }: { children: React.ReactNode }) {
-  return <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4">{children}</div>;
+export function FieldGrid({ children, columns = 3 }: { children: React.ReactNode; columns?: 2 | 3 }) {
+  const cols = columns === 2 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3";
+  return <div className={`grid ${cols} gap-x-6 gap-y-4`}>{children}</div>;
 }
 
 export function ReadOnlyField({ label, value }: { label: string; value: string }) {
