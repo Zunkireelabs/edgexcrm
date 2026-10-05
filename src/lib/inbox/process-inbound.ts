@@ -395,6 +395,8 @@ async function resolveLeadByPhone(
   if (!normalized) return null;
 
   const allDigits = normalized.replace(/\D/g, "");
+  if (allDigits.length < 8) return null;
+
   const suffix = allDigits.length >= 10 ? allDigits.slice(-10) : allDigits;
   if (suffix.length < 7) return null;
 

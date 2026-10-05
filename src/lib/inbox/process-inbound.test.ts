@@ -224,6 +224,25 @@ describe("resolveLeadByPhone matching matrix (S2-C)", () => {
       .single();
     expect((conv as { lead_id: string | null }).lead_id).toBeNull();
   });
+
+  it("an incoming number with fewer than 8 digits is never matched, even against an identical short stored phone", async (ctx) => {
+    if (!localDbAvailable) { ctx.skip(); return; }
+
+    await makeLead("1234567");
+    const eventId = await enqueueInboundEvent({ externalContactId: "1234567", contactPhone: "1234567" });
+
+    const { processInboundEventsByIds } = await import("./process-inbound");
+    const result = await processInboundEventsByIds([eventId]);
+    expect(result.errors).toBe(0);
+
+    const { data: conv } = await db
+      .from("conversations")
+      .select("lead_id")
+      .eq("channel_id", channelId)
+      .eq("external_contact_id", "1234567")
+      .single();
+    expect((conv as { lead_id: string | null }).lead_id).toBeNull();
+  });
 });
 
 describe("retry-link-once (S2-C fix b): a lead created AFTER the conversation", () => {

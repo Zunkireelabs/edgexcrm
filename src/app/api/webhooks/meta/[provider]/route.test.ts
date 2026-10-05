@@ -12,10 +12,12 @@ const getAdapterMock = vi.fn();
 const processInboundEventsByIdsMock = vi.fn();
 const afterMock = vi.fn();
 const createServiceClientMock = vi.fn();
+const loggerInfoMock = vi.fn();
 
 vi.mock("@/lib/inbox/adapters", () => ({ getAdapter: getAdapterMock }));
 vi.mock("@/lib/inbox/process-inbound", () => ({ processInboundEventsByIds: processInboundEventsByIdsMock }));
 vi.mock("@/lib/supabase/server", () => ({ createServiceClient: createServiceClientMock }));
+vi.mock("@/lib/logger", () => ({ logger: { info: loggerInfoMock, warn: vi.fn(), error: vi.fn() } }));
 vi.mock("next/server", async (importOriginal) => {
   const actual = await importOriginal<typeof import("next/server")>();
   return { ...actual, after: afterMock };
@@ -107,6 +109,21 @@ describe("POST /api/webhooks/meta/[provider] — S2-B near-instant inbound", () 
     processInboundEventsByIdsMock.mockResolvedValue({ processed: 1, skipped: 0, errors: 0 });
     afterMock.mockReset();
     createServiceClientMock.mockReset();
+    loggerInfoMock.mockReset();
+  });
+
+  it("logs 'meta webhook: accepted' with the parsed message/status counts before enqueuing", async () => {
+    getAdapterMock.mockReturnValue(fakeAdapter());
+    const { db } = fakeDb();
+    createServiceClientMock.mockResolvedValue(db);
+
+    const { POST } = await import("./route");
+    await POST(fakeReq(), { params });
+
+    expect(loggerInfoMock).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: "whatsapp", messageCount: 1, statusUpdateCount: 0 }),
+      "meta webhook: accepted"
+    );
   });
 
   it("acks 200 immediately and schedules after() with exactly the event id(s) it just enqueued", async () => {
