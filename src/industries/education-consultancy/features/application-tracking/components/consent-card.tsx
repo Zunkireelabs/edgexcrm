@@ -77,7 +77,7 @@ interface ConsentCardProps {
   showProcessingFee?: boolean; // default true (education); false hides the fee block
   /** Education: adds "Copy consent link" (create the signing link without emailing it) and lays the first-state buttons out two per row. */
   showCopyLink?: boolean;
-  /** Education: while the card is collapsed, show the status in the header (e.g. "Consent required") so it isn't hidden. */
+  /** Education: while the card is collapsed, show the status in the header ("Consent required" / "Consent signed") so it isn't hidden. */
   showCollapsedStatus?: boolean;
 }
 
@@ -268,6 +268,12 @@ export function ConsentCard({
                 <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
                   <AlertTriangle className="h-3 w-3 shrink-0" />
                   {L.requiredTitle}
+                </span>
+              )}
+              {showCollapsedStatus && !open && consentStatus === "signed" && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700">
+                  <CheckCircle2 className="h-3 w-3 shrink-0" />
+                  {L.signedTitle}
                 </span>
               )}
             </span>
