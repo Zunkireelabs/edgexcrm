@@ -36,6 +36,8 @@ beforeEach(() => {
     return { ok: true, status: 200, json: async () => NO_CONSENT };
   });
   vi.stubGlobal("fetch", fetchMock);
+  // jsdom has no ResizeObserver; Radix (tooltip) needs one.
+  vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
 });
 
 afterEach(() => {
@@ -178,6 +180,28 @@ describe("ConsentCard — incomplete student profile gate", () => {
 
     expect(screen.queryByText("Complete the student profile first")).not.toBeInTheDocument();
     for (const name of ACTIONS) expect(screen.getByRole("button", { name })).toBeEnabled();
+  });
+
+  it("explains why on hover/focus of a blocked button (the tooltip sits on a wrapper, since disabled buttons get no hover)", async () => {
+    statusIs(INCOMPLETE);
+    renderCard(true);
+    await openCard();
+
+    const wrapper = screen.getByRole("button", { name: "Copy consent link" }).parentElement as HTMLElement;
+    expect(wrapper).toHaveAttribute("tabindex", "0");
+    fireEvent.focus(wrapper);
+
+    const tips = await screen.findAllByText("Complete the student profile first. Missing: Passport Number, Father's Name");
+    expect(tips.length).toBeGreaterThan(0);
+  });
+
+  it("adds no tooltip wrapper once the profile is ready", async () => {
+    statusIs({ data: { ...INCOMPLETE.data, readiness: { ready: true, missing: [] } } });
+    renderCard(true);
+    await openCard();
+
+    const button = screen.getByRole("button", { name: "Copy consent link" });
+    expect(button.parentElement).not.toHaveAttribute("tabindex");
   });
 
   it("offers no override to non-admins", async () => {
