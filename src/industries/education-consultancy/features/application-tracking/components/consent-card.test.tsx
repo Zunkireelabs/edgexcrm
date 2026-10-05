@@ -191,8 +191,40 @@ describe("ConsentCard — incomplete student profile gate", () => {
     expect(wrapper).toHaveAttribute("tabindex", "0");
     fireEvent.focus(wrapper);
 
-    const tips = await screen.findAllByText("Complete the student profile first. Missing: Passport Number, Father's Name");
-    expect(tips.length).toBeGreaterThan(0);
+    // The hover hint repeats the missing items (one per line) and says where to fix them.
+    expect((await screen.findAllByText("Add them in Student Details (Edit).")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Passport Number").length).toBeGreaterThan(1); // warning box + tooltip
+    expect(screen.getAllByText("Father's Name").length).toBeGreaterThan(1);
+  });
+
+  it("shows an Open Student Details button only when the page can open that pop-up", async () => {
+    statusIs(INCOMPLETE);
+    const onOpen = vi.fn();
+    render(
+      <ConsentCard
+        leadId="lead-1"
+        tenantId="tenant-1"
+        consentEnabled
+        consentSigned={false}
+        canManage
+        canManageFee={false}
+        showProcessingFee={false}
+        showCopyLink
+        onOpenStudentDetails={onOpen}
+      />
+    );
+    await openCard();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Student Details" }));
+    expect(onOpen).toHaveBeenCalledTimes(1);
+  });
+
+  it("has no Open Student Details button when the page cannot open the pop-up", async () => {
+    statusIs(INCOMPLETE);
+    renderCard(true);
+    await openCard();
+
+    expect(screen.queryByRole("button", { name: "Open Student Details" })).not.toBeInTheDocument();
   });
 
   it("adds no tooltip wrapper once the profile is ready", async () => {

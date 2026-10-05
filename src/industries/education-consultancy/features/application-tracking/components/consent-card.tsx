@@ -48,7 +48,7 @@ interface ConsentStatus {
 }
 
 /** Disabled buttons don't receive hover, so the tooltip lives on a wrapper. No `hint` = no wrapper at all. */
-function BlockedHint({ hint, className, children }: { hint: string | null; className: string; children: React.ReactNode }) {
+function BlockedHint({ hint, className, children }: { hint: string[] | null; className: string; children: React.ReactNode }) {
   if (!hint) return <>{children}</>;
   return (
     <TooltipProvider>
@@ -56,7 +56,15 @@ function BlockedHint({ hint, className, children }: { hint: string | null; class
         <TooltipTrigger asChild>
           <span tabIndex={0} className={className}>{children}</span>
         </TooltipTrigger>
-        <TooltipContent className="max-w-xs">{hint}</TooltipContent>
+        <TooltipContent className="max-w-xs">
+          <p className="font-medium">Complete the student profile first</p>
+          <ul className="mt-1 list-disc pl-4">
+            {hint.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+          <p className="mt-1 opacity-80">Add them in Student Details (Edit).</p>
+        </TooltipContent>
       </Tooltip>
     </TooltipProvider>
   );
@@ -99,6 +107,8 @@ interface ConsentCardProps {
   showCollapsedStatus?: boolean;
   /** Changes whenever the student's profile fields change, so the card re-checks whether consent is allowed. */
   profileKey?: string;
+  /** Lead page only: opens the Student Details pop-up in edit mode (the warning shows an "Open Student Details" button when given). */
+  onOpenStudentDetails?: () => void;
 }
 
 export function ConsentCard({
@@ -115,6 +125,7 @@ export function ConsentCard({
   showCopyLink = false,
   showCollapsedStatus = false,
   profileKey,
+  onOpenStudentDetails,
 }: ConsentCardProps) {
   // Effective labels — education wording unless a caller overrides.
   const L = {
@@ -280,8 +291,7 @@ export function ConsentCard({
   const profileIncomplete = consentStatus === "none" && !!readiness && !readiness.ready;
   const actionsBlocked = profileIncomplete && !overrideProfile;
   const canOverride = canManageFee; // owner/admin only — the API re-checks the role
-  const blockedHint =
-    actionsBlocked && readiness ? `Complete the student profile first. Missing: ${readiness.missing.join(", ")}` : null;
+  const blockedHint = actionsBlocked && readiness ? readiness.missing : null;
   const hintWrapClass = showCopyLink ? "block [&>button]:w-full" : "inline-block";
 
   return (
@@ -435,6 +445,17 @@ export function ConsentCard({
                     </ul>
                     <p className="mt-1 text-amber-800">Add them from Student Details (Edit).</p>
                   </div>
+                  {onOpenStudentDetails && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={onOpenStudentDetails}
+                      className="h-7 border-amber-300 bg-white px-2 text-xs text-amber-900 hover:bg-amber-100"
+                    >
+                      <FileText className="h-3 w-3 mr-1" />
+                      Open Student Details
+                    </Button>
+                  )}
                   {canOverride && !overrideProfile && (
                     <button
                       type="button"

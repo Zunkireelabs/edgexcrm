@@ -927,6 +927,9 @@ export function LeadDetailV2({
                       showCopyLink
                       showCollapsedStatus
                       profileKey={consentProfileKey(currentLead)}
+                      onOpenStudentDetails={() => {
+                        notesTabRef.current?.openStudentDetails();
+                      }}
                       canManage={canManageApplications ?? isAdmin}
                       canManageFee={isAdmin}
                       onSignedChange={setConsentSignedState}
