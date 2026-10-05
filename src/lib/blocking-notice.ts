@@ -70,8 +70,8 @@ const BLOCKING_ERROR_CODES: Record<string, (error: ApiErrorLike) => BlockingNoti
   PROFILE_INCOMPLETE: (error) => profileIncompleteNotice(parseMissingItems(error.message)),
   PROFILE_INCOMPLETE_FOR_CONSENT: (error) => consentProfileIncompleteNotice(parseMissingItems(error.message)),
   CONSENT_REQUIRED: () => ({
-    title: "Student consent is required",
-    message: "The student must sign the consent document before an application can be created. Use the Pre Application card to send or record the consent, then try again.",
+    title: "Complete the consent form first",
+    message: "An application can only be created once the student's consent is signed. Use the Pre Application card to send or record the consent, then try again.",
   }),
   ALREADY_SIGNED: () => ({
     title: "Consent is already signed",
