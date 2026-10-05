@@ -47,6 +47,7 @@ import { CheckInHistoryCard } from "@/industries/_shared/features/check-in/check
 import { ApplicantDocumentsCard } from "@/industries/education-consultancy/features/applicant-documents/documents-card";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
+import { getLeadCity, getLeadNationality } from "@/lib/leads/lead-location";
 
 interface TeamMember {
   id: string;
@@ -137,9 +138,9 @@ function makeDraft(lead: Lead): LeadDraft {
     last_name: lead.last_name || "",
     email: lead.email || "",
     phone: lead.phone || "",
-    city: lead.city || "",
+    city: getLeadCity(lead) || "",
     country: lead.country || "",
-    nationality: lead.nationality || "",
+    nationality: getLeadNationality(lead) || "",
     preferred_contact_method: lead.preferred_contact_method || "",
     salutation: lead.salutation || "",
     company_name: lead.company_name || "",

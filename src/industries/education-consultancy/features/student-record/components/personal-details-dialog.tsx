@@ -30,6 +30,7 @@ import { ReferencesSection, type ReferenceEntry } from "./references-section";
 import { SectionGroup, CardSection, FieldGrid, EditableField } from "./form-primitives";
 import { AttachDocumentButton } from "./attach-document-button";
 import { PERSONAL_DETAIL_COLUMNS, PERSONAL_DETAIL_DATE_COLUMNS } from "@/lib/leads/personal-details";
+import { getLeadCity, getLeadNationality } from "@/lib/leads/lead-location";
 
 /**
  * Personal / passport / citizenship details are real `leads` columns
@@ -162,8 +163,8 @@ export function coreIdentityFromLead(lead: Lead): CoreIdentity {
     lastName: lead.last_name ?? "",
     email: lead.email ?? "",
     phone: lead.phone ?? "",
-    nationality: lead.nationality ?? "",
-    city: lead.city ?? "",
+    nationality: getLeadNationality(lead) ?? "",
+    city: getLeadCity(lead) ?? "",
   };
 }
 

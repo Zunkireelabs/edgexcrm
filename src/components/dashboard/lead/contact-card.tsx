@@ -38,7 +38,7 @@ import {
 import { CopyButton } from "@/components/ui/copy-button";
 import { TruncatedText } from "@/components/ui/truncated-text";
 import { formatPhoneForTel, formatPhoneForWhatsApp } from "@/lib/phone-utils";
-import { nationalityFromPhone } from "@/lib/leads/nationality";
+import { getLeadCity, getLeadNationality } from "@/lib/leads/lead-location";
 import { toast } from "sonner";
 import type { Lead, PipelineStage } from "@/types/database";
 import { getLeadFullName, getLeadInitials } from "./lead-name";
@@ -467,8 +467,8 @@ export function ContactCard({
             </div>
           )}
           {(() => {
-            const nationality = lead.nationality ?? nationalityFromPhone(lead.phone);
-            const city = lead.city;
+            const nationality = getLeadNationality(lead);
+            const city = getLeadCity(lead);
             if (!nationality && !city) return null;
             return (
               <div className="flex items-center gap-1.5 pt-1">
