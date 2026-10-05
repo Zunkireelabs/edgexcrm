@@ -42,6 +42,8 @@ interface ConsentStatus {
     sent_via: string | null;
   } | null;
   link: string | null;
+  /** Education only: is the profile complete enough to generate a consent document? null/absent = no gate. */
+  readiness?: { ready: boolean; missing: string[] } | null;
 }
 
 /**
@@ -79,6 +81,8 @@ interface ConsentCardProps {
   showCopyLink?: boolean;
   /** Education: while the card is collapsed, show the status in the header ("Consent required" / "Consent signed") so it isn't hidden. */
   showCollapsedStatus?: boolean;
+  /** Changes whenever the student's profile fields change, so the card re-checks whether consent is allowed. */
+  profileKey?: string;
 }
 
 export function ConsentCard({
@@ -94,6 +98,7 @@ export function ConsentCard({
   showProcessingFee = true,
   showCopyLink = false,
   showCollapsedStatus = false,
+  profileKey,
 }: ConsentCardProps) {
   // Effective labels — education wording unless a caller overrides.
   const L = {
@@ -147,6 +152,10 @@ export function ConsentCard({
   }
 
   const [creatingLink, setCreatingLink] = useState(false);
+  // Owner/admin chose "Send anyway" for an incomplete profile (after confirming). Resets on reload.
+  const [overrideProfile, setOverrideProfile] = useState(false);
+  const [overrideConfirmOpen, setOverrideConfirmOpen] = useState(false);
+  const overrideBody = overrideProfile ? { override_profile_check: true } : {};
   const { notify, noticeDialog } = useBlockingNotice();
 
   // One click: create the signing link WITHOUT emailing the student, copy it, and let the card move on to
@@ -157,7 +166,7 @@ export function ConsentCard({
       const res = await fetch(`/api/v1/leads/${leadId}/consent`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "send", deliver: "none" }),
+        body: JSON.stringify({ action: "send", deliver: "none", ...overrideBody }),
       });
       const json = await res.json();
       if (!res.ok) {
@@ -196,7 +205,8 @@ export function ConsentCard({
     }
   }, [leadId, onSignedChange]);
 
-  useEffect(() => { fetchStatus(); }, [fetchStatus]);
+  // profileKey changes when the student's details are edited, so the "complete the profile" gate updates live.
+  useEffect(() => { fetchStatus(); }, [fetchStatus, profileKey]);
 
   function openDialog(tab: "send" | "manual") {
     setDialogTab(tab);
@@ -218,7 +228,7 @@ export function ConsentCard({
       const res = await fetch(`/api/v1/leads/${leadId}/consent`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "send" }),
+        body: JSON.stringify({ action: "send", ...overrideBody }),
       });
       if (!res.ok) {
         const json = await res.json();
@@ -249,6 +259,11 @@ export function ConsentCard({
 
   const current = status;
   const consentStatus = current?.status ?? "none";
+  // Education profile gate: all four consent actions wait for a complete student profile.
+  const readiness = current?.readiness ?? null;
+  const profileIncomplete = consentStatus === "none" && !!readiness && !readiness.ready;
+  const actionsBlocked = profileIncomplete && !overrideProfile;
+  const canOverride = canManageFee; // owner/admin only — the API re-checks the role
 
   return (
     <>
@@ -294,13 +309,47 @@ export function ConsentCard({
               <p className="text-xs text-muted-foreground">
                 {L.requiredHelp}
               </p>
+              {profileIncomplete && readiness && (
+                <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-amber-900">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                    <div className="space-y-0.5">
+                      <p className="text-sm font-medium">Complete the student profile first</p>
+                      <p className="text-xs">
+                        A half-filled profile makes a consent document with blank details, which can cause problems.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-xs">
+                    <p className="font-medium">Still missing:</p>
+                    <ul className="mt-0.5 list-disc pl-4">
+                      {readiness.missing.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                    <p className="mt-1 text-amber-800">Add them from Student Details (Edit).</p>
+                  </div>
+                  {canOverride && !overrideProfile && (
+                    <button
+                      type="button"
+                      onClick={() => setOverrideConfirmOpen(true)}
+                      className="text-xs font-medium underline underline-offset-2 hover:text-amber-950"
+                    >
+                      Send anyway (admin)
+                    </button>
+                  )}
+                  {overrideProfile && (
+                    <p className="text-xs font-medium">Admin override on — consent can go out with the details above blank.</p>
+                  )}
+                </div>
+              )}
               {canManage && (
                 <div className={showCopyLink ? "grid grid-cols-2 gap-2" : "flex gap-2 flex-wrap"}>
-                  <Button size="sm" variant="outline" onClick={() => openDialog("send")} className={`h-7 text-xs${showCopyLink ? " px-2" : ""}`}>
+                  <Button size="sm" variant="outline" disabled={actionsBlocked} onClick={() => openDialog("send")} className={`h-7 text-xs${showCopyLink ? " px-2" : ""}`}>
                     Send consent link
                   </Button>
                   {showCopyLink && (
-                    <Button size="sm" variant="outline" onClick={handleCreateAndCopyLink} disabled={creatingLink} className="h-7 px-2 text-xs">
+                    <Button size="sm" variant="outline" onClick={handleCreateAndCopyLink} disabled={creatingLink || actionsBlocked} className="h-7 px-2 text-xs">
                       {creatingLink ? (
                         <Loader2 className="h-3 w-3 mr-1 animate-spin" />
                       ) : (
@@ -309,11 +358,11 @@ export function ConsentCard({
                       Copy consent link
                     </Button>
                   )}
-                  <Button size="sm" variant="outline" onClick={() => setInPersonOpen(true)} className={`h-7 text-xs${showCopyLink ? " px-2" : ""}`}>
+                  <Button size="sm" variant="outline" disabled={actionsBlocked} onClick={() => setInPersonOpen(true)} className={`h-7 text-xs${showCopyLink ? " px-2" : ""}`}>
                     <PenLine className="h-3 w-3 mr-1" />
                     Sign here now
                   </Button>
-                  <Button size="sm" variant={showCopyLink ? "outline" : "ghost"} onClick={() => openDialog("manual")} className={`h-7 text-xs${showCopyLink ? " px-2" : ""}`}>
+                  <Button size="sm" variant={showCopyLink ? "outline" : "ghost"} disabled={actionsBlocked} onClick={() => openDialog("manual")} className={`h-7 text-xs${showCopyLink ? " px-2" : ""}`}>
                     <Upload className="h-3 w-3 mr-1" />
                     Record manually
                   </Button>
@@ -484,11 +533,43 @@ export function ConsentCard({
         tenantId={tenantId}
         defaultTab={dialogTab}
         allowCopyOnly={showCopyLink}
+        overrideProfileCheck={overrideProfile}
         onSuccess={() => {
           setDialogOpen(false);
           fetchStatus();
         }}
       />
+
+      {/* Owner/admin "send anyway" confirmation for an incomplete profile */}
+      <Dialog open={overrideConfirmOpen} onOpenChange={setOverrideConfirmOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Send consent with missing details?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 text-sm">
+            <p>The student profile is missing:</p>
+            <ul className="list-disc pl-5">
+              {(readiness?.missing ?? []).map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+            <p className="text-muted-foreground">
+              The consent document will go out with these details blank. This override is recorded in the audit log.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setOverrideConfirmOpen(false)}>Cancel</Button>
+            <Button
+              onClick={() => {
+                setOverrideProfile(true);
+                setOverrideConfirmOpen(false);
+              }}
+            >
+              Send anyway
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Signed-document preview — inline PDF in a modal instead of a new tab */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
@@ -528,6 +609,7 @@ export function ConsentCard({
           if (!next) fetchStatus();
         }}
         leadId={leadId}
+        overrideProfileCheck={overrideProfile}
         onSuccess={() => {
           setInPersonOpen(false);
           fetchStatus();

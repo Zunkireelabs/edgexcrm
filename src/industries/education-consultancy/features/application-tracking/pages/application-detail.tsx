@@ -41,6 +41,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ContactCard } from "@/components/dashboard/lead/contact-card";
+import { consentProfileKey } from "@/lib/consent/readiness";
 import { ConsentCard } from "../components/consent-card";
 import { StatusBadge } from "../components/status-badge";
 import { StageStepperHorizontal } from "../components/stage-stepper-horizontal";
@@ -940,6 +941,7 @@ export function ApplicationDetailPage({
               canManage={canEdit}
               canManageFee={canManageFee}
               showCollapsedStatus
+              profileKey={consentProfileKey(fullLead)}
               feeStatus={fullLead.pre_app_fee_status}
               feeAmount={fullLead.pre_app_fee_amount}
               feeNotes={fullLead.pre_app_fee_notes}

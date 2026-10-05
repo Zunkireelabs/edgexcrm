@@ -48,6 +48,7 @@ import { ApplicantDocumentsCard } from "@/industries/education-consultancy/featu
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { getLeadCity, getLeadNationality } from "@/lib/leads/lead-location";
+import { consentProfileKey } from "@/lib/consent/readiness";
 
 interface TeamMember {
   id: string;
@@ -925,6 +926,7 @@ export function LeadDetailV2({
                       consentSigned={consentSigned}
                       showCopyLink
                       showCollapsedStatus
+                      profileKey={consentProfileKey(currentLead)}
                       canManage={canManageApplications ?? isAdmin}
                       canManageFee={isAdmin}
                       onSignedChange={setConsentSignedState}

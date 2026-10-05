@@ -1,12 +1,14 @@
-import type { Lead } from "@/types/database";
-
 // One place that decides which city / nationality a lead "has", so every screen agrees.
 // Prefer the real column; fall back to the legacy custom_fields value for leads whose
 // answer was never promoted to the column (e.g. a form that posted it nested under
 // custom_fields). Deliberately NOT derived from the phone's dialling code — a guess
 // there is wrong for anyone living abroad or on a foreign SIM.
 
-type LocationSource = Pick<Lead, "city" | "nationality" | "custom_fields">;
+interface LocationSource {
+  city: string | null;
+  nationality: string | null;
+  custom_fields?: Record<string, unknown> | null;
+}
 
 function pick(column: string | null | undefined, custom: unknown): string | null {
   const fromColumn = column?.trim();

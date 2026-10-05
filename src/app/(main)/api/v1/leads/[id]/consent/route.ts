@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { authenticateRequest, requireLeadBranchAccess, getClientIp } from "@/lib/api/auth";
+import { authenticateRequest, requireAdmin, requireLeadBranchAccess, getClientIp } from "@/lib/api/auth";
 import { getLeadMembership } from "@/lib/leads/branch-membership";
 import { shouldRestrictToSelf, canManageApplications } from "@/lib/api/permissions";
 import {
@@ -20,6 +20,8 @@ import { APP_URL } from "@/lib/email";
 import { prepareConsentBody, buildConsentMergeData } from "@/lib/consent/merge";
 import { resolveConsentStatus, type ConsentRecordRow } from "@/lib/consent/resolve-status";
 import { touchLeadUpdatedAt } from "@/lib/leads/touch-updated-at";
+import { loadConsentReadiness } from "@/lib/consent/readiness";
+import { consentProfileIncompleteMessage } from "@/lib/blocking-notice";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -123,11 +125,18 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   const { status, record: consentRecord } = resolveConsentStatus((records ?? []) as unknown as ConsentRecordRow[]);
   const link = status === "sent" && consentRecord?.token ? `${APP_URL}/consent/${consentRecord.token}` : null;
 
+  // Education only: is the profile complete enough to generate a consent document? (null = not applicable)
+  const readiness =
+    auth.industryId === "education_consultancy" && consentEnabled
+      ? await loadConsentReadiness(supabase, auth.tenantId, id)
+      : null;
+
   return apiSuccess({
     consent_enabled: consentEnabled,
     status,
     record: consentRecord,
     link,
+    readiness,
   });
 }
 
@@ -202,6 +211,36 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   const db = await scopedClient(auth);
+
+  // Education: a half-filled profile makes a consent document with blank details, so all three actions
+  // (send / Sign here now / Record manually) wait until the profile is complete. Owner/admin may send
+  // anyway after confirming — logged below. An already-signed lead skips this so ALREADY_SIGNED wins.
+  if (auth.industryId === "education_consultancy") {
+    const overrideRequested = body.override_profile_check === true;
+    if (overrideRequested && !requireAdmin(auth)) return apiForbidden();
+    if (!(await hasSignedConsent(db, id))) {
+      const readiness = await loadConsentReadiness(supabase, auth.tenantId, id);
+      if (readiness && !readiness.ready) {
+        if (!overrideRequested) {
+          return apiError(
+            "PROFILE_INCOMPLETE_FOR_CONSENT",
+            consentProfileIncompleteMessage(readiness.missing),
+            422,
+            { missing: readiness.missing },
+          );
+        }
+        await createAuditLog({
+          tenantId: auth.tenantId,
+          userId: auth.userId,
+          action: "consent.profile_check_overridden",
+          entityType: "lead",
+          entityId: id,
+          changes: { consent_action: { old: null, new: action }, missing: { old: null, new: readiness.missing } },
+          requestId,
+        });
+      }
+    }
+  }
 
   if (action === "send") {
     // deliver: "email" (default — today's behaviour: email the link when the lead has an email) or
