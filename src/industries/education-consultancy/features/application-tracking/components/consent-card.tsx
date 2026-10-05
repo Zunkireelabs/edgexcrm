@@ -328,7 +328,6 @@ export function ConsentCard({
                       ))}
                     </ul>
                     <p className="mt-1 text-amber-800">Add them from Student Details (Edit).</p>
-                    <p className="mt-1 text-amber-800">Already signed on paper? Use Record manually.</p>
                   </div>
                   {canOverride && !overrideProfile && (
                     <button
@@ -363,7 +362,7 @@ export function ConsentCard({
                     <PenLine className="h-3 w-3 mr-1" />
                     Sign here now
                   </Button>
-                  <Button size="sm" variant={showCopyLink ? "outline" : "ghost"} onClick={() => openDialog("manual")} className={`h-7 text-xs${showCopyLink ? " px-2" : ""}`}>
+                  <Button size="sm" variant={showCopyLink ? "outline" : "ghost"} disabled={actionsBlocked} onClick={() => openDialog("manual")} className={`h-7 text-xs${showCopyLink ? " px-2" : ""}`}>
                     <Upload className="h-3 w-3 mr-1" />
                     Record manually
                   </Button>
@@ -535,7 +534,6 @@ export function ConsentCard({
         defaultTab={dialogTab}
         allowCopyOnly={showCopyLink}
         overrideProfileCheck={overrideProfile}
-        sendBlocked={actionsBlocked}
         onSuccess={() => {
           setDialogOpen(false);
           fetchStatus();
