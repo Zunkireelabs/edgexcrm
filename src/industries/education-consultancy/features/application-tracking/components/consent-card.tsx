@@ -92,7 +92,8 @@ function BlockedHintTooltip({ groups, className, children }: { groups: MissingGr
             {children}
           </div>
         </TooltipTrigger>
-        <TooltipContent side="top" sideOffset={8} className="max-w-xs">
+        {/* To the LEFT of the buttons: above them it covered the warning box and its "Open Student Details" button. Radix flips it if there is no room. */}
+        <TooltipContent side="left" align="center" sideOffset={12} className="max-w-xs">
           <p className="font-medium">Complete the student profile first</p>
           <p className="mt-1">Fill in all of these before consent can go out:</p>
           <ul className="mt-1 list-disc pl-4">
