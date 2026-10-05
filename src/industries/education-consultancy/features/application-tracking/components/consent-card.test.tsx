@@ -168,8 +168,7 @@ describe("ConsentCard — incomplete student profile gate", () => {
     expect(screen.getByText("Complete the student profile first")).toBeInTheDocument();
     expect(screen.getByText(/half-filled profile/i)).toBeInTheDocument();
     expect(screen.getByText("Still missing:")).toBeInTheDocument();
-    expect(screen.getByText("Passport Number")).toBeInTheDocument();
-    expect(screen.getByText("Father's Name")).toBeInTheDocument();
+    expect(screen.getByText("Passport Number, Father's Name")).toBeInTheDocument();
     for (const name of ACTIONS) expect(screen.getByRole("button", { name })).toBeDisabled();
   });
 
@@ -195,8 +194,7 @@ describe("ConsentCard — incomplete student profile gate", () => {
 
     // The hover hint repeats the missing items (one per line) and says where to fix them.
     expect((await screen.findAllByText("Add them in Student Details (Edit).")).length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Passport Number").length).toBeGreaterThan(1); // warning box + tooltip
-    expect(screen.getAllByText("Father's Name").length).toBeGreaterThan(1);
+    expect(screen.getAllByText("Passport Number, Father's Name").length).toBeGreaterThan(1); // warning box + tooltip
 
     // Leaving hides it, and a click on the group (Radix would keep it shut) does not break the next hover.
     fireEvent.pointerLeave(group);
@@ -205,6 +203,28 @@ describe("ConsentCard — incomplete student profile gate", () => {
     fireEvent.click(group);
     fireEvent.pointerEnter(group);
     expect((await screen.findAllByText("Add them in Student Details (Edit).")).length).toBeGreaterThan(0);
+  });
+
+  it("groups the missing fields by Student Details section so staff know where to fill each one", async () => {
+    statusIs({
+      data: {
+        ...INCOMPLETE.data,
+        readiness: {
+          ready: false,
+          missing: ["Date of Birth", "Father's Name", "Passport Number"],
+          groups: [
+            { section: "Basic Details", fields: ["Date of Birth", "Father's Name"] },
+            { section: "Passport & Citizenship", fields: ["Passport Number"] },
+          ],
+        },
+      },
+    });
+    renderCard(true);
+    await openCard();
+
+    const items = screen.getAllByRole("listitem").map((li) => li.textContent);
+    expect(items).toContain("Basic Details: Date of Birth, Father's Name");
+    expect(items).toContain("Passport & Citizenship: Passport Number");
   });
 
   it("shows an Open Student Details button only when the page can open that pop-up", async () => {

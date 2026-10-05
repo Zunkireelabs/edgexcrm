@@ -14,11 +14,28 @@ import { logger } from "@/lib/logger";
  * lead page and renders harmlessly blank.
  */
 
+/** Missing fields grouped by the Student Details section they live in, in the pop-up's own order. */
+export interface MissingGroup {
+  section: string;
+  fields: string[];
+}
+
 export interface ConsentReadiness {
   ready: boolean;
-  /** Human labels of what to fill in, e.g. ["Passport Number", "Father's Name"]. */
+  /** Flat labels of what to fill in, e.g. ["Passport Number", "Father's Name"]. */
   missing: string[];
+  /** The same fields grouped by section, so staff know WHERE in Student Details to fill each one. */
+  groups: MissingGroup[];
 }
+
+// Section names match the Student Details pop-up, listed in the order it shows them.
+const SECTION_ORDER = [
+  "Personal Information",
+  "Basic Details",
+  "Guardian Details",
+  "Passport & Citizenship",
+  "Study Interest",
+] as const;
 
 export interface ConsentProfile {
   first_name: string | null;
@@ -48,21 +65,22 @@ export const CONSENT_PROFILE_COLUMNS =
 const filled = (v: string | null | undefined) => !!v?.trim();
 
 /** Placeholder -> the profile requirement behind it. Placeholders not listed need nothing (automatic or optional). */
-const PLACEHOLDER_REQUIREMENTS: Record<string, { label: string; ok: (p: ConsentProfile) => boolean }> = {
-  city: { label: "City", ok: (p) => !!getLeadCity(p) },
-  nationality: { label: "Nationality", ok: (p) => !!getLeadNationality(p) },
-  passport_number: { label: "Passport Number", ok: (p) => filled(p.passport_number) },
-  full_address: { label: "Full Address", ok: (p) => filled(p.full_address) },
-  street_address: { label: "Full Address", ok: (p) => filled(p.full_address) },
-  father_name: { label: "Father's Name", ok: (p) => filled(p.father_name) },
-  mother_name: { label: "Mother's Name", ok: (p) => filled(p.mother_name) },
-  parent_name: { label: "Father's or Mother's Name", ok: (p) => filled(p.father_name) || filled(p.mother_name) },
-  emergency_contact_name: { label: "Emergency Contact Name", ok: (p) => filled(p.emergency_contact_name) },
-  emergency_contact_phone: { label: "Emergency Contact No.", ok: (p) => filled(p.emergency_contact_phone) },
-  date_of_birth: { label: "Date of Birth", ok: (p) => filled(p.date_of_birth) },
-  guardian_phone: { label: "Guardian Phone", ok: (p) => filled(p.guardian_phone) },
-  guardian_email: { label: "Guardian Email", ok: (p) => filled(p.guardian_email) },
-  guardian_relationship: { label: "Guardian Relationship", ok: (p) => filled(p.guardian_relationship) },
+type Section = (typeof SECTION_ORDER)[number];
+const PLACEHOLDER_REQUIREMENTS: Record<string, { label: string; section: Section; ok: (p: ConsentProfile) => boolean }> = {
+  city: { label: "City", section: "Personal Information", ok: (p) => !!getLeadCity(p) },
+  nationality: { label: "Nationality", section: "Personal Information", ok: (p) => !!getLeadNationality(p) },
+  passport_number: { label: "Passport Number", section: "Passport & Citizenship", ok: (p) => filled(p.passport_number) },
+  full_address: { label: "Full Address", section: "Basic Details", ok: (p) => filled(p.full_address) },
+  street_address: { label: "Full Address", section: "Basic Details", ok: (p) => filled(p.full_address) },
+  father_name: { label: "Father's Name", section: "Basic Details", ok: (p) => filled(p.father_name) },
+  mother_name: { label: "Mother's Name", section: "Basic Details", ok: (p) => filled(p.mother_name) },
+  parent_name: { label: "Father's or Mother's Name", section: "Basic Details", ok: (p) => filled(p.father_name) || filled(p.mother_name) },
+  emergency_contact_name: { label: "Emergency Contact Name", section: "Basic Details", ok: (p) => filled(p.emergency_contact_name) },
+  emergency_contact_phone: { label: "Emergency Contact No.", section: "Basic Details", ok: (p) => filled(p.emergency_contact_phone) },
+  date_of_birth: { label: "Date of Birth", section: "Basic Details", ok: (p) => filled(p.date_of_birth) },
+  guardian_phone: { label: "Guardian Phone", section: "Guardian Details", ok: (p) => filled(p.guardian_phone) },
+  guardian_email: { label: "Guardian Email", section: "Guardian Details", ok: (p) => filled(p.guardian_email) },
+  guardian_relationship: { label: "Guardian Relationship", section: "Guardian Details", ok: (p) => filled(p.guardian_relationship) },
 };
 
 /** The distinct `{{placeholders}}` used in a template body. */
@@ -75,22 +93,29 @@ export function extractTemplatePlaceholders(body: string | null | undefined): st
 }
 
 export function computeConsentReadiness(templateBody: string | null | undefined, profile: ConsentProfile): ConsentReadiness {
-  const missing: string[] = [];
-  const add = (label: string) => {
-    if (!missing.includes(label)) missing.push(label);
+  const found: { label: string; section: Section }[] = [];
+  const add = (label: string, section: Section) => {
+    if (!found.some((f) => f.label === label)) found.push({ label, section });
   };
 
-  if (!filled(profile.first_name)) add("Name");
-  if (!filled(profile.email)) add("Email");
-  if (!filled(profile.phone)) add("Phone");
-  if (!filled(profile.field_of_study) || !filled(profile.degree_level)) add("Study Information");
+  // Always required. Named exactly as in Student Details (the study check says WHICH of the two is empty).
+  if (!filled(profile.first_name)) add("First Name", "Personal Information");
+  if (!filled(profile.email)) add("Email", "Personal Information");
+  if (!filled(profile.phone)) add("Phone", "Personal Information");
+  if (!filled(profile.field_of_study)) add("Field of Study", "Study Interest");
+  if (!filled(profile.degree_level)) add("Degree Level", "Study Interest");
 
   for (const placeholder of extractTemplatePlaceholders(templateBody)) {
     const requirement = PLACEHOLDER_REQUIREMENTS[placeholder];
-    if (requirement && !requirement.ok(profile)) add(requirement.label);
+    if (requirement && !requirement.ok(profile)) add(requirement.label, requirement.section);
   }
 
-  return { ready: missing.length === 0, missing };
+  const groups: MissingGroup[] = SECTION_ORDER.map((section) => ({
+    section,
+    fields: found.filter((f) => f.section === section).map((f) => f.label),
+  })).filter((g) => g.fields.length > 0);
+
+  return { ready: found.length === 0, missing: found.map((f) => f.label), groups };
 }
 
 /**

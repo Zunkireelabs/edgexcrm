@@ -37,13 +37,33 @@ describe("extractTemplatePlaceholders", () => {
 
 describe("computeConsentReadiness", () => {
   it("is ready with only the core fields when the template needs nothing else", () => {
-    expect(computeConsentReadiness("Dear {{student_name}}, {{organization}} {{date}}", complete)).toEqual({ ready: true, missing: [] });
+    expect(computeConsentReadiness("Dear {{student_name}}, {{organization}} {{date}}", complete)).toEqual({ ready: true, missing: [], groups: [] });
   });
 
   it("always requires name, email, phone and study info", () => {
-    const r = computeConsentReadiness("", { ...complete, first_name: " ", email: null, phone: "", degree_level: null });
-    expect(r.missing).toEqual(["Name", "Email", "Phone", "Study Information"]);
+    const r = computeConsentReadiness("", { ...complete, first_name: " ", email: null, phone: "", field_of_study: null, degree_level: null });
+    expect(r.missing).toEqual(["First Name", "Email", "Phone", "Field of Study", "Degree Level"]);
     expect(r.ready).toBe(false);
+  });
+
+  it("names the exact study field that is empty", () => {
+    expect(computeConsentReadiness("", { ...complete, degree_level: null }).missing).toEqual(["Degree Level"]);
+    expect(computeConsentReadiness("", { ...complete, field_of_study: " " }).missing).toEqual(["Field of Study"]);
+  });
+
+  it("groups the missing fields by Student Details section, in the pop-up's order", () => {
+    const r = computeConsentReadiness(
+      "{{passport_number}} {{guardian_phone}} {{date_of_birth}} {{father_name}} {{city}}",
+      { ...complete, degree_level: null },
+    );
+    expect(r.groups).toEqual([
+      { section: "Personal Information", fields: ["City"] },
+      { section: "Basic Details", fields: ["Date of Birth", "Father's Name"] },
+      { section: "Guardian Details", fields: ["Guardian Phone"] },
+      { section: "Passport & Citizenship", fields: ["Passport Number"] },
+      { section: "Study Interest", fields: ["Degree Level"] },
+    ]);
+    expect(r.groups.flatMap((g) => g.fields).sort()).toEqual([...r.missing].sort());
   });
 
   it("requires only the fields the template uses", () => {

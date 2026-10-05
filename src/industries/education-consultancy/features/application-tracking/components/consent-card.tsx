@@ -44,7 +44,23 @@ interface ConsentStatus {
   } | null;
   link: string | null;
   /** Education only: is the profile complete enough to generate a consent document? null/absent = no gate. */
-  readiness?: { ready: boolean; missing: string[] } | null;
+  readiness?: { ready: boolean; missing: string[]; groups?: MissingGroupView[] } | null;
+}
+
+/** Missing fields grouped by the Student Details section they live in (`section` "" = ungrouped fallback). */
+interface MissingGroupView {
+  section: string;
+  fields: string[];
+}
+
+/** "Basic Details: Date of Birth, Father's Name" — the section in bold, then the fields. */
+function MissingGroupText({ group }: { group: MissingGroupView }) {
+  return (
+    <>
+      {group.section && <span className="font-medium">{group.section}: </span>}
+      {group.fields.join(", ")}
+    </>
+  );
 }
 
 /**
@@ -56,7 +72,7 @@ interface ConsentStatus {
  * all. Disabled buttons have pointer-events:none, so hover lands on the group itself; one trigger
  * also means no dead zones in the gaps between buttons.
  */
-function BlockedHintTooltip({ missing, className, children }: { missing: string[]; className: string; children: React.ReactNode }) {
+function BlockedHintTooltip({ groups, className, children }: { groups: MissingGroupView[]; className: string; children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   return (
     <TooltipProvider delayDuration={0}>
@@ -79,8 +95,10 @@ function BlockedHintTooltip({ missing, className, children }: { missing: string[
         <TooltipContent side="top" sideOffset={8} className="max-w-xs">
           <p className="font-medium">Complete the student profile first</p>
           <ul className="mt-1 list-disc pl-4">
-            {missing.map((item) => (
-              <li key={item}>{item}</li>
+            {groups.map((group) => (
+              <li key={group.section || group.fields.join()}>
+                <MissingGroupText group={group} />
+              </li>
             ))}
           </ul>
           <p className="mt-1 opacity-80">Add them in Student Details (Edit).</p>
@@ -91,10 +109,10 @@ function BlockedHintTooltip({ missing, className, children }: { missing: string[
 }
 
 /** Wraps the button group; adds the hover hint only while blocked (the stateful part unmounts otherwise, so no stale "open"). */
-function BlockedHint({ missing, className, children }: { missing: string[] | null; className: string; children: React.ReactNode }) {
-  if (!missing) return <div className={className}>{children}</div>;
+function BlockedHint({ groups, className, children }: { groups: MissingGroupView[] | null; className: string; children: React.ReactNode }) {
+  if (!groups) return <div className={className}>{children}</div>;
   return (
-    <BlockedHintTooltip missing={missing} className={className}>
+    <BlockedHintTooltip groups={groups} className={className}>
       {children}
     </BlockedHintTooltip>
   );
@@ -321,7 +339,13 @@ export function ConsentCard({
   const profileIncomplete = consentStatus === "none" && !!readiness && !readiness.ready;
   const actionsBlocked = profileIncomplete && !overrideProfile;
   const canOverride = canManageFee; // owner/admin only — the API re-checks the role
-  const blockedHint = actionsBlocked && readiness ? readiness.missing : null;
+  // Missing fields grouped by Student Details section; falls back to one flat group if the server sent none.
+  const missingGroups: MissingGroupView[] = readiness
+    ? readiness.groups?.length
+      ? readiness.groups
+      : [{ section: "", fields: readiness.missing }]
+    : [];
+  const blockedHint = actionsBlocked && readiness ? missingGroups : null;
 
   return (
     <>
@@ -468,8 +492,10 @@ export function ConsentCard({
                   <div className="text-xs">
                     <p className="font-medium">Still missing:</p>
                     <ul className="mt-0.5 list-disc pl-4">
-                      {readiness.missing.map((item) => (
-                        <li key={item}>{item}</li>
+                      {missingGroups.map((group) => (
+                        <li key={group.section || group.fields.join()}>
+                          <MissingGroupText group={group} />
+                        </li>
                       ))}
                     </ul>
                     <p className="mt-1 text-amber-800">Add them from Student Details (Edit).</p>
@@ -500,7 +526,7 @@ export function ConsentCard({
                 </div>
               )}
               {canManage && (
-                <BlockedHint missing={blockedHint} className={showCopyLink ? "grid grid-cols-2 gap-2" : "flex gap-2 flex-wrap"}>
+                <BlockedHint groups={blockedHint} className={showCopyLink ? "grid grid-cols-2 gap-2" : "flex gap-2 flex-wrap"}>
                   <Button size="sm" variant="outline" disabled={actionsBlocked} onClick={() => openDialog("send")} className={`h-7 text-xs${showCopyLink ? " px-2" : ""}`}>
                     Send consent link
                   </Button>
