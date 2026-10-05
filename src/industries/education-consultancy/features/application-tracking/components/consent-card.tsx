@@ -273,27 +273,34 @@ export function ConsentCard({
             type="button"
             onClick={() => setOpen((v) => !v)}
             aria-expanded={open}
-            className="flex w-full items-center justify-between"
+            className="flex w-full items-center justify-between gap-2 text-left"
           >
-            <span className="flex min-w-0 items-center gap-2">
-              <span className={SECTION_TITLE_CLASS}>
+            {/* Title + status badge sit side by side; if a very narrow column can't fit both, the badge wraps below the title instead of squeezing it. */}
+            <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+              <span className={`${SECTION_TITLE_CLASS} whitespace-nowrap`}>
                 {L.sectionTitle}
               </span>
               {showCollapsedStatus && !open && consentStatus === "none" && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+                <span
+                  title={L.requiredTitle}
+                  className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700"
+                >
                   <AlertTriangle className="h-3 w-3 shrink-0" />
-                  {L.requiredTitle}
+                  Required
                 </span>
               )}
               {showCollapsedStatus && !open && consentStatus === "signed" && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700">
+                <span
+                  title={L.signedTitle}
+                  className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700"
+                >
                   <CheckCircle2 className="h-3 w-3 shrink-0" />
-                  {L.signedTitle}
+                  Signed
                 </span>
               )}
             </span>
             <ChevronDown
-              className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
+              className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
             />
           </button>
         </CardHeader>
