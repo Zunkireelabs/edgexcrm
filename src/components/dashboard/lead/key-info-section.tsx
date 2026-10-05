@@ -811,7 +811,7 @@ export function StudyInterestPanel({ lead, isAdmin, isEditor, leadScope, submiss
     <>
       <InfoSection
         title="Study Interest"
-        collapsible={false}
+        defaultOpen
         className="border-0 rounded-none bg-transparent"
         titleClassName={SECTION_TITLE_CLASS}
       >
