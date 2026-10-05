@@ -218,7 +218,8 @@ jobs:
             src/lib/email/outbound/send.test.ts \
             src/lib/email/outbound/suppression.test.ts \
             src/lib/email/outbound/unsubscribe.test.ts \
-            src/industries/_shared/features/outreach/lib/sequence-concurrency.db.test.ts
+            src/industries/_shared/features/outreach/lib/sequence-concurrency.db.test.ts \
+            src/lib/inbox/process-inbound.test.ts
 
       - name: Stop local Supabase
         if: always()

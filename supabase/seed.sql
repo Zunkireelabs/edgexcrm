@@ -54,3 +54,13 @@ VALUES
   ('lead-documents',       'lead-documents',       true),
   ('employee-photos',      'employee-photos',      false)
 ON CONFLICT (id) DO NOTHING;
+
+-- inbox-media: WhatsApp (and future provider) attachment storage. PRIVATE like
+-- knowledge-base-files above — NOT like lead-documents, which is public. Getting this
+-- wrong publishes student passport scans/transcripts to anyone with the URL
+-- (docs/INBOX-ATTACHMENTS-BRIEF.md §3). 20 MB cap set explicitly here since the generic
+-- block above sets none for local; stage/prod buckets are created by hand per that brief.
+INSERT INTO storage.buckets (id, name, public, file_size_limit)
+VALUES
+  ('inbox-media', 'inbox-media', false, 20971520)
+ON CONFLICT (id) DO NOTHING;

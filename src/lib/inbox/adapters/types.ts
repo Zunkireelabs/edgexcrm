@@ -36,6 +36,20 @@ export interface InboxConversation {
   lead_id: string | null;
 }
 
+/**
+ * What the adapter can tell us about an inbound attachment from the webhook payload
+ * ALONE — no network calls. Meta sends a media ID, never bytes or a durable URL;
+ * resolving/downloading/persisting those bytes happens later, during inbound
+ * processing (process-inbound.ts), never in the adapter (parsing stays pure).
+ */
+export interface InboundMediaDescriptor {
+  type: "image" | "document" | "audio" | "video" | "sticker";
+  providerMediaId: string;
+  mimeType: string | null;
+  /** Only ever present for `document` — WhatsApp doesn't send one for other types. */
+  filename: string | null;
+}
+
 export interface NormalizedInbound {
   /** Stable external identifier for the sender (WA-ID / PSID / IGSID) */
   externalContactId: string;
@@ -47,10 +61,10 @@ export interface NormalizedInbound {
   providerMessageId: string;
   /** ISO timestamp from provider (may be absent) */
   providerTimestamp: string | null;
-  /** Plain-text body */
+  /** Plain-text body, OR a media message's caption — a captioned photo is never a blank bubble */
   contentText: string | null;
-  /** Raw attachments (not fully parsed in v1) */
-  attachments: unknown[];
+  /** Media descriptors parsed from the payload; empty for a plain text message */
+  attachments: InboundMediaDescriptor[];
   /** Provider account id the message arrived on (phone_number_id for WA, page id for Messenger).
    *  Used by the Meta webhook to map the payload to the correct inbox_channels row. */
   channelRef: string;
@@ -88,15 +102,25 @@ export interface TemplateContent {
   components?: TemplateComponent[];
 }
 
+/** An outbound attachment that has ALREADY been uploaded to the provider (see
+ *  ChannelAdapter.uploadMedia) — this carries the provider's own media id, never bytes. */
+export interface OutboundMediaRef {
+  type: "image" | "document" | "audio" | "video";
+  providerMediaId: string;
+  filename?: string;
+}
+
 export interface SendMessageContent {
   text: string;
-  attachments?: unknown[];
   /**
    * Pre-approved template payload. Required by WhatsApp to send outside the
    * 24h session window (requiresTemplateOutsideWindow); optional inside it.
    * Providers without supportsTemplates ignore this field entirely.
    */
   template?: TemplateContent;
+  /** An already-uploaded media reference to send instead of/alongside free text.
+   *  `text`, when present, is sent as the media's caption. */
+  media?: OutboundMediaRef;
 }
 
 export interface SendResult {
@@ -147,4 +171,17 @@ export interface ChannelAdapter {
     conversation: InboxConversation,
     content: SendMessageContent
   ): Promise<SendResult>;
+
+  /**
+   * Upload raw bytes to the provider so they can be referenced by a later sendMessage
+   * media send (Meta never accepts bytes inline — media must be uploaded first and
+   * referenced by the id it hands back). Optional: only providers with
+   * capabilities.supportsTemplates-adjacent media support implement this; others omit it.
+   */
+  uploadMedia?(
+    channel: InboxChannel,
+    bytes: Uint8Array,
+    mimeType: string,
+    filename: string | null
+  ): Promise<{ providerMediaId: string }>;
 }

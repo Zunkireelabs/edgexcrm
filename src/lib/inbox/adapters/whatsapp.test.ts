@@ -116,3 +116,86 @@ describe("whatsappAdapter.sendMessage — template vs free-text branching", () =
     ).rejects.toThrow(/WhatsApp send failed \(400\)/);
   });
 });
+
+// S2-A (docs/WHATSAPP-GOLIVE-SONNET-BRIEF.md / docs/INBOX-ATTACHMENTS-BRIEF.md D1):
+// before this, parseInboundEvent hardcoded attachments: [] and only ever read
+// msg.text?.body — a student's passport scan arrived with null text and no
+// attachment, i.e. silent data loss. Parsing stays pure here: no network calls,
+// just describing what the webhook payload says arrived.
+describe("whatsappAdapter.parseInboundEvent — media descriptors (D1)", () => {
+  beforeEach(() => {
+    process.env.INBOX_WHATSAPP_ENABLED = "true";
+  });
+  afterEach(() => {
+    delete process.env.INBOX_WHATSAPP_ENABLED;
+  });
+
+  function entryWith(message: Record<string, unknown>) {
+    return {
+      entry: [
+        {
+          changes: [
+            {
+              value: {
+                metadata: { phone_number_id: "phone-1" },
+                contacts: [{ wa_id: "9779800000001", profile: { name: "Test Student" } }],
+                messages: [{ from: "9779800000001", timestamp: "1700000000", id: "wamid.media1", ...message }],
+              },
+            },
+          ],
+        },
+      ],
+    };
+  }
+
+  it("an image with no caption → one image attachment, contentText null (blank bubble, not lost)", () => {
+    const [result] = whatsappAdapter.parseInboundEvent(
+      entryWith({ type: "image", image: { id: "media-123", mime_type: "image/jpeg", sha256: "abc" } })
+    );
+    expect(result.attachments).toEqual([
+      { type: "image", providerMediaId: "media-123", mimeType: "image/jpeg", filename: null },
+    ]);
+    expect(result.contentText).toBeNull();
+  });
+
+  it("an image WITH a caption → caption becomes contentText, not a blank bubble", () => {
+    const [result] = whatsappAdapter.parseInboundEvent(
+      entryWith({
+        type: "image",
+        image: { id: "media-456", mime_type: "image/jpeg", sha256: "abc", caption: "my passport" },
+      })
+    );
+    expect(result.contentText).toBe("my passport");
+    expect(result.attachments[0]).toMatchObject({ type: "image", providerMediaId: "media-456" });
+  });
+
+  it("a document carries filename AND caption", () => {
+    const [result] = whatsappAdapter.parseInboundEvent(
+      entryWith({
+        type: "document",
+        document: { id: "media-789", mime_type: "application/pdf", filename: "transcript.pdf", caption: "transcript" },
+      })
+    );
+    expect(result.attachments).toEqual([
+      { type: "document", providerMediaId: "media-789", mimeType: "application/pdf", filename: "transcript.pdf" },
+    ]);
+    expect(result.contentText).toBe("transcript");
+  });
+
+  it("audio/video/sticker all map through the same shape", () => {
+    for (const type of ["audio", "video", "sticker"] as const) {
+      const [result] = whatsappAdapter.parseInboundEvent(
+        entryWith({ type, [type]: { id: `media-${type}`, mime_type: `${type}/x` } })
+      );
+      expect(result.attachments).toEqual([
+        { type, providerMediaId: `media-${type}`, mimeType: `${type}/x`, filename: null },
+      ]);
+    }
+  });
+
+  it("a plain text message still has zero attachments (no regression)", () => {
+    const [result] = whatsappAdapter.parseInboundEvent(entryWith({ type: "text", text: { body: "hello" } }));
+    expect(result.attachments).toEqual([]);
+    expect(result.contentText).toBe("hello");
+  });
+});
