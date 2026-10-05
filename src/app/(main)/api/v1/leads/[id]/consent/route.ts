@@ -212,10 +212,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
   const db = await scopedClient(auth);
 
-  // Education: a half-filled profile makes a consent document with blank details, so all three actions
-  // (send / Sign here now / Record manually) wait until the profile is complete. Owner/admin may send
-  // anyway after confirming — logged below. An already-signed lead skips this so ALREADY_SIGNED wins.
-  if (auth.industryId === "education_consultancy") {
+  // Education: a half-filled profile makes a consent document with blank details, so the two actions that
+  // GENERATE a document (send / Sign here now) wait until the profile is complete. Owner/admin may send
+  // anyway after confirming — logged below. "Record manually" is exempt: it files a paper that was already
+  // signed, so no blank document can go out (the Application gate still checks the profile separately).
+  // An already-signed lead skips this so ALREADY_SIGNED wins.
+  if (auth.industryId === "education_consultancy" && action !== "record_manual") {
     const overrideRequested = body.override_profile_check === true;
     if (overrideRequested && !requireAdmin(auth)) return apiForbidden();
     if (!(await hasSignedConsent(db, id))) {

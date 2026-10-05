@@ -158,7 +158,7 @@ describe("ConsentCard — incomplete student profile gate", () => {
     });
   }
 
-  it("warns twice (complete the profile + what is missing) and disables all four actions", async () => {
+  it("warns twice (complete the profile + what is missing) and disables the three actions that create a document", async () => {
     statusIs(INCOMPLETE);
     renderCard(true);
     await openCard();
@@ -168,7 +168,11 @@ describe("ConsentCard — incomplete student profile gate", () => {
     expect(screen.getByText("Still missing:")).toBeInTheDocument();
     expect(screen.getByText("Passport Number")).toBeInTheDocument();
     expect(screen.getByText("Father's Name")).toBeInTheDocument();
-    for (const name of ACTIONS) expect(screen.getByRole("button", { name })).toBeDisabled();
+    for (const name of ["Send consent link", "Copy consent link", "Sign here now"]) {
+      expect(screen.getByRole("button", { name })).toBeDisabled();
+    }
+    // Recording a consent that was already signed on paper generates no document, so it stays available.
+    expect(screen.getByRole("button", { name: "Record manually" })).toBeEnabled();
   });
 
   it("leaves the actions enabled when the profile is ready (or the server sends no gate)", async () => {
@@ -195,7 +199,9 @@ describe("ConsentCard — incomplete student profile gate", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Send anyway (admin)" }));
     expect(await screen.findByText("Send consent with missing details?")).toBeInTheDocument();
-    for (const name of ACTIONS) expect(screen.getByRole("button", { name, hidden: true })).toBeDisabled(); // not unlocked until confirmed
+    for (const name of ["Send consent link", "Copy consent link", "Sign here now"]) {
+      expect(screen.getByRole("button", { name, hidden: true })).toBeDisabled(); // not unlocked until confirmed
+    }
 
     fireEvent.click(screen.getByRole("button", { name: "Send anyway" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Copy consent link" })).toBeEnabled());

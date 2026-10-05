@@ -25,6 +25,8 @@ interface SendConsentDialogProps {
   allowCopyOnly?: boolean;
   /** Owner/admin confirmed "send anyway" for an incomplete profile — forwarded to the API, which re-checks the role. */
   overrideProfileCheck?: boolean;
+  /** The profile is incomplete (and not overridden): the "Send Link" tab is disabled; "Record Manually" stays available. */
+  sendBlocked?: boolean;
   onSuccess: () => void;
 }
 
@@ -36,6 +38,7 @@ export function SendConsentDialog({
   defaultTab = "send",
   allowCopyOnly = false,
   overrideProfileCheck = false,
+  sendBlocked = false,
   onSuccess,
 }: SendConsentDialogProps) {
   const [tab, setTab] = useState<"send" | "manual">(defaultTab);
@@ -149,7 +152,6 @@ export function SendConsentDialog({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "record_manual",
-          ...(overrideProfileCheck && { override_profile_check: true }),
           signer_name: signerName.trim(),
           document_url: documentUrl,
           signed_at: signedAt || undefined,
@@ -181,11 +183,13 @@ export function SendConsentDialog({
           <button
             type="button"
             onClick={() => setTab("send")}
+            disabled={sendBlocked}
+            title={sendBlocked ? "Complete the student profile first" : undefined}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               tab === "send"
                 ? "border-foreground text-foreground"
                 : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
+            } disabled:cursor-not-allowed disabled:opacity-50`}
           >
             Send Link
           </button>
