@@ -2,7 +2,7 @@
 
 import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { InfoSection } from "@/components/dashboard/lead/info-section";
+import { InfoSection, InfoRow } from "@/components/dashboard/lead/info-section";
 import { CollapsibleGroups, SectionGroup, CardSection, FieldGrid, EditableField } from "./form-primitives";
 import { WorkExperienceSection } from "./work-experience-section";
 import { ReferencesSection } from "./references-section";
@@ -13,6 +13,7 @@ import {
   FINANCIAL_FIELDS,
   personalDetailsFromLead,
 } from "./personal-details-dialog";
+import { ACADEMIC_LEVELS, TEST_TYPES } from "@/lib/leads/prospect-qualification";
 import type { Lead } from "@/types/database";
 
 interface StudentDetailsSummaryCardProps {
@@ -34,9 +35,11 @@ const noop = () => {};
  * isEditing={false} mode, so there is no second copy of field-rendering
  * logic to keep in sync; the "Edit" button just opens the real dialog.
  *
- * Core Identity (name/email/phone) and Study Interest/Academic Information
- * are deliberately NOT repeated here — they're already shown once in the
- * page's main Personal Information card and Study Interest panel. Showing
+ * Core Identity (name/email/phone) and Study Interest (destinations / field of
+ * study / degree level / intake) are deliberately NOT repeated here — they're
+ * already shown once in the page's contact card and Study Interest panel.
+ * Academic Qualification and Test Report & Score live HERE (not in the Study
+ * Interest panel, which is limited to those four study fields). Showing
  * the same fields twice on one page was reported as confusing (client
  * feedback, 2026-09-23); this card now only previews the fields that are
  * unique to Student Details.
@@ -52,6 +55,18 @@ export function StudentDetailsSummaryCard({ lead, onEdit, defaultOpen = true }: 
   // Personal / Passport & Citizenship read from the lead's real columns; the remaining
   // preview-only fields (Financial, etc.) have no DB column — always "—" here.
   const values: Record<string, string> = personalDetailsFromLead(lead);
+
+  const leadRecord = lead as unknown as Record<string, unknown>;
+  const academicLevelRows = ACADEMIC_LEVELS.map((level) => ({
+    level,
+    gpa: String(leadRecord[`${level.key}_gpa`] ?? "").trim(),
+    institution: String(leadRecord[`${level.key}_institution`] ?? "").trim(),
+    passedYear: String(leadRecord[`${level.key}_passed_year`] ?? "").trim(),
+  })).filter((r) => r.gpa || r.institution || r.passedYear);
+  const testScoreRows = TEST_TYPES.map((t) => ({
+    test: t,
+    score: String(leadRecord[`${t.key}_score`] ?? "").trim(),
+  })).filter((r) => r.score);
 
   return (
     <InfoSection
@@ -96,6 +111,33 @@ export function StudentDetailsSummaryCard({ lead, onEdit, defaultOpen = true }: 
             </FieldGrid>
           </CardSection>
         </SectionGroup>
+
+        {(academicLevelRows.length > 0 || testScoreRows.length > 0) && (
+          <SectionGroup title="Academic Information">
+            {academicLevelRows.length > 0 && (
+              <CardSection title="Academic Qualification">
+                <div className="px-4 py-2 divide-y">
+                  {academicLevelRows.map(({ level, gpa, institution, passedYear }) => (
+                    <InfoRow
+                      key={level.key}
+                      label={level.label}
+                      value={[gpa, institution, passedYear].filter(Boolean).join(" · ")}
+                    />
+                  ))}
+                </div>
+              </CardSection>
+            )}
+            {testScoreRows.length > 0 && (
+              <CardSection title="Test Report & Score">
+                <div className="px-4 py-2 divide-y">
+                  {testScoreRows.map(({ test, score }) => (
+                    <InfoRow key={test.key} label={test.label} value={score} />
+                  ))}
+                </div>
+              </CardSection>
+            )}
+          </SectionGroup>
+        )}
 
         <SectionGroup title="Professional Information">
           <CardSection title="Work Experience">

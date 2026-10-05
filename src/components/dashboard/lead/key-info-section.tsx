@@ -63,7 +63,6 @@ import { SECTION_TITLE_CLASS, SUBHEADING_CLASS } from "./section-title";
 import { useEditSection, useEditSession } from "./edit-session";
 import { ListStepper } from "@/components/dashboard/leads/list-stepper";
 import { StageMoveSelector } from "@/components/dashboard/leads/stage-move-selector";
-import { ACADEMIC_LEVELS, TEST_TYPES } from "@/lib/leads/prospect-qualification";
 
 const CONTACT_METHODS = [
   { value: "phone", label: "Phone" },
@@ -802,24 +801,11 @@ export function StudyInterestPanel({ lead, isAdmin, isEditor, leadScope, submiss
   const effectiveDegreeLevel = normalizeDegreeLevel(leadWithEdu.degree_level) || distinctDegreeLevel.join(", ") || null;
   const effectiveIntakeTerm = leadWithEdu.intake_term?.trim() || null;
 
-  const leadRecord = lead as unknown as Record<string, unknown>;
   const hasAny =
     effectiveDestinations.length > 0 ||
     effectiveFieldOfStudy ||
     effectiveDegreeLevel ||
     effectiveIntakeTerm;
-
-  const academicLevelRows = ACADEMIC_LEVELS.map((level) => ({
-    level,
-    gpa: String(leadRecord[`${level.key}_gpa`] ?? "").trim(),
-    institution: String(leadRecord[`${level.key}_institution`] ?? "").trim(),
-    passedYear: String(leadRecord[`${level.key}_passed_year`] ?? "").trim(),
-  })).filter((r) => r.gpa || r.institution || r.passedYear);
-  const testScoreRows = TEST_TYPES.map((t) => ({
-    test: t,
-    score: String(leadRecord[`${t.key}_score`] ?? "").trim(),
-  })).filter((r) => r.score);
-  const hasAcademicData = academicLevelRows.length > 0 || testScoreRows.length > 0;
 
   return (
     <>
@@ -858,35 +844,6 @@ export function StudyInterestPanel({ lead, isAdmin, isEditor, leadScope, submiss
         <p className="text-xs text-muted-foreground italic">
           No study details yet.{canEditPanel ? " Use Edit to add." : ""}
         </p>
-      )}
-
-      {hasAcademicData && (
-        <div className="space-y-2 pt-1">
-          {academicLevelRows.length > 0 && (
-            <div className="space-y-1.5">
-              <p className={SUBHEADING_CLASS}>
-                Academic Qualification
-              </p>
-              {academicLevelRows.map(({ level, gpa, institution, passedYear }) => (
-                <InfoRow
-                  key={level.key}
-                  label={level.label}
-                  value={[gpa, institution, passedYear].filter(Boolean).join(" · ") || "—"}
-                />
-              ))}
-            </div>
-          )}
-          {testScoreRows.length > 0 && (
-            <div className="space-y-1.5">
-              <p className={SUBHEADING_CLASS}>
-                Test Report &amp; Score
-              </p>
-              {testScoreRows.map(({ test, score }) => (
-                <InfoRow key={test.key} label={test.label} value={score} />
-              ))}
-            </div>
-          )}
-        </div>
       )}
       </div>
       </InfoSection>
