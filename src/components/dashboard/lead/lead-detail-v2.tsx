@@ -924,6 +924,7 @@ export function LeadDetailV2({
                       consentEnabled={consentEnabled}
                       consentSigned={consentSigned}
                       showCopyLink
+                      showCollapsedStatus
                       canManage={canManageApplications ?? isAdmin}
                       canManageFee={isAdmin}
                       onSignedChange={setConsentSignedState}

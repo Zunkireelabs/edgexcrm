@@ -939,6 +939,7 @@ export function ApplicationDetailPage({
               consentSigned={false}
               canManage={canEdit}
               canManageFee={canManageFee}
+              showCollapsedStatus
               feeStatus={fullLead.pre_app_fee_status}
               feeAmount={fullLead.pre_app_fee_amount}
               feeNotes={fullLead.pre_app_fee_notes}

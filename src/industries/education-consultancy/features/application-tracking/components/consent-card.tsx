@@ -77,6 +77,8 @@ interface ConsentCardProps {
   showProcessingFee?: boolean; // default true (education); false hides the fee block
   /** Education: adds "Copy consent link" (create the signing link without emailing it) and lays the first-state buttons out two per row. */
   showCopyLink?: boolean;
+  /** Education: while the card is collapsed, show the status in the header (e.g. "Consent required") so it isn't hidden. */
+  showCollapsedStatus?: boolean;
 }
 
 export function ConsentCard({
@@ -91,6 +93,7 @@ export function ConsentCard({
   labels,
   showProcessingFee = true,
   showCopyLink = false,
+  showCollapsedStatus = false,
 }: ConsentCardProps) {
   // Effective labels — education wording unless a caller overrides.
   const L = {
@@ -257,8 +260,16 @@ export function ConsentCard({
             aria-expanded={open}
             className="flex w-full items-center justify-between"
           >
-            <span className={SECTION_TITLE_CLASS}>
-              {L.sectionTitle}
+            <span className="flex min-w-0 items-center gap-2">
+              <span className={SECTION_TITLE_CLASS}>
+                {L.sectionTitle}
+              </span>
+              {showCollapsedStatus && !open && consentStatus === "none" && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+                  <AlertTriangle className="h-3 w-3 shrink-0" />
+                  {L.requiredTitle}
+                </span>
+              )}
             </span>
             <ChevronDown
               className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
