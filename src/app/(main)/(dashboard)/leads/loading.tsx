@@ -1,9 +1,10 @@
 import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingTitle } from "@/components/ui/loading-percent";
 
 export default function Loading() {
   return (
     <div className="flex flex-col h-full min-h-0">
-      <Skeleton className="h-7 w-32 shrink-0 mb-4" />
+      <LoadingTitle label="Leads" className="shrink-0 mb-4" />
       {/* toolbar */}
       <div className="shrink-0 bg-card rounded-lg border p-3 mb-2">
         <div className="flex items-center gap-3">

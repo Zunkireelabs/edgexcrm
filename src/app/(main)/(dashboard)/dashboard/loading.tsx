@@ -1,9 +1,10 @@
 import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingTitle } from "@/components/ui/loading-percent";
 
 export default function Loading() {
   return (
     <div className="space-y-6">
-      <Skeleton className="h-7 w-32" />
+      <LoadingTitle label="Dashboard" headingClassName="text-lg font-bold" />
       {/* stat cards — mirrors grid grid-cols-2 md:grid-cols-5 */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         {Array.from({ length: 5 }).map((_, i) => (

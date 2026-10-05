@@ -103,6 +103,7 @@ import {
 } from "@/components/dashboard/leads/columns-registry";
 import { loadColumnPrefs, saveColumnPrefs, clearColumnPrefs } from "@/lib/leads/column-prefs";
 import { STAGE_FRONTLINE, allowedAssigneePositionsForStage } from "@/lib/leads/stage-assignee-positions";
+import { buildIntakeTermOptions } from "@/lib/intake-options";
 import { ColumnManagerDialog } from "@/components/dashboard/leads/column-manager-dialog";
 import { POSITION_ROUTE_MAP_WITH_ADMIN } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
 import { DESTINATION_SYNONYM_KEYS } from "@/lib/leads/destination-normalize";
@@ -2463,12 +2464,9 @@ export function LeadsTable({
       // above, but composed from the two Settings catalogs (Intake Months x
       // Intake Years) Applications already uses — same "Month Year" join
       // (e.g. "November 2026") the Add Lead sheet writes to intake_term.
-      intake_term: eduIntakeMonths.flatMap((month) =>
-        eduIntakeYears.map((year) => {
-          const value = `${month} ${year}`;
-          return { value, label: value };
-        })
-      ),
+      // Year-major so the list reads in time order (Jan 2026 … Dec 2026, Jan 2027 …)
+      // rather than every year of January before the first February.
+      intake_term: buildIntakeTermOptions(eduIntakeMonths, eduIntakeYears),
     };
   }, [
     statusFilterOptions,

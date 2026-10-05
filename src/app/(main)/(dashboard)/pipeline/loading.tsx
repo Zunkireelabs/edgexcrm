@@ -1,11 +1,12 @@
 import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingTitle } from "@/components/ui/loading-percent";
 
 export default function Loading() {
   return (
     <div className="flex flex-col h-[calc(100vh-90px)]">
       {/* header: title + pipeline selector */}
       <div className="flex items-center gap-3 shrink-0 mb-4">
-        <Skeleton className="h-7 w-24" />
+        <LoadingTitle label="Pipeline" headingClassName="text-lg font-bold" />
         <Skeleton className="h-8 w-44" />
       </div>
       {/* toolbar */}

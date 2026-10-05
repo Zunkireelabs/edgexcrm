@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { getCurrentUserTenant, getFormConfigsForTenant, getBranches, getLeadListsByTenant } from "@/lib/supabase/queries";
 import { getCachedUser } from "@/lib/supabase/server";
 import { DashboardShell } from "@/components/dashboard/shell";
+import { RouteProgress } from "@/components/ui/route-progress";
 import { AIAssistantProvider } from "@/contexts/ai-assistant-context";
 import { SettingsModalProvider } from "@/contexts/settings-modal-context";
 import { GlobalSearchProvider } from "@/contexts/global-search-context";
@@ -144,6 +145,7 @@ export default async function DashboardLayout({
           >
             {children}
             {modal}
+            <RouteProgress />
           </DashboardShell>
         </GlobalSearchProvider>
       </SettingsModalProvider>
