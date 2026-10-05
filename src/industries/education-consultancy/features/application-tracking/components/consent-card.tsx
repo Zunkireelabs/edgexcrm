@@ -47,19 +47,39 @@ interface ConsentStatus {
   readiness?: { ready: boolean; missing: string[] } | null;
 }
 
-/** Disabled buttons don't receive hover, so the tooltip lives on a wrapper. No `hint` = no wrapper at all. */
-function BlockedHint({ hint, className, children }: { hint: string[] | null; className: string; children: React.ReactNode }) {
-  if (!hint) return <>{children}</>;
+/**
+ * One hover hint for the whole group of consent buttons while they are blocked.
+ *
+ * Open/closed is controlled by plain pointer/focus handlers on the group (Radix's own open logic is
+ * ignored): Radix closes a tooltip on pointer-down and keeps it closed until the pointer leaves, and
+ * people click greyed-out buttons all the time — that made the hint come late, stick, or not come at
+ * all. Disabled buttons have pointer-events:none, so hover lands on the group itself; one trigger
+ * also means no dead zones in the gaps between buttons.
+ */
+function BlockedHintTooltip({ missing, className, children }: { missing: string[]; className: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
   return (
-    <TooltipProvider>
-      <Tooltip>
+    <TooltipProvider delayDuration={0}>
+      <Tooltip open={open} onOpenChange={() => {}}>
         <TooltipTrigger asChild>
-          <span tabIndex={0} className={className}>{children}</span>
+          <div
+            tabIndex={0}
+            className={className}
+            onPointerEnter={() => setOpen(true)}
+            onPointerLeave={() => setOpen(false)}
+            onFocus={() => setOpen(true)}
+            onBlur={() => setOpen(false)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") setOpen(false);
+            }}
+          >
+            {children}
+          </div>
         </TooltipTrigger>
-        <TooltipContent className="max-w-xs">
+        <TooltipContent side="top" sideOffset={8} className="max-w-xs">
           <p className="font-medium">Complete the student profile first</p>
           <ul className="mt-1 list-disc pl-4">
-            {hint.map((item) => (
+            {missing.map((item) => (
               <li key={item}>{item}</li>
             ))}
           </ul>
@@ -67,6 +87,16 @@ function BlockedHint({ hint, className, children }: { hint: string[] | null; cla
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
+  );
+}
+
+/** Wraps the button group; adds the hover hint only while blocked (the stateful part unmounts otherwise, so no stale "open"). */
+function BlockedHint({ missing, className, children }: { missing: string[] | null; className: string; children: React.ReactNode }) {
+  if (!missing) return <div className={className}>{children}</div>;
+  return (
+    <BlockedHintTooltip missing={missing} className={className}>
+      {children}
+    </BlockedHintTooltip>
   );
 }
 
@@ -292,7 +322,6 @@ export function ConsentCard({
   const actionsBlocked = profileIncomplete && !overrideProfile;
   const canOverride = canManageFee; // owner/admin only — the API re-checks the role
   const blockedHint = actionsBlocked && readiness ? readiness.missing : null;
-  const hintWrapClass = showCopyLink ? "block [&>button]:w-full" : "inline-block";
 
   return (
     <>
@@ -471,15 +500,12 @@ export function ConsentCard({
                 </div>
               )}
               {canManage && (
-                <div className={showCopyLink ? "grid grid-cols-2 gap-2" : "flex gap-2 flex-wrap"}>
-                  <BlockedHint hint={blockedHint} className={hintWrapClass}>
-<Button size="sm" variant="outline" disabled={actionsBlocked} onClick={() => openDialog("send")} className={`h-7 text-xs${showCopyLink ? " px-2" : ""}`}>
+                <BlockedHint missing={blockedHint} className={showCopyLink ? "grid grid-cols-2 gap-2" : "flex gap-2 flex-wrap"}>
+                  <Button size="sm" variant="outline" disabled={actionsBlocked} onClick={() => openDialog("send")} className={`h-7 text-xs${showCopyLink ? " px-2" : ""}`}>
                     Send consent link
                   </Button>
-</BlockedHint>
                   {showCopyLink && (
-                    <BlockedHint hint={blockedHint} className={hintWrapClass}>
-<Button size="sm" variant="outline" onClick={handleCreateAndCopyLink} disabled={creatingLink || actionsBlocked} className="h-7 px-2 text-xs">
+                    <Button size="sm" variant="outline" onClick={handleCreateAndCopyLink} disabled={creatingLink || actionsBlocked} className="h-7 px-2 text-xs">
                       {creatingLink ? (
                         <Loader2 className="h-3 w-3 mr-1 animate-spin" />
                       ) : (
@@ -487,21 +513,16 @@ export function ConsentCard({
                       )}
                       Copy consent link
                     </Button>
-</BlockedHint>
                   )}
-                  <BlockedHint hint={blockedHint} className={hintWrapClass}>
-<Button size="sm" variant="outline" disabled={actionsBlocked} onClick={() => setInPersonOpen(true)} className={`h-7 text-xs${showCopyLink ? " px-2" : ""}`}>
+                  <Button size="sm" variant="outline" disabled={actionsBlocked} onClick={() => setInPersonOpen(true)} className={`h-7 text-xs${showCopyLink ? " px-2" : ""}`}>
                     <PenLine className="h-3 w-3 mr-1" />
                     Sign here now
                   </Button>
-</BlockedHint>
-                  <BlockedHint hint={blockedHint} className={hintWrapClass}>
-<Button size="sm" variant={showCopyLink ? "outline" : "ghost"} disabled={actionsBlocked} onClick={() => openDialog("manual")} className={`h-7 text-xs${showCopyLink ? " px-2" : ""}`}>
+                  <Button size="sm" variant={showCopyLink ? "outline" : "ghost"} disabled={actionsBlocked} onClick={() => openDialog("manual")} className={`h-7 text-xs${showCopyLink ? " px-2" : ""}`}>
                     <Upload className="h-3 w-3 mr-1" />
                     Record manually
                   </Button>
-</BlockedHint>
-                </div>
+                </BlockedHint>
               )}
             </>
           )}

@@ -182,19 +182,29 @@ describe("ConsentCard — incomplete student profile gate", () => {
     for (const name of ACTIONS) expect(screen.getByRole("button", { name })).toBeEnabled();
   });
 
-  it("explains why on hover/focus of a blocked button (the tooltip sits on a wrapper, since disabled buttons get no hover)", async () => {
+  it("explains why when hovering the blocked buttons, and stays reliable after clicks and re-hovers", async () => {
     statusIs(INCOMPLETE);
     renderCard(true);
     await openCard();
 
-    const wrapper = screen.getByRole("button", { name: "Copy consent link" }).parentElement as HTMLElement;
-    expect(wrapper).toHaveAttribute("tabindex", "0");
-    fireEvent.focus(wrapper);
+    // One hint for the whole group (not one per button): hovering anywhere over the buttons shows it.
+    const group = screen.getByRole("button", { name: "Copy consent link" }).parentElement as HTMLElement;
+    expect(group).toHaveAttribute("tabindex", "0");
+    expect(group).toContainElement(screen.getByRole("button", { name: "Record manually" }));
+    fireEvent.pointerEnter(group);
 
     // The hover hint repeats the missing items (one per line) and says where to fix them.
     expect((await screen.findAllByText("Add them in Student Details (Edit).")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Passport Number").length).toBeGreaterThan(1); // warning box + tooltip
     expect(screen.getAllByText("Father's Name").length).toBeGreaterThan(1);
+
+    // Leaving hides it, and a click on the group (Radix would keep it shut) does not break the next hover.
+    fireEvent.pointerLeave(group);
+    await waitFor(() => expect(screen.queryAllByText("Add them in Student Details (Edit).")).toHaveLength(0));
+    fireEvent.pointerDown(group);
+    fireEvent.click(group);
+    fireEvent.pointerEnter(group);
+    expect((await screen.findAllByText("Add them in Student Details (Edit).")).length).toBeGreaterThan(0);
   });
 
   it("shows an Open Student Details button only when the page can open that pop-up", async () => {
@@ -233,7 +243,7 @@ describe("ConsentCard — incomplete student profile gate", () => {
     await openCard();
 
     const button = screen.getByRole("button", { name: "Copy consent link" });
-    expect(button.parentElement).not.toHaveAttribute("tabindex");
+    expect(button.parentElement).not.toHaveAttribute("tabindex"); // plain group, no hint
   });
 
   it("offers no override to non-admins", async () => {
