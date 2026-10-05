@@ -3,6 +3,7 @@
 // identical except for the author field. Full AI autonomy later = auto-approve
 // policy over this one path, not new plumbing.
 
+import { after } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { logger } from "@/lib/logger";
 import { getAdapter } from "./adapters";
@@ -21,6 +22,10 @@ export interface OutboundAttachmentInput {
   filename: string | null;
   mimeType: string;
   type: "image" | "document" | "audio" | "video";
+  /** ms the composer route spent reading the file out of the inbound request body
+   * (client → EdgeX) — purely for the timing log below; optional since the AI-tool
+   * caller has no client upload leg. */
+  toEdgeXMs?: number;
 }
 
 export interface HumanAuthor {
@@ -243,12 +248,14 @@ export async function sendMessage(input: SendMessageInput): Promise<SendMessageR
   // bytes inline. A failure here fails the whole send (there is nothing to send without
   // it) exactly like any other provider delivery failure below.
   let media: OutboundMediaRef | undefined;
+  let toMetaMs: number | undefined;
   if (input.attachment) {
     if (!adapter.uploadMedia) {
       const errMsg = `${conversation.provider} does not support attachments`;
       await supabase.from("messages").update({ status: "failed", error: errMsg }).eq("id", messageId).eq("tenant_id", input.tenantId);
       return { messageId, providerMessageId: null, status: "failed", error: errMsg };
     }
+    const uploadStart = Date.now();
     try {
       const uploaded = await adapter.uploadMedia(
         channelForAdapter,
@@ -256,6 +263,7 @@ export async function sendMessage(input: SendMessageInput): Promise<SendMessageR
         input.attachment.mimeType,
         input.attachment.filename
       );
+      toMetaMs = Date.now() - uploadStart;
       media = { type: input.attachment.type, providerMediaId: uploaded.providerMediaId, filename: input.attachment.filename ?? undefined };
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
@@ -268,6 +276,7 @@ export async function sendMessage(input: SendMessageInput): Promise<SendMessageR
   // Attempt delivery
   let providerMessageId: string | null = null;
   let finalStatus = "sent";
+  const sendStart = Date.now();
 
   try {
     const result = await adapter.sendMessage(
@@ -287,47 +296,67 @@ export async function sendMessage(input: SendMessageInput): Promise<SendMessageR
       .eq("tenant_id", input.tenantId);
     return { messageId, providerMessageId: null, status: "failed" };
   }
+  const toSendMs = Date.now() - sendStart;
 
-  // Store our own copy of the attachment too (best-effort — a failure here doesn't
-  // undo an already-successful provider send; it just means the thread can't render
-  // our own copy and falls back to whatever's in the error marker).
-  let storedAttachment: Record<string, unknown> | undefined;
   if (input.attachment) {
-    try {
-      const ext = input.attachment.filename?.split(".").pop() ?? "bin";
-      const path = `${input.tenantId}/inbox/${input.conversationId}/${messageId}-0.${ext}`;
-      await getStorageProvider().putBytes(INBOX_MEDIA_BUCKET, path, input.attachment.bytes, input.attachment.mimeType);
-      storedAttachment = {
-        type: input.attachment.type,
-        provider_media_id: media?.providerMediaId,
-        bucket: INBOX_MEDIA_BUCKET,
-        path,
-        filename: input.attachment.filename,
-        mime_type: input.attachment.mimeType,
-        size: input.attachment.bytes.byteLength,
-      };
-    } catch (storeErr) {
-      logger.warn({ err: storeErr, messageId }, "sendMessage: failed to store our own copy of an outbound attachment (non-fatal)");
-      storedAttachment = {
-        type: input.attachment.type,
-        provider_media_id: media?.providerMediaId,
-        filename: input.attachment.filename,
-        mime_type: input.attachment.mimeType,
-        error: storeErr instanceof Error ? storeErr.message : String(storeErr),
-      };
-    }
+    logger.info(
+      {
+        conversationId: input.conversationId,
+        bytes: input.attachment.bytes.byteLength,
+        toEdgeXMs: input.attachment.toEdgeXMs,
+        toMetaMs,
+        toSendMs,
+      },
+      "sendMessage: outbound media timing"
+    );
   }
 
-  // Update message to sent + store provider_message_id (+ our own attachment copy, if any)
+  // Update message to sent + store provider_message_id
   await supabase
     .from("messages")
-    .update({
-      status: finalStatus,
-      provider_message_id: providerMessageId,
-      ...(storedAttachment && { attachments: [storedAttachment] }),
-    })
+    .update({ status: finalStatus, provider_message_id: providerMessageId })
     .eq("id", messageId)
     .eq("tenant_id", input.tenantId);
+
+  // Store our own copy of the attachment AFTER the response goes out (same after()
+  // pattern as the inbound webhook) — the provider send already succeeded above, so a
+  // failure here is best-effort only: it just means the thread can't render our own
+  // copy and falls back to whatever's in the error marker. Never fails the send.
+  if (input.attachment) {
+    const attachment = input.attachment;
+    const mediaRef = media;
+    after(async () => {
+      let storedAttachment: Record<string, unknown>;
+      try {
+        const ext = attachment.filename?.split(".").pop() ?? "bin";
+        const path = `${input.tenantId}/inbox/${input.conversationId}/${messageId}-0.${ext}`;
+        await getStorageProvider().putBytes(INBOX_MEDIA_BUCKET, path, attachment.bytes, attachment.mimeType);
+        storedAttachment = {
+          type: attachment.type,
+          provider_media_id: mediaRef?.providerMediaId,
+          bucket: INBOX_MEDIA_BUCKET,
+          path,
+          filename: attachment.filename,
+          mime_type: attachment.mimeType,
+          size: attachment.bytes.byteLength,
+        };
+      } catch (storeErr) {
+        logger.warn({ err: storeErr, messageId }, "sendMessage: failed to store our own copy of an outbound attachment (non-fatal, after())");
+        storedAttachment = {
+          type: attachment.type,
+          provider_media_id: mediaRef?.providerMediaId,
+          filename: attachment.filename,
+          mime_type: attachment.mimeType,
+          error: storeErr instanceof Error ? storeErr.message : String(storeErr),
+        };
+      }
+      await supabase
+        .from("messages")
+        .update({ attachments: [storedAttachment] })
+        .eq("id", messageId)
+        .eq("tenant_id", input.tenantId);
+    });
+  }
 
   // Bump conversation last_message_*
   await supabase

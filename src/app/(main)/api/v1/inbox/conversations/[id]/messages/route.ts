@@ -108,8 +108,13 @@ export async function POST(
   // send path is unchanged JSON. At most ONE file per send — matches the composer's
   // one-attachment-per-message UX; sending several files is several sends.
   if (contentType.includes("multipart/form-data")) {
+    // "to EdgeX" timing (S3 item 4): how long it took the client's upload to reach us —
+    // the stage that was silently failing with no UI signal (a 2.2 MB PDF aborting
+    // mid-upload). Measured around formData() since that's where the body is read.
+    const edgeXStart = Date.now();
     const form = await request.formData().catch(() => null);
     if (!form) return apiError("VALIDATION_ERROR", "invalid multipart body", 422);
+    const toEdgeXMs = Date.now() - edgeXStart;
     content = (form.get("content") as string | null)?.trim() ?? undefined;
     const file = form.get("file");
     if (file instanceof File) {
@@ -119,6 +124,7 @@ export async function POST(
         filename: file.name || null,
         mimeType: file.type || "application/octet-stream",
         type: mediaTypeFor(file.type),
+        toEdgeXMs,
       };
     }
   } else {
