@@ -1,7 +1,7 @@
 "use client";
 
 import { SECTION_TITLE_CLASS } from "@/components/dashboard/lead/section-title";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { AlertTriangle, Clock, CheckCircle2, Loader2, Copy, RefreshCw, FileText, Upload, PenLine, ChevronDown } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -74,11 +74,35 @@ function MissingGroupText({ group }: { group: MissingGroupView }) {
  */
 function BlockedHintTooltip({ groups, className, children }: { groups: MissingGroupView[]; className: string; children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
+  const groupRef = useRef<HTMLDivElement>(null);
+
+  // Safety net so the hint can never get stuck: a missed "pointer left" (macOS screenshot overlay, scrolling
+  // under a resting mouse, switching window/tab) would otherwise leave it on screen. While it is open, close
+  // it as soon as the pointer is anywhere outside the group, the window loses focus, or anything scrolls.
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    const onPointerMove = (event: PointerEvent) => {
+      if (!groupRef.current?.contains(event.target as Node)) close();
+    };
+    document.addEventListener("pointermove", onPointerMove);
+    document.addEventListener("visibilitychange", close);
+    window.addEventListener("blur", close);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      document.removeEventListener("pointermove", onPointerMove);
+      document.removeEventListener("visibilitychange", close);
+      window.removeEventListener("blur", close);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [open]);
+
   return (
     <TooltipProvider delayDuration={0}>
       <Tooltip open={open} onOpenChange={() => {}}>
         <TooltipTrigger asChild>
           <div
+            ref={groupRef}
             tabIndex={0}
             className={className}
             onPointerEnter={() => setOpen(true)}

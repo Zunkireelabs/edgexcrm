@@ -227,6 +227,44 @@ describe("ConsentCard — incomplete student profile gate", () => {
     expect(items).toContain("Passport & Citizenship: Passport Number");
   });
 
+  it("never gets stuck: the hint closes if the pointer is elsewhere, the window loses focus, or the page scrolls", async () => {
+    statusIs(INCOMPLETE);
+    renderCard(true);
+    await openCard();
+    const group = screen.getByRole("button", { name: "Copy consent link" }).parentElement as HTMLElement;
+    const hintGone = () => waitFor(() => expect(screen.queryAllByText("Add them in Student Details (Edit).")).toHaveLength(0));
+
+    // A "pointer left" that the browser never reported — the pointer is simply somewhere else.
+    fireEvent.pointerEnter(group);
+    expect((await screen.findAllByText("Add them in Student Details (Edit).")).length).toBeGreaterThan(0);
+    fireEvent.pointerMove(document.body);
+    await hintGone();
+
+    // Window loses focus (e.g. a screenshot).
+    fireEvent.pointerEnter(group);
+    expect((await screen.findAllByText("Add them in Student Details (Edit).")).length).toBeGreaterThan(0);
+    fireEvent.blur(window);
+    await hintGone();
+
+    // The page scrolls under a resting pointer.
+    fireEvent.pointerEnter(group);
+    expect((await screen.findAllByText("Add them in Student Details (Edit).")).length).toBeGreaterThan(0);
+    fireEvent.scroll(document); // real page scrolls are dispatched on the document
+    await hintGone();
+  });
+
+  it("keeps the hint open while the pointer moves within the buttons", async () => {
+    statusIs(INCOMPLETE);
+    renderCard(true);
+    await openCard();
+    const group = screen.getByRole("button", { name: "Copy consent link" }).parentElement as HTMLElement;
+
+    fireEvent.pointerEnter(group);
+    expect((await screen.findAllByText("Add them in Student Details (Edit).")).length).toBeGreaterThan(0);
+    fireEvent.pointerMove(group);
+    expect(screen.getAllByText("Add them in Student Details (Edit).").length).toBeGreaterThan(0);
+  });
+
   it("shows an Open Student Details button only when the page can open that pop-up", async () => {
     statusIs(INCOMPLETE);
     const onOpen = vi.fn();
