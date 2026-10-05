@@ -20,12 +20,6 @@ function webhookUrl(provider: string): string {
   return `${base}/api/webhooks/meta/${provider}`;
 }
 
-function maskToken(token: string | null): string {
-  if (!token) return "••••";
-  // Show last 4 chars of the *encrypted* blob (not the plaintext)
-  return `••••${token.slice(-4)}`;
-}
-
 export async function GET() {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
@@ -56,9 +50,10 @@ export async function GET() {
       external_account_id: row.external_account_id,
       display_name: row.display_name,
       status: row.status,
-      access_token_masked: maskToken(row.access_token),
+      // Never mask/display the token itself (even the tail of the encrypted
+      // blob reveals nothing useful but looks like a real token fragment).
+      access_token_set: !!row.access_token,
       webhook_url: webhookUrl(row.provider),
-      verify_token: process.env.META_WEBHOOK_VERIFY_TOKEN ?? "",
       created_at: row.created_at,
       updated_at: row.updated_at,
     };
