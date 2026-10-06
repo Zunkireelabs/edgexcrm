@@ -365,7 +365,8 @@ export function ConsentCard({
   const readiness = current?.readiness ?? null;
   const profileIncomplete = consentStatus === "none" && !!readiness && !readiness.ready;
   const actionsBlocked = profileIncomplete && !overrideProfile;
-  const canOverride = canManageFee; // owner/admin only — the API re-checks the role
+  // Callers pass isOwnerOrAdmin(role) (src/lib/roles.ts) — the same rule the API's requireAdmin uses.
+  const canOverride = canManageFee;
   // Missing fields grouped by Student Details section; falls back to one flat group if the server sent none.
   const missingGroups: MissingGroupView[] = readiness
     ? readiness.groups?.length

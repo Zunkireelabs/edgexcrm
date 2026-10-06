@@ -36,7 +36,10 @@ vi.mock("@/lib/api/audit", () => ({ createAuditLog: vi.fn(), emitEvent: vi.fn() 
 vi.mock("@/lib/email/send-consent", () => ({ sendConsentEmail: sendConsentEmailMock }));
 vi.mock("@/lib/email", () => ({ APP_URL: "https://crm.test" }));
 vi.mock("@/lib/leads/touch-updated-at", () => ({ touchLeadUpdatedAt: vi.fn() }));
-vi.mock("@/lib/consent/readiness", () => ({ loadConsentReadiness: loadConsentReadinessMock }));
+vi.mock("@/lib/consent/readiness", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/consent/readiness")>()),
+  loadConsentReadiness: loadConsentReadinessMock,
+}));
 
 const LEAD = { id: "lead-1", assigned_to: "user-1", branch_id: null, email: "s@example.com", first_name: "S", last_name: "T", phone: "1", city: "K", country: "NP" };
 let currentLead: Record<string, unknown> = LEAD;
@@ -393,5 +396,30 @@ describe("consent — student profile readiness (education)", () => {
 
     expect(res.status).toBe(201);
     expect(loadConsentReadinessMock).not.toHaveBeenCalled();
+  });
+});
+
+// Review point 4: the readiness check must reuse the template + lead the route already loaded.
+describe("consent — readiness reuses what the route already read", () => {
+  it("GET passes the loaded template and lead row (no second read)", async () => {
+    const { db } = fakeDb([]);
+    scopedClientMock.mockResolvedValue(db);
+
+    const { GET } = await import("./route");
+    await GET({} as NextRequest, params());
+
+    const preloaded = loadConsentReadinessMock.mock.calls[0][3];
+    expect(preloaded.template).toEqual(expect.objectContaining({ is_active: true, body: "b" }));
+    expect(preloaded.profile).toEqual(expect.objectContaining({ id: "lead-1" }));
+  });
+
+  it("POST passes the loaded lead row (no second read)", async () => {
+    const { db } = fakeDb([]);
+    scopedClientMock.mockResolvedValue(db);
+
+    const { POST } = await import("./route");
+    await POST(post("send"), params());
+
+    expect(loadConsentReadinessMock.mock.calls[0][3].profile).toEqual(expect.objectContaining({ id: "lead-1" }));
   });
 });

@@ -1,3 +1,4 @@
+import { isOwnerOrAdmin } from "@/lib/roles";
 import { redirect, notFound } from "next/navigation";
 import { getCurrentUserTenant, getApplicationActivity } from "@/lib/supabase/queries";
 import { getFeatureAccess } from "@/industries/_loader";
@@ -118,7 +119,7 @@ export default async function ApplicationDetailRoute({ params }: Props) {
       activityTimeline={activityTimeline}
       canEdit={canManageApplicationForLead(tenantData, parentLead)}
       canDelete={canManageApplicationForLead(tenantData, parentLead)}
-      canManageFee={tenantData.permissions.baseTier === "owner" || tenantData.permissions.baseTier === "admin"}
+      canManageFee={isOwnerOrAdmin(tenantData.role)}
       currentUserId={tenantData.userId}
     />
   );

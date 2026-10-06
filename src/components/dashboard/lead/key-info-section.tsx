@@ -605,9 +605,9 @@ export function KeyInfoSection({
           )}
 
           {/* ── DETAILS ───────────────────────────────────────────────
-              Education tenants don't use this box: Created / Last Updated live in the
-              contact card and the study fields in Study Interest. Other industries keep it. */}
-          {industryId !== "education_consultancy" && (<>
+              Every industry keeps this box: it is the only place Residence Country, Preferred
+              Contact and the Entity (College) are shown / edited. Education only drops the
+              Created / Last Updated rows, which its contact card already shows. */}
           <div className="border-t border-border" />
           <InfoSection title="Details" defaultOpen={false} titleClassName={SECTION_TITLE_CLASS}>
             <div className="space-y-2">
@@ -684,17 +684,24 @@ export function KeyInfoSection({
                 </div>
               )}
 
-              {/* Created */}
-              <InfoRow label="Created" value={formatDateTime(lead.created_at)} />
+              {industryId === "education_consultancy" ? (
+                !isEditing && !lead.country && !lead.preferred_contact_method && !entity && (
+                  <p className="text-xs text-muted-foreground italic">No details yet. Use Edit to add.</p>
+                )
+              ) : (
+                <>
+                  {/* Created */}
+                  <InfoRow label="Created" value={formatDateTime(lead.created_at)} />
 
-              {/* Last Updated */}
-              <InfoRow
-                label="Last Updated"
-                value={formatRelativeTime(lead.updated_at)}
-              />
+                  {/* Last Updated */}
+                  <InfoRow
+                    label="Last Updated"
+                    value={formatRelativeTime(lead.updated_at)}
+                  />
+                </>
+              )}
             </div>
           </InfoSection>
-          </>)}
 
           {/* ── ADDITIONAL DETAILS (true extras only) ───────────────── */}
           {customFields.length > 0 && (

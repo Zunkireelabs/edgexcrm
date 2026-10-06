@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { formatBytes } from "@/lib/format";
 import { DOCUMENT_TYPE_CATEGORY, type DocumentType } from "@/lib/documents/constants";
-import { DOCUMENT_TYPE_LABELS, DOCUMENT_CATEGORY_LABELS, DOCUMENT_CATEGORY_ORDER } from "./labels";
+import { documentTypeLabel, DOCUMENT_CATEGORY_LABELS, DOCUMENT_CATEGORY_ORDER } from "./labels";
 import { DocumentUploadDialog } from "./document-upload-dialog";
 
 interface ApplicantDocument {
@@ -129,7 +129,7 @@ export function ApplicantDocumentsCard({
         (d) =>
           d.name.toLowerCase().includes(query) ||
           d.original_filename.toLowerCase().includes(query) ||
-          DOCUMENT_TYPE_LABELS[d.document_type].toLowerCase().includes(query),
+          documentTypeLabel(d.document_type).toLowerCase().includes(query),
       )
     : docs;
   const recentDocs = [...docs]
@@ -372,7 +372,7 @@ function DocumentTile({
       >
         <Icon className="h-5 w-5 text-muted-foreground mb-1.5" />
         <p className="text-xs font-medium truncate">{doc.name}</p>
-        <p className="text-[10px] text-muted-foreground truncate">{DOCUMENT_TYPE_LABELS[doc.document_type]}</p>
+        <p className="text-[10px] text-muted-foreground truncate">{documentTypeLabel(doc.document_type)}</p>
         <DocumentStatusBadge status={doc.status} processingError={doc.processing_error} />
         {canDelete && (
           <span
@@ -405,7 +405,7 @@ function DocumentTile({
         <p className="text-xs font-medium truncate">{doc.name}</p>
         <div className="flex items-center gap-1.5 flex-wrap">
           <p className="text-[10px] text-muted-foreground">
-            {DOCUMENT_TYPE_LABELS[doc.document_type]}
+            {documentTypeLabel(doc.document_type)}
             {formatBytes(doc.file_size) && <> · {formatBytes(doc.file_size)}</>}
           </p>
           <DocumentStatusBadge status={doc.status} processingError={doc.processing_error} />

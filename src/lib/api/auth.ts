@@ -5,6 +5,7 @@ import { resolvePermissions, normalizeRole, type ResolvedPermissions, type Posit
 import { resolveEntitlements, type Entitlements } from "@/lib/api/entitlements";
 import { cookies } from "next/headers";
 import type { LeadMembership } from "@/lib/leads/branch-membership";
+import { isOwnerOrAdmin } from "@/lib/roles";
 import { branchMemberIds as fetchBranchMemberIds } from "@/lib/leads/branch-membership";
 
 export interface AuthContext {
@@ -167,7 +168,7 @@ export async function authenticateRequest(): Promise<AuthContext | null> {
 }
 
 export function requireAdmin(auth: AuthContext): boolean {
-  return auth.role === "owner" || auth.role === "admin";
+  return isOwnerOrAdmin(auth.role);
 }
 
 export function requireLeadBranchAccess(

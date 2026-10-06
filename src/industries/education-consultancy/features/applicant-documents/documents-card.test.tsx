@@ -251,4 +251,15 @@ describe("ApplicantDocumentsCard", () => {
     await waitFor(() => expect(screen.getByText(/no documents yet/i)).toBeInTheDocument());
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
+
+  it("an unknown document type (added to the DB before the UI) shows as Other and never crashes search", async () => {
+    const odd = { ...PASSPORT_DOC, id: "doc-x", name: "mystery.pdf", document_type: "brand_new_type" };
+    global.fetch = mockFetch([odd as typeof PASSPORT_DOC]) as unknown as typeof fetch;
+
+    render(<ApplicantDocumentsCard leadId="lead-1" canManage={true} currentUserId="user-1" isAdmin={false} />);
+    await waitFor(() => expect(screen.getByText("mystery.pdf")).toBeInTheDocument());
+
+    fireEvent.change(screen.getByPlaceholderText(/search by name or type/i), { target: { value: "other" } });
+    expect(screen.getByText("mystery.pdf")).toBeInTheDocument();
+  });
 });

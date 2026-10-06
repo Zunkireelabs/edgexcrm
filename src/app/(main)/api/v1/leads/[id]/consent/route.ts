@@ -20,7 +20,7 @@ import { APP_URL } from "@/lib/email";
 import { prepareConsentBody, buildConsentMergeData } from "@/lib/consent/merge";
 import { resolveConsentStatus, type ConsentRecordRow } from "@/lib/consent/resolve-status";
 import { touchLeadUpdatedAt } from "@/lib/leads/touch-updated-at";
-import { loadConsentReadiness } from "@/lib/consent/readiness";
+import { loadConsentReadiness, CONSENT_PROFILE_COLUMNS, type ConsentProfile } from "@/lib/consent/readiness";
 import { consentProfileIncompleteMessage } from "@/lib/blocking-notice";
 
 interface RouteContext {
@@ -76,10 +76,10 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
   const supabase = await createServiceClient();
 
-  // Verify lead belongs to tenant
+  // Verify lead belongs to tenant (with the profile columns, so the readiness check below needs no re-read)
   const { data: lead } = await supabase
     .from("leads")
-    .select("id, assigned_to, branch_id, email")
+    .select(`id, assigned_to, branch_id, ${CONSENT_PROFILE_COLUMNS}`)
     .eq("id", id)
     .eq("tenant_id", auth.tenantId)
     .is("deleted_at", null)
@@ -105,10 +105,11 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   // Check if tenant has an active consent template
   const { data: tpl } = await db
     .from("consent_templates")
-    .select("is_active")
+    .select("is_active, body")
     .maybeSingle();
 
-  const consentEnabled = (tpl as { is_active: boolean } | null)?.is_active === true;
+  const template = tpl as { is_active: boolean; body: string | null } | null;
+  const consentEnabled = template?.is_active === true;
 
   // Every non-deleted consent row for this lead, newest first. The status is resolved by the same
   // "any signed record counts" rule the lead page and applications APIs use (see resolve-status.ts).
@@ -128,7 +129,10 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   // Education only: is the profile complete enough to generate a consent document? (null = not applicable)
   const readiness =
     auth.industryId === "education_consultancy" && consentEnabled
-      ? await loadConsentReadiness(supabase, auth.tenantId, id)
+      ? await loadConsentReadiness(supabase, auth.tenantId, id, {
+          template,
+          profile: lead as unknown as ConsentProfile,
+        })
       : null;
 
   return apiSuccess({
@@ -156,7 +160,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   // Verify lead belongs to tenant
   const { data: lead } = await supabase
     .from("leads")
-    .select("id, assigned_to, branch_id, email, first_name, last_name, phone, city, country, nationality, passport_number, full_address, father_name, mother_name, emergency_contact_name, emergency_contact_phone, date_of_birth, guardian_phone, guardian_email, guardian_relationship")
+    .select(`id, assigned_to, branch_id, last_name, ${CONSENT_PROFILE_COLUMNS}`)
     .eq("id", id)
     .eq("tenant_id", auth.tenantId)
     .is("deleted_at", null)
@@ -219,7 +223,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const overrideRequested = body.override_profile_check === true;
     if (overrideRequested && !requireAdmin(auth)) return apiForbidden();
     if (!(await hasSignedConsent(db, id))) {
-      const readiness = await loadConsentReadiness(supabase, auth.tenantId, id);
+      const readiness = await loadConsentReadiness(supabase, auth.tenantId, id, {
+        profile: lead as unknown as ConsentProfile,
+      });
       if (readiness && !readiness.ready) {
         if (!overrideRequested) {
           return apiError(

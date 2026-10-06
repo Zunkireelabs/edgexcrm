@@ -10,8 +10,9 @@ import { logger } from "@/lib/logger";
  * CURRENT template: name / email / phone / study info are always required, plus the profile field
  * behind every placeholder the template actually uses. Edit the template and the rule follows.
  *
- * `country` (Residence Country) is deliberately not required: it has no edit spot on the education
- * lead page and renders harmlessly blank.
+ * Every placeholder in CONSENT_MERGE_FIELDS must be in exactly one of ALWAYS_REQUIRED_PLACEHOLDERS,
+ * AUTOMATIC_PLACEHOLDERS or PLACEHOLDER_REQUIREMENTS — readiness.test.ts fails otherwise, so a new
+ * placeholder can never silently go out blank.
  */
 
 /** Missing fields grouped by the Student Details section they live in, in the pop-up's own order. */
@@ -35,6 +36,8 @@ const SECTION_ORDER = [
   "Guardian Details",
   "Passport & Citizenship",
   "Study Interest",
+  // The lead page's own Details box (Residence Country lives there, not in the Student Details pop-up).
+  "Details",
 ] as const;
 
 export interface ConsentProfile {
@@ -45,6 +48,7 @@ export interface ConsentProfile {
   degree_level: string | null;
   city: string | null;
   nationality: string | null;
+  country: string | null;
   custom_fields: Record<string, unknown> | null;
   passport_number: string | null;
   full_address: string | null;
@@ -60,15 +64,21 @@ export interface ConsentProfile {
 
 /** Columns the check reads — keep in sync with ConsentProfile. */
 export const CONSENT_PROFILE_COLUMNS =
-  "first_name, email, phone, field_of_study, degree_level, city, nationality, custom_fields, passport_number, full_address, father_name, mother_name, emergency_contact_name, emergency_contact_phone, date_of_birth, guardian_phone, guardian_email, guardian_relationship";
+  "first_name, email, phone, field_of_study, degree_level, city, nationality, country, custom_fields, passport_number, full_address, father_name, mother_name, emergency_contact_name, emergency_contact_phone, date_of_birth, guardian_phone, guardian_email, guardian_relationship";
 
 const filled = (v: string | null | undefined) => !!v?.trim();
 
-/** Placeholder -> the profile requirement behind it. Placeholders not listed need nothing (automatic or optional). */
+/** Covered by the always-required name / email / phone checks below. */
+export const ALWAYS_REQUIRED_PLACEHOLDERS = ["student_name", "student_email", "student_phone"] as const;
+/** Filled by the system, never from the student profile. */
+export const AUTOMATIC_PLACEHOLDERS = ["organization", "date", "consent_version"] as const;
+
+/** Placeholder -> the profile requirement behind it. */
 type Section = (typeof SECTION_ORDER)[number];
-const PLACEHOLDER_REQUIREMENTS: Record<string, { label: string; section: Section; ok: (p: ConsentProfile) => boolean }> = {
+export const PLACEHOLDER_REQUIREMENTS: Record<string, { label: string; section: Section; ok: (p: ConsentProfile) => boolean }> = {
   city: { label: "City", section: "Personal Information", ok: (p) => !!getLeadCity(p) },
   nationality: { label: "Nationality", section: "Personal Information", ok: (p) => !!getLeadNationality(p) },
+  country: { label: "Residence Country", section: "Details", ok: (p) => filled(p.country) },
   passport_number: { label: "Passport Number", section: "Passport & Citizenship", ok: (p) => filled(p.passport_number) },
   full_address: { label: "Full Address", section: "Basic Details", ok: (p) => filled(p.full_address) },
   street_address: { label: "Full Address", section: "Basic Details", ok: (p) => filled(p.full_address) },
@@ -122,41 +132,52 @@ export function computeConsentReadiness(templateBody: string | null | undefined,
  * Loads the tenant's active consent template + the lead's profile and checks them.
  * Returns null when there is no active template or the lead is gone — callers then fall through to
  * their existing NO_TEMPLATE / not-found handling instead of inventing a second one.
+ *
+ * Pass `preloaded` with whatever the caller already fetched (the template body, the lead row selected
+ * with CONSENT_PROFILE_COLUMNS) so it isn't read twice.
  */
 export async function loadConsentReadiness(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: SupabaseClient<any>,
   tenantId: string,
   leadId: string,
+  preloaded: { template?: { body: string | null; is_active: boolean } | null; profile?: ConsentProfile | null } = {},
 ): Promise<ConsentReadiness | null> {
-  const { data: tpl, error: tplErr } = await supabase
-    .from("consent_templates")
-    .select("body, is_active")
-    .eq("tenant_id", tenantId)
-    .maybeSingle();
-  const template = tpl as { body: string | null; is_active: boolean } | null;
-  if (tplErr) logger.error({ err: tplErr, tenantId }, "consent readiness: could not load the consent template");
+  let template = preloaded.template;
+  if (template === undefined) {
+    const { data: tpl, error: tplErr } = await supabase
+      .from("consent_templates")
+      .select("body, is_active")
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+    if (tplErr) logger.error({ err: tplErr, tenantId }, "consent readiness: could not load the consent template");
+    template = tpl as { body: string | null; is_active: boolean } | null;
+  }
   if (!template?.is_active) return null;
 
-  const { data: lead, error: leadErr } = await supabase
-    .from("leads")
-    .select(CONSENT_PROFILE_COLUMNS)
-    .eq("id", leadId)
-    .eq("tenant_id", tenantId)
-    .is("deleted_at", null)
-    .maybeSingle();
-  // A failed query must be loud: it silently turns the profile gate OFF (e.g. a missing column on an
-  // out-of-date database), which is exactly the bug this log exists to catch.
-  if (leadErr) logger.error({ err: leadErr, tenantId, leadId }, "consent readiness: could not load the lead profile — gate not applied");
-  if (!lead) return null;
+  let profile = preloaded.profile;
+  if (profile === undefined) {
+    const { data: lead, error: leadErr } = await supabase
+      .from("leads")
+      .select(CONSENT_PROFILE_COLUMNS)
+      .eq("id", leadId)
+      .eq("tenant_id", tenantId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    // A failed query must be loud: it silently turns the profile gate OFF (e.g. a missing column on an
+    // out-of-date database), which is exactly the bug this log exists to catch.
+    if (leadErr) logger.error({ err: leadErr, tenantId, leadId }, "consent readiness: could not load the lead profile — gate not applied");
+    profile = lead as unknown as ConsentProfile | null;
+  }
+  if (!profile) return null;
 
-  return computeConsentReadiness(template.body, lead as unknown as ConsentProfile);
+  return computeConsentReadiness(template.body, profile);
 }
 
 /** A string that changes whenever any profile field the consent check reads changes (for UI refresh). */
 export function consentProfileKey(lead: Partial<ConsentProfile>): string {
   return [
-    lead.first_name, lead.email, lead.phone, lead.field_of_study, lead.degree_level, lead.city, lead.nationality,
+    lead.first_name, lead.email, lead.phone, lead.field_of_study, lead.degree_level, lead.city, lead.nationality, lead.country,
     lead.passport_number, lead.full_address, lead.father_name, lead.mother_name, lead.emergency_contact_name,
     lead.emergency_contact_phone, lead.date_of_birth, lead.guardian_phone, lead.guardian_email, lead.guardian_relationship,
     JSON.stringify(lead.custom_fields ?? {}),

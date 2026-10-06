@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { computeConsentReadiness, extractTemplatePlaceholders, type ConsentProfile } from "./readiness";
+import {
+  computeConsentReadiness,
+  extractTemplatePlaceholders,
+  ALWAYS_REQUIRED_PLACEHOLDERS,
+  AUTOMATIC_PLACEHOLDERS,
+  PLACEHOLDER_REQUIREMENTS,
+  type ConsentProfile,
+} from "./readiness";
+import { CONSENT_MERGE_FIELDS } from "./merge";
 
 const complete: ConsentProfile = {
   first_name: "Paras",
@@ -9,6 +17,7 @@ const complete: ConsentProfile = {
   degree_level: "Postgraduate",
   city: null,
   nationality: null,
+  country: null,
   custom_fields: {},
   passport_number: null,
   full_address: null,
@@ -86,11 +95,38 @@ describe("computeConsentReadiness", () => {
     expect(computeConsentReadiness("{{city}} {{nationality}}", p).ready).toBe(true);
   });
 
-  it("does not require country, or automatic placeholders", () => {
-    expect(computeConsentReadiness("{{country}} {{organization}} {{date}} {{consent_version}}", complete).ready).toBe(true);
+  it("does not require automatic placeholders", () => {
+    expect(computeConsentReadiness("{{organization}} {{date}} {{consent_version}}", complete).ready).toBe(true);
   });
 
   it("ignores unknown placeholders", () => {
     expect(computeConsentReadiness("{{something_else}}", complete).ready).toBe(true);
+  });
+});
+
+describe("Residence Country", () => {
+  it("is required when the template uses {{country}}, and filed under the lead page's Details box", () => {
+    const r = computeConsentReadiness("{{city}}, {{country}}", { ...complete, city: "Kathmandu" });
+    expect(r.missing).toEqual(["Residence Country"]);
+    expect(r.groups).toEqual([{ section: "Details", fields: ["Residence Country"] }]);
+    expect(computeConsentReadiness("{{country}}", { ...complete, country: "Nepal" }).ready).toBe(true);
+  });
+});
+
+// Guard: a placeholder an admin can put in the template must never be able to go out blank unnoticed.
+// Adding a field to CONSENT_MERGE_FIELDS without deciding how readiness treats it fails here.
+describe("every consent placeholder is accounted for", () => {
+  const always = new Set<string>(ALWAYS_REQUIRED_PLACEHOLDERS);
+  const automatic = new Set<string>(AUTOMATIC_PLACEHOLDERS);
+  const profile = new Set(Object.keys(PLACEHOLDER_REQUIREMENTS));
+
+  it.each([...CONSENT_MERGE_FIELDS])("{{%s}} is always-required, automatic, or a profile requirement — exactly one", (field) => {
+    const homes = [always.has(field), automatic.has(field), profile.has(field)].filter(Boolean).length;
+    expect(homes).toBe(1);
+  });
+
+  it("no requirement exists for a placeholder the template can't use", () => {
+    const known = new Set<string>(CONSENT_MERGE_FIELDS);
+    for (const key of [...always, ...automatic, ...profile]) expect(known.has(key)).toBe(true);
   });
 });

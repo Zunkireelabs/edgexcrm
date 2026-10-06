@@ -49,6 +49,7 @@ import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { getLeadCity, getLeadNationality } from "@/lib/leads/lead-location";
 import { consentProfileKey } from "@/lib/consent/readiness";
+import { isOwnerOrAdmin } from "@/lib/roles";
 
 interface TeamMember {
   id: string;
@@ -241,7 +242,7 @@ export function LeadDetailV2({
   // industry list — other industries unaffected.
   const isRealEstate = getFeatureAccess(tenant.industry_id, FEATURES.OFFERINGS);
 
-  const isAdmin = role === "owner" || role === "admin";
+  const isAdmin = isOwnerOrAdmin(role);
   // Position-derived edit capability: admins always, plus members whose position grants
   // canEditLeads. Gates the same lead working-data controls (stage, tasks) that isAdmin did.
   const canEdit = isAdmin || canEditLeads;
