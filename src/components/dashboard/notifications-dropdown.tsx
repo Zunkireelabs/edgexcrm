@@ -1,62 +1,41 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, Fragment } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Bell, CheckCheck, Settings } from "lucide-react";
+import { Bell, CheckCheck, Settings, X } from "lucide-react";
+import {
+  NotificationList,
+  NotificationEmptyState,
+  type Notification,
+} from "./notification-card";
 
-// Buckets a notification date into a section-header label.
-function dateBucket(date: Date): "Today" | "Yesterday" | "Earlier" {
-  const now = new Date();
-  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const startYesterday = new Date(startToday);
-  startYesterday.setDate(startYesterday.getDate() - 1);
-  if (date >= startToday) return "Today";
-  if (date >= startYesterday) return "Yesterday";
-  return "Earlier";
-}
-
-// Simple relative time formatter (avoids date-fns dependency)
-function formatRelativeTime(date: Date): string {
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffSec = Math.floor(diffMs / 1000);
-  const diffMin = Math.floor(diffSec / 60);
-  const diffHour = Math.floor(diffMin / 60);
-  const diffDay = Math.floor(diffHour / 24);
-
-  if (diffSec < 60) return "just now";
-  if (diffMin < 60) return `${diffMin}m ago`;
-  if (diffHour < 24) return `${diffHour}h ago`;
-  if (diffDay < 7) return `${diffDay}d ago`;
-  return date.toLocaleDateString();
-}
-
-interface Notification {
-  id: string;
-  type: string;
-  title: string;
-  message: string;
-  link: string | null;
-  read_at: string | null;
-  created_at: string;
-}
+// The panel is a quick look at the latest notifications; everything older lives on /notifications.
+const PANEL_LIMIT = 30;
 
 export function NotificationsDropdown() {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [loading] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [markingAllRead, setMarkingAllRead] = useState(false);
   const [tab, setTab] = useState<"all" | "unread">("all");
 
+  const tabRef = useRef(tab);
+  tabRef.current = tab;
   const inflightRef = useRef(false);
+
   const fetchNotifications = useCallback(async () => {
     if (inflightRef.current) return;
     inflightRef.current = true;
+    const forTab = tabRef.current;
     try {
-      const res = await fetch("/api/v1/notifications?limit=10");
+      const res = await fetch(
+        `/api/v1/notifications?limit=${PANEL_LIMIT}${forTab === "unread" ? "&unread=true" : ""}`,
+      );
       if (!res.ok) return;
+      if (forTab !== tabRef.current) return; // tab changed while the request was in flight
 
       const json = await res.json();
       setNotifications(json.data?.notifications || []);
@@ -68,16 +47,19 @@ export function NotificationsDropdown() {
     }
   }, []);
 
-  // Fetch notifications on mount and when dropdown opens
+  // Unread count for the bell badge, even while the panel is closed.
   useEffect(() => {
     fetchNotifications();
   }, [fetchNotifications]);
 
+  // Opening the panel or switching tab reloads that tab's newest notifications.
   useEffect(() => {
-    if (isOpen) {
-      fetchNotifications();
-    }
-  }, [isOpen, fetchNotifications]);
+    if (!isOpen) return;
+    setLoading(true);
+    setNotifications([]);
+    inflightRef.current = false;
+    fetchNotifications().finally(() => setLoading(false));
+  }, [isOpen, tab, fetchNotifications]);
 
   // Poll for new notifications every 30 seconds
   useEffect(() => {
@@ -85,13 +67,21 @@ export function NotificationsDropdown() {
     return () => clearInterval(interval);
   }, [fetchNotifications]);
 
+  // Esc closes the panel
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setIsOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isOpen]);
+
   const markAsRead = async (id: string) => {
     try {
       await fetch(`/api/v1/notifications/${id}/read`, { method: "POST" });
       setNotifications((prev) =>
-        prev.map((n) =>
-          n.id === id ? { ...n, read_at: new Date().toISOString() } : n
-        )
+        tab === "unread"
+          ? prev.filter((n) => n.id !== id)
+          : prev.map((n) => (n.id === id ? { ...n, read_at: new Date().toISOString() } : n))
       );
       setUnreadCount((prev) => Math.max(0, prev - 1));
     } catch (error) {
@@ -104,7 +94,9 @@ export function NotificationsDropdown() {
     try {
       await fetch("/api/v1/notifications/read-all", { method: "POST" });
       setNotifications((prev) =>
-        prev.map((n) => ({ ...n, read_at: n.read_at || new Date().toISOString() }))
+        tab === "unread"
+          ? []
+          : prev.map((n) => ({ ...n, read_at: n.read_at || new Date().toISOString() }))
       );
       setUnreadCount(0);
     } catch (error) {
@@ -114,7 +106,7 @@ export function NotificationsDropdown() {
     }
   };
 
-  const handleNotificationClick = async (notification: Notification) => {
+  const handleOpen = async (notification: Notification) => {
     if (!notification.read_at) {
       await markAsRead(notification.id);
     }
@@ -122,72 +114,6 @@ export function NotificationsDropdown() {
     if (notification.link) {
       router.push(notification.link);
       setIsOpen(false);
-    }
-  };
-
-  const getNotificationIcon = (type: string) => {
-    switch (type) {
-      case "lead.assigned":
-        return (
-          <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center">
-            <span className="text-base">👤</span>
-          </div>
-        );
-      case "lead.unassigned":
-        return (
-          <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center">
-            <span className="text-base">👋</span>
-          </div>
-        );
-      case "invite.accepted":
-      case "team.member_joined":
-        return (
-          <div className="w-9 h-9 rounded-full bg-green-100 flex items-center justify-center">
-            <span className="text-base">🎉</span>
-          </div>
-        );
-      case "lead.created":
-        return (
-          <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center">
-            <span className="text-base">✨</span>
-          </div>
-        );
-      case "lead.stage_changed":
-        return (
-          <div className="w-9 h-9 rounded-full bg-purple-100 flex items-center justify-center">
-            <span className="text-base">📊</span>
-          </div>
-        );
-      case "email.received":
-        return (
-          <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center">
-            <span className="text-base">✉️</span>
-          </div>
-        );
-      case "leave.requested":
-        return (
-          <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center">
-            <span className="text-base">🌴</span>
-          </div>
-        );
-      case "leave.approved":
-        return (
-          <div className="w-9 h-9 rounded-full bg-green-100 flex items-center justify-center">
-            <span className="text-base">✅</span>
-          </div>
-        );
-      case "leave.rejected":
-        return (
-          <div className="w-9 h-9 rounded-full bg-red-100 flex items-center justify-center">
-            <span className="text-base">🚫</span>
-          </div>
-        );
-      default:
-        return (
-          <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center">
-            <span className="text-base">📬</span>
-          </div>
-        );
     }
   };
 
@@ -207,47 +133,58 @@ export function NotificationsDropdown() {
         )}
       </button>
 
-      {/* Dropdown */}
       {isOpen && (
         <>
           {/* Backdrop */}
-          <div
-            className="fixed inset-0 z-40"
-            onClick={() => setIsOpen(false)}
-          />
+          <div className="fixed inset-0 z-40 bg-black/20" onClick={() => setIsOpen(false)} />
 
-          {/* Dropdown Content - ElevenLabs style, aligned to header right edge */}
-          <div className="fixed right-6 top-[68px] w-[420px] bg-white rounded-2xl shadow-xl border border-gray-200/80 z-50 overflow-hidden">
-            {/* Header — bell + title (left), settings gear (right) */}
+          {/* Right-side panel — full height, slides over the page content */}
+          <aside
+            role="dialog"
+            aria-label="Notifications"
+            className="fixed right-0 top-0 z-50 flex h-full w-[440px] max-w-full flex-col bg-white shadow-2xl border-l border-gray-200 animate-in slide-in-from-right duration-200"
+          >
+            {/* Header — title (left), settings gear + close (right) */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <div className="flex items-center gap-2.5">
                 <Bell className="w-5 h-5 text-gray-900" />
                 <h3 className="text-base font-semibold text-gray-900">Notifications</h3>
               </div>
-              <button
-                type="button"
-                title="Notification settings (coming soon)"
-                className="p-1.5 -mr-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
-              >
-                <Settings className="w-[18px] h-[18px]" />
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  title="Notification settings (coming soon)"
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                >
+                  <Settings className="w-[18px] h-[18px]" />
+                </button>
+                <button
+                  type="button"
+                  title="Close"
+                  aria-label="Close notifications"
+                  onClick={() => setIsOpen(false)}
+                  className="p-1.5 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
-            {/* Filter tabs (All / Unread) + Mark all as read */}
-            <div className="flex items-center justify-between gap-2 px-3 py-2.5 border-b border-gray-100">
-              <div className="flex items-center gap-1">
-                {(["all", "unread"] as const).map((t) => (
+            {/* Underline tabs (Unread / All) + Mark all as read */}
+            <div className="flex items-end justify-between gap-2 border-b border-gray-200 px-5">
+              <div className="flex items-center gap-6">
+                {(["unread", "all"] as const).map((t) => (
                   <button
                     key={t}
                     type="button"
                     onClick={() => setTab(t)}
-                    className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                    className={`-mb-px border-b-2 py-3 text-sm font-medium transition-colors ${
                       tab === t
-                        ? "bg-gray-100 text-gray-900"
-                        : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"
+                        ? "border-gray-900 text-gray-900"
+                        : "border-transparent text-gray-500 hover:text-gray-900"
                     }`}
                   >
-                    {t === "all" ? "All" : "Unread"}
+                    {t === "all" ? "All" : `Unread (${unreadCount.toLocaleString()})`}
                   </button>
                 ))}
               </div>
@@ -255,117 +192,43 @@ export function NotificationsDropdown() {
                 <button
                   onClick={markAllAsRead}
                   disabled={markingAllRead}
-                  className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 font-medium disabled:opacity-50 transition-colors pr-1"
+                  className="mb-2 flex items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 disabled:opacity-50"
                 >
-                  <CheckCheck className="w-4 h-4" />
+                  <CheckCheck className="h-4 w-4" />
                   Mark all as read
                 </button>
               )}
             </div>
 
-            {/* Notifications List */}
-            <div className="max-h-[420px] overflow-y-auto">
-              {(() => {
-                const visible =
-                  tab === "unread"
-                    ? notifications.filter((n) => !n.read_at)
-                    : notifications;
-                if (loading) {
-                  return (
-                    <div className="flex items-center justify-center py-12">
-                      <div className="w-6 h-6 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin" />
-                    </div>
-                  );
-                }
-                if (visible.length === 0) {
-                  return (
-                    <div className="py-12 text-center">
-                      {/* Stacked-cards illustration */}
-                      <div className="relative mx-auto mb-5 h-24 w-40">
-                        <div className="absolute inset-x-0 top-0 mx-auto h-14 w-32 -rotate-[10deg] rounded-xl border border-gray-100 bg-white shadow-sm" />
-                        <div className="absolute inset-x-0 top-1.5 mx-auto h-14 w-32 rotate-[6deg] rounded-xl border border-gray-100 bg-white shadow-sm" />
-                        <div className="absolute inset-x-0 top-3 mx-auto flex h-14 w-32 flex-col justify-center gap-2 rounded-xl border border-gray-100 bg-white px-3 shadow">
-                          <div className="h-2 w-20 rounded-full bg-gray-200" />
-                          <div className="h-2 w-14 rounded-full bg-gray-100" />
-                        </div>
-                      </div>
-                      <p className="text-sm font-medium text-gray-900 mb-1">No notifications</p>
-                      <p className="text-sm text-gray-500">No notifications found</p>
-                    </div>
-                  );
-                }
-                let lastBucket: string | null = null;
-                return (
-                  <div className="p-2">
-                    {visible.map((notification) => {
-                      const unread = !notification.read_at;
-                      const bucket = dateBucket(new Date(notification.created_at));
-                      const showHeader = bucket !== lastBucket;
-                      lastBucket = bucket;
-                      return (
-                        <Fragment key={notification.id}>
-                          {showHeader && (
-                            <p className="px-3 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
-                              {bucket}
-                            </p>
-                          )}
-                          <button
-                            onClick={() => handleNotificationClick(notification)}
-                            className={`relative w-full text-left rounded-xl px-3 py-2.5 transition-colors ${
-                              unread ? "bg-blue-50/60 hover:bg-blue-50" : "hover:bg-gray-50"
-                            }`}
-                          >
-                            {/* Unread accent bar */}
-                            {unread && (
-                              <span className="absolute left-0 top-2.5 bottom-2.5 w-[3px] rounded-full bg-blue-500" />
-                            )}
-                            <div className="flex gap-3">
-                              {/* Type icon */}
-                              <div className="shrink-0">
-                                {getNotificationIcon(notification.type)}
-                              </div>
-
-                              {/* Content */}
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-start justify-between gap-2">
-                                  <p
-                                    className={`text-sm leading-snug ${
-                                      unread
-                                        ? "font-semibold text-gray-900"
-                                        : "font-medium text-gray-700"
-                                    }`}
-                                  >
-                                    {notification.title}
-                                  </p>
-                                  <span className="shrink-0 text-xs text-gray-400 whitespace-nowrap mt-0.5">
-                                    {formatRelativeTime(new Date(notification.created_at))}
-                                  </span>
-                                </div>
-                                <p className="text-sm text-gray-500 mt-0.5 line-clamp-2 leading-snug">
-                                  {notification.message}
-                                </p>
-                              </div>
-                            </div>
-                          </button>
-                        </Fragment>
-                      );
-                    })}
-                  </div>
-                );
-              })()}
+            {/* Latest notifications (capped) */}
+            <div className="flex-1 overflow-y-auto">
+              {loading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="w-6 h-6 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin" />
+                </div>
+              ) : notifications.length === 0 ? (
+                <NotificationEmptyState unreadTab={tab === "unread"} />
+              ) : (
+                <NotificationList
+                  notifications={notifications}
+                  onOpen={handleOpen}
+                  onMarkRead={markAsRead}
+                  stickyHeaders
+                />
+              )}
             </div>
 
-            {/* Footer */}
-            {notifications.length > 0 && (
-              <div className="border-t border-gray-100 px-5 py-3 bg-gray-50/50">
-                <p className="text-center text-xs text-gray-500">
-                  {unreadCount > 0
-                    ? `${unreadCount} unread notification${unreadCount !== 1 ? "s" : ""}`
-                    : "All caught up!"}
-                </p>
-              </div>
-            )}
-          </div>
+            {/* Footer — always points at the full page */}
+            <div className="border-t border-gray-200 bg-white px-5 py-3 text-center">
+              <Link
+                href="/notifications"
+                onClick={() => setIsOpen(false)}
+                className="text-sm font-medium text-blue-600 hover:underline"
+              >
+                View all notifications →
+              </Link>
+            </div>
+          </aside>
         </>
       )}
     </div>
