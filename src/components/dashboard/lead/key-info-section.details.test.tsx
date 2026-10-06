@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 //
-// Guard (PR #614 review): on the education lead page the Details box is the ONLY place Residence
-// Country, Preferred Contact and the College (entity) are shown and edited. Hiding the box once made
-// them silently unreachable — and left {{country}} blank in consent documents. If anyone removes or
-// gates these again, this test fails before merge.
+// Guard (PR #614 review): the Details box must keep SHOWING Residence Country, Preferred Contact and the
+// College on the education lead page (hiding the box once made them invisible). Editing them on
+// education happens in the Student Details pop-up — that is guarded by
+// student-record/components/consent-fields-reachable.test.tsx. Inline editing here is for the other
+// industries, whose Edit button really does enter inline mode.
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
@@ -62,8 +63,8 @@ describe("KeyInfoSection — Details box", () => {
     expect(screen.getByText("Arden University")).toBeInTheDocument();
   });
 
-  it("education: Residence Country and Preferred Contact are editable in edit mode", () => {
-    renderSection("education_consultancy", {
+  it("other industries: Residence Country and Preferred Contact are editable inline", () => {
+    renderSection("it_agency", {
       isEditing: true,
       draft: { country: "Nepal", preferred_contact_method: "phone" },
       onDraftChange: () => {},

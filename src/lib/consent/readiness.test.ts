@@ -105,10 +105,10 @@ describe("computeConsentReadiness", () => {
 });
 
 describe("Residence Country", () => {
-  it("is required when the template uses {{country}}, and filed under the lead page's Details box", () => {
+  it("is required when the template uses {{country}}, and filed under Student Details > Personal Information", () => {
     const r = computeConsentReadiness("{{city}}, {{country}}", { ...complete, city: "Kathmandu" });
     expect(r.missing).toEqual(["Residence Country"]);
-    expect(r.groups).toEqual([{ section: "Details", fields: ["Residence Country"] }]);
+    expect(r.groups).toEqual([{ section: "Personal Information", fields: ["Residence Country"] }]);
     expect(computeConsentReadiness("{{country}}", { ...complete, country: "Nepal" }).ready).toBe(true);
   });
 });

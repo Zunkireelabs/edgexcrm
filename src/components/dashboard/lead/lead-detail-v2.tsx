@@ -933,6 +933,7 @@ export function LeadDetailV2({
                       }}
                       canManage={canManageApplications ?? isAdmin}
                       canManageFee={isAdmin}
+                      canOverrideProfileCheck={isAdmin}
                       onSignedChange={setConsentSignedState}
                       feeStatus={currentLead.pre_app_fee_status}
                       feeAmount={currentLead.pre_app_fee_amount}

@@ -17,6 +17,7 @@ import {
 import { isOtherLead } from "@/lib/leads/lead-type";
 import { canEditLeadWorkingData } from "@/lib/leads/lead-edit-scope";
 import { formatDateTime, formatRelativeTime } from "@/lib/date";
+import { RESIDENCE_COUNTRIES, CONTACT_METHODS } from "@/lib/leads/contact-options";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { SALUTATIONS } from "@/industries/it-agency/leads/salutations";
@@ -64,17 +65,8 @@ import { useEditSection, useEditSession } from "./edit-session";
 import { ListStepper } from "@/components/dashboard/leads/list-stepper";
 import { StageMoveSelector } from "@/components/dashboard/leads/stage-move-selector";
 
-const CONTACT_METHODS = [
-  { value: "phone", label: "Phone" },
-  { value: "email", label: "Email" },
-  { value: "whatsapp", label: "WhatsApp" },
-  { value: "any", label: "Any" },
-];
 
-const COUNTRIES = [
-  "Nepal", "India", "United States", "United Kingdom", "Canada", "Australia",
-  "Germany", "France", "Japan", "China", "Singapore", "UAE", "Other",
-];
+const COUNTRIES = RESIDENCE_COUNTRIES;
 
 interface TeamMember {
   id: string;

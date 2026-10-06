@@ -120,6 +120,7 @@ export default async function ApplicationDetailRoute({ params }: Props) {
       canEdit={canManageApplicationForLead(tenantData, parentLead)}
       canDelete={canManageApplicationForLead(tenantData, parentLead)}
       canManageFee={isOwnerOrAdmin(tenantData.role)}
+      canOverrideProfileCheck={isOwnerOrAdmin(tenantData.role)}
       currentUserId={tenantData.userId}
     />
   );

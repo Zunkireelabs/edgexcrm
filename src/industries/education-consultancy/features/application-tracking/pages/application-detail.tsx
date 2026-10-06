@@ -92,6 +92,8 @@ interface ApplicationDetailPageProps {
   canDelete: boolean;
   /** Processing fee is owner/admin-only, stricter than canEdit (branch-manager/assignee). */
   canManageFee: boolean;
+  /** Owner/admin (isOwnerOrAdmin) — may "Send anyway" on an incomplete student profile. */
+  canOverrideProfileCheck?: boolean;
   currentUserId: string;
 }
 
@@ -103,6 +105,7 @@ export function ApplicationDetailPage({
   canEdit,
   canDelete,
   canManageFee,
+  canOverrideProfileCheck = false,
   currentUserId,
 }: ApplicationDetailPageProps) {
   const router = useRouter();
@@ -825,6 +828,7 @@ export function ApplicationDetailPage({
               consentSigned={false}
               canManage={canEdit}
               canManageFee={canManageFee}
+              canOverrideProfileCheck={canOverrideProfileCheck}
               showCollapsedStatus
               profileKey={consentProfileKey(fullLead)}
               feeStatus={fullLead.pre_app_fee_status}

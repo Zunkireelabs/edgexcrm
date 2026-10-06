@@ -168,6 +168,9 @@ interface ConsentCardProps {
   canManage: boolean;
   /** Processing fee is owner/admin-only (not branch-manager/assignee like canManage) — see API guard in apply-lead-patch.ts. */
   canManageFee: boolean;
+  /** Owner/admin only (pass isOwnerOrAdmin(role) from src/lib/roles.ts — the same rule the API's
+   *  requireAdmin uses): may "Send anyway" when the student profile is incomplete. */
+  canOverrideProfileCheck?: boolean;
   onSignedChange?: (signed: boolean) => void;
   // Pre-Application fee (migration 084) — current lead-level values
   feeStatus?: FeeStatus | null;
@@ -191,6 +194,7 @@ export function ConsentCard({
   tenantId,
   canManage,
   canManageFee,
+  canOverrideProfileCheck = false,
   onSignedChange,
   feeStatus: initialFeeStatus = null,
   feeAmount: initialFeeAmount = null,
@@ -365,8 +369,7 @@ export function ConsentCard({
   const readiness = current?.readiness ?? null;
   const profileIncomplete = consentStatus === "none" && !!readiness && !readiness.ready;
   const actionsBlocked = profileIncomplete && !overrideProfile;
-  // Callers pass isOwnerOrAdmin(role) (src/lib/roles.ts) — the same rule the API's requireAdmin uses.
-  const canOverride = canManageFee;
+  const canOverride = canOverrideProfileCheck;
   // Missing fields grouped by Student Details section; falls back to one flat group if the server sent none.
   const missingGroups: MissingGroupView[] = readiness
     ? readiness.groups?.length

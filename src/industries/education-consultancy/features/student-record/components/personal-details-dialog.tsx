@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Lead } from "@/types/database";
+import { RESIDENCE_COUNTRIES, CONTACT_METHODS } from "@/lib/leads/contact-options";
 import { DestinationsMultiSelect } from "@/components/dashboard/destinations-multi-select";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 import { getDistinctFormValues, type LeadSubmissionSnapshot } from "@/lib/leads/submission-history";
@@ -53,6 +54,15 @@ export const CORE_IDENTITY_FIELDS = [
   { key: "phone", label: "Phone", type: "tel" },
   { key: "nationality", label: "Nationality", type: "text" },
   { key: "city", label: "City", type: "text" },
+  // Residence Country + Preferred Contact: on the education page this pop-up is the only editor
+  // (Edit opens it), and the consent document uses {{country}} — so they must be editable here.
+  {
+    key: "country",
+    label: "Residence Country",
+    type: "select",
+    options: RESIDENCE_COUNTRIES.map((c) => ({ value: c, label: c })),
+  },
+  { key: "preferredContact", label: "Preferred Contact", type: "select", options: CONTACT_METHODS },
 ] as const;
 
 // Owner/admin-only on the server (applyLeadPatch rejects these fields for anyone else), so
@@ -155,6 +165,8 @@ export interface CoreIdentity {
   phone: string;
   nationality: string;
   city: string;
+  country: string;
+  preferredContact: string;
 }
 
 export function coreIdentityFromLead(lead: Lead): CoreIdentity {
@@ -165,6 +177,8 @@ export function coreIdentityFromLead(lead: Lead): CoreIdentity {
     phone: lead.phone ?? "",
     nationality: getLeadNationality(lead) ?? "",
     city: getLeadCity(lead) ?? "",
+    country: lead.country ?? "",
+    preferredContact: lead.preferred_contact_method ?? "",
   };
 }
 
@@ -263,6 +277,8 @@ export function buildLivePatch(
   setIfChanged("phone", core.phone || null, coreOriginal.phone || null);
   setIfChanged("nationality", core.nationality || null, coreOriginal.nationality || null);
   setIfChanged("city", core.city || null, coreOriginal.city || null);
+  setIfChanged("country", core.country || null, coreOriginal.country || null);
+  setIfChanged("preferred_contact_method", core.preferredContact || null, coreOriginal.preferredContact || null);
 
   setIfChanged("destinations", study.destinations, studyOriginal.destinations);
   setIfChanged("field_of_study", study.fieldOfStudy || null, studyOriginal.fieldOfStudy || null);

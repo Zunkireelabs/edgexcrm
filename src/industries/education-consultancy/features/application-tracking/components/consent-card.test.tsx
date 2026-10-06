@@ -45,7 +45,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function renderCard(showCopyLink?: boolean, canManageFee = false) {
+function renderCard(showCopyLink?: boolean, isOwnerOrAdmin = false) {
   render(
     <ConsentCard
       leadId="lead-1"
@@ -53,7 +53,8 @@ function renderCard(showCopyLink?: boolean, canManageFee = false) {
       consentEnabled
       consentSigned={false}
       canManage
-      canManageFee={canManageFee}
+      canManageFee={isOwnerOrAdmin}
+      canOverrideProfileCheck={isOwnerOrAdmin}
       showProcessingFee={false}
       showCopyLink={showCopyLink}
     />
