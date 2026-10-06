@@ -52,11 +52,26 @@ export function profileIncompleteNotice(missing: string[]): BlockingNotice {
   };
 }
 
+/** Server error text for a consent blocked by an incomplete profile (parsed back by parseMissingItems). */
+export function consentProfileIncompleteMessage(missing: string[]): string {
+  return `Complete the student profile first. A half-filled profile makes a consent document with blank details. Missing: ${missing.join(", ")}`;
+}
+
+export function consentProfileIncompleteNotice(missing: string[]): BlockingNotice {
+  return {
+    title: "Complete the student profile first",
+    message:
+      "The consent document uses these details, and a half-filled profile sends it out with blanks. Add them in Student Details (Edit), then try again.",
+    items: missing.map((label) => ({ label })),
+  };
+}
+
 const BLOCKING_ERROR_CODES: Record<string, (error: ApiErrorLike) => BlockingNotice> = {
   PROFILE_INCOMPLETE: (error) => profileIncompleteNotice(parseMissingItems(error.message)),
+  PROFILE_INCOMPLETE_FOR_CONSENT: (error) => consentProfileIncompleteNotice(parseMissingItems(error.message)),
   CONSENT_REQUIRED: () => ({
-    title: "Student consent is required",
-    message: "The student must sign the consent document before an application can be created. Use the Pre Application card to send or record the consent, then try again.",
+    title: "Complete the consent form first",
+    message: "An application can only be created once the student's consent is signed. Use the Pre Application card to send or record the consent, then try again.",
   }),
   ALREADY_SIGNED: () => ({
     title: "Consent is already signed",

@@ -2,10 +2,12 @@
 
 import { SECTION_TITLE_CLASS, SUBHEADING_CLASS } from "@/components/dashboard/lead/section-title";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FileText, Upload, Trash2, Loader2, Download, LayoutGrid, List as ListIcon, Image as ImageIcon, AlertCircle } from "lucide-react";
+import Link from "next/link";
+import { FileText, Upload, Trash2, Loader2, Download, LayoutGrid, List as ListIcon, Image as ImageIcon, AlertCircle, Search } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
   Dialog,
@@ -16,7 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { formatBytes } from "@/lib/format";
 import { DOCUMENT_TYPE_CATEGORY, type DocumentType } from "@/lib/documents/constants";
-import { DOCUMENT_TYPE_LABELS, DOCUMENT_CATEGORY_LABELS, DOCUMENT_CATEGORY_ORDER } from "./labels";
+import { documentTypeLabel, DOCUMENT_CATEGORY_LABELS, DOCUMENT_CATEGORY_ORDER } from "./labels";
 import { DocumentUploadDialog } from "./document-upload-dialog";
 
 interface ApplicantDocument {
@@ -35,17 +37,28 @@ interface ApplicantDocument {
 
 type ViewMode = "grid" | "list";
 
+// How many of the newest documents the compact lead-page card lists before pointing at the full page.
+const SUMMARY_LIMIT = 3;
+
+/**
+ * "page" (default) is the full documents page: every file, grouped by category, with search.
+ * "summary" is the small card on the lead page: the newest few files plus a "View all" link, so a
+ * student with many documents doesn't stretch the narrow right column.
+ */
 export function ApplicantDocumentsCard({
   leadId,
   canManage,
   currentUserId,
   isAdmin,
+  variant = "page",
 }: {
   leadId: string;
   canManage: boolean;
   currentUserId: string;
   isAdmin: boolean;
+  variant?: "page" | "summary";
 }) {
+  const isSummary = variant === "summary";
   const [docs, setDocs] = useState<ApplicantDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>("list");
@@ -53,6 +66,7 @@ export function ApplicantDocumentsCard({
   const [viewerDoc, setViewerDoc] = useState<ApplicantDocument | null>(null);
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
   const [viewerLoading, setViewerLoading] = useState(false);
+  const [search, setSearch] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
@@ -109,9 +123,22 @@ export function ApplicantDocumentsCard({
     }
   }
 
+  const query = search.trim().toLowerCase();
+  const visibleDocs = query
+    ? docs.filter(
+        (d) =>
+          d.name.toLowerCase().includes(query) ||
+          d.original_filename.toLowerCase().includes(query) ||
+          documentTypeLabel(d.document_type).toLowerCase().includes(query),
+      )
+    : docs;
+  const recentDocs = [...docs]
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, SUMMARY_LIMIT);
+
   const grouped = DOCUMENT_CATEGORY_ORDER.map((category) => ({
     category,
-    docs: docs.filter((d) => (DOCUMENT_TYPE_CATEGORY[d.document_type] ?? "other") === category),
+    docs: visibleDocs.filter((d) => (DOCUMENT_TYPE_CATEGORY[d.document_type] ?? "other") === category),
   })).filter((g) => g.docs.length > 0);
 
   return (
@@ -128,15 +155,17 @@ export function ApplicantDocumentsCard({
               )}
             </span>
             <div className="flex items-center gap-1 shrink-0">
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-6 w-6 p-0"
-                onClick={() => setViewMode((m) => (m === "list" ? "grid" : "list"))}
-                title={viewMode === "list" ? "Switch to grid view" : "Switch to list view"}
-              >
-                {viewMode === "list" ? <LayoutGrid className="h-3.5 w-3.5" /> : <ListIcon className="h-3.5 w-3.5" />}
-              </Button>
+              {!isSummary && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 w-6 p-0"
+                  onClick={() => setViewMode((m) => (m === "list" ? "grid" : "list"))}
+                  title={viewMode === "list" ? "Switch to grid view" : "Switch to list view"}
+                >
+                  {viewMode === "list" ? <LayoutGrid className="h-3.5 w-3.5" /> : <ListIcon className="h-3.5 w-3.5" />}
+                </Button>
+              )}
               {canManage && (
                 <>
                   <input
@@ -174,14 +203,45 @@ export function ApplicantDocumentsCard({
             <p className="text-xs text-muted-foreground text-center py-2">
               No documents yet.{canManage ? " Upload a passport, transcript, or other admissions document." : ""}
             </p>
+          ) : isSummary ? (
+            <div className="space-y-1.5">
+              {recentDocs.map((doc) => (
+                <DocumentTile
+                  key={doc.id}
+                  doc={doc}
+                  viewMode="list"
+                  canDelete={isAdmin || doc.uploaded_by === currentUserId}
+                  onView={() => openViewer(doc)}
+                  onDelete={() => handleDelete(doc)}
+                />
+              ))}
+              <Link
+                href={`/leads/${leadId}/documents`}
+                className="block pt-1 text-xs text-primary hover:underline"
+              >
+                {docs.length > SUMMARY_LIMIT ? `View all ${docs.length} documents →` : "Open documents page →"}
+              </Link>
+            </div>
           ) : (
             <div className="space-y-4">
+              <div className="relative max-w-sm">
+                <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search by name or type"
+                  className="h-8 pl-8 text-xs"
+                />
+              </div>
+              {grouped.length === 0 && (
+                <p className="text-xs text-muted-foreground text-center py-2">No documents match your search.</p>
+              )}
               {grouped.map(({ category, docs: catDocs }) => (
                 <div key={category}>
                   <p className={`${SUBHEADING_CLASS} mb-1.5`}>
                     {DOCUMENT_CATEGORY_LABELS[category]}
                   </p>
-                  <div className={viewMode === "grid" ? "grid grid-cols-2 gap-2" : "space-y-1.5"}>
+                  <div className={viewMode === "grid" ? "grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4" : "space-y-1.5"}>
                     {catDocs.map((doc) => (
                       <DocumentTile
                         key={doc.id}
@@ -312,7 +372,7 @@ function DocumentTile({
       >
         <Icon className="h-5 w-5 text-muted-foreground mb-1.5" />
         <p className="text-xs font-medium truncate">{doc.name}</p>
-        <p className="text-[10px] text-muted-foreground truncate">{DOCUMENT_TYPE_LABELS[doc.document_type]}</p>
+        <p className="text-[10px] text-muted-foreground truncate">{documentTypeLabel(doc.document_type)}</p>
         <DocumentStatusBadge status={doc.status} processingError={doc.processing_error} />
         {canDelete && (
           <span
@@ -345,7 +405,7 @@ function DocumentTile({
         <p className="text-xs font-medium truncate">{doc.name}</p>
         <div className="flex items-center gap-1.5 flex-wrap">
           <p className="text-[10px] text-muted-foreground">
-            {DOCUMENT_TYPE_LABELS[doc.document_type]}
+            {documentTypeLabel(doc.document_type)}
             {formatBytes(doc.file_size) && <> · {formatBytes(doc.file_size)}</>}
           </p>
           <DocumentStatusBadge status={doc.status} processingError={doc.processing_error} />

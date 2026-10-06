@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor, fireEvent, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
@@ -78,16 +78,18 @@ describe("ApplicationsCard — profile check before the form opens", () => {
     expect(await screen.findByText("ADD APPLICATION FORM IS OPEN")).toBeInTheDocument();
   });
 
-  it("does nothing — and does not even check — while the button is blocked (consent not signed)", async () => {
+  it("explains why when clicked while consent is unsigned — pop-up, no profile check, no form", async () => {
     await renderCard(true);
 
     const button = screen.getByRole("button", { name: "Add Application (sign consent first)" });
-    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("aria-disabled", "true"); // dimmed, but clickable so it can explain
     fireEvent.click(button);
 
-    await waitFor(() => expect(profileChecks()).toHaveLength(0));
+    expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
+    expect(screen.getByText("Complete the consent form first")).toBeInTheDocument();
+    expect(screen.getByText(/only be created once the student's consent is signed/i)).toBeInTheDocument();
+    expect(profileChecks()).toHaveLength(0);
     expect(screen.queryByText("ADD APPLICATION FORM IS OPEN")).not.toBeInTheDocument();
-    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
   });
 
   it("checks once per click", async () => {

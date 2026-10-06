@@ -4,7 +4,7 @@ import { emptyQualifications, type Qualifications } from "./qualifications-secti
 import { createTestScore, type TestScore } from "./test-scores-section";
 import type { Lead } from "@/types/database";
 
-const core: CoreIdentity = { firstName: "Hardik", lastName: "Phuel", email: "h@example.com", phone: "+9779999999999", nationality: "Nepali", city: "Kathmandu" };
+const core: CoreIdentity = { firstName: "Hardik", lastName: "Phuel", email: "h@example.com", phone: "+9779999999999", nationality: "Nepali", city: "Kathmandu", country: "", preferredContact: "" };
 const study: StudyInterest = { destinations: ["USA"], fieldOfStudy: "Business", degreeLevel: "Undergraduate", intakeMonth: "May", intakeYear: "2027" };
 const source: LeadSourceValues = { source: "Referral", medium: "Facebook", account: "", campaign: "" };
 
@@ -33,6 +33,13 @@ describe("buildLivePatch", () => {
 
   it("sends only the fields that changed", () => {
     expect(patchOf({ core: { ...core, city: "Lalitpur" } })).toEqual({ city: "Lalitpur" });
+  });
+
+  it("saves Residence Country and Preferred Contact to their real columns (education's only editor for them)", () => {
+    expect(patchOf({ core: { ...core, country: "Nepal", preferredContact: "whatsapp" } })).toEqual({
+      country: "Nepal",
+      preferred_contact_method: "whatsapp",
+    });
   });
 
   it("saves the lead source for admins, but only the fields that changed", () => {

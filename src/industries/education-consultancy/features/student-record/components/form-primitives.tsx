@@ -4,6 +4,7 @@ import { createContext, useContext, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -81,8 +82,9 @@ export function CardSection({
   );
 }
 
-export function FieldGrid({ children }: { children: React.ReactNode }) {
-  return <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4">{children}</div>;
+export function FieldGrid({ children, columns = 3 }: { children: React.ReactNode; columns?: 2 | 3 }) {
+  const cols = columns === 2 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3";
+  return <div className={`grid ${cols} gap-x-6 gap-y-4`}>{children}</div>;
 }
 
 export function ReadOnlyField({ label, value }: { label: string; value: string }) {
@@ -131,6 +133,9 @@ export function EditableField({
               ))}
             </SelectContent>
           </Select>
+        ) : field.type === "tel" ? (
+          // Same country-code dropdown + number box the forms use; stored as "+977-98…".
+          <PhoneInput value={value} onChange={onChange} placeholder={field.placeholder ?? "Phone number"} />
         ) : (
           <>
             <Label htmlFor={field.key} className="sr-only">{field.label}</Label>
