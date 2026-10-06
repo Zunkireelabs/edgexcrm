@@ -14,16 +14,12 @@ import {
   MapPin,
   Calendar,
   UserPlus,
-  Users,
-  BookOpen,
-  Clock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Select,
@@ -156,9 +152,6 @@ export function ApplicationDetailPage({
   const [deadline, setDeadline] = useState("");
   const [offerType, setOfferType] = useState<"" | "conditional" | "unconditional">("");
   const [offerLetterUrl, setOfferLetterUrl] = useState("");
-  const [appFeePaid, setAppFeePaid] = useState(false);
-  const [tuitionFee, setTuitionFee] = useState("");
-  const [depositPaid, setDepositPaid] = useState(false);
   const [notes, setNotes] = useState("");
   const [agentId, setAgentId] = useState("");
   const [appliedDate, setAppliedDate] = useState("");
@@ -259,9 +252,6 @@ export function ApplicationDetailPage({
     setDeadline(application.application_deadline ?? "");
     setOfferType((application.offer_type as "" | "conditional" | "unconditional") ?? "");
     setOfferLetterUrl(application.offer_letter_url ?? "");
-    setAppFeePaid(application.application_fee_paid ?? false);
-    setTuitionFee(application.tuition_fee != null ? String(application.tuition_fee) : "");
-    setDepositPaid(application.deposit_paid ?? false);
     setNotes(application.notes ?? "");
     setAgentId(application.agent_id ?? "");
     setAppliedDate(application.applied_date ?? "");
@@ -302,9 +292,6 @@ export function ApplicationDetailPage({
         application_deadline: deadline || null,
         offer_type: offerType || null,
         offer_letter_url: offerLetterUrl.trim() || null,
-        application_fee_paid: appFeePaid,
-        tuition_fee: tuitionFee !== "" ? Number(tuitionFee) : null,
-        deposit_paid: depositPaid,
         notes: notes.trim() || null,
         agent_id: agentId && agentId !== "__none__" ? agentId : null,
         applied_date: appliedDate || null,
@@ -413,66 +400,14 @@ export function ApplicationDetailPage({
             </Card>
           )}
 
-          {/* Student key info */}
+          {/* Link back to the student record (the old Student Info card is gone) */}
           {fullLead && (
-            <Card className="border shadow-none rounded-lg">
-              <CardContent className="p-5 space-y-2">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                  Student Info
-                </p>
-                {fullLead.city && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    <span>{fullLead.city}</span>
-                  </div>
-                )}
-                {fullLead.intake_source && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="text-muted-foreground text-xs">Source:</span>
-                    <span className="text-xs">{fullLead.intake_source}</span>
-                  </div>
-                )}
-                {/* Assigned To */}
-                <div className="flex items-center gap-2 text-sm">
-                  <Users className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <span className="text-muted-foreground text-xs">Assigned To:</span>
-                  <span className="text-xs truncate">
-                    {fullLead.assigned_to
-                      ? (teamMemberNames[fullLead.assigned_to] ?? teamMemberEmails[fullLead.assigned_to] ?? "Unassigned")
-                      : "Unassigned"}
-                  </span>
-                </div>
-                {/* Degree Level */}
-                {(fullLead.degree_level ?? (fullLead.custom_fields as Record<string, string> | null)?.degree_level) && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <BookOpen className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    <span className="text-muted-foreground text-xs">Degree:</span>
-                    <span className="text-xs">
-                      {fullLead.degree_level ?? (fullLead.custom_fields as Record<string, string> | null)?.degree_level}
-                    </span>
-                  </div>
-                )}
-                {/* Days with Admizz */}
-                <div className="flex items-center gap-2 text-sm">
-                  <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <span className="text-muted-foreground text-xs">With Admizz:</span>
-                  <span className="text-xs">
-                    {Math.floor((Date.now() - new Date(fullLead.created_at).getTime()) / 86400000)} days
-                  </span>
-                </div>
-                <div className="pt-1">
-                  <Link
-                    href={`/leads/${leadId}`}
-                    className="text-xs text-primary hover:underline"
-                  >
-                    View student record →
-                  </Link>
-                </div>
-              </CardContent>
-            </Card>
+            <Link href={`/leads/${leadId}`} className="block px-1 text-xs text-primary hover:underline">
+              View student record →
+            </Link>
           )}
 
-          {/* Created By — standalone container, below Student Info */}
+          {/* Created By */}
           <Card className="border shadow-none rounded-lg">
             <CardContent className="p-5">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
@@ -494,6 +429,27 @@ export function ApplicationDetailPage({
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">—</p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Notes */}
+          <Card className="border shadow-none rounded-lg">
+            <CardContent className="p-5">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                Notes
+              </p>
+              {editing ? (
+                <Textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Internal notes..."
+                  rows={3}
+                />
+              ) : (
+                <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                  {application.notes ?? "—"}
+                </p>
               )}
             </CardContent>
           </Card>
@@ -804,70 +760,6 @@ export function ApplicationDetailPage({
                   )}
                 </div>
               )}
-              </div>
-
-              {/* Financials */}
-              <div className="rounded-lg border p-3 space-y-3">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Financials</p>
-
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    id="detail-fee-paid"
-                    checked={editing ? appFeePaid : (application.application_fee_paid ?? false)}
-                    onCheckedChange={editing ? (c) => setAppFeePaid(Boolean(c)) : undefined}
-                    disabled={!editing}
-                  />
-                  <label htmlFor="detail-fee-paid" className="text-sm cursor-pointer">
-                    Application fee paid
-                  </label>
-                </div>
-
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Tuition Fee</Label>
-                  {editing ? (
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={tuitionFee}
-                      onChange={(e) => setTuitionFee(e.target.value)}
-                      placeholder="e.g. 15000"
-                    />
-                  ) : (
-                    <p className="text-sm">
-                      {application.tuition_fee != null ? application.tuition_fee.toLocaleString() : "—"}
-                    </p>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    id="detail-deposit-paid"
-                    checked={editing ? depositPaid : (application.deposit_paid ?? false)}
-                    onCheckedChange={editing ? (c) => setDepositPaid(Boolean(c)) : undefined}
-                    disabled={!editing}
-                  />
-                  <label htmlFor="detail-deposit-paid" className="text-sm cursor-pointer">
-                    Deposit paid
-                  </label>
-                </div>
-              </div>
-
-              {/* Notes */}
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Notes</Label>
-                {editing ? (
-                  <Textarea
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    placeholder="Internal notes..."
-                    rows={3}
-                  />
-                ) : (
-                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                    {application.notes ?? "—"}
-                  </p>
-                )}
               </div>
 
               {/* Agent & Dates */}
