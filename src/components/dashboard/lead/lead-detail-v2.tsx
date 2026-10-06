@@ -966,6 +966,7 @@ export function LeadDetailV2({
                   canManage={canEdit ?? isAdmin}
                   currentUserId={userId}
                   isAdmin={isAdmin}
+                  variant="summary"
                 />
               )}
             </div>

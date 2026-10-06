@@ -192,4 +192,63 @@ describe("ApplicantDocumentsCard", () => {
     );
     expect(toastSuccess).toHaveBeenCalledWith("Document deleted");
   });
+
+  it("page variant: search filters documents by name or type", async () => {
+    global.fetch = mockFetch([PASSPORT_DOC, TRANSCRIPT_DOC]) as unknown as typeof fetch;
+
+    render(<ApplicantDocumentsCard leadId="lead-1" canManage={true} currentUserId="user-1" isAdmin={false} />);
+    await waitFor(() => expect(screen.getByText("passport.pdf")).toBeInTheDocument());
+
+    fireEvent.change(screen.getByPlaceholderText(/search by name or type/i), { target: { value: "transcript" } });
+
+    expect(screen.queryByText("passport.pdf")).not.toBeInTheDocument();
+    expect(screen.getByText("transcript.pdf")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText(/search by name or type/i), { target: { value: "zzz" } });
+    expect(screen.getByText(/no documents match/i)).toBeInTheDocument();
+  });
+
+  it("summary variant: lists only the 3 newest, ungrouped, with a link to the full page", async () => {
+    const many = Array.from({ length: 7 }, (_, i) => ({
+      ...PASSPORT_DOC,
+      id: `doc-${i}`,
+      name: `file-${i}.pdf`,
+      original_filename: `file-${i}.pdf`,
+      // higher i = newer
+      created_at: new Date(Date.UTC(2026, 0, 1 + i)).toISOString(),
+    }));
+    global.fetch = mockFetch(many) as unknown as typeof fetch;
+
+    render(<ApplicantDocumentsCard leadId="lead-1" canManage={true} currentUserId="user-1" isAdmin={false} variant="summary" />);
+    await waitFor(() => expect(screen.getByText("file-6.pdf")).toBeInTheDocument());
+
+    expect(screen.getByText("file-4.pdf")).toBeInTheDocument();
+    expect(screen.queryByText("file-3.pdf")).not.toBeInTheDocument();
+    expect(screen.queryByText("file-0.pdf")).not.toBeInTheDocument();
+    // no category headings, no search box, no grid toggle in the compact card
+    expect(screen.queryByText("Identity")).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/search by name or type/i)).not.toBeInTheDocument();
+    expect(screen.queryByTitle(/switch to grid view/i)).not.toBeInTheDocument();
+    // total count still reflects every document, and the link goes to the dedicated page
+    expect(screen.getByText("7")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /view all 7 documents/i })).toHaveAttribute("href", "/leads/lead-1/documents");
+  });
+
+  it("summary variant: the link is always shown when there are documents, even for 1", async () => {
+    global.fetch = mockFetch([PASSPORT_DOC]) as unknown as typeof fetch;
+
+    render(<ApplicantDocumentsCard leadId="lead-1" canManage={true} currentUserId="user-1" isAdmin={false} variant="summary" />);
+
+    await waitFor(() => expect(screen.getByText("passport.pdf")).toBeInTheDocument());
+    expect(screen.getByRole("link", { name: /open documents page/i })).toHaveAttribute("href", "/leads/lead-1/documents");
+  });
+
+  it("summary variant: empty state has no link", async () => {
+    global.fetch = mockFetch([]) as unknown as typeof fetch;
+
+    render(<ApplicantDocumentsCard leadId="lead-1" canManage={true} currentUserId="user-1" isAdmin={false} variant="summary" />);
+
+    await waitFor(() => expect(screen.getByText(/no documents yet/i)).toBeInTheDocument());
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
 });
