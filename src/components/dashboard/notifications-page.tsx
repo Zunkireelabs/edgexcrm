@@ -22,8 +22,8 @@ export function NotificationsPage() {
   const [loading, setLoading] = useState(true);
   const [markingAll, setMarkingAll] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
+    if (!silent) setLoading(true);
     try {
       // Ask for one extra row: if it comes back, there is a next page (the API has no total count).
       const res = await fetch(
@@ -32,6 +32,12 @@ export function NotificationsPage() {
       if (!res.ok) return;
       const json = await res.json();
       const rows: Notification[] = json.data?.notifications || [];
+      // A later page can run dry (e.g. its last unread was just read) — step back instead of showing
+      // an empty page with "Previous" as the only way out.
+      if (rows.length === 0 && page > 1) {
+        setPage((p) => p - 1);
+        return;
+      }
       setHasNext(rows.length > PAGE_SIZE);
       setNotifications(rows.slice(0, PAGE_SIZE));
       setUnreadCount(json.data?.unread_count || 0);
@@ -54,10 +60,14 @@ export function NotificationsPage() {
   const markAsRead = async (id: string) => {
     try {
       await fetch(`/api/v1/notifications/${id}/read`, { method: "POST" });
+      if (tab === "unread") {
+        // Reading one shifts every later unread up by one, so refetch this page instead of just
+        // dropping the row: the page stays full and Next/Previous never skip a notification.
+        await load({ silent: true });
+        return;
+      }
       setNotifications((prev) =>
-        tab === "unread"
-          ? prev.filter((n) => n.id !== id)
-          : prev.map((n) => (n.id === id ? { ...n, read_at: new Date().toISOString() } : n)),
+        prev.map((n) => (n.id === id ? { ...n, read_at: new Date().toISOString() } : n)),
       );
       setUnreadCount((c) => Math.max(0, c - 1));
     } catch (error) {

@@ -10,6 +10,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
@@ -673,9 +674,9 @@ export function ConsentCard({
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Send consent with missing details?</DialogTitle>
+            <DialogDescription>The student profile is missing:</DialogDescription>
           </DialogHeader>
           <div className="space-y-2 text-sm">
-            <p>The student profile is missing:</p>
             <ul className="list-disc pl-5">
               {(readiness?.missing ?? []).map((item) => (
                 <li key={item}>{item}</li>
