@@ -212,6 +212,8 @@ export function AddLeadSheet({
     setTestScores((prev) => ({ ...prev, [col]: value }));
 
   const isAdmin = role === "owner" || role === "admin";
+  // Education: Lead Source / Campaign are owner/admin-only. Other industries keep them for everyone.
+  const canSetLeadSource = isAdmin || industryId !== "education_consultancy";
   const defaultStage = stages.find((s) => s.is_default) || stages[0];
 
   useEffect(() => {
@@ -313,11 +315,11 @@ export function AddLeadSheet({
         assigned_to: formData.assignedTo || null,
         entity_id: formData.entityId || null,
         branch_id: formData.branchId || null,
-        // Lead Source is owner/admin-only: everyone else always gets the default.
-        intake_source: (isAdmin && formData.intakeSource) || "manual_entry",
+        // Lead Source is owner/admin-only for education: everyone else there gets the default.
+        intake_source: (canSetLeadSource && formData.intakeSource) || "manual_entry",
         intake_medium: "dashboard",
         tags: industryId === "education_consultancy" ? ["student"] : [],
-        intake_campaign: (isAdmin && formData.intakeCampaign) || null,
+        intake_campaign: (canSetLeadSource && formData.intakeCampaign) || null,
         preferred_contact_method: formData.preferredContact || null,
         custom_fields: formData.initialNotes
           ? { initial_notes: formData.initialNotes }
@@ -688,12 +690,12 @@ export function AddLeadSheet({
               sourceOpen ? "rotate-90" : ""
             }`}
           />
-          {isAdmin ? "Lead Source" : "Contact Preference"}
+          {canSetLeadSource ? "Lead Source" : "Contact Preference"}
           <span className="text-xs text-gray-400 font-normal">(optional)</span>
         </CollapsibleTrigger>
         <CollapsibleContent className="space-y-4 pt-2">
           <div className="grid grid-cols-2 gap-4">
-            {isAdmin && (
+            {canSetLeadSource && (
             <div className="space-y-1.5">
               <Label htmlFor="source" className="text-xs text-gray-600">
                 Source
@@ -738,7 +740,7 @@ export function AddLeadSheet({
               </Select>
             </div>
           </div>
-          {isAdmin && (
+          {canSetLeadSource && (
           <div className="space-y-1.5">
             <Label htmlFor="campaign" className="text-xs text-gray-600">
               Campaign / Referrer
