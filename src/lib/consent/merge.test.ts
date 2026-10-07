@@ -6,6 +6,7 @@ import {
   applySignerDetails,
   validateSignerDetails,
   CONSENT_MERGE_FIELDS,
+  findUnknownPlaceholders,
 } from "./merge";
 
 const base = {
@@ -43,7 +44,7 @@ describe("buildConsentMergeData — profile fields", () => {
     expect(d.passport_number).toBe("PA1234567");
     expect(d.full_address).toBe("Baneshwor-10");
     expect(d.street_address).toBe("Baneshwor-10");
-    expect(d.parent_name).toBe("Ram Mehta and Sita Mehta");
+    expect(d.parent_name).toBe("Ram Mehta"); // Father chosen -> ONE guardian, never "X and Y"
     expect(d.emergency_contact_name).toBe("Hari");
     expect(d.emergency_contact_phone).toBe("9800000000");
     expect(d.date_of_birth).toBe("February 1, 2003");
@@ -57,10 +58,37 @@ describe("buildConsentMergeData — profile fields", () => {
     }
   });
 
-  it("parent_name with one parent, and with neither", () => {
-    expect(buildConsentMergeData({ ...base, fatherName: "Ram" }).parent_name).toBe("Ram");
-    expect(buildConsentMergeData({ ...base, motherName: "Sita" }).parent_name).toBe("Sita");
-    expect(buildConsentMergeData({ ...base, fatherName: "  ", motherName: null }).parent_name).toBe("");
+  it("parent_name is ONE guardian: typed name wins, else the chosen parent, never both", () => {
+    const both = { ...base, fatherName: "Ram", motherName: "Sita" };
+    expect(buildConsentMergeData({ ...both, guardianRelationship: "Father" }).parent_name).toBe("Ram");
+    expect(buildConsentMergeData({ ...both, guardianRelationship: "mother" }).parent_name).toBe("Sita");
+    // Father/Mother always print that parent's own name — a stale typed name can't be paired with them.
+    expect(buildConsentMergeData({ ...both, guardianRelationship: "Mother", guardianName: "Ram" }).parent_name).toBe("Sita");
+    expect(buildConsentMergeData({ ...base, guardianRelationship: "Father", guardianName: "Hari" }).parent_name).toBe("Hari"); // parent not on file -> typed name
+    expect(buildConsentMergeData({ ...both, guardianRelationship: "Uncle", guardianName: "Hari" }).guardian_name).toBe("Hari");
+    // No relationship / a relationship with no typed name -> blank (readiness blocks the send), never both parents.
+    expect(buildConsentMergeData(both).parent_name).toBe("");
+    expect(buildConsentMergeData({ ...both, guardianRelationship: "Uncle" }).parent_name).toBe("");
+    expect(buildConsentMergeData({ ...base, guardianRelationship: "Father", fatherName: "  " }).parent_name).toBe("");
+  });
+
+  it("existing lead with one parent and no relationship: prints that parent AND the matching relationship", () => {
+    const d = buildConsentMergeData({ ...base, fatherName: "Ram" });
+    expect([d.parent_name, d.guardian_relationship]).toEqual(["Ram", "Father"]);
+    const both = buildConsentMergeData({ ...base, fatherName: "Ram", motherName: "Sita" });
+    expect([both.parent_name, both.guardian_relationship]).toEqual(["", ""]);
+  });
+
+  it("'None / Not applicable' prints N/A for the guardian lines", () => {
+    const d = buildConsentMergeData({ ...base, guardianRelationship: "None", fatherName: "Ram" });
+    expect([d.parent_name, d.guardian_relationship, d.guardian_phone, d.guardian_email]).toEqual(["N/A", "N/A", "N/A", "N/A"]);
+  });
+
+  it("counselor_name and assign_name both carry the assigned counselor", () => {
+    const d = buildConsentMergeData({ ...base, counselorName: " Anish Balami " });
+    expect(d.counselor_name).toBe("Anish Balami");
+    expect(d.assign_name).toBe("Anish Balami");
+    expect(fillConsentTemplate("Manager/Counselor: {{assign_name}}", d)).toBe("Manager/Counselor: Anish Balami");
   });
 
   it("ignores a malformed date_of_birth", () => {
@@ -167,5 +195,68 @@ describe("signer-filled details", () => {
     expect(Object.keys(errors).sort()).toEqual(["full_address", "guardian_email", "passport_number"]);
     expect(validateSignerDetails(null, keys)).toEqual({ values: {}, errors: {} });
     expect(validateSignerDetails([1, 2], keys)).toEqual({ values: {}, errors: {} });
+  });
+});
+
+describe("Admizz consent template — no raw {{tokens}} reach the student", () => {
+  const template = `Printed Name: {{student_name}}
+Date Issued: {{date}}
+
+For Admizz Education:
+Manager/Counselor: {{assign_name}}
+
+1. Student Information
+Name: {{student_name}}
+Nationality: {{nationality}} | Passport No.: {{passport_number}}
+Address: {{street_address}}, {{city}}, {{country}}
+
+2. Parent/Guardian Information
+Name: {{parent_name}}
+Relationship: {{guardian_relationship}}`;
+
+  const full = {
+    ...base,
+    nationality: "Nepali",
+    passportNumber: "PA1234567",
+    fullAddress: "Baneshwor-10",
+    fatherName: "Ram Mehta",
+    motherName: "Sita Mehta",
+    guardianRelationship: "Mother",
+    counselorName: "Anish Balami",
+  };
+
+  it("fills every blank for a complete profile, with one guardian", () => {
+    const { body, missingFields } = prepareConsentBody(template, buildConsentMessage(full));
+    expect(body).not.toContain("{{");
+    expect(missingFields).toEqual([]);
+    expect(body).toContain("Manager/Counselor: Anish Balami");
+    expect(body).toContain("Name: Sita Mehta\nRelationship: Mother");
+  });
+
+  it("a student with no guardian prints N/A instead of a blank or raw token", () => {
+    const { body } = prepareConsentBody(template, buildConsentMessage({ ...full, guardianRelationship: "None" }));
+    expect(body).not.toContain("{{");
+    expect(body).toContain("Name: N/A\nRelationship: N/A");
+  });
+
+  function buildConsentMessage(input: Parameters<typeof buildConsentMergeData>[0]) {
+    return buildConsentMergeData(input);
+  }
+});
+
+describe("findUnknownPlaceholders", () => {
+  it("flags tokens that would reach students raw, ignores known ones, de-duplicates", () => {
+    expect(findUnknownPlaceholders("{{student_name}} {{assign_name}} {{ Counselor_Nme }} {{counselor_nme}}")).toEqual(["counselor_nme"]);
+    expect(findUnknownPlaceholders(null)).toEqual([]);
+  });
+});
+
+describe("findUnknownPlaceholders — odd tokens", () => {
+  it("flags hyphenated, numbered and spaced tokens that fillConsentTemplate would leave raw", () => {
+    expect(findUnknownPlaceholders("{{guardian-name}} {{field2}} {{ guardian name }} {{student_name}}")).toEqual([
+      "guardian-name",
+      "field2",
+      "guardian name",
+    ]);
   });
 });

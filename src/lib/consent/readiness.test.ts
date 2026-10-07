@@ -5,6 +5,8 @@ import {
   ALWAYS_REQUIRED_PLACEHOLDERS,
   AUTOMATIC_PLACEHOLDERS,
   PLACEHOLDER_REQUIREMENTS,
+  CONSENT_PROFILE_COLUMNS,
+  consentRequirementGroups,
   type ConsentProfile,
 } from "./readiness";
 import { CONSENT_MERGE_FIELDS } from "./merge";
@@ -29,6 +31,8 @@ const complete: ConsentProfile = {
   guardian_phone: null,
   guardian_email: null,
   guardian_relationship: null,
+  guardian_name: null,
+  assigned_to: null,
 };
 
 describe("extractTemplatePlaceholders", () => {
@@ -81,9 +85,47 @@ describe("computeConsentReadiness", () => {
     expect(computeConsentReadiness("Passport {{passport_number}}", { ...complete, passport_number: "N123" }).ready).toBe(true);
   });
 
-  it("treats parent_name as satisfied by either parent", () => {
-    expect(computeConsentReadiness("{{parent_name}}", complete).missing).toEqual(["Father's or Mother's Name"]);
-    expect(computeConsentReadiness("{{parent_name}}", { ...complete, mother_name: "Sita" }).ready).toBe(true);
+  it("shows ONE guardian: Father/Mother resolve from the parent names, others need a typed Guardian Name", () => {
+    // Nothing chosen yet -> both the name and the relationship are asked for, under Guardian Details.
+    const r = computeConsentReadiness("{{parent_name}} {{guardian_relationship}}", complete);
+    expect(r.missing).toEqual(["Guardian Name", "Guardian Relationship"]);
+    expect(r.groups).toEqual([{ section: "Guardian Details", fields: ["Guardian Name", "Guardian Relationship"] }]);
+    // Father picked: father's name is used.
+    const tpl = "{{parent_name}} {{guardian_relationship}}";
+    expect(computeConsentReadiness(tpl, { ...complete, guardian_relationship: "Father", father_name: "Ram" }).ready).toBe(true);
+    expect(computeConsentReadiness(tpl, { ...complete, guardian_relationship: "Father", mother_name: "Sita" }).missing).toEqual(["Guardian Name"]);
+    // Mother picked, case-insensitive legacy text.
+    expect(computeConsentReadiness(tpl, { ...complete, guardian_relationship: "mother", mother_name: "Sita" }).ready).toBe(true);
+    // Uncle needs a typed name.
+    expect(computeConsentReadiness(tpl, { ...complete, guardian_relationship: "Uncle" }).missing).toEqual(["Guardian Name"]);
+    expect(computeConsentReadiness(tpl, { ...complete, guardian_relationship: "Uncle", guardian_name: "Hari" }).ready).toBe(true);
+  });
+
+  it("existing leads (no relationship yet) pass when exactly one parent is on file, and are told what to do when both are", () => {
+    const tpl = "{{parent_name}} {{guardian_relationship}}";
+    expect(computeConsentReadiness(tpl, { ...complete, father_name: "Ram" }).ready).toBe(true);
+    expect(computeConsentReadiness(tpl, { ...complete, mother_name: "Sita" }).ready).toBe(true);
+    // Both parents, nothing picked: staff must choose — we don't guess.
+    expect(computeConsentReadiness(tpl, { ...complete, father_name: "Ram", mother_name: "Sita" }).missing).toEqual([
+      "Guardian Name",
+      "Guardian Relationship",
+    ]);
+    // No parents at all: same.
+    expect(computeConsentReadiness(tpl, complete).missing).toEqual(["Guardian Name", "Guardian Relationship"]);
+  });
+
+  it("'None / Not applicable' needs no guardian name, phone or email", () => {
+    const tpl = "{{parent_name}} {{guardian_relationship}} {{guardian_phone}} {{guardian_email}}";
+    expect(computeConsentReadiness(tpl, { ...complete, guardian_relationship: "None" }).ready).toBe(true);
+  });
+
+  it("requires an assigned counselor only when the template uses it, filed under Assignment", () => {
+    expect(computeConsentReadiness("Counselor: {{assign_name}}", complete).missing).toEqual(["Assigned Counselor"]);
+    expect(computeConsentReadiness("Counselor: {{counselor_name}}", complete).groups).toEqual([
+      { section: "Assignment", fields: ["Assigned Counselor"] },
+    ]);
+    expect(computeConsentReadiness("Counselor: {{assign_name}}", { ...complete, assigned_to: "user-1" }).ready).toBe(true);
+    expect(computeConsentReadiness("No counselor here", complete).ready).toBe(true);
   });
 
   it("lists a field once even if two placeholders map to it", () => {
@@ -128,5 +170,42 @@ describe("every consent placeholder is accounted for", () => {
   it("no requirement exists for a placeholder the template can't use", () => {
     const known = new Set<string>(CONSENT_MERGE_FIELDS);
     for (const key of [...always, ...automatic, ...profile]) expect(known.has(key)).toBe(true);
+  });
+});
+
+describe("CONSENT_PROFILE_COLUMNS", () => {
+  it("selects every ConsentProfile field the rules read (assigned_to and guardian_name included)", () => {
+    const cols = CONSENT_PROFILE_COLUMNS.split(",").map((c) => c.trim());
+    for (const key of Object.keys(complete)) expect(cols).toContain(key);
+  });
+});
+
+describe("consentRequirementGroups — what staff must fill, from the template alone", () => {
+  const ADMIZZ = "{{student_name}} {{date}} {{assign_name}} {{nationality}} {{passport_number}} {{street_address}}, {{city}}, {{country}} {{parent_name}} {{guardian_relationship}}";
+
+  it("lists the always-required fields plus one per placeholder the template uses, in pop-up order", () => {
+    expect(consentRequirementGroups(ADMIZZ)).toEqual([
+      { section: "Personal Information", fields: ["First Name", "Email", "Phone", "Nationality", "City", "Residence Country"] },
+      { section: "Basic Details", fields: ["Full Address"] },
+      { section: "Guardian Details", fields: ["Guardian Name", "Guardian Relationship"] },
+      { section: "Passport & Citizenship", fields: ["Passport Number"] },
+      { section: "Study Interest", fields: ["Field of Study", "Degree Level"] },
+      { section: "Assignment", fields: ["Assigned Counselor"] },
+    ]);
+  });
+
+  it("matches what computeConsentReadiness would ask of an empty profile", () => {
+    const fromTemplate = consentRequirementGroups(ADMIZZ).flatMap((g) => g.fields).sort();
+    const blocked = computeConsentReadiness(ADMIZZ, {
+      ...complete, first_name: null, email: null, phone: null, field_of_study: null, degree_level: null,
+    }).missing.sort();
+    expect(fromTemplate).toEqual(blocked);
+  });
+
+  it("a bare template needs only the basics", () => {
+    expect(consentRequirementGroups("Hello")).toEqual([
+      { section: "Personal Information", fields: ["First Name", "Email", "Phone"] },
+      { section: "Study Interest", fields: ["Field of Study", "Degree Level"] },
+    ]);
   });
 });

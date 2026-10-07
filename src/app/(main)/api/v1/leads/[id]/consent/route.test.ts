@@ -48,13 +48,14 @@ function authAs(over: Partial<{ role: string; industryId: string }> = {}): AuthC
   return { userId: "user-1", tenantId: "tenant-1", industryId: "education_consultancy", role: "admin", permissions: {}, ...over } as unknown as AuthContext;
 }
 
+const getUserByIdMock = vi.fn();
 function serviceClient() {
   const t: Record<string, unknown> = {};
   t.select = vi.fn(() => t);
   t.eq = vi.fn(() => t);
   t.is = vi.fn(() => t);
   t.single = vi.fn(async () => ({ data: currentLead }));
-  return { from: vi.fn(() => t) };
+  return { from: vi.fn(() => t), auth: { admin: { getUserById: getUserByIdMock } } };
 }
 
 const row = (over: Record<string, unknown>) => ({
@@ -68,11 +69,14 @@ const row = (over: Record<string, unknown>) => ({
  * really returns only the newest one and a query for `status = signed` returns only signed rows —
  * that is what makes these tests fail against the old "newest row only" code.
  */
-function fakeDb(records: ReturnType<typeof row>[], opts: { insertError?: { code?: string; message: string } } = {}) {
+function fakeDb(
+  records: ReturnType<typeof row>[],
+  opts: { insertError?: { code?: string; message: string }; templateBody?: string } = {},
+) {
   const writes = vi.fn();
   const template = {
     select: vi.fn(() => template),
-    maybeSingle: vi.fn(async () => ({ data: { is_active: true, id: "tpl", body: "b", version: 1, link_expiry_days: 7, title: "t" } })),
+    maybeSingle: vi.fn(async () => ({ data: { is_active: true, id: "tpl", body: opts.templateBody ?? "b", version: 1, link_expiry_days: 7, title: "t" } })),
   };
   const consentsTable = () => {
     const filters: Record<string, unknown> = {};
@@ -128,6 +132,8 @@ beforeEach(() => {
   loadConsentReadinessMock.mockReset();
   loadConsentReadinessMock.mockResolvedValue(READY);
   currentLead = LEAD;
+  getUserByIdMock.mockReset();
+  getUserByIdMock.mockResolvedValue({ data: { user: { email: "anish@admizz.org", user_metadata: { full_name: "Anish Balami" } } } });
 });
 
 describe("GET /api/v1/leads/[id]/consent", () => {
@@ -421,5 +427,96 @@ describe("consent — readiness reuses what the route already read", () => {
     await POST(post("send"), params());
 
     expect(loadConsentReadinessMock.mock.calls[0][3].profile).toEqual(expect.objectContaining({ id: "lead-1" }));
+  });
+});
+
+describe("consent — counselor name ({{assign_name}} / {{counselor_name}})", () => {
+  const TEMPLATE = "Counselor: {{assign_name}} / {{counselor_name}}";
+
+  it.each(["send", "send_in_person"])("'%s' fills the assigned counselor's name into the document", async (action) => {
+    const { db, writes } = fakeDb([], { templateBody: TEMPLATE });
+    scopedClientMock.mockResolvedValue(db);
+
+    const { POST } = await import("./route");
+    const res = await POST(post(action), params());
+
+    expect(res.status).toBe(201);
+    expect(getUserByIdMock).toHaveBeenCalledWith("user-1");
+    const inserted = writes.mock.calls.map((c) => c[0]).find((w) => w && "body_snapshot" in w);
+    expect(inserted.body_snapshot).toBe("Counselor: Anish Balami / Anish Balami");
+  });
+
+  it("falls back to the counselor's email when they have no name set", async () => {
+    getUserByIdMock.mockResolvedValue({ data: { user: { email: "anish@admizz.org", user_metadata: {} } } });
+    const { db, writes } = fakeDb([], { templateBody: TEMPLATE });
+    scopedClientMock.mockResolvedValue(db);
+
+    const { POST } = await import("./route");
+    await POST(post("send"), params());
+
+    const inserted = writes.mock.calls.map((c) => c[0]).find((w) => w && "body_snapshot" in w);
+    expect(inserted.body_snapshot).toBe("Counselor: anish@admizz.org / anish@admizz.org");
+  });
+
+  it.each(["send", "send_in_person"])("'%s' with no assigned counselor is refused with 422 and replaces nothing", async (action) => {
+    currentLead = { ...LEAD, assigned_to: null };
+    const { db, writes } = fakeDb([], { templateBody: TEMPLATE });
+    scopedClientMock.mockResolvedValue(db);
+
+    const { POST } = await import("./route");
+    const res = await POST(post(action), params());
+    const body = await res.json();
+
+    expect(res.status).toBe(422);
+    expect(body.error.code).toBe("PROFILE_INCOMPLETE_FOR_CONSENT");
+    expect(body.error.message).toContain("Assigned Counselor");
+    expect(writes).not.toHaveBeenCalled(); // the previous unsigned link is untouched
+  });
+
+  it("an auth outage is a retryable 503 — NOT reported as an incomplete profile — and replaces nothing", async () => {
+    getUserByIdMock.mockRejectedValue(new Error("auth down"));
+    const { db, writes } = fakeDb([], { templateBody: TEMPLATE });
+    scopedClientMock.mockResolvedValue(db);
+
+    const { POST } = await import("./route");
+    const res = await POST(post("send"), params());
+    const body = await res.json();
+
+    expect(res.status).toBe(503);
+    expect(body.error.code).toBe("COUNSELOR_LOOKUP_FAILED");
+    expect(writes).not.toHaveBeenCalled();
+  });
+
+  it("an assignee with no usable name or email is the 'Assigned Counselor' 422", async () => {
+    getUserByIdMock.mockResolvedValue({ data: { user: { email: null, user_metadata: {} } } });
+    const { db, writes } = fakeDb([], { templateBody: TEMPLATE });
+    scopedClientMock.mockResolvedValue(db);
+
+    const { POST } = await import("./route");
+    const res = await POST(post("send"), params());
+
+    expect(res.status).toBe(422);
+    expect(writes).not.toHaveBeenCalled();
+  });
+
+  it("an admin override sends anyway", async () => {
+    currentLead = { ...LEAD, assigned_to: null };
+    const { db } = fakeDb([], { templateBody: TEMPLATE });
+    scopedClientMock.mockResolvedValue(db);
+
+    const { POST } = await import("./route");
+    const res = await POST(post("send", { override_profile_check: true }), params());
+
+    expect(res.status).toBe(201);
+  });
+
+  it("does not look the counselor up when the template doesn't use the placeholder", async () => {
+    const { db } = fakeDb([], { templateBody: "Hello {{student_name}}" });
+    scopedClientMock.mockResolvedValue(db);
+
+    const { POST } = await import("./route");
+    await POST(post("send"), params());
+
+    expect(getUserByIdMock).not.toHaveBeenCalled();
   });
 });

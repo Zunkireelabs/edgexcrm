@@ -1,5 +1,6 @@
 "use client";
 
+import { CONSENT_FIELD_HINTS } from "@/lib/consent/field-hints";
 import { SECTION_TITLE_CLASS } from "@/components/dashboard/lead/section-title";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { AlertTriangle, Clock, CheckCircle2, Loader2, Copy, RefreshCw, FileText, Upload, PenLine, ChevronDown } from "lucide-react";
@@ -62,6 +63,15 @@ function MissingGroupText({ group }: { group: MissingGroupView }) {
       {group.fields.join(", ")}
     </>
   );
+}
+
+/** Where to fix what's missing — the assigned counselor is set on the lead, not in Student Details. */
+function missingFixHint(groups: MissingGroupView[], preposition: "in" | "from" = "in"): string {
+  const hasAssignment = groups.some((g) => g.section === "Assignment");
+  const hasProfile = groups.some((g) => g.section !== "Assignment");
+  if (hasAssignment && hasProfile) return `Add them ${preposition} Student Details (Edit), and assign a counselor to this lead.`;
+  if (hasAssignment) return "Assign a counselor to this lead.";
+  return `Add them ${preposition} Student Details (Edit).`;
 }
 
 /**
@@ -128,7 +138,7 @@ function BlockedHintTooltip({ groups, className, children }: { groups: MissingGr
               </li>
             ))}
           </ul>
-          <p className="mt-1 opacity-80">Add them in Student Details (Edit).</p>
+          <p className="mt-1 opacity-80">{missingFixHint(groups)}</p>
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
@@ -529,9 +539,21 @@ export function ConsentCard({
                         </li>
                       ))}
                     </ul>
-                    <p className="mt-1 text-amber-800">Add them from Student Details (Edit).</p>
+                    <p className="mt-1 text-amber-800">{missingFixHint(missingGroups, "from")}</p>
+                    {missingGroups.flatMap((g) => g.fields).some((f) => CONSENT_FIELD_HINTS[f]) && (
+                      <ul className="mt-1.5 space-y-0.5 text-amber-800">
+                        {missingGroups
+                          .flatMap((g) => g.fields)
+                          .filter((f) => CONSENT_FIELD_HINTS[f])
+                          .map((f) => (
+                            <li key={f}>
+                              <span className="font-medium">{f}:</span> {CONSENT_FIELD_HINTS[f]}
+                            </li>
+                          ))}
+                      </ul>
+                    )}
                   </div>
-                  {onOpenStudentDetails && (
+                  {onOpenStudentDetails && missingGroups.some((g) => g.section !== "Assignment") && (
                     <Button
                       size="sm"
                       variant="outline"

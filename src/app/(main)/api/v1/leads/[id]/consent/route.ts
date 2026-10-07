@@ -20,7 +20,7 @@ import { APP_URL } from "@/lib/email";
 import { prepareConsentBody, buildConsentMergeData } from "@/lib/consent/merge";
 import { resolveConsentStatus, type ConsentRecordRow } from "@/lib/consent/resolve-status";
 import { touchLeadUpdatedAt } from "@/lib/leads/touch-updated-at";
-import { loadConsentReadiness, CONSENT_PROFILE_COLUMNS, type ConsentProfile } from "@/lib/consent/readiness";
+import { loadConsentReadiness, extractTemplatePlaceholders, CONSENT_PROFILE_COLUMNS, type ConsentProfile } from "@/lib/consent/readiness";
 import { consentProfileIncompleteMessage } from "@/lib/blocking-notice";
 
 interface RouteContext {
@@ -58,6 +58,56 @@ async function hasSignedConsent(db: Awaited<ReturnType<typeof scopedClient>>, le
 // loser's insert fails with a unique violation; that is "someone just did this", not a server error.
 function isUniqueViolation(error: unknown): boolean {
   return (error as { code?: string } | null)?.code === "23505";
+}
+
+const COUNSELOR_PLACEHOLDERS = ["counselor_name", "assign_name"];
+
+type CounselorLookup =
+  | { used: false }
+  | { used: true; name: string; failed: false }
+  | { used: true; name: ""; failed: boolean };
+
+// Display name of the lead's assigned counselor, for {{counselor_name}} / {{assign_name}}. Same name
+// source as the rest of the app (auth user_metadata name / full_name), falling back to their email.
+// Only looked up when the template actually uses the placeholder (parsed once, here). Never throws:
+// `failed` separates "the auth service errored" (retry later) from "the assignee has no usable name"
+// (assign someone else), so an outage is never reported as an incomplete profile.
+async function resolveCounselor(
+  log: ReturnType<typeof createRequestLogger>,
+  supabase: Awaited<ReturnType<typeof createServiceClient>>,
+  assignedTo: string | null,
+  templateBody: string | null | undefined,
+): Promise<CounselorLookup> {
+  if (!extractTemplatePlaceholders(templateBody).some((p) => COUNSELOR_PLACEHOLDERS.includes(p))) return { used: false };
+  if (!assignedTo) return { used: true, name: "", failed: false };
+  try {
+    const { data, error } = await supabase.auth.admin.getUserById(assignedTo);
+    if (error) throw error;
+    const user = data?.user;
+    const meta = (user?.user_metadata ?? {}) as { name?: string; full_name?: string };
+    const name = (meta.name || meta.full_name || user?.email || "").trim();
+    if (!name) log.warn({ assignedTo }, "consent: assigned counselor has no name or email");
+    return { used: true, name, failed: false } as CounselorLookup;
+  } catch (err) {
+    log.error({ err, assignedTo }, "consent: could not look up the assigned counselor's name");
+    return { used: true, name: "", failed: true };
+  }
+}
+
+// The profile-readiness gate already refuses a lead with NO assignee. This catches what it can't see:
+// an assignee whose name can't be resolved (deleted auth user) or an auth-service outage. Runs before
+// the previous unsigned consent is replaced so a refusal leaves the existing link untouched.
+function counselorRefusal(lookup: CounselorLookup, overrideRequested: boolean, industryId: string | null) {
+  if (!lookup.used || lookup.name || overrideRequested || industryId !== "education_consultancy") return null;
+  if (lookup.failed) {
+    return apiError("COUNSELOR_LOOKUP_FAILED", "Couldn't look up the assigned counselor right now. Please try again in a moment.", 503);
+  }
+  return apiError(
+    "PROFILE_INCOMPLETE_FOR_CONSENT",
+    consentProfileIncompleteMessage(["Assigned Counselor"]),
+    422,
+    { missing: ["Assigned Counselor"] },
+  );
 }
 
 function consentInProgress() {
@@ -188,6 +238,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     guardian_phone: string | null;
     guardian_email: string | null;
     guardian_relationship: string | null;
+    guardian_name: string | null;
   };
 
   const membership = await getLeadMembership(supabase, auth.tenantId, id);
@@ -279,6 +330,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return apiError("ALREADY_SIGNED", "Consent is already signed for this lead", 409);
     }
 
+    // Resolve the counselor BEFORE the previous unsigned consent is replaced below, so a failure
+    // here leaves the existing link untouched.
+    const counselor = await resolveCounselor(log, supabase, leadRow.assigned_to, tplRow.body);
+    const counselorBlocked = counselorRefusal(counselor, body.override_profile_check === true, auth.industryId);
+    if (counselorBlocked) return counselorBlocked;
+    const counselorName = counselor.used ? counselor.name : "";
+
     // Soft-delete any prior unsigned consent for this lead
     await db
       .from("lead_consents")
@@ -322,6 +380,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
         guardianPhone: leadRow.guardian_phone,
         guardianEmail: leadRow.guardian_email,
         guardianRelationship: leadRow.guardian_relationship,
+        guardianName: leadRow.guardian_name,
+        counselorName,
         organization,
         consentVersion: tplRow.version,
       }),
@@ -424,6 +484,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return apiError("ALREADY_SIGNED", "Consent is already signed for this lead", 409);
     }
 
+    // Resolve the counselor BEFORE the previous unsigned consent is replaced below, so a failure
+    // here leaves the existing link untouched.
+    const counselor = await resolveCounselor(log, supabase, leadRow.assigned_to, tplRow.body);
+    const counselorBlocked = counselorRefusal(counselor, body.override_profile_check === true, auth.industryId);
+    if (counselorBlocked) return counselorBlocked;
+    const counselorName = counselor.used ? counselor.name : "";
+
     await db
       .from("lead_consents")
       .update({ deleted_at: new Date().toISOString() })
@@ -464,6 +531,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
         guardianPhone: leadRow.guardian_phone,
         guardianEmail: leadRow.guardian_email,
         guardianRelationship: leadRow.guardian_relationship,
+        guardianName: leadRow.guardian_name,
+        counselorName,
         organization,
         consentVersion: tplRow.version,
       }),
