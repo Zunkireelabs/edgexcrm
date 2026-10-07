@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { resolveLeadBranch, assignmentBranchTarget, branchMoveOnAssignment } from "./branch-resolution";
+import { resolveLeadBranch, assignmentBranchTarget, branchMoveOnAssignment, creationBranchForAssignee } from "./branch-resolution";
 
 // Chainable `branches` table double for the tenant-default fallback query
 // (.select().eq().eq().limit().maybeSingle()).
@@ -134,5 +134,35 @@ describe("branchMoveOnAssignment — only leads in the default branch move", () 
     expect(branchMoveOnAssignment(null, target)).toBeNull();
     expect(branchMoveOnAssignment(undefined, target)).toBeNull();
     expect(branchMoveOnAssignment("global", null)).toBeNull();
+  });
+});
+
+describe("creationBranchForAssignee — a lead created with an assignee", () => {
+  const ARGS = { tenantId: "t", creationBranchId: "global", assigneeId: "u" };
+
+  it("created into Global with a Birgunj assignee -> starts in Birgunj", async () => {
+    const db = fakeAssignDb({ assigneeBranchId: "birgunj", defaultBranchId: "global" });
+    expect(await creationBranchForAssignee(db, ARGS)).toBe("birgunj");
+  });
+
+  it("an explicit branch from the caller wins (no lookup at all)", async () => {
+    const db = fakeAssignDb({ assigneeBranchId: "birgunj", defaultBranchId: "global" });
+    expect(await creationBranchForAssignee(db, { ...ARGS, creationBranchId: "ktm", explicitBranchId: "ktm" })).toBe("ktm");
+    expect((db as unknown as { from: ReturnType<typeof vi.fn> }).from).not.toHaveBeenCalled();
+  });
+
+  it("no assignee -> the creation branch (Global) is kept", async () => {
+    const db = fakeAssignDb({ assigneeBranchId: "birgunj", defaultBranchId: "global" });
+    expect(await creationBranchForAssignee(db, { ...ARGS, assigneeId: null })).toBe("global");
+  });
+
+  it("created into a non-default branch (e.g. the creator's own KTM) -> never moved", async () => {
+    const db = fakeAssignDb({ assigneeBranchId: "birgunj", defaultBranchId: "global" });
+    expect(await creationBranchForAssignee(db, { ...ARGS, creationBranchId: "ktm" })).toBe("ktm");
+  });
+
+  it("assignee with no branch, or a tenant with no creation branch -> unchanged", async () => {
+    expect(await creationBranchForAssignee(fakeAssignDb({ assigneeBranchId: null, defaultBranchId: "global" }), ARGS)).toBe("global");
+    expect(await creationBranchForAssignee(fakeAssignDb({ assigneeBranchId: "birgunj", defaultBranchId: null }), { ...ARGS, creationBranchId: null })).toBeNull();
   });
 });

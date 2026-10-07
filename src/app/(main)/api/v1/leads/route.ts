@@ -57,7 +57,7 @@ import {
   touchLastActivity,
 } from "@/lib/leads/dedup";
 import { resolveLeadPipelineAndStage } from "@/lib/leads/pipeline-resolution";
-import { resolveLeadBranch, assignmentBranchTarget, branchMoveOnAssignment } from "@/lib/leads/branch-resolution";
+import { resolveLeadBranch, creationBranchForAssignee } from "@/lib/leads/branch-resolution";
 import { getPipelineLandingStage } from "@/lib/leads/pipeline-stage";
 import { STAGE_TEAM_MAP } from "@/industries/education-consultancy/lead-assignment-by-stage";
 import { processEmailForwardRules } from "@/lib/email/email-forward";
@@ -1302,12 +1302,13 @@ async function handlePost(request: NextRequest) {
   }
 
   // A lead created straight into the default ("Global") branch with a branch member as its assignee
-  // becomes that member's branch lead (same rule as assigning later). Explicit branch_id wins.
-  let leadBranchId = creationBranchId;
-  if (leadPayload.assigned_to && !body.branch_id) {
-    const target = await assignmentBranchTarget(supabase, tenantId, leadPayload.assigned_to as string);
-    leadBranchId = branchMoveOnAssignment(creationBranchId, target) ?? creationBranchId;
-  }
+  // starts in that member's branch (same rule as assigning later). An explicit branch_id wins.
+  const leadBranchId = await creationBranchForAssignee(supabase, {
+    tenantId,
+    creationBranchId,
+    explicitBranchId: (body.branch_id as string | null | undefined) || null,
+    assigneeId: leadPayload.assigned_to as string | null,
+  });
 
   // Set branch on insert path only; stripped from the update destructure below.
   leadPayload.branch_id = leadBranchId;

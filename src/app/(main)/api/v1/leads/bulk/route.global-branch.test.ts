@@ -119,4 +119,18 @@ describe("PATCH /api/v1/leads/bulk — Global leads move to the assignee's branc
     expect((await PATCH(req({ ids: [IN_GLOBAL], assigned_to: null }))).status).toBe(200);
     expect(branchMoves(t.leads)).toEqual([]);
   });
+
+  it("if moving the leads to the new branch fails, NOTHING is assigned (503) — never assigned-but-still-in-Global", async () => {
+    const t = setup(BIRGUNJ);
+    // The branch-move update (the one carrying only branch_id) fails.
+    (t.leads.update as ReturnType<typeof vi.fn>).mockImplementation((vals: Record<string, unknown>) =>
+      "branch_id" in vals && !("assigned_to" in vals) ? table({ data: null, error: { message: "boom" } }) : table({ data: null, error: null }),
+    );
+    const { PATCH } = await import("./route");
+    const res = await PATCH(req({ ids: [IN_GLOBAL], assigned_to: ASSIGNEE }));
+    expect(res.status).toBe(503);
+    const wroteAssignment = (t.leads.update as ReturnType<typeof vi.fn>).mock.calls.some((c) => "assigned_to" in (c[0] as object));
+    expect(wroteAssignment).toBe(false);
+    expect(syncOriginMembershipMock).not.toHaveBeenCalled();
+  });
 });

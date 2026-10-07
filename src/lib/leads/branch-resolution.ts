@@ -95,3 +95,23 @@ export function branchMoveOnAssignment(
 ): string | null {
   return target && currentBranchId === target.fromBranchId ? target.toBranchId : null;
 }
+
+/**
+ * Branch for a lead being CREATED with an assignee already set. It starts in the branch the creation
+ * rules picked (`creationBranchId`); if that is the default ("Global") branch and the assignee belongs
+ * to another branch, it starts in the assignee's branch instead — the same rule as assigning later.
+ * An explicit branch from the caller, or no assignee, leaves the creation branch alone.
+ */
+export async function creationBranchForAssignee(
+  supabase: SupabaseServiceClient,
+  args: {
+    tenantId: string;
+    creationBranchId: string | null;
+    explicitBranchId?: string | null;
+    assigneeId?: string | null;
+  },
+): Promise<string | null> {
+  if (!args.assigneeId || args.explicitBranchId || !args.creationBranchId) return args.creationBranchId;
+  const target = await assignmentBranchTarget(supabase, args.tenantId, args.assigneeId);
+  return branchMoveOnAssignment(args.creationBranchId, target) ?? args.creationBranchId;
+}

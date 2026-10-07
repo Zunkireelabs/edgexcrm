@@ -310,21 +310,11 @@ export async function PATCH(request: NextRequest) {
     }
   }
 
-  // Update all leads
-  const { error: updateError } = await supabase
-    .from("leads")
-    .update(bulkUpdatePayload)
-    .eq("tenant_id", auth.tenantId)
-    .in("id", idsToUpdate);
-
-  if (updateError) {
-    log.error({ err: updateError }, "Failed to bulk update leads");
-    return apiServiceUnavailable("Failed to update leads");
-  }
-
   // Leads sitting in the default ("Global") branch become the assignee's branch leads when assigned
   // to someone in a branch (each lead's current branch differs, so this can't ride the single bulk
-  // payload). Skipped when the caller set branch_id itself. `movedBranch` feeds the origin-row sync below.
+  // payload). Skipped when the caller set branch_id itself. Done BEFORE the assignment so a failure
+  // here aborts with nothing assigned (the caller just retries) instead of leaving leads assigned but
+  // still sitting in Global. `movedBranch` feeds the origin-row sync below.
   const movedBranch = new Map<string, string>();
   if (body.assigned_to && body.branch_id === undefined) {
     const target = await assignmentBranchTarget(supabase, auth.tenantId, body.assigned_to);
@@ -340,10 +330,22 @@ export async function PATCH(request: NextRequest) {
           .in("id", [...movedBranch.keys()]);
         if (moveError) {
           log.error({ err: moveError }, "Failed to move assigned leads to the assignee's branch");
-          movedBranch.clear();
+          return apiServiceUnavailable("Failed to update leads");
         }
       }
     }
+  }
+
+  // Update all leads
+  const { error: updateError } = await supabase
+    .from("leads")
+    .update(bulkUpdatePayload)
+    .eq("tenant_id", auth.tenantId)
+    .in("id", idsToUpdate);
+
+  if (updateError) {
+    log.error({ err: updateError }, "Failed to bulk update leads");
+    return apiServiceUnavailable("Failed to update leads");
   }
 
   // Per-lead archive snapshot: each lead's prior list (stage) + status differ, so they
