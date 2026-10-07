@@ -3,6 +3,7 @@ import { validate, isPhoneForCountry } from "@/lib/api/validation";
 import { normalizePhoneForStorage } from "@/lib/phone-utils";
 import { requireAdmin, requireLeadAccess, resolvePositionSlug, type AuthContext } from "@/lib/api/auth";
 import { getLeadMembership, syncOriginMembership } from "@/lib/leads/branch-membership";
+import { assignmentBranchTarget, branchMoveOnAssignment } from "@/lib/leads/branch-resolution";
 import { isAdminAssignmentTarget } from "@/lib/leads/branch-assign-policy";
 import { addLeadCollaborator } from "@/lib/leads/collaborators";
 import { canAccessPipeline, canAccessList } from "@/lib/api/permissions";
@@ -825,6 +826,15 @@ export async function applyLeadPatch(
         }
       }
     }
+  }
+
+  // A lead sitting in the default ("Global") branch becomes the assignee's branch lead when assigned
+  // to someone in a branch. Skipped when the caller set branch_id itself. Runs after every permission
+  // check above, so it can never widen what the caller was allowed to do.
+  if (body.assigned_to !== undefined && body.assigned_to !== null && body.branch_id === undefined) {
+    const target = await assignmentBranchTarget(supabase, auth.tenantId, body.assigned_to as string, newAssigneeBranchId);
+    const moveTo = branchMoveOnAssignment((existingLead as Lead).branch_id, target);
+    if (moveTo) updatePayload.branch_id = moveTo;
   }
 
   // Stage-age badge tracks stage/status moves only, not every field edit — set it here

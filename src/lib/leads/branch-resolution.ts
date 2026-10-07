@@ -44,3 +44,54 @@ export async function resolveLeadBranch(
     .maybeSingle();
   return defaultBranch?.id ?? null;
 }
+
+/**
+ * A lead that lands in the tenant's DEFAULT branch (the "Global" inbox) has no team yet. When it is
+ * assigned to someone who belongs to a branch, it becomes that branch's lead: leads.branch_id moves
+ * to the assignee's branch (and the origin lead_branches row follows, via syncOriginMembership).
+ *
+ * Only leads sitting in the default branch move — a lead already in KTM / Birgunj / Janakpur keeps
+ * its branch when reassigned, exactly as before. An assignee with no branch (owner / admin) leaves
+ * the lead where it is. Returns null when there is nothing to move TO for this assignee, so callers
+ * can skip the per-lead check entirely.
+ *
+ * `knownAssigneeBranchId` lets a caller that already read the assignee's tenant_users row skip the
+ * second read (`undefined` = look it up).
+ */
+export async function assignmentBranchTarget(
+  supabase: SupabaseServiceClient,
+  tenantId: string,
+  assigneeId: string,
+  knownAssigneeBranchId?: string | null,
+): Promise<{ fromBranchId: string; toBranchId: string } | null> {
+  let toBranchId = knownAssigneeBranchId;
+  if (toBranchId === undefined) {
+    const { data } = await supabase
+      .from("tenant_users")
+      .select("branch_id")
+      .eq("tenant_id", tenantId)
+      .eq("user_id", assigneeId)
+      .maybeSingle();
+    toBranchId = (data as { branch_id: string | null } | null)?.branch_id ?? null;
+  }
+  if (!toBranchId) return null;
+
+  const { data: defaultBranch } = await supabase
+    .from("branches")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .eq("is_default", true)
+    .limit(1)
+    .maybeSingle();
+  const fromBranchId = (defaultBranch as { id: string } | null)?.id ?? null;
+  if (!fromBranchId || fromBranchId === toBranchId) return null;
+  return { fromBranchId, toBranchId };
+}
+
+/** The branch a lead should move to on assignment, or null to leave it alone. */
+export function branchMoveOnAssignment(
+  currentBranchId: string | null | undefined,
+  target: { fromBranchId: string; toBranchId: string } | null,
+): string | null {
+  return target && currentBranchId === target.fromBranchId ? target.toBranchId : null;
+}

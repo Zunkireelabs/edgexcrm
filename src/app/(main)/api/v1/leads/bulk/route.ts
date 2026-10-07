@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, requireAdmin, getClientIp } from "@/lib/api/auth";
 import { syncOriginMembership } from "@/lib/leads/branch-membership";
+import { assignmentBranchTarget, branchMoveOnAssignment } from "@/lib/leads/branch-resolution";
 import { isAdminAssignmentTarget, isLeadInManagerBranch } from "@/lib/leads/branch-assign-policy";
 import { addLeadCollaborators } from "@/lib/leads/collaborators";
 import { assignDisplayIds } from "@/lib/leads/assign-display-ids";
@@ -321,6 +322,30 @@ export async function PATCH(request: NextRequest) {
     return apiServiceUnavailable("Failed to update leads");
   }
 
+  // Leads sitting in the default ("Global") branch become the assignee's branch leads when assigned
+  // to someone in a branch (each lead's current branch differs, so this can't ride the single bulk
+  // payload). Skipped when the caller set branch_id itself. `movedBranch` feeds the origin-row sync below.
+  const movedBranch = new Map<string, string>();
+  if (body.assigned_to && body.branch_id === undefined) {
+    const target = await assignmentBranchTarget(supabase, auth.tenantId, body.assigned_to);
+    if (target) {
+      for (const lid of idsToUpdate) {
+        if (branchMoveOnAssignment(existingMap.get(lid)?.branch_id, target)) movedBranch.set(lid, target.toBranchId);
+      }
+      if (movedBranch.size > 0) {
+        const { error: moveError } = await supabase
+          .from("leads")
+          .update({ branch_id: target.toBranchId })
+          .eq("tenant_id", auth.tenantId)
+          .in("id", [...movedBranch.keys()]);
+        if (moveError) {
+          log.error({ err: moveError }, "Failed to move assigned leads to the assignee's branch");
+          movedBranch.clear();
+        }
+      }
+    }
+  }
+
   // Per-lead archive snapshot: each lead's prior list (stage) + status differ, so they
   // can't ride the single bulk payload. Written after the move using the pre-move values.
   if (targetList?.is_archive) {
@@ -399,7 +424,8 @@ export async function PATCH(request: NextRequest) {
     await Promise.all(
       idsToUpdate.map((lid) => {
         const existing = existingMap.get(lid);
-        const newBranchId = body.branch_id !== undefined ? (body.branch_id ?? null) : (existing?.branch_id ?? null);
+        const newBranchId =
+          body.branch_id !== undefined ? (body.branch_id ?? null) : (movedBranch.get(lid) ?? existing?.branch_id ?? null);
         const newAssignedTo = body.assigned_to !== undefined ? (body.assigned_to ?? null) : (existing?.assigned_to ?? null);
         return syncOriginMembership(supabase, auth.tenantId, lid, newBranchId, newAssignedTo);
       })

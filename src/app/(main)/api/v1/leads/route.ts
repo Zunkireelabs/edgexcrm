@@ -57,7 +57,7 @@ import {
   touchLastActivity,
 } from "@/lib/leads/dedup";
 import { resolveLeadPipelineAndStage } from "@/lib/leads/pipeline-resolution";
-import { resolveLeadBranch } from "@/lib/leads/branch-resolution";
+import { resolveLeadBranch, assignmentBranchTarget, branchMoveOnAssignment } from "@/lib/leads/branch-resolution";
 import { getPipelineLandingStage } from "@/lib/leads/pipeline-stage";
 import { STAGE_TEAM_MAP } from "@/industries/education-consultancy/lead-assignment-by-stage";
 import { processEmailForwardRules } from "@/lib/email/email-forward";
@@ -1301,8 +1301,16 @@ async function handlePost(request: NextRequest) {
     }
   }
 
+  // A lead created straight into the default ("Global") branch with a branch member as its assignee
+  // becomes that member's branch lead (same rule as assigning later). Explicit branch_id wins.
+  let leadBranchId = creationBranchId;
+  if (leadPayload.assigned_to && !body.branch_id) {
+    const target = await assignmentBranchTarget(supabase, tenantId, leadPayload.assigned_to as string);
+    leadBranchId = branchMoveOnAssignment(creationBranchId, target) ?? creationBranchId;
+  }
+
   // Set branch on insert path only; stripped from the update destructure below.
-  leadPayload.branch_id = creationBranchId;
+  leadPayload.branch_id = leadBranchId;
 
   // Normalised fields for identity resolution (used in both update + create paths)
   const normalizedEmail = normalizeEmail(leadPayload.email as string | null | undefined);
@@ -1761,7 +1769,7 @@ async function handlePost(request: NextRequest) {
   }
 
   // Sync origin branch membership so branch-scoped users see the lead (no-op when null)
-  void syncOriginMembership(supabase, tenantId, lead.id, creationBranchId, (lead as Lead).assigned_to ?? null).catch(() => {});
+  void syncOriginMembership(supabase, tenantId, lead.id, leadBranchId, (lead as Lead).assigned_to ?? null).catch(() => {});
 
   // Phone duplicate suggestions — non-fatal, never blocks ingestion
   if (createPhoneMatchIds.length > 0) {
