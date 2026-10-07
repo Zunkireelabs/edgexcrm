@@ -59,7 +59,7 @@ import {
 import { resolveLeadPipelineAndStage } from "@/lib/leads/pipeline-resolution";
 import { resolveLeadBranch, creationBranchForAssignee } from "@/lib/leads/branch-resolution";
 import { getPipelineLandingStage } from "@/lib/leads/pipeline-stage";
-import { STAGE_TEAM_MAP } from "@/industries/education-consultancy/lead-assignment-by-stage";
+import { isAssigneePermittedForStage } from "@/industries/education-consultancy/lead-assignment-by-stage";
 import { processEmailForwardRules } from "@/lib/email/email-forward";
 import { processFormAutoresponder } from "@/lib/email/form-autoresponder";
 import { assignDisplayIds } from "@/lib/leads/assign-display-ids";
@@ -1249,6 +1249,15 @@ async function handlePost(request: NextRequest) {
     }
   }
 
+  // A lead created straight into the default ("Global") branch with a branch member as its assignee
+  // starts in that member's branch (same rule as assigning later). An explicit branch_id wins.
+  const leadBranchId = await creationBranchForAssignee(supabase, {
+    tenantId,
+    creationBranchId,
+    explicitBranchId: (body.branch_id as string | null | undefined) || null,
+    assigneeId: leadPayload.assigned_to as string | null,
+  });
+
   // Education defense-in-depth: mirror the Add-Lead cascade server-side. On manual dashboard
   // creates by an admin/owner or branch-manager, an explicit assignee must hold a position
   // allowed for the chosen Stage — or be the manager of the lead's branch. Scoped to exactly
@@ -1278,20 +1287,26 @@ async function handlePost(request: NextRequest) {
         .eq("tenant_id", tenantId)
         .maybeSingle(),
     ]);
-    const allowed = STAGE_TEAM_MAP[listRow?.slug ?? ""] ?? [];
     const posEmbed = Array.isArray(assigneeRow?.positions)
       ? (assigneeRow?.positions[0] ?? null)
       : assigneeRow?.positions;
     const assigneeSlug = (posEmbed as { slug?: string } | null)?.slug ?? null;
-    // Admins are always a valid assignee at any stage.
-    let permitted = assigneeRow?.role === "admin" || (!!assigneeSlug && allowed.includes(assigneeSlug));
-    if (!permitted && creationBranchId) {
+    const stageRule = {
+      stageSlug: listRow?.slug ?? null,
+      assigneeId: leadPayload.assigned_to as string,
+      assigneeRole: assigneeRow?.role ?? null,
+      assigneeSlug,
+    };
+    // Admin or a position that works the stage; else the manager of the branch the lead will END UP in
+    // (leadBranchId — after any Global -> assignee-branch move; the Global branch itself has no manager).
+    let permitted = isAssigneePermittedForStage(stageRule);
+    if (!permitted && leadBranchId) {
       const { data: branchRow } = await supabase
         .from("branches")
         .select("manager_user_id")
-        .eq("id", creationBranchId)
+        .eq("id", leadBranchId)
         .maybeSingle();
-      permitted = branchRow?.manager_user_id === leadPayload.assigned_to;
+      permitted = isAssigneePermittedForStage({ ...stageRule, branchManagerId: branchRow?.manager_user_id ?? null });
     }
     // Only reject a known, mismatched funnel position; unknown positions fall through unblocked.
     if (assigneeSlug && !permitted) {
@@ -1300,15 +1315,6 @@ async function handlePost(request: NextRequest) {
       });
     }
   }
-
-  // A lead created straight into the default ("Global") branch with a branch member as its assignee
-  // starts in that member's branch (same rule as assigning later). An explicit branch_id wins.
-  const leadBranchId = await creationBranchForAssignee(supabase, {
-    tenantId,
-    creationBranchId,
-    explicitBranchId: (body.branch_id as string | null | undefined) || null,
-    assigneeId: leadPayload.assigned_to as string | null,
-  });
 
   // Set branch on insert path only; stripped from the update destructure below.
   leadPayload.branch_id = leadBranchId;
