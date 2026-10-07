@@ -14,7 +14,7 @@ import {
 import { FileText, ToggleLeft, ToggleRight } from "lucide-react";
 import { toast } from "sonner";
 import { DEFAULT_CONSENT_TEMPLATE } from "@/lib/consent/default-template";
-import { CONSENT_MERGE_FIELDS } from "@/lib/consent/merge";
+import { CONSENT_MERGE_FIELDS, findUnknownPlaceholders } from "@/lib/consent/merge";
 
 interface ConsentTemplate {
   id: string;
@@ -203,6 +203,12 @@ export function ConsentManager() {
             rows={8}
             className="w-full px-3 py-2 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring resize-none"
           />
+          {findUnknownPlaceholders(form.body).length > 0 && (
+            <p role="alert" className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+              These placeholders aren&apos;t recognised and will show as-is to students:{" "}
+              {findUnknownPlaceholders(form.body).map((t) => `{{${t}}}`).join(", ")}. Check the spelling against the list below.
+            </p>
+          )}
           <p className="text-xs text-muted-foreground">
             Merge fields auto-fill per student when the link is sent:{" "}
             {CONSENT_MERGE_FIELDS.map((field, i) => (

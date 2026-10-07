@@ -397,6 +397,7 @@ function PossibleDuplicatesCard({ lead, onMerged }: { lead: Lead; onMerged?: () 
       guardian_phone: null,
       guardian_email: null,
       guardian_relationship: null,
+      guardian_name: null,
     };
     setMergeTarget(partial);
     setMergeDialogOpen(true);

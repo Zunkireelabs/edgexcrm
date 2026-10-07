@@ -124,6 +124,7 @@ function makeLead(overrides: Partial<Lead>): Lead {
     guardian_phone: null,
     guardian_email: null,
     guardian_relationship: null,
+    guardian_name: null,
     archive_reason: null,
     archived_by: null,
     archived_at: null,

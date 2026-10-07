@@ -22,13 +22,16 @@ const emptyProfile = Object.fromEntries(
     "first_name", "email", "phone", "field_of_study", "degree_level", "city", "nationality", "country",
     "passport_number", "full_address", "father_name", "mother_name", "emergency_contact_name",
     "emergency_contact_phone", "date_of_birth", "guardian_phone", "guardian_email", "guardian_relationship",
+    "guardian_name", "assigned_to",
   ].map((k) => [k, null]),
 ) as unknown as ConsentProfile;
 
 /** Every field label consent can ever ask staff to fill in (composite "X or Y" split into both). */
 function everyConsentRequiredLabel(): string[] {
   const template = CONSENT_MERGE_FIELDS.map((f) => `{{${f}}}`).join(" ");
-  const { missing } = computeConsentReadiness(template, { ...emptyProfile, custom_fields: {} });
+  const { groups } = computeConsentReadiness(template, { ...emptyProfile, custom_fields: {} });
+  // The "Assignment" section (Assigned Counselor) is set with the lead's assignee control, not in this pop-up.
+  const missing = groups.filter((g) => g.section !== "Assignment").flatMap((g) => g.fields);
   // "Father's or Mother's Name" -> "Father's Name", "Mother's Name" (the shared tail goes on each part).
   const expand = (label: string) => {
     const parts = label.split(" or ");

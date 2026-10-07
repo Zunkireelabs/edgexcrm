@@ -7,6 +7,8 @@
  * since program lives on an application that doesn't exist yet at consent time).
  */
 
+import { resolveGuardian, NOT_APPLICABLE_TEXT } from "./guardian";
+
 export interface ConsentMergeData {
   student_name: string;
   student_email: string;
@@ -23,8 +25,14 @@ export interface ConsentMergeData {
   street_address: string;
   father_name: string;
   mother_name: string;
-  /** Father and mother joined with " and "; whichever exists if only one is set. */
+  /** The ONE guardian shown on the form (see guardian.ts) — never father and mother joined. */
   parent_name: string;
+  /** Alias of parent_name. */
+  guardian_name: string;
+  /** Name of the lead's assigned counselor. */
+  counselor_name: string;
+  /** Alias of counselor_name — the client's template calls it `assign_name`. */
+  assign_name: string;
   emergency_contact_name: string;
   emergency_contact_phone: string;
   date_of_birth: string;
@@ -50,6 +58,9 @@ export const CONSENT_MERGE_FIELDS = [
   "father_name",
   "mother_name",
   "parent_name",
+  "guardian_name",
+  "counselor_name",
+  "assign_name",
   "emergency_contact_name",
   "emergency_contact_phone",
   "date_of_birth",
@@ -57,6 +68,16 @@ export const CONSENT_MERGE_FIELDS = [
   "guardian_email",
   "guardian_relationship",
 ] as const;
+
+/** `{{tokens}}` in a template body that aren't a known merge field — they would reach students as raw text. */
+export function findUnknownPlaceholders(body: string | null | undefined): string[] {
+  const known = new Set<string>(CONSENT_MERGE_FIELDS);
+  const unknown = new Set<string>();
+  for (const m of (body ?? "").matchAll(/\{\{\s*([a-z_]+)\s*\}\}/gi)) {
+    if (!known.has(m[1].toLowerCase())) unknown.add(m[1].toLowerCase());
+  }
+  return [...unknown];
+}
 
 /** Stands in for an empty known field until the line is tidied (see tidyEmptyFields). */
 const EMPTY = "\u0000";
@@ -131,6 +152,10 @@ export function buildConsentMergeData(input: {
   guardianPhone?: string | null;
   guardianEmail?: string | null;
   guardianRelationship?: string | null;
+  /** `leads.guardian_name` — typed by staff; Father/Mother relationships resolve from the parent names. */
+  guardianName?: string | null;
+  /** Display name of the lead's assigned counselor (`leads.assigned_to`). */
+  counselorName?: string | null;
   date?: Date;
 }): ConsentMergeData {
   const date = input.date ?? new Date();
@@ -139,6 +164,16 @@ export function buildConsentMergeData(input: {
   const father = input.fatherName?.trim() ?? "";
   const mother = input.motherName?.trim() ?? "";
   const address = input.fullAddress?.trim() ?? "";
+  const guardian = resolveGuardian({
+    guardianName: input.guardianName,
+    guardianRelationship: input.guardianRelationship,
+    fatherName: father,
+    motherName: mother,
+  });
+  const counselor = input.counselorName?.trim() ?? "";
+  // No guardian ("None / Not applicable"): the guardian's own contact lines read N/A rather than asking the signer.
+  const na = (value: string | null | undefined) =>
+    guardian.notApplicable ? NOT_APPLICABLE_TEXT : (value?.trim() ?? "");
   return {
     student_name: [input.firstName, input.lastName].filter(Boolean).join(" ").trim() || "Student",
     student_email: input.email ?? "",
@@ -154,13 +189,16 @@ export function buildConsentMergeData(input: {
     street_address: address,
     father_name: father,
     mother_name: mother,
-    parent_name: [father, mother].filter(Boolean).join(" and "),
+    parent_name: guardian.name,
+    guardian_name: guardian.name,
+    counselor_name: counselor,
+    assign_name: counselor,
     emergency_contact_name: input.emergencyContactName?.trim() ?? "",
     emergency_contact_phone: input.emergencyContactPhone?.trim() ?? "",
     date_of_birth: formatDob(input.dateOfBirth),
-    guardian_phone: input.guardianPhone?.trim() ?? "",
-    guardian_email: input.guardianEmail?.trim() ?? "",
-    guardian_relationship: input.guardianRelationship?.trim() ?? "",
+    guardian_phone: na(input.guardianPhone),
+    guardian_email: na(input.guardianEmail),
+    guardian_relationship: guardian.relationship,
   };
 }
 
@@ -184,7 +222,7 @@ export const SIGNER_FILLABLE_FIELDS = {
   nationality: { label: "Nationality", tags: ["nationality"] },
   passport_number: { label: "Passport Number", tags: ["passport_number"] },
   full_address: { label: "Address", tags: ["full_address", "street_address"] },
-  parent_name: { label: "Parent / Guardian Name", tags: ["parent_name"] },
+  parent_name: { label: "Parent / Guardian Name", tags: ["parent_name", "guardian_name"] },
   guardian_phone: { label: "Guardian Phone", tags: ["guardian_phone"] },
   guardian_email: { label: "Guardian Email", tags: ["guardian_email"] },
   guardian_relationship: { label: "Guardian Relationship", tags: ["guardian_relationship"] },

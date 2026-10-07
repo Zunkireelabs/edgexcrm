@@ -29,6 +29,8 @@ const complete: ConsentProfile = {
   guardian_phone: null,
   guardian_email: null,
   guardian_relationship: null,
+  guardian_name: null,
+  assigned_to: null,
 };
 
 describe("extractTemplatePlaceholders", () => {
@@ -81,9 +83,34 @@ describe("computeConsentReadiness", () => {
     expect(computeConsentReadiness("Passport {{passport_number}}", { ...complete, passport_number: "N123" }).ready).toBe(true);
   });
 
-  it("treats parent_name as satisfied by either parent", () => {
-    expect(computeConsentReadiness("{{parent_name}}", complete).missing).toEqual(["Father's or Mother's Name"]);
-    expect(computeConsentReadiness("{{parent_name}}", { ...complete, mother_name: "Sita" }).ready).toBe(true);
+  it("shows ONE guardian: Father/Mother resolve from the parent names, others need a typed Guardian Name", () => {
+    // Nothing chosen yet -> both the name and the relationship are asked for, under Guardian Details.
+    const r = computeConsentReadiness("{{parent_name}} {{guardian_relationship}}", complete);
+    expect(r.missing).toEqual(["Guardian Name", "Guardian Relationship"]);
+    expect(r.groups).toEqual([{ section: "Guardian Details", fields: ["Guardian Name", "Guardian Relationship"] }]);
+    // Father picked: father's name is used.
+    const tpl = "{{parent_name}} {{guardian_relationship}}";
+    expect(computeConsentReadiness(tpl, { ...complete, guardian_relationship: "Father", father_name: "Ram" }).ready).toBe(true);
+    expect(computeConsentReadiness(tpl, { ...complete, guardian_relationship: "Father", mother_name: "Sita" }).missing).toEqual(["Guardian Name"]);
+    // Mother picked, case-insensitive legacy text.
+    expect(computeConsentReadiness(tpl, { ...complete, guardian_relationship: "mother", mother_name: "Sita" }).ready).toBe(true);
+    // Uncle needs a typed name.
+    expect(computeConsentReadiness(tpl, { ...complete, guardian_relationship: "Uncle" }).missing).toEqual(["Guardian Name"]);
+    expect(computeConsentReadiness(tpl, { ...complete, guardian_relationship: "Uncle", guardian_name: "Hari" }).ready).toBe(true);
+  });
+
+  it("'None / Not applicable' needs no guardian name, phone or email", () => {
+    const tpl = "{{parent_name}} {{guardian_relationship}} {{guardian_phone}} {{guardian_email}}";
+    expect(computeConsentReadiness(tpl, { ...complete, guardian_relationship: "None" }).ready).toBe(true);
+  });
+
+  it("requires an assigned counselor only when the template uses it, filed under Assignment", () => {
+    expect(computeConsentReadiness("Counselor: {{assign_name}}", complete).missing).toEqual(["Assigned Counselor"]);
+    expect(computeConsentReadiness("Counselor: {{counselor_name}}", complete).groups).toEqual([
+      { section: "Assignment", fields: ["Assigned Counselor"] },
+    ]);
+    expect(computeConsentReadiness("Counselor: {{assign_name}}", { ...complete, assigned_to: "user-1" }).ready).toBe(true);
+    expect(computeConsentReadiness("No counselor here", complete).ready).toBe(true);
   });
 
   it("lists a field once even if two placeholders map to it", () => {

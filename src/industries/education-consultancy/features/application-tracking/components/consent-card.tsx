@@ -73,6 +73,15 @@ function MissingGroupText({ group }: { group: MissingGroupView }) {
  * all. Disabled buttons have pointer-events:none, so hover lands on the group itself; one trigger
  * also means no dead zones in the gaps between buttons.
  */
+/** Where to fix what's missing — the assigned counselor is set on the lead, not in Student Details. */
+function missingFixHint(groups: MissingGroupView[], preposition: "in" | "from" = "in"): string {
+  const hasAssignment = groups.some((g) => g.section === "Assignment");
+  const hasProfile = groups.some((g) => g.section !== "Assignment");
+  if (hasAssignment && hasProfile) return `Add them ${preposition} Student Details (Edit), and assign a counselor to this lead.`;
+  if (hasAssignment) return "Assign a counselor to this lead.";
+  return `Add them ${preposition} Student Details (Edit).`;
+}
+
 function BlockedHintTooltip({ groups, className, children }: { groups: MissingGroupView[]; className: string; children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const groupRef = useRef<HTMLDivElement>(null);
@@ -128,7 +137,7 @@ function BlockedHintTooltip({ groups, className, children }: { groups: MissingGr
               </li>
             ))}
           </ul>
-          <p className="mt-1 opacity-80">Add them in Student Details (Edit).</p>
+          <p className="mt-1 opacity-80">{missingFixHint(groups)}</p>
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
@@ -529,7 +538,7 @@ export function ConsentCard({
                         </li>
                       ))}
                     </ul>
-                    <p className="mt-1 text-amber-800">Add them from Student Details (Edit).</p>
+                    <p className="mt-1 text-amber-800">{missingFixHint(missingGroups, "from")}</p>
                   </div>
                   {onOpenStudentDetails && (
                     <Button

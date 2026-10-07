@@ -230,6 +230,7 @@ export interface Lead {
   guardian_phone: string | null;
   guardian_email: string | null;
   guardian_relationship: string | null;
+  guardian_name: string | null;
   intake_account: string | null;
   // Pre-Application fee (education_consultancy — migration 084)
   pre_app_fee_status: "paid" | "unpaid" | "waiver" | null;

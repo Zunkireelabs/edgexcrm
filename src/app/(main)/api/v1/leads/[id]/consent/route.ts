@@ -18,6 +18,7 @@ import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { sendConsentEmail } from "@/lib/email/send-consent";
 import { APP_URL } from "@/lib/email";
 import { prepareConsentBody, buildConsentMergeData } from "@/lib/consent/merge";
+import { extractTemplatePlaceholders } from "@/lib/consent/readiness";
 import { resolveConsentStatus, type ConsentRecordRow } from "@/lib/consent/resolve-status";
 import { touchLeadUpdatedAt } from "@/lib/leads/touch-updated-at";
 import { loadConsentReadiness, CONSENT_PROFILE_COLUMNS, type ConsentProfile } from "@/lib/consent/readiness";
@@ -60,6 +61,30 @@ function isUniqueViolation(error: unknown): boolean {
   return (error as { code?: string } | null)?.code === "23505";
 }
 
+const COUNSELOR_PLACEHOLDERS = ["counselor_name", "assign_name"];
+
+// Display name of the lead's assigned counselor, for {{counselor_name}} / {{assign_name}}. Same name
+// source as the rest of the app (auth user_metadata name / full_name), falling back to their email.
+// Only looked up when the template actually uses the placeholder. Never throws: "" means "couldn't
+// resolve", which the caller turns into a clear blocked-send message instead of a blank line.
+async function resolveCounselorName(
+  supabase: Awaited<ReturnType<typeof createServiceClient>>,
+  assignedTo: string | null,
+  templateBody: string | null | undefined,
+): Promise<string> {
+  if (!assignedTo) return "";
+  const used = extractTemplatePlaceholders(templateBody).some((p) => COUNSELOR_PLACEHOLDERS.includes(p));
+  if (!used) return "";
+  try {
+    const { data } = await supabase.auth.admin.getUserById(assignedTo);
+    const user = data?.user;
+    const meta = (user?.user_metadata ?? {}) as { name?: string; full_name?: string };
+    return (meta.name || meta.full_name || user?.email || "").trim();
+  } catch {
+    return "";
+  }
+}
+
 function consentInProgress() {
   return apiError("CONSENT_IN_PROGRESS", "A consent request for this lead was just created. Please refresh and try again.", 409);
 }
@@ -79,7 +104,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   // Verify lead belongs to tenant (with the profile columns, so the readiness check below needs no re-read)
   const { data: lead } = await supabase
     .from("leads")
-    .select(`id, assigned_to, branch_id, ${CONSENT_PROFILE_COLUMNS}`)
+    .select(`id, branch_id, ${CONSENT_PROFILE_COLUMNS}`)
     .eq("id", id)
     .eq("tenant_id", auth.tenantId)
     .is("deleted_at", null)
@@ -160,7 +185,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   // Verify lead belongs to tenant
   const { data: lead } = await supabase
     .from("leads")
-    .select(`id, assigned_to, branch_id, last_name, ${CONSENT_PROFILE_COLUMNS}`)
+    .select(`id, branch_id, last_name, ${CONSENT_PROFILE_COLUMNS}`)
     .eq("id", id)
     .eq("tenant_id", auth.tenantId)
     .is("deleted_at", null)
@@ -188,6 +213,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     guardian_phone: string | null;
     guardian_email: string | null;
     guardian_relationship: string | null;
+    guardian_name: string | null;
   };
 
   const membership = await getLeadMembership(supabase, auth.tenantId, id);
@@ -279,6 +305,23 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return apiError("ALREADY_SIGNED", "Consent is already signed for this lead", 409);
     }
 
+    // Resolve the counselor BEFORE the previous unsigned consent is replaced below, so a failure
+    // here leaves the existing link untouched.
+    const counselorName = await resolveCounselorName(supabase, leadRow.assigned_to, tplRow.body);
+    if (
+      auth.industryId === "education_consultancy" &&
+      body.override_profile_check !== true &&
+      !counselorName &&
+      extractTemplatePlaceholders(tplRow.body).some((p) => COUNSELOR_PLACEHOLDERS.includes(p))
+    ) {
+      return apiError(
+        "PROFILE_INCOMPLETE_FOR_CONSENT",
+        consentProfileIncompleteMessage(["Assigned Counselor"]),
+        422,
+        { missing: ["Assigned Counselor"] },
+      );
+    }
+
     // Soft-delete any prior unsigned consent for this lead
     await db
       .from("lead_consents")
@@ -322,6 +365,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
         guardianPhone: leadRow.guardian_phone,
         guardianEmail: leadRow.guardian_email,
         guardianRelationship: leadRow.guardian_relationship,
+        guardianName: leadRow.guardian_name,
+        counselorName,
         organization,
         consentVersion: tplRow.version,
       }),
@@ -424,6 +469,23 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return apiError("ALREADY_SIGNED", "Consent is already signed for this lead", 409);
     }
 
+    // Resolve the counselor BEFORE the previous unsigned consent is replaced below, so a failure
+    // here leaves the existing link untouched.
+    const counselorName = await resolveCounselorName(supabase, leadRow.assigned_to, tplRow.body);
+    if (
+      auth.industryId === "education_consultancy" &&
+      body.override_profile_check !== true &&
+      !counselorName &&
+      extractTemplatePlaceholders(tplRow.body).some((p) => COUNSELOR_PLACEHOLDERS.includes(p))
+    ) {
+      return apiError(
+        "PROFILE_INCOMPLETE_FOR_CONSENT",
+        consentProfileIncompleteMessage(["Assigned Counselor"]),
+        422,
+        { missing: ["Assigned Counselor"] },
+      );
+    }
+
     await db
       .from("lead_consents")
       .update({ deleted_at: new Date().toISOString() })
@@ -464,6 +526,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
         guardianPhone: leadRow.guardian_phone,
         guardianEmail: leadRow.guardian_email,
         guardianRelationship: leadRow.guardian_relationship,
+        guardianName: leadRow.guardian_name,
+        counselorName,
         organization,
         consentVersion: tplRow.version,
       }),

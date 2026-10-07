@@ -28,6 +28,7 @@ import { TestScoresSection, testScoresFromLead, legacyScoreColumns, type TestSco
 import { QualificationsSection, qualificationsFromLead, type Qualifications } from "./qualifications-section";
 import { WorkExperienceSection, type WorkExperienceEntry } from "./work-experience-section";
 import { ReferencesSection, type ReferenceEntry } from "./references-section";
+import { GUARDIAN_RELATIONSHIP_OPTIONS, normalizeGuardianRelationship } from "@/lib/consent/guardian";
 import { SectionGroup, CardSection, FieldGrid, EditableField } from "./form-primitives";
 import { AttachDocumentButton } from "./attach-document-button";
 import { PERSONAL_DETAIL_COLUMNS, PERSONAL_DETAIL_DATE_COLUMNS } from "@/lib/leads/personal-details";
@@ -94,12 +95,14 @@ export const PASSPORT_CITIZENSHIP_FIELDS = [
   { key: "citizenship_issued_date", label: "Citizenship Issued Date", type: "date" },
 ] as const;
 
-// Guardian contact for the consent form's Parent/Guardian section (migration 266).
-// The guardian's name comes from Father's / Mother's Name above.
+// The ONE guardian shown on the consent form's Parent/Guardian section (migrations 266, 269).
+// Picking Father / Mother pre-fills Guardian Name from the parent names above; for anyone else, type it.
+// "None / Not applicable" prints N/A on the form instead of blocking the consent.
 export const GUARDIAN_FIELDS = [
+  { key: "guardian_relationship", label: "Guardian Relationship", type: "select", options: GUARDIAN_RELATIONSHIP_OPTIONS },
+  { key: "guardian_name", label: "Guardian Name", type: "text", placeholder: "e.g. Sita Sharma" },
   { key: "guardian_phone", label: "Guardian Phone", type: "tel" },
   { key: "guardian_email", label: "Guardian Email", type: "email" },
-  { key: "guardian_relationship", label: "Guardian Relationship", type: "text", placeholder: "e.g. Father, Uncle" },
 ] as const;
 
 // Not part of the client's original PDF template — flagged there as a
@@ -113,6 +116,15 @@ export const FINANCIAL_FIELDS = [
 ] as const;
 
 type FieldValues = Record<string, string>;
+
+/** A relationship typed before the dropdown existed (e.g. "Step-father") must still show, and survive a save. */
+function withLegacyRelationshipOption<F extends { key: string; options?: readonly { value: string; label: string }[] }>(
+  field: F,
+  current: string | undefined,
+): F {
+  if (field.key !== "guardian_relationship" || !current || field.options?.some((o) => o.value === current)) return field;
+  return { ...field, options: [...(field.options ?? []), { value: current, label: current }] };
+}
 
 export interface StudyInterest {
   destinations: string[];
@@ -194,6 +206,8 @@ export function personalDetailsFromLead(lead: Lead): FieldValues {
     const raw = lead[col];
     out[col] = dateColumns.includes(col) ? (/^\d{4}-\d{2}-\d{2}/.exec(raw ?? "")?.[0] ?? "") : (raw ?? "");
   }
+  // Older free-text values ("father") line up with the dropdown's options; anything else is kept as typed.
+  out.guardian_relationship = normalizeGuardianRelationship(out.guardian_relationship);
   return out;
 }
 
@@ -432,7 +446,15 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
   };
 
   const handleChange = (key: string, value: string) => {
-    setDraft((prev) => ({ ...prev, [key]: value }));
+    setDraft((prev) => {
+      const next = { ...prev, [key]: value };
+      // Father / Mother pre-fills the guardian's name from the parent names, when none is typed yet.
+      if (key === "guardian_relationship" && !(prev.guardian_name ?? "").trim()) {
+        if (value === "Father" && prev.father_name?.trim()) next.guardian_name = prev.father_name.trim();
+        if (value === "Mother" && prev.mother_name?.trim()) next.guardian_name = prev.mother_name.trim();
+      }
+      return next;
+    });
   };
 
   const handleCoreChange = (key: keyof CoreIdentity, value: string) => {
@@ -524,7 +546,7 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
                 {GUARDIAN_FIELDS.map((field) => (
                   <EditableField
                     key={field.key}
-                    field={field}
+                    field={withLegacyRelationshipOption(field, (isEditing ? draft : values).guardian_relationship)}
                     isEditing={isEditing}
                     value={(isEditing ? draft : values)[field.key] || ""}
                     onChange={(v) => handleChange(field.key, v)}

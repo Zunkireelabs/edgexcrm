@@ -13,7 +13,9 @@ export const PERSONAL_DETAIL_TEXT_COLUMNS = [
   "passport_issued_by",
   "citizenship_number",
   "citizenship_issued_by",
-  // Guardian contact (migration 266). Name is derived from father/mother, not stored.
+  // Guardian (migrations 266, 269). guardian_name is typed for non-parent guardians; Father/Mother
+  // relationships fall back to father_name / mother_name (see lib/consent/guardian.ts).
+  "guardian_name",
   "guardian_phone",
   "guardian_email",
   "guardian_relationship",
