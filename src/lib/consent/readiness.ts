@@ -118,6 +118,31 @@ export function extractTemplatePlaceholders(body: string | null | undefined): st
   return [...found];
 }
 
+/**
+ * What every student needs before THIS template can go out, grouped like the Student Details pop-up —
+ * the same rule computeConsentReadiness applies, minus a specific student. Shown in Settings so the
+ * admin (and through them, staff) knows what to fill in up front.
+ */
+export function consentRequirementGroups(templateBody: string | null | undefined): MissingGroup[] {
+  const found: { label: string; section: Section }[] = [];
+  const add = (label: string, section: Section) => {
+    if (!found.some((f) => f.label === label)) found.push({ label, section });
+  };
+  add("First Name", "Personal Information");
+  add("Email", "Personal Information");
+  add("Phone", "Personal Information");
+  add("Field of Study", "Study Interest");
+  add("Degree Level", "Study Interest");
+  for (const placeholder of extractTemplatePlaceholders(templateBody)) {
+    const requirement = PLACEHOLDER_REQUIREMENTS[placeholder];
+    if (requirement) add(requirement.label, requirement.section);
+  }
+  return SECTION_ORDER.map((section) => ({
+    section,
+    fields: found.filter((f) => f.section === section).map((f) => f.label),
+  })).filter((g) => g.fields.length > 0);
+}
+
 export function computeConsentReadiness(templateBody: string | null | undefined, profile: ConsentProfile): ConsentReadiness {
   const found: { label: string; section: Section }[] = [];
   const add = (label: string, section: Section) => {

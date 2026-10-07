@@ -15,6 +15,7 @@ import { FileText, ToggleLeft, ToggleRight } from "lucide-react";
 import { toast } from "sonner";
 import { DEFAULT_CONSENT_TEMPLATE } from "@/lib/consent/default-template";
 import { CONSENT_MERGE_FIELDS, findUnknownPlaceholders } from "@/lib/consent/merge";
+import { consentRequirementGroups } from "@/lib/consent/readiness";
 
 interface ConsentTemplate {
   id: string;
@@ -208,6 +209,22 @@ export function ConsentManager() {
               These placeholders aren&apos;t recognised and will show as-is to students:{" "}
               {findUnknownPlaceholders(form.body).map((t) => `{{${t}}}`).join(", ")}. Check the spelling against the list below.
             </p>
+          )}
+          {form.body.trim() && (
+            <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900 space-y-1">
+              <p className="font-medium">Before a consent can be sent, each student needs:</p>
+              <ul className="list-disc pl-4">
+                {consentRequirementGroups(form.body).map((g) => (
+                  <li key={g.section}>
+                    <span className="font-medium">{g.section}:</span> {g.fields.join(", ")}
+                  </li>
+                ))}
+              </ul>
+              <p className="text-blue-800">
+                Staff fill these in Student Details (Edit); the counselor is the one assigned to the lead. Consent can&apos;t be
+                sent while any is missing. For a student with no guardian, choose &quot;None / Not applicable&quot;.
+              </p>
+            </div>
           )}
           <p className="text-xs text-muted-foreground">
             Merge fields auto-fill per student when the link is sent:{" "}

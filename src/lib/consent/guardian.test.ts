@@ -1,3 +1,5 @@
+import { CONSENT_FIELD_HINTS } from "./field-hints";
+import { PLACEHOLDER_REQUIREMENTS } from "./readiness";
 import { describe, it, expect } from "vitest";
 import { resolveGuardian, guardianNameAfterRelationshipChange, normalizeGuardianRelationship } from "./guardian";
 
@@ -40,5 +42,17 @@ describe("resolveGuardian", () => {
   it("normalizes legacy text", () => {
     expect(normalizeGuardianRelationship(" FATHER ")).toBe("Father");
     expect(normalizeGuardianRelationship("Step-father")).toBe("Step-father");
+  });
+});
+
+describe("CONSENT_FIELD_HINTS", () => {
+  it("only explains labels readiness can actually report", () => {
+    const labels = new Set(Object.values(PLACEHOLDER_REQUIREMENTS).map((r) => r.label));
+    for (const label of Object.keys(CONSENT_FIELD_HINTS)) expect(labels).toContain(label);
+  });
+  it("covers the guardian and counselor items staff don't recognise on sight", () => {
+    for (const label of ["Guardian Relationship", "Guardian Name", "Assigned Counselor"]) {
+      expect(CONSENT_FIELD_HINTS[label]).toBeTruthy();
+    }
   });
 });

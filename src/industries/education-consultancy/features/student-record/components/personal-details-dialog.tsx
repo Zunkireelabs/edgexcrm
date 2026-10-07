@@ -545,6 +545,11 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
             </CardSection>
 
             <CardSection title="Guardian Details">
+              <p className="mb-3 text-xs text-muted-foreground">
+                The guardian signs for the student on the consent. Pick the relationship: Father or Mother fills the name in
+                from their name above; for anyone else, type the name. Choose &quot;None / Not applicable&quot; if there is no
+                guardian.
+              </p>
               <FieldGrid>
                 {GUARDIAN_FIELDS.map((field) => (
                   <EditableField

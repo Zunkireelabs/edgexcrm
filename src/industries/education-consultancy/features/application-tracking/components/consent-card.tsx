@@ -1,5 +1,6 @@
 "use client";
 
+import { CONSENT_FIELD_HINTS } from "@/lib/consent/field-hints";
 import { SECTION_TITLE_CLASS } from "@/components/dashboard/lead/section-title";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { AlertTriangle, Clock, CheckCircle2, Loader2, Copy, RefreshCw, FileText, Upload, PenLine, ChevronDown } from "lucide-react";
@@ -539,6 +540,18 @@ export function ConsentCard({
                       ))}
                     </ul>
                     <p className="mt-1 text-amber-800">{missingFixHint(missingGroups, "from")}</p>
+                    {missingGroups.flatMap((g) => g.fields).some((f) => CONSENT_FIELD_HINTS[f]) && (
+                      <ul className="mt-1.5 space-y-0.5 text-amber-800">
+                        {missingGroups
+                          .flatMap((g) => g.fields)
+                          .filter((f) => CONSENT_FIELD_HINTS[f])
+                          .map((f) => (
+                            <li key={f}>
+                              <span className="font-medium">{f}:</span> {CONSENT_FIELD_HINTS[f]}
+                            </li>
+                          ))}
+                      </ul>
+                    )}
                   </div>
                   {onOpenStudentDetails && missingGroups.some((g) => g.section !== "Assignment") && (
                     <Button

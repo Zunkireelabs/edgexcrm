@@ -24,6 +24,8 @@ export type ClassifiedError =
   | { kind: "blocking"; notice: BlockingNotice }
   | { kind: "toast"; message: string };
 
+import { CONSENT_FIELD_HINTS } from "@/lib/consent/field-hints";
+
 /** Where to fix each piece of a student's profile (matches src/lib/leads/profile-completeness.ts). */
 const MISSING_ITEM_HINTS: Record<string, string> = {
   Name: "Add it with the Edit button at the top of the student's page.",
@@ -62,7 +64,7 @@ export function consentProfileIncompleteNotice(missing: string[]): BlockingNotic
     title: "Complete the student profile first",
     message:
       "The consent document uses these details, and a half-filled profile sends it out with blanks. Add them in Student Details (Edit), then try again.",
-    items: missing.map((label) => ({ label })),
+    items: missing.map((label) => ({ label, hint: CONSENT_FIELD_HINTS[label] })),
   };
 }
 

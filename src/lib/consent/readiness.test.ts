@@ -6,6 +6,7 @@ import {
   AUTOMATIC_PLACEHOLDERS,
   PLACEHOLDER_REQUIREMENTS,
   CONSENT_PROFILE_COLUMNS,
+  consentRequirementGroups,
   type ConsentProfile,
 } from "./readiness";
 import { CONSENT_MERGE_FIELDS } from "./merge";
@@ -163,5 +164,35 @@ describe("CONSENT_PROFILE_COLUMNS", () => {
   it("selects every ConsentProfile field the rules read (assigned_to and guardian_name included)", () => {
     const cols = CONSENT_PROFILE_COLUMNS.split(",").map((c) => c.trim());
     for (const key of Object.keys(complete)) expect(cols).toContain(key);
+  });
+});
+
+describe("consentRequirementGroups — what staff must fill, from the template alone", () => {
+  const ADMIZZ = "{{student_name}} {{date}} {{assign_name}} {{nationality}} {{passport_number}} {{street_address}}, {{city}}, {{country}} {{parent_name}} {{guardian_relationship}}";
+
+  it("lists the always-required fields plus one per placeholder the template uses, in pop-up order", () => {
+    expect(consentRequirementGroups(ADMIZZ)).toEqual([
+      { section: "Personal Information", fields: ["First Name", "Email", "Phone", "Nationality", "City", "Residence Country"] },
+      { section: "Basic Details", fields: ["Full Address"] },
+      { section: "Guardian Details", fields: ["Guardian Name", "Guardian Relationship"] },
+      { section: "Passport & Citizenship", fields: ["Passport Number"] },
+      { section: "Study Interest", fields: ["Field of Study", "Degree Level"] },
+      { section: "Assignment", fields: ["Assigned Counselor"] },
+    ]);
+  });
+
+  it("matches what computeConsentReadiness would ask of an empty profile", () => {
+    const fromTemplate = consentRequirementGroups(ADMIZZ).flatMap((g) => g.fields).sort();
+    const blocked = computeConsentReadiness(ADMIZZ, {
+      ...complete, first_name: null, email: null, phone: null, field_of_study: null, degree_level: null,
+    }).missing.sort();
+    expect(fromTemplate).toEqual(blocked);
+  });
+
+  it("a bare template needs only the basics", () => {
+    expect(consentRequirementGroups("Hello")).toEqual([
+      { section: "Personal Information", fields: ["First Name", "Email", "Phone"] },
+      { section: "Study Interest", fields: ["Field of Study", "Degree Level"] },
+    ]);
   });
 });
