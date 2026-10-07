@@ -473,8 +473,22 @@ describe("consent — counselor name ({{assign_name}} / {{counselor_name}})", ()
     expect(writes).not.toHaveBeenCalled(); // the previous unsigned link is untouched
   });
 
-  it("a counselor lookup failure is refused the same way, never sent as a blank line", async () => {
+  it("an auth outage is a retryable 503 — NOT reported as an incomplete profile — and replaces nothing", async () => {
     getUserByIdMock.mockRejectedValue(new Error("auth down"));
+    const { db, writes } = fakeDb([], { templateBody: TEMPLATE });
+    scopedClientMock.mockResolvedValue(db);
+
+    const { POST } = await import("./route");
+    const res = await POST(post("send"), params());
+    const body = await res.json();
+
+    expect(res.status).toBe(503);
+    expect(body.error.code).toBe("COUNSELOR_LOOKUP_FAILED");
+    expect(writes).not.toHaveBeenCalled();
+  });
+
+  it("an assignee with no usable name or email is the 'Assigned Counselor' 422", async () => {
+    getUserByIdMock.mockResolvedValue({ data: { user: { email: null, user_metadata: {} } } });
     const { db, writes } = fakeDb([], { templateBody: TEMPLATE });
     scopedClientMock.mockResolvedValue(db);
 

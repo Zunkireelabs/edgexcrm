@@ -5,6 +5,7 @@ import {
   ALWAYS_REQUIRED_PLACEHOLDERS,
   AUTOMATIC_PLACEHOLDERS,
   PLACEHOLDER_REQUIREMENTS,
+  CONSENT_PROFILE_COLUMNS,
   type ConsentProfile,
 } from "./readiness";
 import { CONSENT_MERGE_FIELDS } from "./merge";
@@ -155,5 +156,12 @@ describe("every consent placeholder is accounted for", () => {
   it("no requirement exists for a placeholder the template can't use", () => {
     const known = new Set<string>(CONSENT_MERGE_FIELDS);
     for (const key of [...always, ...automatic, ...profile]) expect(known.has(key)).toBe(true);
+  });
+});
+
+describe("CONSENT_PROFILE_COLUMNS", () => {
+  it("selects every ConsentProfile field the rules read (assigned_to and guardian_name included)", () => {
+    const cols = CONSENT_PROFILE_COLUMNS.split(",").map((c) => c.trim());
+    for (const key of Object.keys(complete)) expect(cols).toContain(key);
   });
 });

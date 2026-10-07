@@ -45,7 +45,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function renderCard(showCopyLink?: boolean, isOwnerOrAdmin = false) {
+function renderCard(showCopyLink?: boolean, isOwnerOrAdmin = false, onOpenStudentDetails?: () => void) {
   render(
     <ConsentCard
       leadId="lead-1"
@@ -57,6 +57,7 @@ function renderCard(showCopyLink?: boolean, isOwnerOrAdmin = false) {
       canOverrideProfileCheck={isOwnerOrAdmin}
       showProcessingFee={false}
       showCopyLink={showCopyLink}
+      onOpenStudentDetails={onOpenStudentDetails}
     />
   );
 }
@@ -171,6 +172,30 @@ describe("ConsentCard — incomplete student profile gate", () => {
     expect(screen.getByText("Fill in all of these before consent can go out:")).toBeInTheDocument();
     expect(screen.getByText("Passport Number, Father's Name")).toBeInTheDocument();
     for (const name of ACTIONS) expect(screen.getByRole("button", { name })).toBeDisabled();
+  });
+
+  it("offers 'Open Student Details' for profile gaps, but not when the only gap is the assigned counselor", async () => {
+    statusIs(INCOMPLETE);
+    renderCard(true, false, () => {});
+    await openCard();
+    expect(screen.getByRole("button", { name: /Open Student Details/ })).toBeInTheDocument();
+    cleanup();
+
+    // The counselor isn't set in Student Details, so that button would lead nowhere.
+    statusIs({
+      data: {
+        ...INCOMPLETE.data,
+        readiness: {
+          ready: false,
+          missing: ["Assigned Counselor"],
+          groups: [{ section: "Assignment", fields: ["Assigned Counselor"] }],
+        },
+      },
+    });
+    renderCard(true, false, () => {});
+    await openCard();
+    expect(screen.getByText("Assign a counselor to this lead.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Open Student Details/ })).not.toBeInTheDocument();
   });
 
   it("leaves the actions enabled when the profile is ready (or the server sends no gate)", async () => {

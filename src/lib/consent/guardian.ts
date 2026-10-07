@@ -55,9 +55,31 @@ export function resolveGuardian(input: GuardianInput): ResolvedGuardian {
   if (relationship === GUARDIAN_NOT_APPLICABLE) {
     return { name: NOT_APPLICABLE_TEXT, relationship: NOT_APPLICABLE_TEXT, notApplicable: true };
   }
+  // Father / Mother always print that parent's own name, so a guardian name left over from an earlier
+  // choice can never be paired with the wrong relationship. The typed name is for everyone else (and
+  // the fallback when the chosen parent's own name isn't on file).
   const typed = input.guardianName?.trim() ?? "";
-  let name = typed;
-  if (!name && relationship === "Father") name = input.fatherName?.trim() ?? "";
-  if (!name && relationship === "Mother") name = input.motherName?.trim() ?? "";
+  const parent =
+    relationship === "Father" ? (input.fatherName?.trim() ?? "")
+    : relationship === "Mother" ? (input.motherName?.trim() ?? "")
+    : "";
+  const name = parent || typed;
   return { name, relationship, notApplicable: false };
+}
+
+/**
+ * Guardian Name after the relationship dropdown changes (Student Details form). An empty name, or one
+ * that is just a parent's name from the previous choice (Father -> Mother), is replaced: Father/Mother
+ * take that parent's name (or clear it when it isn't on file), anyone else clears it to be typed.
+ * A name typed by hand for someone else is kept.
+ */
+export function guardianNameAfterRelationshipChange(
+  value: string,
+  prev: { guardianName?: string | null; fatherName?: string | null; motherName?: string | null },
+): string {
+  const current = prev.guardianName?.trim() ?? "";
+  const father = prev.fatherName?.trim() ?? "";
+  const mother = prev.motherName?.trim() ?? "";
+  if (current && current !== father && current !== mother) return current;
+  return value === "Father" ? father : value === "Mother" ? mother : "";
 }

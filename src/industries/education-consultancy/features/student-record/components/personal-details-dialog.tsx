@@ -28,7 +28,7 @@ import { TestScoresSection, testScoresFromLead, legacyScoreColumns, type TestSco
 import { QualificationsSection, qualificationsFromLead, type Qualifications } from "./qualifications-section";
 import { WorkExperienceSection, type WorkExperienceEntry } from "./work-experience-section";
 import { ReferencesSection, type ReferenceEntry } from "./references-section";
-import { GUARDIAN_RELATIONSHIP_OPTIONS, normalizeGuardianRelationship } from "@/lib/consent/guardian";
+import { GUARDIAN_RELATIONSHIP_OPTIONS, normalizeGuardianRelationship, guardianNameAfterRelationshipChange } from "@/lib/consent/guardian";
 import { SectionGroup, CardSection, FieldGrid, EditableField } from "./form-primitives";
 import { AttachDocumentButton } from "./attach-document-button";
 import { PERSONAL_DETAIL_COLUMNS, PERSONAL_DETAIL_DATE_COLUMNS } from "@/lib/leads/personal-details";
@@ -448,10 +448,13 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
   const handleChange = (key: string, value: string) => {
     setDraft((prev) => {
       const next = { ...prev, [key]: value };
-      // Father / Mother pre-fills the guardian's name from the parent names, when none is typed yet.
-      if (key === "guardian_relationship" && !(prev.guardian_name ?? "").trim()) {
-        if (value === "Father" && prev.father_name?.trim()) next.guardian_name = prev.father_name.trim();
-        if (value === "Mother" && prev.mother_name?.trim()) next.guardian_name = prev.mother_name.trim();
+      // Keep Guardian Name in step with the relationship (see guardianNameAfterRelationshipChange).
+      if (key === "guardian_relationship") {
+        next.guardian_name = guardianNameAfterRelationshipChange(value, {
+          guardianName: prev.guardian_name,
+          fatherName: prev.father_name,
+          motherName: prev.mother_name,
+        });
       }
       return next;
     });

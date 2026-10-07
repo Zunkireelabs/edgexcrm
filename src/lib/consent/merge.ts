@@ -73,8 +73,11 @@ export const CONSENT_MERGE_FIELDS = [
 export function findUnknownPlaceholders(body: string | null | undefined): string[] {
   const known = new Set<string>(CONSENT_MERGE_FIELDS);
   const unknown = new Set<string>();
-  for (const m of (body ?? "").matchAll(/\{\{\s*([a-z_]+)\s*\}\}/gi)) {
-    if (!known.has(m[1].toLowerCase())) unknown.add(m[1].toLowerCase());
+  // Any {{token}} (hyphens, digits, spaces inside): fillConsentTemplate only fills [a-z_]+ names, so
+  // `{{guardian-name}}` or `{{field2}}` would otherwise reach the student raw with no warning.
+  for (const m of (body ?? "").matchAll(/\{\{\s*([^{}]*?)\s*\}\}/g)) {
+    const token = m[1].toLowerCase();
+    if (!known.has(token)) unknown.add(token);
   }
   return [...unknown];
 }

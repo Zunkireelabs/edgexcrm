@@ -540,7 +540,7 @@ export function ConsentCard({
                     </ul>
                     <p className="mt-1 text-amber-800">{missingFixHint(missingGroups, "from")}</p>
                   </div>
-                  {onOpenStudentDetails && (
+                  {onOpenStudentDetails && missingGroups.some((g) => g.section !== "Assignment") && (
                     <Button
                       size="sm"
                       variant="outline"

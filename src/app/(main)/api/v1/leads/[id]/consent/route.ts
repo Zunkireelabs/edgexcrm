@@ -63,26 +63,52 @@ function isUniqueViolation(error: unknown): boolean {
 
 const COUNSELOR_PLACEHOLDERS = ["counselor_name", "assign_name"];
 
+type CounselorLookup =
+  | { used: false }
+  | { used: true; name: string; failed: false }
+  | { used: true; name: ""; failed: boolean };
+
 // Display name of the lead's assigned counselor, for {{counselor_name}} / {{assign_name}}. Same name
 // source as the rest of the app (auth user_metadata name / full_name), falling back to their email.
-// Only looked up when the template actually uses the placeholder. Never throws: "" means "couldn't
-// resolve", which the caller turns into a clear blocked-send message instead of a blank line.
-async function resolveCounselorName(
+// Only looked up when the template actually uses the placeholder (parsed once, here). Never throws:
+// `failed` separates "the auth service errored" (retry later) from "the assignee has no usable name"
+// (assign someone else), so an outage is never reported as an incomplete profile.
+async function resolveCounselor(
+  log: ReturnType<typeof createRequestLogger>,
   supabase: Awaited<ReturnType<typeof createServiceClient>>,
   assignedTo: string | null,
   templateBody: string | null | undefined,
-): Promise<string> {
-  if (!assignedTo) return "";
-  const used = extractTemplatePlaceholders(templateBody).some((p) => COUNSELOR_PLACEHOLDERS.includes(p));
-  if (!used) return "";
+): Promise<CounselorLookup> {
+  if (!extractTemplatePlaceholders(templateBody).some((p) => COUNSELOR_PLACEHOLDERS.includes(p))) return { used: false };
+  if (!assignedTo) return { used: true, name: "", failed: false };
   try {
-    const { data } = await supabase.auth.admin.getUserById(assignedTo);
+    const { data, error } = await supabase.auth.admin.getUserById(assignedTo);
+    if (error) throw error;
     const user = data?.user;
     const meta = (user?.user_metadata ?? {}) as { name?: string; full_name?: string };
-    return (meta.name || meta.full_name || user?.email || "").trim();
-  } catch {
-    return "";
+    const name = (meta.name || meta.full_name || user?.email || "").trim();
+    if (!name) log.warn({ assignedTo }, "consent: assigned counselor has no name or email");
+    return { used: true, name, failed: false } as CounselorLookup;
+  } catch (err) {
+    log.error({ err, assignedTo }, "consent: could not look up the assigned counselor's name");
+    return { used: true, name: "", failed: true };
   }
+}
+
+// The profile-readiness gate already refuses a lead with NO assignee. This catches what it can't see:
+// an assignee whose name can't be resolved (deleted auth user) or an auth-service outage. Runs before
+// the previous unsigned consent is replaced so a refusal leaves the existing link untouched.
+function counselorRefusal(lookup: CounselorLookup, overrideRequested: boolean, industryId: string | null) {
+  if (!lookup.used || lookup.name || overrideRequested || industryId !== "education_consultancy") return null;
+  if (lookup.failed) {
+    return apiError("COUNSELOR_LOOKUP_FAILED", "Couldn't look up the assigned counselor right now. Please try again in a moment.", 503);
+  }
+  return apiError(
+    "PROFILE_INCOMPLETE_FOR_CONSENT",
+    consentProfileIncompleteMessage(["Assigned Counselor"]),
+    422,
+    { missing: ["Assigned Counselor"] },
+  );
 }
 
 function consentInProgress() {
@@ -104,7 +130,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   // Verify lead belongs to tenant (with the profile columns, so the readiness check below needs no re-read)
   const { data: lead } = await supabase
     .from("leads")
-    .select(`id, branch_id, ${CONSENT_PROFILE_COLUMNS}`)
+    .select(`id, assigned_to, branch_id, ${CONSENT_PROFILE_COLUMNS}`)
     .eq("id", id)
     .eq("tenant_id", auth.tenantId)
     .is("deleted_at", null)
@@ -185,7 +211,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   // Verify lead belongs to tenant
   const { data: lead } = await supabase
     .from("leads")
-    .select(`id, branch_id, last_name, ${CONSENT_PROFILE_COLUMNS}`)
+    .select(`id, assigned_to, branch_id, last_name, ${CONSENT_PROFILE_COLUMNS}`)
     .eq("id", id)
     .eq("tenant_id", auth.tenantId)
     .is("deleted_at", null)
@@ -307,20 +333,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     // Resolve the counselor BEFORE the previous unsigned consent is replaced below, so a failure
     // here leaves the existing link untouched.
-    const counselorName = await resolveCounselorName(supabase, leadRow.assigned_to, tplRow.body);
-    if (
-      auth.industryId === "education_consultancy" &&
-      body.override_profile_check !== true &&
-      !counselorName &&
-      extractTemplatePlaceholders(tplRow.body).some((p) => COUNSELOR_PLACEHOLDERS.includes(p))
-    ) {
-      return apiError(
-        "PROFILE_INCOMPLETE_FOR_CONSENT",
-        consentProfileIncompleteMessage(["Assigned Counselor"]),
-        422,
-        { missing: ["Assigned Counselor"] },
-      );
-    }
+    const counselor = await resolveCounselor(log, supabase, leadRow.assigned_to, tplRow.body);
+    const counselorBlocked = counselorRefusal(counselor, body.override_profile_check === true, auth.industryId);
+    if (counselorBlocked) return counselorBlocked;
+    const counselorName = counselor.used ? counselor.name : "";
 
     // Soft-delete any prior unsigned consent for this lead
     await db
@@ -471,20 +487,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     // Resolve the counselor BEFORE the previous unsigned consent is replaced below, so a failure
     // here leaves the existing link untouched.
-    const counselorName = await resolveCounselorName(supabase, leadRow.assigned_to, tplRow.body);
-    if (
-      auth.industryId === "education_consultancy" &&
-      body.override_profile_check !== true &&
-      !counselorName &&
-      extractTemplatePlaceholders(tplRow.body).some((p) => COUNSELOR_PLACEHOLDERS.includes(p))
-    ) {
-      return apiError(
-        "PROFILE_INCOMPLETE_FOR_CONSENT",
-        consentProfileIncompleteMessage(["Assigned Counselor"]),
-        422,
-        { missing: ["Assigned Counselor"] },
-      );
-    }
+    const counselor = await resolveCounselor(log, supabase, leadRow.assigned_to, tplRow.body);
+    const counselorBlocked = counselorRefusal(counselor, body.override_profile_check === true, auth.industryId);
+    if (counselorBlocked) return counselorBlocked;
+    const counselorName = counselor.used ? counselor.name : "";
 
     await db
       .from("lead_consents")

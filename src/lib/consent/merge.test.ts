@@ -62,7 +62,9 @@ describe("buildConsentMergeData — profile fields", () => {
     const both = { ...base, fatherName: "Ram", motherName: "Sita" };
     expect(buildConsentMergeData({ ...both, guardianRelationship: "Father" }).parent_name).toBe("Ram");
     expect(buildConsentMergeData({ ...both, guardianRelationship: "mother" }).parent_name).toBe("Sita");
-    expect(buildConsentMergeData({ ...both, guardianRelationship: "Father", guardianName: "Hari" }).parent_name).toBe("Hari");
+    // Father/Mother always print that parent's own name — a stale typed name can't be paired with them.
+    expect(buildConsentMergeData({ ...both, guardianRelationship: "Mother", guardianName: "Ram" }).parent_name).toBe("Sita");
+    expect(buildConsentMergeData({ ...base, guardianRelationship: "Father", guardianName: "Hari" }).parent_name).toBe("Hari"); // parent not on file -> typed name
     expect(buildConsentMergeData({ ...both, guardianRelationship: "Uncle", guardianName: "Hari" }).guardian_name).toBe("Hari");
     // No relationship / a relationship with no typed name -> blank (readiness blocks the send), never both parents.
     expect(buildConsentMergeData(both).parent_name).toBe("");
@@ -239,5 +241,15 @@ describe("findUnknownPlaceholders", () => {
   it("flags tokens that would reach students raw, ignores known ones, de-duplicates", () => {
     expect(findUnknownPlaceholders("{{student_name}} {{assign_name}} {{ Counselor_Nme }} {{counselor_nme}}")).toEqual(["counselor_nme"]);
     expect(findUnknownPlaceholders(null)).toEqual([]);
+  });
+});
+
+describe("findUnknownPlaceholders — odd tokens", () => {
+  it("flags hyphenated, numbered and spaced tokens that fillConsentTemplate would leave raw", () => {
+    expect(findUnknownPlaceholders("{{guardian-name}} {{field2}} {{ guardian name }} {{student_name}}")).toEqual([
+      "guardian-name",
+      "field2",
+      "guardian name",
+    ]);
   });
 });
