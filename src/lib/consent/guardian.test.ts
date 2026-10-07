@@ -22,9 +22,15 @@ describe("guardianNameAfterRelationshipChange — switching the relationship nev
     expect(guardianNameAfterRelationshipChange("Mother", { fatherName: "Ram", guardianName: "Ram" })).toBe("");
   });
 
-  it("a name typed by hand is never overwritten", () => {
-    expect(guardianNameAfterRelationshipChange("Mother", { ...parents, guardianName: "Hari Sharma" })).toBe("Hari Sharma");
-    expect(guardianNameAfterRelationshipChange("Father", { ...parents, guardianName: "  Hari Sharma " })).toBe("Hari Sharma");
+  it("Father/Mother always take that parent's name when it's on file — even over a leftover typed name", () => {
+    // Uncle "Hari" -> Father: the screen locks "Ram" and the form prints "Ram", so "Hari" must not be saved.
+    expect(guardianNameAfterRelationshipChange("Father", { ...parents, guardianName: "Hari" })).toBe("Ram");
+    expect(guardianNameAfterRelationshipChange("Mother", { ...parents, guardianName: "Hari Sharma" })).toBe("Sita");
+  });
+
+  it("anyone else keeps a name typed by hand; a parent whose name isn't on file keeps it too", () => {
+    expect(guardianNameAfterRelationshipChange("Uncle", { ...parents, guardianName: "Hari Sharma" })).toBe("Hari Sharma");
+    expect(guardianNameAfterRelationshipChange("Father", { motherName: "Sita", guardianName: " Hari Sharma " })).toBe("Hari Sharma");
   });
 });
 
@@ -36,8 +42,19 @@ describe("resolveGuardian", () => {
     expect(resolveGuardian({ guardianRelationship: "Father", guardianName: "Hari" }).name).toBe("Hari");
     expect(resolveGuardian({ guardianRelationship: "Uncle", guardianName: "Hari", fatherName: "Ram" }).name).toBe("Hari");
   });
-  it("no relationship chosen -> no name (never guesses between the parents)", () => {
-    expect(resolveGuardian({ fatherName: "Ram", motherName: "Sita" }).name).toBe("");
+  it("no relationship chosen: the ONLY parent on file is the guardian (computed, not saved)", () => {
+    expect(resolveGuardian({ fatherName: "Ram" })).toEqual({ name: "Ram", relationship: "Father", notApplicable: false });
+    expect(resolveGuardian({ motherName: "Sita" })).toEqual({ name: "Sita", relationship: "Mother", notApplicable: false });
+    expect(resolveGuardian({ fatherName: "Ram", motherName: " " }).name).toBe("Ram");
+  });
+  it("no relationship chosen and BOTH parents on file -> nothing: never guesses between two people", () => {
+    expect(resolveGuardian({ fatherName: "Ram", motherName: "Sita" })).toEqual({ name: "", relationship: "", notApplicable: false });
+  });
+  it("no relationship, no parents -> nothing", () => {
+    expect(resolveGuardian({})).toEqual({ name: "", relationship: "", notApplicable: false });
+  });
+  it("a typed guardian name still counts when no relationship/parent decides it", () => {
+    expect(resolveGuardian({ guardianName: "Hari", fatherName: "Ram", motherName: "Sita" }).name).toBe("Hari");
   });
   it("normalizes legacy text", () => {
     expect(normalizeGuardianRelationship(" FATHER ")).toBe("Father");

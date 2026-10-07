@@ -28,7 +28,7 @@ import { TestScoresSection, testScoresFromLead, legacyScoreColumns, type TestSco
 import { QualificationsSection, qualificationsFromLead, type Qualifications } from "./qualifications-section";
 import { WorkExperienceSection, type WorkExperienceEntry } from "./work-experience-section";
 import { ReferencesSection, type ReferenceEntry } from "./references-section";
-import { GUARDIAN_RELATIONSHIP_OPTIONS, normalizeGuardianRelationship, guardianNameAfterRelationshipChange } from "@/lib/consent/guardian";
+import { GUARDIAN_RELATIONSHIP_OPTIONS, normalizeGuardianRelationship, guardianNameAfterRelationshipChange, resolveGuardian } from "@/lib/consent/guardian";
 import { SectionGroup, CardSection, FieldGrid, EditableField } from "./form-primitives";
 import { AttachDocumentButton } from "./attach-document-button";
 import { PERSONAL_DETAIL_COLUMNS, PERSONAL_DETAIL_DATE_COLUMNS } from "@/lib/leads/personal-details";
@@ -553,14 +553,25 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
               <FieldGrid>
                 {GUARDIAN_FIELDS.map((field) => {
                   const shown = isEditing ? draft : values;
-                  // Father / Mother: the consent prints that parent's own name, so show exactly that (locked)
-                  // instead of a box whose contents the form would ignore.
-                  const relationship = normalizeGuardianRelationship(shown.guardian_relationship);
+                  // Father / Mother (picked, or the only parent on file): the consent prints that parent's own
+                  // name, so show exactly that (locked) instead of a box whose contents the form would ignore.
+                  const effective = resolveGuardian({
+                    guardianName: shown.guardian_name,
+                    guardianRelationship: shown.guardian_relationship,
+                    fatherName: shown.father_name,
+                    motherName: shown.mother_name,
+                  });
                   const parentName =
-                    relationship === "Father" ? (shown.father_name ?? "").trim()
-                    : relationship === "Mother" ? (shown.mother_name ?? "").trim()
+                    effective.relationship === "Father" ? (shown.father_name ?? "").trim()
+                    : effective.relationship === "Mother" ? (shown.mother_name ?? "").trim()
                     : "";
                   const fromParent = field.key === "guardian_name" && !!parentName;
+                  const picked = !!normalizeGuardianRelationship(shown.guardian_relationship);
+                  const note = !fromParent
+                    ? undefined
+                    : picked
+                      ? `Taken from ${effective.relationship}'s Name above. Change it there.`
+                      : `Defaults to ${effective.relationship} (the only parent on file). Pick a relationship to change it.`;
                   return (
                     <EditableField
                       key={field.key}
@@ -568,7 +579,7 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
                       isEditing={isEditing}
                       value={fromParent ? parentName : shown[field.key] || ""}
                       onChange={(v) => handleChange(field.key, v)}
-                      readOnlyNote={fromParent ? `Taken from ${relationship}'s Name above. Change it there.` : undefined}
+                      readOnlyNote={note}
                     />
                   );
                 })}

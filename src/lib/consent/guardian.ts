@@ -51,27 +51,29 @@ export interface ResolvedGuardian {
 }
 
 export function resolveGuardian(input: GuardianInput): ResolvedGuardian {
-  const relationship = normalizeGuardianRelationship(input.guardianRelationship);
+  const father = input.fatherName?.trim() ?? "";
+  const mother = input.motherName?.trim() ?? "";
+  let relationship = normalizeGuardianRelationship(input.guardianRelationship);
   if (relationship === GUARDIAN_NOT_APPLICABLE) {
     return { name: NOT_APPLICABLE_TEXT, relationship: NOT_APPLICABLE_TEXT, notApplicable: true };
   }
+  // Nothing picked yet (every lead that predates the relationship field): if exactly ONE parent is on
+  // file, that parent is the guardian. Worked out when the form is built, never saved. With both
+  // parents on file it stays empty — we never guess between two people.
+  if (!relationship && (father ? !mother : !!mother)) relationship = father ? "Father" : "Mother";
+
   // Father / Mother always print that parent's own name, so a guardian name left over from an earlier
   // choice can never be paired with the wrong relationship. The typed name is for everyone else (and
   // the fallback when the chosen parent's own name isn't on file).
   const typed = input.guardianName?.trim() ?? "";
-  const parent =
-    relationship === "Father" ? (input.fatherName?.trim() ?? "")
-    : relationship === "Mother" ? (input.motherName?.trim() ?? "")
-    : "";
+  const parent = relationship === "Father" ? father : relationship === "Mother" ? mother : "";
   const name = parent || typed;
   return { name, relationship, notApplicable: false };
 }
 
 /**
- * Guardian Name after the relationship dropdown changes (Student Details form). An empty name, or one
- * that is just a parent's name from the previous choice (Father -> Mother), is replaced: Father/Mother
- * take that parent's name (or clear it when it isn't on file), anyone else clears it to be typed.
- * A name typed by hand for someone else is kept.
+ * Guardian Name after the relationship dropdown changes (Student Details form). Father/Mother take that
+ * parent's own name; for anyone else a name typed by hand is kept and a leftover parent name is cleared.
  */
 export function guardianNameAfterRelationshipChange(
   value: string,
@@ -80,6 +82,10 @@ export function guardianNameAfterRelationshipChange(
   const current = prev.guardianName?.trim() ?? "";
   const father = prev.fatherName?.trim() ?? "";
   const mother = prev.motherName?.trim() ?? "";
-  if (current && current !== father && current !== mother) return current;
-  return value === "Father" ? father : value === "Mother" ? mother : "";
+  // Father / Mother: that parent's own name, always — the form prints it and the screen locks it, so the
+  // stored name must match (a leftover "Hari" from an earlier Uncle choice would otherwise be saved).
+  const parent = value === "Father" ? father : value === "Mother" ? mother : "";
+  if (parent) return parent;
+  // Anyone else (or a parent whose name isn't on file): keep a name typed by hand, drop a leftover parent name.
+  return current && current !== father && current !== mother ? current : "";
 }

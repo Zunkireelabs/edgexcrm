@@ -18,10 +18,9 @@ import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { sendConsentEmail } from "@/lib/email/send-consent";
 import { APP_URL } from "@/lib/email";
 import { prepareConsentBody, buildConsentMergeData } from "@/lib/consent/merge";
-import { extractTemplatePlaceholders } from "@/lib/consent/readiness";
 import { resolveConsentStatus, type ConsentRecordRow } from "@/lib/consent/resolve-status";
 import { touchLeadUpdatedAt } from "@/lib/leads/touch-updated-at";
-import { loadConsentReadiness, CONSENT_PROFILE_COLUMNS, type ConsentProfile } from "@/lib/consent/readiness";
+import { loadConsentReadiness, extractTemplatePlaceholders, CONSENT_PROFILE_COLUMNS, type ConsentProfile } from "@/lib/consent/readiness";
 import { consentProfileIncompleteMessage } from "@/lib/blocking-notice";
 
 interface RouteContext {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,6 +40,7 @@ function buildDefault(): Omit<ConsentTemplate, "id" | "version"> {
 export function ConsentManager() {
   const [template, setTemplate] = useState<ConsentTemplate | null>(null);
   const [form, setForm] = useState(buildDefault());
+  const unknownPlaceholders = useMemo(() => findUnknownPlaceholders(form.body), [form.body]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -204,10 +205,10 @@ export function ConsentManager() {
             rows={8}
             className="w-full px-3 py-2 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring resize-none"
           />
-          {findUnknownPlaceholders(form.body).length > 0 && (
+          {unknownPlaceholders.length > 0 && (
             <p role="alert" className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
               These placeholders aren&apos;t recognised and will show as-is to students:{" "}
-              {findUnknownPlaceholders(form.body).map((t) => `{{${t}}}`).join(", ")}. Check the spelling against the list below.
+              {unknownPlaceholders.map((t) => `{{${t}}}`).join(", ")}. Check the spelling against the list below.
             </p>
           )}
           {form.body.trim() && (

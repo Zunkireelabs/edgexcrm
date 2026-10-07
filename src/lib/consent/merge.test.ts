@@ -72,6 +72,13 @@ describe("buildConsentMergeData — profile fields", () => {
     expect(buildConsentMergeData({ ...base, guardianRelationship: "Father", fatherName: "  " }).parent_name).toBe("");
   });
 
+  it("existing lead with one parent and no relationship: prints that parent AND the matching relationship", () => {
+    const d = buildConsentMergeData({ ...base, fatherName: "Ram" });
+    expect([d.parent_name, d.guardian_relationship]).toEqual(["Ram", "Father"]);
+    const both = buildConsentMergeData({ ...base, fatherName: "Ram", motherName: "Sita" });
+    expect([both.parent_name, both.guardian_relationship]).toEqual(["", ""]);
+  });
+
   it("'None / Not applicable' prints N/A for the guardian lines", () => {
     const d = buildConsentMergeData({ ...base, guardianRelationship: "None", fatherName: "Ram" });
     expect([d.parent_name, d.guardian_relationship, d.guardian_phone, d.guardian_email]).toEqual(["N/A", "N/A", "N/A", "N/A"]);

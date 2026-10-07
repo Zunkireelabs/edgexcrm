@@ -101,6 +101,19 @@ describe("computeConsentReadiness", () => {
     expect(computeConsentReadiness(tpl, { ...complete, guardian_relationship: "Uncle", guardian_name: "Hari" }).ready).toBe(true);
   });
 
+  it("existing leads (no relationship yet) pass when exactly one parent is on file, and are told what to do when both are", () => {
+    const tpl = "{{parent_name}} {{guardian_relationship}}";
+    expect(computeConsentReadiness(tpl, { ...complete, father_name: "Ram" }).ready).toBe(true);
+    expect(computeConsentReadiness(tpl, { ...complete, mother_name: "Sita" }).ready).toBe(true);
+    // Both parents, nothing picked: staff must choose — we don't guess.
+    expect(computeConsentReadiness(tpl, { ...complete, father_name: "Ram", mother_name: "Sita" }).missing).toEqual([
+      "Guardian Name",
+      "Guardian Relationship",
+    ]);
+    // No parents at all: same.
+    expect(computeConsentReadiness(tpl, complete).missing).toEqual(["Guardian Name", "Guardian Relationship"]);
+  });
+
   it("'None / Not applicable' needs no guardian name, phone or email", () => {
     const tpl = "{{parent_name}} {{guardian_relationship}} {{guardian_phone}} {{guardian_email}}";
     expect(computeConsentReadiness(tpl, { ...complete, guardian_relationship: "None" }).ready).toBe(true);

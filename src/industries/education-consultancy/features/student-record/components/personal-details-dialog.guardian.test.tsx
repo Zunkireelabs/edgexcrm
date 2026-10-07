@@ -53,4 +53,19 @@ describe("Guardian Name in Student Details", () => {
     await waitFor(() => expect(guardianInput()).not.toBeNull());
     expect(guardianInput()).toBeEnabled();
   });
+
+  it("no relationship picked, only one parent on file: shows that parent, locked, saying it's a default", async () => {
+    open({ guardian_relationship: null, father_name: "Ram", mother_name: null });
+    await waitFor(() => expect(guardianInput()).not.toBeNull());
+    expect(guardianInput().value).toBe("Ram");
+    expect(guardianInput()).toBeDisabled();
+    expect(screen.getByText("Defaults to Father (the only parent on file). Pick a relationship to change it.")).toBeInTheDocument();
+  });
+
+  it("no relationship picked, both parents on file: editable and empty — staff must choose", async () => {
+    open({ guardian_relationship: null });
+    await waitFor(() => expect(guardianInput()).not.toBeNull());
+    expect(guardianInput().value).toBe("");
+    expect(guardianInput()).toBeEnabled();
+  });
 });

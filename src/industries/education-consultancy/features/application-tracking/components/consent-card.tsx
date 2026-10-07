@@ -65,15 +65,6 @@ function MissingGroupText({ group }: { group: MissingGroupView }) {
   );
 }
 
-/**
- * One hover hint for the whole group of consent buttons while they are blocked.
- *
- * Open/closed is controlled by plain pointer/focus handlers on the group (Radix's own open logic is
- * ignored): Radix closes a tooltip on pointer-down and keeps it closed until the pointer leaves, and
- * people click greyed-out buttons all the time — that made the hint come late, stick, or not come at
- * all. Disabled buttons have pointer-events:none, so hover lands on the group itself; one trigger
- * also means no dead zones in the gaps between buttons.
- */
 /** Where to fix what's missing — the assigned counselor is set on the lead, not in Student Details. */
 function missingFixHint(groups: MissingGroupView[], preposition: "in" | "from" = "in"): string {
   const hasAssignment = groups.some((g) => g.section === "Assignment");
@@ -83,6 +74,15 @@ function missingFixHint(groups: MissingGroupView[], preposition: "in" | "from" =
   return `Add them ${preposition} Student Details (Edit).`;
 }
 
+/**
+ * One hover hint for the whole group of consent buttons while they are blocked.
+ *
+ * Open/closed is controlled by plain pointer/focus handlers on the group (Radix's own open logic is
+ * ignored): Radix closes a tooltip on pointer-down and keeps it closed until the pointer leaves, and
+ * people click greyed-out buttons all the time — that made the hint come late, stick, or not come at
+ * all. Disabled buttons have pointer-events:none, so hover lands on the group itself; one trigger
+ * also means no dead zones in the gaps between buttons.
+ */
 function BlockedHintTooltip({ groups, className, children }: { groups: MissingGroupView[]; className: string; children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const groupRef = useRef<HTMLDivElement>(null);

@@ -73,13 +73,14 @@ const filled = (v: string | null | undefined) => !!v?.trim();
 
 /** "None / Not applicable" guardian: the form prints N/A, so the guardian's own details aren't required. */
 const noGuardian = (p: ConsentProfile) => normalizeGuardianRelationship(p.guardian_relationship) === GUARDIAN_NOT_APPLICABLE;
-const guardianName = (p: ConsentProfile) =>
+const effectiveGuardian = (p: ConsentProfile) =>
   resolveGuardian({
     guardianName: p.guardian_name,
     guardianRelationship: p.guardian_relationship,
     fatherName: p.father_name,
     motherName: p.mother_name,
-  }).name;
+  });
+const guardianName = (p: ConsentProfile) => effectiveGuardian(p).name;
 
 /** Covered by the always-required name / email / phone checks below. */
 export const ALWAYS_REQUIRED_PLACEHOLDERS = ["student_name", "student_email", "student_phone"] as const;
@@ -106,7 +107,7 @@ export const PLACEHOLDER_REQUIREMENTS: Record<string, { label: string; section: 
   date_of_birth: { label: "Date of Birth", section: "Basic Details", ok: (p) => filled(p.date_of_birth) },
   guardian_phone: { label: "Guardian Phone", section: "Guardian Details", ok: (p) => noGuardian(p) || filled(p.guardian_phone) },
   guardian_email: { label: "Guardian Email", section: "Guardian Details", ok: (p) => noGuardian(p) || filled(p.guardian_email) },
-  guardian_relationship: { label: "Guardian Relationship", section: "Guardian Details", ok: (p) => filled(p.guardian_relationship) },
+  guardian_relationship: { label: "Guardian Relationship", section: "Guardian Details", ok: (p) => filled(effectiveGuardian(p).relationship) },
 };
 
 /** The distinct `{{placeholders}}` used in a template body. */
