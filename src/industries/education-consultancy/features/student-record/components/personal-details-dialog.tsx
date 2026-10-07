@@ -551,15 +551,27 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
                 guardian.
               </p>
               <FieldGrid>
-                {GUARDIAN_FIELDS.map((field) => (
-                  <EditableField
-                    key={field.key}
-                    field={withLegacyRelationshipOption(field, (isEditing ? draft : values).guardian_relationship)}
-                    isEditing={isEditing}
-                    value={(isEditing ? draft : values)[field.key] || ""}
-                    onChange={(v) => handleChange(field.key, v)}
-                  />
-                ))}
+                {GUARDIAN_FIELDS.map((field) => {
+                  const shown = isEditing ? draft : values;
+                  // Father / Mother: the consent prints that parent's own name, so show exactly that (locked)
+                  // instead of a box whose contents the form would ignore.
+                  const relationship = normalizeGuardianRelationship(shown.guardian_relationship);
+                  const parentName =
+                    relationship === "Father" ? (shown.father_name ?? "").trim()
+                    : relationship === "Mother" ? (shown.mother_name ?? "").trim()
+                    : "";
+                  const fromParent = field.key === "guardian_name" && !!parentName;
+                  return (
+                    <EditableField
+                      key={field.key}
+                      field={withLegacyRelationshipOption(field, shown.guardian_relationship)}
+                      isEditing={isEditing}
+                      value={fromParent ? parentName : shown[field.key] || ""}
+                      onChange={(v) => handleChange(field.key, v)}
+                      readOnlyNote={fromParent ? `Taken from ${relationship}'s Name above. Change it there.` : undefined}
+                    />
+                  );
+                })}
               </FieldGrid>
             </CardSection>
 

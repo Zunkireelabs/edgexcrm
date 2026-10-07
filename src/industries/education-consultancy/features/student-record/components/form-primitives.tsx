@@ -111,11 +111,14 @@ export function EditableField({
   isEditing,
   value,
   onChange,
+  readOnlyNote,
 }: {
   field: FieldDef;
   isEditing: boolean;
   value: string;
   onChange: (value: string) => void;
+  /** Shows the value but locks it, with this note beneath (a field that is derived from another one). */
+  readOnlyNote?: string;
 }) {
   return (
     <div className={field.span === 2 ? "col-span-full" : undefined}>
@@ -146,7 +149,10 @@ export function EditableField({
               onChange={(e) => onChange(e.target.value)}
               placeholder={field.placeholder ?? `Enter ${field.label.toLowerCase()}`}
               className="h-9 text-sm"
+              readOnly={!!readOnlyNote}
+              disabled={!!readOnlyNote}
             />
+            {readOnlyNote && <p className="mt-1 text-xs text-muted-foreground">{readOnlyNote}</p>}
           </>
         )
       ) : (
