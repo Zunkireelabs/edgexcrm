@@ -7,6 +7,7 @@ import { Bell, CheckCheck, Settings, X } from "lucide-react";
 import {
   NotificationList,
   NotificationEmptyState,
+  NotificationSkeleton,
   type Notification,
 } from "./notification-card";
 
@@ -142,13 +143,13 @@ export function NotificationsDropdown() {
           <aside
             role="dialog"
             aria-label="Notifications"
-            className="fixed right-0 top-0 z-50 flex h-full w-[440px] max-w-full flex-col bg-white shadow-2xl border-l border-gray-200 animate-in slide-in-from-right duration-200"
+            className="fixed right-0 top-0 z-50 flex h-full w-full flex-col sm:w-[400px] bg-white shadow-2xl border-l border-gray-200 animate-in slide-in-from-right duration-200"
           >
             {/* Header — title (left), settings gear + close (right) */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
               <div className="flex items-center gap-2.5">
-                <Bell className="w-5 h-5 text-gray-900" />
-                <h3 className="text-base font-semibold text-gray-900">Notifications</h3>
+                <Bell className="w-[18px] h-[18px] text-gray-900" />
+                <h3 className="text-[15px] font-semibold text-gray-900">Notifications</h3>
               </div>
               <div className="flex items-center gap-1">
                 <button
@@ -171,14 +172,14 @@ export function NotificationsDropdown() {
             </div>
 
             {/* Underline tabs (Unread / All) + Mark all as read */}
-            <div className="flex items-end justify-between gap-2 border-b border-gray-200 px-5">
+            <div className="flex items-end justify-between gap-2 border-b border-gray-200 px-4">
               <div className="flex items-center gap-6">
                 {(["unread", "all"] as const).map((t) => (
                   <button
                     key={t}
                     type="button"
                     onClick={() => setTab(t)}
-                    className={`-mb-px border-b-2 py-3 text-sm font-medium transition-colors ${
+                    className={`-mb-px border-b-2 py-2.5 text-sm font-medium transition-colors ${
                       tab === t
                         ? "border-gray-900 text-gray-900"
                         : "border-transparent text-gray-500 hover:text-gray-900"
@@ -203,9 +204,7 @@ export function NotificationsDropdown() {
             {/* Latest notifications (capped) */}
             <div className="flex-1 overflow-y-auto">
               {loading ? (
-                <div className="flex items-center justify-center py-12">
-                  <div className="w-6 h-6 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin" />
-                </div>
+                <NotificationSkeleton />
               ) : notifications.length === 0 ? (
                 <NotificationEmptyState unreadTab={tab === "unread"} />
               ) : (
@@ -219,7 +218,7 @@ export function NotificationsDropdown() {
             </div>
 
             {/* Footer — always points at the full page */}
-            <div className="border-t border-gray-200 bg-white px-5 py-3 text-center">
+            <div className="border-t border-gray-200 bg-white px-4 py-2.5 text-center">
               <Link
                 href="/notifications"
                 onClick={() => setIsOpen(false)}

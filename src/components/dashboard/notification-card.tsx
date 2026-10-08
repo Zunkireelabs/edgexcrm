@@ -1,9 +1,12 @@
 "use client";
 
 import { Fragment } from "react";
+import { NOTIFICATION_CATEGORIES, type NotificationCategoryKey } from "@/lib/notification-categories";
 import {
+  AtSign,
   Bell,
   Check,
+  ChevronRight,
   UserPlus,
   UserMinus,
   UserCheck,
@@ -33,13 +36,16 @@ export interface Notification {
 }
 
 // Buckets a notification date into a section-header label.
-export function dateBucket(date: Date): "Today" | "Yesterday" | "Earlier" {
+export function dateBucket(date: Date): "Today" | "Yesterday" | "This week" | "Earlier" {
   const now = new Date();
   const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const startYesterday = new Date(startToday);
   startYesterday.setDate(startYesterday.getDate() - 1);
+  const startWeek = new Date(startToday);
+  startWeek.setDate(startWeek.getDate() - 7);
   if (date >= startToday) return "Today";
   if (date >= startYesterday) return "Yesterday";
+  if (date >= startWeek) return "This week";
   return "Earlier";
 }
 
@@ -75,13 +81,16 @@ const NOTIFICATION_META: Record<string, { Icon: LucideIcon; tint: string; action
   "task.assigned": { Icon: ListChecks, tint: "bg-indigo-50 text-indigo-600", action: "View task" },
   "task.completed": { Icon: ListChecks, tint: "bg-green-50 text-green-600", action: "View task" },
   "task.commented": { Icon: MessageSquare, tint: "bg-indigo-50 text-indigo-600", action: "View task" },
+  "inbox.message_received": { Icon: MessageSquare, tint: "bg-sky-50 text-sky-600", action: "View message" },
+  "inbox.assigned": { Icon: MessageSquare, tint: "bg-blue-50 text-blue-600", action: "View message" },
+  "note.mention": { Icon: AtSign, tint: "bg-purple-50 text-purple-600", action: "View note" },
   "outreach.draft_due": { Icon: Send, tint: "bg-sky-50 text-sky-600", action: "Open outreach" },
 };
 const DEFAULT_META = { Icon: Bell, tint: "bg-gray-100 text-gray-500", action: "View" };
 
-export function NotificationEmptyState({ unreadTab }: { unreadTab: boolean }) {
+export function NotificationEmptyState({ unreadTab, filtered = false }: { unreadTab: boolean; filtered?: boolean }) {
   return (
-    <div className="py-12 text-center">
+    <div className="py-10 text-center">
       {/* Stacked-cards illustration */}
       <div className="relative mx-auto mb-5 h-24 w-40">
         <div className="absolute inset-x-0 top-0 mx-auto h-14 w-32 -rotate-[10deg] rounded-xl border border-gray-100 bg-white shadow-sm" />
@@ -92,14 +101,20 @@ export function NotificationEmptyState({ unreadTab }: { unreadTab: boolean }) {
         </div>
       </div>
       <p className="text-sm font-medium text-gray-900 mb-1">
-        {unreadTab ? "You don't have any unread notifications" : "No notifications"}
+        {filtered
+          ? "Nothing in this category"
+          : unreadTab
+            ? "You don't have any unread notifications"
+            : "No notifications"}
       </p>
-      <p className="text-sm text-gray-500">{unreadTab ? "You're all caught up." : "No notifications found"}</p>
+      <p className="text-sm text-gray-500">
+        {filtered ? "Try another filter." : unreadTab ? "You're all caught up." : "No notifications found"}
+      </p>
     </div>
   );
 }
 
-/** The list body: date headers + cards. */
+/** The list body: date headers + compact rows. */
 export function NotificationList({
   notifications,
   onOpen,
@@ -112,77 +127,158 @@ export function NotificationList({
   stickyHeaders?: boolean;
 }) {
   return (
-    <div className="pb-2">
+    <div>
       {notifications.map((notification, index) => {
         const unread = !notification.read_at;
         const bucket = dateBucket(new Date(notification.created_at));
         const showHeader = index === 0 || bucket !== dateBucket(new Date(notifications[index - 1].created_at));
         const { Icon, tint, action } = NOTIFICATION_META[notification.type] ?? DEFAULT_META;
+        const openable = !!notification.link;
         return (
           <Fragment key={notification.id}>
             {showHeader && (
               <p
-                className={`px-5 pb-2 pt-4 text-[11px] font-semibold uppercase tracking-wider text-gray-400 ${
-                  stickyHeaders ? "sticky top-0 z-10 bg-white/95 backdrop-blur" : ""
+                className={`border-b border-gray-100 bg-white px-3 pb-1.5 pt-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500 sm:px-4 ${
+                  stickyHeaders ? "sticky top-0 z-10" : ""
                 }`}
               >
                 {bucket}
               </p>
             )}
+            {/* The whole row opens the notification; the check button marks it read without opening. */}
             <div
-              className={`mx-4 mb-2.5 rounded-xl border px-4 py-3 transition-shadow hover:shadow-sm ${
-                unread ? "border-blue-100 bg-blue-50/40" : "border-gray-200 bg-white"
-              }`}
+              role={openable ? "button" : undefined}
+              tabIndex={openable ? 0 : undefined}
+              aria-label={openable ? `${action}: ${notification.title}` : undefined}
+              onClick={openable ? () => onOpen(notification) : undefined}
+              onKeyDown={
+                openable
+                  ? (e) => {
+                      if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
+                        e.preventDefault();
+                        onOpen(notification);
+                      }
+                    }
+                  : undefined
+              }
+              className={`group relative flex gap-3 border-b border-gray-100 bg-white px-3 py-2.5 transition-colors hover:bg-gray-50 focus-visible:bg-gray-50 focus-visible:outline-none sm:px-4 ${
+                openable ? "cursor-pointer" : ""
+              } ${unread ? "before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-blue-500" : ""}`}
             >
-              <div className="flex gap-3">
-                <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${tint}`}>
-                  <Icon className="h-[18px] w-[18px]" />
+              <div
+                className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${tint} ${
+                  unread ? "" : "opacity-60"
+                }`}
+              >
+                <Icon className="h-3.5 w-3.5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline gap-2">
+                  <p
+                    className={`truncate text-sm leading-5 ${
+                      unread ? "font-semibold text-gray-900" : "font-normal text-gray-600"
+                    }`}
+                  >
+                    {notification.title}
+                  </p>
+                  <span className="shrink-0 whitespace-nowrap text-xs text-gray-400">
+                    {formatRelativeTime(new Date(notification.created_at))}
+                  </span>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-start justify-between gap-2">
-                    <p
-                      className={`text-sm leading-snug ${
-                        unread ? "font-semibold text-gray-900" : "font-medium text-gray-700"
-                      }`}
-                    >
-                      {notification.title}
-                    </p>
-                    <span className="mt-0.5 flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs text-gray-400">
-                      {unread && <span className="h-2 w-2 rounded-full bg-blue-500" aria-label="Unread" />}
-                      {formatRelativeTime(new Date(notification.created_at))}
+                <p
+                  className={`line-clamp-2 text-[13px] leading-5 sm:line-clamp-1 ${
+                    unread ? "pr-8 text-gray-600" : "text-gray-400"
+                  }`}
+                >
+                  {notification.message}
+                </p>
+              </div>
+              {/* Hover actions sit on top of the row's end so nothing shifts. On touch screens only the check shows. */}
+              {(unread || openable) && (
+                <div className="absolute bottom-1.5 right-3 flex items-center gap-2 bg-gray-50 pl-2 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 group-focus-visible:opacity-100 [@media(hover:none)]:bg-transparent [@media(hover:none)]:opacity-100 sm:right-4">
+                  {openable && (
+                    <span className="flex items-center text-xs font-medium text-gray-500 [@media(hover:none)]:hidden">
+                      {action}
+                      <ChevronRight className="h-3.5 w-3.5" />
                     </span>
-                  </div>
-                  <p className="mt-0.5 line-clamp-2 text-sm leading-snug text-gray-500">{notification.message}</p>
-                  {(notification.link || unread) && (
-                    <div className="mt-2.5 flex items-center gap-2">
-                      {notification.link && (
-                        <button
-                          type="button"
-                          onClick={() => onOpen(notification)}
-                          className="rounded-full border border-gray-300 bg-white px-3 py-1 text-xs font-medium text-gray-800 transition-colors hover:bg-gray-50"
-                        >
-                          {action}
-                        </button>
-                      )}
-                      {unread && (
-                        <button
-                          type="button"
-                          title="Mark as read"
-                          aria-label="Mark as read"
-                          onClick={() => onMarkRead(notification.id)}
-                          className="flex h-7 w-7 items-center justify-center rounded-full border border-gray-300 bg-white text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-900"
-                        >
-                          <Check className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                    </div>
+                  )}
+                  {unread && (
+                    <button
+                      type="button"
+                      title="Mark as read"
+                      aria-label="Mark as read"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onMarkRead(notification.id);
+                      }}
+                      className="flex h-6 w-6 items-center justify-center rounded-full border border-gray-300 bg-white text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900"
+                    >
+                      <Check className="h-3 w-3" />
+                    </button>
                   )}
                 </div>
-              </div>
+              )}
             </div>
           </Fragment>
         );
       })}
+    </div>
+  );
+}
+
+/** Category chips for the /notifications page. Scrolls sideways on narrow screens instead of wrapping. */
+export function NotificationFilters({
+  value,
+  onChange,
+}: {
+  value: NotificationCategoryKey | null;
+  onChange: (next: NotificationCategoryKey | null) => void;
+}) {
+  const chips: { key: NotificationCategoryKey | null; label: string }[] = [
+    { key: null, label: "All types" },
+    ...NOTIFICATION_CATEGORIES.map((c) => ({ key: c.key, label: c.label })),
+  ];
+  return (
+    <div
+      role="group"
+      aria-label="Filter by type"
+      className="flex gap-2 overflow-x-auto px-3 py-2.5 [scrollbar-width:none] sm:px-4 [&::-webkit-scrollbar]:hidden"
+    >
+      {chips.map((chip) => {
+        const active = value === chip.key;
+        return (
+          <button
+            key={chip.label}
+            type="button"
+            aria-pressed={active}
+            onClick={() => onChange(chip.key)}
+            className={`shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+              active
+                ? "border-gray-900 bg-gray-900 text-white"
+                : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+            }`}
+          >
+            {chip.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Placeholder rows shown while the first page loads. */
+export function NotificationSkeleton({ rows = 6 }: { rows?: number }) {
+  return (
+    <div aria-hidden>
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} className="flex animate-pulse gap-3 border-b border-gray-100 px-3 py-3 sm:px-4">
+          <div className="h-7 w-7 shrink-0 rounded-full bg-gray-100" />
+          <div className="flex-1 space-y-2">
+            <div className="h-3 w-1/3 rounded bg-gray-100" />
+            <div className="h-3 w-2/3 rounded bg-gray-100" />
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
