@@ -62,6 +62,7 @@ import { getPipelineLandingStage } from "@/lib/leads/pipeline-stage";
 import { isAssigneePermittedForStage } from "@/industries/education-consultancy/lead-assignment-by-stage";
 import { processEmailForwardRules } from "@/lib/email/email-forward";
 import { processFormAutoresponder } from "@/lib/email/form-autoresponder";
+import { processFormSmsAutoresponder } from "@/lib/sms/form-autoresponder";
 import { assignDisplayIds } from "@/lib/leads/assign-display-ids";
 import { coerceAcademicPayload, hasProspectQualification, canBypassProspectQualification } from "@/lib/leads/prospect-qualification";
 import { normalizeDestinations, normalizeFieldOfStudy, normalizeDegreeLevel } from "@/lib/leads/destination-normalize";
@@ -1530,6 +1531,11 @@ async function handlePost(request: NextRequest) {
           updated as Lead,
           { isResubmission: false, tenant: { name: tenant.name } }
         ).catch(() => {});
+        void processFormSmsAutoresponder(
+          formConfig as FormConfig,
+          updated as Lead,
+          { isResubmission: false }
+        ).catch(() => {});
       }
     }
 
@@ -1646,6 +1652,11 @@ async function handlePost(request: NextRequest) {
           formConfig as FormConfig,
           { ...canonical, ...patch } as Lead,
           { isResubmission: true, tenant: { name: tenant.name } }
+        ).catch(() => {});
+        void processFormSmsAutoresponder(
+          formConfig as FormConfig,
+          { ...canonical, ...patch } as Lead,
+          { isResubmission: true }
         ).catch(() => {});
       }
 
@@ -1911,6 +1922,11 @@ async function handlePost(request: NextRequest) {
         formConfig as FormConfig,
         lead as Lead,
         { isResubmission: false, tenant: { name: tenant.name } }
+      ).catch(() => {});
+      void processFormSmsAutoresponder(
+        formConfig as FormConfig,
+        lead as Lead,
+        { isResubmission: false }
       ).catch(() => {});
     }
 
