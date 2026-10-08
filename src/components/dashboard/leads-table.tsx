@@ -604,6 +604,17 @@ export function LeadsTable({
   // it_agency: Fit-Qualified → Sales Leads graduation reuses the move-to-list dialog/API.
   const [isGraduateMove, setIsGraduateMove] = useState(false);
 
+  // Restore-from-Archive: require an explicit Stage + Status pick before a lead leaves
+  // Archived (RESTORE-FROM-ARCHIVE-BRIEF) — mirrors the move-to-list dialog above.
+  const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
+  const [restoreIds, setRestoreIds] = useState<string[]>([]);
+  const [restoreMode, setRestoreMode] = useState<"previous" | "new">("new");
+  const [restoreOriginListId, setRestoreOriginListId] = useState<string | null>(null);
+  const [restoreOriginStageId, setRestoreOriginStageId] = useState<string | null>(null);
+  const [restoreListId, setRestoreListId] = useState<string>("");
+  const [restoreStageId, setRestoreStageId] = useState<string>("");
+  const [isRestoring, setIsRestoring] = useState(false);
+
   // Column resize (session-only — drag handle lives in the header, width mirrors onto <td>s).
   // "name" is seeded with a default: under table-layout:auto a column whose cell content is
   // overflow-hidden (TruncatedText) has an effective min-content width of 0, so with no width
@@ -1641,32 +1652,20 @@ export function LeadsTable({
   const graduateTargetList = leadLists.find((l) => l.funnel_key === "sales_leads" && l.slug === "new-prospect") ?? null;
   const canGraduate = industryId === "it_agency" && activeListSlug === "fit-qualified" && !!graduateTargetList;
 
-  // Restore from the recycle bin (Delete view → clears deleted_at) or un-archive
-  // (Archived view → moves back into the intake/Pre-qualified list).
+  // Restore from the recycle bin (Delete view → clears deleted_at, no Stage/Status
+  // pick — unrelated to Archive). Archive restore is handled by the restore dialog
+  // below, which requires an explicit Stage + Status before the lead leaves Archived.
   async function restoreLeads(ids: string[]) {
     if (ids.length === 0) return;
     try {
       let restored = 0;
       for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
         const chunk = ids.slice(i, i + CHUNK_SIZE);
-        let res: Response;
-        if (viewMode === "archived") {
-          if (!intakeListId) {
-            toast.error("No list to restore into");
-            return;
-          }
-          res = await fetch("/api/v1/leads/bulk", {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ ids: chunk, list_id: intakeListId }),
-          });
-        } else {
-          res = await fetch("/api/v1/leads/bulk/restore", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ ids: chunk }),
-          });
-        }
+        const res = await fetch("/api/v1/leads/bulk/restore", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids: chunk }),
+        });
         if (!res.ok) throw new Error("restore failed");
         restored += chunk.length;
       }
@@ -1675,6 +1674,91 @@ export function LeadsTable({
       router.refresh();
     } catch {
       toast.error("Failed to restore");
+    }
+  }
+
+  const restoreTargetList = leadLists.find((l) => l.id === restoreListId) ?? null;
+  const restoreStageOptions = useMemo(() => {
+    if (!restoreTargetList?.pipeline_id) return [];
+    return stages
+      .filter((s) => s.pipeline_id === restoreTargetList.pipeline_id)
+      .sort((a, b) => a.position - b.position);
+  }, [restoreTargetList, stages]);
+
+  // Opens the restore dialog for one or more archived leads. Single-lead restores
+  // prefill from that lead's archived_from_list_id/archived_from_status snapshot;
+  // multi-select bulk restores only prefill when every selected lead shares the same
+  // origin — otherwise the picks are left blank and must be made explicitly.
+  function openRestoreDialog(ids: string[]) {
+    if (ids.length === 0) return;
+    const originLeads = ids
+      .map((id) => localLeads.find((l) => l.id === id))
+      .filter((l): l is Lead => !!l);
+    const firstOriginList = originLeads[0]?.archived_from_list_id ?? null;
+    const firstOriginStatus = originLeads[0]?.archived_from_status ?? null;
+    const sameOrigin =
+      originLeads.length === ids.length &&
+      originLeads.every(
+        (l) => l.archived_from_list_id === firstOriginList && l.archived_from_status === firstOriginStatus,
+      );
+    let originListId: string | null = null;
+    let originStageId: string | null = null;
+    if (sameOrigin && firstOriginList && leadLists.some((l) => l.id === firstOriginList)) {
+      const originList = leadLists.find((l) => l.id === firstOriginList) ?? null;
+      if (firstOriginStatus && originList?.pipeline_id) {
+        const originStage = stages.find(
+          (s) => s.slug === firstOriginStatus && s.pipeline_id === originList.pipeline_id,
+        );
+        if (originStage) {
+          originListId = firstOriginList;
+          originStageId = originStage.id;
+        }
+      }
+    }
+    setRestoreIds(ids);
+    setRestoreOriginListId(originListId);
+    setRestoreOriginStageId(originStageId);
+    setRestoreMode(originListId && originStageId ? "previous" : "new");
+    setRestoreListId("");
+    setRestoreStageId("");
+    setRestoreDialogOpen(true);
+  }
+
+  async function handleRestoreConfirm() {
+    const targetListId = restoreMode === "previous" ? restoreOriginListId : restoreListId;
+    const targetStageId = restoreMode === "previous" ? restoreOriginStageId : restoreStageId;
+    if (restoreIds.length === 0 || !targetListId || !targetStageId) return;
+    setIsRestoring(true);
+    const chunks: string[][] = [];
+    for (let i = 0; i < restoreIds.length; i += CHUNK_SIZE) {
+      chunks.push(restoreIds.slice(i, i + CHUNK_SIZE));
+    }
+    let totalRestored = 0;
+    try {
+      for (const chunk of chunks) {
+        const res = await fetch("/api/v1/leads/bulk", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids: chunk, list_id: targetListId, stage_id: targetStageId }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error?.message || "Failed to restore leads");
+        totalRestored += data.data.updated as number;
+      }
+      toast.success(`Restored ${totalRestored} lead${totalRestored !== 1 ? "s" : ""}`);
+      setSelectedIds(new Set());
+      setRestoreDialogOpen(false);
+      setRestoreIds([]);
+      setRestoreMode("new");
+      setRestoreOriginListId(null);
+      setRestoreOriginStageId(null);
+      setRestoreListId("");
+      setRestoreStageId("");
+      router.refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to restore leads");
+    } finally {
+      setIsRestoring(false);
     }
   }
 
@@ -2127,8 +2211,10 @@ export function LeadsTable({
         : undefined,
       viewMode,
       onRestore:
-        viewMode === "trash" || viewMode === "archived"
+        viewMode === "trash"
           ? async (leadId: string) => { await restoreLeads([leadId]); }
+          : viewMode === "archived"
+          ? async (leadId: string) => { openRestoreDialog([leadId]); }
           : undefined,
       openTaskLeadIds,
     }),
@@ -2669,7 +2755,11 @@ export function LeadsTable({
               <>
                 {isAdmin && (
                   <button
-                    onClick={() => restoreLeads(Array.from(selectedIds))}
+                    onClick={() =>
+                      viewMode === "archived"
+                        ? openRestoreDialog(Array.from(selectedIds))
+                        : restoreLeads(Array.from(selectedIds))
+                    }
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-emerald-700 hover:bg-emerald-50 rounded transition-colors"
                   >
                     <RotateCcw className="h-4 w-4" />
@@ -3340,6 +3430,137 @@ export function LeadsTable({
               {isMoveList
                 ? (isGraduateMove ? "Graduating…" : moveTargetIsArchive ? "Archiving…" : "Moving…")
                 : (isGraduateMove ? "Graduate" : moveTargetIsArchive ? "Archive" : "Move")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Restore from Archive Dialog — Stage + Status are required before an archived
+          lead is allowed back into the pipeline (RESTORE-FROM-ARCHIVE-BRIEF). */}
+      <Dialog open={restoreDialogOpen} onOpenChange={(open) => {
+        setRestoreDialogOpen(open);
+        if (!open) {
+          setRestoreIds([]);
+          setRestoreMode("new");
+          setRestoreOriginListId(null);
+          setRestoreOriginStageId(null);
+          setRestoreListId("");
+          setRestoreStageId("");
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Restore {restoreIds.length} lead{restoreIds.length !== 1 ? "s" : ""}</DialogTitle>
+            <DialogDescription>
+              Choose where this lead lands. It leaves Archived only after a Stage and Status are picked.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-3">
+            {restoreOriginListId && restoreOriginStageId && (
+              <label
+                className={`flex items-start gap-2 rounded-md border p-3 cursor-pointer ${
+                  restoreMode === "previous" ? "border-primary bg-primary/5" : "border-gray-200"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="restoreMode"
+                  className="mt-1"
+                  checked={restoreMode === "previous"}
+                  onChange={() => setRestoreMode("previous")}
+                />
+                <div className="space-y-0.5">
+                  <p className="text-sm font-medium text-gray-900">Restore to previous stage & status</p>
+                  <p className="text-sm text-gray-600">
+                    {leadLists.find((l) => l.id === restoreOriginListId)?.name ?? "Unknown stage"}
+                    {" → "}
+                    {stages.find((s) => s.id === restoreOriginStageId)?.name ?? "Unknown status"}
+                  </p>
+                </div>
+              </label>
+            )}
+            <label
+              className={`flex items-start gap-2 rounded-md border p-3 cursor-pointer ${
+                restoreMode === "new" ? "border-primary bg-primary/5" : "border-gray-200"
+              }`}
+            >
+              <input
+                type="radio"
+                name="restoreMode"
+                className="mt-1"
+                checked={restoreMode === "new"}
+                onChange={() => setRestoreMode("new")}
+              />
+              <div className="flex-1 space-y-2">
+                <p className="text-sm font-medium text-gray-900">Select new stage & status</p>
+                {restoreMode === "new" && (
+                  <div className="space-y-3">
+                    <div className="space-y-1.5">
+                      <p className="text-sm font-medium text-gray-700">Stage</p>
+                      <Select
+                        value={restoreListId}
+                        onValueChange={(v) => { setRestoreListId(v); setRestoreStageId(""); }}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select stage..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(isAdmin ? leadLists : leadLists.filter((l) => !l.is_archive))
+                            .filter((l) => !l.is_archive)
+                            .map((l) => (
+                              <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <p className="text-sm font-medium text-gray-700">Status</p>
+                      <Select
+                        value={restoreStageId}
+                        onValueChange={setRestoreStageId}
+                        disabled={!restoreListId || restoreStageOptions.length === 0}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder={restoreListId ? "Select status..." : "Pick a stage first"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {restoreStageOptions.map((s) => (
+                            <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </label>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRestoreDialogOpen(false);
+                setRestoreIds([]);
+                setRestoreMode("new");
+                setRestoreOriginListId(null);
+                setRestoreOriginStageId(null);
+                setRestoreListId("");
+                setRestoreStageId("");
+              }}
+              disabled={isRestoring}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleRestoreConfirm}
+              disabled={
+                isRestoring ||
+                (restoreMode === "previous"
+                  ? !restoreOriginListId || !restoreOriginStageId
+                  : !restoreListId || !restoreStageId)
+              }
+            >
+              {isRestoring ? "Restoring…" : "Restore"}
             </Button>
           </DialogFooter>
         </DialogContent>
