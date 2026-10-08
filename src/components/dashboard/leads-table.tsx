@@ -3532,8 +3532,8 @@ export function LeadsTable({
                           <SelectValue placeholder="Select stage..." />
                         </SelectTrigger>
                         <SelectContent>
-                          {(isAdmin ? leadLists : leadLists.filter((l) => !l.is_archive))
-                            .filter((l) => !l.is_archive)
+                          {(isAdmin ? leadLists : leadLists.filter((l) => !l.is_staging && !l.is_archive))
+                            .filter((l) => !l.is_archive && l.pipeline_id)
                             .map((l) => (
                               <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
                             ))}
