@@ -613,6 +613,7 @@ export function LeadsTable({
   const [restoreOriginStageId, setRestoreOriginStageId] = useState<string | null>(null);
   const [restoreListId, setRestoreListId] = useState<string>("");
   const [restoreStageId, setRestoreStageId] = useState<string>("");
+  const [restoreAssignTo, setRestoreAssignTo] = useState<string>("keep");
   const [isRestoring, setIsRestoring] = useState(false);
 
   // Column resize (session-only — drag handle lives in the header, width mirrors onto <td>s).
@@ -1685,6 +1686,21 @@ export function LeadsTable({
       .sort((a, b) => a.position - b.position);
   }, [restoreTargetList, stages]);
 
+  // "Previous stage/status" option's read-only assignee line: the current
+  // assigned_to is who the lead(s) were assigned to pre-archive (archiving
+  // never touches assigned_to), so it's shown, not editable, under that option.
+  const restoreAssignedToDisplay = useMemo(() => {
+    const leadsInRestore = restoreIds
+      .map((id) => localLeads.find((l) => l.id === id))
+      .filter((l): l is Lead => !!l);
+    if (leadsInRestore.length === 0) return null;
+    const first = leadsInRestore[0].assigned_to ?? null;
+    const sameAssignee = leadsInRestore.every((l) => (l.assigned_to ?? null) === first);
+    if (!sameAssignee) return "Assignments stay as they are";
+    const name = first ? memberNames[first] || memberMap[first]?.split("@")[0] || first : "Unassigned";
+    return `Assigned to ${name}`;
+  }, [restoreIds, localLeads, memberNames, memberMap]);
+
   // Opens the restore dialog for one or more archived leads. Single-lead restores
   // prefill from that lead's archived_from_list_id/archived_from_status snapshot;
   // multi-select bulk restores only prefill when every selected lead shares the same
@@ -1721,6 +1737,7 @@ export function LeadsTable({
     setRestoreMode(originListId && originStageId ? "previous" : "new");
     setRestoreListId("");
     setRestoreStageId("");
+    setRestoreAssignTo("keep");
     setRestoreDialogOpen(true);
   }
 
@@ -1739,7 +1756,14 @@ export function LeadsTable({
         const res = await fetch("/api/v1/leads/bulk", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ids: chunk, list_id: targetListId, stage_id: targetStageId }),
+          body: JSON.stringify({
+            ids: chunk,
+            list_id: targetListId,
+            stage_id: targetStageId,
+            ...(restoreMode === "new" && restoreAssignTo !== "keep" && {
+              assigned_to: restoreAssignTo === "unassign" ? null : restoreAssignTo,
+            }),
+          }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error?.message || "Failed to restore leads");
@@ -1754,6 +1778,7 @@ export function LeadsTable({
       setRestoreOriginStageId(null);
       setRestoreListId("");
       setRestoreStageId("");
+      setRestoreAssignTo("keep");
       router.refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to restore leads");
@@ -3446,6 +3471,7 @@ export function LeadsTable({
           setRestoreOriginStageId(null);
           setRestoreListId("");
           setRestoreStageId("");
+          setRestoreAssignTo("keep");
         }
       }}>
         <DialogContent>
@@ -3475,6 +3501,7 @@ export function LeadsTable({
                     {leadLists.find((l) => l.id === restoreOriginListId)?.name ?? "Unknown stage"}
                     {" → "}
                     {stages.find((s) => s.id === restoreOriginStageId)?.name ?? "Unknown status"}
+                    {restoreAssignedToDisplay && <> · {restoreAssignedToDisplay}</>}
                   </p>
                 </div>
               </label>
@@ -3530,6 +3557,31 @@ export function LeadsTable({
                         </SelectContent>
                       </Select>
                     </div>
+                    <div className="space-y-1.5">
+                      <p className="text-sm font-medium text-gray-700">Assign to (optional)</p>
+                      <Select value={restoreAssignTo} onValueChange={setRestoreAssignTo}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Keep current assignee" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="keep">
+                            <span className="text-muted-foreground">Keep current assignee</span>
+                          </SelectItem>
+                          <SelectItem value="unassign">
+                            <span className="text-muted-foreground">Unassign</span>
+                          </SelectItem>
+                          {Array.from(new Map((assignableMembers ?? teamMembers.filter((m) => m.canEditLeads !== false)).map((m) => [m.user_id, m])).values())
+                            .map((member) => (
+                              <SelectItem key={member.user_id} value={member.user_id}>
+                                <div className="flex items-center gap-2">
+                                  <span>{member.name}</span>
+                                  <span className="text-xs text-muted-foreground">({memberMeta(member.user_id, member.role)})</span>
+                                </div>
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 )}
               </div>
@@ -3546,6 +3598,7 @@ export function LeadsTable({
                 setRestoreOriginStageId(null);
                 setRestoreListId("");
                 setRestoreStageId("");
+                setRestoreAssignTo("keep");
               }}
               disabled={isRestoring}
             >
