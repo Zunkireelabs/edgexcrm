@@ -429,9 +429,18 @@ export interface FormConfig {
     subject: string;
     body_html: string;
     body_format?: "text" | "html"; // absent === "text" (back-compat)
+    // Confirmation SMS — independent of the email fields above (its own enabled flag).
+    sms?: FormSmsAutoresponder;
   };
   created_at: string;
   updated_at: string;
+}
+
+/** Per-form confirmation SMS, stored at form_configs.autoresponder.sms. */
+export interface FormSmsAutoresponder {
+  enabled: boolean;
+  fire_mode: "every" | "first";
+  body: string;
 }
 
 export interface FormStep {

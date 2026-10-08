@@ -14,6 +14,7 @@ import { StepEditor } from "./step-editor";
 import { BrandingEditor } from "./branding-editor";
 import { AttributionEditor } from "./attribution-editor";
 import { AutoresponderEditor } from "./autoresponder-editor";
+import { SmsAutoresponderEditor } from "./sms-autoresponder-editor";
 import { PipelineRoutingEditor } from "./pipeline-routing-editor";
 import { ListRoutingEditor } from "./list-routing-editor";
 import { BranchRoutingEditor } from "./branch-routing-editor";
@@ -25,6 +26,8 @@ interface FormBuilderPageProps {
   formConfig: FormConfig;
   tenantSlug: string;
   industryId?: string | null;
+  /** True when the tenant has SMS switched on; the Confirmation SMS tab only shows then. */
+  smsEnabled?: boolean;
 }
 
 function LivePreview({ steps, branding, currentStep }: { steps: FormStep[]; branding: FormBranding; currentStep: number }) {
@@ -196,7 +199,7 @@ function PreviewField({
   );
 }
 
-export function FormBuilderPage({ formConfig, tenantSlug, industryId }: FormBuilderPageProps) {
+export function FormBuilderPage({ formConfig, tenantSlug, industryId, smsEnabled = false }: FormBuilderPageProps) {
   const router = useRouter();
   const { state, dispatch, save } = useFormBuilder(formConfig);
   const [slugEditing, setSlugEditing] = useState(false);
@@ -320,6 +323,7 @@ export function FormBuilderPage({ formConfig, tenantSlug, industryId }: FormBuil
               <TabsTrigger value="attribution">Attribution</TabsTrigger>
               <TabsTrigger value="routing">Routing</TabsTrigger>
               <TabsTrigger value="autoresponder">Confirmation Email</TabsTrigger>
+              {smsEnabled && <TabsTrigger value="sms-autoresponder">Confirmation SMS</TabsTrigger>}
               <TabsTrigger value="submissions">
                 Submissions
                 {submissionCount !== null && (
@@ -380,6 +384,16 @@ export function FormBuilderPage({ formConfig, tenantSlug, industryId }: FormBuil
                 dispatch={dispatch}
               />
             </TabsContent>
+
+            {smsEnabled && (
+              <TabsContent value="sms-autoresponder">
+                <SmsAutoresponderEditor
+                  autoresponder={state.autoresponder}
+                  steps={state.steps}
+                  dispatch={dispatch}
+                />
+              </TabsContent>
+            )}
 
             <TabsContent value="submissions">
               <SubmissionsTab
