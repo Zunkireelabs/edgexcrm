@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, requireAdmin, getClientIp } from "@/lib/api/auth";
 import { syncOriginMembership } from "@/lib/leads/branch-membership";
+import { assignmentBranchTarget, branchMoveOnAssignment } from "@/lib/leads/branch-resolution";
 import { isAdminAssignmentTarget, isLeadInManagerBranch } from "@/lib/leads/branch-assign-policy";
 import { addLeadCollaborators } from "@/lib/leads/collaborators";
 import { assignDisplayIds } from "@/lib/leads/assign-display-ids";
@@ -58,6 +59,8 @@ export async function PATCH(request: NextRequest) {
     archive_reason?: string;
     /** it_agency: Fit-Qualified → Sales Leads graduation. Labels the audit/event distinctly. */
     graduate?: boolean;
+    /** Explicit landing stage within list_id's pipeline (e.g. Archive restore). Falls back to auto-pick when omitted. */
+    stage_id?: string;
   };
   try {
     body = await request.json();
@@ -97,6 +100,13 @@ export async function PATCH(request: NextRequest) {
   if (body.list_id !== undefined && body.list_id !== null) {
     if (!UUID_REGEX.test(body.list_id)) {
       return apiValidationError({ list_id: ["Invalid UUID format"] });
+    }
+  }
+
+  // Validate stage_id if provided
+  if (body.stage_id !== undefined) {
+    if (!UUID_REGEX.test(body.stage_id)) {
+      return apiValidationError({ stage_id: ["Invalid UUID format"] });
     }
   }
 
@@ -191,6 +201,26 @@ export async function PATCH(request: NextRequest) {
       return apiValidationError({ archive_reason: ["Archive reason is required when moving to an archive list"] });
     }
     targetList = listCheck;
+  }
+
+  // Validate stage_id belongs to the target list's pipeline (e.g. Archive restore,
+  // where the caller picks an explicit landing stage instead of the auto-picked default).
+  let targetStage: { id: string; slug: string } | null = null;
+  if (body.stage_id !== undefined) {
+    if (!targetList?.pipeline_id) {
+      return apiValidationError({ stage_id: ["stage_id requires list_id to resolve to a pipeline"] });
+    }
+    const { data: stageCheck } = await supabase
+      .from("pipeline_stages")
+      .select("id, slug")
+      .eq("tenant_id", auth.tenantId)
+      .eq("id", body.stage_id)
+      .eq("pipeline_id", targetList.pipeline_id)
+      .maybeSingle();
+    if (!stageCheck) {
+      return apiValidationError({ stage_id: ["Invalid stage_id. Stage does not belong to this list's pipeline."] });
+    }
+    targetStage = stageCheck;
   }
 
   // Verify all leads exist and belong to tenant (exclude converted leads from bulk operations)
@@ -295,15 +325,42 @@ export async function PATCH(request: NextRequest) {
         bulkUpdatePayload.archived_from_status = null;
       }
       // Sync pipeline + landing stage so stage updates work after the move.
-      // Use the shared helper: default-flagged stage if present, else first by
+      // An explicit, validated stage_id (e.g. Archive restore) wins; otherwise fall
+      // back to the shared helper: default-flagged stage if present, else first by
       // position — a pipeline with no is_default stage (e.g. Prospects) must
       // still land on a real stage, or the lead's Status renders blank.
       if (targetList.pipeline_id) {
-        const landing = await getPipelineLandingStage(supabase, targetList.pipeline_id);
+        const landing = targetStage ?? (await getPipelineLandingStage(supabase, targetList.pipeline_id));
         if (landing) {
           bulkUpdatePayload.pipeline_id = targetList.pipeline_id;
           bulkUpdatePayload.stage_id = landing.id;
           bulkUpdatePayload.status = landing.slug;
+        }
+      }
+    }
+  }
+
+  // Leads sitting in the default ("Global") branch become the assignee's branch leads when assigned
+  // to someone in a branch (each lead's current branch differs, so this can't ride the single bulk
+  // payload). Skipped when the caller set branch_id itself. Done BEFORE the assignment so a failure
+  // here aborts with nothing assigned (the caller just retries) instead of leaving leads assigned but
+  // still sitting in Global. `movedBranch` feeds the origin-row sync below.
+  const movedBranch = new Map<string, string>();
+  if (body.assigned_to && body.branch_id === undefined) {
+    const target = await assignmentBranchTarget(supabase, auth.tenantId, body.assigned_to);
+    if (target) {
+      for (const lid of idsToUpdate) {
+        if (branchMoveOnAssignment(existingMap.get(lid)?.branch_id, target)) movedBranch.set(lid, target.toBranchId);
+      }
+      if (movedBranch.size > 0) {
+        const { error: moveError } = await supabase
+          .from("leads")
+          .update({ branch_id: target.toBranchId })
+          .eq("tenant_id", auth.tenantId)
+          .in("id", [...movedBranch.keys()]);
+        if (moveError) {
+          log.error({ err: moveError }, "Failed to move assigned leads to the assignee's branch");
+          return apiServiceUnavailable("Failed to update leads");
         }
       }
     }
@@ -399,7 +456,8 @@ export async function PATCH(request: NextRequest) {
     await Promise.all(
       idsToUpdate.map((lid) => {
         const existing = existingMap.get(lid);
-        const newBranchId = body.branch_id !== undefined ? (body.branch_id ?? null) : (existing?.branch_id ?? null);
+        const newBranchId =
+          body.branch_id !== undefined ? (body.branch_id ?? null) : (movedBranch.get(lid) ?? existing?.branch_id ?? null);
         const newAssignedTo = body.assigned_to !== undefined ? (body.assigned_to ?? null) : (existing?.assigned_to ?? null);
         return syncOriginMembership(supabase, auth.tenantId, lid, newBranchId, newAssignedTo);
       })

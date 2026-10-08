@@ -24,6 +24,8 @@ import {
   apiServiceUnavailable,
 } from "@/lib/api/response";
 import { assignDisplayIds } from "@/lib/leads/assign-display-ids";
+import { resolveLeadBranch } from "@/lib/leads/branch-resolution";
+import { syncOriginMembership } from "@/lib/leads/branch-membership";
 import { requirePermission } from "@/lib/api/integration-permissions";
 import { validate, required, isEmail } from "@/lib/api/validation";
 import { buildIlikeOrFilter } from "@/lib/api/search-filter";
@@ -234,8 +236,13 @@ export const POST = withIntegrationErrorBoundary(async function POST(request: Ne
     return apiValidationError({ stage: ["No default pipeline stage configured for this tenant"] });
   }
 
+  // New leads from the API are attributed to the tenant's default branch ("Global" for Admizz), like
+  // every other way a lead is created. Tenants with no default branch keep a null branch, as before.
+  const creationBranchId = await resolveLeadBranch(ctx.supabase, { tenantId });
+
   const leadPayload: Record<string, unknown> = {
     tenant_id: tenantId,
+    branch_id: creationBranchId,
     pipeline_id: resolved.pipelineId,
     first_name: body.first_name as string,
     last_name: (body.last_name as string) || null,
@@ -324,6 +331,10 @@ export const POST = withIntegrationErrorBoundary(async function POST(request: Ne
       }
     }
     return apiServiceUnavailable("Failed to create lead");
+  }
+
+  if (creationBranchId) {
+    void syncOriginMembership(ctx.supabase, tenantId, (lead as Lead).id, creationBranchId, null).catch(() => {});
   }
 
   // Assign display ID for education leads (best-effort; null list_id → live → assigns).

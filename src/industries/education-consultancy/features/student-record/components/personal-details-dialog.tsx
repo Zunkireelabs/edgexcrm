@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Lead } from "@/types/database";
+import { RESIDENCE_COUNTRIES, CONTACT_METHODS } from "@/lib/leads/contact-options";
 import { DestinationsMultiSelect } from "@/components/dashboard/destinations-multi-select";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 import { getDistinctFormValues, type LeadSubmissionSnapshot } from "@/lib/leads/submission-history";
@@ -27,14 +28,18 @@ import { TestScoresSection, testScoresFromLead, legacyScoreColumns, type TestSco
 import { QualificationsSection, qualificationsFromLead, type Qualifications } from "./qualifications-section";
 import { WorkExperienceSection, type WorkExperienceEntry } from "./work-experience-section";
 import { ReferencesSection, type ReferenceEntry } from "./references-section";
+import { GUARDIAN_RELATIONSHIP_OPTIONS, normalizeGuardianRelationship, guardianNameAfterRelationshipChange, resolveGuardian } from "@/lib/consent/guardian";
 import { SectionGroup, CardSection, FieldGrid, EditableField } from "./form-primitives";
 import { AttachDocumentButton } from "./attach-document-button";
+import { PERSONAL_DETAIL_COLUMNS, PERSONAL_DETAIL_DATE_COLUMNS } from "@/lib/leads/personal-details";
+import { getLeadCity, getLeadNationality } from "@/lib/leads/lead-location";
 
 /**
- * Phase 1 preview build: new personal-detail fields live only in this
- * component's local state. The `leads` columns they map to don't exist in
- * any database yet (migration 234 is written but not applied), so nothing
- * here is persisted via the API — this is for visual/UX review only.
+ * Personal / passport / citizenship details are real `leads` columns
+ * (migration 234) and save through PATCH /api/v1/leads/[id] with everything
+ * else. Fields with no column or table yet (Financial, richer Qualification
+ * fields, Work Experience, References) are still kept in this component's
+ * local state only — preview-only — so they are NOT sent.
  *
  * Study Interest is the exception: those columns (destinations, field_of_study,
  * degree_level, intake_term) already exist on `leads`, so that section is
@@ -50,6 +55,15 @@ export const CORE_IDENTITY_FIELDS = [
   { key: "phone", label: "Phone", type: "tel" },
   { key: "nationality", label: "Nationality", type: "text" },
   { key: "city", label: "City", type: "text" },
+  // Residence Country + Preferred Contact: on the education page this pop-up is the only editor
+  // (Edit opens it), and the consent document uses {{country}} — so they must be editable here.
+  {
+    key: "country",
+    label: "Residence Country",
+    type: "select",
+    options: RESIDENCE_COUNTRIES.map((c) => ({ value: c, label: c })),
+  },
+  { key: "preferredContact", label: "Preferred Contact", type: "select", options: CONTACT_METHODS },
 ] as const;
 
 // Owner/admin-only on the server (applyLeadPatch rejects these fields for anyone else), so
@@ -81,6 +95,16 @@ export const PASSPORT_CITIZENSHIP_FIELDS = [
   { key: "citizenship_issued_date", label: "Citizenship Issued Date", type: "date" },
 ] as const;
 
+// The ONE guardian shown on the consent form's Parent/Guardian section (migrations 266, 269).
+// Picking Father / Mother pre-fills Guardian Name from the parent names above; for anyone else, type it.
+// "None / Not applicable" prints N/A on the form instead of blocking the consent.
+export const GUARDIAN_FIELDS = [
+  { key: "guardian_relationship", label: "Guardian Relationship", type: "select", options: GUARDIAN_RELATIONSHIP_OPTIONS },
+  { key: "guardian_name", label: "Guardian Name", type: "text", placeholder: "e.g. Sita Sharma" },
+  { key: "guardian_phone", label: "Guardian Phone", type: "tel" },
+  { key: "guardian_email", label: "Guardian Email", type: "email" },
+] as const;
+
 // Not part of the client's original PDF template — flagged there as a
 // generic "standard fields for completeness" addition, so it may change
 // pending client confirmation.
@@ -92,6 +116,15 @@ export const FINANCIAL_FIELDS = [
 ] as const;
 
 type FieldValues = Record<string, string>;
+
+/** A relationship typed before the dropdown existed (e.g. "Step-father") must still show, and survive a save. */
+function withLegacyRelationshipOption<F extends { key: string; options?: readonly { value: string; label: string }[] }>(
+  field: F,
+  current: string | undefined,
+): F {
+  if (field.key !== "guardian_relationship" || !current || field.options?.some((o) => o.value === current)) return field;
+  return { ...field, options: [...(field.options ?? []), { value: current, label: current }] };
+}
 
 export interface StudyInterest {
   destinations: string[];
@@ -144,6 +177,8 @@ export interface CoreIdentity {
   phone: string;
   nationality: string;
   city: string;
+  country: string;
+  preferredContact: string;
 }
 
 export function coreIdentityFromLead(lead: Lead): CoreIdentity {
@@ -152,9 +187,28 @@ export function coreIdentityFromLead(lead: Lead): CoreIdentity {
     lastName: lead.last_name ?? "",
     email: lead.email ?? "",
     phone: lead.phone ?? "",
-    nationality: lead.nationality ?? "",
-    city: lead.city ?? "",
+    nationality: getLeadNationality(lead) ?? "",
+    city: getLeadCity(lead) ?? "",
+    country: lead.country ?? "",
+    preferredContact: lead.preferred_contact_method ?? "",
   };
+}
+
+/**
+ * Seeds the Personal / Passport & Citizenship fields from the lead's real columns.
+ * DATE columns arrive as `YYYY-MM-DD`; if a source ever hands back a longer value (a timestamp),
+ * keep just the calendar date so the date input shows it and change-detection stays accurate.
+ */
+export function personalDetailsFromLead(lead: Lead): FieldValues {
+  const dateColumns: readonly string[] = PERSONAL_DETAIL_DATE_COLUMNS;
+  const out: FieldValues = {};
+  for (const col of PERSONAL_DETAIL_COLUMNS) {
+    const raw = lead[col];
+    out[col] = dateColumns.includes(col) ? (/^\d{4}-\d{2}-\d{2}/.exec(raw ?? "")?.[0] ?? "") : (raw ?? "");
+  }
+  // Older free-text values ("father") line up with the dropdown's options; anything else is kept as typed.
+  out.guardian_relationship = normalizeGuardianRelationship(out.guardian_relationship);
+  return out;
 }
 
 export interface LeadSourceValues {
@@ -191,11 +245,11 @@ const QUALIFICATION_COLUMN_PREFIX: Record<keyof Qualifications, string> = {
  * (opened by the one Edit button on the contact card), so it also carries City, each
  * level's Passed Year, the five exam scores that have a column, and — for admins
  * only — Lead Source. It's held to the "only send what's whitelisted, never guess"
- * rule. Everything else this dialog collects (new Personal Information
- * fields, the richer Qualification fields, Test Scores/Work
- * Experience/References) has no live column or table yet (migrations
- * 234-239 aren't applied anywhere), so it deliberately stays out of this
- * payload — sending it would just 500 against a column that doesn't exist.
+ * rule. The Personal / Passport & Citizenship fields (migration 234) are
+ * real columns and are included. Everything else this dialog collects (the
+ * richer Qualification fields, Work Experience/References, Financial) has no
+ * live column or table yet, so it deliberately stays out of this payload —
+ * sending it would just 500 against a column that doesn't exist.
  *
  * Only fields that actually changed from their original (committed) value
  * are included — never blindly resend an untouched field. This isn't just
@@ -221,7 +275,10 @@ export function buildLivePatch(
   testScoresOriginal: TestScore[],
   /** null for non-admins: Lead Source fields are owner/admin-only, so they're never sent. */
   source: LeadSourceValues | null,
-  sourceOriginal: LeadSourceValues
+  sourceOriginal: LeadSourceValues,
+  /** Personal / Passport & Citizenship field values keyed by column name. */
+  personal: FieldValues = {},
+  personalOriginal: FieldValues = {}
 ): Record<string, unknown> {
   const patch: Record<string, unknown> = {};
   const setIfChanged = (key: string, next: unknown, prev: unknown) => {
@@ -234,6 +291,8 @@ export function buildLivePatch(
   setIfChanged("phone", core.phone || null, coreOriginal.phone || null);
   setIfChanged("nationality", core.nationality || null, coreOriginal.nationality || null);
   setIfChanged("city", core.city || null, coreOriginal.city || null);
+  setIfChanged("country", core.country || null, coreOriginal.country || null);
+  setIfChanged("preferred_contact_method", core.preferredContact || null, coreOriginal.preferredContact || null);
 
   setIfChanged("destinations", study.destinations, studyOriginal.destinations);
   setIfChanged("field_of_study", study.fieldOfStudy || null, studyOriginal.fieldOfStudy || null);
@@ -263,6 +322,9 @@ export function buildLivePatch(
     setIfChanged("intake_account", source.account || null, sourceOriginal.account || null);
     setIfChanged("intake_campaign", source.campaign || null, sourceOriginal.campaign || null);
   }
+  for (const col of PERSONAL_DETAIL_COLUMNS) {
+    setIfChanged(col, (personal[col] ?? "").trim() || null, (personalOriginal[col] ?? "").trim() || null);
+  }
   return patch;
 }
 
@@ -285,7 +347,7 @@ interface PersonalDetailsDialogProps {
 export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHistory, onLeadUpdate, canUploadDocuments, openInEditMode, isAdmin = false }: PersonalDetailsDialogProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [values, setValues] = useState<FieldValues>({});
+  const [values, setValues] = useState<FieldValues>(() => personalDetailsFromLead(lead));
   const [draft, setDraft] = useState<FieldValues>({});
   const [coreIdentity, setCoreIdentity] = useState<CoreIdentity>(() => coreIdentityFromLead(lead));
   const [coreIdentityDraft, setCoreIdentityDraft] = useState<CoreIdentity>(coreIdentity);
@@ -343,7 +405,8 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
       studyDraft, studyInterest,
       qualificationsDraft, qualifications,
       testScoresDraft, testScores,
-      isAdmin ? leadSourceDraft : null, leadSource
+      isAdmin ? leadSourceDraft : null, leadSource,
+      draft, values
     );
     const hasLiveChanges = Object.keys(patch).length > 0;
     setIsSaving(true);
@@ -372,7 +435,7 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
       setIsEditing(false);
       toast.success(
         hasLiveChanges
-          ? "Saved. Fields without a database column yet (birth date, passport, work experience, etc.) are kept locally for preview only until the database update is live."
+          ? "Saved. Financial, work experience and reference details are kept locally for preview only — they don't have a database column yet."
           : "Saved locally for preview only — nothing in the real-save fields changed."
       );
     } catch {
@@ -383,7 +446,18 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
   };
 
   const handleChange = (key: string, value: string) => {
-    setDraft((prev) => ({ ...prev, [key]: value }));
+    setDraft((prev) => {
+      const next = { ...prev, [key]: value };
+      // Keep Guardian Name in step with the relationship (see guardianNameAfterRelationshipChange).
+      if (key === "guardian_relationship") {
+        next.guardian_name = guardianNameAfterRelationshipChange(value, {
+          guardianName: prev.guardian_name,
+          fatherName: prev.father_name,
+          motherName: prev.mother_name,
+        });
+      }
+      return next;
+    });
   };
 
   const handleCoreChange = (key: keyof CoreIdentity, value: string) => {
@@ -436,7 +510,7 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
             </div>
           </div>
           <p className="text-xs text-muted-foreground">
-            Name, email, phone, nationality, city, Study Interest, qualifications (institution, grade, passed year), the main exam scores{isAdmin ? " and Lead Source" : ""} save for real. Everything else here is a preview — it saves locally for now and will start saving for real once the database update for it is live.
+            Name, email, phone, nationality, city, personal and passport details, Study Interest, qualifications (institution, grade, passed year), the main exam scores{isAdmin ? " and Lead Source" : ""} save for real. Financial, work experience and references are a preview — they save locally for now and will start saving for real once their database update is live.
           </p>
         </DialogHeader>
 
@@ -457,7 +531,7 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
             </CardSection>
 
             <CardSection title="Basic Details">
-              <FieldGrid>
+              <FieldGrid columns={2}>
                 {PERSONAL_DETAIL_FIELDS.map((field) => (
                   <EditableField
                     key={field.key}
@@ -467,6 +541,48 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
                     onChange={(v) => handleChange(field.key, v)}
                   />
                 ))}
+              </FieldGrid>
+            </CardSection>
+
+            <CardSection title="Guardian Details">
+              <p className="mb-3 text-xs text-muted-foreground">
+                The guardian signs for the student on the consent. Pick the relationship: Father or Mother fills the name in
+                from their name above; for anyone else, type the name. Choose &quot;None / Not applicable&quot; if there is no
+                guardian.
+              </p>
+              <FieldGrid>
+                {GUARDIAN_FIELDS.map((field) => {
+                  const shown = isEditing ? draft : values;
+                  // Father / Mother (picked, or the only parent on file): the consent prints that parent's own
+                  // name, so show exactly that (locked) instead of a box whose contents the form would ignore.
+                  const effective = resolveGuardian({
+                    guardianName: shown.guardian_name,
+                    guardianRelationship: shown.guardian_relationship,
+                    fatherName: shown.father_name,
+                    motherName: shown.mother_name,
+                  });
+                  const parentName =
+                    effective.relationship === "Father" ? (shown.father_name ?? "").trim()
+                    : effective.relationship === "Mother" ? (shown.mother_name ?? "").trim()
+                    : "";
+                  const fromParent = field.key === "guardian_name" && !!parentName;
+                  const picked = !!normalizeGuardianRelationship(shown.guardian_relationship);
+                  const note = !fromParent
+                    ? undefined
+                    : picked
+                      ? `Taken from ${effective.relationship}'s Name above. Change it there.`
+                      : `Defaults to ${effective.relationship} (the only parent on file). Pick a relationship to change it.`;
+                  return (
+                    <EditableField
+                      key={field.key}
+                      field={withLegacyRelationshipOption(field, shown.guardian_relationship)}
+                      isEditing={isEditing}
+                      value={fromParent ? parentName : shown[field.key] || ""}
+                      onChange={(v) => handleChange(field.key, v)}
+                      readOnlyNote={note}
+                    />
+                  );
+                })}
               </FieldGrid>
             </CardSection>
 

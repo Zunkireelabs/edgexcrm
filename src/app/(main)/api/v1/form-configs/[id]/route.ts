@@ -14,6 +14,7 @@ import { validateFormConfig } from "@/industries/_shared/features/form-builder/l
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import type { FormStep, FormBranding, FormAttribution, FormConfig } from "@/types/database";
+import { normalizeSmsAutoresponder } from "@/lib/sms/form-autoresponder-config";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -54,6 +55,11 @@ export function normalizeAutoresponder(
       input.body_format !== undefined
         ? (input.body_format === "html" ? "html" : "text")
         : (base.body_format ?? "text"),
+    // Confirmation SMS rides in the same JSONB. Only present when there is SMS config to keep,
+    // so a form that never used it stays byte-identical. A full reset (raw === null) drops it.
+    ...(raw !== null && (input.sms !== undefined || base.sms !== undefined)
+      ? { sms: normalizeSmsAutoresponder(base.sms, input.sms) }
+      : {}),
   };
 }
 

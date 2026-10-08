@@ -38,12 +38,12 @@ import {
 import { CopyButton } from "@/components/ui/copy-button";
 import { TruncatedText } from "@/components/ui/truncated-text";
 import { formatPhoneForTel, formatPhoneForWhatsApp } from "@/lib/phone-utils";
-import { nationalityFromPhone } from "@/lib/leads/nationality";
+import { getLeadCity, getLeadNationality } from "@/lib/leads/lead-location";
 import { toast } from "sonner";
 import type { Lead, PipelineStage } from "@/types/database";
 import { getLeadFullName, getLeadInitials } from "./lead-name";
 import { isOtherLead } from "@/lib/leads/lead-type";
-import { formatDateTime } from "@/lib/date";
+import { formatDateTime, formatRelativeTime } from "@/lib/date";
 import { displayCase } from "@/lib/display-case";
 
 interface LeadTypeOption {
@@ -440,6 +440,11 @@ export function ContactCard({
               <p className="text-xs text-muted-foreground mt-2">
                 Created {formatDateTime(lead.created_at)}
               </p>
+              {industryId === "education_consultancy" && lead.updated_at && (
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Last updated {formatRelativeTime(lead.updated_at)}
+                </p>
+              )}
             </>
           )}
         </div>
@@ -467,8 +472,8 @@ export function ContactCard({
             </div>
           )}
           {(() => {
-            const nationality = lead.nationality ?? nationalityFromPhone(lead.phone);
-            const city = lead.city;
+            const nationality = getLeadNationality(lead);
+            const city = getLeadCity(lead);
             if (!nationality && !city) return null;
             return (
               <div className="flex items-center gap-1.5 pt-1">

@@ -4,6 +4,7 @@ import { createContext, useContext, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -81,8 +82,9 @@ export function CardSection({
   );
 }
 
-export function FieldGrid({ children }: { children: React.ReactNode }) {
-  return <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4">{children}</div>;
+export function FieldGrid({ children, columns = 3 }: { children: React.ReactNode; columns?: 2 | 3 }) {
+  const cols = columns === 2 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3";
+  return <div className={`grid ${cols} gap-x-6 gap-y-4`}>{children}</div>;
 }
 
 export function ReadOnlyField({ label, value }: { label: string; value: string }) {
@@ -109,11 +111,14 @@ export function EditableField({
   isEditing,
   value,
   onChange,
+  readOnlyNote,
 }: {
   field: FieldDef;
   isEditing: boolean;
   value: string;
   onChange: (value: string) => void;
+  /** Shows the value but locks it, with this note beneath (a field that is derived from another one). */
+  readOnlyNote?: string;
 }) {
   return (
     <div className={field.span === 2 ? "col-span-full" : undefined}>
@@ -131,6 +136,9 @@ export function EditableField({
               ))}
             </SelectContent>
           </Select>
+        ) : field.type === "tel" ? (
+          // Same country-code dropdown + number box the forms use; stored as "+977-98…".
+          <PhoneInput value={value} onChange={onChange} placeholder={field.placeholder ?? "Phone number"} />
         ) : (
           <>
             <Label htmlFor={field.key} className="sr-only">{field.label}</Label>
@@ -141,7 +149,10 @@ export function EditableField({
               onChange={(e) => onChange(e.target.value)}
               placeholder={field.placeholder ?? `Enter ${field.label.toLowerCase()}`}
               className="h-9 text-sm"
+              readOnly={!!readOnlyNote}
+              disabled={!!readOnlyNote}
             />
+            {readOnlyNote && <p className="mt-1 text-xs text-muted-foreground">{readOnlyNote}</p>}
           </>
         )
       ) : (

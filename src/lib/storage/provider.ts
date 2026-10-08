@@ -18,6 +18,12 @@ export interface StorageProvider {
   // Server-side credentialed fetch — for the 2B ingestion pipeline. NEVER
   // signed URLs; signed URLs are for humans in the browser.
   getBytes(bucket: string, path: string): Promise<Uint8Array>;
+  // Server-side credentialed write — the bytes originate on OUR server (fetched from a
+  // third party, e.g. inbound WhatsApp media resolved via the Graph API), not in a
+  // user's browser, so the existing createSignedUploadUrl path doesn't apply. Added for
+  // the inbox-attachments feature (docs/INBOX-ATTACHMENTS-BRIEF.md §3a); every other
+  // method on this interface is unchanged.
+  putBytes(bucket: string, path: string, bytes: Uint8Array, contentType: string): Promise<void>;
   remove(bucket: string, paths: string[]): Promise<void>;
 }
 
@@ -68,6 +74,14 @@ export class SupabaseStorageProvider implements StorageProvider {
       throw new Error(`getBytes failed for ${bucket}/${path}: ${error?.message ?? "no data"}`);
     }
     return new Uint8Array(await data.arrayBuffer());
+  }
+
+  async putBytes(bucket: string, path: string, bytes: Uint8Array, contentType: string): Promise<void> {
+    const client = await this.getClient();
+    const { error } = await client.storage.from(bucket).upload(path, bytes, { contentType, upsert: false });
+    if (error) {
+      throw new Error(`putBytes failed for ${bucket}/${path}: ${error.message}`);
+    }
   }
 
   async remove(bucket: string, paths: string[]): Promise<void> {

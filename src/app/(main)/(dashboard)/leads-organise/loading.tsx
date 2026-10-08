@@ -1,10 +1,11 @@
 import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingTitle } from "@/components/ui/loading-percent";
 
 export default function Loading() {
   return (
     <div className="space-y-6">
       <div>
-        <Skeleton className="h-7 w-40" />
+        <LoadingTitle label="Leads Organise" />
         <Skeleton className="h-4 w-64 mt-1" />
       </div>
       {/* list cards — mirrors grid gap-3 */}

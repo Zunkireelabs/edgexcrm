@@ -7,11 +7,12 @@
 // Choice logged in PR: shipping status updates in 3a keeps the route self-contained.
 // If it balloons later, split into a dedicated status processor in 3b.
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getAdapter } from "@/lib/inbox/adapters";
 import type { StatusEventResult } from "@/lib/inbox/adapters/types";
 import { logger } from "@/lib/logger";
+import { processInboundEventsByIds } from "@/lib/inbox/process-inbound";
 
 type MetaProvider = "whatsapp" | "messenger" | "instagram";
 
@@ -125,11 +126,23 @@ export async function POST(
     return NextResponse.json({ received: true }, { status: 200 });
   }
 
+  const phoneNumberIds = Array.from(new Set(messages.map((m) => m.channelRef)));
+  logger.info(
+    {
+      provider,
+      phoneNumberIds,
+      statusUpdateCount: statusResults.length,
+      messageCount: messages.length,
+    },
+    "meta webhook: accepted"
+  );
+
   if (messages.length === 0) {
     return NextResponse.json({ received: true }, { status: 200 });
   }
 
   let enqueued = 0;
+  const enqueuedEventIds: string[] = [];
 
   for (const msg of messages) {
     // Route to tenant via inbox_channels(provider, external_account_id = channelRef)
@@ -151,31 +164,53 @@ export async function POST(
 
     const ch = channelRow as { id: string; tenant_id: string; provider: string; external_account_id: string };
 
-    const { error } = await supabase.from("events").insert({
-      tenant_id: ch.tenant_id,
-      type: "inbox.inbound_received",
-      entity_type: "inbox_channel",
-      entity_id: ch.id,
-      payload: {
-        channel_id: ch.id,
+    const { data: inserted, error } = await supabase
+      .from("events")
+      .insert({
         tenant_id: ch.tenant_id,
-        provider: ch.provider,
-        external_contact_id: msg.externalContactId,
-        contact_phone: msg.contactPhone,
-        contact_display_name: msg.contactDisplayName,
-        provider_message_id: msg.providerMessageId,
-        provider_timestamp: msg.providerTimestamp,
-        content_text: msg.contentText,
-        attachments: msg.attachments,
-      },
-      status: "pending",
-    });
+        type: "inbox.inbound_received",
+        entity_type: "inbox_channel",
+        entity_id: ch.id,
+        payload: {
+          channel_id: ch.id,
+          tenant_id: ch.tenant_id,
+          provider: ch.provider,
+          external_contact_id: msg.externalContactId,
+          contact_phone: msg.contactPhone,
+          contact_display_name: msg.contactDisplayName,
+          provider_message_id: msg.providerMessageId,
+          provider_timestamp: msg.providerTimestamp,
+          content_text: msg.contentText,
+          attachments: msg.attachments,
+        },
+        status: "pending",
+      })
+      .select("id")
+      .single();
 
-    if (error) {
+    if (error || !inserted) {
       logger.error({ err: error, channelId: ch.id }, "meta webhook: failed to enqueue event");
     } else {
       enqueued++;
+      enqueuedEventIds.push((inserted as { id: string }).id);
     }
+  }
+
+  // S2-B (re-scoped Phase 3b): process the event(s) THIS call just enqueued right after
+  // the response goes out, instead of waiting for the */15 drain cron — the gap between
+  // those two paths was up to 15 minutes of a student's message not showing up anywhere.
+  // after() is guaranteed to run even though the response has already been sent; a
+  // failure inside it must never change what Meta sees, so it's deliberately not awaited
+  // and errors are swallowed here (processInboundEventsByIds already logs internally) —
+  // the cron remains the safety net for anything this misses (crash, timeout, cold start).
+  if (enqueuedEventIds.length > 0) {
+    after(async () => {
+      try {
+        await processInboundEventsByIds(enqueuedEventIds);
+      } catch (err) {
+        logger.error({ err, eventIds: enqueuedEventIds }, "meta webhook: after() inbound processing failed");
+      }
+    });
   }
 
   // Fast-ack 200 always — Meta disables slow webhooks

@@ -6,13 +6,78 @@
 // WhatsApp is even enabled.
 
 import { createHmac, timingSafeEqual } from "crypto";
+import { GRAPH_API_BASE } from "../graph-api";
 import type {
   ChannelAdapter,
   ChannelCapabilities,
+  InboundMediaDescriptor,
   NormalizedInbound,
   StatusEventResult,
   SendResult,
+  TemplateContent,
 } from "./types";
+
+// Meta's actual template-message wire format (Cloud API `messages` endpoint,
+// type: "template"). Distinct from TemplateContent (our own input shape) —
+// this is what that input gets translated INTO for the provider call.
+interface WATemplatePayload {
+  messaging_product: "whatsapp";
+  recipient_type: "individual";
+  to: string;
+  type: "template";
+  template: {
+    name: string;
+    language: { code: string };
+    components?: {
+      type: string;
+      parameters: { type: string; text: string }[];
+    }[];
+  };
+}
+
+function buildTemplatePayload(to: string, template: TemplateContent): WATemplatePayload {
+  return {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to,
+    type: "template",
+    template: {
+      name: template.name,
+      language: { code: template.languageCode },
+      components: template.components?.map((c) => ({
+        type: c.type,
+        parameters: c.parameters.map((p) => ({ type: p.type, text: p.text })),
+      })),
+    },
+  };
+}
+
+interface WAMediaSendPayload {
+  messaging_product: "whatsapp";
+  recipient_type: "individual";
+  to: string;
+  type: "image" | "document" | "audio" | "video";
+  image?: { id: string; caption?: string };
+  document?: { id: string; caption?: string; filename?: string };
+  audio?: { id: string };
+  video?: { id: string; caption?: string };
+}
+
+function buildMediaPayload(to: string, media: { type: WAMediaSendPayload["type"]; providerMediaId: string; filename?: string }, caption: string): WAMediaSendPayload {
+  const base = { messaging_product: "whatsapp" as const, recipient_type: "individual" as const, to, type: media.type };
+  switch (media.type) {
+    case "document":
+      return { ...base, document: { id: media.providerMediaId, caption: caption || undefined, filename: media.filename } };
+    case "audio":
+      // WhatsApp audio messages carry no caption field at all.
+      return { ...base, audio: { id: media.providerMediaId } };
+    case "video":
+      return { ...base, video: { id: media.providerMediaId, caption: caption || undefined } };
+    case "image":
+    default:
+      return { ...base, image: { id: media.providerMediaId, caption: caption || undefined } };
+  }
+}
 
 const CAPABILITIES: ChannelCapabilities = {
   sessionWindowHours: 24,
@@ -27,12 +92,49 @@ interface WAContact {
   profile?: { name?: string };
   wa_id?: string;
 }
+// Meta's media object shape is identical across image/document/audio/video/sticker —
+// only `caption` and `filename` are type-specific (caption: image/document/video only;
+// filename: document only). Modeling one shape and reading the fields that apply keeps
+// this simple instead of four near-duplicate interfaces.
+interface WAMediaObject {
+  id: string;
+  mime_type: string;
+  sha256?: string;
+  caption?: string;
+  filename?: string;
+}
 interface WAMessage {
   id: string;
   from: string;
   timestamp: string;
   text?: { body?: string };
+  image?: WAMediaObject;
+  document?: WAMediaObject;
+  audio?: WAMediaObject;
+  video?: WAMediaObject;
+  sticker?: WAMediaObject;
   type: string;
+}
+
+const MEDIA_FIELDS = ["image", "document", "audio", "video", "sticker"] as const;
+
+function extractMedia(msg: WAMessage): { attachments: InboundMediaDescriptor[]; caption: string | null } {
+  const attachments: InboundMediaDescriptor[] = [];
+  let caption: string | null = null;
+
+  for (const field of MEDIA_FIELDS) {
+    const media = msg[field];
+    if (!media) continue;
+    attachments.push({
+      type: field,
+      providerMediaId: media.id,
+      mimeType: media.mime_type ?? null,
+      filename: media.filename ?? null,
+    });
+    if (media.caption) caption = media.caption;
+  }
+
+  return { attachments, caption };
 }
 interface WAStatus {
   id: string;
@@ -113,14 +215,15 @@ export const whatsappAdapter: ChannelAdapter = {
 
         for (const msg of value.messages) {
           const contact = contactMap[msg.from];
+          const { attachments, caption } = extractMedia(msg);
           results.push({
             externalContactId: msg.from,
             contactPhone: `+${msg.from}`,
             contactDisplayName: contact?.profile?.name ?? null,
             providerMessageId: msg.id,
             providerTimestamp: new Date(parseInt(msg.timestamp, 10) * 1000).toISOString(),
-            contentText: msg.text?.body ?? null,
-            attachments: [],
+            contentText: msg.text?.body ?? caption,
+            attachments,
             channelRef,
           });
         }
@@ -164,14 +267,26 @@ export const whatsappAdapter: ChannelAdapter = {
     const token = channel.access_token;
     if (!token) throw new Error("WhatsApp channel missing access_token");
 
-    const url = `https://graph.facebook.com/v19.0/${channel.external_account_id}/messages`;
-    const body = {
-      messaging_product: "whatsapp",
-      recipient_type: "individual",
-      to: conversation.external_contact_id,
-      type: "text",
-      text: { body: content.text },
-    };
+    const url = `${GRAPH_API_BASE}/${channel.external_account_id}/messages`;
+    // A template is required outside the 24h session window (enforced by the
+    // caller, send-message.ts) and optional-but-valid inside it — either way,
+    // if one was supplied, send it as a template rather than free text. Meta
+    // rejects a template name/language it hasn't approved, so a bad name here
+    // surfaces as a normal !res.ok failure below, same as any other send error.
+    // Precedence: template > media > plain text. A media reference means the caller
+    // already uploaded bytes via uploadMedia() below and holds Meta's own media id —
+    // `content.text`, if present, rides along as the media's caption.
+    const body = content.template
+      ? buildTemplatePayload(conversation.external_contact_id, content.template)
+      : content.media
+        ? buildMediaPayload(conversation.external_contact_id, content.media, content.text)
+        : {
+            messaging_product: "whatsapp",
+            recipient_type: "individual",
+            to: conversation.external_contact_id,
+            type: "text",
+            text: { body: content.text },
+          };
 
     const res = await fetch(url, {
       method: "POST",
@@ -192,5 +307,33 @@ export const whatsappAdapter: ChannelAdapter = {
       providerMessageId: data.messages?.[0]?.id ?? null,
       sentAt: new Date().toISOString(),
     };
+  },
+
+  // Outbound mirror of the inbound media flow: Meta requires bytes to be uploaded to
+  // its own /media endpoint FIRST, which hands back a media id — only then can a
+  // message reference it. multipart/form-data per Meta's Cloud API media-upload spec.
+  async uploadMedia(channel, bytes, mimeType, filename): Promise<{ providerMediaId: string }> {
+    if (!process.env.INBOX_WHATSAPP_ENABLED) throw new Error(NOT_ENABLED);
+    const token = channel.access_token;
+    if (!token) throw new Error("WhatsApp channel missing access_token");
+
+    const form = new FormData();
+    form.append("messaging_product", "whatsapp");
+    form.append("file", new Blob([bytes as unknown as BlobPart], { type: mimeType }), filename ?? "upload");
+
+    const res = await fetch(`${GRAPH_API_BASE}/${channel.external_account_id}/media`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    });
+
+    if (!res.ok) {
+      const err = await res.text().catch(() => "unknown error");
+      throw new Error(`WhatsApp media upload failed (${res.status}): ${err}`);
+    }
+
+    const data = (await res.json()) as { id?: string };
+    if (!data.id) throw new Error("WhatsApp media upload response had no id");
+    return { providerMediaId: data.id };
   },
 };

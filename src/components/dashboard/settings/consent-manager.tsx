@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,6 +14,8 @@ import {
 import { FileText, ToggleLeft, ToggleRight } from "lucide-react";
 import { toast } from "sonner";
 import { DEFAULT_CONSENT_TEMPLATE } from "@/lib/consent/default-template";
+import { CONSENT_MERGE_FIELDS, findUnknownPlaceholders } from "@/lib/consent/merge";
+import { consentRequirementGroups } from "@/lib/consent/readiness";
 
 interface ConsentTemplate {
   id: string;
@@ -38,6 +40,7 @@ function buildDefault(): Omit<ConsentTemplate, "id" | "version"> {
 export function ConsentManager() {
   const [template, setTemplate] = useState<ConsentTemplate | null>(null);
   const [form, setForm] = useState(buildDefault());
+  const unknownPlaceholders = useMemo(() => findUnknownPlaceholders(form.body), [form.body]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -202,16 +205,36 @@ export function ConsentManager() {
             rows={8}
             className="w-full px-3 py-2 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring resize-none"
           />
+          {unknownPlaceholders.length > 0 && (
+            <p role="alert" className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+              These placeholders aren&apos;t recognised and will show as-is to students:{" "}
+              {unknownPlaceholders.map((t) => `{{${t}}}`).join(", ")}. Check the spelling against the list below.
+            </p>
+          )}
+          {form.body.trim() && (
+            <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900 space-y-1">
+              <p className="font-medium">Before a consent can be sent, each student needs:</p>
+              <ul className="list-disc pl-4">
+                {consentRequirementGroups(form.body).map((g) => (
+                  <li key={g.section}>
+                    <span className="font-medium">{g.section}:</span> {g.fields.join(", ")}
+                  </li>
+                ))}
+              </ul>
+              <p className="text-blue-800">
+                Staff fill these in Student Details (Edit); the counselor is the one assigned to the lead. Consent can&apos;t be
+                sent while any is missing. For a student with no guardian, choose &quot;None / Not applicable&quot;.
+              </p>
+            </div>
+          )}
           <p className="text-xs text-muted-foreground">
             Merge fields auto-fill per student when the link is sent:{" "}
-            <code className="text-foreground">{"{{student_name}}"}</code>,{" "}
-            <code className="text-foreground">{"{{student_email}}"}</code>,{" "}
-            <code className="text-foreground">{"{{student_phone}}"}</code>,{" "}
-            <code className="text-foreground">{"{{city}}"}</code>,{" "}
-            <code className="text-foreground">{"{{country}}"}</code>,{" "}
-            <code className="text-foreground">{"{{organization}}"}</code>,{" "}
-            <code className="text-foreground">{"{{date}}"}</code>,{" "}
-            <code className="text-foreground">{"{{consent_version}}"}</code>
+            {CONSENT_MERGE_FIELDS.map((field, i) => (
+              <span key={field}>
+                <code className="text-foreground">{`{{${field}}}`}</code>
+                {i < CONSENT_MERGE_FIELDS.length - 1 ? ", " : ""}
+              </span>
+            ))}
           </p>
         </div>
 

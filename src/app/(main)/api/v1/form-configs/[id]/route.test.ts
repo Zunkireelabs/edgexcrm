@@ -88,4 +88,29 @@ describe("normalizeAutoresponder", () => {
     expect(result.subject).toBe(alreadyLong.subject);
     expect(result.body_html).toBe(alreadyLong.body_html);
   });
+
+  describe("confirmation SMS (autoresponder.sms)", () => {
+    it("a form that never used SMS stays byte-identical (no sms key appears)", () => {
+      const result = normalizeAutoresponder(stored, { enabled: false });
+      expect("sms" in result).toBe(false);
+    });
+
+    it("saving SMS config keeps the email fields untouched", () => {
+      const result = normalizeAutoresponder(stored, { sms: { enabled: true, body: "Hi" } });
+      expect(result).toEqual({ ...stored, sms: { enabled: true, fire_mode: "every", body: "Hi" } });
+    });
+
+    it("an email-only PATCH preserves previously saved SMS config", () => {
+      const withSms = { ...stored, sms: { enabled: true, fire_mode: "first" as const, body: "Hi" } };
+      const result = normalizeAutoresponder(withSms, { subject: "Changed" });
+      expect(result.sms).toEqual(withSms.sms);
+      expect(result.subject).toBe("Changed");
+    });
+
+    it("autoresponder: null drops SMS config along with the email defaults", () => {
+      const withSms = { ...stored, sms: { enabled: true, fire_mode: "first" as const, body: "Hi" } };
+      const result = normalizeAutoresponder(withSms, null);
+      expect("sms" in result).toBe(false);
+    });
+  });
 });

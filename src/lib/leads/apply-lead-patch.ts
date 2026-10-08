@@ -3,6 +3,7 @@ import { validate, isPhoneForCountry } from "@/lib/api/validation";
 import { normalizePhoneForStorage } from "@/lib/phone-utils";
 import { requireAdmin, requireLeadAccess, resolvePositionSlug, type AuthContext } from "@/lib/api/auth";
 import { getLeadMembership, syncOriginMembership } from "@/lib/leads/branch-membership";
+import { assignmentBranchTarget, branchMoveOnAssignment } from "@/lib/leads/branch-resolution";
 import { isAdminAssignmentTarget } from "@/lib/leads/branch-assign-policy";
 import { addLeadCollaborator } from "@/lib/leads/collaborators";
 import { canAccessPipeline, canAccessList } from "@/lib/api/permissions";
@@ -26,6 +27,7 @@ import {
   hasProspectQualification,
   canBypassProspectQualification,
 } from "@/lib/leads/prospect-qualification";
+import { PERSONAL_DETAIL_COLUMNS, coercePersonalDetailsPayload } from "@/lib/leads/personal-details";
 import { normalizeDestinations, normalizeFieldOfStudy, normalizeDegreeLevel } from "@/lib/leads/destination-normalize";
 import type { Lead } from "@/types/database";
 
@@ -87,6 +89,8 @@ const UPDATABLE_FIELDS = [
   "sat_score",
   "gre_gmat_score",
   "on_hold",
+  // Student personal / passport / citizenship details (migration 234) — normalised below.
+  ...PERSONAL_DETAIL_COLUMNS,
 ] as const;
 
 // Blocked for plain counselors/viewers but NOT for team-scoped branch managers
@@ -599,6 +603,14 @@ export async function applyLeadPatch(
   }
   Object.assign(updatePayload, coerceAcademicPayload(body));
 
+  // Personal / passport / citizenship details: trim, null-out blanks, reject bad dates
+  // before they reach Postgres (an invalid DATE would surface as an opaque 500).
+  const personal = coercePersonalDetailsPayload(body);
+  if (Object.keys(personal.errors).length > 0) {
+    return { kind: "validation", errors: personal.errors };
+  }
+  Object.assign(updatePayload, personal.values);
+
   // Mirror lead_type on list move (keeps existing education UI working during transition)
   // Also resolve list names for the audit log so the activity timeline can render them.
   let newListName: string | null = null;
@@ -814,6 +826,15 @@ export async function applyLeadPatch(
         }
       }
     }
+  }
+
+  // A lead sitting in the default ("Global") branch becomes the assignee's branch lead when assigned
+  // to someone in a branch. Skipped when the caller set branch_id itself. Runs after every permission
+  // check above, so it can never widen what the caller was allowed to do.
+  if (body.assigned_to !== undefined && body.assigned_to !== null && body.branch_id === undefined) {
+    const target = await assignmentBranchTarget(supabase, auth.tenantId, body.assigned_to as string, newAssigneeBranchId);
+    const moveTo = branchMoveOnAssignment((existingLead as Lead).branch_id, target);
+    if (moveTo) updatePayload.branch_id = moveTo;
   }
 
   // Stage-age badge tracks stage/status moves only, not every field edit — set it here

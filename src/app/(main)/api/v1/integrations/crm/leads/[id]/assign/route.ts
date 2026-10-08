@@ -18,6 +18,8 @@ import {
 import { requirePermission } from "@/lib/api/integration-permissions";
 import { validate, required, isUUID } from "@/lib/api/validation";
 import { addLeadCollaborator } from "@/lib/leads/collaborators";
+import { assignmentBranchTarget, branchMoveOnAssignment } from "@/lib/leads/branch-resolution";
+import { syncOriginMembership } from "@/lib/leads/branch-membership";
 import type { Lead } from "@/types/database";
 
 // POST /api/v1/integrations/crm/leads/:id/assign
@@ -83,9 +85,13 @@ export const POST = withIntegrationErrorBoundary(async function POST(
     });
   }
 
+  // A lead in the default ("Global") branch becomes the assignee's branch lead (same rule as the dashboard).
+  const target = await assignmentBranchTarget(ctx.supabase, tenantId, userId);
+  const moveTo = branchMoveOnAssignment((existingLead as Lead).branch_id, target);
+
   const { data: updated, error } = await ctx.supabase
     .from("leads")
-    .update({ assigned_to: userId })
+    .update({ assigned_to: userId, ...(moveTo && { branch_id: moveTo }) })
     .eq("id", id)
     .eq("tenant_id", tenantId)
     .select()
@@ -93,6 +99,11 @@ export const POST = withIntegrationErrorBoundary(async function POST(
 
   if (error) {
     return apiServiceUnavailable("Failed to assign lead");
+  }
+
+  // Keep the origin lead_branches row in step with the new branch / assignee.
+  if (moveTo) {
+    await syncOriginMembership(ctx.supabase, tenantId, id, moveTo, userId);
   }
 
   // Assignee is a collaborator (migration 090). Migration 252's trigger now guarantees

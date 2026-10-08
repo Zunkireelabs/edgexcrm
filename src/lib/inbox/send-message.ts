@@ -7,7 +7,21 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { logger } from "@/lib/logger";
 import { getAdapter } from "./adapters";
 import { decryptToken } from "./crypto";
-import type { InboxProvider } from "./adapters/types";
+import { INBOX_MEDIA_BUCKET } from "./media";
+import { getStorageProvider } from "@/lib/storage/provider";
+import type { InboxProvider, TemplateContent, OutboundMediaRef } from "./adapters/types";
+
+// Outbound attachment the caller (the composer route) already has in hand — raw bytes,
+// not yet uploaded anywhere. send-message.ts uploads to the provider FIRST (D4: Meta
+// requires a media id before a message can reference it), then stores our own copy in
+// inbox-media too, so the thread renders consistently and history survives Meta's
+// retention even if the provider-side copy expires.
+export interface OutboundAttachmentInput {
+  bytes: Uint8Array;
+  filename: string | null;
+  mimeType: string;
+  type: "image" | "document" | "audio" | "video";
+}
 
 export interface HumanAuthor {
   type: "human_agent";
@@ -30,6 +44,16 @@ export interface SendMessageInput {
   author: HumanAuthor | AiAuthor | SystemAuthor;
   /** If provided, flip an existing draft row to sent instead of inserting a new row */
   fromDraftMessageId?: string;
+  /**
+   * A pre-approved provider template to send instead of/alongside free text.
+   * Required to get past the session-window guard below once outside the
+   * window; optional (and still valid) inside it. `content` is still stored
+   * as the human-readable message-log entry either way — this only changes
+   * what's actually transmitted to the provider.
+   */
+  template?: TemplateContent;
+  /** A single file to send alongside/instead of text — see OutboundAttachmentInput. */
+  attachment?: OutboundAttachmentInput;
 }
 
 export interface SendMessageResult {
@@ -93,9 +117,11 @@ export async function sendMessage(input: SendMessageInput): Promise<SendMessageR
   const adapter = getAdapter(conversation.provider as InboxProvider);
 
   // Session-window guard: enforce for providers that require templates outside the window.
-  // Template composing UI is out of scope — if we're outside the window and no template is
-  // provided, fail early so the rep gets a clear error instead of a silent Meta rejection.
-  if (adapter.capabilities.requiresTemplateOutsideWindow && adapter.capabilities.sessionWindowHours !== null) {
+  // A caller-supplied template clears this guard even outside the window (that's the
+  // whole point of a template — Meta's actual rule) — only fail when we're outside the
+  // window AND no template was given, so the rep gets a clear error instead of a silent
+  // Meta rejection.
+  if (!input.template && adapter.capabilities.requiresTemplateOutsideWindow && adapter.capabilities.sessionWindowHours !== null) {
     const windowHours = adapter.capabilities.sessionWindowHours;
 
     const { data: latestInbound } = await supabase
@@ -190,34 +216,64 @@ export async function sendMessage(input: SendMessageInput): Promise<SendMessageR
     }
   }
 
+  const channelForAdapter = {
+    id: channel.id,
+    tenant_id: channel.tenant_id,
+    provider: channel.provider as InboxProvider,
+    external_account_id: channel.external_account_id,
+    display_name: channel.display_name,
+    status: channel.status,
+    access_token: plaintextToken,
+    webhook_verify_token_hash: channel.webhook_verify_token_hash,
+    meta: channel.meta,
+  };
+  const conversationForAdapter = {
+    id: conversation.id,
+    tenant_id: conversation.tenant_id,
+    channel_id: conversation.channel_id,
+    provider: conversation.provider as InboxProvider,
+    external_contact_id: conversation.external_contact_id,
+    contact_phone: conversation.contact_phone,
+    contact_display_name: conversation.contact_display_name,
+    lead_id: conversation.lead_id,
+  };
+
+  // D4: an attachment must be uploaded to the provider FIRST — Meta hands back a media
+  // id only AFTER it has the bytes, and a message can only ever reference an id, never
+  // bytes inline. A failure here fails the whole send (there is nothing to send without
+  // it) exactly like any other provider delivery failure below.
+  let media: OutboundMediaRef | undefined;
+  if (input.attachment) {
+    if (!adapter.uploadMedia) {
+      const errMsg = `${conversation.provider} does not support attachments`;
+      await supabase.from("messages").update({ status: "failed", error: errMsg }).eq("id", messageId).eq("tenant_id", input.tenantId);
+      return { messageId, providerMessageId: null, status: "failed", error: errMsg };
+    }
+    try {
+      const uploaded = await adapter.uploadMedia(
+        channelForAdapter,
+        input.attachment.bytes,
+        input.attachment.mimeType,
+        input.attachment.filename
+      );
+      media = { type: input.attachment.type, providerMediaId: uploaded.providerMediaId, filename: input.attachment.filename ?? undefined };
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      logger.error({ err, conversationId: input.conversationId }, "sendMessage: attachment upload failed");
+      await supabase.from("messages").update({ status: "failed", error: errMsg }).eq("id", messageId).eq("tenant_id", input.tenantId);
+      return { messageId, providerMessageId: null, status: "failed", error: errMsg };
+    }
+  }
+
   // Attempt delivery
   let providerMessageId: string | null = null;
   let finalStatus = "sent";
 
   try {
     const result = await adapter.sendMessage(
-      {
-        id: channel.id,
-        tenant_id: channel.tenant_id,
-        provider: channel.provider as InboxProvider,
-        external_account_id: channel.external_account_id,
-        display_name: channel.display_name,
-        status: channel.status,
-        access_token: plaintextToken,
-        webhook_verify_token_hash: channel.webhook_verify_token_hash,
-        meta: channel.meta,
-      },
-      {
-        id: conversation.id,
-        tenant_id: conversation.tenant_id,
-        channel_id: conversation.channel_id,
-        provider: conversation.provider as InboxProvider,
-        external_contact_id: conversation.external_contact_id,
-        contact_phone: conversation.contact_phone,
-        contact_display_name: conversation.contact_display_name,
-        lead_id: conversation.lead_id,
-      },
-      { text: input.content }
+      channelForAdapter,
+      conversationForAdapter,
+      { text: input.content, template: input.template, media }
     );
     providerMessageId = result.providerMessageId;
   } catch (err) {
@@ -232,12 +288,43 @@ export async function sendMessage(input: SendMessageInput): Promise<SendMessageR
     return { messageId, providerMessageId: null, status: "failed" };
   }
 
-  // Update message to sent + store provider_message_id
+  // Store our own copy of the attachment too (best-effort — a failure here doesn't
+  // undo an already-successful provider send; it just means the thread can't render
+  // our own copy and falls back to whatever's in the error marker).
+  let storedAttachment: Record<string, unknown> | undefined;
+  if (input.attachment) {
+    try {
+      const ext = input.attachment.filename?.split(".").pop() ?? "bin";
+      const path = `${input.tenantId}/inbox/${input.conversationId}/${messageId}-0.${ext}`;
+      await getStorageProvider().putBytes(INBOX_MEDIA_BUCKET, path, input.attachment.bytes, input.attachment.mimeType);
+      storedAttachment = {
+        type: input.attachment.type,
+        provider_media_id: media?.providerMediaId,
+        bucket: INBOX_MEDIA_BUCKET,
+        path,
+        filename: input.attachment.filename,
+        mime_type: input.attachment.mimeType,
+        size: input.attachment.bytes.byteLength,
+      };
+    } catch (storeErr) {
+      logger.warn({ err: storeErr, messageId }, "sendMessage: failed to store our own copy of an outbound attachment (non-fatal)");
+      storedAttachment = {
+        type: input.attachment.type,
+        provider_media_id: media?.providerMediaId,
+        filename: input.attachment.filename,
+        mime_type: input.attachment.mimeType,
+        error: storeErr instanceof Error ? storeErr.message : String(storeErr),
+      };
+    }
+  }
+
+  // Update message to sent + store provider_message_id (+ our own attachment copy, if any)
   await supabase
     .from("messages")
     .update({
       status: finalStatus,
       provider_message_id: providerMessageId,
+      ...(storedAttachment && { attachments: [storedAttachment] }),
     })
     .eq("id", messageId)
     .eq("tenant_id", input.tenantId);

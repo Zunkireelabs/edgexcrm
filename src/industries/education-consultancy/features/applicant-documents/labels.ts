@@ -19,6 +19,11 @@ export const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
   other: "Other",
 };
 
+/** Display name for a document type; never undefined, even for a type added to the DB before the UI. */
+export function documentTypeLabel(type: string): string {
+  return DOCUMENT_TYPE_LABELS[type as DocumentType] ?? "Other";
+}
+
 export const DOCUMENT_CATEGORY_LABELS: Record<DocumentCategory, string> = {
   identity: "Identity",
   education: "Education",

@@ -47,6 +47,9 @@ import { CheckInHistoryCard } from "@/industries/_shared/features/check-in/check
 import { ApplicantDocumentsCard } from "@/industries/education-consultancy/features/applicant-documents/documents-card";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
+import { getLeadCity, getLeadNationality } from "@/lib/leads/lead-location";
+import { consentProfileKey } from "@/lib/consent/readiness";
+import { isOwnerOrAdmin } from "@/lib/roles";
 
 interface TeamMember {
   id: string;
@@ -137,9 +140,9 @@ function makeDraft(lead: Lead): LeadDraft {
     last_name: lead.last_name || "",
     email: lead.email || "",
     phone: lead.phone || "",
-    city: lead.city || "",
+    city: getLeadCity(lead) || "",
     country: lead.country || "",
-    nationality: lead.nationality || "",
+    nationality: getLeadNationality(lead) || "",
     preferred_contact_method: lead.preferred_contact_method || "",
     salutation: lead.salutation || "",
     company_name: lead.company_name || "",
@@ -239,7 +242,7 @@ export function LeadDetailV2({
   // industry list — other industries unaffected.
   const isRealEstate = getFeatureAccess(tenant.industry_id, FEATURES.OFFERINGS);
 
-  const isAdmin = role === "owner" || role === "admin";
+  const isAdmin = isOwnerOrAdmin(role);
   // Position-derived edit capability: admins always, plus members whose position grants
   // canEditLeads. Gates the same lead working-data controls (stage, tasks) that isAdmin did.
   const canEdit = isAdmin || canEditLeads;
@@ -923,8 +926,14 @@ export function LeadDetailV2({
                       consentEnabled={consentEnabled}
                       consentSigned={consentSigned}
                       showCopyLink
+                      showCollapsedStatus
+                      profileKey={consentProfileKey(currentLead)}
+                      onOpenStudentDetails={() => {
+                        notesTabRef.current?.openStudentDetails();
+                      }}
                       canManage={canManageApplications ?? isAdmin}
                       canManageFee={isAdmin}
+                      canOverrideProfileCheck={isAdmin}
                       onSignedChange={setConsentSignedState}
                       feeStatus={currentLead.pre_app_fee_status}
                       feeAmount={currentLead.pre_app_fee_amount}
@@ -959,6 +968,7 @@ export function LeadDetailV2({
                   canManage={canEdit ?? isAdmin}
                   currentUserId={userId}
                   isAdmin={isAdmin}
+                  variant="summary"
                 />
               )}
             </div>

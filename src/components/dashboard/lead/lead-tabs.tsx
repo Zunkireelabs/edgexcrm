@@ -141,6 +141,11 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
             />
           )}
 
+          {/* Student Details summary — read-only. Editing happens in the Student Details pop-up, opened by the page's single Edit button (top of the contact card). */}
+          {studentRecordActive && (
+            <StudentDetailsSummaryCard lead={lead} />
+          )}
+
           {/* Recent Notes Preview */}
           {notes.length > 0 && (
             <Card className="shadow-none rounded-lg py-0">
@@ -170,11 +175,6 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
                 )}
               </CardContent>
             </Card>
-          )}
-
-          {/* Student Details summary — read-only. Editing happens in the Student Details pop-up, opened by the page's single Edit button (top of the contact card). */}
-          {studentRecordActive && (
-            <StudentDetailsSummaryCard />
           )}
 
           {/* Possible Duplicates — admin-only */}
@@ -380,6 +380,24 @@ function PossibleDuplicatesCard({ lead, onMerged }: { lead: Lead; onMerged?: () 
       toefl_score: null,
       sat_score: null,
       gre_gmat_score: null,
+      date_of_birth: null,
+      marital_status: null,
+      father_name: null,
+      mother_name: null,
+      full_address: null,
+      emergency_contact_name: null,
+      emergency_contact_phone: null,
+      passport_number: null,
+      passport_issued_by: null,
+      passport_issued_date: null,
+      passport_expiry_date: null,
+      citizenship_number: null,
+      citizenship_issued_by: null,
+      citizenship_issued_date: null,
+      guardian_phone: null,
+      guardian_email: null,
+      guardian_relationship: null,
+      guardian_name: null,
     };
     setMergeTarget(partial);
     setMergeDialogOpen(true);

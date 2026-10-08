@@ -14,16 +14,12 @@ import {
   MapPin,
   Calendar,
   UserPlus,
-  Users,
-  BookOpen,
-  Clock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Select,
@@ -41,6 +37,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ContactCard } from "@/components/dashboard/lead/contact-card";
+import { consentProfileKey } from "@/lib/consent/readiness";
 import { ConsentCard } from "../components/consent-card";
 import { StatusBadge } from "../components/status-badge";
 import { StageStepperHorizontal } from "../components/stage-stepper-horizontal";
@@ -95,6 +92,8 @@ interface ApplicationDetailPageProps {
   canDelete: boolean;
   /** Processing fee is owner/admin-only, stricter than canEdit (branch-manager/assignee). */
   canManageFee: boolean;
+  /** Owner/admin (isOwnerOrAdmin) — may "Send anyway" on an incomplete student profile. */
+  canOverrideProfileCheck?: boolean;
   currentUserId: string;
 }
 
@@ -106,6 +105,7 @@ export function ApplicationDetailPage({
   canEdit,
   canDelete,
   canManageFee,
+  canOverrideProfileCheck = false,
   currentUserId,
 }: ApplicationDetailPageProps) {
   const router = useRouter();
@@ -155,9 +155,6 @@ export function ApplicationDetailPage({
   const [deadline, setDeadline] = useState("");
   const [offerType, setOfferType] = useState<"" | "conditional" | "unconditional">("");
   const [offerLetterUrl, setOfferLetterUrl] = useState("");
-  const [appFeePaid, setAppFeePaid] = useState(false);
-  const [tuitionFee, setTuitionFee] = useState("");
-  const [depositPaid, setDepositPaid] = useState(false);
   const [notes, setNotes] = useState("");
   const [agentId, setAgentId] = useState("");
   const [appliedDate, setAppliedDate] = useState("");
@@ -258,9 +255,6 @@ export function ApplicationDetailPage({
     setDeadline(application.application_deadline ?? "");
     setOfferType((application.offer_type as "" | "conditional" | "unconditional") ?? "");
     setOfferLetterUrl(application.offer_letter_url ?? "");
-    setAppFeePaid(application.application_fee_paid ?? false);
-    setTuitionFee(application.tuition_fee != null ? String(application.tuition_fee) : "");
-    setDepositPaid(application.deposit_paid ?? false);
     setNotes(application.notes ?? "");
     setAgentId(application.agent_id ?? "");
     setAppliedDate(application.applied_date ?? "");
@@ -301,9 +295,6 @@ export function ApplicationDetailPage({
         application_deadline: deadline || null,
         offer_type: offerType || null,
         offer_letter_url: offerLetterUrl.trim() || null,
-        application_fee_paid: appFeePaid,
-        tuition_fee: tuitionFee !== "" ? Number(tuitionFee) : null,
-        deposit_paid: depositPaid,
         notes: notes.trim() || null,
         agent_id: agentId && agentId !== "__none__" ? agentId : null,
         applied_date: appliedDate || null,
@@ -412,66 +403,14 @@ export function ApplicationDetailPage({
             </Card>
           )}
 
-          {/* Student key info */}
+          {/* Link back to the student record (the old Student Info card is gone) */}
           {fullLead && (
-            <Card className="border shadow-none rounded-lg">
-              <CardContent className="p-5 space-y-2">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                  Student Info
-                </p>
-                {fullLead.city && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    <span>{fullLead.city}</span>
-                  </div>
-                )}
-                {fullLead.intake_source && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="text-muted-foreground text-xs">Source:</span>
-                    <span className="text-xs">{fullLead.intake_source}</span>
-                  </div>
-                )}
-                {/* Assigned To */}
-                <div className="flex items-center gap-2 text-sm">
-                  <Users className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <span className="text-muted-foreground text-xs">Assigned To:</span>
-                  <span className="text-xs truncate">
-                    {fullLead.assigned_to
-                      ? (teamMemberNames[fullLead.assigned_to] ?? teamMemberEmails[fullLead.assigned_to] ?? "Unassigned")
-                      : "Unassigned"}
-                  </span>
-                </div>
-                {/* Degree Level */}
-                {(fullLead.degree_level ?? (fullLead.custom_fields as Record<string, string> | null)?.degree_level) && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <BookOpen className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    <span className="text-muted-foreground text-xs">Degree:</span>
-                    <span className="text-xs">
-                      {fullLead.degree_level ?? (fullLead.custom_fields as Record<string, string> | null)?.degree_level}
-                    </span>
-                  </div>
-                )}
-                {/* Days with Admizz */}
-                <div className="flex items-center gap-2 text-sm">
-                  <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <span className="text-muted-foreground text-xs">With Admizz:</span>
-                  <span className="text-xs">
-                    {Math.floor((Date.now() - new Date(fullLead.created_at).getTime()) / 86400000)} days
-                  </span>
-                </div>
-                <div className="pt-1">
-                  <Link
-                    href={`/leads/${leadId}`}
-                    className="text-xs text-primary hover:underline"
-                  >
-                    View student record →
-                  </Link>
-                </div>
-              </CardContent>
-            </Card>
+            <Link href={`/leads/${leadId}`} className="block px-1 text-xs text-primary hover:underline">
+              View student record →
+            </Link>
           )}
 
-          {/* Created By — standalone container, below Student Info */}
+          {/* Created By */}
           <Card className="border shadow-none rounded-lg">
             <CardContent className="p-5">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
@@ -493,6 +432,27 @@ export function ApplicationDetailPage({
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">—</p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Notes */}
+          <Card className="border shadow-none rounded-lg">
+            <CardContent className="p-5">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                Notes
+              </p>
+              {editing ? (
+                <Textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Internal notes..."
+                  rows={3}
+                />
+              ) : (
+                <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                  {application.notes ?? "—"}
+                </p>
               )}
             </CardContent>
           </Card>
@@ -624,18 +584,38 @@ export function ApplicationDetailPage({
                 )}
               </div>
 
-              {/* Created by */}
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Created by</Label>
-                <p className="text-sm font-medium">
-                  {application.created_by
-                    ? (teamMemberNames[application.created_by] ?? teamMemberEmails[application.created_by] ?? "—")
-                    : "—"}
-                </p>
+              {/* Study details — two compact columns (long fields span both); Created by lives in the left "Created By" card. */}
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+              {/* University */}
+              <div className="col-span-2 space-y-1">
+                <Label className="text-xs text-muted-foreground">University</Label>
+                {editing ? (
+                  <AutocompleteInput
+                    value={universityName}
+                    onChange={setUniversityName}
+                    suggestions={collegeSuggestions}
+                    placeholder="e.g. University of Melbourne"
+                    onCreateNew={handleCreateCollege}
+                    createLabel="university"
+                    skipConfirm
+                  />
+                ) : (
+                  <p className="text-sm">{application.university_name}</p>
+                )}
+              </div>
+
+              {/* Program */}
+              <div className="col-span-2 space-y-1">
+                <Label className="text-xs text-muted-foreground">Program</Label>
+                {editing ? (
+                  <Input value={programName} onChange={(e) => setProgramName(e.target.value)} />
+                ) : (
+                  <p className="text-sm">{application.program_name}</p>
+                )}
               </div>
 
               {/* Country */}
-              <div className="space-y-1">
+              <div className={`space-y-1${editing ? " col-span-2" : ""}`}>
                 {editing ? (
                   <DestinationsMultiSelect
                     selected={countries}
@@ -656,76 +636,8 @@ export function ApplicationDetailPage({
                 )}
               </div>
 
-              {/* University */}
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">University</Label>
-                {editing ? (
-                  <AutocompleteInput
-                    value={universityName}
-                    onChange={setUniversityName}
-                    suggestions={collegeSuggestions}
-                    placeholder="e.g. University of Melbourne"
-                    onCreateNew={handleCreateCollege}
-                    createLabel="university"
-                    skipConfirm
-                  />
-                ) : (
-                  <p className="text-sm">{application.university_name}</p>
-                )}
-              </div>
-
-              {/* Interested Degree Level */}
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Interested Degree Level</Label>
-                {editing ? (
-                  <Select value={degreeLevel || "__none__"} onValueChange={setDegreeLevel}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select level" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">Select level</SelectItem>
-                      {studyLevels.map((lvl) => (
-                        <SelectItem key={lvl} value={lvl}>{lvl}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <p className="text-sm">{normalizeDegreeLevel(application.degree_level) ?? "—"}</p>
-                )}
-              </div>
-
-              {/* Field of Study */}
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Field of Study</Label>
-                {editing ? (
-                  <Select value={fieldOfStudy || "__none__"} onValueChange={setFieldOfStudy}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select field" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">Select field</SelectItem>
-                      {fieldsOfStudy.map((f) => (
-                        <SelectItem key={f} value={f}>{f}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <p className="text-sm">{normalizeFieldOfStudy(application.field_of_study) ?? "—"}</p>
-                )}
-              </div>
-
-              {/* Program */}
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Program</Label>
-                {editing ? (
-                  <Input value={programName} onChange={(e) => setProgramName(e.target.value)} />
-                ) : (
-                  <p className="text-sm">{application.program_name}</p>
-                )}
-              </div>
-
               {/* Intake */}
-              <div className="space-y-1">
+              <div className={`space-y-1${editing ? " col-span-2" : ""}`}>
                 <Label className="text-xs text-muted-foreground">Intake</Label>
                 {editing ? (
                   <div className="grid grid-cols-2 gap-2">
@@ -763,6 +675,46 @@ export function ApplicationDetailPage({
                 )}
               </div>
 
+              {/* Degree Level */}
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Degree Level</Label>
+                {editing ? (
+                  <Select value={degreeLevel || "__none__"} onValueChange={setDegreeLevel}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select level" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">Select level</SelectItem>
+                      {studyLevels.map((lvl) => (
+                        <SelectItem key={lvl} value={lvl}>{lvl}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <p className="text-sm">{normalizeDegreeLevel(application.degree_level) ?? "—"}</p>
+                )}
+              </div>
+
+              {/* Field of Study */}
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Field of Study</Label>
+                {editing ? (
+                  <Select value={fieldOfStudy || "__none__"} onValueChange={setFieldOfStudy}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select field" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">Select field</SelectItem>
+                      {fieldsOfStudy.map((f) => (
+                        <SelectItem key={f} value={f}>{f}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <p className="text-sm">{normalizeFieldOfStudy(application.field_of_study) ?? "—"}</p>
+                )}
+              </div>
+
               {/* Deadline */}
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">Deadline</Label>
@@ -775,7 +727,7 @@ export function ApplicationDetailPage({
 
               {/* Offer Type */}
               {(showOfferType || editing) && (
-                <div className={showOfferType && editing ? "rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2" : "space-y-1"}>
+                <div className={showOfferType && editing ? "col-span-2 rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2" : `space-y-1${editing ? " col-span-2" : ""}`}>
                   <Label className={`text-xs ${showOfferType && editing ? "text-amber-800 font-semibold" : "text-muted-foreground"}`}>
                     Offer Type
                   </Label>
@@ -811,69 +763,6 @@ export function ApplicationDetailPage({
                   )}
                 </div>
               )}
-
-              {/* Financials */}
-              <div className="rounded-lg border p-3 space-y-3">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Financials</p>
-
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    id="detail-fee-paid"
-                    checked={editing ? appFeePaid : (application.application_fee_paid ?? false)}
-                    onCheckedChange={editing ? (c) => setAppFeePaid(Boolean(c)) : undefined}
-                    disabled={!editing}
-                  />
-                  <label htmlFor="detail-fee-paid" className="text-sm cursor-pointer">
-                    Application fee paid
-                  </label>
-                </div>
-
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Tuition Fee</Label>
-                  {editing ? (
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={tuitionFee}
-                      onChange={(e) => setTuitionFee(e.target.value)}
-                      placeholder="e.g. 15000"
-                    />
-                  ) : (
-                    <p className="text-sm">
-                      {application.tuition_fee != null ? application.tuition_fee.toLocaleString() : "—"}
-                    </p>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    id="detail-deposit-paid"
-                    checked={editing ? depositPaid : (application.deposit_paid ?? false)}
-                    onCheckedChange={editing ? (c) => setDepositPaid(Boolean(c)) : undefined}
-                    disabled={!editing}
-                  />
-                  <label htmlFor="detail-deposit-paid" className="text-sm cursor-pointer">
-                    Deposit paid
-                  </label>
-                </div>
-              </div>
-
-              {/* Notes */}
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Notes</Label>
-                {editing ? (
-                  <Textarea
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    placeholder="Internal notes..."
-                    rows={3}
-                  />
-                ) : (
-                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                    {application.notes ?? "—"}
-                  </p>
-                )}
               </div>
 
               {/* Agent & Dates */}
@@ -939,6 +828,9 @@ export function ApplicationDetailPage({
               consentSigned={false}
               canManage={canEdit}
               canManageFee={canManageFee}
+              canOverrideProfileCheck={canOverrideProfileCheck}
+              showCollapsedStatus
+              profileKey={consentProfileKey(fullLead)}
               feeStatus={fullLead.pre_app_fee_status}
               feeAmount={fullLead.pre_app_fee_amount}
               feeNotes={fullLead.pre_app_fee_notes}
