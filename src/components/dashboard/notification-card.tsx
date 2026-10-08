@@ -6,7 +6,6 @@ import {
   AtSign,
   Bell,
   Check,
-  ChevronRight,
   UserPlus,
   UserMinus,
   UserCheck,
@@ -150,6 +149,7 @@ export function NotificationList({
               role={openable ? "button" : undefined}
               tabIndex={openable ? 0 : undefined}
               aria-label={openable ? `${action}: ${notification.title}` : undefined}
+              title={openable ? action : undefined}
               onClick={openable ? () => onOpen(notification) : undefined}
               onKeyDown={
                 openable
@@ -193,30 +193,21 @@ export function NotificationList({
                   {notification.message}
                 </p>
               </div>
-              {/* Hover actions sit on top of the row's end so nothing shifts. On touch screens only the check shows. */}
-              {(unread || openable) && (
-                <div className="absolute bottom-1.5 right-3 flex items-center gap-2 bg-gray-50 pl-2 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 group-focus-visible:opacity-100 [@media(hover:none)]:bg-transparent [@media(hover:none)]:opacity-100 sm:right-4">
-                  {openable && (
-                    <span className="flex items-center text-xs font-medium text-gray-500 [@media(hover:none)]:hidden">
-                      {action}
-                      <ChevronRight className="h-3.5 w-3.5" />
-                    </span>
-                  )}
-                  {unread && (
-                    <button
-                      type="button"
-                      title="Mark as read"
-                      aria-label="Mark as read"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onMarkRead(notification.id);
-                      }}
-                      className="flex h-6 w-6 items-center justify-center rounded-full border border-gray-300 bg-white text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900"
-                    >
-                      <Check className="h-3 w-3" />
-                    </button>
-                  )}
-                </div>
+              {/* Mark-as-read sits over the row's end (the message reserves pr-8 for it, so it never covers
+                  text). Shown on hover/focus; always visible on touch screens, which have no hover. */}
+              {unread && (
+                <button
+                  type="button"
+                  title="Mark as read"
+                  aria-label="Mark as read"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onMarkRead(notification.id);
+                  }}
+                  className="absolute bottom-2 right-3 flex h-6 w-6 items-center justify-center rounded-full border border-gray-300 bg-white text-gray-500 opacity-0 transition-opacity hover:bg-gray-100 hover:text-gray-900 focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100 sm:right-4"
+                >
+                  <Check className="h-3 w-3" />
+                </button>
               )}
             </div>
           </Fragment>
