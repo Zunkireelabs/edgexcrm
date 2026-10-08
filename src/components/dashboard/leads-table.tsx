@@ -3532,8 +3532,11 @@ export function LeadsTable({
                           <SelectValue placeholder="Select stage..." />
                         </SelectTrigger>
                         <SelectContent>
-                          {(isAdmin ? leadLists : leadLists.filter((l) => !l.is_staging && !l.is_archive))
-                            .filter((l) => !l.is_archive && l.pipeline_id)
+                          {/* Core funnel stages only, every role — restore is not a management
+                              action like Move-to-list, so Staging/Archive/Delete never belong
+                              here even for admins. */}
+                          {leadLists
+                            .filter((l) => !l.is_staging && !l.is_archive && l.slug !== "delete" && l.pipeline_id)
                             .map((l) => (
                               <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
                             ))}
