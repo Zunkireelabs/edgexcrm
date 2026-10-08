@@ -75,9 +75,12 @@ export default async function DashboardLayout({
   // "All Leads" shows only the active funnel; off-funnel lists (Archived, Delete)
   // render as standalone top-level items in the LEADS section.
   const leadLists = accessibleLists.filter((l) => !l.is_staging && !isOffFunnelLeadList(l));
-  const archiveLists = accessibleLists
-    .filter((l) => !l.is_staging && isOffFunnelLeadList(l))
-    .sort((a, b) => a.sort_order - b.sort_order);
+  // Archive/Delete lists are admin-only, same gate as staging buckets below
+  const archiveLists = isLayoutAdmin
+    ? accessibleLists
+        .filter((l) => !l.is_staging && isOffFunnelLeadList(l))
+        .sort((a, b) => a.sort_order - b.sort_order)
+    : [];
   // Leads Organise staging buckets are admin-only; counselors/viewers never see them in the nav
   const stagingLists = isLayoutAdmin ? accessibleLists.filter((l) => !!l.is_staging) : [];
 
