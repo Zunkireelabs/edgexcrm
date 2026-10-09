@@ -7,6 +7,12 @@ export const PERSONAL_DETAIL_TEXT_COLUMNS = [
   "father_name",
   "mother_name",
   "full_address",
+  // Structured Nepal address parts (migration 272). Country reuses leads.country.
+  "address_province",
+  "address_district",
+  "address_municipality",
+  "address_ward",
+  "address_tole",
   "emergency_contact_name",
   "emergency_contact_phone",
   "passport_number",

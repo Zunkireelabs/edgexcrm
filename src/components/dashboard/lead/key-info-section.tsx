@@ -227,6 +227,7 @@ export function KeyInfoSection({
   // Other-tagged walk-ins (Contacts) never enter the pipeline/funnel — Status and
   // Stage are meaningless for them (see excludeOtherType across Stages/Pipeline).
   const isOtherContact = isOtherLead(lead.tags, industryId);
+  const isEducationDetails = industryId === "education_consultancy";
 
   // Custom fields
   const customFields = Object.entries(lead.custom_fields || {}).filter(
@@ -597,12 +598,16 @@ export function KeyInfoSection({
           )}
 
           {/* ── DETAILS ───────────────────────────────────────────────
-              Every industry keeps this box: it is the only place Residence Country, Preferred
-              Contact and the Entity (College) are shown / edited. Education only drops the
-              Created / Last Updated rows, which its contact card already shows. */}
+              Education no longer shows Residence Country or Preferred Contact here: the client asked for both
+              to go (the address Country lives in Student Details, and Preferred Contact is dropped), and with
+              the pop-up no longer editing them there is nothing left to see or change. The College (entity)
+              still shows, and the box is hidden entirely when there is none. Other industries are unchanged:
+              the box is the only place they show / edit Residence Country, Preferred Contact and the Entity. */}
+          {!(isEducationDetails && !entity) && (<>
           <div className="border-t border-border" />
           <InfoSection title="Details" defaultOpen={false} titleClassName={SECTION_TITLE_CLASS}>
             <div className="space-y-2">
+              {!isEducationDetails && (<>
               {/* Residence Country */}
               {isEditing && draft ? (
                 <div>
@@ -656,6 +661,8 @@ export function KeyInfoSection({
                 />
               ) : null}
 
+              </>)}
+
               {/* Entity (e.g., College, Service, Project Type).
                   travel_agency has its own editable Package selector in the Trip
                   Inquiry panel above, so skip this read-only block there. */}
@@ -676,11 +683,7 @@ export function KeyInfoSection({
                 </div>
               )}
 
-              {industryId === "education_consultancy" ? (
-                !isEditing && !lead.country && !lead.preferred_contact_method && !entity && (
-                  <p className="text-xs text-muted-foreground italic">No details yet. Use Edit to add.</p>
-                )
-              ) : (
+              {isEducationDetails ? null : (
                 <>
                   {/* Created */}
                   <InfoRow label="Created" value={formatDateTime(lead.created_at)} />
@@ -694,6 +697,7 @@ export function KeyInfoSection({
               )}
             </div>
           </InfoSection>
+          </>)}
 
           {/* ── ADDITIONAL DETAILS (true extras only) ───────────────── */}
           {customFields.length > 0 && (

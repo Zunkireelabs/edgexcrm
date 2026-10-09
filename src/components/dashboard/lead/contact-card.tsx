@@ -38,7 +38,7 @@ import {
 import { CopyButton } from "@/components/ui/copy-button";
 import { TruncatedText } from "@/components/ui/truncated-text";
 import { formatPhoneForTel, formatPhoneForWhatsApp } from "@/lib/phone-utils";
-import { getLeadCity, getLeadNationality } from "@/lib/leads/lead-location";
+import { getLeadLocationRows } from "@/lib/leads/lead-location";
 import { toast } from "sonner";
 import type { Lead, PipelineStage } from "@/types/database";
 import { getLeadFullName, getLeadInitials } from "./lead-name";
@@ -451,13 +451,13 @@ export function ContactCard({
 
         {/* Contact Info (read-only — inputs shown above when editing) */}
         {!isEditing && (
-        <div className="space-y-3 mb-4">
+        <div className="space-y-1 mb-3">
           {lead.email && (
             <div className="flex items-center justify-between gap-2 group">
               <a href={`mailto:${lead.email}`} className="min-w-0 flex-1 hover:text-primary">
                 <TruncatedText text={lead.email} className="text-sm font-medium text-foreground" />
               </a>
-              <CopyButton value={lead.email} label="Email" className="opacity-0 group-hover:opacity-100 transition-opacity" />
+              <CopyButton value={lead.email} label="Email" className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
           )}
           {lead.phone && (
@@ -468,27 +468,15 @@ export function ContactCard({
               >
                 {lead.phone}
               </a>
-              <CopyButton value={lead.phone} label="Phone" className="opacity-0 group-hover:opacity-100 transition-opacity" />
+              <CopyButton value={lead.phone} label="Phone" className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
           )}
-          {(() => {
-            const nationality = getLeadNationality(lead);
-            const city = getLeadCity(lead);
-            if (!nationality && !city) return null;
-            return (
-              <div className="flex items-center gap-1.5 pt-1">
-                {nationality && (
-                  <span className="text-[13px] text-muted-foreground">{displayCase(nationality)}</span>
-                )}
-                {nationality && city && (
-                  <span className="text-[13px] text-muted-foreground">·</span>
-                )}
-                {city && (
-                  <span className="text-[13px] text-muted-foreground">{displayCase(city)}</span>
-                )}
-              </div>
-            );
-          })()}
+          {getLeadLocationRows(lead).map((row) => (
+            <p key={row.label} className="text-sm">
+              <span className="text-muted-foreground">{row.label}: </span>
+              <span className="font-medium text-foreground">{displayCase(row.value)}</span>
+            </p>
+          ))}
         </div>
         )}
 
@@ -496,7 +484,11 @@ export function ContactCard({
             margin cancels the section's own header padding so its text lines up with
             the contact details above. Stays visible while editing: it follows the same
             page-level edit mode as the fields above. */}
-        {detailsSlot && <div className="-mx-3 mt-3 mb-2">{detailsSlot}</div>}
+        {detailsSlot && (
+          <div className="mt-3 border-t border-border pt-2">
+            <div className="-mx-3 mb-2">{detailsSlot}</div>
+          </div>
+        )}
 
         {/* Quick Actions, or Save/Cancel while editing — page-level actions
             (Edit/Convert/Delete) live in the Action dropdown below instead

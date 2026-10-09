@@ -4,12 +4,14 @@ import {
   extractTemplatePlaceholders,
   ALWAYS_REQUIRED_PLACEHOLDERS,
   AUTOMATIC_PLACEHOLDERS,
+  OPTIONAL_PLACEHOLDERS,
   PLACEHOLDER_REQUIREMENTS,
   CONSENT_PROFILE_COLUMNS,
   consentRequirementGroups,
   type ConsentProfile,
 } from "./readiness";
 import { CONSENT_MERGE_FIELDS } from "./merge";
+import { GUARDIAN_SECTION_TITLE } from "./guardian";
 
 const complete: ConsentProfile = {
   first_name: "Paras",
@@ -72,7 +74,7 @@ describe("computeConsentReadiness", () => {
     expect(r.groups).toEqual([
       { section: "Personal Information", fields: ["City"] },
       { section: "Basic Details", fields: ["Date of Birth", "Father's Name"] },
-      { section: "Guardian Details", fields: ["Guardian Phone"] },
+      { section: GUARDIAN_SECTION_TITLE, fields: ["Guardian Phone"] },
       { section: "Passport & Citizenship", fields: ["Passport Number"] },
       { section: "Study Interest", fields: ["Degree Level"] },
     ]);
@@ -86,10 +88,10 @@ describe("computeConsentReadiness", () => {
   });
 
   it("shows ONE guardian: Father/Mother resolve from the parent names, others need a typed Guardian Name", () => {
-    // Nothing chosen yet -> both the name and the relationship are asked for, under Guardian Details.
+    // Nothing chosen yet -> both the name and the relationship are asked for, under the guardian section.
     const r = computeConsentReadiness("{{parent_name}} {{guardian_relationship}}", complete);
     expect(r.missing).toEqual(["Guardian Name", "Guardian Relationship"]);
-    expect(r.groups).toEqual([{ section: "Guardian Details", fields: ["Guardian Name", "Guardian Relationship"] }]);
+    expect(r.groups).toEqual([{ section: GUARDIAN_SECTION_TITLE, fields: ["Guardian Name", "Guardian Relationship"] }]);
     // Father picked: father's name is used.
     const tpl = "{{parent_name}} {{guardian_relationship}}";
     expect(computeConsentReadiness(tpl, { ...complete, guardian_relationship: "Father", father_name: "Ram" }).ready).toBe(true);
@@ -128,8 +130,17 @@ describe("computeConsentReadiness", () => {
     expect(computeConsentReadiness("No counselor here", complete).ready).toBe(true);
   });
 
+  it("never blocks on Emergency Contact — Student Details no longer asks for it", () => {
+    const r = computeConsentReadiness("{{emergency_contact_name}} {{emergency_contact_phone}}", {
+      ...complete, emergency_contact_name: null, emergency_contact_phone: null,
+    });
+    expect(r.ready).toBe(true);
+    expect(r.missing).toEqual([]);
+    expect(OPTIONAL_PLACEHOLDERS).toEqual(["emergency_contact_name", "emergency_contact_phone"]);
+  });
+
   it("lists a field once even if two placeholders map to it", () => {
-    expect(computeConsentReadiness("{{full_address}} {{street_address}}", complete).missing).toEqual(["Full Address"]);
+    expect(computeConsentReadiness("{{full_address}} {{street_address}}", complete).missing).toEqual(["Address"]);
   });
 
   it("accepts city / nationality kept only in custom_fields", () => {
@@ -146,12 +157,19 @@ describe("computeConsentReadiness", () => {
   });
 });
 
-describe("Residence Country", () => {
-  it("is required when the template uses {{country}}, and filed under Student Details > Personal Information", () => {
-    const r = computeConsentReadiness("{{city}}, {{country}}", { ...complete, city: "Kathmandu" });
-    expect(r.missing).toEqual(["Residence Country"]);
-    expect(r.groups).toEqual([{ section: "Personal Information", fields: ["Residence Country"] }]);
-    expect(computeConsentReadiness("{{country}}", { ...complete, country: "Nepal" }).ready).toBe(true);
+describe("{{country}} (filled from Nationality — the pop-up has one country field)", () => {
+  it("is required when the template uses {{country}}, asked for as Nationality under Personal Information", () => {
+    const r = computeConsentReadiness("{{city}}, {{country}}", { ...complete, city: "Kathmandu", nationality: null, country: null });
+    expect(r.missing).toEqual(["Nationality"]);
+    expect(r.groups).toEqual([{ section: "Personal Information", fields: ["Nationality"] }]);
+  });
+
+  it("is satisfied by Nationality alone", () => {
+    expect(computeConsentReadiness("{{country}}", { ...complete, nationality: "Nepal", country: null }).ready).toBe(true);
+  });
+
+  it("is still satisfied by an older lead's Residence Country alone", () => {
+    expect(computeConsentReadiness("{{country}}", { ...complete, nationality: null, country: "Nepal" }).ready).toBe(true);
   });
 });
 
@@ -160,16 +178,17 @@ describe("Residence Country", () => {
 describe("every consent placeholder is accounted for", () => {
   const always = new Set<string>(ALWAYS_REQUIRED_PLACEHOLDERS);
   const automatic = new Set<string>(AUTOMATIC_PLACEHOLDERS);
+  const optional = new Set<string>(OPTIONAL_PLACEHOLDERS);
   const profile = new Set(Object.keys(PLACEHOLDER_REQUIREMENTS));
 
-  it.each([...CONSENT_MERGE_FIELDS])("{{%s}} is always-required, automatic, or a profile requirement — exactly one", (field) => {
-    const homes = [always.has(field), automatic.has(field), profile.has(field)].filter(Boolean).length;
+  it.each([...CONSENT_MERGE_FIELDS])("{{%s}} is always-required, automatic, optional, or a profile requirement — exactly one", (field) => {
+    const homes = [always.has(field), automatic.has(field), optional.has(field), profile.has(field)].filter(Boolean).length;
     expect(homes).toBe(1);
   });
 
   it("no requirement exists for a placeholder the template can't use", () => {
     const known = new Set<string>(CONSENT_MERGE_FIELDS);
-    for (const key of [...always, ...automatic, ...profile]) expect(known.has(key)).toBe(true);
+    for (const key of [...always, ...automatic, ...optional, ...profile]) expect(known.has(key)).toBe(true);
   });
 });
 
@@ -185,9 +204,8 @@ describe("consentRequirementGroups — what staff must fill, from the template a
 
   it("lists the always-required fields plus one per placeholder the template uses, in pop-up order", () => {
     expect(consentRequirementGroups(ADMIZZ)).toEqual([
-      { section: "Personal Information", fields: ["First Name", "Email", "Phone", "Nationality", "City", "Residence Country"] },
-      { section: "Basic Details", fields: ["Full Address"] },
-      { section: "Guardian Details", fields: ["Guardian Name", "Guardian Relationship"] },
+      { section: "Personal Information", fields: ["First Name", "Email", "Phone", "Nationality", "Address", "City"] },
+      { section: GUARDIAN_SECTION_TITLE, fields: ["Guardian Name", "Guardian Relationship"] },
       { section: "Passport & Citizenship", fields: ["Passport Number"] },
       { section: "Study Interest", fields: ["Field of Study", "Degree Level"] },
       { section: "Assignment", fields: ["Assigned Counselor"] },

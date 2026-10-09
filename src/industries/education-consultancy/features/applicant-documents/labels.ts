@@ -14,6 +14,8 @@ export const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
   bank_statement: "Bank Statement",
   english_test_result: "English Test Result",
   offer_letter: "Offer Letter",
+  conditional_offer: "Conditional Offer",
+  unconditional_offer: "Unconditional Offer",
   visa_document: "Visa Document",
   identity_document: "Identity Document",
   other: "Other",

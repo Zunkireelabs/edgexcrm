@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { GUARDIAN_SECTION_TITLE } from "@/lib/consent/guardian";
+import { useEffect, useState, useRef } from "react";
 import { toast } from "sonner";
 import { Pencil, X, Check, Loader2 } from "lucide-react";
 import {
@@ -19,7 +20,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Lead } from "@/types/database";
-import { RESIDENCE_COUNTRIES, CONTACT_METHODS } from "@/lib/leads/contact-options";
+import { NATIONALITY_OPTIONS } from "@/lib/leads/contact-options";
+import { ADDRESS_COLUMNS, nextCity, updateAddress, type AddressField, type AddressParts } from "@/lib/leads/address";
+import { AddressFields } from "./address-fields";
+import { IdentityDocumentFields } from "./identity-document-fields";
 import { DestinationsMultiSelect } from "@/components/dashboard/destinations-multi-select";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 import { getDistinctFormValues, type LeadSubmissionSnapshot } from "@/lib/leads/submission-history";
@@ -53,17 +57,8 @@ export const CORE_IDENTITY_FIELDS = [
   { key: "lastName", label: "Last Name", type: "text" },
   { key: "email", label: "Email", type: "email" },
   { key: "phone", label: "Phone", type: "tel" },
-  { key: "nationality", label: "Nationality", type: "text" },
+  { key: "nationality", label: "Nationality", type: "select", options: NATIONALITY_OPTIONS },
   { key: "city", label: "City", type: "text" },
-  // Residence Country + Preferred Contact: on the education page this pop-up is the only editor
-  // (Edit opens it), and the consent document uses {{country}} — so they must be editable here.
-  {
-    key: "country",
-    label: "Residence Country",
-    type: "select",
-    options: RESIDENCE_COUNTRIES.map((c) => ({ value: c, label: c })),
-  },
-  { key: "preferredContact", label: "Preferred Contact", type: "select", options: CONTACT_METHODS },
 ] as const;
 
 // Owner/admin-only on the server (applyLeadPatch rejects these fields for anyone else), so
@@ -80,19 +75,8 @@ export const PERSONAL_DETAIL_FIELDS = [
   { key: "marital_status", label: "Marital Status", type: "select", options: [{ value: "unmarried", label: "Unmarried" }, { value: "married", label: "Married" }] },
   { key: "father_name", label: "Father's Name", type: "text" },
   { key: "mother_name", label: "Mother's Name", type: "text" },
-  { key: "full_address", label: "Full Address", type: "text", span: 2 },
-  { key: "emergency_contact_name", label: "Emergency Contact Name", type: "text" },
-  { key: "emergency_contact_phone", label: "Emergency Contact No.", type: "tel" },
-] as const;
-
-export const PASSPORT_CITIZENSHIP_FIELDS = [
-  { key: "passport_number", label: "Passport Number", type: "text" },
-  { key: "passport_issued_by", label: "Passport Issued By", type: "text", placeholder: "MOFA, Department of Passport" },
-  { key: "passport_issued_date", label: "Passport Issued Date", type: "date" },
-  { key: "passport_expiry_date", label: "Passport Expiry Date", type: "date" },
-  { key: "citizenship_number", label: "Citizenship Number", type: "text" },
-  { key: "citizenship_issued_by", label: "Citizenship Issued By", type: "text", placeholder: "Government of Home Minister, District Administration Office" },
-  { key: "citizenship_issued_date", label: "Citizenship Issued Date", type: "date" },
+  // Address lives in Personal Information (AddressFields). Emergency Contact is no longer asked here — the
+  // the guardian section below already captures a contact person; the old columns stay, untouched.
 ] as const;
 
 // The ONE guardian shown on the consent form's Parent/Guardian section (migrations 266, 269).
@@ -209,6 +193,18 @@ export function personalDetailsFromLead(lead: Lead): FieldValues {
   // Older free-text values ("father") line up with the dropdown's options; anything else is kept as typed.
   out.guardian_relationship = normalizeGuardianRelationship(out.guardian_relationship);
   return out;
+}
+
+/** The address as the UI edits it: Country lives with the core identity, the rest in the personal-detail values. */
+export function addressPartsOf(core: CoreIdentity, values: FieldValues): AddressParts {
+  return {
+    country: core.country,
+    province: values[ADDRESS_COLUMNS.province] ?? "",
+    district: values[ADDRESS_COLUMNS.district] ?? "",
+    municipality: values[ADDRESS_COLUMNS.municipality] ?? "",
+    ward: values[ADDRESS_COLUMNS.ward] ?? "",
+    tole: values[ADDRESS_COLUMNS.tole] ?? "",
+  };
 }
 
 export interface LeadSourceValues {
@@ -364,7 +360,13 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
   const [leadSource, setLeadSource] = useState<LeadSourceValues>(() => leadSourceFromLead(lead, submissionHistory));
   const [leadSourceDraft, setLeadSourceDraft] = useState<LeadSourceValues>(leadSource);
 
+  // The last municipality City could have been filled from. Changing the province clears the municipality
+  // in between, so City is compared against this — not the (now empty) current municipality — to know it is
+  // still the auto-filled value and may follow the next pick.
+  const lastMunicipalityRef = useRef("");
+
   const startEditing = () => {
+    lastMunicipalityRef.current = values.address_municipality ?? "";
     setDraft(values);
     setCoreIdentityDraft(coreIdentity);
     setStudyDraft(studyInterest);
@@ -464,6 +466,31 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
     setCoreIdentityDraft((prev) => ({ ...prev, [key]: value }));
   };
 
+  // One edit to the address: clears dependent dropdowns, keeps full_address in step, and lets City
+  // follow the municipality (without overwriting a City someone typed).
+  const handleAddressPartChange = (field: AddressField, value: string) => {
+    const before = { parts: addressPartsOf(coreIdentityDraft, draft), fullAddress: draft.full_address ?? "" };
+    const after = updateAddress(before, field, value);
+    if (after === before) return;
+    // Read before updating the ref: the state updater below runs later, after the ref has moved on.
+    const previousMunicipality = lastMunicipalityRef.current;
+    if (field === "municipality" && value) lastMunicipalityRef.current = value;
+    setCoreIdentityDraft((prev) => ({
+      ...prev,
+      country: after.parts.country,
+      city: field === "municipality" ? nextCity(prev.city, previousMunicipality, value) : prev.city,
+    }));
+    setDraft((prev) => ({
+      ...prev,
+      [ADDRESS_COLUMNS.province]: after.parts.province,
+      [ADDRESS_COLUMNS.district]: after.parts.district,
+      [ADDRESS_COLUMNS.municipality]: after.parts.municipality,
+      [ADDRESS_COLUMNS.ward]: after.parts.ward,
+      [ADDRESS_COLUMNS.tole]: after.parts.tole,
+      full_address: after.fullAddress,
+    }));
+  };
+
   const handleSourceChange = (key: keyof LeadSourceValues, value: string) => {
     setLeadSourceDraft((prev) => ({ ...prev, [key]: value }));
   };
@@ -528,6 +555,18 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
                   />
                 ))}
               </FieldGrid>
+
+              {/* Same card as Nationality and City: the client asked for the address "together with" them. */}
+              <div className="mt-5 border-t pt-4">
+                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Address</p>
+                <AddressFields
+                  isEditing={isEditing}
+                  parts={addressPartsOf(isEditing ? coreIdentityDraft : coreIdentity, isEditing ? draft : values)}
+                  fullAddress={(isEditing ? draft : values).full_address ?? ""}
+                  onPartChange={handleAddressPartChange}
+                  onFullAddressChange={(v) => handleChange("full_address", v)}
+                />
+              </div>
             </CardSection>
 
             <CardSection title="Basic Details">
@@ -544,7 +583,7 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
               </FieldGrid>
             </CardSection>
 
-            <CardSection title="Guardian Details">
+            <CardSection title={GUARDIAN_SECTION_TITLE}>
               <p className="mb-3 text-xs text-muted-foreground">
                 The guardian signs for the student on the consent. Pick the relationship: Father or Mother fills the name in
                 from their name above; for anyone else, type the name. Choose &quot;None / Not applicable&quot; if there is no
@@ -594,17 +633,11 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
                 )
               }
             >
-              <FieldGrid>
-                {PASSPORT_CITIZENSHIP_FIELDS.map((field) => (
-                  <EditableField
-                    key={field.key}
-                    field={field}
-                    isEditing={isEditing}
-                    value={(isEditing ? draft : values)[field.key] || ""}
-                    onChange={(v) => handleChange(field.key, v)}
-                  />
-                ))}
-              </FieldGrid>
+              <IdentityDocumentFields
+                isEditing={isEditing}
+                values={isEditing ? draft : values}
+                onChange={handleChange}
+              />
             </CardSection>
           </SectionGroup>
 
@@ -762,6 +795,10 @@ function StudyInterestFields({
               {studyLevels.map((lvl) => (
                 <SelectItem key={lvl} value={lvl}>{lvl}</SelectItem>
               ))}
+              {/* A level saved earlier but no longer in the catalog must still show, not look blank. */}
+              {value.degreeLevel && !studyLevels.includes(value.degreeLevel) && (
+                <SelectItem value={value.degreeLevel}>{value.degreeLevel}</SelectItem>
+              )}
             </SelectContent>
           </Select>
         ) : (

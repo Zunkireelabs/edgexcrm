@@ -4,6 +4,7 @@ import { CONSENT_FIELD_HINTS } from "@/lib/consent/field-hints";
 import { SECTION_TITLE_CLASS } from "@/components/dashboard/lead/section-title";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { AlertTriangle, Clock, CheckCircle2, Loader2, Copy, RefreshCw, FileText, Upload, PenLine, ChevronDown } from "lucide-react";
+import { cardCompleteness } from "./consent-completeness";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -241,6 +242,8 @@ export function ConsentCard({
   );
   const [feeNotes, setFeeNotes] = useState(initialFeeNotes ?? "");
   const [open, setOpen] = useState(false); // collapsible: collapsed by default
+  // The fee as last SAVED. The green "complete" signal reads this, never the dropdown's unsaved choice.
+  const [savedFeeStatus, setSavedFeeStatus] = useState<string>(initialFeeStatus ?? "");
   const [feeDirty, setFeeDirty] = useState(false);
   const [feeSaving, setFeeSaving] = useState(false);
 
@@ -259,6 +262,7 @@ export function ConsentCard({
       });
       if (!res.ok) throw new Error();
       toast.success("Processing fee saved");
+      setSavedFeeStatus(feeStatus);
       setFeeDirty(false);
     } catch {
       toast.error("Failed to save application fee");
@@ -375,6 +379,8 @@ export function ConsentCard({
 
   const current = status;
   const consentStatus = current?.status ?? "none";
+  // Green only when BOTH the Processing Fee (Paid / Waiver) and the consent are done — see consent-completeness.ts.
+  const completeness = cardCompleteness({ consent: consentStatus, savedFeeStatus, showProcessingFee });
   // Education profile gate: all four consent actions wait for a complete student profile.
   const readiness = current?.readiness ?? null;
   const profileIncomplete = consentStatus === "none" && !!readiness && !readiness.ready;
@@ -412,13 +418,22 @@ export function ConsentCard({
                   Required
                 </span>
               )}
-              {showCollapsedStatus && !open && consentStatus === "signed" && (
+              {showCollapsedStatus && !open && consentStatus === "signed" && completeness.complete && (
                 <span
                   title={L.signedTitle}
                   className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700"
                 >
                   <CheckCircle2 className="h-3 w-3 shrink-0" />
                   Signed
+                </span>
+              )}
+              {showCollapsedStatus && !open && consentStatus === "signed" && !completeness.complete && (
+                <span
+                  title={`${L.signedTitle} · processing fee pending`}
+                  className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700"
+                >
+                  <AlertTriangle className="h-3 w-3 shrink-0" />
+                  Fee pending
                 </span>
               )}
             </span>
@@ -432,7 +447,20 @@ export function ConsentCard({
           {/* ── Processing Fee (pre-application, lead-level) — education only. Shown above the consent. ── */}
           {showProcessingFee && (
           <div className="border-b pb-3 space-y-3">
-            <p className="text-xs font-medium text-muted-foreground">Processing Fee</p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-medium text-muted-foreground">Processing Fee</p>
+              {completeness.feeDone ? (
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-green-600">
+                  <CheckCircle2 className="h-3 w-3 shrink-0" />
+                  Done
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-600">
+                  <AlertTriangle className="h-3 w-3 shrink-0" />
+                  Pending
+                </span>
+              )}
+            </div>
 
             {canManageFee ? (
               <>
@@ -646,10 +674,15 @@ export function ConsentCard({
 
           {consentStatus === "signed" && (
             <>
-              <div className="flex items-start gap-2 text-green-600">
-                <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
+              <div className={`flex items-start gap-2 ${completeness.complete ? "text-green-600" : "text-amber-600"}`}>
+                {completeness.complete ? (
+                  <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
+                ) : (
+                  <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                )}
                 <div>
                   <p className="text-sm font-medium">{L.signedTitle}</p>
+                  {!completeness.feeDone && <p className="text-xs font-medium">Processing fee pending</p>}
                   {current?.record?.signer_name && (
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {current.record.signer_name}

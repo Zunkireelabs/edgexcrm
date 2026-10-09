@@ -18,6 +18,7 @@ import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { sendConsentEmail } from "@/lib/email/send-consent";
 import { APP_URL } from "@/lib/email";
 import { prepareConsentBody, buildConsentMergeData } from "@/lib/consent/merge";
+import { getLeadCountry } from "@/lib/leads/lead-location";
 import { resolveConsentStatus, type ConsentRecordRow } from "@/lib/consent/resolve-status";
 import { touchLeadUpdatedAt } from "@/lib/leads/touch-updated-at";
 import { loadConsentReadiness, extractTemplatePlaceholders, CONSENT_PROFILE_COLUMNS, type ConsentProfile } from "@/lib/consent/readiness";
@@ -368,7 +369,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         email: leadRow.email,
         phone: leadRow.phone,
         city: leadRow.city,
-        country: leadRow.country,
+        country: getLeadCountry(leadRow),
         nationality: leadRow.nationality,
         passportNumber: leadRow.passport_number,
         fullAddress: leadRow.full_address,
@@ -519,7 +520,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         email: leadRow.email,
         phone: leadRow.phone,
         city: leadRow.city,
-        country: leadRow.country,
+        country: getLeadCountry(leadRow),
         nationality: leadRow.nationality,
         passportNumber: leadRow.passport_number,
         fullAddress: leadRow.full_address,
