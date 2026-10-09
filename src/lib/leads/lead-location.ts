@@ -24,3 +24,19 @@ export function getLeadCity(lead: LocationSource): string | null {
 export function getLeadNationality(lead: LocationSource): string | null {
   return pick(lead.nationality, lead.custom_fields?.nationality);
 }
+
+export interface LocationRow {
+  label: "Nationality" | "City";
+  value: string;
+}
+
+// Labelled rows for the contact card. A missing value yields no row at all, so the card
+// never shows an empty "City:" line.
+export function getLeadLocationRows(lead: LocationSource): LocationRow[] {
+  const rows: LocationRow[] = [];
+  const nationality = getLeadNationality(lead);
+  const city = getLeadCity(lead);
+  if (nationality) rows.push({ label: "Nationality", value: nationality });
+  if (city) rows.push({ label: "City", value: city });
+  return rows;
+}
