@@ -161,7 +161,7 @@ export function QualificationsSection({
                   leadId={leadId}
                   defaultDocumentType="marksheet"
                   fixedQualificationLevel={QUALIFICATION_DOCUMENT_LEVEL[meta.key]}
-                  label="Attach Marksheet"
+                  label="Attach"
                 />
               )
             }

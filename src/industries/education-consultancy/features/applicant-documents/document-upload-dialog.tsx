@@ -36,7 +36,7 @@ import { DOCUMENT_TYPE_LABELS } from "./labels";
 
 export type QualificationLevel = "see" | "plus_two" | "bachelor" | "masters";
 
-const QUALIFICATION_LEVEL_LABELS: Record<QualificationLevel, string> = {
+export const QUALIFICATION_LEVEL_LABELS: Record<QualificationLevel, string> = {
   see: "SEE / Grade X",
   plus_two: "+2 / Grade XI-XII",
   bachelor: "Bachelor's",
