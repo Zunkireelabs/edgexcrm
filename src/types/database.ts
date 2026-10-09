@@ -217,6 +217,12 @@ export interface Lead {
   father_name: string | null;
   mother_name: string | null;
   full_address: string | null;
+  // Structured Nepal address (migration 272); country reuses `country`.
+  address_province: string | null;
+  address_district: string | null;
+  address_municipality: string | null;
+  address_ward: string | null;
+  address_tole: string | null;
   emergency_contact_name: string | null;
   emergency_contact_phone: string | null;
   passport_number: string | null;

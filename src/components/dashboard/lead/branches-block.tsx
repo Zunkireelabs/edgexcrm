@@ -111,6 +111,8 @@ export function BranchesBlock({ leadId, isAdmin, userBranchId, leadScope }: Bran
 
   const memberBranchIds = new Set(memberships.map((m) => m.branch_id));
   const availableBranches = allBranches.filter((b) => !memberBranchIds.has(b.id));
+  const originBranch = memberships.find((m) => m.is_origin) ?? memberships[0];
+  const label = `Branch: ${originBranch?.branch_name ?? "—"}`;
 
   async function handleSend() {
     if (!selectedBranch) return;
@@ -145,7 +147,7 @@ export function BranchesBlock({ leadId, isAdmin, userBranchId, leadScope }: Bran
       <div>
         <div className="flex items-center justify-between mb-1.5">
           <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-            Branches
+            {label}
           </p>
           {canSend && availableBranches.length > 0 && (
             <button

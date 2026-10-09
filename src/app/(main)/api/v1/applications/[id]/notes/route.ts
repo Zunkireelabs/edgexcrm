@@ -38,7 +38,24 @@ export async function GET(_request: NextRequest, { params }: Props) {
     .order("created_at", { ascending: false });
 
   if (error) return apiError("DB_ERROR", "Failed to fetch notes", 500);
-  return apiSuccess(data ?? []);
+
+  // Files attached to each note (migration 273). Best effort: if this lookup fails the notes still load,
+  // just without their attachment chips — a missing chip must never hide a note.
+  const notes = (data ?? []) as unknown as { id: string }[];
+  const documentsByNote: Record<string, unknown[]> = {};
+  if (notes.length > 0) {
+    const { data: docs } = await db
+      .from("applicant_documents")
+      .select("id, name, document_type, original_filename, mime_type, file_size, application_note_id, uploaded_by, created_at")
+      .in("application_note_id", notes.map((n) => n.id))
+      .is("deleted_at", null)
+      .order("created_at", { ascending: true });
+    for (const doc of (docs ?? []) as unknown as { application_note_id: string }[]) {
+      (documentsByNote[doc.application_note_id] ??= []).push(doc);
+    }
+  }
+
+  return apiSuccess(notes.map((note) => ({ ...note, documents: documentsByNote[note.id] ?? [] })));
 }
 
 export async function POST(request: NextRequest, { params }: Props) {

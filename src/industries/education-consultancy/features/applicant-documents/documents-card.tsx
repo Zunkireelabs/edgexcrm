@@ -1,5 +1,7 @@
 "use client";
 
+import { onDocumentsChanged } from "./documents-events";
+import { groupDocuments, type ApplicationNames } from "./group-documents";
 import { SECTION_TITLE_CLASS, SUBHEADING_CLASS } from "@/components/dashboard/lead/section-title";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -17,8 +19,8 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { formatBytes } from "@/lib/format";
-import { DOCUMENT_TYPE_CATEGORY, type DocumentType } from "@/lib/documents/constants";
-import { documentTypeLabel, DOCUMENT_CATEGORY_LABELS, DOCUMENT_CATEGORY_ORDER } from "./labels";
+import type { DocumentType } from "@/lib/documents/constants";
+import { documentTypeLabel, DOCUMENT_CATEGORY_LABELS } from "./labels";
 import { DocumentUploadDialog } from "./document-upload-dialog";
 
 interface ApplicantDocument {
@@ -33,6 +35,7 @@ interface ApplicantDocument {
   current_version_id: string | null;
   uploaded_by: string | null;
   created_at: string;
+  application_id?: string | null;
 }
 
 type ViewMode = "grid" | "list";
@@ -60,6 +63,8 @@ export function ApplicantDocumentsCard({
 }) {
   const isSummary = variant === "summary";
   const [docs, setDocs] = useState<ApplicantDocument[]>([]);
+  // Names of the university applications some files are linked to, for the "University – Programme" groups.
+  const [applications, setApplications] = useState<ApplicationNames>({});
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
@@ -75,6 +80,7 @@ export function ApplicantDocumentsCard({
       if (!res.ok) return;
       const json = await res.json();
       setDocs((json.data?.documents ?? []) as ApplicantDocument[]);
+      setApplications((json.data?.applications ?? {}) as ApplicationNames);
     } catch {
       // silently fail — empty state renders
     } finally {
@@ -85,6 +91,9 @@ export function ApplicantDocumentsCard({
   useEffect(() => {
     load();
   }, [load]);
+
+  // Refresh when documents are added elsewhere on the page (e.g. the Attach button in the Student Details pop-up).
+  useEffect(() => onDocumentsChanged(leadId, load), [leadId, load]);
 
   async function handleDelete(doc: ApplicantDocument) {
     if (!confirm(`Delete "${doc.name}"? This cannot be undone.`)) return;
@@ -136,10 +145,20 @@ export function ApplicantDocumentsCard({
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     .slice(0, SUMMARY_LIMIT);
 
-  const grouped = DOCUMENT_CATEGORY_ORDER.map((category) => ({
-    category,
-    docs: visibleDocs.filter((d) => (DOCUMENT_TYPE_CATEGORY[d.document_type] ?? "other") === category),
-  })).filter((g) => g.docs.length > 0);
+  const grouped = groupDocuments(visibleDocs, applications);
+
+  // The small card: the latest few files, application files grouped under their name. Other files stay in one
+  // unheaded list — unless an application heading is showing, when they get an "Other documents" heading so
+  // they are not mistaken for part of the last application's group.
+  const summaryGroups = groupDocuments(recentDocs, applications);
+  const summaryApplicationSections = summaryGroups.filter((g) => g.kind === "application");
+  const summaryOtherDocs = summaryGroups.filter((g) => g.kind === "category").flatMap((g) => g.docs);
+  const summarySections: { key: string; title: string | null; docs: typeof recentDocs }[] = [
+    ...summaryApplicationSections.map((g) => ({ key: g.key, title: g.kind === "application" ? g.title : null, docs: g.docs })),
+    ...(summaryOtherDocs.length > 0
+      ? [{ key: "other", title: summaryApplicationSections.length > 0 ? "Other documents" : null, docs: summaryOtherDocs }]
+      : []),
+  ];
 
   return (
     <>
@@ -205,15 +224,21 @@ export function ApplicantDocumentsCard({
             </p>
           ) : isSummary ? (
             <div className="space-y-1.5">
-              {recentDocs.map((doc) => (
-                <DocumentTile
-                  key={doc.id}
-                  doc={doc}
-                  viewMode="list"
-                  canDelete={isAdmin || doc.uploaded_by === currentUserId}
-                  onView={() => openViewer(doc)}
-                  onDelete={() => handleDelete(doc)}
-                />
+              {/* Files tied to a university application sit under "University – Programme"; the rest follow, as before. */}
+              {summarySections.map((section) => (
+                <div key={section.key} data-document-group={section.key} className="space-y-1.5">
+                  {section.title && <p className={`${SUBHEADING_CLASS} pt-1`}>{section.title}</p>}
+                  {section.docs.map((doc) => (
+                    <DocumentTile
+                      key={doc.id}
+                      doc={doc}
+                      viewMode="list"
+                      canDelete={isAdmin || doc.uploaded_by === currentUserId}
+                      onView={() => openViewer(doc)}
+                      onDelete={() => handleDelete(doc)}
+                    />
+                  ))}
+                </div>
               ))}
               <Link
                 href={`/leads/${leadId}/documents`}
@@ -236,13 +261,13 @@ export function ApplicantDocumentsCard({
               {grouped.length === 0 && (
                 <p className="text-xs text-muted-foreground text-center py-2">No documents match your search.</p>
               )}
-              {grouped.map(({ category, docs: catDocs }) => (
-                <div key={category}>
+              {grouped.map((group) => (
+                <div key={group.key} data-document-group={group.key}>
                   <p className={`${SUBHEADING_CLASS} mb-1.5`}>
-                    {DOCUMENT_CATEGORY_LABELS[category]}
+                    {group.kind === "application" ? group.title : DOCUMENT_CATEGORY_LABELS[group.category]}
                   </p>
                   <div className={viewMode === "grid" ? "grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4" : "space-y-1.5"}>
-                    {catDocs.map((doc) => (
+                    {group.docs.map((doc) => (
                       <DocumentTile
                         key={doc.id}
                         doc={doc}
