@@ -11,6 +11,7 @@ vi.mock("sonner", () => ({ toast: { success: toastSuccess, error: toastError, in
 vi.mock("@/industries/education-consultancy/features/applicant-documents/upload-document", () => ({ uploadApplicantDocument: uploadMock }));
 
 import { AttachDocumentButton } from "./attach-document-button";
+import { onDocumentsChanged } from "@/industries/education-consultancy/features/applicant-documents/documents-events";
 
 let uuid = 0;
 beforeEach(() => {
@@ -240,5 +241,49 @@ describe("Passport & Citizenship", () => {
     fireEvent.click(screen.getByRole("button", { name: "Upload 2 files" }));
     await waitFor(() => expect(uploadMock).toHaveBeenCalledTimes(2));
     expect(uploadMock.mock.calls.every((c) => c[0].documentType === "passport" && c[0].qualificationLevel === undefined)).toBe(true);
+  });
+});
+
+describe("refreshing the page behind the pop-up", () => {
+  it("tells the Documents card to refresh once documents are saved", async () => {
+    uploadMock.mockResolvedValue({ ok: true });
+    const changed = vi.fn();
+    const off = onDocumentsChanged("lead-1", changed);
+    renderButton();
+    choose(pdf("a.pdf"));
+    fireEvent.click(await screen.findByRole("button", { name: "Upload 1 file" }));
+    await waitFor(() => expect(changed).toHaveBeenCalledTimes(1));
+    off();
+  });
+
+  it("also refreshes after a partial success (some saved), but not when nothing was saved", async () => {
+    const changed = vi.fn();
+    const off = onDocumentsChanged("lead-1", changed);
+    uploadMock.mockResolvedValueOnce({ ok: true }).mockResolvedValueOnce({ ok: false, message: "boom" });
+    renderButton();
+    choose(pdf("a.pdf"), pdf("b.pdf", 2));
+    fireEvent.click(await screen.findByRole("button", { name: "Upload 2 files" }));
+    await waitFor(() => expect(changed).toHaveBeenCalledTimes(1));
+    cleanup();
+    changed.mockReset();
+    uploadMock.mockReset();
+    uploadMock.mockResolvedValue({ ok: false, message: "offline" });
+    renderButton();
+    choose(pdf("c.pdf", 3));
+    fireEvent.click(await screen.findByRole("button", { name: "Upload 1 file" }));
+    await screen.findByText(/Not uploaded: offline/);
+    expect(changed).not.toHaveBeenCalled();
+    off();
+  });
+
+  it("does not close the pop-up (and lose the named files) on a stray click outside it", async () => {
+    renderButton();
+    choose(pdf("a.pdf"), pdf("b.pdf", 2));
+    await screen.findByRole("dialog");
+    fireEvent.pointerDown(document.body);
+    fireEvent.click(document.body);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(rows()).toEqual(["a.pdf", "b.pdf"]);
   });
 });

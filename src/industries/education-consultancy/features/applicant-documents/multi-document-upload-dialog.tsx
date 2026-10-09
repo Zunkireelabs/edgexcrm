@@ -114,7 +114,14 @@ export function MultiDocumentUploadDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!next && !uploading) onClose(); }}>
-      <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col gap-0 p-0">
+      <DialogContent
+        className="sm:max-w-2xl max-h-[85vh] flex flex-col gap-0 p-0"
+        // Ten named files are real work: a stray click on the dimmed page must not throw them away.
+        // Cancel, the X and Escape still close it.
+        onInteractOutside={(e) => {
+          if (items.length > 0) e.preventDefault();
+        }}
+      >
         <DialogHeader className="px-6 pt-6 pb-3 shrink-0">
           <DialogTitle>Attach documents</DialogTitle>
           <DialogDescription>

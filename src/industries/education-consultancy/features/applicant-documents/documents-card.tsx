@@ -1,5 +1,6 @@
 "use client";
 
+import { onDocumentsChanged } from "./documents-events";
 import { groupDocuments, type ApplicationNames } from "./group-documents";
 import { SECTION_TITLE_CLASS, SUBHEADING_CLASS } from "@/components/dashboard/lead/section-title";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -90,6 +91,9 @@ export function ApplicantDocumentsCard({
   useEffect(() => {
     load();
   }, [load]);
+
+  // Refresh when documents are added elsewhere on the page (e.g. the Attach button in the Student Details pop-up).
+  useEffect(() => onDocumentsChanged(leadId, load), [leadId, load]);
 
   async function handleDelete(doc: ApplicantDocument) {
     if (!confirm(`Delete "${doc.name}"? This cannot be undone.`)) return;

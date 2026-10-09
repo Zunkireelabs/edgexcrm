@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import type { DocumentType } from "@/lib/documents/constants";
 import type { QualificationLevel } from "@/industries/education-consultancy/features/applicant-documents/document-upload-dialog";
 import { MultiDocumentUploadDialog } from "@/industries/education-consultancy/features/applicant-documents/multi-document-upload-dialog";
+import { notifyDocumentsChanged } from "@/industries/education-consultancy/features/applicant-documents/documents-events";
 import { ACCEPT_ATTR, describeSkipped, pickFiles } from "@/industries/education-consultancy/features/applicant-documents/multi-upload";
 
 // What a document on each kind of card can be. The first entry is that card's usual document.
@@ -69,7 +70,10 @@ export function AttachDocumentButton({
         leadId={leadId}
         files={files}
         onClose={() => setFiles(null)}
-        onUploaded={onUploaded}
+        onUploaded={() => {
+          notifyDocumentsChanged(leadId); // refresh the Documents card behind this pop-up
+          onUploaded?.();
+        }}
         typeOptions={typeOptions}
         defaultType={defaultDocumentType}
         fixedQualificationLevel={fixedQualificationLevel}
