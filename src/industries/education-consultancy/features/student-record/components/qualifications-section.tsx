@@ -57,12 +57,17 @@ type Tier = "ug" | "pg" | "phd";
  * not a fixed enum — matched by keyword rather than exact string so a
  * tenant's own wording ("Master's", "Postgraduate Diploma", etc.) still
  * resolves correctly instead of only matching one exact label.
+ *
+ * Compared with spaces, hyphens and punctuation removed: a catalog entry spelled
+ * "Under Graduate" (two words) must match exactly like "Undergraduate" — it used to
+ * fall through and the Academic Information section showed nothing. The short codes
+ * "UG" / "PG" (also used as catalog values) are recognised too.
  */
 export function qualificationTier(degreeLevel: string): Tier | null {
-  const v = degreeLevel.toLowerCase();
+  const v = degreeLevel.toLowerCase().replace(/[^a-z]/g, "");
   if (v.includes("phd") || v.includes("doctor")) return "phd";
-  if (v.includes("post") || v.includes("master")) return "pg";
-  if (v.includes("undergrad") || v.includes("bachelor")) return "ug";
+  if (v.includes("post") || v.includes("master") || v === "pg") return "pg";
+  if (v.includes("undergrad") || v.includes("bachelor") || v === "ug") return "ug";
   return null;
 }
 
