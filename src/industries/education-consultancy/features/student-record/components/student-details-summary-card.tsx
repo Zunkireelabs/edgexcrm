@@ -9,7 +9,6 @@ import { WorkExperienceSection } from "./work-experience-section";
 import { ReferencesSection } from "./references-section";
 import {
   PERSONAL_DETAIL_FIELDS,
-  PASSPORT_CITIZENSHIP_FIELDS,
   GUARDIAN_FIELDS,
   FINANCIAL_FIELDS,
   personalDetailsFromLead,
@@ -17,6 +16,7 @@ import {
   addressPartsOf,
 } from "./personal-details-dialog";
 import { AddressFields } from "./address-fields";
+import { IdentityDocumentFields } from "./identity-document-fields";
 import { ACADEMIC_LEVELS, TEST_TYPES } from "@/lib/leads/prospect-qualification";
 import type { Lead } from "@/types/database";
 
@@ -118,11 +118,7 @@ export function StudentDetailsSummaryCard({ lead, onEdit, defaultOpen = true }: 
           </CardSection>
 
           <CardSection title="Passport & Citizenship Details">
-            <FieldGrid>
-              {PASSPORT_CITIZENSHIP_FIELDS.map((field) => (
-                <EditableField key={field.key} field={field} isEditing={false} value={values[field.key] || ""} onChange={noop} />
-              ))}
-            </FieldGrid>
+            <IdentityDocumentFields isEditing={false} values={values} />
           </CardSection>
         </SectionGroup>
 

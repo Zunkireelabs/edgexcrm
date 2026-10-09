@@ -23,6 +23,7 @@ import type { Lead } from "@/types/database";
 import { NATIONALITY_OPTIONS } from "@/lib/leads/contact-options";
 import { ADDRESS_COLUMNS, nextCity, updateAddress, type AddressField, type AddressParts } from "@/lib/leads/address";
 import { AddressFields } from "./address-fields";
+import { IdentityDocumentFields } from "./identity-document-fields";
 import { DestinationsMultiSelect } from "@/components/dashboard/destinations-multi-select";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 import { getDistinctFormValues, type LeadSubmissionSnapshot } from "@/lib/leads/submission-history";
@@ -76,16 +77,6 @@ export const PERSONAL_DETAIL_FIELDS = [
   { key: "mother_name", label: "Mother's Name", type: "text" },
   // Address lives in Personal Information (AddressFields). Emergency Contact is no longer asked here — the
   // the guardian section below already captures a contact person; the old columns stay, untouched.
-] as const;
-
-export const PASSPORT_CITIZENSHIP_FIELDS = [
-  { key: "passport_number", label: "Passport Number", type: "text" },
-  { key: "passport_issued_by", label: "Passport Issued By", type: "text", placeholder: "MOFA, Department of Passport" },
-  { key: "passport_issued_date", label: "Passport Issued Date", type: "date" },
-  { key: "passport_expiry_date", label: "Passport Expiry Date", type: "date" },
-  { key: "citizenship_number", label: "Citizenship Number", type: "text" },
-  { key: "citizenship_issued_by", label: "Citizenship Issued By", type: "text", placeholder: "Government of Home Minister, District Administration Office" },
-  { key: "citizenship_issued_date", label: "Citizenship Issued Date", type: "date" },
 ] as const;
 
 // The ONE guardian shown on the consent form's Parent/Guardian section (migrations 266, 269).
@@ -642,17 +633,11 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
                 )
               }
             >
-              <FieldGrid>
-                {PASSPORT_CITIZENSHIP_FIELDS.map((field) => (
-                  <EditableField
-                    key={field.key}
-                    field={field}
-                    isEditing={isEditing}
-                    value={(isEditing ? draft : values)[field.key] || ""}
-                    onChange={(v) => handleChange(field.key, v)}
-                  />
-                ))}
-              </FieldGrid>
+              <IdentityDocumentFields
+                isEditing={isEditing}
+                values={isEditing ? draft : values}
+                onChange={handleChange}
+              />
             </CardSection>
           </SectionGroup>
 
