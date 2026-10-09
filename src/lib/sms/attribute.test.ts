@@ -120,7 +120,7 @@ describe("attributeProviderResults", () => {
     });
   });
 
-  it("marks a recipient in neither array as failed with no_provider_result and lists it as unmatched", () => {
+  it("marks a recipient in neither array as submitted-unconfirmed (so the delivery poller settles it) and lists it as unmatched", () => {
     const messages = [{ id: "m1", to_phone: "9800000001" }];
     const providerResult = result([], []);
 
@@ -133,12 +133,59 @@ describe("attributeProviderResults", () => {
     expect(attributions).toEqual([
       {
         messageId: "m1",
-        outcome: "failed",
-        errorCode: "no_provider_result",
-        errorMessage: "Recipient found in neither the provider's valid nor invalid results.",
+        outcome: "submitted",
+        providerMessageId: null,
+        credit: null,
+        network: null,
+        providerStatus: "unconfirmed",
+        shortcode: null,
       },
     ]);
     expect(unmatched).toEqual(["m1"]);
+  });
+
+  it("bills our estimate for unmatched recipients so settle does not refund credits the provider really charged", () => {
+    const messages = [
+      { id: "m1", to_phone: "9800000001", estimated_credits: 2 },
+      { id: "m2", to_phone: "9800000002", estimated_credits: 2 },
+    ];
+
+    const { totalCreditsCharged, estimatedUnmatchedCredits, unmatched } = attributeProviderResults({
+      messages,
+      result: result([], []),
+      sandboxed: false,
+    });
+
+    expect(unmatched).toEqual(["m1", "m2"]);
+    expect(estimatedUnmatchedCredits).toBe(4);
+    expect(totalCreditsCharged).toBe(4);
+  });
+
+  it("adds the estimate only for the unmatched recipient when others matched with a provider credit", () => {
+    const messages = [
+      { id: "m1", to_phone: "9800000001", estimated_credits: 2 },
+      { id: "m2", to_phone: "9800000002", estimated_credits: 2 },
+    ];
+    const providerResult = result([{ id: "p1", mobile: "9800000001", credit: 3, network: "ntc", status: "queued" }]);
+
+    const { totalCreditsCharged, estimatedUnmatchedCredits } = attributeProviderResults({
+      messages,
+      result: providerResult,
+      sandboxed: false,
+    });
+
+    expect(estimatedUnmatchedCredits).toBe(2);
+    expect(totalCreditsCharged).toBe(5); // 3 reported by the provider + 2 estimated
+  });
+
+  it("treats a missing estimate as 0 credits for an unmatched recipient", () => {
+    const { totalCreditsCharged } = attributeProviderResults({
+      messages: [{ id: "m1", to_phone: "9800000001" }],
+      result: result([], []),
+      sandboxed: false,
+    });
+
+    expect(totalCreditsCharged).toBe(0);
   });
 
   it("attributes two message rows sharing one phone number and counts the credit once", () => {
