@@ -112,6 +112,7 @@ export function EditableField({
   value,
   onChange,
   readOnlyNote,
+  disabled,
 }: {
   field: FieldDef;
   isEditing: boolean;
@@ -119,13 +120,15 @@ export function EditableField({
   onChange: (value: string) => void;
   /** Shows the value but locks it, with this note beneath (a field that is derived from another one). */
   readOnlyNote?: string;
+  /** Greys a dropdown out until the field it depends on is chosen (e.g. District before Province). */
+  disabled?: boolean;
 }) {
   return (
     <div className={field.span === 2 ? "col-span-full" : undefined}>
       <p className="text-xs text-muted-foreground mb-1">{field.label}</p>
       {isEditing ? (
         field.type === "select" ? (
-          <Select value={value || "__none__"} onValueChange={(v) => onChange(v === "__none__" ? "" : v)}>
+          <Select value={value || "__none__"} onValueChange={(v) => onChange(v === "__none__" ? "" : v)} disabled={disabled}>
             <SelectTrigger className="h-9 text-sm w-full">
               <SelectValue placeholder="Select" />
             </SelectTrigger>

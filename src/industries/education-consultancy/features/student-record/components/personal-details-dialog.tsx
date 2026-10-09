@@ -20,6 +20,8 @@ import {
 } from "@/components/ui/select";
 import type { Lead } from "@/types/database";
 import { NATIONALITY_OPTIONS } from "@/lib/leads/contact-options";
+import { ADDRESS_COLUMNS, nextCity, updateAddress, type AddressField, type AddressParts } from "@/lib/leads/address";
+import { AddressFields } from "./address-fields";
 import { DestinationsMultiSelect } from "@/components/dashboard/destinations-multi-select";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 import { getDistinctFormValues, type LeadSubmissionSnapshot } from "@/lib/leads/submission-history";
@@ -71,9 +73,8 @@ export const PERSONAL_DETAIL_FIELDS = [
   { key: "marital_status", label: "Marital Status", type: "select", options: [{ value: "unmarried", label: "Unmarried" }, { value: "married", label: "Married" }] },
   { key: "father_name", label: "Father's Name", type: "text" },
   { key: "mother_name", label: "Mother's Name", type: "text" },
-  { key: "full_address", label: "Full Address", type: "text", span: 2 },
-  { key: "emergency_contact_name", label: "Emergency Contact Name", type: "text" },
-  { key: "emergency_contact_phone", label: "Emergency Contact No.", type: "tel" },
+  // Address lives in Personal Information (AddressFields). Emergency Contact is no longer asked here — the
+  // Guardian Details below already capture a contact person; the old columns stay, untouched.
 ] as const;
 
 export const PASSPORT_CITIZENSHIP_FIELDS = [
@@ -200,6 +201,18 @@ export function personalDetailsFromLead(lead: Lead): FieldValues {
   // Older free-text values ("father") line up with the dropdown's options; anything else is kept as typed.
   out.guardian_relationship = normalizeGuardianRelationship(out.guardian_relationship);
   return out;
+}
+
+/** The address as the UI edits it: Country lives with the core identity, the rest in the personal-detail values. */
+export function addressPartsOf(core: CoreIdentity, values: FieldValues): AddressParts {
+  return {
+    country: core.country,
+    province: values[ADDRESS_COLUMNS.province] ?? "",
+    district: values[ADDRESS_COLUMNS.district] ?? "",
+    municipality: values[ADDRESS_COLUMNS.municipality] ?? "",
+    ward: values[ADDRESS_COLUMNS.ward] ?? "",
+    tole: values[ADDRESS_COLUMNS.tole] ?? "",
+  };
 }
 
 export interface LeadSourceValues {
@@ -455,6 +468,28 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
     setCoreIdentityDraft((prev) => ({ ...prev, [key]: value }));
   };
 
+  // One edit to the address: clears dependent dropdowns, keeps full_address in step, and lets City
+  // follow the municipality (without overwriting a City someone typed).
+  const handleAddressPartChange = (field: AddressField, value: string) => {
+    const before = { parts: addressPartsOf(coreIdentityDraft, draft), fullAddress: draft.full_address ?? "" };
+    const after = updateAddress(before, field, value);
+    if (after === before) return;
+    setCoreIdentityDraft((prev) => ({
+      ...prev,
+      country: after.parts.country,
+      city: field === "municipality" ? nextCity(prev.city, before.parts.municipality, value) : prev.city,
+    }));
+    setDraft((prev) => ({
+      ...prev,
+      [ADDRESS_COLUMNS.province]: after.parts.province,
+      [ADDRESS_COLUMNS.district]: after.parts.district,
+      [ADDRESS_COLUMNS.municipality]: after.parts.municipality,
+      [ADDRESS_COLUMNS.ward]: after.parts.ward,
+      [ADDRESS_COLUMNS.tole]: after.parts.tole,
+      full_address: after.fullAddress,
+    }));
+  };
+
   const handleSourceChange = (key: keyof LeadSourceValues, value: string) => {
     setLeadSourceDraft((prev) => ({ ...prev, [key]: value }));
   };
@@ -519,6 +554,16 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
                   />
                 ))}
               </FieldGrid>
+            </CardSection>
+
+            <CardSection title="Address">
+              <AddressFields
+                isEditing={isEditing}
+                parts={addressPartsOf(isEditing ? coreIdentityDraft : coreIdentity, isEditing ? draft : values)}
+                fullAddress={(isEditing ? draft : values).full_address ?? ""}
+                onPartChange={handleAddressPartChange}
+                onFullAddressChange={(v) => handleChange("full_address", v)}
+              />
             </CardSection>
 
             <CardSection title="Basic Details">

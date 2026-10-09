@@ -4,6 +4,7 @@ import {
   extractTemplatePlaceholders,
   ALWAYS_REQUIRED_PLACEHOLDERS,
   AUTOMATIC_PLACEHOLDERS,
+  OPTIONAL_PLACEHOLDERS,
   PLACEHOLDER_REQUIREMENTS,
   CONSENT_PROFILE_COLUMNS,
   consentRequirementGroups,
@@ -128,8 +129,17 @@ describe("computeConsentReadiness", () => {
     expect(computeConsentReadiness("No counselor here", complete).ready).toBe(true);
   });
 
+  it("never blocks on Emergency Contact — Student Details no longer asks for it", () => {
+    const r = computeConsentReadiness("{{emergency_contact_name}} {{emergency_contact_phone}}", {
+      ...complete, emergency_contact_name: null, emergency_contact_phone: null,
+    });
+    expect(r.ready).toBe(true);
+    expect(r.missing).toEqual([]);
+    expect(OPTIONAL_PLACEHOLDERS).toEqual(["emergency_contact_name", "emergency_contact_phone"]);
+  });
+
   it("lists a field once even if two placeholders map to it", () => {
-    expect(computeConsentReadiness("{{full_address}} {{street_address}}", complete).missing).toEqual(["Full Address"]);
+    expect(computeConsentReadiness("{{full_address}} {{street_address}}", complete).missing).toEqual(["Address"]);
   });
 
   it("accepts city / nationality kept only in custom_fields", () => {
@@ -167,16 +177,17 @@ describe("{{country}} (filled from Nationality — the pop-up has one country fi
 describe("every consent placeholder is accounted for", () => {
   const always = new Set<string>(ALWAYS_REQUIRED_PLACEHOLDERS);
   const automatic = new Set<string>(AUTOMATIC_PLACEHOLDERS);
+  const optional = new Set<string>(OPTIONAL_PLACEHOLDERS);
   const profile = new Set(Object.keys(PLACEHOLDER_REQUIREMENTS));
 
-  it.each([...CONSENT_MERGE_FIELDS])("{{%s}} is always-required, automatic, or a profile requirement — exactly one", (field) => {
-    const homes = [always.has(field), automatic.has(field), profile.has(field)].filter(Boolean).length;
+  it.each([...CONSENT_MERGE_FIELDS])("{{%s}} is always-required, automatic, optional, or a profile requirement — exactly one", (field) => {
+    const homes = [always.has(field), automatic.has(field), optional.has(field), profile.has(field)].filter(Boolean).length;
     expect(homes).toBe(1);
   });
 
   it("no requirement exists for a placeholder the template can't use", () => {
     const known = new Set<string>(CONSENT_MERGE_FIELDS);
-    for (const key of [...always, ...automatic, ...profile]) expect(known.has(key)).toBe(true);
+    for (const key of [...always, ...automatic, ...optional, ...profile]) expect(known.has(key)).toBe(true);
   });
 });
 
@@ -192,8 +203,7 @@ describe("consentRequirementGroups — what staff must fill, from the template a
 
   it("lists the always-required fields plus one per placeholder the template uses, in pop-up order", () => {
     expect(consentRequirementGroups(ADMIZZ)).toEqual([
-      { section: "Personal Information", fields: ["First Name", "Email", "Phone", "Nationality", "City"] },
-      { section: "Basic Details", fields: ["Full Address"] },
+      { section: "Personal Information", fields: ["First Name", "Email", "Phone", "Nationality", "Address", "City"] },
       { section: "Guardian Details", fields: ["Guardian Name", "Guardian Relationship"] },
       { section: "Passport & Citizenship", fields: ["Passport Number"] },
       { section: "Study Interest", fields: ["Field of Study", "Degree Level"] },

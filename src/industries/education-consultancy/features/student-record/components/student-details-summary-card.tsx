@@ -12,7 +12,10 @@ import {
   GUARDIAN_FIELDS,
   FINANCIAL_FIELDS,
   personalDetailsFromLead,
+  coreIdentityFromLead,
+  addressPartsOf,
 } from "./personal-details-dialog";
+import { AddressFields } from "./address-fields";
 import { ACADEMIC_LEVELS, TEST_TYPES } from "@/lib/leads/prospect-qualification";
 import type { Lead } from "@/types/database";
 
@@ -87,6 +90,16 @@ export function StudentDetailsSummaryCard({ lead, onEdit, defaultOpen = true }: 
       <CollapsibleGroups>
       <div className="space-y-7 pt-2">
         <SectionGroup title="Personal Information">
+          <CardSection title="Address">
+            <AddressFields
+              isEditing={false}
+              parts={addressPartsOf(coreIdentityFromLead(lead), values)}
+              fullAddress={values.full_address ?? ""}
+              onPartChange={noop}
+              onFullAddressChange={noop}
+            />
+          </CardSection>
+
           <CardSection title="Basic Details">
             <FieldGrid columns={2}>
               {PERSONAL_DETAIL_FIELDS.map((field) => (
