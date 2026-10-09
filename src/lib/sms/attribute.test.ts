@@ -120,7 +120,7 @@ describe("attributeProviderResults", () => {
     });
   });
 
-  it("marks a recipient in neither array as failed with no_provider_result and lists it as unmatched", () => {
+  it("marks a recipient in neither array as submitted-unconfirmed (so the delivery poller settles it) and lists it as unmatched", () => {
     const messages = [{ id: "m1", to_phone: "9800000001" }];
     const providerResult = result([], []);
 
@@ -133,9 +133,12 @@ describe("attributeProviderResults", () => {
     expect(attributions).toEqual([
       {
         messageId: "m1",
-        outcome: "failed",
-        errorCode: "no_provider_result",
-        errorMessage: "Recipient found in neither the provider's valid nor invalid results.",
+        outcome: "submitted",
+        providerMessageId: null,
+        credit: null,
+        network: null,
+        providerStatus: "unconfirmed",
+        shortcode: null,
       },
     ]);
     expect(unmatched).toEqual(["m1"]);

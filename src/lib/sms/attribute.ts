@@ -20,10 +20,10 @@ export type Attribution =
   | {
       messageId: string;
       outcome: "submitted";
-      providerMessageId: string;
-      credit: number;
-      network: string;
-      providerStatus: string;
+      providerMessageId: string | null;
+      credit: number | null;
+      network: string | null;
+      providerStatus: string | null;
       shortcode: string | null;
     }
   | { messageId: string; outcome: "failed"; errorCode: string; errorMessage: string };
@@ -124,12 +124,22 @@ export function attributeProviderResults(input: AttributionInput): AttributionRe
       continue;
     }
 
+    // The provider accepted the call (error:false) but echoed this recipient
+    // in neither array. That is NOT evidence of failure — in production
+    // Aakash delivered messages we had marked failed this way (2026-10-09,
+    // UK Expo blast). Record it as submitted-but-unconfirmed so the delivery
+    // poller (matches the provider report by recipient + body + time) settles
+    // the real outcome, rather than writing a terminal "failed" the poller
+    // never revisits.
     unmatched.push(msg.id);
     attributions.push({
       messageId: msg.id,
-      outcome: "failed",
-      errorCode: "no_provider_result",
-      errorMessage: "Recipient found in neither the provider's valid nor invalid results.",
+      outcome: "submitted",
+      providerMessageId: null,
+      credit: null,
+      network: null,
+      providerStatus: "unconfirmed",
+      shortcode: null,
     });
   }
 

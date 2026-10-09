@@ -137,8 +137,15 @@ export async function sendQueuedBatch(tenantId: string, messageIds: string[]): P
 
     if (unmatched.length > 0) {
       logger.warn(
-        { tenantId, unmatchedCount: unmatched.length, unmatchedIds: unmatched },
-        "sendQueuedBatch: recipient(s) found in neither provider valid[] nor invalid[] — provider-contract violation"
+        {
+          tenantId,
+          unmatchedCount: unmatched.length,
+          unmatchedIds: unmatched,
+          sentTo: guarded.to.slice(0, 5),
+          providerValidMobiles: outcome.result.valid.slice(0, 5).map((v) => v.mobile),
+          providerInvalidMobiles: outcome.result.invalid.slice(0, 5).map((v) => v.mobile),
+        },
+        "sendQueuedBatch: recipient(s) found in neither provider valid[] nor invalid[] — left submitted-unconfirmed for the delivery poller to settle"
       );
     }
 
