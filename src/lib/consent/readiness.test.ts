@@ -146,12 +146,19 @@ describe("computeConsentReadiness", () => {
   });
 });
 
-describe("Residence Country", () => {
-  it("is required when the template uses {{country}}, and filed under Student Details > Personal Information", () => {
-    const r = computeConsentReadiness("{{city}}, {{country}}", { ...complete, city: "Kathmandu" });
-    expect(r.missing).toEqual(["Residence Country"]);
-    expect(r.groups).toEqual([{ section: "Personal Information", fields: ["Residence Country"] }]);
-    expect(computeConsentReadiness("{{country}}", { ...complete, country: "Nepal" }).ready).toBe(true);
+describe("{{country}} (filled from Nationality — the pop-up has one country field)", () => {
+  it("is required when the template uses {{country}}, asked for as Nationality under Personal Information", () => {
+    const r = computeConsentReadiness("{{city}}, {{country}}", { ...complete, city: "Kathmandu", nationality: null, country: null });
+    expect(r.missing).toEqual(["Nationality"]);
+    expect(r.groups).toEqual([{ section: "Personal Information", fields: ["Nationality"] }]);
+  });
+
+  it("is satisfied by Nationality alone", () => {
+    expect(computeConsentReadiness("{{country}}", { ...complete, nationality: "Nepal", country: null }).ready).toBe(true);
+  });
+
+  it("is still satisfied by an older lead's Residence Country alone", () => {
+    expect(computeConsentReadiness("{{country}}", { ...complete, nationality: null, country: "Nepal" }).ready).toBe(true);
   });
 });
 
@@ -185,7 +192,7 @@ describe("consentRequirementGroups — what staff must fill, from the template a
 
   it("lists the always-required fields plus one per placeholder the template uses, in pop-up order", () => {
     expect(consentRequirementGroups(ADMIZZ)).toEqual([
-      { section: "Personal Information", fields: ["First Name", "Email", "Phone", "Nationality", "City", "Residence Country"] },
+      { section: "Personal Information", fields: ["First Name", "Email", "Phone", "Nationality", "City"] },
       { section: "Basic Details", fields: ["Full Address"] },
       { section: "Guardian Details", fields: ["Guardian Name", "Guardian Relationship"] },
       { section: "Passport & Citizenship", fields: ["Passport Number"] },

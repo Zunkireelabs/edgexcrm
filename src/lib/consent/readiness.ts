@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getLeadCity, getLeadNationality } from "@/lib/leads/lead-location";
+import { getLeadCity, getLeadCountry, getLeadNationality } from "@/lib/leads/lead-location";
 import { logger } from "@/lib/logger";
 import { resolveGuardian, GUARDIAN_NOT_APPLICABLE, normalizeGuardianRelationship } from "./guardian";
 
@@ -92,7 +92,7 @@ type Section = (typeof SECTION_ORDER)[number];
 export const PLACEHOLDER_REQUIREMENTS: Record<string, { label: string; section: Section; ok: (p: ConsentProfile) => boolean }> = {
   city: { label: "City", section: "Personal Information", ok: (p) => !!getLeadCity(p) },
   nationality: { label: "Nationality", section: "Personal Information", ok: (p) => !!getLeadNationality(p) },
-  country: { label: "Residence Country", section: "Personal Information", ok: (p) => filled(p.country) },
+  country: { label: "Nationality", section: "Personal Information", ok: (p) => !!getLeadCountry(p) },
   passport_number: { label: "Passport Number", section: "Passport & Citizenship", ok: (p) => filled(p.passport_number) },
   full_address: { label: "Full Address", section: "Basic Details", ok: (p) => filled(p.full_address) },
   street_address: { label: "Full Address", section: "Basic Details", ok: (p) => filled(p.full_address) },
