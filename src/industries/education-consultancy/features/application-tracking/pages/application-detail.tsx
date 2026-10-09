@@ -535,6 +535,9 @@ export function ApplicationDetailPage({
                 teamMemberEmails={teamMemberEmails}
                 teamMemberNames={teamMemberNames}
                 currentUserId={currentUserId}
+                leadId={leadId}
+                canAttach={canEdit}
+                offerType={application.offer_type}
               />
             </CardContent>
           </Card>

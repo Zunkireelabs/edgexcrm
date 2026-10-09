@@ -1,5 +1,6 @@
 "use client";
 
+import { uploadApplicantDocument } from "./upload-document";
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -46,14 +47,6 @@ const QUALIFICATION_LEVEL_LABELS: Record<QualificationLevel, string> = {
 // matches the plan's scoping (a Passport or Visa Document has no meaningful
 // link to "which qualification").
 const QUALIFICATION_LINKABLE_TYPES: readonly DocumentType[] = ["marksheet", "transcript", "certificate"];
-
-async function sha256Hex(file: File): Promise<string> {
-  const buf = await file.arrayBuffer();
-  const digest = await crypto.subtle.digest("SHA-256", buf);
-  return Array.from(new Uint8Array(digest))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
 
 interface DocumentUploadDialogProps {
   leadId: string;
@@ -109,68 +102,21 @@ export function DocumentUploadDialog({
   async function handleUpload() {
     if (!file) return;
     setUploading(true);
-    try {
-      const urlRes = await fetch(`/api/v1/leads/${leadId}/documents/upload-url`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          document_type: uploadType,
-          name: uploadName.trim() || file.name,
-          original_filename: file.name,
-          file_size: file.size,
-          mime_type: file.type || "",
-        }),
-      });
-      const urlJson = await urlRes.json();
-      if (!urlRes.ok) {
-        toast.error(urlJson?.error?.message ?? "Failed to get upload URL");
-        return;
-      }
-      const { document_id, version_id, upload_url, upload_headers } = urlJson.data as {
-        document_id: string;
-        version_id: string;
-        upload_url: string;
-        upload_headers?: Record<string, string>;
-      };
-
-      const putRes = await fetch(upload_url, {
-        method: "PUT",
-        headers: upload_headers,
-        body: file,
-      });
-      if (!putRes.ok) {
-        toast.error("Upload to storage failed");
-        return;
-      }
-
-      const checksum = await sha256Hex(file);
-      const completeRes = await fetch(`/api/v1/leads/${leadId}/documents/${document_id}/complete`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          version_id,
-          document_type: uploadType,
-          name: uploadName.trim() || file.name,
-          original_filename: file.name,
-          file_size: file.size,
-          mime_type: file.type || "",
-          checksum,
-          qualification_level: canLinkQualification && qualificationLevel ? qualificationLevel : undefined,
-        }),
-      });
-      const completeJson = await completeRes.json();
-      if (!completeRes.ok) {
-        toast.error(completeJson?.error?.message ?? "Failed to confirm upload — please retry");
-        return;
-      }
-      toast.success("Document uploaded");
-      onOpenChange(false);
-      onUploaded?.();
-    } catch {
-      toast.error("Upload failed");
-    } finally {
-      setUploading(false);
+    const result = await uploadApplicantDocument({
+      leadId,
+      file,
+      documentType: uploadType,
+      name: uploadName,
+      qualificationLevel: canLinkQualification && qualificationLevel ? qualificationLevel : undefined,
+    });
+    setUploading(false);
+    if (!result.ok) {
+      toast.error(result.message);
+      return;
     }
+    toast.success("Document uploaded");
+    onOpenChange(false);
+    onUploaded?.();
   }
 
   return (
