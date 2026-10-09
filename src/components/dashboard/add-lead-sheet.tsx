@@ -733,6 +733,8 @@ export function AddLeadSheet({
               </Select>
             </div>
             )}
+            {/* The client dropped Preferred Contact for education (one less field for counselors to fill). */}
+            {!isEducation && (
             <div className="space-y-1.5">
               <Label htmlFor="preferredContact" className="text-xs text-gray-600">
                 Preferred Contact
@@ -754,6 +756,7 @@ export function AddLeadSheet({
                 </SelectContent>
               </Select>
             </div>
+            )}
           </div>
           {canSetLeadSource && (
           <div className="space-y-1.5">

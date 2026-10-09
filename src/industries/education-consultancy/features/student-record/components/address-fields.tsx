@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import { Input } from "@/components/ui/input";
 import { NATIONALITY_OPTIONS } from "@/lib/leads/contact-options";
 import {
   districtOptions,
@@ -13,6 +15,14 @@ import {
 import { EditableField, FieldGrid, type FieldDef } from "./form-primitives";
 
 const toOptions = (names: readonly string[]) => names.map((n) => ({ value: n, label: n }));
+
+/** The Ward dropdown's last choice: for a ward the list does not have (the list comes from public data and could be one short). */
+export const OTHER_WARD = "__other_ward__";
+
+/** Keep only digits, drop leading zeros, cap at two digits (the largest real ward number is 35). */
+export function sanitizeWardNumber(raw: string): string {
+  return raw.replace(/\D/g, "").replace(/^0+/, "").slice(0, 2);
+}
 
 interface AddressFieldsProps {
   isEditing: boolean;
@@ -31,6 +41,13 @@ interface AddressFieldsProps {
 export function AddressFields({ isEditing, parts, fullAddress, onPartChange, onFullAddressChange }: AddressFieldsProps) {
   const nepal = isNepal(parts.country);
   const hasParts = [parts.province, parts.district, parts.municipality, parts.ward, parts.tole].some((p) => p.trim() !== "");
+
+  // "Other ward…": the counselor needs a ward the list does not offer. Also the state for a saved ward that is
+  // outside the list (older data, or a municipality whose count in the data is short), so it is never hidden.
+  const wards = wardOptions(parts.district, parts.municipality);
+  // Remembered per municipality, so choosing a different municipality starts fresh with no effect needed.
+  const [otherWardFor, setOtherWardFor] = useState<string | null>(null);
+  const wardIsCustom = otherWardFor === parts.municipality || (parts.ward !== "" && !wards.includes(parts.ward));
 
   const countryField: FieldDef = { key: "country", label: "Country", type: "select", options: NATIONALITY_OPTIONS };
 
@@ -97,18 +114,38 @@ export function AddressFields({ isEditing, parts, fullAddress, onPartChange, onF
           onChange={(v) => onPartChange("municipality", v)}
           disabled={!parts.district}
         />
-        <EditableField
-          field={{
-            key: "address_ward",
-            label: "Ward",
-            type: "select",
-            options: toOptions(wardOptions(parts.district, parts.municipality)),
-          }}
-          isEditing
-          value={parts.ward}
-          onChange={(v) => onPartChange("ward", v)}
-          disabled={!parts.municipality}
-        />
+        <div className="space-y-2">
+          <EditableField
+            field={{
+              key: "address_ward",
+              label: "Ward",
+              type: "select",
+              options: [...toOptions(wards), { value: OTHER_WARD, label: "Other ward…" }],
+            }}
+            isEditing
+            value={wardIsCustom ? OTHER_WARD : parts.ward}
+            onChange={(v) => {
+              if (v === OTHER_WARD) {
+                setOtherWardFor(parts.municipality);
+                onPartChange("ward", "");
+              } else {
+                setOtherWardFor(null);
+                onPartChange("ward", v);
+              }
+            }}
+            disabled={!parts.municipality}
+          />
+          {wardIsCustom && (
+            <Input
+              inputMode="numeric"
+              aria-label="Ward number"
+              placeholder="Ward number"
+              value={parts.ward}
+              onChange={(e) => onPartChange("ward", sanitizeWardNumber(e.target.value))}
+              className="h-9 text-sm"
+            />
+          )}
+        </div>
         <EditableField
           field={{ key: "address_tole", label: "Tole / Street", type: "text", placeholder: "e.g. Baneshwor, near the temple" }}
           isEditing

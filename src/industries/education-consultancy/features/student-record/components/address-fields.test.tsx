@@ -3,11 +3,11 @@
 // Client request (Student Details): structured Nepal address (Country > Province > District >
 // Municipality > Ward > Tole), one plain box for other countries, no Emergency Contact.
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import type { Lead } from "@/types/database";
 import { EMPTY_ADDRESS, formatAddress } from "@/lib/leads/address";
-import { AddressFields } from "./address-fields";
+import { AddressFields, OTHER_WARD, sanitizeWardNumber } from "./address-fields";
 import { qualificationsFromLead } from "./qualifications-section";
 import {
   PersonalDetailsDialog,
@@ -144,5 +144,51 @@ describe("saving the address", () => {
       full_address: "Baneshwor, Ward 5, Kathmandu Metropolitan City, Kathmandu, Bagmati, Nepal",
     });
     expect(addressPartsOf(core, draft).country).toBe("Nepal");
+  });
+});
+
+describe("Ward: 'Other ward…' escape hatch (the ward list comes from public data and could be one short)", () => {
+  const kmc = { ...nepal, province: "Bagmati", district: "Kathmandu", municipality: "Kathmandu Metropolitan City" }; // 32 wards
+
+  it("shows no number box for a ward that is in the list", () => {
+    render(<AddressFields isEditing parts={{ ...kmc, ward: "5" }} fullAddress="" onPartChange={noop} onFullAddressChange={noop} />);
+    expect(screen.queryByLabelText("Ward number")).toBeNull();
+  });
+
+  it("shows a number box, holding the value, for a saved ward that is outside the list — it is never hidden", () => {
+    render(<AddressFields isEditing parts={{ ...kmc, ward: "33" }} fullAddress="" onPartChange={noop} onFullAddressChange={noop} />);
+    expect(screen.getByLabelText("Ward number")).toHaveValue("33");
+    expect(triggerFor("Ward")).toHaveTextContent("Other ward…");
+  });
+
+  it("reports only clean digits as the counselor types", () => {
+    const onPartChange = vi.fn();
+    render(<AddressFields isEditing parts={{ ...kmc, ward: "33" }} fullAddress="" onPartChange={onPartChange} onFullAddressChange={noop} />);
+    fireEvent.change(screen.getByLabelText("Ward number"), { target: { value: "3a4" } });
+    expect(onPartChange).toHaveBeenCalledWith("ward", "34");
+    fireEvent.change(screen.getByLabelText("Ward number"), { target: { value: "" } });
+    expect(onPartChange).toHaveBeenLastCalledWith("ward", "");
+  });
+
+  it("keeps Ward disabled until a municipality is chosen", () => {
+    render(<AddressFields isEditing parts={nepal} fullAddress="" onPartChange={noop} onFullAddressChange={noop} />);
+    expect(triggerFor("Ward")).toBeDisabled();
+    expect(screen.queryByLabelText("Ward number")).toBeNull();
+  });
+
+  it("the 'Other' choice never collides with a real ward value", () => {
+    expect(OTHER_WARD).not.toMatch(/^\d+$/);
+  });
+});
+
+describe("sanitizeWardNumber", () => {
+  it("keeps digits only, drops leading zeros, and caps at two digits", () => {
+    expect(sanitizeWardNumber("12")).toBe("12");
+    expect(sanitizeWardNumber("07")).toBe("7");
+    expect(sanitizeWardNumber("0")).toBe("");
+    expect(sanitizeWardNumber("abc")).toBe("");
+    expect(sanitizeWardNumber("123")).toBe("12");
+    expect(sanitizeWardNumber(" 3 5 ")).toBe("35");
+    expect(sanitizeWardNumber("-4")).toBe("4");
   });
 });
