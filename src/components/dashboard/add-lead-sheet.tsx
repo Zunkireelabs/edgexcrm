@@ -129,6 +129,7 @@ interface FormErrors {
   phone?: string;
   general?: string;
   archiveReason?: string;
+  listId?: string;
 }
 
 const CONTACT_METHODS = [
@@ -290,6 +291,19 @@ export function AddLeadSheet({
 
     if (lockedList?.is_archive && !formData.archiveReason.trim()) {
       setErrors({ archiveReason: "Archive reason is required." });
+      return;
+    }
+
+    // Non-admins can't see the staging list ("New Leads"). Without a Stage the lead
+    // would be routed there and disappear from the creator's view.
+    if (
+      isEducation &&
+      !isAdmin &&
+      !lockedList &&
+      !formData.listId &&
+      leadLists.some((l) => !l.is_staging && !l.is_archive)
+    ) {
+      setErrors({ listId: "Choose a stage so the lead stays in your view." });
       return;
     }
 
@@ -589,6 +603,7 @@ export function AddLeadSheet({
               </SelectContent>
             </Select>
           )}
+          {errors.listId && <p className="text-xs text-red-500">{errors.listId}</p>}
         </div>
 
         <div className="space-y-1.5">

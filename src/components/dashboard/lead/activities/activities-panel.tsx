@@ -30,6 +30,7 @@ import { TaskList, type TaskListRef } from "@/components/dashboard/tasks/task-li
 import { type EmailThread, type Email } from "@/industries/_shared/features/email/hooks/use-email-threads";
 import { useConnectedInboxes } from "@/industries/_shared/features/email/hooks/use-connected-inboxes";
 import { getFeatureAccess } from "@/industries/_loader";
+import { describeSubmission, humanizeIntakeValue } from "./lead-activity-labels";
 import { FEATURES } from "@/industries/_registry";
 import { LeadCadenceStrip } from "@/industries/_shared/features/outreach/ui/lead-cadence-strip";
 
@@ -1003,8 +1004,8 @@ function SubmissionDetail({ submission }: { submission: LeadSubmission }) {
     typeof val === "string" && val.trim() !== "" ? val : undefined;
 
   const sourceRows: { label: string; value: string }[] = [
-    { label: "Source Category", value: submission.intake_source ?? "" },
-    { label: "Source Channel", value: submission.intake_medium ?? "" },
+    { label: "Lead Source", value: humanizeIntakeValue(submission.intake_source) },
+    { label: "Channel", value: humanizeIntakeValue(submission.intake_medium) },
     { label: "Source Page / Account", value: asString(rawPayload?.intake_account) ?? "" },
     { label: "Campaign", value: submission.intake_campaign ?? "" },
     { label: "Ref Code", value: asString(rawPayload?.ref_code) ?? "" },
@@ -1028,7 +1029,6 @@ function SubmissionDetail({ submission }: { submission: LeadSubmission }) {
 
       {hasSourceRows && (
         <div className="space-y-1 mt-1">
-          <span className="text-muted-foreground">Lead Source:</span>
           {sourceRows.map((row) => (
             <div key={row.label} className="flex gap-2 text-muted-foreground">
               <span className="capitalize shrink-0">{row.label}:</span>
@@ -1165,11 +1165,7 @@ function getSystemActivityDescription(
 
   // Submission (dedup-aware)
   if (activity.action === "lead.submission") {
-    const isFirst = changes.is_first?.new === true;
-    const formName = changes.form_name?.new as string | null;
-    return isFirst
-      ? `Lead created${formName ? ` · Filled ${formName}` : ""}`
-      : `Filled ${formName || "form"}`;
+    return describeSubmission(changes);
   }
 
   if (activity.action === "lead.merged") {
