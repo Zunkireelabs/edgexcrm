@@ -1243,6 +1243,13 @@ function getSystemActivityDescription(
       designation: "designation",
       salutation: "salutation",
       preferred_contact_method: "contact method",
+      // The structured address is saved as several columns; one edit should read as one "address".
+      full_address: "address",
+      address_province: "address",
+      address_district: "address",
+      address_municipality: "address",
+      address_ward: "address",
+      address_tole: "address",
     };
     const seen = new Set<string>();
     const labels: string[] = [];

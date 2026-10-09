@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { toast } from "sonner";
 import { Pencil, X, Check, Loader2 } from "lucide-react";
 import {
@@ -368,7 +368,13 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
   const [leadSource, setLeadSource] = useState<LeadSourceValues>(() => leadSourceFromLead(lead, submissionHistory));
   const [leadSourceDraft, setLeadSourceDraft] = useState<LeadSourceValues>(leadSource);
 
+  // The last municipality City could have been filled from. Changing the province clears the municipality
+  // in between, so City is compared against this — not the (now empty) current municipality — to know it is
+  // still the auto-filled value and may follow the next pick.
+  const lastMunicipalityRef = useRef("");
+
   const startEditing = () => {
+    lastMunicipalityRef.current = values.address_municipality ?? "";
     setDraft(values);
     setCoreIdentityDraft(coreIdentity);
     setStudyDraft(studyInterest);
@@ -474,10 +480,13 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
     const before = { parts: addressPartsOf(coreIdentityDraft, draft), fullAddress: draft.full_address ?? "" };
     const after = updateAddress(before, field, value);
     if (after === before) return;
+    // Read before updating the ref: the state updater below runs later, after the ref has moved on.
+    const previousMunicipality = lastMunicipalityRef.current;
+    if (field === "municipality" && value) lastMunicipalityRef.current = value;
     setCoreIdentityDraft((prev) => ({
       ...prev,
       country: after.parts.country,
-      city: field === "municipality" ? nextCity(prev.city, before.parts.municipality, value) : prev.city,
+      city: field === "municipality" ? nextCity(prev.city, previousMunicipality, value) : prev.city,
     }));
     setDraft((prev) => ({
       ...prev,
