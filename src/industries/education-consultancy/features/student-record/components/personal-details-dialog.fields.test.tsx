@@ -7,6 +7,7 @@ import { render, screen, cleanup } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import type { Lead } from "@/types/database";
 import { PersonalDetailsDialog } from "./personal-details-dialog";
+import { GUARDIAN_SECTION_TITLE } from "@/lib/consent/guardian";
 import { CORE_IDENTITY_FIELDS } from "./personal-details-dialog";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
@@ -46,5 +47,12 @@ describe("Student Details > Personal Information fields", () => {
   it("keeps an old typed nationality visible in the dropdown", async () => {
     renderDialog({ nationality: "Nepali" });
     expect((await screen.findAllByText("Nepali", { exact: true })).length).toBeGreaterThan(0);
+  });
+
+  it("names the guardian section 'Guardian Details / Emergency Contact' (the guardian is the emergency contact)", async () => {
+    expect(GUARDIAN_SECTION_TITLE).toBe("Guardian Details / Emergency Contact");
+    renderDialog({});
+    expect((await screen.findAllByText(GUARDIAN_SECTION_TITLE, { exact: true })).length).toBeGreaterThan(0);
+    expect(screen.queryByText("Guardian Details", { exact: true })).toBeNull();
   });
 });

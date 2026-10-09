@@ -1,5 +1,6 @@
 "use client";
 
+import { GUARDIAN_SECTION_TITLE } from "@/lib/consent/guardian";
 import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InfoSection, InfoRow } from "@/components/dashboard/lead/info-section";
@@ -108,7 +109,7 @@ export function StudentDetailsSummaryCard({ lead, onEdit, defaultOpen = true }: 
             </FieldGrid>
           </CardSection>
 
-          <CardSection title="Guardian Details">
+          <CardSection title={GUARDIAN_SECTION_TITLE}>
             <FieldGrid>
               {GUARDIAN_FIELDS.map((field) => (
                 <EditableField key={field.key} field={field} isEditing={false} value={values[field.key] || ""} onChange={noop} />

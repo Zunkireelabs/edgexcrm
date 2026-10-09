@@ -11,6 +11,7 @@ import {
   type ConsentProfile,
 } from "./readiness";
 import { CONSENT_MERGE_FIELDS } from "./merge";
+import { GUARDIAN_SECTION_TITLE } from "./guardian";
 
 const complete: ConsentProfile = {
   first_name: "Paras",
@@ -73,7 +74,7 @@ describe("computeConsentReadiness", () => {
     expect(r.groups).toEqual([
       { section: "Personal Information", fields: ["City"] },
       { section: "Basic Details", fields: ["Date of Birth", "Father's Name"] },
-      { section: "Guardian Details", fields: ["Guardian Phone"] },
+      { section: GUARDIAN_SECTION_TITLE, fields: ["Guardian Phone"] },
       { section: "Passport & Citizenship", fields: ["Passport Number"] },
       { section: "Study Interest", fields: ["Degree Level"] },
     ]);
@@ -87,10 +88,10 @@ describe("computeConsentReadiness", () => {
   });
 
   it("shows ONE guardian: Father/Mother resolve from the parent names, others need a typed Guardian Name", () => {
-    // Nothing chosen yet -> both the name and the relationship are asked for, under Guardian Details.
+    // Nothing chosen yet -> both the name and the relationship are asked for, under the guardian section.
     const r = computeConsentReadiness("{{parent_name}} {{guardian_relationship}}", complete);
     expect(r.missing).toEqual(["Guardian Name", "Guardian Relationship"]);
-    expect(r.groups).toEqual([{ section: "Guardian Details", fields: ["Guardian Name", "Guardian Relationship"] }]);
+    expect(r.groups).toEqual([{ section: GUARDIAN_SECTION_TITLE, fields: ["Guardian Name", "Guardian Relationship"] }]);
     // Father picked: father's name is used.
     const tpl = "{{parent_name}} {{guardian_relationship}}";
     expect(computeConsentReadiness(tpl, { ...complete, guardian_relationship: "Father", father_name: "Ram" }).ready).toBe(true);
@@ -204,7 +205,7 @@ describe("consentRequirementGroups — what staff must fill, from the template a
   it("lists the always-required fields plus one per placeholder the template uses, in pop-up order", () => {
     expect(consentRequirementGroups(ADMIZZ)).toEqual([
       { section: "Personal Information", fields: ["First Name", "Email", "Phone", "Nationality", "Address", "City"] },
-      { section: "Guardian Details", fields: ["Guardian Name", "Guardian Relationship"] },
+      { section: GUARDIAN_SECTION_TITLE, fields: ["Guardian Name", "Guardian Relationship"] },
       { section: "Passport & Citizenship", fields: ["Passport Number"] },
       { section: "Study Interest", fields: ["Field of Study", "Degree Level"] },
       { section: "Assignment", fields: ["Assigned Counselor"] },

@@ -1,5 +1,6 @@
 "use client";
 
+import { GUARDIAN_SECTION_TITLE } from "@/lib/consent/guardian";
 import { useEffect, useState, useRef } from "react";
 import { toast } from "sonner";
 import { Pencil, X, Check, Loader2 } from "lucide-react";
@@ -74,7 +75,7 @@ export const PERSONAL_DETAIL_FIELDS = [
   { key: "father_name", label: "Father's Name", type: "text" },
   { key: "mother_name", label: "Mother's Name", type: "text" },
   // Address lives in Personal Information (AddressFields). Emergency Contact is no longer asked here — the
-  // Guardian Details below already capture a contact person; the old columns stay, untouched.
+  // the guardian section below already captures a contact person; the old columns stay, untouched.
 ] as const;
 
 export const PASSPORT_CITIZENSHIP_FIELDS = [
@@ -563,16 +564,18 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
                   />
                 ))}
               </FieldGrid>
-            </CardSection>
 
-            <CardSection title="Address">
-              <AddressFields
-                isEditing={isEditing}
-                parts={addressPartsOf(isEditing ? coreIdentityDraft : coreIdentity, isEditing ? draft : values)}
-                fullAddress={(isEditing ? draft : values).full_address ?? ""}
-                onPartChange={handleAddressPartChange}
-                onFullAddressChange={(v) => handleChange("full_address", v)}
-              />
+              {/* Same card as Nationality and City: the client asked for the address "together with" them. */}
+              <div className="mt-5 border-t pt-4">
+                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Address</p>
+                <AddressFields
+                  isEditing={isEditing}
+                  parts={addressPartsOf(isEditing ? coreIdentityDraft : coreIdentity, isEditing ? draft : values)}
+                  fullAddress={(isEditing ? draft : values).full_address ?? ""}
+                  onPartChange={handleAddressPartChange}
+                  onFullAddressChange={(v) => handleChange("full_address", v)}
+                />
+              </div>
             </CardSection>
 
             <CardSection title="Basic Details">
@@ -589,7 +592,7 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
               </FieldGrid>
             </CardSection>
 
-            <CardSection title="Guardian Details">
+            <CardSection title={GUARDIAN_SECTION_TITLE}>
               <p className="mb-3 text-xs text-muted-foreground">
                 The guardian signs for the student on the consent. Pick the relationship: Father or Mother fills the name in
                 from their name above; for anyone else, type the name. Choose &quot;None / Not applicable&quot; if there is no

@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getLeadCity, getLeadCountry, getLeadNationality } from "@/lib/leads/lead-location";
 import { logger } from "@/lib/logger";
-import { resolveGuardian, GUARDIAN_NOT_APPLICABLE, normalizeGuardianRelationship } from "./guardian";
+import { resolveGuardian, GUARDIAN_NOT_APPLICABLE, GUARDIAN_SECTION_TITLE, normalizeGuardianRelationship } from "./guardian";
 
 /**
  * Is a student's profile complete enough to generate a consent document?
@@ -34,7 +34,7 @@ export interface ConsentReadiness {
 const SECTION_ORDER = [
   "Personal Information",
   "Basic Details",
-  "Guardian Details",
+  GUARDIAN_SECTION_TITLE,
   "Passport & Citizenship",
   "Study Interest",
   "Assignment",
@@ -88,7 +88,7 @@ export const ALWAYS_REQUIRED_PLACEHOLDERS = ["student_name", "student_email", "s
 export const AUTOMATIC_PLACEHOLDERS = ["organization", "date", "consent_version"] as const;
 /**
  * Printed when the student has the value on file, but NEVER required: Student Details no longer asks for them
- * (the Guardian Details already capture the contact person), so requiring them would leave consent stuck.
+ * (the guardian section already captures the contact person), so requiring them would leave consent stuck.
  */
 export const OPTIONAL_PLACEHOLDERS = ["emergency_contact_name", "emergency_contact_phone"] as const;
 
@@ -103,14 +103,14 @@ export const PLACEHOLDER_REQUIREMENTS: Record<string, { label: string; section: 
   street_address: { label: "Address", section: "Personal Information", ok: (p) => filled(p.full_address) },
   father_name: { label: "Father's Name", section: "Basic Details", ok: (p) => filled(p.father_name) },
   mother_name: { label: "Mother's Name", section: "Basic Details", ok: (p) => filled(p.mother_name) },
-  parent_name: { label: "Guardian Name", section: "Guardian Details", ok: (p) => filled(guardianName(p)) },
-  guardian_name: { label: "Guardian Name", section: "Guardian Details", ok: (p) => filled(guardianName(p)) },
+  parent_name: { label: "Guardian Name", section: GUARDIAN_SECTION_TITLE, ok: (p) => filled(guardianName(p)) },
+  guardian_name: { label: "Guardian Name", section: GUARDIAN_SECTION_TITLE, ok: (p) => filled(guardianName(p)) },
   counselor_name: { label: "Assigned Counselor", section: "Assignment", ok: (p) => filled(p.assigned_to) },
   assign_name: { label: "Assigned Counselor", section: "Assignment", ok: (p) => filled(p.assigned_to) },
   date_of_birth: { label: "Date of Birth", section: "Basic Details", ok: (p) => filled(p.date_of_birth) },
-  guardian_phone: { label: "Guardian Phone", section: "Guardian Details", ok: (p) => noGuardian(p) || filled(p.guardian_phone) },
-  guardian_email: { label: "Guardian Email", section: "Guardian Details", ok: (p) => noGuardian(p) || filled(p.guardian_email) },
-  guardian_relationship: { label: "Guardian Relationship", section: "Guardian Details", ok: (p) => filled(effectiveGuardian(p).relationship) },
+  guardian_phone: { label: "Guardian Phone", section: GUARDIAN_SECTION_TITLE, ok: (p) => noGuardian(p) || filled(p.guardian_phone) },
+  guardian_email: { label: "Guardian Email", section: GUARDIAN_SECTION_TITLE, ok: (p) => noGuardian(p) || filled(p.guardian_email) },
+  guardian_relationship: { label: "Guardian Relationship", section: GUARDIAN_SECTION_TITLE, ok: (p) => filled(effectiveGuardian(p).relationship) },
 };
 
 /** The distinct `{{placeholders}}` used in a template body. */
