@@ -52,23 +52,28 @@ export function qualificationsFromLead(lead: Lead): Qualifications {
 
 type Tier = "ug" | "pg" | "phd";
 
+/** Short forms of degrees, matched whole (a substring test on "ma" or "ba" would hit unrelated words). */
+const UG_CODES = new Set(["ug", "ba", "bsc", "bba", "bca", "bcom", "btech", "be", "beng", "bed", "llb"]);
+const PG_CODES = new Set(["pg", "ma", "msc", "mba", "mca", "mcom", "mtech", "me", "meng", "med", "llm", "mphil"]);
+
 /**
- * `degree_level` is a tenant-configurable catalog value (study_levels table),
- * not a fixed enum — matched by keyword rather than exact string so a
- * tenant's own wording ("Master's", "Postgraduate Diploma", etc.) still
- * resolves correctly instead of only matching one exact label.
+ * `degree_level` is a tenant-configurable catalog value (study_levels table), not a fixed enum, so any
+ * spelling can show up ("Under Graduate", "Master's", "B.Sc.", "Diploma", ...). It is matched by keyword,
+ * ignoring case, spaces, hyphens and punctuation — "Under Graduate" once fell through to "no degree
+ * level" and the Academic Information section showed nothing.
  *
- * Compared with spaces, hyphens and punctuation removed: a catalog entry spelled
- * "Under Graduate" (two words) must match exactly like "Undergraduate" — it used to
- * fall through and the Academic Information section showed nothing. The short codes
- * "UG" / "PG" (also used as catalog values) are recognised too.
+ * The one rule that must never break: a level that IS chosen always shows qualifications. Wording we do
+ * not recognise (Diploma, Foundation, Certificate, a tenant's own invention) gets the base two — Grade X
+ * and Grade XI & XII — which every student has, instead of an empty section. Only a blank level
+ * returns null, and that alone shows the "Set a Degree Level" notice.
  */
 export function qualificationTier(degreeLevel: string): Tier | null {
   const v = degreeLevel.toLowerCase().replace(/[^a-z]/g, "");
-  if (v.includes("phd") || v.includes("doctor")) return "phd";
-  if (v.includes("post") || v.includes("master") || v === "pg") return "pg";
-  if (v.includes("undergrad") || v.includes("bachelor") || v === "ug") return "ug";
-  return null;
+  if (!v) return null;
+  if (v.includes("phd") || v.includes("doctor") || v === "dphil" || v.includes("postdoc")) return "phd";
+  if (v.includes("post") || v.includes("master") || PG_CODES.has(v)) return "pg";
+  if (v.includes("undergrad") || v.includes("bachelor") || UG_CODES.has(v)) return "ug";
+  return "ug";
 }
 
 interface LevelMeta {

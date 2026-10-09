@@ -30,10 +30,28 @@ describe("qualificationTier", () => {
     expect(qualificationTier("Doctorate")).toBe("phd");
   });
 
-  it("does not misread other words that merely contain 'ug' or 'pg'", () => {
-    expect(qualificationTier("Foundation")).toBeNull();
-    expect(qualificationTier("Diploma")).toBeNull();
-    expect(qualificationTier("Language Course")).toBeNull(); // contains "ug" but is not the UG code
+  it("recognises degree abbreviations, with or without dots", () => {
+    for (const v of ["B.Sc.", "BSc", "B.A", "BBA", "B.Tech", "BCA", "LLB"]) expect(qualificationTier(v), v).toBe("ug");
+    for (const v of ["M.Sc.", "MBA", "M.A.", "MCA", "M.Tech", "MPhil", "LLM"]) expect(qualificationTier(v), v).toBe("pg");
+    expect(qualificationTier("D.Phil")).toBe("phd");
+    expect(qualificationTier("Postdoctoral")).toBe("phd");
+  });
+
+  it("never leaves a chosen level empty: unrecognised wording falls back to the base qualifications", () => {
+    for (const v of ["Diploma", "Foundation", "Certificate", "Language Course", "Pre-sessional", "Level 4", "Associate Degree", "Something New"]) {
+      expect(qualificationTier(v), v).toBe("ug");
+    }
+  });
+
+  it("does not let short codes or words hit unrelated levels", () => {
+    expect(qualificationTier("Management")).toBe("ug"); // contains "ma" but is not the MA code -> base fallback, not PG
+    expect(qualificationTier("Media Studies")).toBe("ug");
+    expect(qualificationTier("Beginner")).toBe("ug");
+  });
+
+  it("only a blank level means 'no degree level' (the one case that shows the notice)", () => {
     expect(qualificationTier("")).toBeNull();
+    expect(qualificationTier("   ")).toBeNull();
+    expect(qualificationTier("---")).toBeNull();
   });
 });

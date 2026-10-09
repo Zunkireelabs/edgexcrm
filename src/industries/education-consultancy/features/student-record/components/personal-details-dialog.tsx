@@ -795,6 +795,10 @@ function StudyInterestFields({
               {studyLevels.map((lvl) => (
                 <SelectItem key={lvl} value={lvl}>{lvl}</SelectItem>
               ))}
+              {/* A level saved earlier but no longer in the catalog must still show, not look blank. */}
+              {value.degreeLevel && !studyLevels.includes(value.degreeLevel) && (
+                <SelectItem value={value.degreeLevel}>{value.degreeLevel}</SelectItem>
+              )}
             </SelectContent>
           </Select>
         ) : (
