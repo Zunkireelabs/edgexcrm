@@ -538,6 +538,7 @@ export function ApplicationDetailPage({
                 leadId={leadId}
                 canAttach={canEdit}
                 offerType={application.offer_type}
+                isAdmin={canOverrideProfileCheck}
               />
             </CardContent>
           </Card>

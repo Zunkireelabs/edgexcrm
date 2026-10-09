@@ -143,6 +143,19 @@ export function ApplicantDocumentsCard({
 
   const grouped = groupDocuments(visibleDocs, applications);
 
+  // The small card: the latest few files, application files grouped under their name. Other files stay in one
+  // unheaded list — unless an application heading is showing, when they get an "Other documents" heading so
+  // they are not mistaken for part of the last application's group.
+  const summaryGroups = groupDocuments(recentDocs, applications);
+  const summaryApplicationSections = summaryGroups.filter((g) => g.kind === "application");
+  const summaryOtherDocs = summaryGroups.filter((g) => g.kind === "category").flatMap((g) => g.docs);
+  const summarySections: { key: string; title: string | null; docs: typeof recentDocs }[] = [
+    ...summaryApplicationSections.map((g) => ({ key: g.key, title: g.kind === "application" ? g.title : null, docs: g.docs })),
+    ...(summaryOtherDocs.length > 0
+      ? [{ key: "other", title: summaryApplicationSections.length > 0 ? "Other documents" : null, docs: summaryOtherDocs }]
+      : []),
+  ];
+
   return (
     <>
       <Card className="shadow-none rounded-lg py-0">
@@ -207,15 +220,21 @@ export function ApplicantDocumentsCard({
             </p>
           ) : isSummary ? (
             <div className="space-y-1.5">
-              {recentDocs.map((doc) => (
-                <DocumentTile
-                  key={doc.id}
-                  doc={doc}
-                  viewMode="list"
-                  canDelete={isAdmin || doc.uploaded_by === currentUserId}
-                  onView={() => openViewer(doc)}
-                  onDelete={() => handleDelete(doc)}
-                />
+              {/* Files tied to a university application sit under "University – Programme"; the rest follow, as before. */}
+              {summarySections.map((section) => (
+                <div key={section.key} data-document-group={section.key} className="space-y-1.5">
+                  {section.title && <p className={`${SUBHEADING_CLASS} pt-1`}>{section.title}</p>}
+                  {section.docs.map((doc) => (
+                    <DocumentTile
+                      key={doc.id}
+                      doc={doc}
+                      viewMode="list"
+                      canDelete={isAdmin || doc.uploaded_by === currentUserId}
+                      onView={() => openViewer(doc)}
+                      onDelete={() => handleDelete(doc)}
+                    />
+                  ))}
+                </div>
               ))}
               <Link
                 href={`/leads/${leadId}/documents`}

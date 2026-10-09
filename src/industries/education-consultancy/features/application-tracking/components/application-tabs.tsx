@@ -8,7 +8,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { ApplicationActivityTimeline, formatTime } from "./application-activity-timeline";
 import { uploadApplicantDocument } from "../../applicant-documents/upload-document";
-import { NoteAttachmentPicker, NoteDocumentList, type NoteDocument } from "./note-attachment-ui";
+import { NoteAddDocuments, NoteAttachmentPicker, NoteDocumentList, type NoteDocument } from "./note-attachment-ui";
+import { ApplicationDocumentsList, type ApplicationDocument } from "./application-documents-list";
 import { defaultAttachmentType, noteContentFor, type PendingAttachment } from "./note-attachments";
 import type { LeadActivity } from "@/lib/supabase/queries";
 
@@ -34,13 +35,16 @@ interface ApplicationTabsProps {
   canAttach?: boolean;
   /** The application's offer type, used to pre-select the document type. */
   offerType?: string | null;
+  /** Owner/admin — may delete any file (anyone else only the files they uploaded). */
+  isAdmin?: boolean;
 }
 
-type Tab = "activity" | "notes" | "emails" | "calls" | "tasks" | "meetings";
+type Tab = "activity" | "notes" | "documents" | "emails" | "calls" | "tasks" | "meetings";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "activity", label: "Activity" },
   { id: "notes", label: "Notes" },
+  { id: "documents", label: "Documents" },
   { id: "emails", label: "Emails" },
   { id: "calls", label: "Calls" },
   { id: "tasks", label: "Tasks" },
@@ -64,12 +68,15 @@ export function ApplicationTabs({
   leadId,
   canAttach = false,
   offerType = null,
+  isAdmin = false,
 }: ApplicationTabsProps) {
   const [activeTab, setActiveTab] = useState<Tab>("activity");
   const [notes, setNotes] = useState<ApplicationNote[]>([]);
   const [loadingNotes, setLoadingNotes] = useState(true);
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
+  const [docs, setDocs] = useState<ApplicationDocument[]>([]);
+  const [loadingDocs, setLoadingDocs] = useState(true);
   const [pending, setPending] = useState<PendingAttachment[]>([]);
   // Set once the note is saved but some of its files failed: "retry" then uploads to THIS note, never a new one.
   const [savedNoteId, setSavedNoteId] = useState<string | null>(null);
@@ -89,7 +96,29 @@ export function ApplicationTabs({
     }
   }, [applicationId]);
 
-  useEffect(() => { fetchNotes(); }, [fetchNotes]);
+  // Every file on this application (the student's documents filtered to this application). Best effort: a
+  // failed lookup just leaves the Documents tab empty — it never blocks the notes.
+  const fetchDocs = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/v1/leads/${leadId}/documents`);
+      if (!res.ok) return;
+      const json = await res.json();
+      const all = (json.data?.documents ?? []) as (ApplicationDocument & { application_id?: string | null })[];
+      setDocs(all.filter((d) => d.application_id === applicationId));
+    } catch {
+      // keep whatever we had
+    } finally {
+      setLoadingDocs(false);
+    }
+  }, [leadId, applicationId]);
+
+  useEffect(() => { fetchNotes(); fetchDocs(); }, [fetchNotes, fetchDocs]);
+
+  // After any change to a file: refresh the notes (their chips) and the Documents tab together.
+  const refreshFiles = useCallback(() => {
+    fetchNotes(true);
+    fetchDocs();
+  }, [fetchNotes, fetchDocs]);
 
   function addFiles(files: File[]) {
     setPending((prev) => [
@@ -140,7 +169,7 @@ export function ApplicationTabs({
       setPending(failed);
       // Set together with the failed list (before the refresh below), so the retry state never lags the message.
       setSavedNoteId(failed.length > 0 ? noteId : null);
-      if (pending.length > 0) await fetchNotes(true);
+      if (pending.length > 0) await Promise.all([fetchNotes(true), fetchDocs()]);
 
       if (failed.length > 0) {
         toast.error(`Note saved, but ${failed.length} file${failed.length === 1 ? "" : "s"} did not upload. Retry below.`);
@@ -181,6 +210,11 @@ export function ApplicationTabs({
               }`}
             >
               {tab.label}
+              {tab.id === "documents" && docs.length > 0 && (
+                <Badge variant="secondary" className="h-4 min-w-4 px-1 text-[10px] leading-none">
+                  {docs.length}
+                </Badge>
+              )}
               {tab.id === "notes" && notes.length > 0 && (
                 <Badge variant="secondary" className="h-4 min-w-4 px-1 text-[10px] leading-none">
                   {notes.length}
@@ -246,7 +280,22 @@ export function ApplicationTabs({
               {notes.map((note) => (
                 <div key={note.id} className="border rounded-lg p-3">
                   <p className="text-sm whitespace-pre-wrap">{note.content}</p>
-                  <NoteDocumentList documents={note.documents ?? []} />
+                  <NoteDocumentList
+                    documents={note.documents ?? []}
+                    currentUserId={currentUserId}
+                    isAdmin={isAdmin}
+                    canManage={canAttach}
+                    onChanged={refreshFiles}
+                  />
+                  {canAttach && (
+                    <NoteAddDocuments
+                      noteId={note.id}
+                      applicationId={applicationId}
+                      leadId={leadId}
+                      offerType={offerType}
+                      onUploaded={refreshFiles}
+                    />
+                  )}
                   <p className="text-xs text-muted-foreground mt-1.5">
                     {nameFor(note.user_id, note.user_email)} · {formatTime(note.created_at)}
                   </p>
@@ -255,6 +304,17 @@ export function ApplicationTabs({
             </div>
           )}
         </div>
+      )}
+
+      {activeTab === "documents" && (
+        <ApplicationDocumentsList
+          docs={docs}
+          loading={loadingDocs}
+          currentUserId={currentUserId}
+          isAdmin={isAdmin}
+          canManage={canAttach}
+          onChanged={refreshFiles}
+        />
       )}
 
       {activeTab === "emails" && <ComingSoon label="Emails" />}

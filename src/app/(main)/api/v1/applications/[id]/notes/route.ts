@@ -46,7 +46,7 @@ export async function GET(_request: NextRequest, { params }: Props) {
   if (notes.length > 0) {
     const { data: docs } = await db
       .from("applicant_documents")
-      .select("id, name, document_type, original_filename, mime_type, file_size, application_note_id, created_at")
+      .select("id, name, document_type, original_filename, mime_type, file_size, application_note_id, uploaded_by, created_at")
       .in("application_note_id", notes.map((n) => n.id))
       .is("deleted_at", null)
       .order("created_at", { ascending: true });

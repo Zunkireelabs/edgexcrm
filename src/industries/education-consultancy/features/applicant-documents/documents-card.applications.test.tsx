@@ -71,3 +71,35 @@ describe("Documents grouped by application", () => {
     expect(within(application).getByText("Arden conditional offer")).toBeInTheDocument();
   });
 });
+
+describe("the small Documents card on the lead page", () => {
+  const renderSummary = () => render(<ApplicantDocumentsCard leadId="lead-1" canManage currentUserId="u1" isAdmin variant="summary" />);
+
+  it("shows the latest files with application files under their application's name", async () => {
+    // newest first: the card shows the latest three
+    const docs = [
+      { ...DOCS[0], created_at: "2026-10-09T00:00:00Z" }, // Arden conditional
+      { ...DOCS[3], created_at: "2026-10-08T00:00:00Z" }, // passport
+      { ...DOCS[2], created_at: "2026-10-07T00:00:00Z" }, // York offer
+      { ...DOCS[1], created_at: "2026-10-01T00:00:00Z" }, // older Arden — cut by the limit of 3
+    ];
+    global.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ data: { documents: docs, by_category: {}, applications: APPS } }) }) as Response) as unknown as typeof fetch;
+    renderSummary();
+    const arden = (await screen.findByText("Arden University – MSc Project Management")).closest("[data-document-group]") as HTMLElement;
+    expect(within(arden).getByText("Arden conditional offer")).toBeInTheDocument();
+    const york = screen.getByText("York St John University – MBA").closest("[data-document-group]") as HTMLElement;
+    expect(within(york).getByText("York offer")).toBeInTheDocument();
+    // the non-application file is NOT inside an application group; it sits under "Other documents"
+    const other = screen.getByText("Other documents").closest("[data-document-group]") as HTMLElement;
+    expect(within(other).getByText("My passport")).toBeInTheDocument();
+    expect(screen.queryByText("Arden unconditional offer")).toBeNull();
+  });
+
+  it("shows no group headings at all when no file is tied to an application", async () => {
+    global.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ data: { documents: [DOCS[3]], by_category: {}, applications: APPS } }) }) as Response) as unknown as typeof fetch;
+    renderSummary();
+    await screen.findByText("My passport");
+    expect(screen.queryByText("Other documents")).toBeNull();
+    expect(screen.queryByText(/University/)).toBeNull();
+  });
+});
