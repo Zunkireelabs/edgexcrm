@@ -96,14 +96,26 @@ describe("resolveEligibleDrafts", () => {
     rows = [draftRow(1), draftRow(2, { subject: "  " }), draftRow(3, { leads: { email: null } }), draftRow(4, { leads: { email: " " } })];
     const r = await resolveEligibleDrafts({} as never, {} as never, { mode: "ids", ids: [U(1), U(2), U(3), U(4)] }, { forSending: true, limit: 5000 });
     expect(r.eligible.map((d) => d.id)).toEqual([U(1)]);
-    expect(r.skipped).toEqual({ noSubject: 1, noEmail: 2 });
+    expect(r.skipped).toEqual({ noSubject: 1, noEmail: 2, noPhone: 0 });
+  });
+
+  it("a TEXT draft is judged on the lead's phone number, not a subject or an email", async () => {
+    rows = [
+      draftRow(1, { channel: "sms", subject: "", leads: { email: null, phone: "9801234567" } }), // sendable: no subject / email needed
+      draftRow(2, { channel: "sms", subject: "", leads: { email: "a@b.com", phone: null } }), // an email address does not help a text
+      draftRow(3, { channel: "sms", subject: "", leads: { email: null, phone: "12345" } }), // not a usable number
+      draftRow(4), // an ordinary email draft is unchanged
+    ];
+    const r = await resolveEligibleDrafts({} as never, {} as never, { mode: "ids", ids: [U(1), U(2), U(3), U(4)] }, { forSending: true, limit: 5000 });
+    expect(r.eligible.map((d) => d.id)).toEqual([U(1), U(4)]);
+    expect(r.skipped).toEqual({ noSubject: 0, noEmail: 0, noPhone: 2 });
   });
 
   it("skipping does NOT care about subject or email", async () => {
     rows = [draftRow(1, { subject: "" }), draftRow(2, { leads: { email: null } })];
     const r = await resolveEligibleDrafts({} as never, {} as never, { mode: "ids", ids: [U(1), U(2)] }, { forSending: false, limit: 50 });
     expect(r.eligible).toHaveLength(2);
-    expect(r.skipped).toEqual({ noSubject: 0, noEmail: 0 });
+    expect(r.skipped).toEqual({ noSubject: 0, noEmail: 0, noPhone: 0 });
   });
 
   it("'all' counts first, pages through the matches, and uses the same scope filters as the list", async () => {

@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import { CheckCircle2, SkipForward, Clock, CalendarClock, Eye, Loader2 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DraftReviewPanel } from "./draft-review-panel";
+import { SmsDraftReviewPanel } from "./sms-draft-review-panel";
 import type { Draft } from "./today-worklist";
 import { useCadence, type CadenceStepItem } from "../hooks/use-cadence";
 import { formatDate } from "../lib/format-due";
@@ -98,6 +99,8 @@ export function CadenceTimeline({
   const [activeDraft, setActiveDraft] = useState<Draft | null>(null);
 
   const isAutoSend = data?.sequence.auto_send ?? false;
+  // A text sequence: the row shows the message (there is no subject) and a due step opens the SMS review dialog.
+  const isSms = data?.sequence.channel === "sms";
 
   const openDue = (item: CadenceStepItem) => {
     // Auto-send sequences have no manual review/send action — the read-only
@@ -112,6 +115,7 @@ export function CadenceTimeline({
       body_html: item.body_html ?? "",
       status: "pending",
       draft_source: "template",
+      channel: isSms ? "sms" : "email",
       scheduled_send_at: item.scheduled_send_at ?? null,
       scheduled_error: item.scheduled_error ?? null,
       leads: { first_name: leadFirstName, last_name: leadLastName, email: leadEmail },
@@ -152,10 +156,12 @@ export function CadenceTimeline({
 
         const statusLabel = sentAutomatically
           ? `Sent automatically via EdgeX ${formatDate(item.sent_at ?? "")}${
-              item.email_message_status ? ` · ${item.email_message_status}` : ""
+              (isSms ? item.sms_message_status : item.email_message_status)
+                ? ` · ${isSms ? item.sms_message_status : item.email_message_status}`
+                : ""
             }`
           : isSent
-            ? `Sent ${formatDate(item.sent_at ?? "")}`
+            ? `Sent ${formatDate(item.sent_at ?? "")}${isSms && item.sms_message_status ? ` · ${item.sms_message_status}` : ""}`
             : isSkipped
               ? "Skipped"
               : isDue
@@ -180,12 +186,12 @@ export function CadenceTimeline({
               <div className="flex items-center gap-2">
                 <span className="text-xs font-medium text-muted-foreground shrink-0">Step {item.step_order}</span>
                 <span className={`text-sm truncate ${isSkipped ? "line-through text-muted-foreground" : ""}`}>
-                  {item.subject || "(no subject)"}
+                  {item.subject || (isSms ? "(empty message)" : "(no subject)")}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground">{statusLabel}</p>
             </div>
-            {isSent && item.sent_activity_id && <SentPreview leadId={leadId} activityId={item.sent_activity_id} />}
+            {isSent && !isSms && item.sent_activity_id && <SentPreview leadId={leadId} activityId={item.sent_activity_id} />}
           </>
         );
 
@@ -220,8 +226,15 @@ export function CadenceTimeline({
       })}
 
       <DraftReviewPanel
-        draft={activeDraft}
+        draft={isSms ? null : activeDraft}
         isAdmin={isAdmin}
+        onOpenChange={(open) => !open && setActiveDraft(null)}
+        onSent={handleDone}
+        onSkipped={handleDone}
+        onUpdated={handleUpdated}
+      />
+      <SmsDraftReviewPanel
+        draft={isSms ? activeDraft : null}
         onOpenChange={(open) => !open && setActiveDraft(null)}
         onSent={handleDone}
         onSkipped={handleDone}

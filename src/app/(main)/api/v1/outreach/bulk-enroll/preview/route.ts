@@ -4,6 +4,8 @@ import { apiSuccess, apiUnauthorized, apiForbidden, apiNotFound, apiError, apiVa
 import { scopedClient } from "@/lib/supabase/scoped";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getFeatureAccess } from "@/industries/_loader";
+import { channelOf } from "@/industries/_shared/features/outreach/lib/channel";
+import { isSmsEnabledForTenant } from "@/lib/sms/flag";
 import { describeSendWindow, validateSendWindow } from "@/industries/_shared/features/outreach/lib/send-window";
 import { FEATURES } from "@/industries/_registry";
 import {
@@ -37,7 +39,7 @@ export async function POST(request: NextRequest) {
   const db = await scopedClient(auth);
   const { data: sequence } = await db
     .from("email_sequences")
-    .select("id, name, status, auto_send, send_window")
+    .select("id, name, status, auto_send, send_window, channel")
     .eq("id", parsed.sequenceId)
     .maybeSingle();
   const seq = sequence as unknown as {
@@ -46,14 +48,21 @@ export async function POST(request: NextRequest) {
     status: string;
     auto_send: boolean;
     send_window?: unknown;
+    channel?: string | null;
   } | null;
   if (!seq || seq.status !== "active") return apiNotFound("Sequence");
+  const channel = channelOf(seq);
+  // Same standing as Start (see bulk-enroll/route.ts): SMS on for the account + permission to send SMS.
+  if (channel === "sms") {
+    if (!(await isSmsEnabledForTenant(auth.tenantId))) return apiForbidden("SMS isn't turned on for your account.");
+    if (!auth.permissions.canSendSms) return apiForbidden("You need SMS permission to enroll many leads in an SMS sequence.");
+  }
 
   const planned = await planBulkEnroll(
     auth,
     parsed.source,
     { user: await createClient(), service: await createServiceClient(), db },
-    { sequenceId: parsed.sequenceId, conflictPolicy }
+    { sequenceId: parsed.sequenceId, conflictPolicy, channel }
   );
   if (!planned.ok) return apiValidationError(planned.errors);
 
@@ -63,6 +72,6 @@ export async function POST(request: NextRequest) {
 
   return apiSuccess({
     ...planned.plan.preview,
-    sequence: { id: seq.id, name: seq.name, auto_send: seq.auto_send, send_window_text: windowText },
+    sequence: { id: seq.id, name: seq.name, auto_send: seq.auto_send, channel, send_window_text: windowText },
   });
 }

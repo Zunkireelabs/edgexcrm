@@ -3,6 +3,7 @@ import { scopedClientForTenant } from "@/lib/supabase/scoped";
 import { logger } from "@/lib/logger";
 import { isBulkEmailEnabledForTenant } from "./flag";
 import { sendDraftViaEdgeX } from "@/industries/_shared/features/outreach/lib/send-draft";
+import { sendDraftViaSms } from "@/industries/_shared/features/outreach/lib/send-draft-sms";
 
 // Sends sequence drafts a rep SCHEDULED ("Schedule send"). Deliberately NOT an Inngest function:
 // the shared Inngest quota was exhausted once and silently blocked every blast, so — like
@@ -27,6 +28,8 @@ interface ScheduledDraftRow {
   lead_id: string;
   subject: string;
   body_html: string;
+  channel: string | null;
+  sms_message_id: string | null;
   scheduled_by: string | null;
   scheduled_send_at: string;
 }
@@ -64,7 +67,7 @@ export async function processTenantScheduledDrafts(tenantId: string): Promise<Sc
   // enrollment never sends.
   const { data, error } = await db
     .from("sequence_step_drafts")
-    .select("id, lead_id, subject, body_html, scheduled_by, scheduled_send_at, leads!inner(deleted_at), sequence_enrollments!inner(status)")
+    .select("id, lead_id, subject, body_html, channel, sms_message_id, scheduled_by, scheduled_send_at, leads!inner(deleted_at), sequence_enrollments!inner(status)")
     .eq("status", "pending")
     .not("scheduled_send_at", "is", null)
     .lte("scheduled_send_at", nowIso)
@@ -90,6 +93,48 @@ export async function processTenantScheduledDrafts(tenantId: string): Promise<Sc
   const sendingEnabled = await isBulkEmailEnabledForTenant(tenantId);
 
   for (const draft of drafts) {
+    if (draft.channel === "sms") {
+      // A rep chose this time, so quiet hours don't hold it (same as "Send now"). The SMS grant is checked in the sender.
+      if (Date.now() - new Date(draft.scheduled_send_at).getTime() > MAX_OVERDUE_MS) {
+        await clearSchedule(draft.id, "This missed its scheduled time by more than a day, so it was not sent. Reschedule it if you still want it sent.");
+        continue;
+      }
+      const smsResult = await sendDraftViaSms(db, tenantId, draft);
+      switch (smsResult.status) {
+        case "sent":
+        case "already_sent":
+          summary.sent++;
+          break;
+        case "no_credits":
+          // Stays scheduled; retried next pass (until it is more than a day overdue).
+          summary.throttled++;
+          break;
+        case "in_progress":
+          break;
+        case "sms_disabled":
+          await clearSchedule(draft.id, "SMS was turned off when this was due, so it was not sent.");
+          break;
+        case "no_phone":
+          await clearSchedule(draft.id, "This lead has no valid phone number, so it was not sent.");
+          break;
+        case "already_handled":
+          await clearSchedule(
+            draft.id,
+            smsResult.errorMessage ?? `A previous send attempt ended as "${smsResult.messageStatus}", so it was not sent again.`
+          );
+          break;
+        case "failed":
+          await clearSchedule(
+            draft.id,
+            smsResult.suppressed
+              ? "This number has opted out of SMS, so EdgeX did not text it."
+              : (smsResult.errorMessage ?? "The text couldn't be sent.")
+          );
+          break;
+      }
+      continue;
+    }
+
     if (!sendingEnabled) {
       await clearSchedule(draft.id, "Sending from EdgeX was turned off when this was due, so it was not sent.");
       continue;

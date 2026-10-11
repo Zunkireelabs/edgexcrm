@@ -17,6 +17,7 @@ import {
   validateSequenceSteps,
   type SequenceStepInput,
 } from "@/industries/_shared/features/outreach/lib/validate-steps";
+import { channelOf } from "@/industries/_shared/features/outreach/lib/channel";
 import { ON_REPLY_VALUES, type OnReply } from "@/industries/_shared/features/outreach/lib/stop-on-reply";
 import { validateSendWindow } from "@/industries/_shared/features/outreach/lib/send-window";
 import { checkStepEdit, lockedUpToStep, stepsLockedMessage } from "@/industries/_shared/features/outreach/lib/step-edit-rules";
@@ -101,8 +102,10 @@ export async function PATCH(request: NextRequest, { params }: Props) {
 
   const db = await scopedClient(auth);
 
-  const { data: existing } = await db.from("email_sequences").select("id").eq("id", id).maybeSingle();
+  const { data: existing } = await db.from("email_sequences").select("id, channel").eq("id", id).maybeSingle();
   if (!existing) return apiNotFound("Sequence");
+  // The channel is fixed at creation (a body.channel is ignored): steps are validated against the sequence's own.
+  const sequenceChannel = channelOf(existing as { channel?: string | null });
 
   const updates: Record<string, unknown> = {};
   if (body.name !== undefined) updates.name = String(body.name).trim();
@@ -121,7 +124,7 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   }
 
   if (body.steps !== undefined) {
-    const stepsError = validateSequenceSteps(body.steps);
+    const stepsError = validateSequenceSteps(body.steps, sequenceChannel);
     if (stepsError) return apiValidationError({ steps: [stepsError] });
 
     const { data: existingSteps } = await db

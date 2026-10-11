@@ -29,6 +29,16 @@ vi.mock("@/industries/_shared/features/outreach/lib/send-draft", () => ({
     return result;
   },
 }));
+let smsDeferral: Date | null;
+let smsBehavior: (draft: { id: string }) => unknown;
+let smsSent: string[];
+vi.mock("@/industries/_shared/features/outreach/lib/send-draft-sms", () => ({
+  sendDraftViaSms: async (_db: unknown, _tenant: string, draft: { id: string }) => {
+    smsSent.push(draft.id);
+    return smsBehavior(draft);
+  },
+  smsQuietHoursDeferral: async () => smsDeferral,
+}));
 vi.mock("@/lib/logger", () => ({ logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() } }));
 
 const pathGet = (row: Row, path: string) => path.split(".").reduce<unknown>((v, k) => (v as Row | undefined)?.[k], row);
@@ -120,6 +130,9 @@ function seed(drafts: Row[], sequences: Row[] = [{ id: "seq-auto", auto_send: tr
 beforeEach(() => {
   inCalls = [];
   sentOrder = [];
+  smsSent = [];
+  smsDeferral = null;
+  smsBehavior = () => ({ status: "sent", smsMessageId: "s" });
   sendBehavior = () => ({ status: "sent", emailMessageId: "m" });
 });
 
@@ -255,5 +268,48 @@ describe("runAutoSendSequenceSteps", () => {
   it("nothing due anywhere -> an empty result and nothing sent", async () => {
     seed([draft("future", { due_at: FUTURE })]);
     expect(await runAutoSendSequenceSteps(5000)).toEqual({});
+  });
+
+  describe("SMS drafts", () => {
+    it("routes an SMS draft to the SMS sender and an email draft to the email sender, in the same pass", async () => {
+      seed([draft("mail", { channel: "email" }), draft("text", { channel: "sms", due_at: "2026-10-02T00:00:00.000Z" })]);
+      const result = await processTenantAutoSendDrafts("t1");
+      expect(sentOrder).toEqual(["mail"]);
+      expect(smsSent).toEqual(["text"]);
+      expect(result).toMatchObject({ sent: 2, failed: 0 });
+    });
+
+    it("holds an SMS draft during quiet hours: nothing is texted, it just moves to when the window opens", async () => {
+      smsDeferral = new Date("2999-01-01T04:15:00.000Z");
+      seed([draft("text", { channel: "sms" })]);
+      const result = await processTenantAutoSendDrafts("t1");
+      expect(smsSent).toEqual([]);
+      expect(result).toMatchObject({ sent: 0, failed: 0, skipped: 1 });
+      expect(tables.sequence_step_drafts[0].due_at).toBe("2999-01-01T04:15:00.000Z");
+      expect(tables.sequence_step_drafts[0].status).toBe("pending");
+    });
+
+    it("stops texting for the pass when credits run out, but keeps sending email", async () => {
+      seed([
+        draft("t1", { channel: "sms", due_at: "2026-10-01T00:00:00.000Z" }),
+        draft("t2", { channel: "sms", due_at: "2026-10-01T01:00:00.000Z" }),
+        draft("mail", { channel: "email", due_at: "2026-10-01T02:00:00.000Z" }),
+      ]);
+      smsBehavior = () => ({ status: "no_credits" });
+      const result = await processTenantAutoSendDrafts("t1");
+      expect(smsSent).toEqual(["t1"]); // the second text is not even attempted
+      expect(sentOrder).toEqual(["mail"]);
+      expect(result).toMatchObject({ sent: 1, throttled: 1 });
+    });
+
+    it("pushes a lead with no phone number a day out so it cannot starve the queue", async () => {
+      seed([draft("text", { channel: "sms" })]);
+      smsBehavior = () => ({ status: "no_phone", reason: "missing" });
+      await processTenantAutoSendDrafts("t1");
+      const row = tables.sequence_step_drafts[0];
+      expect(row.status).toBe("pending");
+      expect(row.scheduled_error).toBe("This lead has no valid phone number.");
+      expect(new Date(row.due_at).getTime()).toBeGreaterThan(Date.now() + 23 * 3600_000);
+    });
   });
 });

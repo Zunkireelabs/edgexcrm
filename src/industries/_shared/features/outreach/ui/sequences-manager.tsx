@@ -21,15 +21,18 @@ import { SequencePauseDialog } from "./sequence-pause-dialog";
 import { SequenceReportDialog } from "./sequence-report-dialog";
 import { BulkEnrollDialog } from "./bulk-enroll-dialog";
 import { formatDate } from "../lib/format-due";
+import type { OutreachChannel } from "../lib/channel";
 import { describeSendWindow } from "../lib/send-window";
 
 interface SequencesManagerProps {
   isAdmin: boolean;
   industryId: string | null;
+  /** The Outreach channel tab: lists only this channel's sequences and creates new ones on it. Defaults to email. */
+  channel?: OutreachChannel;
 }
 
-export function SequencesManager({ isAdmin, industryId }: SequencesManagerProps) {
-  const { sequences, loading, refresh } = useSequences();
+export function SequencesManager({ isAdmin, industryId, channel = "email" }: SequencesManagerProps) {
+  const { sequences, loading, refresh } = useSequences(channel);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingSequence, setEditingSequence] = useState<Sequence | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<Sequence | null>(null);
@@ -208,6 +211,7 @@ export function SequencesManager({ isAdmin, industryId }: SequencesManagerProps)
         open={editorOpen}
         onOpenChange={setEditorOpen}
         sequence={editingSequence}
+        channel={editingSequence?.channel ?? channel}
         onSaved={(saved) => {
           refresh();
           if (saved?.created) setJustCreated({ id: saved.id, name: saved.name });

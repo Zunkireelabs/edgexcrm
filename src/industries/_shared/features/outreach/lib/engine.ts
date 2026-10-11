@@ -7,6 +7,7 @@ import { computeDueAt, effectiveWindow, resolveWindowTimeZone, validateSendWindo
 import type { ScopedClient } from "@/lib/supabase/scoped";
 import type { AuthContext } from "@/lib/api/auth";
 import type { Lead } from "@/types/database";
+import { channelOf, type OutreachChannel } from "./channel";
 
 export type LeadTemplateContext = Pick<
   Lead,
@@ -38,6 +39,8 @@ export interface SequenceEnrollmentRow {
   enrolled_by: string | null;
   started_at: string;
   completed_at: string | null;
+  /** 'email' | 'sms' (migration 274), copied from the sequence when the enrollment is created. */
+  channel?: string;
 }
 
 export interface SequenceStepDraftRow {
@@ -56,6 +59,9 @@ export interface SequenceStepDraftRow {
   edited: boolean;
   sent_at: string | null;
   sent_via: string | null;
+  /** 'email' | 'sms', stamped from the enrollment (migration 274). For an SMS draft body_html is the plain-text message. */
+  channel?: string;
+  sms_message_id?: string | null;
   sent_activity_id: string | null;
   email_message_id: string | null;
 }
@@ -90,8 +96,16 @@ export async function generateStepDraft(params: {
   sequence: { name: string; description: string | null };
   stepOrder: number;
   totalSteps: number;
+  channel?: OutreachChannel;
 }): Promise<GeneratedDraft> {
-  const { step, lead, tenantId, tenantName, sequence, stepOrder, totalSteps } = params;
+  const { step, lead, tenantId, tenantName, sequence, stepOrder, totalSteps, channel = "email" } = params;
+
+  // SMS is plain text with no subject. The AI drafter writes emails, so an SMS step always uses its template
+  // for now (an SMS-specific AI draft is a follow-up); merge values are NOT html-escaped.
+  if (channel === "sms") {
+    const smsCtx = { lead: lead as unknown as Lead, tenant: { name: tenantName } };
+    return { subject: "", body_html: renderTemplate(step.body_template, smsCtx), source: "template" };
+  }
 
   if (step.draft_source === "ai" && (await isOutreachDraftEnabledForTenant(tenantId))) {
     try {
@@ -137,12 +151,12 @@ async function loadTenantInfo(db: ScopedClient, tenantId: string): Promise<{ nam
 async function loadSequenceMeta(
   db: ScopedClient,
   sequenceId: string
-): Promise<{ name: string; description: string | null; totalSteps: number; sendWindow: SendWindow | null }> {
+): Promise<{ name: string; description: string | null; totalSteps: number; sendWindow: SendWindow | null; channel: OutreachChannel }> {
   const [{ data: seq }, { count }] = await Promise.all([
-    db.from("email_sequences").select("name, description, send_window").eq("id", sequenceId).maybeSingle(),
+    db.from("email_sequences").select("name, description, send_window, channel").eq("id", sequenceId).maybeSingle(),
     db.from("email_sequence_steps").select("id", { count: "exact", head: true }).eq("sequence_id", sequenceId),
   ]);
-  const seqRow = seq as { name: string; description: string | null; send_window?: unknown } | null;
+  const seqRow = seq as { name: string; description: string | null; send_window?: unknown; channel?: string | null } | null;
   // A stored window that no longer validates is ignored (the step goes out on the old schedule) rather than blocking enrollment.
   const parsed = validateSendWindow(seqRow?.send_window ?? null);
   return {
@@ -150,6 +164,7 @@ async function loadSequenceMeta(
     description: seqRow?.description ?? null,
     totalSteps: count ?? 0,
     sendWindow: parsed.ok ? parsed.window : null,
+    channel: channelOf(seqRow),
   };
 }
 
@@ -194,6 +209,7 @@ async function createDraftForStep(
       sequence: { name: sequenceMeta.name, description: sequenceMeta.description },
       stepOrder: step.step_order,
       totalSteps: sequenceMeta.totalSteps,
+      channel: sequenceMeta.channel,
     });
     // WHEN this step is due: the old rule (now + wait) unless the sequence has a send window — then the next allowed
     // day / time of day in the lead's (or office's) timezone, at this lead's stable minute in the spread.
@@ -346,7 +362,7 @@ export async function switchEnrollment(
 export async function advanceEnrollment(
   db: ScopedClient,
   auth: Pick<AuthContext, "tenantId">,
-  enrollment: Pick<SequenceEnrollmentRow, "id" | "sequence_id" | "lead_id" | "assigned_to">,
+  enrollment: Pick<SequenceEnrollmentRow, "id" | "sequence_id" | "lead_id" | "assigned_to" | "channel">,
   fromStepOrder: number
 ): Promise<void> {
   const { data: nextStep } = await db
@@ -377,17 +393,24 @@ export async function advanceEnrollment(
   });
 
   // The lead is free again: if a sequence was queued behind this one ("Queue next"), start it.
-  await promoteQueued(auth.tenantId, enrollment.lead_id);
+  // Only the sequence queued on the SAME channel as the one that just ended is started (migration 275). A caller that
+  // did not carry the channel on the row it passed is looked up, never assumed to be email.
+  let endedChannel = enrollment.channel;
+  if (endedChannel === undefined) {
+    const { data: row } = await db.from("sequence_enrollments").select("channel").eq("id", enrollment.id).maybeSingle();
+    endedChannel = (row as { channel?: string } | null)?.channel;
+  }
+  await promoteQueued(auth.tenantId, enrollment.lead_id, channelOf({ channel: endedChannel }));
 }
 
 /**
  * Starts the sequence queued behind a lead's just-ended enrollment (queue-next.ts). Dynamic import: that
  * module calls enrollLead from here, so a static import would be a cycle. Never throws.
  */
-async function promoteQueued(tenantId: string, leadId: string): Promise<void> {
+async function promoteQueued(tenantId: string, leadId: string, channel: OutreachChannel = "email"): Promise<void> {
   try {
     const { promoteQueuedEnrollment } = await import("./queue-next");
-    await promoteQueuedEnrollment(tenantId, leadId);
+    await promoteQueuedEnrollment(tenantId, leadId, channel);
   } catch (err) {
     logger.error({ err, tenantId, leadId }, "engine: starting the queued sequence failed (non-fatal)");
   }
@@ -589,6 +612,57 @@ export async function markDraftSentViaEdgeX(
   return { activityId };
 }
 
+/**
+ * SMS twin of markDraftSentViaEdgeX: called once the step's sms_messages row has actually been handed to the provider.
+ * It records the send on the draft, advances the enrollment, and emits sequence.step_sent. It writes NO lead_activities
+ * row — activity_type is an enum (call/email/meeting) read by many dashboards, so the SMS shows in the lead's SMS
+ * history (sms_messages) instead.
+ */
+export async function markDraftSentViaSms(
+  db: ScopedClient,
+  tenantId: string,
+  draftId: string,
+  smsMessageId: string
+): Promise<boolean> {
+  const { data: draft } = await db.from("sequence_step_drafts").select("*").eq("id", draftId).maybeSingle();
+  if (!draft) return false;
+  const draftRow = draft as unknown as SequenceStepDraftRow;
+  if (draftRow.status !== "pending") return false;
+
+  const { data: enrollment } = await db.from("sequence_enrollments").select("*").eq("id", draftRow.enrollment_id).maybeSingle();
+  if (!enrollment) return false;
+  const enrollmentRow = enrollment as unknown as SequenceEnrollmentRow;
+
+  await db
+    .from("sequence_step_drafts")
+    .update({
+      status: "sent",
+      sent_at: new Date().toISOString(),
+      sent_via: "edgex_send",
+      sms_message_id: smsMessageId,
+    })
+    .eq("id", draftId);
+
+  await db.from("sequence_enrollments").update({ current_step_order: draftRow.step_order }).eq("id", enrollmentRow.id);
+
+  await emitEvent({
+    tenantId,
+    type: "sequence.step_sent",
+    entityType: "sequence_step_draft",
+    entityId: draftId,
+    payload: {
+      sequence_id: enrollmentRow.sequence_id,
+      lead_id: draftRow.lead_id,
+      step_order: draftRow.step_order,
+      sent_via: "edgex_send",
+      channel: "sms",
+    },
+  });
+
+  await advanceEnrollment(db, { tenantId }, enrollmentRow, draftRow.step_order);
+  return true;
+}
+
 export async function skipDraft(db: ScopedClient, auth: AuthContext, draftId: string): Promise<boolean> {
   const { data: draft } = await db
     .from("sequence_step_drafts")
@@ -631,7 +705,7 @@ export async function unenrollLead(
 ): Promise<void> {
   const { data: existing } = await db
     .from("sequence_enrollments")
-    .select("lead_id, tenant_id")
+    .select("lead_id, tenant_id, channel")
     .eq("id", enrollmentId)
     .maybeSingle();
 
@@ -643,6 +717,6 @@ export async function unenrollLead(
     .eq("enrollment_id", enrollmentId)
     .eq("status", "pending");
 
-  const row = existing as unknown as { lead_id: string; tenant_id: string } | null;
-  if (row && opts.promoteQueue !== false) await promoteQueued(row.tenant_id, row.lead_id);
+  const row = existing as unknown as { lead_id: string; tenant_id: string; channel?: string | null } | null;
+  if (row && opts.promoteQueue !== false) await promoteQueued(row.tenant_id, row.lead_id, channelOf(row));
 }

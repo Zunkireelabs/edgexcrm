@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { formatDate } from "../lib/format-due";
+import type { OutreachChannel } from "../lib/channel";
 
 type EnrollmentStatus = "active" | "paused" | "completed" | "unenrolled";
 
@@ -59,9 +60,11 @@ const STATUS_VARIANT: Record<EnrollmentStatus, "default" | "secondary" | "outlin
 interface EnrollmentsTableProps {
   isAdmin: boolean;
   currentUserId?: string;
+  /** Only this channel's enrollments (the Outreach channel tab). Omitted = both. */
+  channel?: OutreachChannel;
 }
 
-export function EnrollmentsTable({ isAdmin, currentUserId }: EnrollmentsTableProps) {
+export function EnrollmentsTable({ isAdmin, currentUserId, channel }: EnrollmentsTableProps) {
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<EnrollmentStatus | "all" | "replied">("active");
@@ -72,7 +75,8 @@ export function EnrollmentsTable({ isAdmin, currentUserId }: EnrollmentsTablePro
     setLoading(true);
     try {
       const params = status === "all" ? "" : status === "replied" ? "?stop_reason=replied" : `?status=${status}`;
-      const res = await fetch(`/api/v1/outreach/enrollments${params}`);
+      const channelQuery = channel ? `${params ? "&" : "?"}channel=${channel}` : "";
+      const res = await fetch(`/api/v1/outreach/enrollments${params}${channelQuery}`);
       if (res.ok) {
         const json = await res.json();
         setEnrollments(json.data ?? []);
@@ -80,7 +84,7 @@ export function EnrollmentsTable({ isAdmin, currentUserId }: EnrollmentsTablePro
     } finally {
       setLoading(false);
     }
-  }, [status]);
+  }, [status, channel]);
 
   useEffect(() => {
     fetchEnrollments();

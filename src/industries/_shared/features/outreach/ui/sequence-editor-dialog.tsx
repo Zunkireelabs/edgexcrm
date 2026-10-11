@@ -34,6 +34,9 @@ import type { SendWindow } from "../lib/send-window";
 import { TipTapEditor, type TipTapEditorHandle } from "@/industries/_shared/features/email/components/tiptap-editor";
 import { HtmlSourceEditor, type HtmlSourceEditorHandle } from "@/industries/_shared/features/email/components/html-source-editor";
 import type { Sequence } from "../hooks/use-sequences";
+import { CharacterCounter } from "@/industries/_shared/features/sms/ui/character-counter";
+import { SMS_BODY_TEMPLATE_MAX } from "../lib/validate-steps";
+import type { OutreachChannel } from "../lib/channel";
 import { detectBodyMode, fillSampleMergeTags, findTagsWithoutFallback, type StepBodyMode } from "../lib/body-format";
 
 // Same height for the editor and the inline preview in both modes, so switching never makes the box jump.
@@ -61,6 +64,8 @@ interface SequenceEditorDialogProps {
   /** `saved` is the sequence that was just created or edited — callers use `created` to offer "who should get it?". */
   onSaved: (saved?: { id: string; name: string; created: boolean }) => void;
   industryId: string | null;
+  /** Which channel a NEW sequence is created on (an existing one keeps its own). Defaults to email. */
+  channel?: OutreachChannel;
 }
 
 let keyCounter = 0;
@@ -87,7 +92,7 @@ function stepsFromSequence(sequence: Sequence | null): StepDraft[] {
     }));
 }
 
-export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, industryId }: SequenceEditorDialogProps) {
+export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, industryId, channel = "email" }: SequenceEditorDialogProps) {
   // OUTREACH-PHASE2-BRIEF.md §6 — building this only for education_consultancy's
   // manifest registration already keeps it out of it_agency's reach, but gate
   // the toggle in the component itself too, per CLAUDE.md's industry-aware UI
@@ -115,6 +120,8 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
   const [pendingRichIndex, setPendingRichIndex] = useState<number | null>(null);
   const [lastFocused, setLastFocused] = useState<{ index: number; field: "subject" | "body" } | null>(null);
 
+  const isSms = channel === "sms";
+  const smsBodyRefs = useRef<Record<number, HTMLTextAreaElement | null>>({});
   const subjectRefs = useRef<Record<number, HTMLInputElement | null>>({});
   const bodyRefs = useRef<Record<number, TipTapEditorHandle | HtmlSourceEditorHandle | null>>({});
 
@@ -304,6 +311,16 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
         el?.focus();
         el?.setSelectionRange(start + tag.length, start + tag.length);
       });
+    } else if (isSms) {
+      const el = smsBodyRefs.current[index];
+      const current = steps[index]?.body_template ?? "";
+      const start = el?.selectionStart ?? current.length;
+      const end = el?.selectionEnd ?? current.length;
+      updateStep(index, { body_template: current.slice(0, start) + tag + current.slice(end) });
+      requestAnimationFrame(() => {
+        el?.focus();
+        el?.setSelectionRange(start + tag.length, start + tag.length);
+      });
     } else {
       bodyRefs.current[index]?.insertText(tag);
     }
@@ -318,7 +335,7 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
       toast.error("Add at least one step");
       return;
     }
-    const missingInstructions = steps.find((s) => s.draft_source === "ai" && !s.ai_instructions.trim());
+    const missingInstructions = isSms ? undefined : steps.find((s) => s.draft_source === "ai" && !s.ai_instructions.trim());
     if (missingInstructions) {
       toast.error("Add AI instructions for every step with auto-draft enabled");
       return;
@@ -327,6 +344,8 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
     const payload = {
       name: name.trim(),
       description: description.trim() || undefined,
+      // The channel is chosen when a sequence is created and can't be changed afterwards (the API ignores it on edit).
+      channel,
       auto_send: autoSend,
       on_reply: onReply,
       send_window: sendWindow,
@@ -334,10 +353,11 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
         step_order: i + 1,
         delay_days: i === 0 ? 0 : s.delay_days,
         send_time: s.send_time || null,
-        subject_template: s.subject_template,
+        // An SMS step is plain text: no subject, and always its template (the AI drafter writes emails).
+        subject_template: isSms ? "" : s.subject_template,
         body_template: s.body_template,
-        draft_source: s.draft_source,
-        ai_instructions: s.ai_instructions.trim() || null,
+        draft_source: isSms ? "template" : s.draft_source,
+        ai_instructions: isSms ? null : s.ai_instructions.trim() || null,
       })),
     };
 
@@ -374,7 +394,7 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Edit sequence" : "New sequence"}</DialogTitle>
+          <DialogTitle>{isEdit ? (isSms ? "Edit SMS sequence" : "Edit sequence") : isSms ? "New SMS sequence" : "New sequence"}</DialogTitle>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto space-y-4 py-2">
@@ -415,6 +435,7 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
             officeTimeZone={windowDefaults?.timezone}
           />
 
+          {!isSms && (
           <div className="space-y-1.5 rounded-md border p-3">
             <Label htmlFor="seq-on-reply" className="text-sm font-normal">
               When a lead replies
@@ -434,6 +455,7 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
               it from the lead&apos;s page or the Enrollments tab.
             </p>
           </div>
+          )}
 
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground">Merge tags — click to insert at cursor</p>
@@ -535,6 +557,26 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
                     </div>
                   </div>
 
+                  {isSms ? (
+                    <div className="space-y-1.5" onFocusCapture={() => setLastFocused({ index, field: "body" })}>
+                      <Label className="text-xs text-muted-foreground">Message</Label>
+                      <Textarea
+                        ref={(el) => {
+                          smsBodyRefs.current[index] = el;
+                        }}
+                        rows={5}
+                        maxLength={SMS_BODY_TEMPLATE_MAX}
+                        value={step.body_template}
+                        onChange={(e) => updateStep(index, { body_template: e.target.value })}
+                        placeholder="Hi {{first_name|there}}, just checking in about your study plans. Reply to this number or call us anytime."
+                      />
+                      <CharacterCounter body={step.body_template} prefix="" footer="" />
+                      <p className="text-xs text-muted-foreground">
+                        Plain text. Your sender name and the opt-out link are added when it sends, and each text uses SMS credits.
+                      </p>
+                    </div>
+                  ) : (
+                  <>
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Subject</Label>
                     <Input
@@ -662,6 +704,8 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
                       </p>
                     </div>
                   </div>
+                  </>
+                  )}
                 </CardContent>
               </Card>
               );

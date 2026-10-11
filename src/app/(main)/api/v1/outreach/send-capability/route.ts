@@ -3,6 +3,7 @@ import { apiSuccess, apiUnauthorized, apiForbidden } from "@/lib/api/response";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES, INDUSTRIES } from "@/industries/_registry";
 import { isBulkEmailEnabledForTenant, isEmailOutboundSandbox } from "@/lib/email/outbound/flag";
+import { isSmsEnabledForTenant, isSmsSandbox } from "@/lib/sms/flag";
 import { resolveTenantSender } from "@/lib/email/sender";
 import { PLATFORM_EMAIL_ADDRESS } from "@/lib/email";
 
@@ -14,12 +15,21 @@ export async function GET() {
   if (!auth) return apiUnauthorized();
   if (!getFeatureAccess(auth.industryId, FEATURES.OUTREACH)) return apiForbidden();
 
-  const disabled = { enabled: false, sandbox: true, from: null, replyTo: null, usingPlatformAddress: false };
+  // SMS: the same standing the bulk routes require (education, SMS turned on for the account, permission to send SMS).
+  // Decides whether Today offers bulk Send now / Schedule for TEXT drafts. Independent of the email grant.
+  const smsEnabled =
+    auth.industryId === INDUSTRIES.EDUCATION_CONSULTANCY &&
+    auth.permissions.canSendSms === true &&
+    (await isSmsEnabledForTenant(auth.tenantId));
+  const sms = { enabled: smsEnabled, sandbox: isSmsSandbox() };
+
+  const disabled = { enabled: false, sandbox: true, from: null, replyTo: null, usingPlatformAddress: false, sms };
   if (auth.industryId !== INDUSTRIES.EDUCATION_CONSULTANCY) return apiSuccess(disabled);
   if (!(await isBulkEmailEnabledForTenant(auth.tenantId))) return apiSuccess(disabled);
 
   const sender = await resolveTenantSender(auth.tenantId);
   return apiSuccess({
+    sms,
     enabled: true,
     sandbox: isEmailOutboundSandbox(),
     from: sender.from,

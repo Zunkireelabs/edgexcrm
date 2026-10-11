@@ -15,7 +15,14 @@ class ResizeObserverStub {
 }
 (global as unknown as { ResizeObserver: typeof ResizeObserverStub }).ResizeObserver = ResizeObserverStub;
 
-vi.mock("../hooks/use-sequences", () => ({ useSequences: () => ({ sequences: [{ id: "s1", name: "Welcome", email_sequence_steps: [{}, {}, {}] }], loading: false, refresh: vi.fn() }) }));
+let smsSequences: Array<Record<string, unknown>> = [];
+vi.mock("../hooks/use-sequences", () => ({
+  useSequences: (channel?: string) => ({
+    sequences: channel === "sms" ? smsSequences : [{ id: "s1", name: "Welcome", email_sequence_steps: [{}, {}, {}] }],
+    loading: false,
+    refresh: vi.fn(),
+  }),
+}));
 vi.mock("./cadence-timeline", () => ({ CadenceTimeline: () => <div data-testid="timeline" /> }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -24,14 +31,21 @@ import { LeadCadenceStrip } from "./lead-cadence-strip";
 const LEAD = "3168f9d7-23c7-48c1-a29b-3b9a94b3512f";
 let urls: string[];
 let enrollment: Record<string, unknown>;
+let smsEnrollment: Record<string, unknown> | null;
 
 beforeEach(() => {
   urls = [];
+  smsSequences = [];
+  smsEnrollment = null;
   enrollment = { id: "e1", sequence_id: "s1", status: "active", current_step_order: 1, assigned_to: "u1", email_sequences: { name: "Welcome" } };
   globalThis.fetch = vi.fn(async (url: RequestInfo | URL) => {
     const u = String(url);
     urls.push(u);
-    if (u.includes("/outreach/enrollments")) return { ok: true, json: async () => ({ data: [enrollment] }) } as Response;
+    if (u.includes("/outreach/enrollments")) {
+      // each channel only ever sees its own enrollment
+      const rows = u.includes("channel=sms") ? (smsEnrollment ? [smsEnrollment] : []) : [enrollment];
+      return { ok: true, json: async () => ({ data: rows }) } as Response;
+    }
     if (u.includes("/outreach/drafts")) return { ok: true, json: async () => ({ data: [{ lead_id: LEAD, due_at: "2026-10-07T04:15:00.000Z" }] }) } as Response;
     return { ok: false, json: async () => ({}) } as Response;
   }) as typeof fetch;
@@ -42,7 +56,7 @@ describe("LeadCadenceStrip", () => {
   it("asks for this lead's drafts only — never the whole worklist", async () => {
     render(<LeadCadenceStrip leadId={LEAD} isAdmin currentUserId="u1" />);
     await waitFor(() => expect(urls.some((u) => u.includes("/outreach/drafts"))).toBe(true));
-    expect(urls.find((u) => u.includes("/outreach/drafts"))).toBe(`/api/v1/outreach/drafts?due=all&lead_id=${LEAD}`);
+    expect(urls.find((u) => u.includes("/outreach/drafts"))).toBe(`/api/v1/outreach/drafts?due=all&lead_id=${LEAD}&channel=email`);
     await screen.findByText(/next draft/);
   });
 
@@ -57,5 +71,29 @@ describe("LeadCadenceStrip", () => {
     enrollment = { ...enrollment, status: "paused", stop_reason: "replied" };
     render(<LeadCadenceStrip leadId={LEAD} isAdmin currentUserId="u1" />);
     await screen.findByText(/the lead replied/);
+  });
+
+  it("shows a lead's SMS sequence next to the email one, each asked for by its own channel", async () => {
+    smsSequences = [{ id: "ss1", name: "Text follow-up", email_sequence_steps: [{}, {}] }];
+    smsEnrollment = { id: "e2", sequence_id: "ss1", status: "active", current_step_order: 1, assigned_to: "u1", email_sequences: { name: "Text follow-up" } };
+    render(<LeadCadenceStrip leadId={LEAD} isAdmin currentUserId="u1" />);
+    await screen.findByText("In SMS sequence:");
+    await screen.findByText("In sequence:");
+    expect(urls).toContain(`/api/v1/outreach/enrollments?lead_id=${LEAD}&channel=email`);
+    expect(urls).toContain(`/api/v1/outreach/enrollments?lead_id=${LEAD}&channel=sms`);
+    expect(urls).toContain(`/api/v1/outreach/drafts?due=all&lead_id=${LEAD}&channel=sms`);
+  });
+
+  it("offers an SMS sequence to a lead that is only in an email one", async () => {
+    smsSequences = [{ id: "ss1", name: "Text follow-up", email_sequence_steps: [{}] }];
+    render(<LeadCadenceStrip leadId={LEAD} isAdmin currentUserId="u1" />);
+    await screen.findByText("Not in an SMS sequence");
+    await screen.findByText("In sequence:");
+  });
+
+  it("says nothing about SMS when the account has no SMS sequences and the lead is in none", async () => {
+    render(<LeadCadenceStrip leadId={LEAD} isAdmin currentUserId="u1" />);
+    await screen.findByText("In sequence:");
+    expect(screen.queryByText(/SMS/)).toBeNull();
   });
 });

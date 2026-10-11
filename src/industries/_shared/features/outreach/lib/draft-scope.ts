@@ -18,10 +18,12 @@ export interface DraftScopeFilters {
   due?: "today" | "all" | null;
   assignedTo?: string | null;
   leadId?: string | null;
+  /** Narrows to one channel's drafts (the Outreach channel tab). Omitted = both. */
+  channel?: "email" | "sms" | null;
 }
 
 export const DRAFT_LIST_SELECT =
-  "*, leads!inner(first_name, last_name, email), sequence_enrollments!inner(sequence_id, status, email_sequences(name))";
+  "*, leads!inner(first_name, last_name, email, phone), sequence_enrollments!inner(sequence_id, status, email_sequences(name))";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -52,6 +54,7 @@ export function buildDraftsQuery(
   }
 
   if (filters.leadId) query = query.eq("lead_id", filters.leadId);
+  if (filters.channel) query = query.eq("channel", filters.channel);
   if (filters.due === "today") query = query.lte("due_at", new Date().toISOString());
 
   return query;

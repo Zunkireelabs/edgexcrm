@@ -1,4 +1,5 @@
 import type { ScopedClient } from "@/lib/supabase/scoped";
+import type { OutreachChannel } from "./channel";
 
 // Per-sequence report (Outreach Phase 5): how a sequence is doing — who is in it, what happened to them, and what its
 // emails did. Built from COUNT queries only (never row lists): a sequence can hold thousands of leads and PostgREST caps a
@@ -14,7 +15,11 @@ import type { ScopedClient } from "@/lib/supabase/scoped";
 // "Replied" counts leads the system stopped on a reply, so it is only tracked while the sequence is set to pause / end on
 // reply — a sequence set to "keep sending" records no replies.
 
+// For an SMS sequence the `emails` block describes TEXTS: sent = drafts sent, delivered = the provider confirmed delivery,
+// bounced = the provider reported the text failed, complained = always 0 (there are no spam complaints on SMS; people opt
+// out instead, which shows as "do not contact"). The block keeps its name so existing consumers don't change.
 export interface SequenceReport {
+  channel: OutreachChannel;
   enrollments: {
     total: number;
     running: number;
@@ -45,7 +50,13 @@ async function count(q: PromiseLike<{ count: number | null; error: { message: st
   return n ?? 0;
 }
 
-export async function buildSequenceReport(db: Db, sequenceId: string, stepOrders: number[]): Promise<SequenceReport> {
+export async function buildSequenceReport(
+  db: Db,
+  sequenceId: string,
+  stepOrders: number[],
+  channel: OutreachChannel = "email"
+): Promise<SequenceReport> {
+  const isSms = channel === "sms";
   const enrollments = (status?: string, stopReason?: string) => {
     let q = db.from("sequence_enrollments").select("id", { count: "exact", head: true }).eq("sequence_id", sequenceId);
     if (status) q = q.eq("status", status);
@@ -54,16 +65,17 @@ export async function buildSequenceReport(db: Db, sequenceId: string, stepOrders
   };
 
   // sent drafts of this sequence, optionally narrowed by the provider's status on the email they produced or by step
+  const messageTable = isSms ? "sms_messages" : "email_messages";
   const sentDrafts = (opts: { emailStatus?: string; stepOrder?: number } = {}) => {
     let q = db
       .from("sequence_step_drafts")
       .select(
-        `id, sequence_enrollments!inner(sequence_id)${opts.emailStatus ? ", email_messages!inner(status)" : ""}`,
+        `id, sequence_enrollments!inner(sequence_id)${opts.emailStatus ? `, ${messageTable}!inner(status)` : ""}`,
         { count: "exact", head: true }
       )
       .eq("status", "sent")
       .eq("sequence_enrollments.sequence_id", sequenceId);
-    if (opts.emailStatus) q = q.eq("email_messages.status", opts.emailStatus);
+    if (opts.emailStatus) q = q.eq(`${messageTable}.status`, opts.emailStatus);
     if (opts.stepOrder !== undefined) q = q.eq("step_order", opts.stepOrder);
     return count(q);
   };
@@ -87,12 +99,16 @@ export async function buildSequenceReport(db: Db, sequenceId: string, stepOrders
   ] = await Promise.all([
     enrollments(), enrollments("active"), enrollments("paused"), enrollments("completed"), enrollments("unenrolled"),
     enrollments(undefined, "replied"), enrollments(undefined, "suppressed"), enrollments("paused", "sequence_paused"),
-    sentDrafts(), sentDrafts({ emailStatus: "delivered" }), sentDrafts({ emailStatus: "bounced" }), sentDrafts({ emailStatus: "complained" }),
+    sentDrafts(),
+    sentDrafts({ emailStatus: "delivered" }),
+    sentDrafts({ emailStatus: isSms ? "failed" : "bounced" }),
+    isSms ? Promise.resolve(0) : sentDrafts({ emailStatus: "complained" }),
     pendingDrafts("now"), pendingDrafts("later"),
     Promise.all(stepOrders.map(async (stepOrder) => ({ stepOrder, sent: await sentDrafts({ stepOrder }) }))),
   ]);
 
   return {
+    channel,
     enrollments: { total, running, paused, completed, ended, replied, doNotContact, pausedByStopAll },
     emails: { sent, delivered, bounced, complained },
     steps: stepCounts,

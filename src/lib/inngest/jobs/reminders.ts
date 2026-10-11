@@ -163,7 +163,7 @@ export async function runOutreachDraftReminders(): Promise<{ processed: number; 
 
   const { data: dueDrafts, error: draftErr } = await supabase
     .from("sequence_step_drafts")
-    .select("id, lead_id, tenant_id, assigned_to, subject, sequence_enrollments!inner(status), leads!inner(deleted_at)")
+    .select("id, lead_id, tenant_id, assigned_to, subject, channel, sequence_enrollments!inner(status), leads!inner(deleted_at)")
     .lte("due_at", nowIso)
     .is("notified_at", null)
     // A scheduled draft is sent by EdgeX itself, so it must not ping a rep as "due".
@@ -182,7 +182,7 @@ export async function runOutreachDraftReminders(): Promise<{ processed: number; 
   const draftProcessedIds: string[] = [];
 
   for (const row of dueDrafts ?? []) {
-    const r = row as unknown as { id: string; lead_id: string; tenant_id: string; assigned_to: string | null; subject: string | null };
+    const r = row as unknown as { id: string; lead_id: string; tenant_id: string; assigned_to: string | null; subject: string | null; channel: string | null };
     if (!r.assigned_to) {
       draftProcessedIds.push(r.id); // no owner — stamp to avoid perpetual re-scan
       continue;
@@ -192,8 +192,14 @@ export async function runOutreachDraftReminders(): Promise<{ processed: number; 
         tenantId: r.tenant_id,
         userId: r.assigned_to,
         type: NotificationTypes.OUTREACH_DRAFT_DUE,
-        title: "Outreach email due",
-        message: r.subject && r.subject.trim() ? r.subject : "A follow-up email is ready to send",
+        title: r.channel === "sms" ? "Outreach text due" : "Outreach email due",
+        // a text has no subject
+        message:
+          r.channel === "sms"
+            ? "A follow-up text is ready to send"
+            : r.subject && r.subject.trim()
+              ? r.subject
+              : "A follow-up email is ready to send",
         link: `/leads/${r.lead_id}`,
       });
       outreachNotified++;
