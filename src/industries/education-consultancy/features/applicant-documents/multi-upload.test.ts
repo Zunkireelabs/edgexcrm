@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  MAX_FILES_PER_BATCH, autoName, changeName, changeType, describeSkipped, isSupportedFile, newItem, pickFiles,
-  resolveName, summarizeBatch,
+  MAX_FILES_PER_BATCH, autoName, changeName, changeQualificationLevel, changeType, describeSkipped, isSupportedFile, newItem,
+  pickFiles, qualificationLevelFor, resolveName, summarizeBatch,
 } from "./multi-upload";
 
 const file = (name: string, size = 10, lastModified = 1) => new File(["x".repeat(size)], name, { lastModified });
@@ -113,3 +113,49 @@ describe("summarizeBatch", () => {
     expect(summarizeBatch(2, 1)).toBe("1 document uploaded, 1 failed");
   });
 });
+
+describe("naming from the file (the generic Documents card)", () => {
+  it("a new file can start with its OWN name instead of its type's label", () => {
+    expect(newItem(file("scan001.pdf"), "other", "1", "file").name).toBe("scan001.pdf");
+    expect(newItem(file("scan001.pdf"), "other", "1").name).toBe("Other"); // the default is unchanged
+  });
+
+  it("changing the type of a file-named item keeps the file name (it is not the automatic type label)", () => {
+    const i = changeType(newItem(file("grade10.pdf"), "other", "1", "file"), "marksheet");
+    expect(i.type).toBe("marksheet");
+    expect(i.name).toBe("grade10.pdf");
+  });
+});
+
+describe("linked qualification", () => {
+  const it1 = (type: "marksheet" | "passport" | "other", level?: string) => ({ type, qualificationLevel: level });
+
+  it("changeQualificationLevel sets and clears the pick", () => {
+    const item = newItem(file("a.pdf"), "marksheet", "1");
+    expect(changeQualificationLevel(item, "bachelor").qualificationLevel).toBe("bachelor");
+    expect(changeQualificationLevel(changeQualificationLevel(item, "bachelor"), "").qualificationLevel).toBeUndefined();
+  });
+
+  it("only marksheets, transcripts and certificates can be linked", () => {
+    for (const type of ["marksheet", "transcript", "certificate"] as const) {
+      expect(qualificationLevelFor({ type, qualificationLevel: "see" }, { pickerShown: true })).toBe("see");
+    }
+    for (const type of ["passport", "other"] as const) {
+      expect(qualificationLevelFor(it1(type, "see"), { pickerShown: true })).toBeUndefined();
+    }
+  });
+
+  it("a card's fixed level wins over any pick", () => {
+    expect(qualificationLevelFor(it1("marksheet", "see"), { fixedLevel: "plus_two", pickerShown: true })).toBe("plus_two");
+    expect(qualificationLevelFor(it1("marksheet"), { fixedLevel: "plus_two" })).toBe("plus_two");
+  });
+
+  it("a pick is ignored where the picker is not shown", () => {
+    expect(qualificationLevelFor(it1("marksheet", "see"), {})).toBeUndefined();
+  });
+
+  it("nothing picked sends nothing", () => {
+    expect(qualificationLevelFor(it1("marksheet"), { pickerShown: true })).toBeUndefined();
+  });
+});
+

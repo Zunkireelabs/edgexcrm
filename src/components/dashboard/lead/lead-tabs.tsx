@@ -57,6 +57,8 @@ export interface LeadTabsRef {
   focusTaskComposer: () => void;
   /** Opens the Student Details pop-up in edit mode. Returns false when this tenant has no student record (the caller then falls back to inline edit). */
   openStudentDetails: () => boolean;
+  /** Opens Activity -> Documents (the last sub-tab). Used by the right-column documents card's "View all". */
+  openDocuments: () => void;
 }
 
 export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
@@ -80,6 +82,10 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
       },
       focusTaskComposer: () => {
         activitiesPanelRef.current?.openTasks(true);
+      },
+      openDocuments: () => {
+        onTabChange("activity");
+        setTimeout(() => activitiesPanelRef.current?.openDocuments(), 50);
       },
       openStudentDetails: () => {
         if (!studentRecordActive) return false;

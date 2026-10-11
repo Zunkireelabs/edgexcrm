@@ -33,6 +33,7 @@ import { getFeatureAccess } from "@/industries/_loader";
 import { describeSubmission, humanizeIntakeValue } from "./lead-activity-labels";
 import { FEATURES } from "@/industries/_registry";
 import { LeadCadenceStrip } from "@/industries/_shared/features/outreach/ui/lead-cadence-strip";
+import { ApplicantDocumentsCard } from "@/industries/education-consultancy/features/applicant-documents/documents-card";
 
 // Lazy-load compose dialog so TipTap only loads when the modal is opened
 const ComposeEmailDialog = dynamic(
@@ -52,7 +53,7 @@ const EmailThreadCard = dynamic(
   { ssr: false },
 );
 
-type SubTab = "all" | "notes" | "emails" | "calls" | "tasks" | "meetings";
+type SubTab = "all" | "notes" | "emails" | "calls" | "tasks" | "meetings" | "documents";
 
 interface ActivitiesPanelProps {
   leadId: string;
@@ -85,6 +86,8 @@ const SUB_TABS: { id: SubTab; label: string; icon: React.ReactNode }[] = [
   { id: "calls", label: "Calls", icon: <Phone className="h-4 w-4" /> },
   { id: "tasks", label: "Tasks", icon: <CheckSquare className="h-4 w-4" /> },
   { id: "meetings", label: "Meetings", icon: <Calendar className="h-4 w-4" /> },
+  // Last in the row (client request, Oct 2026). Only shown where the tenant has the documents feature.
+  { id: "documents", label: "Documents", icon: <FileText className="h-4 w-4" /> },
 ];
 
 export interface ActivitiesPanelRef {
@@ -92,7 +95,15 @@ export interface ActivitiesPanelRef {
   openNotes: (focus?: boolean) => void;
   /** Switch to the Tasks sub-tab; pass true to also expand the task composer. */
   openTasks: (focus?: boolean) => void;
+  /** Switch to the Documents sub-tab (only exists for tenants with the documents feature). */
+  openDocuments: () => void;
 }
+
+/**
+ * Education tenants (client request, Oct 2026) log and list Calls and Meetings inside Notes, with no tabs of their own.
+ * Every other industry keeps the Calls and Meetings tabs it has today: this panel is shared by all of them.
+ */
+const callsAndMeetingsInNotes = (industryId?: string | null) => industryId === "education_consultancy";
 
 export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelProps>(
   function ActivitiesPanel({
@@ -128,6 +139,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
         setTimeout(() => notesTabRef.current?.focusComposer(), 50);
       }
     },
+    openDocuments: () => setActiveTab("documents"),
     openTasks: (focus = false) => {
       setActiveTab("tasks");
       if (focus) {
@@ -168,6 +180,14 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
 
   const hasEmail = getFeatureAccess(industryId, FEATURES.EMAIL);
   const hasOutreach = getFeatureAccess(industryId, FEATURES.OUTREACH);
+  const mergedIntoNotes = callsAndMeetingsInNotes(industryId);
+  const documentsEnabled = getFeatureAccess(industryId, FEATURES.APPLICANT_DOCUMENTS);
+  const visibleTabs = SUB_TABS.filter((t) => {
+    if (t.id === "documents") return documentsEnabled;
+    if (mergedIntoNotes && (t.id === "calls" || t.id === "meetings")) return false;
+    return true;
+  });
+
 
   // Connected inboxes for EmailThreadCard (needed to identify own emails for participant display)
   const { inboxes: ownConnectedInboxes } = useConnectedInboxes();
@@ -362,6 +382,28 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
     );
   };
 
+  // The calls and meetings logged for this lead, listed inside Notes (education only) in date order with the notes.
+  const callAndMeetingEntries = useMemo(
+    () =>
+      !mergedIntoNotes
+        ? []
+        : loggedActivities
+            .filter((a) => a.activity_type === "call" || a.activity_type === "meeting")
+            .map((a) => ({
+              id: `act-${a.id}`,
+              at: a.created_at,
+              node: (
+                <ActivityCard
+                  activity={a}
+                  onDelete={handleDeleteActivity}
+                  canDelete={isAdmin || a.user_id === currentUserId}
+                />
+              ),
+            })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [mergedIntoNotes, loggedActivities, isAdmin, currentUserId],
+  );
+
   // Get action buttons based on active tab
   const getActionButtons = () => {
     switch (activeTab) {
@@ -376,6 +418,21 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
             </Button>
           </div>
         );
+      case "notes":
+        // Education: calls and meetings are logged from Notes (they have no tabs of their own).
+        return mergedIntoNotes ? (
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={() => handleLogActivity("call")}>
+              Log Call
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <a href={`tel:`}>Make a phone call</a>
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => handleLogActivity("meeting")}>
+              Log Meeting
+            </Button>
+          </div>
+        ) : null;
       case "emails":
         return (
           <div className="flex gap-2">
@@ -414,7 +471,9 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
       case "meetings":
         return "Schedule a meeting with a contact from this record. Or log a meeting activity to keep track of your meeting and notes.";
       case "notes":
-        return "No notes yet. Add a note to keep track of important information.";
+        return mergedIntoNotes
+          ? "No notes yet. Add a note, or log a call or meeting, to keep track of important information."
+          : "No notes yet. Add a note to keep track of important information.";
       case "tasks":
         return "No tasks yet. Use the checklist panel to add tasks.";
       case "all":
@@ -432,7 +491,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
       {/* Sub-tabs */}
       <div className="border-b">
         <div className="flex gap-1 -mb-px overflow-x-auto">
-          {SUB_TABS.map((tab) => (
+          {visibleTabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
@@ -443,9 +502,9 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
               }`}
             >
               {tab.label}
-              {tab.id === "notes" && notes.length > 0 && (
+              {tab.id === "notes" && notes.length + callAndMeetingEntries.length > 0 && (
                 <Badge variant="secondary" className="h-4 min-w-4 px-1 text-[10px] leading-none">
-                  {notes.length}
+                  {notes.length + callAndMeetingEntries.length}
                 </Badge>
               )}
               {tab.id === "emails" && unreadEmailCount > 0 && (
@@ -459,7 +518,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
       </div>
 
       {/* Action buttons */}
-      {(activeTab === "calls" || activeTab === "emails" || activeTab === "meetings") && (
+      {(activeTab === "calls" || activeTab === "emails" || activeTab === "meetings" || (activeTab === "notes" && mergedIntoNotes)) && (
         <div className="flex justify-end">
           {getActionButtons()}
         </div>
@@ -476,6 +535,17 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
           teamMemberEmails={teamMemberEmails}
           currentUserId={currentUserId}
           canManageNotes={canManageNotes}
+          extraEntries={callAndMeetingEntries}
+        />
+      )}
+
+      {/* Documents tab — the full documents card (search, grouping, multi-file upload), same rights as the right-column card. */}
+      {activeTab === "documents" && documentsEnabled && (
+        <ApplicantDocumentsCard
+          leadId={leadId}
+          canManage={canEdit ?? isAdmin}
+          currentUserId={currentUserId}
+          isAdmin={isAdmin}
         />
       )}
 

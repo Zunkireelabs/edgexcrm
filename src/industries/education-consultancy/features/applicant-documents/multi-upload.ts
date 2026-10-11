@@ -80,16 +80,27 @@ export interface UploadItem {
   id: string;
   file: File;
   type: DocumentType;
-  /** What the document is called in Documents. Starts as the type's label ("Marksheet"). */
+  /** What the document is called in Documents. Starts as the type's label ("Marksheet") or the file's own name (see `NameFrom`). */
   name: string;
+  /**
+   * Optional "Linked qualification" (e.g. "bachelor"), chosen per file on the generic Documents card, where the level is not
+   * known from context. Ignored unless the type can be linked (see QUALIFICATION_LINKABLE_TYPES).
+   */
+  qualificationLevel?: string;
   status: ItemStatus;
   error?: string;
 }
 
 export const autoName = (type: DocumentType): string => documentTypeLabel(type);
 
-export function newItem(file: File, type: DocumentType, id: string): UploadItem {
-  return { id, file, type, name: autoName(type), status: "idle" };
+/**
+ * What a new file is called until someone types a name: its type's label ("Marksheet" — right on a Qualification card, where
+ * the type is known) or its own file name (right on the generic Documents card, where the default type is just "Other").
+ */
+export type NameFrom = "type" | "file";
+
+export function newItem(file: File, type: DocumentType, id: string, nameFrom: NameFrom = "type"): UploadItem {
+  return { id, file, type, name: nameFrom === "file" ? file.name : autoName(type), status: "idle" };
 }
 
 /**
@@ -101,6 +112,10 @@ export function changeType(item: UploadItem, type: DocumentType): UploadItem {
   return { ...item, type, name: nameIsAutomatic ? autoName(type) : item.name, error: undefined };
 }
 
+export function changeQualificationLevel(item: UploadItem, level: string): UploadItem {
+  return { ...item, qualificationLevel: level || undefined, error: undefined };
+}
+
 export function changeName(item: UploadItem, name: string): UploadItem {
   return { ...item, name, error: undefined };
 }
@@ -110,6 +125,20 @@ export const resolveName = (item: Pick<UploadItem, "name" | "file">): string => 
 
 /** Only these types can be tied to a qualification level (a passport has no meaningful link to one). */
 export const QUALIFICATION_LINKABLE_TYPES: readonly DocumentType[] = ["marksheet", "transcript", "certificate"];
+
+/**
+ * The qualification level sent with a file: only for a type that can be linked; the card's fixed level wins (a Qualification
+ * card already knows it); otherwise the per-file pick, and only where the picker is shown.
+ */
+export function qualificationLevelFor(
+  item: Pick<UploadItem, "type" | "qualificationLevel">,
+  opts: { fixedLevel?: string; pickerShown?: boolean }
+): string | undefined {
+  if (!QUALIFICATION_LINKABLE_TYPES.includes(item.type)) return undefined;
+  if (opts.fixedLevel) return opts.fixedLevel;
+  if (opts.pickerShown && item.qualificationLevel) return item.qualificationLevel;
+  return undefined;
+}
 
 export function summarizeBatch(total: number, failed: number): string {
   const ok = total - failed;

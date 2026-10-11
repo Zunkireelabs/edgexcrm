@@ -17,12 +17,15 @@ import {
   MAX_FILES_PER_BATCH,
   QUALIFICATION_LINKABLE_TYPES,
   changeName,
+  changeQualificationLevel,
   changeType,
   describeSkipped,
   newItem,
   pickFiles,
+  qualificationLevelFor,
   resolveName,
   summarizeBatch,
+  type NameFrom,
   type UploadItem,
 } from "./multi-upload";
 
@@ -40,6 +43,8 @@ export function MultiDocumentUploadDialog({
   typeOptions,
   defaultType,
   fixedQualificationLevel,
+  showQualificationLevelPicker,
+  nameFrom = "type",
 }: {
   leadId: string;
   /** The files chosen when the dialog was opened; null = closed. */
@@ -52,6 +57,13 @@ export function MultiDocumentUploadDialog({
   defaultType: DocumentType;
   /** Set when opened from a specific Qualification card: shown as a fixed "Linked to" note. */
   fixedQualificationLevel?: QualificationLevel;
+  /**
+   * The generic Documents card does not know which qualification a file belongs to, so each file gets an optional
+   * "Linked qualification" picker (only for the types that can be linked). Ignored when a fixed level is given.
+   */
+  showQualificationLevelPicker?: boolean;
+  /** "type" (default): a new file is named after its type; "file": after its own file name (the generic Documents card). */
+  nameFrom?: NameFrom;
 }) {
   const [items, setItems] = useState<UploadItem[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -62,7 +74,7 @@ export function MultiDocumentUploadDialog({
 
   // A fresh batch every time the dialog is opened with files.
   useEffect(() => {
-    if (files) setItems(files.map((f) => newItem(f, defaultType, crypto.randomUUID())));
+    if (files) setItems(files.map((f) => newItem(f, defaultType, crypto.randomUUID(), nameFrom)));
     // Reset only when a new set of files is handed in, not on every parent render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [files]);
@@ -72,7 +84,7 @@ export function MultiDocumentUploadDialog({
     const note = describeSkipped(result);
     if (note) toast.error(note);
     if (result.accepted.length > 0) {
-      setItems((prev) => [...prev, ...result.accepted.map((f) => newItem(f, defaultType, crypto.randomUUID()))]);
+      setItems((prev) => [...prev, ...result.accepted.map((f) => newItem(f, defaultType, crypto.randomUUID(), nameFrom))]);
     }
   }
 
@@ -89,8 +101,7 @@ export function MultiDocumentUploadDialog({
         file: item.file,
         documentType: item.type,
         name: resolveName(item),
-        qualificationLevel:
-          fixedQualificationLevel && QUALIFICATION_LINKABLE_TYPES.includes(item.type) ? fixedQualificationLevel : undefined,
+        qualificationLevel: qualificationLevelFor(item, { fixedLevel: fixedQualificationLevel, pickerShown: showQualificationLevelPicker }),
       });
       if (!result.ok) failed.push({ ...item, status: "failed", error: result.message });
       else setItems((prev) => prev.filter((p) => p.id !== item.id)); // saved: leaves the list
@@ -184,6 +195,28 @@ export function MultiDocumentUploadDialog({
                   />
                 </div>
               </div>
+              {showQualificationLevelPicker && !fixedQualificationLevel && QUALIFICATION_LINKABLE_TYPES.includes(item.type) && (
+                <div>
+                  <label className="mb-1 block text-[11px] text-muted-foreground" htmlFor={`mu-level-${item.id}`}>Linked qualification (optional)</label>
+                  <Select
+                    value={item.qualificationLevel || "__none__"}
+                    onValueChange={(v) =>
+                      setItems((prev) => prev.map((p) => (p.id === item.id ? changeQualificationLevel(p, v === "__none__" ? "" : v) : p)))
+                    }
+                    disabled={uploading}
+                  >
+                    <SelectTrigger id={`mu-level-${item.id}`} className="h-9 text-sm" aria-label={`Linked qualification for ${item.file.name}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__"><span className="text-muted-foreground">Not linked</span></SelectItem>
+                      {(Object.keys(QUALIFICATION_LEVEL_LABELS) as QualificationLevel[]).map((lvl) => (
+                        <SelectItem key={lvl} value={lvl}>{QUALIFICATION_LEVEL_LABELS[lvl]}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               {item.status === "failed" && item.error && <p className="text-xs text-red-600">Not uploaded: {item.error}</p>}
             </div>
           ))}

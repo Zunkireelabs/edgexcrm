@@ -19,9 +19,10 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { formatBytes } from "@/lib/format";
-import type { DocumentType } from "@/lib/documents/constants";
+import { DOCUMENT_TYPES, type DocumentType } from "@/lib/documents/constants";
 import { documentTypeLabel, DOCUMENT_CATEGORY_LABELS } from "./labels";
-import { DocumentUploadDialog } from "./document-upload-dialog";
+import { MultiDocumentUploadDialog } from "./multi-document-upload-dialog";
+import { ACCEPT_ATTR, describeSkipped, pickFiles } from "./multi-upload";
 
 interface ApplicantDocument {
   id: string;
@@ -54,12 +55,15 @@ export function ApplicantDocumentsCard({
   currentUserId,
   isAdmin,
   variant = "page",
+  onViewAll,
 }: {
   leadId: string;
   canManage: boolean;
   currentUserId: string;
   isAdmin: boolean;
   variant?: "page" | "summary";
+  /** Summary card only: when given, "View all" calls this (e.g. switch to the lead page's Documents tab) instead of leaving for the documents page. */
+  onViewAll?: () => void;
 }) {
   const isSummary = variant === "summary";
   const [docs, setDocs] = useState<ApplicantDocument[]>([]);
@@ -67,7 +71,8 @@ export function ApplicantDocumentsCard({
   const [applications, setApplications] = useState<ApplicationNames>({});
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>("list");
-  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  // The files chosen with the upload button (several at once); null = the upload dialog is closed.
+  const [pendingFiles, setPendingFiles] = useState<File[] | null>(null);
   const [viewerDoc, setViewerDoc] = useState<ApplicantDocument | null>(null);
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
   const [viewerLoading, setViewerLoading] = useState(false);
@@ -190,12 +195,19 @@ export function ApplicantDocumentsCard({
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept="application/pdf,image/jpeg,image/png,image/webp,.docx"
+                    multiple
+                    accept={ACCEPT_ATTR}
                     className="hidden"
+                    data-testid="documents-upload-input"
                     onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) setPendingFile(f);
+                      const chosen = Array.from(e.target.files ?? []);
                       e.target.value = "";
+                      if (chosen.length === 0) return;
+                      // unsupported types, duplicates and anything past the batch limit are left out, and the rep is told
+                      const result = pickFiles([], chosen);
+                      const note = describeSkipped(result);
+                      if (note) toast.error(note);
+                      if (result.accepted.length > 0) setPendingFiles(result.accepted);
                     }}
                   />
                   <Button
@@ -203,7 +215,7 @@ export function ApplicantDocumentsCard({
                     variant="ghost"
                     className="h-6 w-6 p-0"
                     onClick={() => fileInputRef.current?.click()}
-                    title="Upload document"
+                    title="Upload documents"
                   >
                     <Upload className="h-3.5 w-3.5" />
                   </Button>
@@ -240,12 +252,18 @@ export function ApplicantDocumentsCard({
                   ))}
                 </div>
               ))}
-              <Link
-                href={`/leads/${leadId}/documents`}
-                className="block pt-1 text-xs text-primary hover:underline"
-              >
-                {docs.length > SUMMARY_LIMIT ? `View all ${docs.length} documents →` : "Open documents page →"}
-              </Link>
+              {onViewAll ? (
+                <button type="button" onClick={onViewAll} className="block pt-1 text-left text-xs text-primary hover:underline">
+                  {docs.length > SUMMARY_LIMIT ? `View all ${docs.length} documents →` : "Open all documents →"}
+                </button>
+              ) : (
+                <Link
+                  href={`/leads/${leadId}/documents`}
+                  className="block pt-1 text-xs text-primary hover:underline"
+                >
+                  {docs.length > SUMMARY_LIMIT ? `View all ${docs.length} documents →` : "Open documents page →"}
+                </Link>
+              )}
             </div>
           ) : (
             <div className="space-y-4">
@@ -289,12 +307,17 @@ export function ApplicantDocumentsCard({
         </CardContent>
       </Card>
 
-      <DocumentUploadDialog
+      {/* Several files at once: type, name and (for marksheets / transcripts / certificates) an optional linked qualification
+          for each. A file starts out named after itself, as a single upload always did on this card. */}
+      <MultiDocumentUploadDialog
         leadId={leadId}
-        file={pendingFile}
-        onOpenChange={(open) => !open && setPendingFile(null)}
+        files={pendingFiles}
+        onClose={() => setPendingFiles(null)}
         onUploaded={load}
+        typeOptions={DOCUMENT_TYPES}
+        defaultType="other"
         showQualificationLevelPicker
+        nameFrom="file"
       />
 
       {/* Viewer dialog */}

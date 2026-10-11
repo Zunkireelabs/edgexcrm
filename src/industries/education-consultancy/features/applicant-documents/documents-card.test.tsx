@@ -108,7 +108,7 @@ describe("ApplicantDocumentsCard", () => {
     render(<ApplicantDocumentsCard leadId="lead-1" canManage={false} currentUserId="user-1" isAdmin={false} />);
 
     await waitFor(() => expect(screen.getByText("passport.pdf")).toBeInTheDocument());
-    expect(screen.queryByTitle("Upload document")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("Upload documents")).not.toBeInTheDocument();
   });
 
   it("REGRESSION (PR #533 review): hides Delete for an editor who can manage but did not upload the document", async () => {
