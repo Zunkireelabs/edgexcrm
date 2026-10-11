@@ -18,6 +18,10 @@ export const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
   unconditional_offer: "Unconditional Offer",
   visa_document: "Visa Document",
   identity_document: "Identity Document",
+  statement_of_purpose: "Statement of Purpose / Essay",
+  experience_letter: "Experience Letter",
+  gap_explanation: "Gap Explanation",
+  enrollment_document: "Enrollment Document",
   other: "Other",
 };
 
@@ -27,20 +31,28 @@ export function documentTypeLabel(type: string): string {
 }
 
 export const DOCUMENT_CATEGORY_LABELS: Record<DocumentCategory, string> = {
-  identity: "Identity",
-  education: "Education",
+  personal_identity: "Personal Identity",
+  academic_records: "Academic Records",
   english_proficiency: "English Proficiency",
-  financial: "Financial",
-  application: "Application",
+  application_essays: "Application Essays & References",
+  work_experience_gap: "Work Experience & Gap",
+  financial: "Financial Documents",
+  university_offers: "University Offers & Confirmations",
+  visa_predeparture: "Visa & Pre-Departure",
+  enrollment: "Enrollment",
   other: "Other",
 };
 
-// Rendering order for grouped-by-category sections.
+// Rendering order for grouped-by-category sections: the client's order, with the catch-all last.
 export const DOCUMENT_CATEGORY_ORDER: DocumentCategory[] = [
-  "identity",
-  "education",
+  "personal_identity",
+  "academic_records",
   "english_proficiency",
+  "application_essays",
+  "work_experience_gap",
   "financial",
-  "application",
+  "university_offers",
+  "visa_predeparture",
+  "enrollment",
   "other",
 ];

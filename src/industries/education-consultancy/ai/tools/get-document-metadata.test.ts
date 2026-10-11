@@ -79,7 +79,7 @@ describe("get_document_metadata", () => {
     };
     expect(result).toMatchObject({
       documentTypeLabel: "Passport",
-      category: "Identity",
+      category: "Personal Identity",
       status: "ready",
       verificationStatus: "verified",
     });

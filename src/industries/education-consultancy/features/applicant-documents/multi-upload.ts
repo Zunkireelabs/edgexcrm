@@ -1,5 +1,5 @@
-import type { DocumentType } from "@/lib/documents/constants";
-import { documentTypeLabel } from "./labels";
+import { DOCUMENT_TYPE_CATEGORY, type DocumentCategory, type DocumentType } from "@/lib/documents/constants";
+import { DOCUMENT_CATEGORY_ORDER, documentTypeLabel } from "./labels";
 
 // Logic for attaching SEVERAL documents at once (Student Details > Qualification cards / Passport & Citizenship).
 // Kept free of React so every rule — the file cap, what is accepted, how files are named — is unit tested.
@@ -147,3 +147,28 @@ export function summarizeBatch(total: number, failed: number): string {
   if (ok === 0) return `${failed} ${noun(failed)} failed to upload`;
   return `${ok} ${noun(ok)} uploaded, ${failed} failed`;
 }
+
+/** From this many choices up, a type list is shown under category headings (the full list has 19; a qualification card's has 5). */
+export const GROUP_TYPES_FROM = 8;
+
+export interface TypeOptionGroup {
+  category: DocumentCategory;
+  types: DocumentType[];
+}
+
+/**
+ * Arranges a document-type dropdown under the client's category headings (Personal Identity, Academic Records, ...), in the
+ * client's order, so the right type is found by what the document IS rather than by scrolling a long flat list. Inside a
+ * heading the types keep the order they came in. Returns null for a short list — a Qualification card's five choices read
+ * better flat — and the caller then renders it as it always did. Every type appears exactly once; none is dropped.
+ */
+export function groupTypeOptions(types: readonly DocumentType[]): TypeOptionGroup[] | null {
+  if (types.length < GROUP_TYPES_FROM) return null;
+  const groups: TypeOptionGroup[] = [];
+  for (const category of DOCUMENT_CATEGORY_ORDER) {
+    const inCategory = types.filter((t) => DOCUMENT_TYPE_CATEGORY[t] === category);
+    if (inCategory.length > 0) groups.push({ category, types: inCategory });
+  }
+  return groups;
+}
+

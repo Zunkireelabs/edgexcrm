@@ -96,9 +96,9 @@ describe("ApplicantDocumentsCard", () => {
 
     await waitFor(() => expect(screen.getByText("passport.pdf")).toBeInTheDocument());
     expect(screen.getByText("transcript.pdf")).toBeInTheDocument();
-    // passport -> Identity, transcript -> Education (DOCUMENT_TYPE_CATEGORY)
-    expect(screen.getByText("Identity")).toBeInTheDocument();
-    expect(screen.getByText("Education")).toBeInTheDocument();
+    // passport -> Personal Identity, transcript -> Academic Records (DOCUMENT_TYPE_CATEGORY)
+    expect(screen.getByText("Personal Identity")).toBeInTheDocument();
+    expect(screen.getByText("Academic Records")).toBeInTheDocument();
     expect(screen.getByText("2")).toBeInTheDocument();
   });
 
@@ -226,7 +226,7 @@ describe("ApplicantDocumentsCard", () => {
     expect(screen.queryByText("file-3.pdf")).not.toBeInTheDocument();
     expect(screen.queryByText("file-0.pdf")).not.toBeInTheDocument();
     // no category headings, no search box, no grid toggle in the compact card
-    expect(screen.queryByText("Identity")).not.toBeInTheDocument();
+    expect(screen.queryByText("Personal Identity")).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText(/search by name or type/i)).not.toBeInTheDocument();
     expect(screen.queryByTitle(/switch to grid view/i)).not.toBeInTheDocument();
     // total count still reflects every document, and the link goes to the dedicated page

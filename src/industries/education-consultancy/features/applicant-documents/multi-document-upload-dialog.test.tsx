@@ -15,6 +15,8 @@ vi.mock("./upload-document", () => ({ uploadApplicantDocument: uploadMock }));
 // can be found and changed.
 vi.mock("@/components/ui/select", () => {
   const SelectTrigger = () => null;
+  const SelectLabel = ({ children, className }: { children: React.ReactNode; className?: string }) => <span data-label-class={className}>{children}</span>;
+  const SelectSeparator = () => null;
   return {
     Select: ({ value, onValueChange, disabled, children }: { value: string; onValueChange: (v: string) => void; disabled?: boolean; children: React.ReactNode }) => {
       const trigger = React.Children.toArray(children).find((c) => React.isValidElement(c) && c.type === SelectTrigger) as React.ReactElement<Record<string, string>> | undefined;
@@ -27,7 +29,22 @@ vi.mock("@/components/ui/select", () => {
     SelectTrigger,
     SelectValue: () => null,
     SelectContent: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-    SelectItem: ({ value, children }: { value: string; children: React.ReactNode }) => <option value={value}>{children}</option>,
+    // a group heading becomes an <optgroup label="...">, which is how a native <select> shows one
+    SelectGroup: ({ children }: { children: React.ReactNode }) => {
+      const kids = React.Children.toArray(children);
+      const label = kids.find((c) => React.isValidElement(c) && c.type === SelectLabel) as React.ReactElement<{ children: string; className?: string }> | undefined;
+      const hasSeparator = kids.some((c) => React.isValidElement(c) && c.type === SelectSeparator);
+      return (
+        <optgroup label={label?.props.children} data-heading-class={label?.props.className} data-separator={hasSeparator ? "true" : undefined}>
+          {kids.filter((c) => c !== label && !(React.isValidElement(c) && c.type === SelectSeparator))}
+        </optgroup>
+      );
+    },
+    SelectLabel,
+    SelectSeparator,
+    SelectItem: ({ value, children, className }: { value: string; children: React.ReactNode; className?: string }) => (
+      <option value={value} data-item-class={className}>{children}</option>
+    ),
   };
 });
 
@@ -116,7 +133,7 @@ describe("naming from the file", () => {
     expect(screen.getByLabelText("Name for a.pdf")).toHaveValue("a.pdf");
     expect(screen.getByLabelText("Name for b.pdf")).toHaveValue("b.pdf");
     const options = Array.from(screen.getByLabelText("Type for a.pdf").querySelectorAll("option")).map((o) => o.getAttribute("value"));
-    expect(options).toEqual([...DOCUMENT_TYPES]);
+    expect([...options].sort()).toEqual([...DOCUMENT_TYPES].sort()); // all of them, whatever the arrangement
   });
 
   it("uploads with the file's own name and the chosen type, as a single upload on this card always did", async () => {
@@ -132,3 +149,84 @@ describe("naming from the file", () => {
     expect(screen.getByLabelText("Name for a.pdf")).toHaveValue("Marksheet");
   });
 });
+
+describe("the type dropdown under category headings", () => {
+  const headings = (file: string) => Array.from(screen.getByLabelText(`Type for ${file}`).querySelectorAll("optgroup")).map((g) => g.getAttribute("label"));
+
+  it("the full list is grouped under the client's nine headings, in his order, with Other last", () => {
+    open({ showQualificationLevelPicker: true, nameFrom: "file" });
+    expect(headings("a.pdf")).toEqual([
+      "Personal Identity",
+      "Academic Records",
+      "English Proficiency",
+      "Application Essays & References",
+      "Work Experience & Gap",
+      "Financial Documents",
+      "University Offers & Confirmations",
+      "Visa & Pre-Departure",
+      "Enrollment",
+      "Other",
+    ]);
+  });
+
+  it("each type sits under the right heading", () => {
+    open({ showQualificationLevelPicker: true, nameFrom: "file" });
+    const group = (label: string) =>
+      Array.from(screen.getByLabelText("Type for a.pdf").querySelectorAll(`optgroup[label="${label}"] option`)).map((o) => o.getAttribute("value"));
+    expect(group("Work Experience & Gap")).toEqual(["cv", "experience_letter", "gap_explanation"]);
+    expect(group("Application Essays & References")).toEqual(["recommendation_letter", "statement_of_purpose"]);
+    expect(group("Enrollment")).toEqual(["enrollment_document"]);
+  });
+
+  it("choosing a type from a group works as before (it is uploaded as that type)", async () => {
+    open({ showQualificationLevelPicker: true, nameFrom: "file" }, [pdf("sop.pdf")]);
+    setType("sop.pdf", "statement_of_purpose");
+    fireEvent.click(screen.getByRole("button", { name: "Upload 1 file" }));
+    await waitFor(() => expect(uploadMock).toHaveBeenCalled());
+    expect(uploadMock.mock.calls[0][0]).toMatchObject({ documentType: "statement_of_purpose" });
+  });
+
+  it("a Qualification / Passport card's short list stays flat, with no headings", () => {
+    open({ defaultType: "marksheet", typeOptions: ["marksheet", "transcript", "certificate", "english_test_result", "other"] });
+    expect(headings("a.pdf")).toEqual([]);
+    expect(screen.getByLabelText("Type for a.pdf").querySelectorAll("option")).toHaveLength(5);
+  });
+});
+
+describe("the grouped dropdown's look", () => {
+  const groups = () => Array.from(screen.getByLabelText("Type for a.pdf").querySelectorAll("optgroup"));
+
+  it("headings are small, bold, uppercase and pinned to the top while their group scrolls", () => {
+    open({ showQualificationLevelPicker: true, nameFrom: "file" });
+    for (const g of groups()) {
+      const cls = g.getAttribute("data-heading-class") ?? "";
+      for (const part of ["sticky", "top-0", "bg-popover", "font-semibold", "uppercase", "tracking-wider"]) expect(cls, g.getAttribute("label") ?? "").toContain(part);
+    }
+  });
+
+  it("has a divider between groups — nine of them for ten groups, none before the first", () => {
+    open({ showQualificationLevelPicker: true, nameFrom: "file" });
+    const all = groups();
+    expect(all).toHaveLength(10);
+    expect(all[0].getAttribute("data-separator")).toBeNull();
+    expect(all.slice(1).every((g) => g.getAttribute("data-separator") === "true")).toBe(true);
+  });
+
+  it("types are indented under their heading and the rows are compact", () => {
+    open({ showQualificationLevelPicker: true, nameFrom: "file" });
+    const items = Array.from(screen.getByLabelText("Type for a.pdf").querySelectorAll("option"));
+    expect(items).toHaveLength(DOCUMENT_TYPES.length);
+    for (const o of items) {
+      expect(o.getAttribute("data-item-class")).toContain("pl-5");
+      expect(o.getAttribute("data-item-class")).toContain("py-1");
+    }
+  });
+
+  it("a short list is untouched: no headings, no dividers, no extra indent", () => {
+    open({ defaultType: "marksheet", typeOptions: ["marksheet", "transcript", "certificate", "english_test_result", "other"] });
+    const select = screen.getByLabelText("Type for a.pdf");
+    expect(select.querySelectorAll("optgroup")).toHaveLength(0);
+    for (const o of Array.from(select.querySelectorAll("option"))) expect(o.getAttribute("data-item-class")).toBeNull();
+  });
+});
+

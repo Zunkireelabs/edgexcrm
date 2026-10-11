@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   MAX_FILES_PER_BATCH, autoName, changeName, changeQualificationLevel, changeType, describeSkipped, isSupportedFile, newItem,
-  pickFiles, qualificationLevelFor, resolveName, summarizeBatch,
+  pickFiles, qualificationLevelFor, resolveName, summarizeBatch, groupTypeOptions, GROUP_TYPES_FROM,
 } from "./multi-upload";
+import { DOCUMENT_TYPES, type DocumentType } from "@/lib/documents/constants";
 
 const file = (name: string, size = 10, lastModified = 1) => new File(["x".repeat(size)], name, { lastModified });
 
@@ -156,6 +157,52 @@ describe("linked qualification", () => {
 
   it("nothing picked sends nothing", () => {
     expect(qualificationLevelFor(it1("marksheet"), { pickerShown: true })).toBeUndefined();
+  });
+});
+
+describe("groupTypeOptions (the type dropdown under category headings)", () => {
+  it("arranges the full list under the client's nine headings, in his order, with Other last", () => {
+    const groups = groupTypeOptions(DOCUMENT_TYPES)!;
+    expect(groups.map((g) => g.category)).toEqual([
+      "personal_identity", "academic_records", "english_proficiency", "application_essays", "work_experience_gap",
+      "financial", "university_offers", "visa_predeparture", "enrollment", "other",
+    ]);
+    expect(groups.map((g) => g.types)).toEqual([
+      ["passport", "identity_document"],
+      ["marksheet", "transcript", "certificate"],
+      ["english_test_result"],
+      ["recommendation_letter", "statement_of_purpose"],
+      ["cv", "experience_letter", "gap_explanation"],
+      ["financial_document", "bank_statement"],
+      ["offer_letter", "conditional_offer", "unconditional_offer"],
+      ["visa_document"],
+      ["enrollment_document"],
+      ["other"],
+    ]);
+  });
+
+  it("every type appears exactly once — grouping never drops or duplicates a choice", () => {
+    const all = groupTypeOptions(DOCUMENT_TYPES)!.flatMap((g) => g.types);
+    expect([...all].sort()).toEqual([...DOCUMENT_TYPES].sort());
+    expect(new Set(all).size).toBe(all.length);
+  });
+
+  it("a short list stays flat (a Qualification card's five choices, a passport card's three)", () => {
+    expect(groupTypeOptions(["marksheet", "transcript", "certificate", "english_test_result", "other"])).toBeNull();
+    expect(groupTypeOptions(["passport", "identity_document", "other"])).toBeNull();
+  });
+
+  it(`switches to headings at ${GROUP_TYPES_FROM} choices`, () => {
+    const seven = DOCUMENT_TYPES.slice(0, GROUP_TYPES_FROM - 1);
+    expect(groupTypeOptions(seven)).toBeNull();
+    expect(groupTypeOptions(DOCUMENT_TYPES.slice(0, GROUP_TYPES_FROM))).not.toBeNull();
+  });
+
+  it("a long list that only touches some categories shows only those headings, keeping the order it was given within each", () => {
+    const list: DocumentType[] = ["transcript", "marksheet", "passport", "certificate", "english_test_result", "identity_document", "other", "cv"];
+    const groups = groupTypeOptions(list)!;
+    expect(groups.map((g) => g.category)).toEqual(["personal_identity", "academic_records", "english_proficiency", "work_experience_gap", "other"]);
+    expect(groups[1].types).toEqual(["transcript", "marksheet", "certificate"]); // given order inside a heading
   });
 });
 

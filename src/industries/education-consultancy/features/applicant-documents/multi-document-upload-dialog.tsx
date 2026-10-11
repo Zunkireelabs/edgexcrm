@@ -5,11 +5,11 @@ import { AlertCircle, CheckCircle2, FileText, Loader2, Paperclip, X } from "luci
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatBytes } from "@/lib/format";
-import type { DocumentType } from "@/lib/documents/constants";
-import { documentTypeLabel } from "./labels";
+import { DOCUMENT_TYPE_CATEGORY, type DocumentType } from "@/lib/documents/constants";
+import { DOCUMENT_CATEGORY_LABELS, documentTypeLabel } from "./labels";
 import { QUALIFICATION_LEVEL_LABELS, type QualificationLevel } from "./document-upload-dialog";
 import { uploadApplicantDocument } from "./upload-document";
 import {
@@ -20,6 +20,7 @@ import {
   changeQualificationLevel,
   changeType,
   describeSkipped,
+  groupTypeOptions,
   newItem,
   pickFiles,
   qualificationLevelFor,
@@ -28,6 +29,22 @@ import {
   type NameFrom,
   type UploadItem,
 } from "./multi-upload";
+
+/**
+ * What the closed type dropdown shows on the grouped list: the type, with its category in small grey text under it
+ * ("Experience Letter" / "Work Experience & Gap"), so the filing is visible without reopening the list. A type whose name IS
+ * its category's name ("Other") is shown once.
+ */
+export function TypeWithCategory({ type }: { type: DocumentType }) {
+  const typeLabel = documentTypeLabel(type);
+  const categoryLabel = DOCUMENT_CATEGORY_LABELS[DOCUMENT_TYPE_CATEGORY[type]];
+  return (
+    <span className="flex flex-col items-start text-left leading-tight">
+      <span>{typeLabel}</span>
+      {categoryLabel !== typeLabel && <span className="text-[10px] font-normal text-muted-foreground">{categoryLabel}</span>}
+    </span>
+  );
+}
 
 /**
  * Attach several documents at once: choose up to 10 files, say what each one is (Marksheet, Transcript, ...) and
@@ -71,6 +88,8 @@ export function MultiDocumentUploadDialog({
   // A second click before React re-renders must not start a second upload of the same files.
   const busyRef = useRef(false);
   const open = files !== null;
+  // A long list of types is shown under the category headings; a short one stays flat.
+  const typeGroups = groupTypeOptions(typeOptions);
 
   // A fresh batch every time the dialog is opened with files.
   useEffect(() => {
@@ -171,13 +190,33 @@ export function MultiDocumentUploadDialog({
                     onValueChange={(v) => setItems((prev) => prev.map((p) => (p.id === item.id ? changeType(p, v as DocumentType) : p)))}
                     disabled={uploading}
                   >
-                    <SelectTrigger id={`mu-type-${item.id}`} className="h-9 text-sm" aria-label={`Type for ${item.file.name}`}>
-                      <SelectValue />
+                    <SelectTrigger
+                      id={`mu-type-${item.id}`}
+                      // the grouped list shows the category under the type, so the trigger may be two lines tall
+                      className={typeGroups ? "h-auto text-sm data-[size=default]:h-auto data-[size=default]:min-h-9 py-1" : "h-9 text-sm"}
+                      aria-label={`Type for ${item.file.name}`}
+                    >
+                      <SelectValue>{typeGroups ? <TypeWithCategory type={item.type} /> : undefined}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      {typeOptions.map((t) => (
-                        <SelectItem key={t} value={t}>{documentTypeLabel(t)}</SelectItem>
-                      ))}
+                      {typeGroups
+                        ? typeGroups.map((g, index) => (
+                            <SelectGroup key={g.category}>
+                              {index > 0 && <SelectSeparator className="mx-0 my-1" />}
+                              {/* The heading stays pinned to the top of the list while you scroll through its group. */}
+                              <SelectLabel className="sticky top-0 z-10 bg-popover px-2 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-foreground/70">
+                                {DOCUMENT_CATEGORY_LABELS[g.category]}
+                              </SelectLabel>
+                              {g.types.map((t) => (
+                                <SelectItem key={t} value={t} className="py-1 pl-5">
+                                  {documentTypeLabel(t)}
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
+                          ))
+                        : typeOptions.map((t) => (
+                            <SelectItem key={t} value={t}>{documentTypeLabel(t)}</SelectItem>
+                          ))}
                     </SelectContent>
                   </Select>
                 </div>

@@ -30,7 +30,7 @@ describe("groupDocuments", () => {
 
   it("lists application groups first, then the normal category groups for everything else", () => {
     const groups = groupDocuments([doc("p", "passport"), doc("o", "conditional_offer", "a1"), doc("t", "transcript")], APPS);
-    expect(groups.map((g) => g.key)).toEqual(["app:a1", "cat:identity", "cat:education"]);
+    expect(groups.map((g) => g.key)).toEqual(["app:a1", "cat:personal_identity", "cat:academic_records"]);
   });
 
   it("orders application groups by when each first appears (newest activity first)", () => {
@@ -41,7 +41,7 @@ describe("groupDocuments", () => {
   it("does not drop a file whose application name could not be loaded — it falls back to its category", () => {
     const groups = groupDocuments([doc("1", "conditional_offer", "missing-app")], {});
     expect(groups).toHaveLength(1);
-    expect(groups[0]).toMatchObject({ kind: "category", category: "application" });
+    expect(groups[0]).toMatchObject({ kind: "category", category: "university_offers" });
     expect(groups[0].docs).toHaveLength(1);
   });
 
