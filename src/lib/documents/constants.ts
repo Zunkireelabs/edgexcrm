@@ -13,6 +13,8 @@ export const DOCUMENT_TYPES = [
   "bank_statement",
   "english_test_result",
   "offer_letter",
+  "conditional_offer",
+  "unconditional_offer",
   "visa_document",
   "identity_document",
   "other",
@@ -44,6 +46,8 @@ export const DOCUMENT_TYPE_CATEGORY: Record<DocumentType, DocumentCategory> = {
   cv: "application",
   recommendation_letter: "application",
   offer_letter: "application",
+  conditional_offer: "application",
+  unconditional_offer: "application",
   visa_document: "application",
   other: "other",
 };

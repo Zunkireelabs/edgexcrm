@@ -1,5 +1,6 @@
 "use client";
 
+import { GUARDIAN_SECTION_TITLE } from "@/lib/consent/guardian";
 import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InfoSection, InfoRow } from "@/components/dashboard/lead/info-section";
@@ -8,11 +9,14 @@ import { WorkExperienceSection } from "./work-experience-section";
 import { ReferencesSection } from "./references-section";
 import {
   PERSONAL_DETAIL_FIELDS,
-  PASSPORT_CITIZENSHIP_FIELDS,
   GUARDIAN_FIELDS,
   FINANCIAL_FIELDS,
   personalDetailsFromLead,
+  coreIdentityFromLead,
+  addressPartsOf,
 } from "./personal-details-dialog";
+import { AddressFields } from "./address-fields";
+import { IdentityDocumentFields } from "./identity-document-fields";
 import { ACADEMIC_LEVELS, TEST_TYPES } from "@/lib/leads/prospect-qualification";
 import type { Lead } from "@/types/database";
 
@@ -87,6 +91,16 @@ export function StudentDetailsSummaryCard({ lead, onEdit, defaultOpen = true }: 
       <CollapsibleGroups>
       <div className="space-y-7 pt-2">
         <SectionGroup title="Personal Information">
+          <CardSection title="Address">
+            <AddressFields
+              isEditing={false}
+              parts={addressPartsOf(coreIdentityFromLead(lead), values)}
+              fullAddress={values.full_address ?? ""}
+              onPartChange={noop}
+              onFullAddressChange={noop}
+            />
+          </CardSection>
+
           <CardSection title="Basic Details">
             <FieldGrid columns={2}>
               {PERSONAL_DETAIL_FIELDS.map((field) => (
@@ -95,7 +109,7 @@ export function StudentDetailsSummaryCard({ lead, onEdit, defaultOpen = true }: 
             </FieldGrid>
           </CardSection>
 
-          <CardSection title="Guardian Details">
+          <CardSection title={GUARDIAN_SECTION_TITLE}>
             <FieldGrid>
               {GUARDIAN_FIELDS.map((field) => (
                 <EditableField key={field.key} field={field} isEditing={false} value={values[field.key] || ""} onChange={noop} />
@@ -104,11 +118,7 @@ export function StudentDetailsSummaryCard({ lead, onEdit, defaultOpen = true }: 
           </CardSection>
 
           <CardSection title="Passport & Citizenship Details">
-            <FieldGrid>
-              {PASSPORT_CITIZENSHIP_FIELDS.map((field) => (
-                <EditableField key={field.key} field={field} isEditing={false} value={values[field.key] || ""} onChange={noop} />
-              ))}
-            </FieldGrid>
+            <IdentityDocumentFields isEditing={false} values={values} />
           </CardSection>
         </SectionGroup>
 

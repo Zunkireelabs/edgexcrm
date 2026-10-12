@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getLeadCity, getLeadNationality } from "@/lib/leads/lead-location";
+import { getLeadCity, getLeadCountry, getLeadNationality } from "@/lib/leads/lead-location";
 import { logger } from "@/lib/logger";
-import { resolveGuardian, GUARDIAN_NOT_APPLICABLE, normalizeGuardianRelationship } from "./guardian";
+import { resolveGuardian, GUARDIAN_NOT_APPLICABLE, GUARDIAN_SECTION_TITLE, normalizeGuardianRelationship } from "./guardian";
 
 /**
  * Is a student's profile complete enough to generate a consent document?
@@ -34,7 +34,7 @@ export interface ConsentReadiness {
 const SECTION_ORDER = [
   "Personal Information",
   "Basic Details",
-  "Guardian Details",
+  GUARDIAN_SECTION_TITLE,
   "Passport & Citizenship",
   "Study Interest",
   "Assignment",
@@ -86,28 +86,31 @@ const guardianName = (p: ConsentProfile) => effectiveGuardian(p).name;
 export const ALWAYS_REQUIRED_PLACEHOLDERS = ["student_name", "student_email", "student_phone"] as const;
 /** Filled by the system, never from the student profile. */
 export const AUTOMATIC_PLACEHOLDERS = ["organization", "date", "consent_version"] as const;
+/**
+ * Printed when the student has the value on file, but NEVER required: Student Details no longer asks for them
+ * (the guardian section already captures the contact person), so requiring them would leave consent stuck.
+ */
+export const OPTIONAL_PLACEHOLDERS = ["emergency_contact_name", "emergency_contact_phone"] as const;
 
 /** Placeholder -> the profile requirement behind it. */
 type Section = (typeof SECTION_ORDER)[number];
 export const PLACEHOLDER_REQUIREMENTS: Record<string, { label: string; section: Section; ok: (p: ConsentProfile) => boolean }> = {
   city: { label: "City", section: "Personal Information", ok: (p) => !!getLeadCity(p) },
   nationality: { label: "Nationality", section: "Personal Information", ok: (p) => !!getLeadNationality(p) },
-  country: { label: "Residence Country", section: "Personal Information", ok: (p) => filled(p.country) },
+  country: { label: "Nationality", section: "Personal Information", ok: (p) => !!getLeadCountry(p) },
   passport_number: { label: "Passport Number", section: "Passport & Citizenship", ok: (p) => filled(p.passport_number) },
-  full_address: { label: "Full Address", section: "Basic Details", ok: (p) => filled(p.full_address) },
-  street_address: { label: "Full Address", section: "Basic Details", ok: (p) => filled(p.full_address) },
+  full_address: { label: "Address", section: "Personal Information", ok: (p) => filled(p.full_address) },
+  street_address: { label: "Address", section: "Personal Information", ok: (p) => filled(p.full_address) },
   father_name: { label: "Father's Name", section: "Basic Details", ok: (p) => filled(p.father_name) },
   mother_name: { label: "Mother's Name", section: "Basic Details", ok: (p) => filled(p.mother_name) },
-  parent_name: { label: "Guardian Name", section: "Guardian Details", ok: (p) => filled(guardianName(p)) },
-  guardian_name: { label: "Guardian Name", section: "Guardian Details", ok: (p) => filled(guardianName(p)) },
+  parent_name: { label: "Guardian Name", section: GUARDIAN_SECTION_TITLE, ok: (p) => filled(guardianName(p)) },
+  guardian_name: { label: "Guardian Name", section: GUARDIAN_SECTION_TITLE, ok: (p) => filled(guardianName(p)) },
   counselor_name: { label: "Assigned Counselor", section: "Assignment", ok: (p) => filled(p.assigned_to) },
   assign_name: { label: "Assigned Counselor", section: "Assignment", ok: (p) => filled(p.assigned_to) },
-  emergency_contact_name: { label: "Emergency Contact Name", section: "Basic Details", ok: (p) => filled(p.emergency_contact_name) },
-  emergency_contact_phone: { label: "Emergency Contact No.", section: "Basic Details", ok: (p) => filled(p.emergency_contact_phone) },
   date_of_birth: { label: "Date of Birth", section: "Basic Details", ok: (p) => filled(p.date_of_birth) },
-  guardian_phone: { label: "Guardian Phone", section: "Guardian Details", ok: (p) => noGuardian(p) || filled(p.guardian_phone) },
-  guardian_email: { label: "Guardian Email", section: "Guardian Details", ok: (p) => noGuardian(p) || filled(p.guardian_email) },
-  guardian_relationship: { label: "Guardian Relationship", section: "Guardian Details", ok: (p) => filled(effectiveGuardian(p).relationship) },
+  guardian_phone: { label: "Guardian Phone", section: GUARDIAN_SECTION_TITLE, ok: (p) => noGuardian(p) || filled(p.guardian_phone) },
+  guardian_email: { label: "Guardian Email", section: GUARDIAN_SECTION_TITLE, ok: (p) => noGuardian(p) || filled(p.guardian_email) },
+  guardian_relationship: { label: "Guardian Relationship", section: GUARDIAN_SECTION_TITLE, ok: (p) => filled(effectiveGuardian(p).relationship) },
 };
 
 /** The distinct `{{placeholders}}` used in a template body. */

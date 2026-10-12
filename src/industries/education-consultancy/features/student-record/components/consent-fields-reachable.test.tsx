@@ -3,7 +3,7 @@
 // Guard (PR #614 review): on the education lead page, "Edit" opens the Student Details pop-up — it is
 // the ONLY editor. Consent refuses to go out while a required profile field is empty, so every field
 // consent can ask for MUST be editable in this pop-up, or the student's consent is stuck forever
-// (owner/admin override only). This once happened with Residence Country.
+// (owner/admin override only). This once happened with Residence Country (now {{country}} reads Nationality).
 //
 // The list of fields is derived from the consent rule itself (every placeholder, empty profile), so a
 // new consent requirement without an editor here fails this test.
@@ -52,7 +52,7 @@ describe("every field consent can require is editable in Student Details (educat
   const labels = everyConsentRequiredLabel();
 
   it("derives a real list (sanity)", () => {
-    expect(labels).toEqual(expect.arrayContaining(["First Name", "Field of Study", "Residence Country", "Date of Birth"]));
+    expect(labels).toEqual(expect.arrayContaining(["First Name", "Field of Study", "Nationality", "Date of Birth"]));
   });
 
   it.each(labels)("'%s' has an input in the pop-up's edit mode", async (label) => {

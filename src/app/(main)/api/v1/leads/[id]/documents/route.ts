@@ -40,5 +40,16 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     (byCategory[category] ??= []).push(doc);
   }
 
-  return apiSuccess({ documents, by_category: byCategory });
+  // Names for the files linked to a university application (migration 273), so the Documents section can
+  // group them under "University – Programme". Best effort: without it the files simply show ungrouped.
+  const applicationIds = [...new Set(documents.map((d) => d.application_id).filter((v): v is string => !!v))];
+  const applications: Record<string, { university_name: string; program_name: string }> = {};
+  if (applicationIds.length > 0) {
+    const { data: apps } = await db.from("applications").select("id, university_name, program_name").in("id", applicationIds);
+    for (const app of (apps ?? []) as unknown as { id: string; university_name: string; program_name: string }[]) {
+      applications[app.id] = { university_name: app.university_name, program_name: app.program_name };
+    }
+  }
+
+  return apiSuccess({ documents, by_category: byCategory, applications });
 }

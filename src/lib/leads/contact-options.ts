@@ -1,3 +1,5 @@
+import { COUNTRY_CODES } from "@/lib/country-codes";
+
 // Option lists for the lead's Residence Country and Preferred Contact. Shared by the inline Details
 // box (other industries) and the education Student Details pop-up, so the two can't offer different
 // choices for the same column.
@@ -12,3 +14,9 @@ export const CONTACT_METHODS = [
   { value: "whatsapp", label: "WhatsApp" },
   { value: "any", label: "Any" },
 ] as const;
+
+// Nationality dropdown: every country the phone-code picker knows (Nepal and India first, as there).
+// Stored as the plain country name, same as the free text it replaces.
+export const NATIONALITY_OPTIONS: readonly { value: string; label: string }[] = [
+  ...new Set(COUNTRY_CODES.map((c) => c.label)),
+].map((name) => ({ value: name, label: name }));

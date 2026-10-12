@@ -2,8 +2,26 @@ import { describe, expect, it } from "vitest";
 import { PERSONAL_DETAIL_COLUMNS, coercePersonalDetailsPayload } from "./personal-details";
 
 describe("coercePersonalDetailsPayload", () => {
-  it("covers the 14 migration-234 columns plus the 4 guardian columns (migrations 266, 269)", () => {
-    expect(PERSONAL_DETAIL_COLUMNS).toHaveLength(18);
+  it("covers the 14 migration-234 columns, the 4 guardian columns (266, 269) and the 5 address columns (272)", () => {
+    expect(PERSONAL_DETAIL_COLUMNS).toHaveLength(23);
+  });
+
+  it("saves the structured address parts as trimmed text and clears them with blanks", () => {
+    const { values, errors } = coercePersonalDetailsPayload({
+      address_province: " Bagmati ",
+      address_district: "Kathmandu",
+      address_municipality: "Kathmandu Metropolitan City",
+      address_ward: "5",
+      address_tole: "",
+    });
+    expect(errors).toEqual({});
+    expect(values).toEqual({
+      address_province: "Bagmati",
+      address_district: "Kathmandu",
+      address_municipality: "Kathmandu Metropolitan City",
+      address_ward: "5",
+      address_tole: null,
+    });
   });
 
   it("only returns columns present in the body", () => {

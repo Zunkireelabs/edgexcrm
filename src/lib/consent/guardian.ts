@@ -7,6 +7,13 @@
  * have no guardian (e.g. adult students) — the form shows "N/A" instead of blocking the consent.
  */
 
+/**
+ * The Student Details section the guardian fields live in. Named for what it is to the client: the
+ * guardian is also the emergency contact (there is no separate Emergency Contact any more). One constant,
+ * so the pop-up, the summary card, and consent's "what to fill in" lists can never name it differently.
+ */
+export const GUARDIAN_SECTION_TITLE = "Guardian Details / Emergency Contact";
+
 export const GUARDIAN_NOT_APPLICABLE = "None";
 export const NOT_APPLICABLE_TEXT = "N/A";
 

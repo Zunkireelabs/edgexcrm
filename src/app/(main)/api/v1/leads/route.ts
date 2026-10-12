@@ -56,6 +56,8 @@ import {
   emitSubmissionAudit,
   touchLastActivity,
 } from "@/lib/leads/dedup";
+import { pickDefaultListForStaff, type DefaultListCandidate } from "@/lib/leads/default-list";
+import { resolveSubmissionAttribution } from "@/lib/leads/submission-attribution";
 import { resolveLeadPipelineAndStage } from "@/lib/leads/pipeline-resolution";
 import { resolveLeadBranch, creationBranchForAssignee } from "@/lib/leads/branch-resolution";
 import { getPipelineLandingStage } from "@/lib/leads/pipeline-stage";
@@ -1158,7 +1160,33 @@ async function handlePost(request: NextRequest) {
   //   no counselor, lead-exec checker → Qualified (lead-exec owns it)
   //   no counselor, owner/admin/branch-mgr → Qualified (shared pool, assigned_to = null)
   // All other leads go to the intake list. Falls back to null if no matching list exists.
-  if (!body.list_id) {
+  // A non-admin staff member who creates a lead without a Stage must not have it routed
+  // to the staging intake list ("New Leads", owner/admin only) — they'd lose sight of
+  // their own lead. Place it in the first Stage they can open instead. Check-in keeps its
+  // own routing; admin/owner creates and form-widget leads are unchanged.
+  let requestedListId = (body.list_id as string | undefined) || null;
+  if (
+    !requestedListId &&
+    dashAuth &&
+    dashAuth.role !== "owner" &&
+    dashAuth.role !== "admin" &&
+    !body.form_config_id &&
+    body.intake_medium !== "check_in" &&
+    getFeatureAccess(tenant.industry_id, FEATURES.LEAD_LISTS)
+  ) {
+    const { data: tenantLists } = await supabase
+      .from("lead_lists")
+      .select("id, sort_order, is_staging, is_archive, is_intake, access")
+      .eq("tenant_id", tenantId);
+    const rows = (tenantLists ?? []) as unknown as (DefaultListCandidate & { is_intake: boolean })[];
+    if (rows.some((l) => l.is_intake && l.is_staging)) {
+      requestedListId = pickDefaultListForStaff(rows, (l) =>
+        canAccessList(dashAuth.permissions, l.access, dashAuth.positionId, l.id)
+      );
+    }
+  }
+
+  if (!requestedListId) {
     const isCheckIn = body.intake_medium === "check_in";
     const isContactOnly = isCheckIn && Array.isArray(body.tags) && (body.tags as string[]).includes("other");
     if (isCheckIn && !isContactOnly) {
@@ -1199,7 +1227,7 @@ async function handlePost(request: NextRequest) {
     }
     // isContactOnly → list_id stays null (no pipeline placement)
   } else {
-    const explicitListId = (body.list_id as string) ?? null;
+    const explicitListId = requestedListId;
     if (explicitListId) {
       const { data: listCheck } = await supabase
         .from("lead_lists")
@@ -1542,6 +1570,13 @@ async function handlePost(request: NextRequest) {
     return apiSuccess(updated, 200);
   }
 
+  // Staff-created leads (Add Lead, Check-in, Inbox convert) are "manual" with the
+  // creating user as the timeline actor; form-widget leads stay "public_form".
+  const submissionAttribution = resolveSubmissionAttribution({
+    dashboardUserId: dashAuth?.userId,
+    formConfigId: body.form_config_id,
+  });
+
   // Create path — run dedup when is_final (single-step form submissions)
   let createPhoneMatchIds: string[] = [];
   if (leadPayload.is_final === true) {
@@ -1561,7 +1596,7 @@ async function handlePost(request: NextRequest) {
           leadId: canonical.id,
           formConfigId: leadPayload.form_config_id as string | null,
           sessionId: leadPayload.session_id as string | null,
-          createdVia: "public_form",
+          createdVia: submissionAttribution.createdVia,
           idempotencyKey: idempotencyKey ?? null,
           firstName: leadPayload.first_name as string | null,
           lastName: leadPayload.last_name as string | null,
@@ -1600,6 +1635,8 @@ async function handlePost(request: NextRequest) {
 
       const createFoldFormName = await resolveFormName(supabase, leadPayload.form_config_id as string | null);
       void emitSubmissionAudit(supabase, {
+        userId: submissionAttribution.actorUserId,
+        createdVia: submissionAttribution.createdVia,
         tenantId,
         leadId: canonical.id,
         submissionId: submissionId ?? null,
@@ -1705,7 +1742,7 @@ async function handlePost(request: NextRequest) {
             raceSubmissionId = await recordSubmission(supabase, {
               tenantId,
               leadId: (raceMatch as Lead).id,
-              createdVia: "public_form",
+              createdVia: submissionAttribution.createdVia,
               idempotencyKey: idempotencyKey ?? null,
               email: leadPayload.email as string | null,
               normalizedEmail,
@@ -1716,6 +1753,8 @@ async function handlePost(request: NextRequest) {
           } catch { /* non-fatal */ }
           const raceFormName = await resolveFormName(supabase, leadPayload.form_config_id as string | null);
           void emitSubmissionAudit(supabase, {
+        userId: submissionAttribution.actorUserId,
+        createdVia: submissionAttribution.createdVia,
             tenantId,
             leadId: (raceMatch as Lead).id,
             submissionId: raceSubmissionId ?? null,
@@ -1810,7 +1849,7 @@ async function handlePost(request: NextRequest) {
         leadId: lead.id,
         formConfigId: (lead as Lead).form_config_id ?? null,
         sessionId: (lead as Lead).session_id ?? null,
-        createdVia: "public_form",
+        createdVia: submissionAttribution.createdVia,
         idempotencyKey: idempotencyKey ?? null,
         firstName: (lead as Lead).first_name,
         lastName: (lead as Lead).last_name,
@@ -1839,6 +1878,8 @@ async function handlePost(request: NextRequest) {
     void (async () => {
       const newLeadFormName = await resolveFormName(supabase, (lead as Lead).form_config_id ?? null);
       await emitSubmissionAudit(supabase, {
+        userId: submissionAttribution.actorUserId,
+        createdVia: submissionAttribution.createdVia,
         tenantId,
         leadId: lead.id,
         submissionId: newSubmissionId,
@@ -1858,6 +1899,7 @@ async function handlePost(request: NextRequest) {
       ? Promise.resolve()
       : createAuditLog({
           tenantId,
+          userId: submissionAttribution.actorUserId,
           action: "lead.created",
           entityType: "lead",
           entityId: lead.id,

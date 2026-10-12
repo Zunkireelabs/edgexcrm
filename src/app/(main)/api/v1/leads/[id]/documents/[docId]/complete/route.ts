@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { resolveApplicationLink } from "@/lib/documents/application-link";
 import { authenticateRequest } from "@/lib/api/auth";
 import { apiSuccess, apiUnauthorized, apiForbidden, apiNotFound, apiError, apiValidationError } from "@/lib/api/response";
 import { validate, required, isIn, isPositiveInt, maxLength, isUUID } from "@/lib/api/validation";
@@ -72,6 +73,16 @@ export async function POST(request: NextRequest, context: RouteContext) {
   });
   if (!valid) return apiValidationError(errors);
 
+  // Optional: pin this file to a university application (and the note it was attached in). Proven here,
+  // not trusted — the application must be this student's and the caller must be able to write to it.
+  const link = await resolveApplicationLink(auth, db, id, body.application_id, body.application_note_id);
+  if (!link.ok) {
+    if (link.code === "NOT_FOUND") return apiNotFound("Application");
+    if (link.code === "FORBIDDEN") return apiForbidden();
+    if (link.code === "DB_ERROR") return apiError("DB_ERROR", link.message, 500);
+    return apiValidationError({ [link.field ?? "application_id"]: [link.message] });
+  }
+
   const versionId = String(body.version_id);
   const originalFilename = String(body.original_filename);
   const resolvedMimeType = resolveDocumentMimeType(typeof body.mime_type === "string" ? body.mime_type : "", originalFilename);
@@ -128,6 +139,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
       status: "uploaded",
       description: body.description ? String(body.description) : null,
       uploaded_by: auth.userId,
+      // Only sent when linked, so an ordinary upload is byte-for-byte what it was before migration 273.
+      ...(link.applicationId ? { application_id: link.applicationId, application_note_id: link.noteId } : {}),
     })
     .select()
     .single();

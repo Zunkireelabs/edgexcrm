@@ -18,6 +18,10 @@ export interface ApplicantDocumentRow {
   verification_status: VerificationStatus;
   description: string | null;
   uploaded_by: string | null;
+  /** The university application this file belongs to (migration 273); null for a general student document. */
+  application_id?: string | null;
+  /** The application note it was attached in (migration 273). */
+  application_note_id?: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
