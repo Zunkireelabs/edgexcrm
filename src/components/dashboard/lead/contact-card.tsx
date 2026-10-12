@@ -6,6 +6,9 @@ import {
   ArrowLeft,
   Mail,
   Phone,
+  MapPin,
+  Globe,
+  type LucideIcon,
   MessageSquare,
   CheckSquare,
   MoreHorizontal,
@@ -35,7 +38,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { CopyButton } from "@/components/ui/copy-button";
+import { CopyButton, copyToClipboard } from "@/components/ui/copy-button";
 import { TruncatedText } from "@/components/ui/truncated-text";
 import { formatPhoneForTel, formatPhoneForWhatsApp } from "@/lib/phone-utils";
 import { getLeadLocationRows } from "@/lib/leads/lead-location";
@@ -186,6 +189,10 @@ interface ContactCardProps {
   convertedContactName?: string | null;
   onConvertClick?: () => void;
 }
+
+// Small leading icon for each contact line, so email / phone / place read at a glance.
+const CONTACT_ICON_CLASS = "h-3.5 w-3.5 shrink-0 text-muted-foreground";
+const LOCATION_ICONS: Record<string, LucideIcon> = { Nationality: Globe, City: MapPin };
 
 interface QuickActionButtonProps {
   icon: React.ReactNode;
@@ -453,30 +460,47 @@ export function ContactCard({
         {!isEditing && (
         <div className="space-y-1 mb-3">
           {lead.email && (
-            <div className="flex items-center justify-between gap-2 group">
-              <a href={`mailto:${lead.email}`} className="min-w-0 flex-1 hover:text-primary">
+            <div className="flex items-center gap-2 group">
+              <Mail className={CONTACT_ICON_CLASS} aria-hidden="true" />
+              <button
+                type="button"
+                title="Click to copy"
+                onClick={() => copyToClipboard(lead.email!, "Email")}
+                className="min-w-0 flex-1 cursor-pointer text-left hover:text-primary"
+              >
                 <TruncatedText text={lead.email} className="text-sm font-medium text-foreground" />
-              </a>
+              </button>
               <CopyButton value={lead.email} label="Email" className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
           )}
           {lead.phone && (
-            <div className="flex items-center justify-between group">
-              <a
-                href={`tel:${formatPhoneForTel(lead.phone)}`}
-                className="text-sm font-medium text-foreground hover:text-primary"
-              >
-                {lead.phone}
-              </a>
+            <div className="flex items-center justify-between gap-2 group">
+              <span className="flex min-w-0 items-center gap-2">
+                <Phone className={CONTACT_ICON_CLASS} aria-hidden="true" />
+                <button
+                  type="button"
+                  title="Click to copy"
+                  onClick={() => copyToClipboard(lead.phone!, "Phone")}
+                  className="cursor-pointer text-left text-sm font-medium text-foreground hover:text-primary"
+                >
+                  {lead.phone}
+                </button>
+              </span>
               <CopyButton value={lead.phone} label="Phone" className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
           )}
-          {getLeadLocationRows(lead).map((row) => (
-            <p key={row.label} className="text-sm">
-              <span className="text-muted-foreground">{row.label}: </span>
-              <span className="font-medium text-foreground">{displayCase(row.value)}</span>
-            </p>
-          ))}
+          {getLeadLocationRows(lead).map((row) => {
+            const RowIcon = LOCATION_ICONS[row.label] ?? MapPin;
+            return (
+              <p key={row.label} className="flex items-center gap-2 text-sm">
+                <span title={row.label} className="flex shrink-0">
+                  <RowIcon className={CONTACT_ICON_CLASS} aria-hidden="true" />
+                  <span className="sr-only">{row.label}: </span>
+                </span>
+                <span className="font-medium text-foreground">{displayCase(row.value)}</span>
+              </p>
+            );
+          })}
         </div>
         )}
 
