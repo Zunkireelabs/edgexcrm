@@ -21,12 +21,18 @@ async function fetchMembershipByLead(
 ): Promise<Map<string, LeadMembership>> {
   const byLead = new Map<string, LeadMembership>();
   const CHUNK_SIZE = 250;
-  for (let i = 0; i < leadIds.length; i += CHUNK_SIZE) {
-    const { data } = await supabase
-      .from("lead_branches")
-      .select("lead_id, branch_id, assigned_to, is_origin")
-      .eq("tenant_id", tenantId)
-      .in("lead_id", leadIds.slice(i, i + CHUNK_SIZE));
+  const chunks: string[][] = [];
+  for (let i = 0; i < leadIds.length; i += CHUNK_SIZE) chunks.push(leadIds.slice(i, i + CHUNK_SIZE));
+  const results = await Promise.all(
+    chunks.map((chunk) =>
+      supabase
+        .from("lead_branches")
+        .select("lead_id, branch_id, assigned_to, is_origin")
+        .eq("tenant_id", tenantId)
+        .in("lead_id", chunk),
+    ),
+  );
+  for (const { data } of results) {
     for (const r of (data ?? []) as Array<{ lead_id: string; branch_id: string; assigned_to: string | null; is_origin: boolean }>) {
       const list = byLead.get(r.lead_id) ?? [];
       list.push({ branch_id: r.branch_id, assigned_to: r.assigned_to ?? null, is_origin: r.is_origin ?? false });
