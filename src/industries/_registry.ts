@@ -62,6 +62,9 @@ export const FEATURES = {
   // Phase 1 (schema + storage + core API only; no sidebar item — surfaces as
   // a Lead Detail tab in a later phase). See docs/APPLICANT-DOCUMENTS-PHASE1-BRIEF.md.
   APPLICANT_DOCUMENTS: "applicant-documents",
+  // Industry-scoped (education_consultancy) — find archived leads in Global Search, preview them, and send them
+  // back to the pipeline (client request, Oct 2026). No sidebar item: it surfaces inside the Global Search palette.
+  ARCHIVED_LOOKUP: "archived-lookup",
   // Industry-scoped (it_agency) — email sequencing / cadence engine
   OUTREACH: "outreach",
   // Shared (education_consultancy today; other tenants buy this later — see
