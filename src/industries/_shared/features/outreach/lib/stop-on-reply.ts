@@ -53,6 +53,9 @@ export async function stopEnrollmentsOnReply(
     .from("sequence_enrollments")
     .select("id, sequence_id, status, stop_reason")
     .eq("lead_id", params.leadId)
+    // An inbound EMAIL reply only concerns the lead's email sequences. A text sequence keeps running (the SMS provider
+    // has no inbound replies, so SMS has no reply-stop of its own).
+    .eq("channel", "email")
     .in("status", ["active", "paused"]);
   if (error) {
     logger.error({ err: error, leadId: params.leadId }, "stopEnrollmentsOnReply: failed to load enrollments");
@@ -109,7 +112,7 @@ export async function stopEnrollmentsOnReply(
         result.ended++;
         // the lead is free again — start a sequence queued behind this one, if any
         const { promoteQueuedEnrollment } = await import("./queue-next");
-        await promoteQueuedEnrollment(params.tenantId, params.leadId);
+        await promoteQueuedEnrollment(params.tenantId, params.leadId, "email");
       } else {
         result.paused++;
       }

@@ -23,6 +23,7 @@ vi.mock("../hooks/use-sequences", () => ({
     sequences: [
       { id: "seq-1", name: "Welcome", auto_send: false },
       { id: "seq-2", name: "Nurture", auto_send: true },
+      { id: "seq-sms", name: "Text follow-up", auto_send: false, channel: "sms" },
     ],
   }),
 }));
@@ -62,10 +63,12 @@ let previewData: Record<string, unknown>;
 let runData: Record<string, unknown>;
 
 const basePreview = {
+  channel: "email",
+  sms: null,
   matched: 120,
   notVisible: 0,
   willEnroll: 120,
-  skipped: { noEmail: 3, malformedEmail: 0, duplicateEmail: 0, suppressed: 2, alreadyInSequence: 0 },
+  skipped: { noEmail: 3, malformedEmail: 0, duplicateEmail: 0, noPhone: 0, foreignNumber: 0, malformedPhone: 0, duplicatePhone: 0, suppressed: 2, alreadyInSequence: 0 },
   conflictPolicy: "skip",
   inOtherSequence: 0,
   willSwitch: 0,
@@ -232,3 +235,69 @@ describe("BulkEnrollDialog — started from a sequence (filter picker)", () => {
     expect(previewCalls()[0].body).toMatchObject({ sequence_id: "seq-1", source: { mode: "filter", tree } });
   });
 });
+
+describe("BulkEnrollDialog — SMS sequences", () => {
+  const smsPreview = (over: Record<string, unknown> = {}) => ({
+    ...basePreview,
+    channel: "sms",
+    willEnroll: 40,
+    skipped: { noEmail: 0, malformedEmail: 0, duplicateEmail: 0, noPhone: 4, foreignNumber: 1, malformedPhone: 2, duplicatePhone: 3, suppressed: 5, alreadyInSequence: 6 },
+    cap: { dailyCap: 0, sentToday: 0, remaining: 0 },
+    sms: { creditsFirstStep: 55, creditsAllSteps: 110, stepCount: 2, balance: 500, sufficientFirstStep: true, sufficientAllSteps: true },
+    sequence: { id: "seq-sms", name: "Text follow-up", auto_send: false, channel: "sms" },
+    ...over,
+  });
+  const pick = () => fireEvent.change(screen.getByLabelText("Sequence"), { target: { value: "seq-sms" } });
+
+  it("labels the SMS sequence in the picker", () => {
+    open();
+    expect(screen.getByText("Text follow-up · SMS")).toBeInTheDocument();
+  });
+
+  it("shows phone skip reasons (not email ones) and the credits instead of the daily email limit", async () => {
+    previewData = smsPreview();
+    open();
+    pick();
+    await screen.findByText(/will be enrolled/);
+    for (const label of ["No phone number", "Not a Nepal mobile number", "Invalid phone number", "Opted out of SMS", "Same number as another lead", "Already in an SMS sequence"]) {
+      expect(screen.getByText(label)).toBeInTheDocument();
+    }
+    expect(screen.queryByText("No email address")).toBeNull();
+    expect(screen.queryByText(/daily send limit/)).toBeNull();
+    expect(screen.getByText(/first texts need about/)).toBeInTheDocument();
+    expect(screen.getByText("55")).toBeInTheDocument();
+  });
+
+  it("warns when the credits don't cover the first texts (and when they only cover part of the sequence)", async () => {
+    previewData = smsPreview({ sms: { creditsFirstStep: 55, creditsAllSteps: 110, stepCount: 2, balance: 10, sufficientFirstStep: false, sufficientAllSteps: false } });
+    open();
+    pick();
+    await screen.findByText(/don't have enough credits for the first texts/);
+    cleanup();
+
+    previewData = smsPreview({ sms: { creditsFirstStep: 55, creditsAllSteps: 110, stepCount: 2, balance: 60, sufficientFirstStep: true, sufficientAllSteps: false } });
+    open();
+    pick();
+    await screen.findByText(/cover the first texts but not the whole sequence/);
+  });
+
+  it("uses text wording for auto-send and the sandbox warnings, and mentions quiet hours", async () => {
+    previewData = smsPreview({ sandbox: false, sequence: { id: "seq-sms", name: "Text follow-up", auto_send: true, channel: "sms" } });
+    open();
+    pick();
+    await screen.findByText(/nobody reviews the texts/);
+    expect(screen.getByText(/Texts go to the real leads, not a test number/)).toBeInTheDocument();
+    expect(screen.getByText(/never sent during your SMS quiet hours/)).toBeInTheDocument();
+  });
+
+  it("starts the SMS enrollment through the same Start request", async () => {
+    previewData = smsPreview({ willEnroll: 10 });
+    open();
+    pick();
+    await screen.findByText(/will be enrolled/);
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+    await waitFor(() => expect(calls.some((c) => c.url.endsWith("/bulk-enroll") && c.method === "POST")).toBe(true));
+    expect(calls.find((c) => c.url.endsWith("/bulk-enroll") && c.method === "POST")?.body).toMatchObject({ sequence_id: "seq-sms" });
+  });
+});
+

@@ -24,7 +24,7 @@ import { DateTimePicker } from "./time-of-day-picker";
 // type the action word first.
 
 export type BulkDraftAction = "send" | "schedule" | "skip";
-export type BulkDraftSelection = { mode: "ids"; ids: string[] } | { mode: "all"; due: "today" | "all" };
+export type BulkDraftSelection = { mode: "ids"; ids: string[] } | { mode: "all"; due: "today" | "all"; channel?: "email" | "sms" };
 
 interface BulkDraftDialogProps {
   open: boolean;
@@ -33,8 +33,10 @@ interface BulkDraftDialogProps {
   selection: BulkDraftSelection;
   /** How many drafts this will act on (the page's picks, or the whole matching total). */
   count: number;
-  /** The sandbox is on: emails go to the test address, not to the leads. */
+  /** The sandbox is on: messages go to the test address / number, not to the leads. */
   sandbox: boolean;
+  /** Which channel the drafts are on (the Outreach channel tab). Decides the wording: texts, credits, quiet hours. Defaults to email. */
+  channel?: "email" | "sms";
   onDone: () => void;
 }
 
@@ -66,8 +68,11 @@ export function BulkDraftDialog({
   selection,
   count,
   sandbox,
+  channel = "email",
   onDone,
 }: BulkDraftDialogProps) {
+  const isSms = channel === "sms";
+  const noun = isSms ? "text" : "email";
   const [sendAt, setSendAt] = useState("");
   const [confirmText, setConfirmText] = useState("");
   const [running, setRunning] = useState(false);
@@ -94,7 +99,7 @@ export function BulkDraftDialog({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         action,
-        selection: selection.mode === "ids" ? { mode: "ids", ids: selection.ids } : { mode: "all", due: selection.due },
+        selection: selection.mode === "ids" ? { mode: "ids", ids: selection.ids } : { mode: "all", due: selection.due, channel: selection.channel },
         confirm: needsConfirm ? true : undefined,
         ...extra,
       }),
@@ -105,14 +110,15 @@ export function BulkDraftDialog({
       applied: number;
       failed?: number;
       remaining: number;
-      skipped: { no_subject: number; no_email: number; not_available: number };
+      skipped: { no_subject: number; no_email: number; no_phone?: number; not_available: number };
       sandbox?: boolean;
     };
   };
 
-  const describeLeftOut = (s: { no_subject: number; no_email: number; not_available: number }) => {
+  const describeLeftOut = (s: { no_subject: number; no_email: number; no_phone?: number; not_available: number }) => {
     const parts = [
       s.no_email > 0 && `${s.no_email.toLocaleString()} with no email`,
+      (s.no_phone ?? 0) > 0 && `${s.no_phone!.toLocaleString()} with no usable phone number`,
       s.no_subject > 0 && `${s.no_subject.toLocaleString()} with no subject`,
       s.not_available > 0 && `${s.not_available.toLocaleString()} no longer available`,
     ].filter(Boolean);
@@ -137,18 +143,22 @@ export function BulkDraftDialog({
           if (data.remaining <= 0 || data.applied + (data.failed ?? 0) === 0) break;
         }
         toast.success(
-          `Skipped ${applied.toLocaleString()} email${applied === 1 ? "" : "s"}${failed > 0 ? ` (${failed.toLocaleString()} couldn't be skipped)` : ""}`,
+          `Skipped ${applied.toLocaleString()} ${noun}${applied === 1 ? "" : "s"}${failed > 0 ? ` (${failed.toLocaleString()} couldn't be skipped)` : ""}`,
         );
       } else if (action === "send") {
         const data = await request();
         toast.success(
-          `${data.applied.toLocaleString()} email${data.applied === 1 ? "" : "s"} queued — they go out over the next few minutes, within your daily limit.${describeLeftOut(data.skipped)}`,
+          `${data.applied.toLocaleString()} ${noun}${data.applied === 1 ? "" : "s"} queued — ${
+            isSms
+              ? "they go out over the next few minutes, as far as your SMS credits go."
+              : "they go out over the next few minutes, within your daily limit."
+          }${describeLeftOut(data.skipped)}`,
         );
       } else {
         const when = new Date(sendAt);
         const data = await request({ send_at: when.toISOString() });
         toast.success(
-          `${data.applied.toLocaleString()} email${data.applied === 1 ? "" : "s"} scheduled for ${formatDateTime12(when)}.${describeLeftOut(data.skipped)}`,
+          `${data.applied.toLocaleString()} ${noun}${data.applied === 1 ? "" : "s"} scheduled for ${formatDateTime12(when)}.${describeLeftOut(data.skipped)}`,
         );
       }
       onDone();
@@ -164,10 +174,10 @@ export function BulkDraftDialog({
 
   const title =
     action === "send"
-      ? `Send ${count.toLocaleString()} email${plural} now?`
+      ? `Send ${count.toLocaleString()} ${noun}${plural} now?`
       : action === "schedule"
-        ? `Schedule ${count.toLocaleString()} email${plural}?`
-        : `Skip ${count.toLocaleString()} email${plural}?`;
+        ? `Schedule ${count.toLocaleString()} ${noun}${plural}?`
+        : `Skip ${count.toLocaleString()} ${noun}${plural}?`;
 
   return (
     <Dialog open={open} onOpenChange={(o) => !running && onOpenChange(o)}>
@@ -176,10 +186,15 @@ export function BulkDraftDialog({
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
             {action === "send" &&
-              "EdgeX queues them and sends them over the next few minutes, within your daily send limit — anything over the limit goes out the next day."}
-            {action === "schedule" && "EdgeX sends them at the time you choose, within your daily send limit."}
+              (isSms
+                ? "EdgeX queues them and sends them over the next few minutes. Each text uses SMS credits — if the credits run out, the rest wait until credits are added."
+                : "EdgeX queues them and sends them over the next few minutes, within your daily send limit — anything over the limit goes out the next day.")}
+            {action === "schedule" &&
+              (isSms
+                ? "EdgeX sends them at the time you choose. Each text uses SMS credits."
+                : "EdgeX sends them at the time you choose, within your daily send limit.")}
             {action === "skip" &&
-              "Each lead moves on to the next step of their sequence without this email. This can't be undone."}
+              `Each lead moves on to the next step of their sequence without this ${noun}. This can't be undone.`}
           </DialogDescription>
         </DialogHeader>
 
@@ -190,6 +205,7 @@ export function BulkDraftDialog({
               <DateTimePicker id="bulk-draft-send-at" value={sendAt} onChange={setSendAt} min={toLocalInputValue(new Date())} />
               <p className="text-xs text-muted-foreground">
                 Your local time. At least 5 minutes from now, within 90 days.
+                {isSms && " Not during your SMS quiet hours."}
               </p>
             </div>
           )}
@@ -197,14 +213,14 @@ export function BulkDraftDialog({
           {action !== "skip" && sandbox && (
             <p className="flex items-start gap-1.5 rounded bg-amber-50 px-2 py-1.5 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              <span>Sandbox is on: these go to the configured test address, not to the leads.</span>
+              <span>Sandbox is on: these go to the configured test {isSms ? "number" : "address"}, not to the leads.</span>
             </p>
           )}
 
           {needsConfirm && (
             <div className="space-y-1.5">
               <Label htmlFor="bulk-draft-confirm">
-                Type <strong>{WORD[action]}</strong> to confirm ({count.toLocaleString()} emails)
+                Type <strong>{WORD[action]}</strong> to confirm ({count.toLocaleString()} {noun}s)
               </Label>
               <Input
                 id="bulk-draft-confirm"

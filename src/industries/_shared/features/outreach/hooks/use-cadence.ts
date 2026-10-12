@@ -12,6 +12,8 @@ export interface CadenceStepItem {
   sent_activity_id?: string | null;
   sent_via?: string | null;
   email_message_status?: string | null;
+  /** SMS sequences: what the SMS provider reported for the text (submitted / delivered / failed ...). */
+  sms_message_status?: string | null;
   body_html?: string;
   scheduled_send_at?: string | null;
   scheduled_error?: string | null;
@@ -25,7 +27,7 @@ export interface CadenceData {
     current_step_order: number;
     assigned_to: string | null;
   };
-  sequence: { id: string; name: string; total_steps: number; auto_send: boolean };
+  sequence: { id: string; name: string; total_steps: number; auto_send: boolean; channel?: "email" | "sms" };
   timeline: CadenceStepItem[];
 }
 

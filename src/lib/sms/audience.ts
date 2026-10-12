@@ -1,6 +1,11 @@
 import type { AuthContext } from "@/lib/api/auth";
 import type { FilterTree } from "@/lib/filters/types";
-import { resolveAudienceCore, type ChannelAdapter, type ResolveAudienceClients } from "@/lib/outbound/audience";
+import {
+  resolveAudienceCore,
+  resolveAudienceForLeadIdsCore,
+  type ChannelAdapter,
+  type ResolveAudienceClients,
+} from "@/lib/outbound/audience";
 import { toProviderRecipient, providerMsisdnToE164 } from "./phone";
 import { loadSuppressedPhones } from "./suppression";
 
@@ -35,6 +40,8 @@ export interface AudienceBreakdown {
     suppressed: number;
     duplicatePhone: number;
   };
+  /** Per-lead version of `excluded` (reason = the adapter key: noPhone / foreignNumber / malformed / duplicate). Optional so existing mocks of this shape still type-check. */
+  excludedRows?: { leadId: string; reason: string }[];
 }
 
 export type ResolveAudienceResult = { ok: true; audience: AudienceBreakdown } | { ok: false; errors: Record<string, string[]> };
@@ -95,6 +102,44 @@ export async function resolveAudience(
         suppressed: result.audience.excluded.suppressed,
         duplicatePhone: result.audience.excluded.duplicate,
       },
+      excludedRows: result.audience.excludedRows,
+    },
+  };
+}
+
+export interface LeadIdsAudience {
+  /** Distinct ids asked for; `audience.matched` is how many of them the caller may see (and are not deleted). */
+  requested: number;
+  audience: AudienceBreakdown & { excludedRows: { leadId: string; reason: string }[] };
+}
+
+/** Same SMS contactability rules as resolveAudience(), for a hand-picked set of lead ids (ticked rows). */
+export async function resolveAudienceForLeadIds(
+  auth: AuthContext,
+  leadIds: string[],
+  clients: ResolveAudienceClients
+): Promise<LeadIdsAudience> {
+  const { requested, audience } = await resolveAudienceForLeadIdsCore(auth, leadIds, clients, smsAdapter);
+  const toRow = (r: { leadId: string; contact: SmsContact; lead: Record<string, unknown> }): AudienceRow => ({
+    leadId: r.leadId,
+    phone: r.contact.msisdn,
+    phoneE164: r.contact.phoneE164,
+    lead: r.lead,
+  });
+  return {
+    requested,
+    audience: {
+      matched: audience.matched,
+      sendable: audience.sendable.map(toRow),
+      suppressed: audience.suppressed.map(toRow),
+      excluded: {
+        noPhone: audience.excluded.noPhone,
+        foreignNumber: audience.excluded.foreignNumber,
+        malformed: audience.excluded.malformed,
+        suppressed: audience.excluded.suppressed,
+        duplicatePhone: audience.excluded.duplicate,
+      },
+      excludedRows: audience.excludedRows,
     },
   };
 }

@@ -6,7 +6,9 @@ import { scopedClient } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES, INDUSTRIES } from "@/industries/_registry";
 import { isBulkEmailEnabledForTenant, isEmailOutboundSandbox } from "@/lib/email/outbound/flag";
+import { isSmsEnabledForTenant, isSmsSandbox } from "@/lib/sms/flag";
 import { skipDraft } from "@/industries/_shared/features/outreach/lib/engine";
+import { smsQuietHoursDeferral } from "@/industries/_shared/features/outreach/lib/send-draft-sms";
 import {
   BULK_DRAFT_CONFIRM_FROM,
   BULK_DRAFT_MAX,
@@ -46,21 +48,34 @@ export async function POST(request: NextRequest) {
   const { action, selection, sendAt, confirm } = parsed.value;
 
   const sending = action !== "skip";
-  if (sending) {
-    if (auth.industryId !== INDUSTRIES.EDUCATION_CONSULTANCY) return apiForbidden();
-    if (!(await isBulkEmailEnabledForTenant(auth.tenantId))) {
-      return apiConflict("Sending from EdgeX isn't turned on for your account, so these can't be sent.");
-    }
-  }
+  if (sending && auth.industryId !== INDUSTRIES.EDUCATION_CONSULTANCY) return apiForbidden();
 
   const db = await scopedClient(auth);
   const limit = sending ? BULK_DRAFT_MAX : SKIP_BATCH;
   const found = await resolveEligibleDrafts(db, auth, selection, { forSending: sending, limit });
 
-  const skipped = { no_subject: found.skipped.noSubject, no_email: found.skipped.noEmail, not_available: found.notAvailable };
+  const skipped = {
+    no_subject: found.skipped.noSubject,
+    no_email: found.skipped.noEmail,
+    no_phone: found.skipped.noPhone,
+    not_available: found.notAvailable,
+  };
+
+  // Send / Schedule need the gate of EACH channel the selection touches: emails need the tenant's bulk-email grant, texts
+  // need SMS turned on for the account and the permission to send SMS (texting many people spends shared credits — the
+  // same standing as an SMS blast). A mixed selection needs both.
+  const hasSms = found.eligible.some((d) => d.channel === "sms");
+  const hasEmail = found.eligible.some((d) => d.channel !== "sms");
+  if (sending && hasEmail && !(await isBulkEmailEnabledForTenant(auth.tenantId))) {
+    return apiConflict("Sending from EdgeX isn't turned on for your account, so these can't be sent.");
+  }
+  if (sending && hasSms) {
+    if (!(await isSmsEnabledForTenant(auth.tenantId))) return apiConflict("SMS isn't turned on for your account, so these texts can't be sent.");
+    if (!auth.permissions.canSendSms) return apiForbidden("You need SMS permission to send many texts at once.");
+  }
 
   if (found.eligible.length === 0) {
-    return apiError("NOTHING_TO_DO", "None of these drafts can be used — they may be sent already, not yours, paused, or missing a subject or email.", 422);
+    return apiError("NOTHING_TO_DO", "None of these drafts can be used — they may be sent already, not yours, paused, or missing a subject, email or phone number.", 422);
   }
   if (sending && found.truncated) {
     return apiError("TOO_MANY", `That is more than ${BULK_DRAFT_MAX.toLocaleString()} drafts — narrow it (for example "Show due today") and run it again.`, 422);
@@ -76,6 +91,23 @@ export async function POST(request: NextRequest) {
 
   if (sending) {
     const when = action === "send" ? new Date() : sendAt!;
+
+    // Texting many people is held to the tenant's SMS quiet hours, like a blast: a bulk Send now inside them, or a bulk
+    // Schedule for a time inside them, is refused with the time they end (one rep's own single Send now is not held back).
+    if (hasSms) {
+      const deferUntil = await smsQuietHoursDeferral(db, auth.tenantId, when);
+      if (deferUntil) {
+        return apiError(
+          "SMS_QUIET_HOURS",
+          action === "send"
+            ? "It's inside your SMS quiet hours right now, so these texts can't go out. Schedule them for later instead."
+            : "That time is inside your SMS quiet hours. Pick a later time.",
+          422,
+          { allowed_from: deferUntil.toISOString() }
+        );
+      }
+    }
+
     const applied = await scheduleDrafts(db, auth, ids, when);
     log.info({ action, applied, eligible: ids.length }, "Bulk draft send/schedule");
     return apiSuccess({
@@ -85,7 +117,8 @@ export async function POST(request: NextRequest) {
       remaining: 0,
       skipped,
       send_at: when.toISOString(),
-      sandbox: isEmailOutboundSandbox(),
+      // the sandbox that applies to what was sent (a mixed selection reports the stricter: either one being live is "live")
+      sandbox: (hasEmail ? isEmailOutboundSandbox() : true) && (hasSms ? isSmsSandbox() : true),
     });
   }
 

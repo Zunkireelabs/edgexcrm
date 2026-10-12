@@ -78,7 +78,7 @@ const T = "t1";
 function seed(opts: { seqStatus?: string; leadDeleted?: boolean; queueStatus?: string } = {}) {
   tables = {
     sequence_enrollment_queue: [
-      { id: "q1", lead_id: "lead-1", sequence_id: "seq-B", queued_by: "user-1", status: opts.queueStatus ?? "waiting", created_at: 1 },
+      { id: "q1", lead_id: "lead-1", sequence_id: "seq-B", queued_by: "user-1", status: opts.queueStatus ?? "waiting", created_at: 1, channel: "email" },
     ],
     email_sequences: [{ id: "seq-B", status: opts.seqStatus ?? "active" }],
     leads: [{ id: "lead-1", assigned_to: "rep-1", deleted_at: opts.leadDeleted ? "2026-10-01T00:00:00Z" : null }],
@@ -123,6 +123,20 @@ describe("startQueuedEnrollment", () => {
     expect(enrollCalls).toEqual([{ sequenceId: "seq-B", leadId: "lead-1", assignedTo: "rep-1", enrolledBy: "user-1" }]);
     expect(tables.sequence_enrollment_queue[0]).toMatchObject({ status: "started" });
     expect(tables.sequence_enrollment_queue[0].started_at).toEqual(expect.any(String));
+  });
+
+  it("starts only the row queued on the SAME channel: an ended email enrollment never starts a queued SMS sequence", async () => {
+    seed();
+    tables.sequence_enrollment_queue.push({ id: "q2", lead_id: "lead-1", sequence_id: "seq-S", queued_by: "user-1", status: "waiting", created_at: 2, channel: "sms" });
+    tables.email_sequences.push({ id: "seq-S", status: "active" });
+
+    expect(await startQueuedEnrollment(T, "lead-1", "email")).toBe("started");
+    expect(enrollCalls.map((c) => c.sequenceId)).toEqual(["seq-B"]);
+    expect(tables.sequence_enrollment_queue.find((q) => q.id === "q2")?.status).toBe("waiting");
+
+    enrollCalls = [];
+    expect(await startQueuedEnrollment(T, "lead-1", "sms")).toBe("started");
+    expect(enrollCalls.map((c) => c.sequenceId)).toEqual(["seq-S"]);
   });
 
   it("only ever starts a WAITING row (a started / cancelled one is not started twice)", async () => {

@@ -18,17 +18,26 @@ import {
 } from "@/industries/_shared/features/outreach/lib/validate-steps";
 import { ON_REPLY_VALUES, type OnReply } from "@/industries/_shared/features/outreach/lib/stop-on-reply";
 import { validateSendWindow } from "@/industries/_shared/features/outreach/lib/send-window";
+import { DEFAULT_OUTREACH_CHANNEL, isOutreachChannel } from "@/industries/_shared/features/outreach/lib/channel";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
   if (!getFeatureAccess(auth.industryId, FEATURES.OUTREACH)) return apiForbidden();
 
+  // ?channel=email|sms narrows the list to one channel; omitted returns every channel.
+  const channelParam = request.nextUrl.searchParams.get("channel");
+  if (channelParam !== null && !isOutreachChannel(channelParam)) {
+    return apiValidationError({ channel: ["Must be one of: email, sms"] });
+  }
+
   const db = await scopedClient(auth);
-  const { data, error } = await db
+  let query = db
     .from("email_sequences")
     .select("*, email_sequence_steps(*)")
-    .eq("status", "active")
+    .eq("status", "active");
+  if (channelParam) query = query.eq("channel", channelParam);
+  const { data, error } = await query
     .order("step_order", { referencedTable: "email_sequence_steps", ascending: true })
     .order("created_at", { ascending: false });
 
@@ -57,7 +66,12 @@ export async function POST(request: NextRequest) {
   });
   if (!valid) return apiValidationError(errors);
 
-  const stepsError = validateSequenceSteps(body.steps);
+  if (body.channel !== undefined && !isOutreachChannel(body.channel)) {
+    return apiValidationError({ channel: ["Must be one of: email, sms"] });
+  }
+  const channel = isOutreachChannel(body.channel) ? body.channel : DEFAULT_OUTREACH_CHANNEL;
+
+  const stepsError = validateSequenceSteps(body.steps, channel);
   if (stepsError) return apiValidationError({ steps: [stepsError] });
 
   if (body.on_reply !== undefined && !ON_REPLY_VALUES.includes(body.on_reply as OnReply)) {
@@ -74,6 +88,8 @@ export async function POST(request: NextRequest) {
     .insert({
       name: String(body.name).trim(),
       description: body.description ? String(body.description) : null,
+      // Which channel this sequence sends on (migration 274). Fixed at creation; email and SMS never mix.
+      channel,
       // OUTREACH-PHASE2-BRIEF.md §4 — sequence-level, not per-step or
       // per-tenant. Defaults false so a tenant that never sets it (every
       // it_agency sequence today) keeps the exact manual-copy behavior.

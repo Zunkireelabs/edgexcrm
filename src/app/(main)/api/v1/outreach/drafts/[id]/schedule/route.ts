@@ -6,6 +6,7 @@ import { scopedClient, type ScopedClient } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES, INDUSTRIES } from "@/industries/_registry";
 import { isBulkEmailEnabledForTenant } from "@/lib/email/outbound/flag";
+import { isSmsEnabledForTenant } from "@/lib/sms/flag";
 import type { AuthContext } from "@/lib/api/auth";
 
 type Props = { params: Promise<{ id: string }> };
@@ -17,6 +18,8 @@ const MAX_LEAD_MS = 90 * 24 * 60 * 60 * 1000;
 interface DraftRow {
   id: string;
   subject: string;
+  body_html: string;
+  channel: string | null;
   status: string;
   assigned_to: string | null;
 }
@@ -26,7 +29,7 @@ async function loadAllowedDraft(
   db: ScopedClient,
   id: string
 ): Promise<{ error: NextResponse } | { draft: DraftRow }> {
-  const { data } = await db.from("sequence_step_drafts").select("id, subject, status, assigned_to").eq("id", id).maybeSingle();
+  const { data } = await db.from("sequence_step_drafts").select("id, subject, body_html, channel, status, assigned_to").eq("id", id).maybeSingle();
   if (!data) return { error: apiNotFound("Draft") };
   const draft = data as unknown as DraftRow;
   const isAdminTier = auth.role === "owner" || auth.role === "admin";
@@ -63,11 +66,18 @@ export async function POST(request: NextRequest, { params }: Props) {
   if ("error" in loaded) return loaded.error;
   const { draft } = loaded;
 
-  if (!(await isBulkEmailEnabledForTenant(auth.tenantId))) {
+  // An SMS draft has no subject and is gated by the tenant's SMS grant, not the bulk-email one.
+  const isSms = draft.channel === "sms";
+  if (isSms) {
+    if (!(await isSmsEnabledForTenant(auth.tenantId))) {
+      return apiConflict("SMS isn't turned on for your account, so a text can't be scheduled.");
+    }
+  } else if (!(await isBulkEmailEnabledForTenant(auth.tenantId))) {
     return apiConflict("Sending from EdgeX isn't turned on for your account, so a send can't be scheduled.");
   }
   if (draft.status !== "pending") return apiConflict("This step was already sent or skipped.");
-  if (!draft.subject?.trim()) return apiError("SUBJECT_REQUIRED", "Add a subject before scheduling.", 422);
+  if (!isSms && !draft.subject?.trim()) return apiError("SUBJECT_REQUIRED", "Add a subject before scheduling.", 422);
+  if (isSms && !draft.body_html?.trim()) return apiError("MESSAGE_REQUIRED", "Write a message before scheduling.", 422);
 
   await db
     .from("sequence_step_drafts")

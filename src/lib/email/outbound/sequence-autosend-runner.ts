@@ -1,6 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { scopedClientForTenant } from "@/lib/supabase/scoped";
 import { sendDraftViaEdgeX } from "@/industries/_shared/features/outreach/lib/send-draft";
+import { sendDraftViaSms, smsQuietHoursDeferral } from "@/industries/_shared/features/outreach/lib/send-draft-sms";
 import { logger } from "@/lib/logger";
 
 // Auto-send worker for Outreach drip sequences — OUTREACH-PHASE2-BRIEF.md §5. Sends every step of an
@@ -53,6 +54,8 @@ interface DueDraftRow {
   subject: string;
   body_html: string;
   due_at: string;
+  channel: string | null;
+  sms_message_id: string | null;
 }
 
 export interface AutoSendSummary {
@@ -116,7 +119,7 @@ export async function processTenantAutoSendDrafts(tenantId: string): Promise<Aut
   for (const ids of chunk(sequenceIds, SEQUENCE_ID_CHUNK)) {
     const { data, error } = await db
       .from("sequence_step_drafts")
-      .select("id, lead_id, subject, body_html, due_at, sequence_enrollments!inner(status, sequence_id)")
+      .select("id, lead_id, subject, body_html, due_at, channel, sms_message_id, sequence_enrollments!inner(status, sequence_id)")
       .eq("status", "pending")
       .lte("due_at", nowIso)
       .eq("sequence_enrollments.status", "active")
@@ -143,7 +146,53 @@ export async function processTenantAutoSendDrafts(tenantId: string): Promise<Aut
       .eq("status", "pending");
   };
 
+  // SMS drafts share one credit balance: once it is empty, the rest of this pass skips SMS (email carries on).
+  let smsBlocked = false;
+
   for (const draft of due.slice(0, BATCH_SIZE)) {
+    if (draft.channel === "sms") {
+      if (smsBlocked) continue;
+      // Unattended texts honour the tenant's SMS quiet hours: hold the draft until the window opens (no send, no failure).
+      const deferUntil = await smsQuietHoursDeferral(db, tenantId);
+      if (deferUntil) {
+        await db.from("sequence_step_drafts").update({ due_at: deferUntil.toISOString() }).eq("id", draft.id).eq("status", "pending");
+        summary.skipped++;
+        continue;
+      }
+      const smsResult = await sendDraftViaSms(db, tenantId, draft);
+      switch (smsResult.status) {
+        case "sent":
+          summary.sent++;
+          break;
+        case "no_credits":
+        case "sms_disabled":
+          // Stays pending with its due time; the due-draft bell flags it. Stop texting for this pass.
+          summary.throttled++;
+          smsBlocked = true;
+          break;
+        case "no_phone":
+          summary.skipped++;
+          await retryLater(draft.id, RETRY_AFTER_HANDLED_MS, "This lead has no valid phone number.");
+          break;
+        case "failed":
+          summary.failed++;
+          await retryLater(draft.id, RETRY_AFTER_FAILED_MS, smsResult.errorMessage ?? "The text couldn't be sent.");
+          break;
+        case "already_handled":
+          summary.failed++;
+          await retryLater(
+            draft.id,
+            RETRY_AFTER_HANDLED_MS,
+            smsResult.errorMessage ?? `A previous send attempt ended as "${smsResult.messageStatus}".`
+          );
+          break;
+        case "already_sent":
+        case "in_progress":
+          break;
+      }
+      continue;
+    }
+
     const result = await sendDraftViaEdgeX(db, tenantId, draft);
 
     switch (result.status) {

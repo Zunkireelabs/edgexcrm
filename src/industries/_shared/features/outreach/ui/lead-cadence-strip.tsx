@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { useSequences } from "../hooks/use-sequences";
+import type { OutreachChannel } from "../lib/channel";
 import { formatDate } from "../lib/format-due";
 import { CadenceTimeline } from "./cadence-timeline";
 
@@ -44,15 +45,28 @@ interface LeadCadenceStripProps {
   leadEmail?: string | null;
 }
 
-export function LeadCadenceStrip({
+// A lead can run one EMAIL sequence and one SMS sequence at the same time (migration 274), so the strip shows one block per
+// channel, each with its own enrollment, sequence picker, pause / resume / unenroll and timeline.
+export function LeadCadenceStrip(props: LeadCadenceStripProps) {
+  return (
+    <div className="space-y-2">
+      <ChannelCadenceStrip channel="email" {...props} />
+      <ChannelCadenceStrip channel="sms" {...props} />
+    </div>
+  );
+}
+
+function ChannelCadenceStrip({
+  channel,
   leadId,
   isAdmin,
   currentUserId,
   leadFirstName = null,
   leadLastName = null,
   leadEmail = null,
-}: LeadCadenceStripProps) {
-  const { sequences } = useSequences();
+}: LeadCadenceStripProps & { channel: OutreachChannel }) {
+  const isSms = channel === "sms";
+  const { sequences } = useSequences(channel);
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
   const [nextDraftDueAt, setNextDraftDueAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -62,7 +76,7 @@ export function LeadCadenceStrip({
   const fetchEnrollment = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/v1/outreach/enrollments?lead_id=${leadId}`);
+      const res = await fetch(`/api/v1/outreach/enrollments?lead_id=${leadId}&channel=${channel}`);
       if (res.ok) {
         const json = await res.json();
         const rows = (json.data ?? []) as Enrollment[];
@@ -71,7 +85,7 @@ export function LeadCadenceStrip({
 
         if (live && live.status === "active") {
           // narrowed to THIS lead: the unfiltered list is capped at 1,000 rows and would miss the lead on a big tenant
-          const draftsRes = await fetch(`/api/v1/outreach/drafts?due=all&lead_id=${leadId}`);
+          const draftsRes = await fetch(`/api/v1/outreach/drafts?due=all&lead_id=${leadId}&channel=${channel}`);
           if (draftsRes.ok) {
             const draftsJson = await draftsRes.json();
             const pending = (draftsJson.data ?? []) as DraftRow[];
@@ -85,7 +99,7 @@ export function LeadCadenceStrip({
     } finally {
       setLoading(false);
     }
-  }, [leadId]);
+  }, [leadId, channel]);
 
   useEffect(() => {
     fetchEnrollment();
@@ -102,7 +116,7 @@ export function LeadCadenceStrip({
       });
       const json = await res.json();
       if (!res.ok) {
-        if (res.status === 409) toast.error("Lead is already in a sequence");
+        if (res.status === 409) toast.error(`Lead is already in ${isSms ? "an SMS" : "an email"} sequence`);
         else if (res.status === 404) toast.error(json?.error?.message ?? "Lead or sequence not found");
         else toast.error(json?.error?.message ?? "Failed to enroll lead");
         return;
@@ -142,6 +156,8 @@ export function LeadCadenceStrip({
   const canManage = isAdmin || enrollment?.assigned_to === currentUserId;
 
   if (!enrollment) {
+    // Don't nag accounts that have no SMS sequences: the SMS block only appears once there is one to join (or one running).
+    if (isSms && sequences.length === 0) return null;
     if (sequences.length === 0) {
       return (
         <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
@@ -155,10 +171,10 @@ export function LeadCadenceStrip({
     return (
       <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
         <GitBranch className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-        <span className="text-sm text-muted-foreground shrink-0">Not in a sequence</span>
+        <span className="text-sm text-muted-foreground shrink-0">{isSms ? "Not in an SMS sequence" : "Not in a sequence"}</span>
         <Select value={selectedSequenceId} onValueChange={setSelectedSequenceId}>
           <SelectTrigger className="h-8 w-56 ml-auto">
-            <SelectValue placeholder="Enroll in sequence..." />
+            <SelectValue placeholder={isSms ? "Enroll in SMS sequence..." : "Enroll in sequence..."} />
           </SelectTrigger>
           <SelectContent>
             {sequences.map((s) => (
@@ -183,7 +199,7 @@ export function LeadCadenceStrip({
       <div className="rounded-lg border bg-muted/30 px-3 py-2 space-y-1.5">
         <div className="flex items-center gap-2 flex-wrap">
           <GitBranch className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-          <span className="text-sm text-muted-foreground shrink-0">In sequence:</span>
+          <span className="text-sm text-muted-foreground shrink-0">{isSms ? "In SMS sequence:" : "In sequence:"}</span>
           <span className="text-sm font-medium truncate min-w-0 max-w-full">{sequenceName}</span>
           <span className="text-sm text-muted-foreground whitespace-nowrap">
             {" · Step "}

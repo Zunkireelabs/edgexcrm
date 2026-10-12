@@ -62,7 +62,7 @@ describe("GET sequence report", () => {
   it("builds the report with the sequence's own step numbers and returns it with the sequence", async () => {
     const res = await get();
     expect(res.status).toBe(200);
-    expect(buildMock).toHaveBeenCalledWith(expect.anything(), "seq-1", [1, 2, 4]);
+    expect(buildMock).toHaveBeenCalledWith(expect.anything(), "seq-1", [1, 2, 4], "email");
     expect(((await res.json()) as { data: { sequence: { name: string }; emails: { sent: number } } }).data).toMatchObject({
       sequence: { name: "Welcome" },
       emails: { sent: 1 },

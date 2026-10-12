@@ -12,6 +12,8 @@ import { createRequestLogger } from "@/lib/logger";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getFeatureAccess } from "@/industries/_loader";
+import { channelOf } from "@/industries/_shared/features/outreach/lib/channel";
+import { isSmsEnabledForTenant } from "@/lib/sms/flag";
 import { FEATURES } from "@/industries/_registry";
 import {
   BULK_ENROLL_CONFIRM_FROM,
@@ -52,14 +54,21 @@ export async function POST(request: NextRequest) {
   }
 
   const db = await scopedClient(auth);
-  const { data: sequence } = await db.from("email_sequences").select("id, status").eq("id", parsed.sequenceId).maybeSingle();
+  const { data: sequence } = await db.from("email_sequences").select("id, status, channel").eq("id", parsed.sequenceId).maybeSingle();
   if (!sequence || (sequence as unknown as { status: string }).status !== "active") return apiNotFound("Sequence");
+  const channel = channelOf(sequence as { channel?: string | null });
+  // Texting many people spends shared SMS credits, so it needs the same standing as sending an SMS blast: SMS turned on
+  // for the account AND the permission to send SMS. (Enrolling ONE lead stays open to everyone who can enrol.)
+  if (channel === "sms") {
+    if (!(await isSmsEnabledForTenant(auth.tenantId))) return apiForbidden("SMS isn't turned on for your account.");
+    if (!auth.permissions.canSendSms) return apiForbidden("You need SMS permission to enroll many leads in an SMS sequence.");
+  }
 
   const planned = await planBulkEnroll(
     auth,
     parsed.source,
     { user: await createClient(), service: await createServiceClient(), db },
-    { sequenceId: parsed.sequenceId, conflictPolicy }
+    { sequenceId: parsed.sequenceId, conflictPolicy, channel }
   );
   if (!planned.ok) return apiValidationError(planned.errors);
   const { plan } = planned;

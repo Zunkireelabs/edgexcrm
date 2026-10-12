@@ -100,7 +100,7 @@ describe("normalizeOnReply", () => {
 describe("stopEnrollmentsOnReply", () => {
   it("pauses an active enrollment by default and records why", async () => {
     const tables: Record<string, Row[]> = {
-      sequence_enrollments: [{ id: "e1", sequence_id: "s1", lead_id: "lead-1", status: "active" }],
+      sequence_enrollments: [{ id: "e1", sequence_id: "s1", lead_id: "lead-1", status: "active", channel: "email" }],
       email_sequences: [{ id: "s1", on_reply: "pause" }],
     };
     const { db, updates } = buildDb(tables);
@@ -117,9 +117,24 @@ describe("stopEnrollmentsOnReply", () => {
     );
   });
 
+  it("an email reply never touches the lead's SMS sequence", async () => {
+    const tables = {
+      sequence_enrollments: [
+        { id: "e1", sequence_id: "s1", lead_id: "lead-1", status: "active", channel: "email" },
+        { id: "esms", sequence_id: "s-sms", lead_id: "lead-1", status: "active", channel: "sms" },
+      ],
+      email_sequences: [{ id: "s1", on_reply: "pause" }, { id: "s-sms", on_reply: "pause" }],
+    };
+    const { db } = buildDb(tables);
+    const result = await stopEnrollmentsOnReply(db, P);
+    expect(result.paused).toBe(1);
+    expect(tables.sequence_enrollments.find((e) => e.id === "e1")?.status).toBe("paused");
+    expect(tables.sequence_enrollments.find((e) => e.id === "esms")?.status).toBe("active");
+  });
+
   it("treats a missing / unknown on_reply as pause", async () => {
     const tables: Record<string, Row[]> = {
-      sequence_enrollments: [{ id: "e1", sequence_id: "s1", lead_id: "lead-1", status: "active" }],
+      sequence_enrollments: [{ id: "e1", sequence_id: "s1", lead_id: "lead-1", status: "active", channel: "email" }],
       email_sequences: [{ id: "s1", on_reply: null }],
     };
     const { db } = buildDb(tables);
@@ -130,7 +145,7 @@ describe("stopEnrollmentsOnReply", () => {
 
   it("'end' unenrolls and skips the pending drafts (never the sent ones)", async () => {
     const tables: Record<string, Row[]> = {
-      sequence_enrollments: [{ id: "e1", sequence_id: "s1", lead_id: "lead-1", status: "active" }],
+      sequence_enrollments: [{ id: "e1", sequence_id: "s1", lead_id: "lead-1", status: "active", channel: "email" }],
       email_sequences: [{ id: "s1", on_reply: "end" }],
       sequence_step_drafts: [
         { id: "d1", enrollment_id: "e1", status: "pending" },
@@ -147,12 +162,12 @@ describe("stopEnrollmentsOnReply", () => {
     expect(tables.sequence_step_drafts.map((d) => d.status)).toEqual(["skipped", "sent", "pending"]);
     expect(emitEventMock).toHaveBeenCalledWith(expect.objectContaining({ type: "sequence.ended_on_reply" }));
     // ending frees the lead: a sequence queued behind this one starts
-    expect(promoteQueuedMock).toHaveBeenCalledWith("t1", "lead-1");
+    expect(promoteQueuedMock).toHaveBeenCalledWith("t1", "lead-1", "email");
   });
 
   it("'continue' leaves the enrollment completely alone", async () => {
     const tables: Record<string, Row[]> = {
-      sequence_enrollments: [{ id: "e1", sequence_id: "s1", lead_id: "lead-1", status: "active" }],
+      sequence_enrollments: [{ id: "e1", sequence_id: "s1", lead_id: "lead-1", status: "active", channel: "email" }],
       email_sequences: [{ id: "s1", on_reply: "continue" }],
     };
     const { db, updates } = buildDb(tables);
@@ -168,10 +183,10 @@ describe("stopEnrollmentsOnReply", () => {
   it("ignores enrollments that are not active (already paused / completed / unenrolled) and other leads", async () => {
     const tables: Record<string, Row[]> = {
       sequence_enrollments: [
-        { id: "e1", sequence_id: "s1", lead_id: "lead-1", status: "paused" },
-        { id: "e2", sequence_id: "s1", lead_id: "lead-1", status: "completed" },
-        { id: "e3", sequence_id: "s1", lead_id: "lead-1", status: "unenrolled" },
-        { id: "e4", sequence_id: "s1", lead_id: "someone-else", status: "active" },
+        { id: "e1", sequence_id: "s1", lead_id: "lead-1", status: "paused", channel: "email" },
+        { id: "e2", sequence_id: "s1", lead_id: "lead-1", status: "completed", channel: "email" },
+        { id: "e3", sequence_id: "s1", lead_id: "lead-1", status: "unenrolled", channel: "email" },
+        { id: "e4", sequence_id: "s1", lead_id: "someone-else", status: "active", channel: "email" },
       ],
       email_sequences: [{ id: "s1", on_reply: "pause" }],
     };
@@ -186,7 +201,7 @@ describe("stopEnrollmentsOnReply", () => {
 
   it("does nothing (and counts nothing) when a person changed it between the read and the write", async () => {
     const tables: Record<string, Row[]> = {
-      sequence_enrollments: [{ id: "e1", sequence_id: "s1", lead_id: "lead-1", status: "active" }],
+      sequence_enrollments: [{ id: "e1", sequence_id: "s1", lead_id: "lead-1", status: "active", channel: "email" }],
       email_sequences: [{ id: "s1", on_reply: "pause" }],
     };
     const { db } = buildDb(tables);
@@ -215,8 +230,8 @@ describe("stopEnrollmentsOnReply", () => {
   it("one enrollment failing to update doesn't stop the others", async () => {
     const tables: Record<string, Row[]> = {
       sequence_enrollments: [
-        { id: "e1", sequence_id: "s1", lead_id: "lead-1", status: "active" },
-        { id: "e2", sequence_id: "s2", lead_id: "lead-1", status: "active" },
+        { id: "e1", sequence_id: "s1", lead_id: "lead-1", status: "active", channel: "email" },
+        { id: "e2", sequence_id: "s2", lead_id: "lead-1", status: "active", channel: "email" },
       ],
       email_sequences: [
         { id: "s1", on_reply: "pause" },
@@ -235,7 +250,7 @@ describe("stopEnrollmentsOnReply", () => {
   it("a lead frozen by the sequence-level 'Pause all' who then replies is marked as replied, so 'Resume all' skips them", async () => {
     const tables: Record<string, Row[]> = {
       sequence_enrollments: [
-        { id: "e1", sequence_id: "s1", lead_id: "lead-1", status: "paused", stop_reason: "sequence_paused" },
+        { id: "e1", sequence_id: "s1", lead_id: "lead-1", status: "paused", channel: "email", stop_reason: "sequence_paused" },
       ],
       email_sequences: [{ id: "s1", on_reply: "pause" }],
     };
@@ -252,8 +267,8 @@ describe("stopEnrollmentsOnReply", () => {
   it("a rep's own pause (no stop reason) and an earlier reply stop are never overwritten", async () => {
     const tables: Record<string, Row[]> = {
       sequence_enrollments: [
-        { id: "e1", sequence_id: "s1", lead_id: "lead-1", status: "paused", stop_reason: null },
-        { id: "e2", sequence_id: "s1", lead_id: "lead-1", status: "paused", stop_reason: "replied" },
+        { id: "e1", sequence_id: "s1", lead_id: "lead-1", status: "paused", channel: "email", stop_reason: null },
+        { id: "e2", sequence_id: "s1", lead_id: "lead-1", status: "paused", channel: "email", stop_reason: "replied" },
       ],
       email_sequences: [{ id: "s1", on_reply: "pause" }],
     };
@@ -265,7 +280,7 @@ describe("stopEnrollmentsOnReply", () => {
 
   it("is idempotent: handling the same reply twice changes nothing the second time", async () => {
     const tables: Record<string, Row[]> = {
-      sequence_enrollments: [{ id: "e1", sequence_id: "s1", lead_id: "lead-1", status: "active" }],
+      sequence_enrollments: [{ id: "e1", sequence_id: "s1", lead_id: "lead-1", status: "active", channel: "email" }],
       email_sequences: [{ id: "s1", on_reply: "pause" }],
     };
     const { db } = buildDb(tables);
