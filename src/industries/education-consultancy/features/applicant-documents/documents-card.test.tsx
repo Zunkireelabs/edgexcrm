@@ -47,7 +47,9 @@ const TRANSCRIPT_DOC = {
   original_filename: "transcript.pdf",
 };
 
-function mockFetch(documents: typeof PASSPORT_DOC[]) {
+function mockFetch(initialDocuments: typeof PASSPORT_DOC[]) {
+  // The fake server's own list: a DELETE really removes the document, so the card's refetch after a delete agrees with it.
+  let documents = [...initialDocuments];
   return vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const method = init?.method ?? "GET";
@@ -59,6 +61,8 @@ function mockFetch(documents: typeof PASSPORT_DOC[]) {
       } as Response);
     }
     if (url.match(/\/api\/v1\/documents\/[\w-]+$/) && method === "DELETE") {
+      const id = url.split("/").pop();
+      documents = documents.filter((d) => d.id !== id);
       return Promise.resolve({ ok: true, json: async () => ({ data: { deleted: true } }) } as Response);
     }
     return Promise.resolve({ ok: false, status: 404, json: async () => ({ error: { message: "not found" } }) } as Response);
@@ -96,9 +100,9 @@ describe("ApplicantDocumentsCard", () => {
 
     await waitFor(() => expect(screen.getByText("passport.pdf")).toBeInTheDocument());
     expect(screen.getByText("transcript.pdf")).toBeInTheDocument();
-    // passport -> Identity, transcript -> Education (DOCUMENT_TYPE_CATEGORY)
-    expect(screen.getByText("Identity")).toBeInTheDocument();
-    expect(screen.getByText("Education")).toBeInTheDocument();
+    // passport -> Personal Identity, transcript -> Academic Records (DOCUMENT_TYPE_CATEGORY)
+    expect(screen.getByText("Personal Identity")).toBeInTheDocument();
+    expect(screen.getByText("Academic Records")).toBeInTheDocument();
     expect(screen.getByText("2")).toBeInTheDocument();
   });
 
@@ -108,7 +112,7 @@ describe("ApplicantDocumentsCard", () => {
     render(<ApplicantDocumentsCard leadId="lead-1" canManage={false} currentUserId="user-1" isAdmin={false} />);
 
     await waitFor(() => expect(screen.getByText("passport.pdf")).toBeInTheDocument());
-    expect(screen.queryByTitle("Upload document")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("Upload documents")).not.toBeInTheDocument();
   });
 
   it("REGRESSION (PR #533 review): hides Delete for an editor who can manage but did not upload the document", async () => {
@@ -226,7 +230,7 @@ describe("ApplicantDocumentsCard", () => {
     expect(screen.queryByText("file-3.pdf")).not.toBeInTheDocument();
     expect(screen.queryByText("file-0.pdf")).not.toBeInTheDocument();
     // no category headings, no search box, no grid toggle in the compact card
-    expect(screen.queryByText("Identity")).not.toBeInTheDocument();
+    expect(screen.queryByText("Personal Identity")).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText(/search by name or type/i)).not.toBeInTheDocument();
     expect(screen.queryByTitle(/switch to grid view/i)).not.toBeInTheDocument();
     // total count still reflects every document, and the link goes to the dedicated page

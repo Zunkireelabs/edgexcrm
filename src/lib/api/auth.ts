@@ -172,7 +172,9 @@ export function requireAdmin(auth: AuthContext): boolean {
 }
 
 export function requireLeadBranchAccess(
-  auth: AuthContext,
+  auth: Pick<AuthContext, "userId" | "branchId" | "branchMemberIds"> & {
+    permissions: Pick<ResolvedPermissions, "leadScope">;
+  },
   lead: { assigned_to: string | null; branch_id?: string | null },
   membership: LeadMembership,
 ): boolean {

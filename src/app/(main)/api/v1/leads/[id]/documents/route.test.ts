@@ -79,8 +79,8 @@ describe("GET /api/v1/leads/[id]/documents", () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.data.documents).toHaveLength(3);
-    expect(json.data.by_category.identity).toEqual([docs[0]]);
-    expect(json.data.by_category.education).toEqual([docs[1]]);
+    expect(json.data.by_category.personal_identity).toEqual([docs[0]]);
+    expect(json.data.by_category.academic_records).toEqual([docs[1]]);
     expect(json.data.by_category.financial).toEqual([docs[2]]);
   });
 });

@@ -1,5 +1,5 @@
-import type { DocumentType } from "@/lib/documents/constants";
-import { documentTypeLabel } from "./labels";
+import { DOCUMENT_TYPE_CATEGORY, type DocumentCategory, type DocumentType } from "@/lib/documents/constants";
+import { DOCUMENT_CATEGORY_ORDER, documentTypeLabel } from "./labels";
 
 // Logic for attaching SEVERAL documents at once (Student Details > Qualification cards / Passport & Citizenship).
 // Kept free of React so every rule — the file cap, what is accepted, how files are named — is unit tested.
@@ -80,16 +80,27 @@ export interface UploadItem {
   id: string;
   file: File;
   type: DocumentType;
-  /** What the document is called in Documents. Starts as the type's label ("Marksheet"). */
+  /** What the document is called in Documents. Starts as the type's label ("Marksheet") or the file's own name (see `NameFrom`). */
   name: string;
+  /**
+   * Optional "Linked qualification" (e.g. "bachelor"), chosen per file on the generic Documents card, where the level is not
+   * known from context. Ignored unless the type can be linked (see QUALIFICATION_LINKABLE_TYPES).
+   */
+  qualificationLevel?: string;
   status: ItemStatus;
   error?: string;
 }
 
 export const autoName = (type: DocumentType): string => documentTypeLabel(type);
 
-export function newItem(file: File, type: DocumentType, id: string): UploadItem {
-  return { id, file, type, name: autoName(type), status: "idle" };
+/**
+ * What a new file is called until someone types a name: its type's label ("Marksheet" — right on a Qualification card, where
+ * the type is known) or its own file name (right on the generic Documents card, where the default type is just "Other").
+ */
+export type NameFrom = "type" | "file";
+
+export function newItem(file: File, type: DocumentType, id: string, nameFrom: NameFrom = "type"): UploadItem {
+  return { id, file, type, name: nameFrom === "file" ? file.name : autoName(type), status: "idle" };
 }
 
 /**
@@ -99,6 +110,10 @@ export function newItem(file: File, type: DocumentType, id: string): UploadItem 
 export function changeType(item: UploadItem, type: DocumentType): UploadItem {
   const nameIsAutomatic = item.name === autoName(item.type);
   return { ...item, type, name: nameIsAutomatic ? autoName(type) : item.name, error: undefined };
+}
+
+export function changeQualificationLevel(item: UploadItem, level: string): UploadItem {
+  return { ...item, qualificationLevel: level || undefined, error: undefined };
 }
 
 export function changeName(item: UploadItem, name: string): UploadItem {
@@ -111,6 +126,20 @@ export const resolveName = (item: Pick<UploadItem, "name" | "file">): string => 
 /** Only these types can be tied to a qualification level (a passport has no meaningful link to one). */
 export const QUALIFICATION_LINKABLE_TYPES: readonly DocumentType[] = ["marksheet", "transcript", "certificate"];
 
+/**
+ * The qualification level sent with a file: only for a type that can be linked; the card's fixed level wins (a Qualification
+ * card already knows it); otherwise the per-file pick, and only where the picker is shown.
+ */
+export function qualificationLevelFor(
+  item: Pick<UploadItem, "type" | "qualificationLevel">,
+  opts: { fixedLevel?: string; pickerShown?: boolean }
+): string | undefined {
+  if (!QUALIFICATION_LINKABLE_TYPES.includes(item.type)) return undefined;
+  if (opts.fixedLevel) return opts.fixedLevel;
+  if (opts.pickerShown && item.qualificationLevel) return item.qualificationLevel;
+  return undefined;
+}
+
 export function summarizeBatch(total: number, failed: number): string {
   const ok = total - failed;
   const noun = (n: number) => `document${n === 1 ? "" : "s"}`;
@@ -118,3 +147,28 @@ export function summarizeBatch(total: number, failed: number): string {
   if (ok === 0) return `${failed} ${noun(failed)} failed to upload`;
   return `${ok} ${noun(ok)} uploaded, ${failed} failed`;
 }
+
+/** From this many choices up, a type list is shown under category headings (the full list has 19; a qualification card's has 5). */
+export const GROUP_TYPES_FROM = 8;
+
+export interface TypeOptionGroup {
+  category: DocumentCategory;
+  types: DocumentType[];
+}
+
+/**
+ * Arranges a document-type dropdown under the client's category headings (Personal Identity, Academic Records, ...), in the
+ * client's order, so the right type is found by what the document IS rather than by scrolling a long flat list. Inside a
+ * heading the types keep the order they came in. Returns null for a short list — a Qualification card's five choices read
+ * better flat — and the caller then renders it as it always did. Every type appears exactly once; none is dropped.
+ */
+export function groupTypeOptions(types: readonly DocumentType[]): TypeOptionGroup[] | null {
+  if (types.length < GROUP_TYPES_FROM) return null;
+  const groups: TypeOptionGroup[] = [];
+  for (const category of DOCUMENT_CATEGORY_ORDER) {
+    const inCategory = types.filter((t) => DOCUMENT_TYPE_CATEGORY[t] === category);
+    if (inCategory.length > 0) groups.push({ category, types: inCategory });
+  }
+  return groups;
+}
+

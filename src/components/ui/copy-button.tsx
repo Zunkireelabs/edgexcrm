@@ -6,6 +6,18 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
+/** Copy `value` and show the standard toast ("<label> copied"). Returns whether it worked. */
+export async function copyToClipboard(value: string, label?: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(value);
+    toast.success(label ? `${label} copied` : "Copied to clipboard");
+    return true;
+  } catch {
+    toast.error("Failed to copy");
+    return false;
+  }
+}
+
 interface CopyButtonProps {
   value: string;
   label?: string;
@@ -16,13 +28,9 @@ export function CopyButton({ value, label, className }: CopyButtonProps) {
   const [copied, setCopied] = useState(false);
 
   async function handleCopy() {
-    try {
-      await navigator.clipboard.writeText(value);
+    if (await copyToClipboard(value, label)) {
       setCopied(true);
-      toast.success(label ? `${label} copied` : "Copied to clipboard");
       setTimeout(() => setCopied(false), 2000);
-    } catch {
-      toast.error("Failed to copy");
     }
   }
 

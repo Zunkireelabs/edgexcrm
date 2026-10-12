@@ -5,11 +5,11 @@ import { AlertCircle, CheckCircle2, FileText, Loader2, Paperclip, X } from "luci
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatBytes } from "@/lib/format";
-import type { DocumentType } from "@/lib/documents/constants";
-import { documentTypeLabel } from "./labels";
+import { DOCUMENT_TYPE_CATEGORY, type DocumentType } from "@/lib/documents/constants";
+import { DOCUMENT_CATEGORY_LABELS, documentTypeLabel } from "./labels";
 import { QUALIFICATION_LEVEL_LABELS, type QualificationLevel } from "./document-upload-dialog";
 import { uploadApplicantDocument } from "./upload-document";
 import {
@@ -17,14 +17,34 @@ import {
   MAX_FILES_PER_BATCH,
   QUALIFICATION_LINKABLE_TYPES,
   changeName,
+  changeQualificationLevel,
   changeType,
   describeSkipped,
+  groupTypeOptions,
   newItem,
   pickFiles,
+  qualificationLevelFor,
   resolveName,
   summarizeBatch,
+  type NameFrom,
   type UploadItem,
 } from "./multi-upload";
+
+/**
+ * What the closed type dropdown shows on the grouped list: the type, with its category in small grey text under it
+ * ("Experience Letter" / "Work Experience & Gap"), so the filing is visible without reopening the list. A type whose name IS
+ * its category's name ("Other") is shown once.
+ */
+export function TypeWithCategory({ type }: { type: DocumentType }) {
+  const typeLabel = documentTypeLabel(type);
+  const categoryLabel = DOCUMENT_CATEGORY_LABELS[DOCUMENT_TYPE_CATEGORY[type]];
+  return (
+    <span className="flex flex-col items-start text-left leading-tight">
+      <span>{typeLabel}</span>
+      {categoryLabel !== typeLabel && <span className="text-[10px] font-normal text-muted-foreground">{categoryLabel}</span>}
+    </span>
+  );
+}
 
 /**
  * Attach several documents at once: choose up to 10 files, say what each one is (Marksheet, Transcript, ...) and
@@ -40,6 +60,8 @@ export function MultiDocumentUploadDialog({
   typeOptions,
   defaultType,
   fixedQualificationLevel,
+  showQualificationLevelPicker,
+  nameFrom = "type",
 }: {
   leadId: string;
   /** The files chosen when the dialog was opened; null = closed. */
@@ -52,6 +74,13 @@ export function MultiDocumentUploadDialog({
   defaultType: DocumentType;
   /** Set when opened from a specific Qualification card: shown as a fixed "Linked to" note. */
   fixedQualificationLevel?: QualificationLevel;
+  /**
+   * The generic Documents card does not know which qualification a file belongs to, so each file gets an optional
+   * "Linked qualification" picker (only for the types that can be linked). Ignored when a fixed level is given.
+   */
+  showQualificationLevelPicker?: boolean;
+  /** "type" (default): a new file is named after its type; "file": after its own file name (the generic Documents card). */
+  nameFrom?: NameFrom;
 }) {
   const [items, setItems] = useState<UploadItem[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -59,10 +88,12 @@ export function MultiDocumentUploadDialog({
   // A second click before React re-renders must not start a second upload of the same files.
   const busyRef = useRef(false);
   const open = files !== null;
+  // A long list of types is shown under the category headings; a short one stays flat.
+  const typeGroups = groupTypeOptions(typeOptions);
 
   // A fresh batch every time the dialog is opened with files.
   useEffect(() => {
-    if (files) setItems(files.map((f) => newItem(f, defaultType, crypto.randomUUID())));
+    if (files) setItems(files.map((f) => newItem(f, defaultType, crypto.randomUUID(), nameFrom)));
     // Reset only when a new set of files is handed in, not on every parent render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [files]);
@@ -72,7 +103,7 @@ export function MultiDocumentUploadDialog({
     const note = describeSkipped(result);
     if (note) toast.error(note);
     if (result.accepted.length > 0) {
-      setItems((prev) => [...prev, ...result.accepted.map((f) => newItem(f, defaultType, crypto.randomUUID()))]);
+      setItems((prev) => [...prev, ...result.accepted.map((f) => newItem(f, defaultType, crypto.randomUUID(), nameFrom))]);
     }
   }
 
@@ -89,8 +120,7 @@ export function MultiDocumentUploadDialog({
         file: item.file,
         documentType: item.type,
         name: resolveName(item),
-        qualificationLevel:
-          fixedQualificationLevel && QUALIFICATION_LINKABLE_TYPES.includes(item.type) ? fixedQualificationLevel : undefined,
+        qualificationLevel: qualificationLevelFor(item, { fixedLevel: fixedQualificationLevel, pickerShown: showQualificationLevelPicker }),
       });
       if (!result.ok) failed.push({ ...item, status: "failed", error: result.message });
       else setItems((prev) => prev.filter((p) => p.id !== item.id)); // saved: leaves the list
@@ -160,13 +190,33 @@ export function MultiDocumentUploadDialog({
                     onValueChange={(v) => setItems((prev) => prev.map((p) => (p.id === item.id ? changeType(p, v as DocumentType) : p)))}
                     disabled={uploading}
                   >
-                    <SelectTrigger id={`mu-type-${item.id}`} className="h-9 text-sm" aria-label={`Type for ${item.file.name}`}>
-                      <SelectValue />
+                    <SelectTrigger
+                      id={`mu-type-${item.id}`}
+                      // the grouped list shows the category under the type, so the trigger may be two lines tall
+                      className={typeGroups ? "h-auto text-sm data-[size=default]:h-auto data-[size=default]:min-h-9 py-1" : "h-9 text-sm"}
+                      aria-label={`Type for ${item.file.name}`}
+                    >
+                      <SelectValue>{typeGroups ? <TypeWithCategory type={item.type} /> : undefined}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      {typeOptions.map((t) => (
-                        <SelectItem key={t} value={t}>{documentTypeLabel(t)}</SelectItem>
-                      ))}
+                      {typeGroups
+                        ? typeGroups.map((g, index) => (
+                            <SelectGroup key={g.category}>
+                              {index > 0 && <SelectSeparator className="mx-0 my-1" />}
+                              {/* The heading stays pinned to the top of the list while you scroll through its group. */}
+                              <SelectLabel className="sticky top-0 z-10 bg-popover px-2 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-foreground/70">
+                                {DOCUMENT_CATEGORY_LABELS[g.category]}
+                              </SelectLabel>
+                              {g.types.map((t) => (
+                                <SelectItem key={t} value={t} className="py-1 pl-5">
+                                  {documentTypeLabel(t)}
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
+                          ))
+                        : typeOptions.map((t) => (
+                            <SelectItem key={t} value={t}>{documentTypeLabel(t)}</SelectItem>
+                          ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -184,6 +234,28 @@ export function MultiDocumentUploadDialog({
                   />
                 </div>
               </div>
+              {showQualificationLevelPicker && !fixedQualificationLevel && QUALIFICATION_LINKABLE_TYPES.includes(item.type) && (
+                <div>
+                  <label className="mb-1 block text-[11px] text-muted-foreground" htmlFor={`mu-level-${item.id}`}>Linked qualification (optional)</label>
+                  <Select
+                    value={item.qualificationLevel || "__none__"}
+                    onValueChange={(v) =>
+                      setItems((prev) => prev.map((p) => (p.id === item.id ? changeQualificationLevel(p, v === "__none__" ? "" : v) : p)))
+                    }
+                    disabled={uploading}
+                  >
+                    <SelectTrigger id={`mu-level-${item.id}`} className="h-9 text-sm" aria-label={`Linked qualification for ${item.file.name}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__" className="text-muted-foreground">Not linked</SelectItem>
+                      {(Object.keys(QUALIFICATION_LEVEL_LABELS) as QualificationLevel[]).map((lvl) => (
+                        <SelectItem key={lvl} value={lvl}>{QUALIFICATION_LEVEL_LABELS[lvl]}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               {item.status === "failed" && item.error && <p className="text-xs text-red-600">Not uploaded: {item.error}</p>}
             </div>
           ))}

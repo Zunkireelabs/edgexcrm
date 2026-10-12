@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useSyncExternalStore } from "react";
+import { Loader2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import {
@@ -69,6 +70,28 @@ export function LoadingTitle({
       ) : (
         <Skeleton className={cn("h-7", skeletonClassName)} />
       )}
+      <LoadingPercent />
+    </div>
+  );
+}
+
+/**
+ * Full-area page loader: a spinner centred in the content area with the loading percentage under
+ * it. Used by every `loading.tsx`. It renders `LoadingPercent`, so the navigation still counts as
+ * in flight while it is mounted and completes when the real page replaces it.
+ */
+export function PageLoader({ className }: { className?: string }) {
+  return (
+    <div
+      className={cn(
+        "flex min-h-[calc(100vh-140px)] flex-col items-center justify-center gap-3",
+        className,
+      )}
+    >
+      <Loader2
+        aria-hidden="true"
+        className="h-8 w-8 text-muted-foreground motion-safe:animate-spin"
+      />
       <LoadingPercent />
     </div>
   );

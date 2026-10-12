@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
-  MAX_FILES_PER_BATCH, autoName, changeName, changeType, describeSkipped, isSupportedFile, newItem, pickFiles,
-  resolveName, summarizeBatch,
+  MAX_FILES_PER_BATCH, autoName, changeName, changeQualificationLevel, changeType, describeSkipped, isSupportedFile, newItem,
+  pickFiles, qualificationLevelFor, resolveName, summarizeBatch, groupTypeOptions, GROUP_TYPES_FROM,
 } from "./multi-upload";
+import { DOCUMENT_TYPES, type DocumentType } from "@/lib/documents/constants";
 
 const file = (name: string, size = 10, lastModified = 1) => new File(["x".repeat(size)], name, { lastModified });
 
@@ -113,3 +114,95 @@ describe("summarizeBatch", () => {
     expect(summarizeBatch(2, 1)).toBe("1 document uploaded, 1 failed");
   });
 });
+
+describe("naming from the file (the generic Documents card)", () => {
+  it("a new file can start with its OWN name instead of its type's label", () => {
+    expect(newItem(file("scan001.pdf"), "other", "1", "file").name).toBe("scan001.pdf");
+    expect(newItem(file("scan001.pdf"), "other", "1").name).toBe("Other"); // the default is unchanged
+  });
+
+  it("changing the type of a file-named item keeps the file name (it is not the automatic type label)", () => {
+    const i = changeType(newItem(file("grade10.pdf"), "other", "1", "file"), "marksheet");
+    expect(i.type).toBe("marksheet");
+    expect(i.name).toBe("grade10.pdf");
+  });
+});
+
+describe("linked qualification", () => {
+  const it1 = (type: "marksheet" | "passport" | "other", level?: string) => ({ type, qualificationLevel: level });
+
+  it("changeQualificationLevel sets and clears the pick", () => {
+    const item = newItem(file("a.pdf"), "marksheet", "1");
+    expect(changeQualificationLevel(item, "bachelor").qualificationLevel).toBe("bachelor");
+    expect(changeQualificationLevel(changeQualificationLevel(item, "bachelor"), "").qualificationLevel).toBeUndefined();
+  });
+
+  it("only marksheets, transcripts and certificates can be linked", () => {
+    for (const type of ["marksheet", "transcript", "certificate"] as const) {
+      expect(qualificationLevelFor({ type, qualificationLevel: "see" }, { pickerShown: true })).toBe("see");
+    }
+    for (const type of ["passport", "other"] as const) {
+      expect(qualificationLevelFor(it1(type, "see"), { pickerShown: true })).toBeUndefined();
+    }
+  });
+
+  it("a card's fixed level wins over any pick", () => {
+    expect(qualificationLevelFor(it1("marksheet", "see"), { fixedLevel: "plus_two", pickerShown: true })).toBe("plus_two");
+    expect(qualificationLevelFor(it1("marksheet"), { fixedLevel: "plus_two" })).toBe("plus_two");
+  });
+
+  it("a pick is ignored where the picker is not shown", () => {
+    expect(qualificationLevelFor(it1("marksheet", "see"), {})).toBeUndefined();
+  });
+
+  it("nothing picked sends nothing", () => {
+    expect(qualificationLevelFor(it1("marksheet"), { pickerShown: true })).toBeUndefined();
+  });
+});
+
+describe("groupTypeOptions (the type dropdown under category headings)", () => {
+  it("arranges the full list under the client's nine headings, in his order, with Other last", () => {
+    const groups = groupTypeOptions(DOCUMENT_TYPES)!;
+    expect(groups.map((g) => g.category)).toEqual([
+      "personal_identity", "academic_records", "english_proficiency", "application_essays", "work_experience_gap",
+      "financial", "university_offers", "visa_predeparture", "enrollment", "other",
+    ]);
+    expect(groups.map((g) => g.types)).toEqual([
+      ["passport", "identity_document"],
+      ["marksheet", "transcript", "certificate"],
+      ["english_test_result"],
+      ["recommendation_letter", "statement_of_purpose"],
+      ["cv", "experience_letter", "gap_explanation"],
+      ["financial_document", "bank_statement"],
+      ["offer_letter", "conditional_offer", "unconditional_offer"],
+      ["visa_document"],
+      ["enrollment_document"],
+      ["other"],
+    ]);
+  });
+
+  it("every type appears exactly once — grouping never drops or duplicates a choice", () => {
+    const all = groupTypeOptions(DOCUMENT_TYPES)!.flatMap((g) => g.types);
+    expect([...all].sort()).toEqual([...DOCUMENT_TYPES].sort());
+    expect(new Set(all).size).toBe(all.length);
+  });
+
+  it("a short list stays flat (a Qualification card's five choices, a passport card's three)", () => {
+    expect(groupTypeOptions(["marksheet", "transcript", "certificate", "english_test_result", "other"])).toBeNull();
+    expect(groupTypeOptions(["passport", "identity_document", "other"])).toBeNull();
+  });
+
+  it(`switches to headings at ${GROUP_TYPES_FROM} choices`, () => {
+    const seven = DOCUMENT_TYPES.slice(0, GROUP_TYPES_FROM - 1);
+    expect(groupTypeOptions(seven)).toBeNull();
+    expect(groupTypeOptions(DOCUMENT_TYPES.slice(0, GROUP_TYPES_FROM))).not.toBeNull();
+  });
+
+  it("a long list that only touches some categories shows only those headings, keeping the order it was given within each", () => {
+    const list: DocumentType[] = ["transcript", "marksheet", "passport", "certificate", "english_test_result", "identity_document", "other", "cv"];
+    const groups = groupTypeOptions(list)!;
+    expect(groups.map((g) => g.category)).toEqual(["personal_identity", "academic_records", "english_proficiency", "work_experience_gap", "other"]);
+    expect(groups[1].types).toEqual(["transcript", "marksheet", "certificate"]); // given order inside a heading
+  });
+});
+
