@@ -15,6 +15,7 @@ import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { shouldRestrictToSelf } from "@/lib/api/permissions";
+import { PERMISSION_DENIED_MESSAGE } from "@/lib/permission-denied";
 import { canEnrollStudents } from "@/lib/api/class-attendance";
 import { getLeadMembership } from "@/lib/leads/branch-membership";
 
@@ -115,9 +116,9 @@ export async function PATCH(request: NextRequest, { params }: Props) {
       membership.some((m: { assigned_to: string | null }) => m.assigned_to === auth.userId)
     )
   ) {
-    return apiNotFound("Enrollment");
+    return apiForbidden(PERMISSION_DENIED_MESSAGE);
   }
-  if (!requireLeadBranchAccess(auth, parentLeadRow, membership)) return apiNotFound("Enrollment");
+  if (!requireLeadBranchAccess(auth, parentLeadRow, membership)) return apiForbidden(PERMISSION_DENIED_MESSAGE);
 
   const patch: Record<string, unknown> = {};
   if (body.fee_paid !== undefined) patch.fee_paid = Boolean(body.fee_paid);
@@ -216,9 +217,9 @@ export async function DELETE(_request: NextRequest, { params }: Props) {
       membership.some((m: { assigned_to: string | null }) => m.assigned_to === auth.userId)
     )
   ) {
-    return apiNotFound("Enrollment");
+    return apiForbidden(PERMISSION_DENIED_MESSAGE);
   }
-  if (!requireLeadBranchAccess(auth, parentLeadRow, membership)) return apiNotFound("Enrollment");
+  if (!requireLeadBranchAccess(auth, parentLeadRow, membership)) return apiForbidden(PERMISSION_DENIED_MESSAGE);
 
   // Soft delete (un-enroll)
   const { error } = await db

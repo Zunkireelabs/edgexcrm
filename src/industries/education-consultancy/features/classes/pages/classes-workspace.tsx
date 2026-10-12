@@ -4,6 +4,7 @@ import { useState, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { failureMessage } from "@/lib/permission-denied";
 import { Plus, Users, ClipboardCheck, Pencil, Loader2, Search, ArrowRight, TrendingUp, Wallet, CircleDollarSign } from "lucide-react";
 import { useSettingsModal } from "@/contexts/settings-modal-context";
 import { Badge } from "@/components/ui/badge";
@@ -215,7 +216,10 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
-      if (!res.ok) throw new Error("Failed to update status");
+      if (!res.ok) {
+        toast.error(failureMessage(res, "Failed to update status"));
+        return;
+      }
       toast.success("Status updated");
       handleRefresh();
     } catch {
@@ -240,7 +244,10 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
           fee_amount: row.demo.fee_amount,
         }),
       });
-      if (!res.ok) throw new Error("Failed to convert");
+      if (!res.ok) {
+        toast.error(failureMessage(res, "Failed to convert to actual class"));
+        return;
+      }
       toast.success("Converted to actual class");
       handleRefresh();
     } catch {
@@ -262,7 +269,10 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
           fee_amount: editFeeAmount.trim() ? Number(editFeeAmount) : null,
         }),
       });
-      if (!res.ok) throw new Error("Failed to update");
+      if (!res.ok) {
+        toast.error(failureMessage(res, "Failed to update fee"));
+        return;
+      }
       toast.success("Fee updated");
       setEditFeeTarget(null);
       handleRefresh();

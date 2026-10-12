@@ -18,6 +18,7 @@ import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { shouldRestrictToSelf } from "@/lib/api/permissions";
+import { PERMISSION_DENIED_MESSAGE } from "@/lib/permission-denied";
 import { canEnrollStudents } from "@/lib/api/class-attendance";
 import { getLeadMembership } from "@/lib/leads/branch-membership";
 
@@ -132,9 +133,9 @@ export async function POST(request: NextRequest) {
       membership.some((m: { assigned_to: string | null }) => m.assigned_to === auth.userId)
     )
   ) {
-    return apiNotFound("Lead");
+    return apiForbidden(PERMISSION_DENIED_MESSAGE);
   }
-  if (!requireLeadBranchAccess(auth, leadRow, membership)) return apiNotFound("Lead");
+  if (!requireLeadBranchAccess(auth, leadRow, membership)) return apiForbidden(PERMISSION_DENIED_MESSAGE);
 
   // Validate fields
   const feePaid = body.fee_paid === undefined ? false : Boolean(body.fee_paid);

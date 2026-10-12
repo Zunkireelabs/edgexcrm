@@ -26,6 +26,7 @@ import {
   DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
+import { failureMessage } from "@/lib/permission-denied";
 import { AddEnrollmentToLeadSheet } from "./add-enrollment-to-lead-sheet";
 
 interface Enrollment {
@@ -100,7 +101,10 @@ export function ClassesCard({ leadId, canManage }: ClassesCardProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fee_paid: false }),
       });
-      if (!res.ok) throw new Error("Failed to update");
+      if (!res.ok) {
+        toast.error(failureMessage(res, "Failed to update enrollment"));
+        return;
+      }
       toast.success("Marked unpaid");
       fetchEnrollments();
     } catch {
@@ -119,7 +123,10 @@ export function ClassesCard({ leadId, canManage }: ClassesCardProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      if (!res.ok) throw new Error("Failed to update");
+      if (!res.ok) {
+        toast.error(failureMessage(res, "Failed to update enrollment"));
+        return;
+      }
       toast.success("Marked paid");
       setMarkPaidTarget(null);
       fetchEnrollments();
@@ -139,7 +146,10 @@ export function ClassesCard({ leadId, canManage }: ClassesCardProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
-      if (!res.ok) throw new Error("Failed to update");
+      if (!res.ok) {
+        toast.error(failureMessage(res, "Failed to update status"));
+        return;
+      }
       toast.success("Status updated");
       fetchEnrollments();
     } catch {
@@ -154,7 +164,10 @@ export function ClassesCard({ leadId, canManage }: ClassesCardProps) {
     if (!confirm(`Un-enroll from ${className}?`)) return;
     try {
       const res = await fetch(`/api/v1/class-enrollments/${enrollment.id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Failed to un-enroll");
+      if (!res.ok) {
+        toast.error(failureMessage(res, "Failed to un-enroll"));
+        return;
+      }
       toast.success("Un-enrolled");
       fetchEnrollments();
     } catch {
