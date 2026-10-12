@@ -5,11 +5,36 @@ import { FEATURES } from "@/industries/_registry";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { leadQueryScope } from "@/lib/api/permissions";
 import { canEnrollStudents, canMarkClassAttendance, canViewFullRoster } from "@/lib/api/class-attendance";
-import { branchMemberIds } from "@/lib/leads/branch-membership";
+import { branchMemberIds, type LeadMembership } from "@/lib/leads/branch-membership";
+import { canActOnEnrollmentLead } from "@/lib/classes/enrollment-scope";
 import { visibleLeadsBase } from "@/lib/leads/visibility-query";
 import { POSITION_ROUTE_MAP } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
 import { ClassesWorkspace } from "@/industries/education-consultancy/features/classes/pages/classes-workspace";
 import type { SupabaseClient } from "@supabase/supabase-js";
+
+// Branch-share rows (lead_branches) for the roster's leads, in 250-ID chunks (URL-length safe).
+async function fetchMembershipByLead(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: SupabaseClient<any>,
+  tenantId: string,
+  leadIds: string[],
+): Promise<Map<string, LeadMembership>> {
+  const byLead = new Map<string, LeadMembership>();
+  const CHUNK_SIZE = 250;
+  for (let i = 0; i < leadIds.length; i += CHUNK_SIZE) {
+    const { data } = await supabase
+      .from("lead_branches")
+      .select("lead_id, branch_id, assigned_to, is_origin")
+      .eq("tenant_id", tenantId)
+      .in("lead_id", leadIds.slice(i, i + CHUNK_SIZE));
+    for (const r of (data ?? []) as Array<{ lead_id: string; branch_id: string; assigned_to: string | null; is_origin: boolean }>) {
+      const list = byLead.get(r.lead_id) ?? [];
+      list.push({ branch_id: r.branch_id, assigned_to: r.assigned_to ?? null, is_origin: r.is_origin ?? false });
+      byLead.set(r.lead_id, list);
+    }
+  }
+  return byLead;
+}
 
 // Fetch enrollments in 250-ID chunks to avoid Node/undici 16 KB URL limit.
 async function fetchEnrollmentsByLeadIds(
@@ -23,7 +48,7 @@ async function fetchEnrollmentsByLeadIds(
   const buildQ = (chunk?: string[]) => {
     let q = supabase
       .from("class_enrollments")
-      .select("*, leads!class_enrollments_lead_id_fkey(id,first_name,last_name,email,assigned_to)")
+      .select("*, leads!class_enrollments_lead_id_fkey(id,first_name,last_name,email,assigned_to,branch_id)")
       .eq("tenant_id", tenantId)
       .is("deleted_at", null)
       .order("created_at", { ascending: false });
@@ -102,7 +127,7 @@ export default async function ClassesRoute() {
       ? (async () => {
           const { data } = await supabase
             .from("class_enrollments")
-            .select("*, leads!class_enrollments_lead_id_fkey!inner(id,first_name,last_name,email,assigned_to)")
+            .select("*, leads!class_enrollments_lead_id_fkey!inner(id,first_name,last_name,email,assigned_to,branch_id)")
             .eq("tenant_id", tenantData.tenant.id)
             .is("deleted_at", null)
             .order("created_at", { ascending: false })
@@ -119,6 +144,28 @@ export default async function ClassesRoute() {
     is_active: boolean;
     end_date: string | null;
   }>;
+
+  // Per-student "may this user change it?" — the SAME rule the enrollment API enforces
+  // (canActOnEnrollmentLead), so the screen can say "no permission" on click instead of after Save.
+  // All-scope users (owner/admin) skip the branch-share lookup: they are never blocked.
+  const scopeSubject = {
+    userId: tenantData.userId,
+    branchId: tenantData.branchId ?? null,
+    branchMemberIds: teamMemberIds ?? [],
+    permissions: tenantData.permissions,
+  };
+  const membershipByLead =
+    tenantData.permissions.leadScope === "all" || enrollments.length === 0
+      ? new Map<string, LeadMembership>()
+      : await fetchMembershipByLead(supabase, tenantData.tenant.id, [...new Set(enrollments.map((e) => e.lead_id as string))]);
+  for (const e of enrollments) {
+    const lead = e.leads as { assigned_to: string | null; branch_id?: string | null } | null;
+    e.can_edit = canActOnEnrollmentLead(
+      scopeSubject,
+      { assigned_to: lead?.assigned_to ?? null, branch_id: lead?.branch_id ?? null },
+      membershipByLead.get(e.lead_id as string) ?? [],
+    );
+  }
 
   // Fees totals (aggregate amount + per-class collection %) are owner-only —
   // computed here, not in the client, so a non-owner is never handed a

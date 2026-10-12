@@ -16,6 +16,7 @@ import { FEATURES } from "@/industries/_registry";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { shouldRestrictToSelf } from "@/lib/api/permissions";
 import { PERMISSION_DENIED_MESSAGE } from "@/lib/permission-denied";
+import { canActOnEnrollmentLead } from "@/lib/classes/enrollment-scope";
 import { canEnrollStudents } from "@/lib/api/class-attendance";
 import { getLeadMembership } from "@/lib/leads/branch-membership";
 
@@ -109,16 +110,7 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   if (!parentLead) return apiNotFound("Enrollment");
   const parentLeadRow = parentLead as { id: string; assigned_to: string | null; branch_id: string | null };
   const membership = await getLeadMembership(supabase, auth.tenantId, parentLeadRow.id);
-  if (
-    shouldRestrictToSelf(auth.permissions) &&
-    !(
-      parentLeadRow.assigned_to === auth.userId ||
-      membership.some((m: { assigned_to: string | null }) => m.assigned_to === auth.userId)
-    )
-  ) {
-    return apiForbidden(PERMISSION_DENIED_MESSAGE);
-  }
-  if (!requireLeadBranchAccess(auth, parentLeadRow, membership)) return apiForbidden(PERMISSION_DENIED_MESSAGE);
+  if (!canActOnEnrollmentLead(auth, parentLeadRow, membership)) return apiForbidden(PERMISSION_DENIED_MESSAGE);
 
   const patch: Record<string, unknown> = {};
   if (body.fee_paid !== undefined) patch.fee_paid = Boolean(body.fee_paid);
@@ -210,16 +202,7 @@ export async function DELETE(_request: NextRequest, { params }: Props) {
   if (!parentLead) return apiNotFound("Enrollment");
   const parentLeadRow = parentLead as { id: string; assigned_to: string | null; branch_id: string | null };
   const membership = await getLeadMembership(supabase, auth.tenantId, parentLeadRow.id);
-  if (
-    shouldRestrictToSelf(auth.permissions) &&
-    !(
-      parentLeadRow.assigned_to === auth.userId ||
-      membership.some((m: { assigned_to: string | null }) => m.assigned_to === auth.userId)
-    )
-  ) {
-    return apiForbidden(PERMISSION_DENIED_MESSAGE);
-  }
-  if (!requireLeadBranchAccess(auth, parentLeadRow, membership)) return apiForbidden(PERMISSION_DENIED_MESSAGE);
+  if (!canActOnEnrollmentLead(auth, parentLeadRow, membership)) return apiForbidden(PERMISSION_DENIED_MESSAGE);
 
   // Soft delete (un-enroll)
   const { error } = await db
