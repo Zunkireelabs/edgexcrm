@@ -125,7 +125,11 @@ export default async function DashboardLayout({
         industryId={tenantData.tenant.industry_id ?? null}
         aiAssistantEnabled={aiAssistantEnabled}
       >
-        <GlobalSearchProvider navIndex={navIndex} currentUserId={user.id}>
+        <GlobalSearchProvider
+          navIndex={navIndex}
+          currentUserId={user.id}
+          archivedLookupEnabled={getFeatureAccess(tenantData.tenant.industry_id, FEATURES.ARCHIVED_LOOKUP)}
+        >
           <DashboardShell
             user={user}
             tenant={tenantData.tenant}

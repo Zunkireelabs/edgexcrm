@@ -51,12 +51,15 @@ interface GlobalSearchProviderProps {
   navIndex: NavResult[];
   /** Round 2 slice B: ⌘K quick-add stamps its own assignee (self). */
   currentUserId: string;
+  /** Education tenants: Global Search also finds archived leads (see archived-lookup). */
+  archivedLookupEnabled?: boolean;
 }
 
 export function GlobalSearchProvider({
   children,
   navIndex,
   currentUserId,
+  archivedLookupEnabled = false,
 }: GlobalSearchProviderProps) {
   const [isOpen, setIsOpen] = useState(false);
   // Default to ⌘K; updated after mount to avoid hydration mismatch
@@ -97,6 +100,7 @@ export function GlobalSearchProvider({
         onClose={close}
         navIndex={navIndex}
         currentUserId={currentUserId}
+        archivedLookupEnabled={archivedLookupEnabled}
       />
     </GlobalSearchContext.Provider>
   );
