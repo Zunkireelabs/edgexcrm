@@ -248,7 +248,7 @@ export function MultiDocumentUploadDialog({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__none__"><span className="text-muted-foreground">Not linked</span></SelectItem>
+                      <SelectItem value="__none__" className="text-muted-foreground">Not linked</SelectItem>
                       {(Object.keys(QUALIFICATION_LEVEL_LABELS) as QualificationLevel[]).map((lvl) => (
                         <SelectItem key={lvl} value={lvl}>{QUALIFICATION_LEVEL_LABELS[lvl]}</SelectItem>
                       ))}
