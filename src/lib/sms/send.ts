@@ -26,6 +26,7 @@ interface QueuedMessageRow {
   tenant_id: string;
   to_phone: string;
   body: string;
+  estimated_credits: number | null;
 }
 
 export interface SendQueuedBatchResult {
@@ -41,7 +42,7 @@ export async function sendQueuedBatch(tenantId: string, messageIds: string[]): P
 
   const { data: rows, error } = await db
     .from("sms_messages")
-    .select("id, tenant_id, to_phone, body")
+    .select("id, tenant_id, to_phone, body, estimated_credits")
     .in("id", messageIds)
     .in("status", ["queued", "deferred"]);
 
@@ -129,7 +130,7 @@ export async function sendQueuedBatch(tenantId: string, messageIds: string[]): P
     // row. The positional path survives only for sandboxed sends, where
     // SMS_TEST_RECIPIENTS redirection makes 1:1 phone matching genuinely
     // impossible and accuracy doesn't matter.
-    const { attributions, totalCreditsCharged: groupCredits, unmatched } = attributeProviderResults({
+    const { attributions, totalCreditsCharged: groupCredits, estimatedUnmatchedCredits, unmatched } = attributeProviderResults({
       messages: groupMessages,
       result: outcome.result,
       sandboxed: guarded.sandboxed,
@@ -137,8 +138,16 @@ export async function sendQueuedBatch(tenantId: string, messageIds: string[]): P
 
     if (unmatched.length > 0) {
       logger.warn(
-        { tenantId, unmatchedCount: unmatched.length, unmatchedIds: unmatched },
-        "sendQueuedBatch: recipient(s) found in neither provider valid[] nor invalid[] — provider-contract violation"
+        {
+          tenantId,
+          unmatchedCount: unmatched.length,
+          unmatchedIds: unmatched,
+          estimatedUnmatchedCredits,
+          sentTo: guarded.to.slice(0, 5),
+          providerValidMobiles: outcome.result.valid.slice(0, 5).map((v) => v.mobile),
+          providerInvalidMobiles: outcome.result.invalid.slice(0, 5).map((v) => v.mobile),
+        },
+        "sendQueuedBatch: recipient(s) found in neither provider valid[] nor invalid[] — left submitted-unconfirmed for the delivery poller to settle"
       );
     }
 
