@@ -117,6 +117,8 @@ export function ApplicantDocumentsCard({
       }
       toast.success("Document deleted");
       setDocs((prev) => prev.filter((d) => d.id !== doc.id));
+      // the other Documents card showing this student (tab + summary) refreshes too
+      notifyDocumentsChanged(leadId);
     } catch {
       toast.error("Failed to delete document");
     }
@@ -366,7 +368,7 @@ export function ApplicantDocumentsCard({
         leadId={leadId}
         files={pendingFiles}
         onClose={() => setPendingFiles(null)}
-        onUploaded={load}
+        onUploaded={() => notifyDocumentsChanged(leadId)}
         typeOptions={DOCUMENT_TYPES}
         defaultType="other"
         showQualificationLevelPicker

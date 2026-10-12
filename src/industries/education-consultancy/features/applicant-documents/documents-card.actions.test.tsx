@@ -44,7 +44,11 @@ beforeEach(() => {
       viewerCalls.push(url);
       return { ok: true, json: async () => ({ data: { url: "https://files.test/x.pdf" } }) } as Response;
     }
-    if (method === "DELETE") return { ok: true, json: async () => ({ data: { deleted: true } }) } as Response;
+    if (method === "DELETE") {
+      // the fake server really removes it, so the card's refetch after a delete agrees (like the real one)
+      documents = documents.filter((d) => !url.endsWith(`/${d.id}`));
+      return { ok: true, json: async () => ({ data: { deleted: true } }) } as Response;
+    }
     return { ok: false, status: 404, json: async () => ({}) } as Response;
   }) as unknown as typeof fetch;
 });

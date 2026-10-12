@@ -47,7 +47,9 @@ const TRANSCRIPT_DOC = {
   original_filename: "transcript.pdf",
 };
 
-function mockFetch(documents: typeof PASSPORT_DOC[]) {
+function mockFetch(initialDocuments: typeof PASSPORT_DOC[]) {
+  // The fake server's own list: a DELETE really removes the document, so the card's refetch after a delete agrees with it.
+  let documents = [...initialDocuments];
   return vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const method = init?.method ?? "GET";
@@ -59,6 +61,8 @@ function mockFetch(documents: typeof PASSPORT_DOC[]) {
       } as Response);
     }
     if (url.match(/\/api\/v1\/documents\/[\w-]+$/) && method === "DELETE") {
+      const id = url.split("/").pop();
+      documents = documents.filter((d) => d.id !== id);
       return Promise.resolve({ ok: true, json: async () => ({ data: { deleted: true } }) } as Response);
     }
     return Promise.resolve({ ok: false, status: 404, json: async () => ({ error: { message: "not found" } }) } as Response);
