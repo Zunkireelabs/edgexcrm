@@ -5,19 +5,24 @@
  * consent document that also prints `{{country}}`). A Nepal address is composed with the country as its last part
  * ("…, Bagmati, Nepal"), so showing both prints the country twice.
  *
- * Only a trailing comma-separated part that equals `country` (ignoring case and spaces) is dropped — repeatedly, so
- * "…, Nepal, Nepal" is cleaned too. A country in the middle, or an address that does not end with it, is left alone.
- * Never changes what is saved; display/merge time only.
+ * The address must END with the country as a whole, comma-separated part: "…, Nepal" or just "Nepal" (ignoring case and spaces).
+ * It is matched as a suffix of the whole text, not a split on commas, so a country whose own name contains a comma
+ * ("Korea, South") still matches. A country that is only the end of a longer word or name ("Nepalgunj", "Port Nepal"), a country
+ * in the middle, or an address that does not end with it, is left alone. A repeated trailing country ("…, Nepal, Nepal") is
+ * cleaned too. Never changes what is saved; display/merge time only.
  */
 export function stripTrailingCountry(address: string | null | undefined, country: string | null | undefined): string {
   let rest = (address ?? "").trim();
-  const target = (country ?? "").trim().toLowerCase();
-  if (!rest || !target) return rest;
+  const wanted = (country ?? "").trim();
+  if (!rest || !wanted) return rest;
+  const n = wanted.length;
+  const lowered = wanted.toLowerCase();
   for (;;) {
-    const cut = rest.lastIndexOf(",");
-    const last = (cut === -1 ? rest : rest.slice(cut + 1)).trim().toLowerCase();
-    if (last !== target) return rest;
-    if (cut === -1) return "";
-    rest = rest.slice(0, cut).trim();
+    if (rest.toLowerCase() === lowered) return "";
+    if (rest.length <= n || rest.slice(-n).toLowerCase() !== lowered) return rest;
+    // What comes before it must be a comma — otherwise the country is just the tail of a longer word or name.
+    const head = rest.slice(0, rest.length - n).trimEnd();
+    if (!head.endsWith(",")) return rest;
+    rest = head.slice(0, -1).trim();
   }
 }

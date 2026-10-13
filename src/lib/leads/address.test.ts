@@ -196,6 +196,20 @@ describe("stripTrailingCountry", () => {
     expect(stripTrailingCountry("Birta, Nepalgunj", "Nepal")).toBe("Birta, Nepalgunj");
   });
 
+  it("matches a country whose own name contains a comma (free-text country values)", () => {
+    expect(stripTrailingCountry("Gangnam, Seoul, Korea, South", "Korea, South")).toBe("Gangnam, Seoul");
+    expect(stripTrailingCountry("Seoul, korea, south", "Korea, South")).toBe("Seoul");
+    expect(stripTrailingCountry("Korea, South", "Korea, South")).toBe("");
+  });
+
+  it("does not match when the country is only the end of a longer word or name", () => {
+    expect(stripTrailingCountry("Birta, Nepalgunj", "Nepal")).toBe("Birta, Nepalgunj");
+    expect(stripTrailingCountry("Port Nepal", "Nepal")).toBe("Port Nepal");
+    expect(stripTrailingCountry("Bagmati,Nepal", "Nepal")).toBe("Bagmati");
+    expect(stripTrailingCountry("South Korea", "Korea, South")).toBe("South Korea");
+    expect(stripTrailingCountry("Seoul, Korea", "Korea, South")).toBe("Seoul, Korea");
+  });
+
   it("does nothing without a country, or without an address", () => {
     expect(stripTrailingCountry("Bagmati, Nepal", "")).toBe("Bagmati, Nepal");
     expect(stripTrailingCountry("Bagmati, Nepal", null)).toBe("Bagmati, Nepal");

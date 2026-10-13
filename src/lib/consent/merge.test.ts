@@ -307,6 +307,10 @@ describe("fillConsentTemplate — the country is printed once", () => {
     expect(fill("{{street_address}}, {{country}}", { fullAddress: "Bagmati, NEPAL" })).toBe("Bagmati, Nepal");
   });
 
+  it("a country whose own name contains a comma still prints once", () => {
+    expect(fill("Address: {{street_address}}, {{country}}", { fullAddress: "Gangnam, Seoul, Korea, South", country: "Korea, South" })).toBe("Address: Gangnam, Seoul, Korea, South");
+  });
+
   it("with no country on file the address is left exactly as saved", () => {
     expect(fill("Address: {{street_address}}, {{country}}", { country: null })).toBe(`Address: ${SAVED}`);
   });
