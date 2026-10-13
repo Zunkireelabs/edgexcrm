@@ -9,7 +9,7 @@ import { scopedClient } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { assertLeadVisible } from "@/lib/documents/access";
-import { DOCUMENT_TYPES, resolveDocumentMimeType } from "@/lib/documents/constants";
+import { DOCUMENT_TYPES, QUALIFICATION_LEVELS, resolveDocumentMimeType } from "@/lib/documents/constants";
 import { loadMaxDocumentSizeBytes } from "@/lib/documents/settings";
 import { buildDocumentStorageKey } from "@/lib/documents/storage-key";
 import { getDocumentStorageProvider } from "@/lib/documents/storage/r2-provider";
@@ -83,6 +83,15 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return apiValidationError({ [link.field ?? "application_id"]: [link.message] });
   }
 
+  // Optional: which academic level this document belongs to (Grade X, +2, Bachelor's, Master's) — the "Attach" button on a qualification
+  // card and the optional level picker in the upload dialog. It used to be sent and silently dropped. Only written when given, so an
+  // ordinary upload is byte-for-byte what it was before.
+  const rawLevel = body.qualification_level;
+  const hasLevel = rawLevel !== undefined && rawLevel !== null && rawLevel !== "";
+  if (hasLevel && !(QUALIFICATION_LEVELS as readonly unknown[]).includes(rawLevel)) {
+    return apiValidationError({ qualification_level: [`Must be one of: ${QUALIFICATION_LEVELS.join(", ")}`] });
+  }
+
   const versionId = String(body.version_id);
   const originalFilename = String(body.original_filename);
   const resolvedMimeType = resolveDocumentMimeType(typeof body.mime_type === "string" ? body.mime_type : "", originalFilename);
@@ -141,6 +150,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       uploaded_by: auth.userId,
       // Only sent when linked, so an ordinary upload is byte-for-byte what it was before migration 273.
       ...(link.applicationId ? { application_id: link.applicationId, application_note_id: link.noteId } : {}),
+      ...(hasLevel ? { qualification_level: String(rawLevel) } : {}),
     })
     .select()
     .single();

@@ -24,6 +24,8 @@ import { formatBytes } from "@/lib/format";
 import { DOCUMENT_TYPES, type DocumentType } from "@/lib/documents/constants";
 import { documentTypeLabel, DOCUMENT_CATEGORY_LABELS } from "./labels";
 import { MultiDocumentUploadDialog } from "./multi-document-upload-dialog";
+import { QUALIFICATION_LEVEL_LABELS } from "./document-upload-dialog";
+import type { QualificationLevel } from "@/lib/documents/constants";
 import { ACCEPTED_LABEL, ACCEPT_ATTR, describeSkipped, isSupportedFile, pickFiles } from "./multi-upload";
 
 interface ApplicantDocument {
@@ -39,6 +41,8 @@ interface ApplicantDocument {
   uploaded_by: string | null;
   created_at: string;
   application_id?: string | null;
+  /** Academic level the document is linked to (migration 240), if any. */
+  qualification_level?: string | null;
 }
 
 type ViewMode = "grid" | "list";
@@ -559,6 +563,9 @@ function DocumentTile({
           <div className="flex min-w-0 items-center gap-1.5 flex-wrap">
             <p className="text-[10px] text-muted-foreground">
               {documentTypeLabel(doc.document_type)}
+              {doc.qualification_level && QUALIFICATION_LEVEL_LABELS[doc.qualification_level as QualificationLevel] && (
+                <> · {QUALIFICATION_LEVEL_LABELS[doc.qualification_level as QualificationLevel]}</>
+              )}
               {formatBytes(doc.file_size) && <> · {formatBytes(doc.file_size)}</>}
               {doc.created_at && <> · Uploaded {formatRelativeTime(doc.created_at)}</>}
             </p>

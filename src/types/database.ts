@@ -255,6 +255,31 @@ export interface Lead {
   masters_gpa: string | null;
   masters_institution: string | null;
   masters_passed_year: number | null;
+  // Qualification details (education_consultancy — migration 236). DATE columns arrive as "YYYY-MM-DD".
+  see_address: string | null;
+  see_awarding_body: string | null;
+  see_start_date: string | null;
+  see_end_date: string | null;
+  plus_two_address: string | null;
+  plus_two_awarding_body: string | null;
+  plus_two_start_date: string | null;
+  plus_two_end_date: string | null;
+  plus_two_stream_faculty: string | null;
+  bachelor_address: string | null;
+  bachelor_awarding_body: string | null;
+  bachelor_start_date: string | null;
+  bachelor_end_date: string | null;
+  bachelor_stream_faculty: string | null;
+  masters_address: string | null;
+  masters_awarding_body: string | null;
+  masters_start_date: string | null;
+  masters_end_date: string | null;
+  masters_stream_faculty: string | null;
+  // Financial / sponsor details (education_consultancy — migration 239)
+  sponsor_name: string | null;
+  sponsor_relationship: string | null;
+  source_of_funds: string | null;
+  scholarship_loan: string | null;
   ielts_score: string | null;
   pte_score: string | null;
   toefl_score: string | null;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildLivePatch, personalDetailsFromLead, type CoreIdentity, type LeadSourceValues, type StudyInterest } from "./personal-details-dialog";
-import { emptyQualifications, type Qualifications } from "./qualifications-section";
+import { emptyQualifications, qualificationsFromLead, type Qualifications } from "./qualifications-section";
 import { createTestScore, type TestScore } from "./test-scores-section";
 import type { Lead } from "@/types/database";
 
@@ -101,8 +101,12 @@ describe("buildLivePatch — personal / passport details (migration 234)", () =>
     });
   });
 
-  it("never sends fields that have no column (e.g. sponsor_name)", () => {
-    expect(build({ sponsor_name: "Uncle" })).toEqual({});
+  it("never sends a key that is not a real column", () => {
+    expect(build({ not_a_column: "x", role: "owner" })).toEqual({});
+  });
+
+  it("sends the financial / sponsor fields — they are real columns now (migration 239)", () => {
+    expect(build({ sponsor_name: "Uncle", source_of_funds: "Bank loan" })).toEqual({ sponsor_name: "Uncle", source_of_funds: "Bank loan" });
   });
 });
 
@@ -134,5 +138,71 @@ describe("personalDetailsFromLead", () => {
     expect(
       buildLivePatch(core, core, study, study, emptyQualifications(), emptyQualifications(), [], [], source, source, seeded, seeded)
     ).toEqual({});
+  });
+});
+
+// The fields the client lost (WhatsApp, Oct 13): a qualification's Address of Institution, Awarding Body and Start / End Date (and
+// Stream) showed after Save but were empty after a refresh, because the dialog never sent them. They are real columns
+// (migration 236) — every one must be sent when changed, and must come back when the lead is reopened.
+describe("buildLivePatch — qualification details (migration 236)", () => {
+  const withEntry = (level: keyof Qualifications, over: Partial<Qualifications["see"]>): Qualifications => {
+    const q = emptyQualifications();
+    q[level] = { ...q[level], ...over };
+    return q;
+  };
+
+  it("sends Address, Awarding Body, Start Date and End Date for Grade X (SEE)", () => {
+    const quals = withEntry("see", { address: "Kathmandu", awardingBody: "NEB", startDate: "2014-04-01", endDate: "2019-03-31" });
+    expect(patchOf({ quals })).toEqual({
+      see_address: "Kathmandu",
+      see_awarding_body: "NEB",
+      see_start_date: "2014-04-01",
+      see_end_date: "2019-03-31",
+    });
+  });
+
+  it("uses each level's own column prefix (plus_two, bachelor, masters)", () => {
+    expect(patchOf({ quals: withEntry("plusTwo", { address: "Pokhara", startDate: "2019-06-01" }) })).toEqual({ plus_two_address: "Pokhara", plus_two_start_date: "2019-06-01" });
+    expect(patchOf({ quals: withEntry("bachelor", { awardingBody: "TU", endDate: "2023-07-01" }) })).toEqual({ bachelor_awarding_body: "TU", bachelor_end_date: "2023-07-01" });
+    expect(patchOf({ quals: withEntry("masters", { address: "Lalitpur" }) })).toEqual({ masters_address: "Lalitpur" });
+  });
+
+  it("sends Stream / Faculty from +2 onward, and never invents a column for Grade X", () => {
+    expect(patchOf({ quals: withEntry("plusTwo", { streamFaculty: "Science" }) })).toEqual({ plus_two_stream_faculty: "Science" });
+    expect(patchOf({ quals: withEntry("bachelor", { streamFaculty: "BBA" }) })).toEqual({ bachelor_stream_faculty: "BBA" });
+    expect(patchOf({ quals: withEntry("see", { streamFaculty: "Anything" }) })).toEqual({});
+  });
+
+  it("clears a saved value (null) when the field is emptied, and trims text", () => {
+    const original = withEntry("see", { address: "Old address", startDate: "2014-04-01" });
+    const patch = buildLivePatch(core, core, study, study, withEntry("see", { address: "  New address  ", startDate: "" }), original, [], [], source, source);
+    expect(patch).toEqual({ see_address: "New address", see_start_date: null });
+  });
+
+  it("sends nothing for an untouched qualification", () => {
+    const q = withEntry("see", { address: "Same", startDate: "2014-04-01" });
+    expect(buildLivePatch(core, core, study, study, q, q, [], [], source, source)).toEqual({});
+  });
+
+  it("ROUND TRIP: what the dialog sends comes back when the lead is reopened (the refresh the client did)", () => {
+    const typed = withEntry("plusTwo", {
+      institution: "National Academy", address: "Baneshwor", awardingBody: "NEB", startDate: "2019-06-01", endDate: "2021-05-30",
+      percentageGrade: "3.4", passedYear: "2021", streamFaculty: "Science",
+    });
+    const patch = patchOf({ quals: typed });
+    const reopened = qualificationsFromLead(patch as unknown as Lead);
+    expect(reopened.plusTwo).toEqual(typed.plusTwo);
+  });
+
+  it("shows nothing for a lead that has none of these saved yet, and strips a timestamp from a date", () => {
+    expect(qualificationsFromLead({} as unknown as Lead)).toEqual(emptyQualifications());
+    expect(qualificationsFromLead({ see_start_date: "2014-04-01T00:00:00+00:00" } as unknown as Lead).see.startDate).toBe("2014-04-01");
+  });
+});
+
+describe("personalDetailsFromLead — financial details", () => {
+  it("loads the saved sponsor details back", () => {
+    const v = personalDetailsFromLead({ sponsor_name: "Uncle", source_of_funds: "Bank loan", scholarship_loan: null } as unknown as Lead);
+    expect(v).toMatchObject({ sponsor_name: "Uncle", source_of_funds: "Bank loan", scholarship_loan: "" });
   });
 });
