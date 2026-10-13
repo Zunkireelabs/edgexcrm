@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Pause, Play, UserX, Loader2, GitBranch } from "lucide-react";
+import { Pause, Play, UserX, Loader2, GitBranch, Mail, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -16,6 +16,7 @@ import { useSequences } from "../hooks/use-sequences";
 import type { OutreachChannel } from "../lib/channel";
 import { formatDate } from "../lib/format-due";
 import { CadenceTimeline } from "./cadence-timeline";
+import type { LeadSubscriptions } from "../lib/lead-subscriptions";
 
 type EnrollmentStatus = "active" | "paused" | "completed" | "unenrolled";
 
@@ -43,11 +44,32 @@ interface LeadCadenceStripProps {
   leadFirstName?: string | null;
   leadLastName?: string | null;
   leadEmail?: string | null;
+  /**
+   * Read the lead's running sequence from GET /api/v1/leads/[id]/subscriptions (the lead's own visibility rules) instead of the
+   * outreach list, which only shows non-admins the enrollments assigned to them. Used by the Subscribed tab; the Emails tab keeps
+   * the original source.
+   */
+  readFromLead?: boolean;
+  /** Called after this strip enrolls / pauses / resumes / unenrolls, so a parent view can refresh too. */
+  onChanged?: () => void;
+  /**
+   * Show each channel in its own titled box ("Email sequence" / "SMS sequence"), side by side on wide screens, with the picker on its
+   * own line so nothing overflows. Used by the Subscribed tab; the Emails tab keeps the compact rows.
+   */
+  labelled?: boolean;
 }
 
 // A lead can run one EMAIL sequence and one SMS sequence at the same time (migration 274), so the strip shows one block per
 // channel, each with its own enrollment, sequence picker, pause / resume / unenroll and timeline.
 export function LeadCadenceStrip(props: LeadCadenceStripProps) {
+  if (props.labelled) {
+    return (
+      <div className="flex flex-col gap-3 md:flex-row">
+        <ChannelCadenceStrip channel="email" {...props} />
+        <ChannelCadenceStrip channel="sms" {...props} />
+      </div>
+    );
+  }
   return (
     <div className="space-y-2">
       <ChannelCadenceStrip channel="email" {...props} />
@@ -64,6 +86,9 @@ function ChannelCadenceStrip({
   leadFirstName = null,
   leadLastName = null,
   leadEmail = null,
+  readFromLead = false,
+  onChanged,
+  labelled = false,
 }: LeadCadenceStripProps & { channel: OutreachChannel }) {
   const isSms = channel === "sms";
   const { sequences } = useSequences(channel);
@@ -76,10 +101,24 @@ function ChannelCadenceStrip({
   const fetchEnrollment = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/v1/outreach/enrollments?lead_id=${leadId}&channel=${channel}`);
+      const res = await fetch(
+        readFromLead ? `/api/v1/leads/${leadId}/subscriptions` : `/api/v1/outreach/enrollments?lead_id=${leadId}&channel=${channel}`,
+      );
       if (res.ok) {
         const json = await res.json();
-        const rows = (json.data ?? []) as Enrollment[];
+        const rows: Enrollment[] = readFromLead
+          ? ((json.data as LeadSubscriptions | undefined)?.sequences ?? [])
+              .filter((r) => r.channel === channel)
+              .map((r) => ({
+                id: r.id,
+                sequence_id: r.sequenceId,
+                status: r.status,
+                current_step_order: r.currentStep,
+                assigned_to: r.assignedTo,
+                stop_reason: r.stopReason,
+                email_sequences: { name: r.sequenceName },
+              }))
+          : ((json.data ?? []) as Enrollment[]);
         const live = rows.find((r) => r.status === "active" || r.status === "paused");
         setEnrollment(live ?? null);
 
@@ -99,7 +138,7 @@ function ChannelCadenceStrip({
     } finally {
       setLoading(false);
     }
-  }, [leadId, channel]);
+  }, [leadId, channel, readFromLead]);
 
   useEffect(() => {
     fetchEnrollment();
@@ -123,6 +162,7 @@ function ChannelCadenceStrip({
       }
       toast.success("Lead enrolled");
       fetchEnrollment();
+      onChanged?.();
     } finally {
       setBusy(false);
     }
@@ -146,6 +186,7 @@ function ChannelCadenceStrip({
         action === "pause" ? "Sequence paused" : action === "resume" ? "Sequence resumed" : "Lead unenrolled",
       );
       fetchEnrollment();
+      onChanged?.();
     } finally {
       setBusy(false);
     }
@@ -158,6 +199,34 @@ function ChannelCadenceStrip({
   if (!enrollment) {
     // Don't nag accounts that have no SMS sequences: the SMS block only appears once there is one to join (or one running).
     if (isSms && sequences.length === 0) return null;
+    if (labelled) {
+      return (
+        <ChannelBox channel={channel}>
+          <p className="text-sm text-muted-foreground">Not running</p>
+          {sequences.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No {isSms ? "SMS " : ""}sequences yet — create one in Outreach &rsaquo; Sequences.</p>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2">
+              <Select value={selectedSequenceId} onValueChange={setSelectedSequenceId}>
+                <SelectTrigger className="h-8 min-w-0 flex-1 basis-40" aria-label={isSms ? "Enroll in SMS sequence" : "Enroll in email sequence"}>
+                  <SelectValue placeholder="Pick a sequence…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {sequences.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button type="button" size="sm" disabled={!selectedSequenceId || busy} onClick={handleEnroll}>
+                {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Enroll"}
+              </Button>
+            </div>
+          )}
+        </ChannelBox>
+      );
+    }
     if (sequences.length === 0) {
       return (
         <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
@@ -194,7 +263,7 @@ function ChannelCadenceStrip({
   const totalSteps = sequences.find((s) => s.id === enrollment.sequence_id)?.email_sequence_steps.length;
   const sequenceName = enrollment.email_sequences?.name ?? "Sequence";
 
-  return (
+  const running = (
     <div className="space-y-2">
       <div className="rounded-lg border bg-muted/30 px-3 py-2 space-y-1.5">
         <div className="flex items-center gap-2 flex-wrap">
@@ -261,5 +330,21 @@ function ChannelCadenceStrip({
         onChanged={fetchEnrollment}
       />
     </div>
+  );
+  return labelled ? <ChannelBox channel={channel}>{running}</ChannelBox> : running;
+}
+
+/** The titled box of one channel in the labelled layout. */
+function ChannelBox({ channel, children }: { channel: OutreachChannel; children: React.ReactNode }) {
+  const isSms = channel === "sms";
+  const Icon = isSms ? MessageSquare : Mail;
+  return (
+    <section className="min-w-0 flex-1 space-y-2 rounded-lg border bg-card p-3" aria-label={isSms ? "SMS sequence" : "Email sequence"}>
+      <h5 className="flex items-center gap-1.5 text-sm font-medium">
+        <Icon className={`h-4 w-4 ${isSms ? "text-emerald-600" : "text-blue-600"}`} />
+        {isSms ? "SMS sequence" : "Email sequence"}
+      </h5>
+      {children}
+    </section>
   );
 }
