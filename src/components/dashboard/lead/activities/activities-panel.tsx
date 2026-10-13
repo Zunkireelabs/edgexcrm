@@ -34,6 +34,7 @@ import { describeSubmission, humanizeIntakeValue } from "./lead-activity-labels"
 import { FEATURES } from "@/industries/_registry";
 import { LeadCadenceStrip } from "@/industries/_shared/features/outreach/ui/lead-cadence-strip";
 import { ApplicantDocumentsCard } from "@/industries/education-consultancy/features/applicant-documents/documents-card";
+import { FINANCIAL_COLUMNS, QUALIFICATION_DETAIL_COLUMNS } from "@/lib/leads/student-record-columns";
 
 // Lazy-load compose dialog so TipTap only loads when the modal is opened
 const ComposeEmailDialog = dynamic(
@@ -1320,6 +1321,9 @@ function getSystemActivityDescription(
       address_municipality: "address",
       address_ward: "address",
       address_tole: "address",
+      // Qualification details (migration 236) and financial details (migration 239): one label each, not 19 + 4 raw column names.
+      ...Object.fromEntries(QUALIFICATION_DETAIL_COLUMNS.map((c) => [c, "qualification details"])),
+      ...Object.fromEntries(FINANCIAL_COLUMNS.map((c) => [c, "financial details"])),
     };
     const seen = new Set<string>();
     const labels: string[] = [];

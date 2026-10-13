@@ -43,10 +43,10 @@ export type PersonalDetailColumn = (typeof PERSONAL_DETAIL_COLUMNS)[number];
 
 export const MARITAL_STATUSES = ["unmarried", "married"] as const;
 
-const TEXT_MAX_LENGTH = 500;
+export const TEXT_MAX_LENGTH = 500;
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
-function isRealCalendarDate(value: string): boolean {
+export function isRealCalendarDate(value: string): boolean {
   const m = ISO_DATE.exec(value);
   if (!m) return false;
   const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];

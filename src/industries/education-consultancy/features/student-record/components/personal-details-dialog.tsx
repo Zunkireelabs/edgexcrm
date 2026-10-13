@@ -33,9 +33,10 @@ import { QualificationsSection, qualificationsFromLead, type Qualifications } fr
 import { WorkExperienceSection, type WorkExperienceEntry } from "./work-experience-section";
 import { ReferencesSection, type ReferenceEntry } from "./references-section";
 import { GUARDIAN_RELATIONSHIP_OPTIONS, normalizeGuardianRelationship, guardianNameAfterRelationshipChange, resolveGuardian } from "@/lib/consent/guardian";
-import { SectionGroup, CardSection, FieldGrid, EditableField } from "./form-primitives";
+import { SectionGroup, CardSection, FieldGrid, EditableField, NotSavedBadge } from "./form-primitives";
 import { AttachDocumentButton } from "./attach-document-button";
 import { PERSONAL_DETAIL_COLUMNS, PERSONAL_DETAIL_DATE_COLUMNS } from "@/lib/leads/personal-details";
+import { FINANCIAL_COLUMNS } from "@/lib/leads/student-record-columns";
 import { getLeadCity, getLeadNationality } from "@/lib/leads/lead-location";
 
 /**
@@ -190,6 +191,8 @@ export function personalDetailsFromLead(lead: Lead): FieldValues {
     const raw = lead[col];
     out[col] = dateColumns.includes(col) ? (/^\d{4}-\d{2}-\d{2}/.exec(raw ?? "")?.[0] ?? "") : (raw ?? "");
   }
+  // Financial / sponsor details are real columns too (migration 239).
+  for (const col of FINANCIAL_COLUMNS) out[col] = lead[col] ?? "";
   // Older free-text values ("father") line up with the dropdown's options; anything else is kept as typed.
   out.guardian_relationship = normalizeGuardianRelationship(out.guardian_relationship);
   return out;
@@ -241,11 +244,12 @@ const QUALIFICATION_COLUMN_PREFIX: Record<keyof Qualifications, string> = {
  * (opened by the one Edit button on the contact card), so it also carries City, each
  * level's Passed Year, the five exam scores that have a column, and — for admins
  * only — Lead Source. It's held to the "only send what's whitelisted, never guess"
- * rule. The Personal / Passport & Citizenship fields (migration 234) are
- * real columns and are included. Everything else this dialog collects (the
- * richer Qualification fields, Work Experience/References, Financial) has no
- * live column or table yet, so it deliberately stays out of this payload —
- * sending it would just 500 against a column that doesn't exist.
+ * rule. The Personal / Passport & Citizenship fields (migration 234), the richer
+ * Qualification fields — address, awarding body, start/end date, stream
+ * (migration 236) — and the Financial fields (migration 239) are real columns
+ * and are included. The only things still left out are Work Experience,
+ * References and the per-exam score breakdown: they have a table but no API yet,
+ * so they stay on screen only (and are labelled "Not saved yet").
  *
  * Only fields that actually changed from their original (committed) value
  * are included — never blindly resend an untouched field. This isn't just
@@ -303,6 +307,15 @@ export function buildLivePatch(
     setIfChanged(`${prefix}_institution`, entry.institution || null, entryOriginal.institution || null);
     setIfChanged(`${prefix}_gpa`, entry.percentageGrade || null, entryOriginal.percentageGrade || null);
     setIfChanged(`${prefix}_passed_year`, entry.passedYear.trim() || null, entryOriginal.passedYear.trim() || null);
+    // Migration 236 columns.
+    setIfChanged(`${prefix}_address`, entry.address.trim() || null, entryOriginal.address.trim() || null);
+    setIfChanged(`${prefix}_awarding_body`, entry.awardingBody.trim() || null, entryOriginal.awardingBody.trim() || null);
+    setIfChanged(`${prefix}_start_date`, entry.startDate || null, entryOriginal.startDate || null);
+    setIfChanged(`${prefix}_end_date`, entry.endDate || null, entryOriginal.endDate || null);
+    // Grade X (SEE) has no stream column; every level from +2 onward does.
+    if (prefix !== "see") {
+      setIfChanged(`${prefix}_stream_faculty`, entry.streamFaculty.trim() || null, entryOriginal.streamFaculty.trim() || null);
+    }
   }
 
   // Exam scores: only the five exams with a real column are saved (see legacyScoreColumns).
@@ -318,7 +331,7 @@ export function buildLivePatch(
     setIfChanged("intake_account", source.account || null, sourceOriginal.account || null);
     setIfChanged("intake_campaign", source.campaign || null, sourceOriginal.campaign || null);
   }
-  for (const col of PERSONAL_DETAIL_COLUMNS) {
+  for (const col of [...PERSONAL_DETAIL_COLUMNS, ...FINANCIAL_COLUMNS]) {
     setIfChanged(col, (personal[col] ?? "").trim() || null, (personalOriginal[col] ?? "").trim() || null);
   }
   return patch;
@@ -411,8 +424,11 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
       draft, values
     );
     const hasLiveChanges = Object.keys(patch).length > 0;
+    // Work Experience / References have no API yet: they stay on screen only, and the toast says so.
+    const unsavedSectionsHaveData = workExperienceDraft.length > 0 || referencesDraft.length > 0;
     setIsSaving(true);
     try {
+      let saved: Lead | null = null;
       if (hasLiveChanges) {
         const res = await fetch(`/api/v1/leads/${lead.id}`, {
           method: "PATCH",
@@ -420,26 +436,43 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
           body: JSON.stringify(patch),
         });
         if (!res.ok) throw new Error("Failed to save");
-        onLeadUpdate?.(patch);
+        // The server answers with the row it actually STORED. That — not what was typed — is what the dialog shows
+        // afterwards, so a field that did not persist visibly reverts right away instead of only after a refresh.
+        const json = await Promise.resolve().then(() => res.json()).catch(() => null);
+        saved = (json?.data ?? null) as Lead | null;
+        onLeadUpdate?.(saved ?? patch);
       }
 
-      // Only commit local state — including the sections that don't persist
-      // yet — after the live save actually succeeds (or there was nothing
-      // live to save), so a failed save never silently discards what was typed.
-      setValues(draft);
-      setCoreIdentity(coreIdentityDraft);
-      setStudyInterest(studyDraft);
+      // Only commit local state after the live save actually succeeds (or there was nothing live to save), so a failed save
+      // never silently discards what was typed.
+      const fresh = saved ? ({ ...lead, ...saved } as Lead) : null;
+      if (fresh) {
+        setValues(personalDetailsFromLead(fresh));
+        setCoreIdentity(coreIdentityFromLead(fresh));
+        setStudyInterest(studyInterestFromLead(fresh, submissionHistory));
+        setQualifications(qualificationsFromLead(fresh));
+        setLeadSource(leadSourceFromLead(fresh, submissionHistory));
+      } else {
+        setValues(draft);
+        setCoreIdentity(coreIdentityDraft);
+        setStudyInterest(studyDraft);
+        setQualifications(qualificationsDraft);
+        setLeadSource(leadSourceDraft);
+      }
+      // Not stored anywhere yet (labelled "Not saved yet" on screen): kept in this dialog only.
       setTestScores(testScoresDraft);
-      setQualifications(qualificationsDraft);
       setWorkExperience(workExperienceDraft);
       setReferences(referencesDraft);
-      setLeadSource(leadSourceDraft);
       setIsEditing(false);
-      toast.success(
-        hasLiveChanges
-          ? "Saved. Financial, work experience and reference details are kept locally for preview only — they don't have a database column yet."
-          : "Saved locally for preview only — nothing in the real-save fields changed."
-      );
+      if (unsavedSectionsHaveData) {
+        toast.warning(
+          hasLiveChanges
+            ? "Saved — but work experience and references are not stored yet, so they will be empty after a refresh."
+            : "Work experience and references are not stored yet, so they will be empty after a refresh. Nothing else changed.",
+        );
+      } else {
+        toast.success(hasLiveChanges ? "Saved." : "Nothing to save — no changes were made.");
+      }
     } catch {
       toast.error("Failed to save — nothing was changed. Your edits are still here, try again.");
     } finally {
@@ -537,7 +570,7 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
             </div>
           </div>
           <p className="text-xs text-muted-foreground">
-            Name, email, phone, nationality, city, personal and passport details, Study Interest, qualifications (institution, grade, passed year), the main exam scores{isAdmin ? " and Lead Source" : ""} save for real. Financial, work experience and references are a preview — they save locally for now and will start saving for real once their database update is live.
+            Name, email, phone, nationality, city, address, personal and passport details, Study Interest, qualifications (institution, address, awarding body, dates, grade, passed year, stream), the main exam scores, financial details{isAdmin ? " and Lead Source" : ""} all save. Work experience, references and the exam score breakdown are not stored yet — they stay on screen only and are empty after a refresh.
           </p>
         </DialogHeader>
 
@@ -678,7 +711,7 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
               leadId={lead.id}
               canUploadDocuments={canUploadDocuments}
             />
-            <CardSection title="Test Scores">
+            <CardSection title="Test Scores" action={<NotSavedBadge>Score breakdown not saved yet</NotSavedBadge>}>
               <TestScoresSection
                 isEditing={isEditing}
                 value={isEditing ? testScoresDraft : testScores}
@@ -688,14 +721,14 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
           </SectionGroup>
 
           <SectionGroup title="Professional Information">
-            <CardSection title="Work Experience">
+            <CardSection title="Work Experience" action={<NotSavedBadge />}>
               <WorkExperienceSection
                 isEditing={isEditing}
                 value={isEditing ? workExperienceDraft : workExperience}
                 onChange={setWorkExperienceDraft}
               />
             </CardSection>
-            <CardSection title="References">
+            <CardSection title="References" action={<NotSavedBadge />}>
               <ReferencesSection
                 isEditing={isEditing}
                 value={isEditing ? referencesDraft : references}

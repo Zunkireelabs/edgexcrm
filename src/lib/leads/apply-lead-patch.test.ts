@@ -714,3 +714,89 @@ describe("applyLeadPatch — a Global lead becomes the assignee's branch lead", 
     expect(branchUpdates(db)).toHaveLength(0);
   });
 });
+
+// The fields the client lost (Oct 2026): qualification address / awarding body / start & end date / stream (migration 236) and financial
+// details (migration 239) were rejected by this pipeline, so the Student Details pop-up could not save them.
+describe("applyLeadPatch — student record columns (migrations 236 + 239)", () => {
+  const LEAD = { id: "lead-1", pipeline_id: "pipe-1", assigned_to: "user-1", branch_id: null, list_id: null, status: "s" };
+  const written = (db: Awaited<ReturnType<typeof setFakeDb>>) => ((db._updates.leads ?? []) as Array<Record<string, unknown>>);
+
+  it("saves them, trimmed, for the counselor who owns the lead", async () => {
+    const db = await setFakeDb({ leads: LEAD });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(
+      fixtureAuth(),
+      "lead-1",
+      {
+        see_address: "  Baneshwor, Kathmandu ",
+        see_awarding_body: "NEB",
+        see_start_date: "2014-04-01",
+        see_end_date: "2019-03-31",
+        plus_two_stream_faculty: "Science",
+        bachelor_address: "Lalitpur",
+        masters_end_date: "2025-06-30",
+        sponsor_name: " Uncle ",
+        source_of_funds: "Bank loan",
+      },
+      OPTS,
+    );
+    expect(outcome.kind).toBe("ok");
+    expect(written(db)[0]).toMatchObject({
+      see_address: "Baneshwor, Kathmandu",
+      see_awarding_body: "NEB",
+      see_start_date: "2014-04-01",
+      see_end_date: "2019-03-31",
+      plus_two_stream_faculty: "Science",
+      bachelor_address: "Lalitpur",
+      masters_end_date: "2025-06-30",
+      sponsor_name: "Uncle",
+      source_of_funds: "Bank loan",
+    });
+  });
+
+  it("an emptied field is cleared (null), not left as an empty string", async () => {
+    const db = await setFakeDb({ leads: LEAD });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(fixtureAuth(), "lead-1", { see_address: "   ", see_start_date: "", sponsor_name: null }, OPTS);
+    expect(outcome.kind).toBe("ok");
+    expect(written(db)[0]).toMatchObject({ see_address: null, see_start_date: null, sponsor_name: null });
+  });
+
+  it("rejects a bad date per column and writes nothing (a bad DATE would otherwise be an opaque 500)", async () => {
+    const db = await setFakeDb({ leads: LEAD });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(fixtureAuth(), "lead-1", { see_start_date: "04/01/2014", bachelor_end_date: "2023-02-30", see_address: "ok" }, OPTS);
+    expect(outcome).toEqual({
+      kind: "validation",
+      errors: { see_start_date: ["Must be a valid date (YYYY-MM-DD)"], bachelor_end_date: ["Must be a valid date (YYYY-MM-DD)"] },
+    });
+    expect(written(db)).toHaveLength(0);
+  });
+
+  it("rejects text that is too long", async () => {
+    const db = await setFakeDb({ leads: LEAD });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(fixtureAuth(), "lead-1", { masters_address: "x".repeat(501) }, OPTS);
+    expect(outcome).toMatchObject({ kind: "validation", errors: { masters_address: [expect.stringContaining("500")] } });
+    expect(written(db)).toHaveLength(0);
+  });
+
+  it("an own-scope counselor cannot write them on a lead that is not theirs (the existing scope rule still applies)", async () => {
+    const db = await setFakeDb({ leads: { ...LEAD, assigned_to: "someone-else" } });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(fixtureAuth(), "lead-1", { see_address: "x" }, OPTS);
+    expect(outcome.kind).not.toBe("ok");
+    expect(written(db)).toHaveLength(0);
+  });
+
+  it("only real columns pass through — an unknown key is not written", async () => {
+    const db = await setFakeDb({ leads: LEAD });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    await applyLeadPatch(fixtureAuth(), "lead-1", { see_address: "ok", see_not_a_column: "x", tenant_id: "other-tenant" }, OPTS);
+    const w = written(db)[0] ?? {};
+    expect(w).toMatchObject({ see_address: "ok" });
+    expect(w).not.toHaveProperty("see_not_a_column");
+    expect(w).not.toHaveProperty("tenant_id");
+  });
+});
+
