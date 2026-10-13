@@ -8,6 +8,7 @@ import {
   isNepal,
   municipalityOptions,
   provinceOptions,
+  stripTrailingCountry,
   wardOptions,
   type AddressField,
   type AddressParts,
@@ -59,7 +60,8 @@ export function AddressFields({ isEditing, parts, fullAddress, onPartChange, onF
           <EditableField
             field={{ key: "full_address", label: "Address", type: "text" }}
             isEditing={false}
-            value={fullAddress}
+            // A Nepal address is saved ending with the country; Country is shown right beside it, so don't print it twice.
+            value={stripTrailingCountry(fullAddress, parts.country)}
             onChange={() => {}}
           />
         </div>

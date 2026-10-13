@@ -8,6 +8,7 @@
  */
 
 import { resolveGuardian, NOT_APPLICABLE_TEXT } from "./guardian";
+import { stripTrailingCountry } from "@/lib/leads/address-text";
 
 export interface ConsentMergeData {
   student_name: string;
@@ -103,10 +104,16 @@ export function fillConsentTemplate(
   } = {},
 ): string {
   const map = data as unknown as Record<string, string | undefined>;
+  // A Nepal address is saved ending with the country ("…, Bagmati, Nepal"). When this document also prints {{country}}, the
+  // address is filled WITHOUT its trailing country so "Nepal" shows once. A template that prints only the address keeps it.
+  const printsCountry = /\{\{\s*country\s*\}\}/i.test(body) && !!map.country?.trim();
   const filled = body.replace(/\{\{\s*([a-z_]+)\s*\}\}/gi, (token, rawKey: string) => {
     const key = rawKey.toLowerCase();
     if (Object.prototype.hasOwnProperty.call(data, key)) {
-      const value = map[key];
+      let value = map[key];
+      if (value && printsCountry && (key === "full_address" || key === "street_address")) {
+        value = stripTrailingCountry(value, map.country);
+      }
       if (value) return value;
       if (options.deferBlank?.has(key)) return token; // signer will fill this in
       return options.blankAs ?? EMPTY;
