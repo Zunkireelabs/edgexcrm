@@ -13,6 +13,16 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -448,7 +458,9 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
     setIsEditing(false);
   };
 
-  const save = async () => {
+  // What the user has changed since opening Edit, worked out exactly the way Save sends it. The save, the "Save these changes?" box and the
+  // "Discard unsaved changes?" box all use this one answer, so they can never disagree about whether something changed.
+  const computeChanges = () => {
     const patch = buildLivePatch(
       coreIdentityDraft, coreIdentity,
       studyDraft, studyInterest,
@@ -457,7 +469,6 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
       isAdmin ? leadSourceDraft : null, leadSource,
       draft, values
     );
-    const hasLiveChanges = Object.keys(patch).length > 0;
     // The three lists are rows in their own tables, saved with PUT after the lead itself. Only lists that changed are sent, and only
     // once they have loaded (never save a list that is really "not loaded yet" over the stored one).
     const listsPayload = listsEditable
@@ -466,7 +477,26 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
           { workExperience, references, testScores },
         )
       : {};
+    const hasLiveChanges = Object.keys(patch).length > 0;
     const hasListChanges = Object.keys(listsPayload).length > 0;
+    return { patch, listsPayload, hasLiveChanges, hasListChanges, hasChanges: hasLiveChanges || hasListChanges };
+  };
+
+  // Which question is on screen: confirm a save, or confirm throwing away typed changes (by the Cancel button, or by closing the pop-up).
+  const [confirm, setConfirm] = useState<null | "save" | "discard" | "discard-close">(null);
+
+  const requestSave = () => {
+    // Nothing changed: skip the question, save() just says so.
+    if (!computeChanges().hasChanges) void save();
+    else setConfirm("save");
+  };
+  const requestCancel = () => {
+    if (computeChanges().hasChanges) setConfirm("discard");
+    else cancelEditing();
+  };
+
+  const save = async () => {
+    const { patch, listsPayload, hasLiveChanges, hasListChanges } = computeChanges();
     setIsSaving(true);
     let listsFailed = false;
     try {
@@ -586,6 +616,11 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
   const handleOpenChange = (next: boolean) => {
     if (!next) {
       if (isSaving) return; // never let a close interrupt an in-flight save
+      // Closing (X, Esc, click outside) while editing would silently drop what was typed: ask first.
+      if (isEditing && computeChanges().hasChanges) {
+        setConfirm("discard-close");
+        return;
+      }
       setIsEditing(false);
     }
     onOpenChange(next);
@@ -607,11 +642,11 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
             <div className="flex items-center gap-2 shrink-0">
               {isEditing ? (
                 <>
-                  <Button variant="ghost" onClick={cancelEditing} disabled={isSaving}>
+                  <Button variant="ghost" onClick={requestCancel} disabled={isSaving}>
                     <X className="h-3.5 w-3.5 mr-1" />
                     Cancel
                   </Button>
-                  <Button onClick={save} disabled={isSaving}>
+                  <Button onClick={requestSave} disabled={isSaving}>
                     {isSaving ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Check className="h-3.5 w-3.5 mr-1" />}
                     Save
                   </Button>
@@ -656,7 +691,21 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
                 />
               </div>
             </CardSection>
+          </SectionGroup>
 
+          {/* Study Interest is the first thing staff need after the contact details, so it sits right under them rather than
+              after the long Basic Details / Guardian / Passport block (client request, Oct 13). */}
+          <SectionGroup title="Study Interest">
+            <CardSection>
+              <StudyInterestFields
+                isEditing={isEditing}
+                value={isEditing ? studyDraft : studyInterest}
+                onChange={setStudyDraft}
+              />
+            </CardSection>
+          </SectionGroup>
+
+          <SectionGroup title="Personal Details">
             <CardSection title="Basic Details">
               <FieldGrid columns={2}>
                 {PERSONAL_DETAIL_FIELDS.map((field) => (
@@ -725,16 +774,6 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
                 isEditing={isEditing}
                 values={isEditing ? draft : values}
                 onChange={handleChange}
-              />
-            </CardSection>
-          </SectionGroup>
-
-          <SectionGroup title="Study Interest">
-            <CardSection>
-              <StudyInterestFields
-                isEditing={isEditing}
-                value={isEditing ? studyDraft : studyInterest}
-                onChange={setStudyDraft}
               />
             </CardSection>
           </SectionGroup>
@@ -812,6 +851,36 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
           </SectionGroup>
         </div>
       </DialogContent>
+
+      <AlertDialog open={confirm !== null} onOpenChange={(next) => { if (!next) setConfirm(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{confirm === "save" ? "Save these changes?" : "Discard your changes?"}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirm === "save"
+                ? "The changes you made will be saved to this student's record."
+                : "You have unsaved changes. If you leave now, what you typed will be lost."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep editing</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const which = confirm;
+                setConfirm(null);
+                if (which === "save") void save();
+                else if (which === "discard") cancelEditing();
+                else if (which === "discard-close") {
+                  cancelEditing();
+                  onOpenChange(false);
+                }
+              }}
+            >
+              {confirm === "save" ? "Save" : "Discard"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }
