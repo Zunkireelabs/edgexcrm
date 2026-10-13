@@ -82,15 +82,6 @@ export function CardSection({
   );
 }
 
-/** Header badge for a section whose details are NOT stored yet — so nobody assumes they survive a refresh. */
-export function NotSavedBadge({ children = "Not saved yet" }: { children?: React.ReactNode }) {
-  return (
-    <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-      {children}
-    </span>
-  );
-}
-
 export function FieldGrid({ children, columns = 3 }: { children: React.ReactNode; columns?: 2 | 3 }) {
   const cols = columns === 2 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3";
   return <div className={`grid ${cols} gap-x-6 gap-y-4`}>{children}</div>;

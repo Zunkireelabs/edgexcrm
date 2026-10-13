@@ -2,6 +2,10 @@
 // API routes (validation) and, in a later phase, the UI. Kept as plain data
 // so nothing here needs the request/auth context.
 
+/** The academic levels a document can be linked to (migration 240: applicant_documents.qualification_level). */
+export const QUALIFICATION_LEVELS = ["see", "plus_two", "bachelor", "masters"] as const;
+export type QualificationLevel = (typeof QUALIFICATION_LEVELS)[number];
+
 export const DOCUMENT_TYPES = [
   "passport",
   "marksheet",

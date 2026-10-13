@@ -94,16 +94,17 @@ describe("Student Details > Save shows what the server stored", () => {
   });
 });
 
-describe("Student Details > sections that are not stored yet are labelled", () => {
-  it("marks Work Experience, References and the score breakdown 'Not saved yet'", () => {
+describe("Student Details > nothing is labelled 'not saved' any more — every section saves", () => {
+  it("shows no 'Not saved yet' badge on any section", () => {
     setup(() => ok({}));
-    expect(screen.getAllByText("Not saved yet")).toHaveLength(2);
-    expect(screen.getByText("Score breakdown not saved yet")).toBeInTheDocument();
+    expect(screen.queryByText("Not saved yet")).toBeNull();
+    expect(screen.queryByText("Score breakdown not saved yet")).toBeNull();
   });
 
-  it("the header note no longer promises that preview sections save", () => {
+  it("the header note says everything saves, and no longer talks about previews", () => {
     setup(() => ok({}));
-    expect(screen.getByText(/Work experience, references and the exam score breakdown are not stored yet/)).toBeInTheDocument();
+    expect(screen.getByText(/Everything on this form saves/)).toBeInTheDocument();
     expect(screen.queryByText(/once their database update is live/)).toBeNull();
+    expect(screen.queryByText(/are not stored yet/)).toBeNull();
   });
 });

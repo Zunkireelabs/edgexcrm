@@ -4,7 +4,8 @@ import { GUARDIAN_SECTION_TITLE } from "@/lib/consent/guardian";
 import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InfoSection, InfoRow } from "@/components/dashboard/lead/info-section";
-import { CollapsibleGroups, SectionGroup, CardSection, FieldGrid, EditableField, NotSavedBadge } from "./form-primitives";
+import { CollapsibleGroups, SectionGroup, CardSection, FieldGrid, EditableField } from "./form-primitives";
+import { useStudentRecordLists } from "./use-student-record-lists";
 import { WorkExperienceSection } from "./work-experience-section";
 import { ReferencesSection } from "./references-section";
 import {
@@ -17,7 +18,7 @@ import {
 } from "./personal-details-dialog";
 import { AddressFields } from "./address-fields";
 import { IdentityDocumentFields } from "./identity-document-fields";
-import { ACADEMIC_LEVELS, TEST_TYPES } from "@/lib/leads/prospect-qualification";
+import { ACADEMIC_LEVELS } from "@/lib/leads/prospect-qualification";
 import type { Lead } from "@/types/database";
 
 interface StudentDetailsSummaryCardProps {
@@ -48,14 +49,15 @@ const noop = () => {};
  * feedback, 2026-09-23); this card now only previews the fields that are
  * unique to Student Details.
  *
- * Everything shown here comes from the lead's real columns, so it matches
- * what the Student Details dialog shows when reopened. The exception is
- * Work Experience and References: they are not stored yet, so they are always
- * empty here and labelled "Not saved yet".
+ * Everything shown here comes from what is really stored, so it matches what
+ * the Student Details dialog shows when reopened: the flat fields from the
+ * lead's columns, and Work Experience / References / Test Scores from their
+ * own tables (loaded by useStudentRecordLists, which reloads after a save).
  */
 export function StudentDetailsSummaryCard({ lead, onEdit, defaultOpen = true }: StudentDetailsSummaryCardProps) {
   // Personal / Passport & Citizenship and Financial all read from the lead's real columns.
   const values: Record<string, string> = personalDetailsFromLead(lead);
+  const { lists } = useStudentRecordLists(lead);
 
   const leadRecord = lead as unknown as Record<string, unknown>;
   const academicLevelRows = ACADEMIC_LEVELS.map((level) => {
@@ -72,10 +74,19 @@ export function StudentDetailsSummaryCard({ lead, onEdit, defaultOpen = true }: 
       details: [read("address"), read("awarding_body"), start && end ? `${start} – ${end}` : start || end, read("stream_faculty")].filter(Boolean),
     };
   }).filter((r) => r.gpa || r.institution || r.passedYear || r.details.length > 0);
-  const testScoreRows = TEST_TYPES.map((t) => ({
-    test: t,
-    score: String(leadRecord[`${t.key}_score`] ?? "").trim(),
-  })).filter((r) => r.score);
+  // Every stored score (plus, for an older lead, the overall score kept in its legacy column), with the exam date and skill breakdown when there is one.
+  const testScoreRows = lists.testScores
+    .map((t) => {
+      const skills = [
+        t.listening && `L ${t.listening}`,
+        t.reading && `R ${t.reading}`,
+        t.writing && `W ${t.writing}`,
+        t.speaking && `S ${t.speaking}`,
+      ].filter(Boolean).join(" · ");
+      const value = [t.overall, skills, t.dateOfExam].filter(Boolean).join("  ·  ");
+      return { id: t.id, label: t.examType, value };
+    })
+    .filter((r) => r.value);
 
   return (
     <InfoSection
@@ -145,8 +156,8 @@ export function StudentDetailsSummaryCard({ lead, onEdit, defaultOpen = true }: 
             {testScoreRows.length > 0 && (
               <CardSection title="Test Report & Score">
                 <div className="px-4 py-2 divide-y">
-                  {testScoreRows.map(({ test, score }) => (
-                    <InfoRow key={test.key} label={test.label} value={score} />
+                  {testScoreRows.map(({ id, label, value }) => (
+                    <InfoRow key={id} label={label} value={value} />
                   ))}
                 </div>
               </CardSection>
@@ -155,11 +166,11 @@ export function StudentDetailsSummaryCard({ lead, onEdit, defaultOpen = true }: 
         )}
 
         <SectionGroup title="Professional Information">
-          <CardSection title="Work Experience" action={<NotSavedBadge />}>
-            <WorkExperienceSection isEditing={false} value={[]} onChange={noop} />
+          <CardSection title="Work Experience">
+            <WorkExperienceSection isEditing={false} value={lists.workExperience} onChange={noop} />
           </CardSection>
-          <CardSection title="References" action={<NotSavedBadge />}>
-            <ReferencesSection isEditing={false} value={[]} onChange={noop} />
+          <CardSection title="References">
+            <ReferencesSection isEditing={false} value={lists.references} onChange={noop} />
           </CardSection>
         </SectionGroup>
 

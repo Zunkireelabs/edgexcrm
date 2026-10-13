@@ -15,6 +15,10 @@ import { computeConsentReadiness, type ConsentProfile } from "@/lib/consent/read
 import { CONSENT_MERGE_FIELDS } from "@/lib/consent/merge";
 import { PersonalDetailsDialog } from "./personal-details-dialog";
 
+// These tests render the whole Student Details dialog (every section), which takes seconds on a busy machine — CI runs hundreds of files at
+// once — so give them room instead of letting a slow machine fail them at the 5-second default.
+vi.setConfig({ testTimeout: 30_000 });
+
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
 
 const emptyProfile = Object.fromEntries(

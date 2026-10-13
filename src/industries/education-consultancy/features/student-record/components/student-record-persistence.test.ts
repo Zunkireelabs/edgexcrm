@@ -5,8 +5,8 @@
 // (1) the change produces something in the save request, (2) every column in that request is one the server's lead update will accept, and
 // (3) for the qualification cards, what is sent comes back when the lead is reopened.
 //
-// Adding a field to the pop-up without wiring it to storage now fails here. The ONLY exceptions are in PREVIEW_ONLY below — each is labelled
-// "Not saved yet" on screen, and the list must only ever shrink (PR 2 gives them an API and empties it).
+// Adding a field to the pop-up without wiring it to storage now fails here. There are NO exceptions: PREVIEW_ONLY is empty and the test below
+// keeps it that way. (Work Experience, References and Test Scores used to be exceptions; they now save through /api/v1/leads/[id]/student-record.)
 import { describe, it, expect } from "vitest";
 import {
   CORE_IDENTITY_FIELDS,
@@ -19,14 +19,18 @@ import {
   type StudyInterest,
 } from "./personal-details-dialog";
 import { emptyQualifications, qualificationsFromLead, type QualificationEntry, type Qualifications } from "./qualifications-section";
-import { createTestScore } from "./test-scores-section";
+import { createTestScore, type TestScore } from "./test-scores-section";
+import { createWorkExperience } from "./work-experience-section";
+import { createReference } from "./references-section";
+import { buildListsPayload, referencesFromRows, testScoresFromRows, workExperienceFromRows, type StudentRecordLists } from "./student-record-lists";
+import { LIST_COLUMNS, coerceList, type ListName } from "@/lib/leads/student-record-lists";
 import { UPDATABLE_FIELDS } from "@/lib/leads/apply-lead-patch";
 import { PERSONAL_DETAIL_COLUMNS } from "@/lib/leads/personal-details";
 import { FINANCIAL_COLUMNS, STUDENT_RECORD_COLUMNS } from "@/lib/leads/student-record-columns";
 import type { Lead } from "@/types/database";
 
-/** Editable on screen but NOT stored yet (they have tables but no API). Each shows a "Not saved yet" badge. Shrink this, never grow it. */
-const PREVIEW_ONLY = ["work_experience", "references", "test_score_breakdown"] as const;
+/** Editable on screen but NOT stored. Must stay EMPTY — adding to it means shipping a field that vanishes on refresh. */
+const PREVIEW_ONLY: readonly string[] = [];
 
 /** A qualification field that is not rendered for that level at all (Grade X has no Stream / Faculty). */
 const NOT_RENDERED: Array<[keyof Qualifications, keyof QualificationEntry]> = [["see", "streamFaculty"]];
@@ -138,16 +142,81 @@ describe("every editable field in Student Details is saved, and the server accep
     for (const col of FINANCIAL_COLUMNS) expect(back[col], col).toBe("2020-01-02");
   });
 
-  it("the exam score breakdown is not sent (and is labelled 'Not saved yet')", () => {
-    const withBreakdown = { ...createTestScore(), examType: "IELTS", overall: "7", listening: "8", reading: "7", writing: "6", speaking: "7" };
+  it("the overall score of each of the five legacy exams still reaches its column (other code reads those columns)", () => {
+    const withBreakdown: TestScore = { ...createTestScore(), examType: "IELTS", overall: "7", listening: "8", reading: "7", writing: "6", speaking: "7" };
     const p = buildLivePatch(core, core, study, study, NO_QUALS, NO_QUALS, [withBreakdown], [], source, source);
-    expect(Object.keys(p)).toEqual(["ielts_score"]); // only the overall score has a column
+    expect(Object.keys(p)).toEqual(["ielts_score"]);
   });
 });
 
-describe("the exceptions are explicit", () => {
-  it("PREVIEW_ONLY lists exactly the three sections that are labelled 'Not saved yet'", () => {
-    expect([...PREVIEW_ONLY]).toEqual(["work_experience", "references", "test_score_breakdown"]);
+// The three "add as many as you need" lists are rows saved through PUT /api/v1/leads/[id]/student-record. Every field of every entry must
+// reach the request, be a column the server validates, and come back unchanged.
+describe("every field of the work experience / references / test score entries is saved and comes back", () => {
+  const none: StudentRecordLists = { workExperience: [], references: [], testScores: [] };
+  const KEYS: Record<ListName, readonly string[]> = LIST_COLUMNS;
+
+  const fill = (entry: Record<string, string>, skip: string[] = []) => {
+    const out = { ...entry };
+    for (const k of Object.keys(out)) if (k !== "id" && !skip.includes(k)) out[k] = "x";
+    return out;
+  };
+
+  it("work experience: each entry field is sent under a real column, and the row round trips", () => {
+    const e = createWorkExperience();
+    for (const field of ["institutionName", "address", "position", "startDate", "endDate"] as const) {
+      const entry = { ...e, [field]: field.endsWith("Date") ? "2020-01-02" : "edited" };
+      const payload = buildListsPayload({ ...none, workExperience: [entry] }, none);
+      const row = payload.work_experience?.[0] ?? {};
+      const sent = Object.keys(row).filter((k) => k !== "id" && row[k]);
+      expect(sent, `workExperience.${field} was not sent`).toHaveLength(1);
+      expect(KEYS.work_experience, `${sent[0]} is not a column the server accepts`).toContain(sent[0]);
+    }
+    const full = { ...createWorkExperience(), institutionName: "A", address: "B", position: "C", startDate: "2020-01-02", endDate: "2021-03-04" };
+    const rows = coerceList("work_experience", buildListsPayload({ ...none, workExperience: [full] }, none).work_experience).rows;
+    expect(workExperienceFromRows(rows as never)).toEqual([{ ...full, id: expect.any(String) }]);
+  });
+
+  it("references: each entry field is sent under a real column, and the row round trips", () => {
+    const e = createReference();
+    for (const field of ["refereeName", "position", "organization", "email", "address", "relationship"] as const) {
+      const entry = { ...e, [field]: field === "email" ? "a@b.co" : "edited" };
+      const row = buildListsPayload({ ...none, references: [entry] }, none).references?.[0] ?? {};
+      const sent = Object.keys(row).filter((k) => k !== "id" && row[k]);
+      expect(sent, `references.${field} was not sent`).toHaveLength(1);
+      expect(KEYS.references, `${sent[0]} is not a column the server accepts`).toContain(sent[0]);
+    }
+    const full = { ...createReference(), refereeName: "A", position: "B", organization: "C", email: "d@e.co", address: "F", relationship: "G" };
+    const rows = coerceList("references", buildListsPayload({ ...none, references: [full] }, none).references).rows;
+    expect(referencesFromRows(rows as never)).toEqual([{ ...full, id: expect.any(String) }]);
+  });
+
+  it("test scores: every field of every exam — including Duolingo, Other Tests and the skill breakdown — is sent and round trips", () => {
+    const e = createTestScore();
+    for (const field of ["dateOfExam", "listening", "reading", "writing", "speaking", "overall"] as const) {
+      const entry = { ...e, examType: "IELTS", [field]: field === "dateOfExam" ? "2026-03-01" : "7" };
+      const row = buildListsPayload({ ...none, testScores: [entry] }, none).test_scores?.[0] ?? {};
+      const sent = Object.keys(row).filter((k) => k !== "id" && k !== "exam_type" && row[k]);
+      expect(sent, `testScores.${field} was not sent`).toHaveLength(1);
+      expect(KEYS.test_scores, `${sent[0]} is not a column the server accepts`).toContain(sent[0]);
+    }
+    for (const exam of ["IELTS", "TOEFL", "PTE", "Duolingo English Test", "SAT", "GRE/GMAT", "Other Tests"]) {
+      const full: TestScore = { ...createTestScore(), examType: exam, dateOfExam: "2026-03-01", listening: "8", reading: "7", writing: "6", speaking: "7", overall: "7" };
+      const rows = coerceList("test_scores", buildListsPayload({ ...none, testScores: [full] }, none).test_scores).rows;
+      expect(testScoresFromRows(rows as never), exam).toEqual([{ ...full, id: expect.any(String) }]);
+    }
+  });
+
+  it("an entry field that has no column would be caught: every key of every entry type is accounted for", () => {
+    expect(Object.keys(fill({ id: "i", institutionName: "", address: "", position: "", startDate: "", endDate: "" }))).toHaveLength(6);
+    expect(Object.keys(createWorkExperience()).length - 1).toBe(KEYS.work_experience.length);
+    expect(Object.keys(createReference()).length - 1).toBe(KEYS.references.length);
+    expect(Object.keys(createTestScore()).length - 1).toBe(KEYS.test_scores.length);
+  });
+});
+
+describe("there are no exceptions", () => {
+  it("nothing in Student Details is preview-only: the list of exceptions is empty and must stay empty", () => {
+    expect(PREVIEW_ONLY).toEqual([]);
   });
   it("every student-record column is accepted by the server (no column shown on screen can be rejected)", () => {
     for (const col of STUDENT_RECORD_COLUMNS) expect(SERVER.has(col), col).toBe(true);
