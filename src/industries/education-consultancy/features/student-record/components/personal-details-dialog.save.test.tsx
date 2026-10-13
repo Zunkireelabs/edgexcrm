@@ -4,7 +4,7 @@
 // Root cause: Save showed what was TYPED (copied into state) instead of what the server STORED. After Save the dialog must show the row
 // the server returned, so a field that did not persist visibly reverts at once — and a field that did persist shows its stored value.
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, waitFor, within } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import type { Lead } from "@/types/database";
 import { PersonalDetailsDialog } from "./personal-details-dialog";
@@ -48,7 +48,13 @@ function setup(respond: (body: Record<string, unknown>) => Response | Promise<Re
 const ok = (lead: Record<string, unknown>) => ({ ok: true, status: 200, json: async () => ({ data: { ...LEAD, ...lead } }) }) as Response;
 const typeAddress = (value: string) =>
   fireEvent.change(screen.getAllByPlaceholderText("Enter address of institution")[0], { target: { value } });
-const save = () => fireEvent.click(screen.getByRole("button", { name: /^Save$/ }));
+const save = () => {
+  // Save now asks "Save these changes?" first; confirm it.
+  fireEvent.click(screen.getByRole("button", { name: /^Save$/ }));
+  // (When nothing was changed there is no question to answer — Save just says so.)
+  const box = screen.queryByRole("alertdialog");
+  if (box) fireEvent.click(within(box).getByRole("button", { name: /^Save$/ }));
+};
 
 describe("Student Details > Save shows what the server stored", () => {
   it("sends the qualification address, and afterwards shows the STORED value", async () => {

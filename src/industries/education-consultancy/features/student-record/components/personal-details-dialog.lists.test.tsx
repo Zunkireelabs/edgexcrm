@@ -65,7 +65,13 @@ function setup(server: Server, props: { openInEditMode?: boolean } = {}) {
   render(<PersonalDetailsDialog lead={LEAD as unknown as Lead} open onOpenChange={() => {}} openInEditMode={props.openInEditMode ?? true} />);
   return { calls, puts: () => calls.filter((c) => c.method === "PUT"), patches: () => calls.filter((c) => c.method === "PATCH") };
 }
-const save = () => fireEvent.click(screen.getByRole("button", { name: /^Save$/ }));
+const save = () => {
+  // Save now asks "Save these changes?" first; confirm it.
+  fireEvent.click(screen.getByRole("button", { name: /^Save$/ }));
+  // (When nothing was changed there is no question to answer — Save just says so.)
+  const box = screen.queryByRole("alertdialog");
+  if (box) fireEvent.click(within(box).getByRole("button", { name: /^Save$/ }));
+};
 
 describe("Student Details lists — loading", () => {
   it("loads the stored work experience, references and test scores when the pop-up opens", async () => {
