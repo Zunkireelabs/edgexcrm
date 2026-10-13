@@ -8,6 +8,7 @@ import {
   isNepal,
   municipalityOptions,
   nextCity,
+  stripTrailingCountry,
   updateAddress,
   wardOptions,
   type AddressParts,
@@ -158,5 +159,48 @@ describe("isNepal", () => {
     expect(isNepal("India")).toBe(false);
     expect(isNepal(null)).toBe(false);
     expect(isNepal("")).toBe(false);
+  });
+});
+
+// The composed Nepal address ends with the country ("…, Bagmati, Nepal"); the card and the consent form also show the country
+// separately, so the country printed twice. stripTrailingCountry removes the repeat at display/merge time (saved data untouched).
+describe("stripTrailingCountry", () => {
+  it("drops the trailing country — the exact address from the client's screenshot", () => {
+    expect(
+      stripTrailingCountry("Sunar Gaun, Ward 14, Kathmandu Metropolitan City, Kathmandu, Bagmati, Nepal", "Nepal"),
+    ).toBe("Sunar Gaun, Ward 14, Kathmandu Metropolitan City, Kathmandu, Bagmati");
+  });
+
+  it("works on what formatAddress() composes", () => {
+    expect(stripTrailingCountry(formatAddress(full), "Nepal")).toBe("Baneshwor, Ward 5, Kathmandu Metropolitan City, Kathmandu, Bagmati");
+  });
+
+  it("ignores case and extra spaces", () => {
+    expect(stripTrailingCountry("Bagmati,   NEPAL  ", " nepal ")).toBe("Bagmati");
+  });
+
+  it("cleans a repeated trailing country too", () => {
+    expect(stripTrailingCountry("Bagmati, Nepal, Nepal", "Nepal")).toBe("Bagmati");
+  });
+
+  it("an address that is only the country becomes empty", () => {
+    expect(stripTrailingCountry("Nepal", "Nepal")).toBe("");
+  });
+
+  it("leaves an address that does not end with the country untouched", () => {
+    expect(stripTrailingCountry("12 Main St, London", "UK")).toBe("12 Main St, London");
+    expect(stripTrailingCountry("Bagmati, Nepal, Kathmandu", "Nepal")).toBe("Bagmati, Nepal, Kathmandu");
+  });
+
+  it("never matches part of a word (Nepal vs Nepalgunj)", () => {
+    expect(stripTrailingCountry("Birta, Nepalgunj", "Nepal")).toBe("Birta, Nepalgunj");
+  });
+
+  it("does nothing without a country, or without an address", () => {
+    expect(stripTrailingCountry("Bagmati, Nepal", "")).toBe("Bagmati, Nepal");
+    expect(stripTrailingCountry("Bagmati, Nepal", null)).toBe("Bagmati, Nepal");
+    expect(stripTrailingCountry("", "Nepal")).toBe("");
+    expect(stripTrailingCountry(null, "Nepal")).toBe("");
+    expect(stripTrailingCountry(undefined, undefined)).toBe("");
   });
 });

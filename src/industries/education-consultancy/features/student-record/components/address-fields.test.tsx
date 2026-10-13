@@ -83,11 +83,41 @@ describe("AddressFields (editing)", () => {
 });
 
 describe("AddressFields (read-only)", () => {
+  const parts = { country: "Nepal", province: "Bagmati", district: "Kathmandu", municipality: "Kathmandu Metropolitan City", ward: "5", tole: "Baneshwor" };
+
   it("shows Country and the readable address", () => {
-    const parts = { country: "Nepal", province: "Bagmati", district: "Kathmandu", municipality: "Kathmandu Metropolitan City", ward: "5", tole: "Baneshwor" };
     render(<AddressFields isEditing={false} parts={parts} fullAddress={formatAddress(parts)} onPartChange={noop} onFullAddressChange={noop} />);
     expect(screen.getByText("Nepal", { exact: true })).toBeInTheDocument();
-    expect(screen.getByText("Baneshwor, Ward 5, Kathmandu Metropolitan City, Kathmandu, Bagmati, Nepal")).toBeInTheDocument();
+    expect(screen.getByText("Baneshwor, Ward 5, Kathmandu Metropolitan City, Kathmandu, Bagmati")).toBeInTheDocument();
+  });
+
+  it("REGRESSION (client, Oct 2026): the country is printed ONCE — the saved address ends with it, the Country field already shows it", () => {
+    const sunarGaun = { country: "Nepal", province: "Bagmati", district: "Kathmandu", municipality: "Kathmandu Metropolitan City", ward: "14", tole: "Sunar Gaun" };
+    const saved = formatAddress(sunarGaun); // "Sunar Gaun, Ward 14, Kathmandu Metropolitan City, Kathmandu, Bagmati, Nepal"
+    expect(saved.endsWith(", Nepal")).toBe(true); // what is stored — untouched
+    render(<AddressFields isEditing={false} parts={sunarGaun} fullAddress={saved} onPartChange={noop} onFullAddressChange={noop} />);
+    expect(screen.getAllByText(/Nepal/)).toHaveLength(1);
+    expect(screen.getByText("Sunar Gaun, Ward 14, Kathmandu Metropolitan City, Kathmandu, Bagmati")).toBeInTheDocument();
+  });
+
+  it("an older address saved without the country is shown as it is", () => {
+    render(<AddressFields isEditing={false} parts={nepal} fullAddress="Baneshwor, Kathmandu" onPartChange={noop} onFullAddressChange={noop} />);
+    expect(screen.getByText("Baneshwor, Kathmandu")).toBeInTheDocument();
+  });
+
+  it("another country's typed address is shown untouched", () => {
+    render(<AddressFields isEditing={false} parts={{ ...EMPTY_ADDRESS, country: "United Kingdom" }} fullAddress="12 Main St, London" onPartChange={noop} onFullAddressChange={noop} />);
+    expect(screen.getByText("12 Main St, London")).toBeInTheDocument();
+  });
+
+  it("a typed address that also ends with its country is cleaned the same way", () => {
+    render(<AddressFields isEditing={false} parts={{ ...EMPTY_ADDRESS, country: "India" }} fullAddress="Andheri, Mumbai, India" onPartChange={noop} onFullAddressChange={noop} />);
+    expect(screen.getByText("Andheri, Mumbai")).toBeInTheDocument();
+  });
+
+  it("editing mode is never rewritten — a counselor sees exactly what is saved", () => {
+    render(<AddressFields isEditing parts={{ ...EMPTY_ADDRESS, country: "India" }} fullAddress="Andheri, Mumbai, India" onPartChange={noop} onFullAddressChange={noop} />);
+    expect((screen.getByDisplayValue("Andheri, Mumbai, India") as HTMLInputElement).value).toBe("Andheri, Mumbai, India");
   });
 });
 

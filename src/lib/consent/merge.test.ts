@@ -260,3 +260,78 @@ describe("findUnknownPlaceholders — odd tokens", () => {
     ]);
   });
 });
+
+// A Nepal address is SAVED ending with the country ("…, Bagmati, Nepal") and the country is also its own merge field, so a
+// template that prints both showed "Nepal" twice (client, Oct 2026). The address is filled without its trailing country when
+// the same document also prints {{country}}; a template that prints only the address keeps the country.
+describe("fillConsentTemplate — the country is printed once", () => {
+  const SAVED = "Sunar Gaun, Ward 14, Kathmandu Metropolitan City, Kathmandu, Bagmati, Nepal";
+  const WITHOUT = "Sunar Gaun, Ward 14, Kathmandu Metropolitan City, Kathmandu, Bagmati";
+  const fill = (tpl: string, over: Record<string, unknown> = {}) =>
+    fillConsentTemplate(tpl, buildConsentMergeData({ ...base, fullAddress: SAVED, ...over }));
+  const count = (text: string, word: string) => text.split(word).length - 1;
+
+  it("street, city, country on one line: Nepal appears once, at the end", () => {
+    const out = fill("Address: {{street_address}}, {{city}}, {{country}}");
+    expect(out).toBe(`Address: ${WITHOUT}, Kathmandu, Nepal`);
+    expect(count(out, "Nepal")).toBe(1);
+  });
+
+  it("address then country on one line", () => {
+    expect(fill("Address: {{street_address}}, {{country}}")).toBe(`Address: ${WITHOUT}, Nepal`);
+  });
+
+  it("address and country on SEPARATE lines: the address line has no Nepal, the Country line keeps it", () => {
+    const out = fill("Address: {{street_address}}\nCountry: {{country}}");
+    expect(out).toBe(`Address: ${WITHOUT}\nCountry: Nepal`);
+    expect(count(out, "Nepal")).toBe(1);
+  });
+
+  it("works for {{full_address}} as well as {{street_address}}", () => {
+    expect(fill("{{full_address}} / {{country}}")).toBe(`${WITHOUT} / Nepal`);
+  });
+
+  it("a template that prints ONLY the address keeps the country (nothing is lost)", () => {
+    expect(fill("Address: {{street_address}}")).toBe(`Address: ${SAVED}`);
+  });
+
+  it("an address saved without the country is untouched", () => {
+    expect(fill("Address: {{street_address}}, {{country}}", { fullAddress: "Baneshwor, Kathmandu" })).toBe("Address: Baneshwor, Kathmandu, Nepal");
+  });
+
+  it("another country's typed address is untouched", () => {
+    expect(fill("{{street_address}}, {{country}}", { fullAddress: "12 Main St, London", country: "United Kingdom" })).toBe("12 Main St, London, United Kingdom");
+  });
+
+  it("matches the country regardless of case", () => {
+    expect(fill("{{street_address}}, {{country}}", { fullAddress: "Bagmati, NEPAL" })).toBe("Bagmati, Nepal");
+  });
+
+  it("with no country on file the address is left exactly as saved", () => {
+    expect(fill("Address: {{street_address}}, {{country}}", { country: null })).toBe(`Address: ${SAVED}`);
+  });
+
+  it("an address that is only the country leaves no stray comma", () => {
+    expect(fill("Address: {{street_address}}, {{city}}, {{country}}", { fullAddress: "Nepal" })).toBe("Address: Kathmandu, Nepal");
+  });
+
+  it("the default template (city + country, no address field) is unaffected", () => {
+    expect(fill("Address: {{city}}, {{country}}")).toBe("Address: Kathmandu, Nepal");
+  });
+
+  it("the live preview / send path (prepareConsentBody) de-duplicates too", () => {
+    const data = buildConsentMergeData({ ...base, fullAddress: SAVED });
+    const { body, missingFields } = prepareConsentBody("Address: {{street_address}}, {{city}}, {{country}}", data);
+    expect(missingFields).toEqual([]);
+    expect(count(body, "Nepal")).toBe(1);
+    expect(body).toBe(`Address: ${WITHOUT}, Kathmandu, Nepal`);
+  });
+
+  it("an address the STUDENT fills in later (blank on file) still flows through the signer step unchanged", () => {
+    const data = buildConsentMergeData({ ...base, fullAddress: null });
+    const { body, missingFields } = prepareConsentBody("Address: {{street_address}}", data);
+    expect(missingFields).toContain("full_address");
+    expect(applySignerDetails(body, { full_address: "Baneshwor, Kathmandu" }, missingFields)).toBe("Address: Baneshwor, Kathmandu");
+  });
+});
+
