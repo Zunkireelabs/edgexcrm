@@ -19,8 +19,18 @@ describe("getFeatureAccess", () => {
     expect(getFeatureAccess("general", FEATURES.FORM_BUILDER)).toBe(true);
   });
 
-  it("returns false for an unknown industryId for a feature the general manifest lacks (falls back to general)", () => {
-    expect(getFeatureAccess("not_a_real_industry", FEATURES.CHECK_IN)).toBe(false);
+  it("returns false for form-builder under an unknown industryId (falls back to the bare fallback manifest, not general)", () => {
+    expect(getFeatureAccess("not_a_real_industry", FEATURES.FORM_BUILDER)).toBe(false);
+  });
+
+  it("returns false for form-builder under null/undefined industryId", () => {
+    expect(getFeatureAccess(null, FEATURES.FORM_BUILDER)).toBe(false);
+    expect(getFeatureAccess(undefined, FEATURES.FORM_BUILDER)).toBe(false);
+  });
+
+  it("still grants the shared email feature to null/unknown industryId (fallback keeps email)", () => {
+    expect(getFeatureAccess(null, FEATURES.EMAIL)).toBe(true);
+    expect(getFeatureAccess("not_a_real_industry", FEATURES.EMAIL)).toBe(true);
   });
 
   it("returns false for an unknown featureId", () => {
