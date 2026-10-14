@@ -72,6 +72,7 @@ import { useTrackPreviousPage } from "@/hooks/use-track-previous-page";
 import { Badge } from "@/components/ui/badge";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarTip } from "@/components/dashboard/sidebar-tooltip";
+import { SidebarFlyout } from "@/components/dashboard/sidebar-flyout";
 import type { SidebarEntry, SidebarGroup, SidebarItem } from "@/industries/_types";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
@@ -192,22 +193,23 @@ function SidebarGroupRender({
 
   if (collapsed) {
     return (
-      <div className="relative group/navgroup">
-        <button
-          type="button"
-          aria-label={group.label}
-          className={`w-full flex items-center justify-center px-2 py-1.5 rounded-[8px] transition-colors ${
-            hasActiveChild
-              ? "bg-[#ebebeb] text-gray-900"
-              : "text-[#666666] hover:bg-[#ebebeb] hover:text-gray-900"
-          }`}
+      <div>
+        <SidebarFlyout
+          header={group.label}
+          trigger={
+            <button
+              type="button"
+              aria-label={group.label}
+              className={`w-full flex items-center justify-center px-2 py-1.5 rounded-[8px] transition-colors ${
+                hasActiveChild
+                  ? "bg-[#ebebeb] text-gray-900"
+                  : "text-[#666666] hover:bg-[#ebebeb] hover:text-gray-900"
+              }`}
+            >
+              <ParentIcon className="w-[18px] h-[18px] shrink-0" />
+            </button>
+          }
         >
-          <ParentIcon className="w-[18px] h-[18px] shrink-0" />
-        </button>
-        <div className="hidden group-hover/navgroup:block absolute left-full top-0 ml-1 z-50 min-w-[190px] bg-white rounded-lg shadow-lg border border-gray-200 py-1.5">
-          <p className="px-3 pb-1 text-[11px] font-medium text-gray-400 uppercase tracking-wider select-none">
-            {group.label}
-          </p>
           {group.children.map((child) => {
             const ChildIcon = INDUSTRY_ICONS[child.icon] ?? FileText;
             const active = isChildActive(child);
@@ -227,7 +229,7 @@ function SidebarGroupRender({
               </Link>
             );
           })}
-        </div>
+        </SidebarFlyout>
       </div>
     );
   }
