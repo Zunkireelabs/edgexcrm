@@ -101,7 +101,7 @@ describe("Activity panel tabs", () => {
   it("has Activity, Notes, Emails, Tasks and Documents — no Calls and no Meetings tab any more", async () => {
     renderPanel();
     await screen.findByRole("button", { name: /^Notes/ });
-    expect(tabNames()).toEqual(["Activity", "Notes", "Emails", "Tasks", "Documents"]);
+    expect(tabNames()).toEqual(["Activity", "Notes", "Emails", "Tasks", "Documents", "Subscribed"]);
     expect(screen.queryByRole("button", { name: "Calls" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Meetings" })).toBeNull();
   });
@@ -164,7 +164,7 @@ describe("other industries keep exactly what they have today", () => {
   it("still have Activity, Notes, Emails, Calls, Tasks and Meetings tabs — and no Documents tab", async () => {
     renderPanel(itAgency);
     await screen.findByRole("button", { name: /^Notes/ });
-    expect(tabNames()).toEqual(["Activity", "Notes", "Emails", "Calls", "Tasks", "Meetings"]);
+    expect(tabNames()).toEqual(["Activity", "Notes", "Emails", "Calls", "Tasks", "Meetings", "Subscribed"]);
   });
 
   it("the Notes tab has typed notes only, no Log Call / Log Meeting buttons, and the count is just the notes", async () => {

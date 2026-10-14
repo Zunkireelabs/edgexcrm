@@ -33,6 +33,7 @@ import { getFeatureAccess } from "@/industries/_loader";
 import { describeSubmission, humanizeIntakeValue } from "./lead-activity-labels";
 import { FEATURES } from "@/industries/_registry";
 import { LeadCadenceStrip } from "@/industries/_shared/features/outreach/ui/lead-cadence-strip";
+import { LeadSubscriptionsTab } from "@/industries/_shared/features/outreach/ui/lead-subscriptions-tab";
 import { ApplicantDocumentsCard } from "@/industries/education-consultancy/features/applicant-documents/documents-card";
 import { FINANCIAL_COLUMNS, QUALIFICATION_DETAIL_COLUMNS } from "@/lib/leads/student-record-columns";
 
@@ -54,7 +55,7 @@ const EmailThreadCard = dynamic(
   { ssr: false },
 );
 
-type SubTab = "all" | "notes" | "emails" | "calls" | "tasks" | "meetings" | "documents";
+type SubTab = "all" | "notes" | "emails" | "calls" | "tasks" | "meetings" | "documents" | "subscribed";
 
 interface ActivitiesPanelProps {
   leadId: string;
@@ -89,6 +90,8 @@ const SUB_TABS: { id: SubTab; label: string; icon: React.ReactNode }[] = [
   { id: "meetings", label: "Meetings", icon: <Calendar className="h-4 w-4" /> },
   // Last in the row (client request, Oct 2026). Only shown where the tenant has the documents feature.
   { id: "documents", label: "Documents", icon: <FileText className="h-4 w-4" /> },
+  // Everything the lead is subscribed to: outreach sequences (running / queued / past) and campaigns. Only where Outreach exists.
+  { id: "subscribed", label: "Subscribed", icon: <Mail className="h-4 w-4" /> },
 ];
 
 export interface ActivitiesPanelRef {
@@ -185,6 +188,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
   const documentsEnabled = getFeatureAccess(industryId, FEATURES.APPLICANT_DOCUMENTS);
   const visibleTabs = SUB_TABS.filter((t) => {
     if (t.id === "documents") return documentsEnabled;
+    if (t.id === "subscribed") return hasOutreach;
     if (mergedIntoNotes && (t.id === "calls" || t.id === "meetings")) return false;
     return true;
   });
@@ -547,6 +551,18 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
           canManage={canEdit ?? isAdmin}
           currentUserId={currentUserId}
           isAdmin={isAdmin}
+        />
+      )}
+
+      {/* Subscribed tab — the lead's outreach sequences (running, queue next, history) and the campaigns it was sent. */}
+      {activeTab === "subscribed" && hasOutreach && (
+        <LeadSubscriptionsTab
+          leadId={leadId}
+          isAdmin={isAdmin}
+          currentUserId={currentUserId}
+          leadFirstName={leadFirstName}
+          leadLastName={leadLastName}
+          leadEmail={leadEmail}
         />
       )}
 
