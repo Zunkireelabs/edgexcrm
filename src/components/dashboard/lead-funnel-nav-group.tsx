@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { SidebarTip } from "@/components/dashboard/sidebar-tooltip";
+import { SidebarFlyout } from "@/components/dashboard/sidebar-flyout";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { ChevronDown, Settings2, type LucideIcon } from "lucide-react";
@@ -40,27 +41,24 @@ export function LeadFunnelNavGroup({ funnelKey, label, icon: Icon, lists, onNavi
   }, [hasActiveChild]);
 
   if (collapsed) {
+    const trigger = (
+      <Link
+        href={`/leads?funnel=${funnelKey}`}
+        onClick={onNavigate}
+        aria-label={label}
+        className={`w-full flex items-center justify-center px-2 py-1.5 rounded-md transition-colors ${
+          parentActive || hasActiveChild
+            ? "bg-[#ebebeb] text-gray-900"
+            : "text-[#666666] hover:bg-[#ebebeb] hover:text-gray-900"
+        }`}
+      >
+        <Icon className="w-[18px] h-[18px] shrink-0" />
+      </Link>
+    );
     return (
-      <div className="relative group/navgroup">
-        <SidebarTip label={label} enabled={lists.length === 0}>
-        <Link
-          href={`/leads?funnel=${funnelKey}`}
-          onClick={onNavigate}
-          aria-label={label}
-          className={`w-full flex items-center justify-center px-2 py-1.5 rounded-md transition-colors ${
-            parentActive || hasActiveChild
-              ? "bg-[#ebebeb] text-gray-900"
-              : "text-[#666666] hover:bg-[#ebebeb] hover:text-gray-900"
-          }`}
-        >
-          <Icon className="w-[18px] h-[18px] shrink-0" />
-        </Link>
-        </SidebarTip>
-        {lists.length > 0 && (
-          <div className="hidden group-hover/navgroup:block absolute left-full top-0 ml-1 z-50 min-w-[190px] bg-white rounded-lg shadow-lg border border-gray-200 py-1.5">
-            <p className="px-3 pb-1 text-[11px] font-medium text-gray-400 uppercase tracking-wider select-none">
-              {label}
-            </p>
+      <div>
+        {lists.length > 0 ? (
+          <SidebarFlyout header={label} trigger={trigger}>
             {lists.map((list) => {
               const active = isOnLeads && currentList === list.slug;
               return (
@@ -78,7 +76,9 @@ export function LeadFunnelNavGroup({ funnelKey, label, icon: Icon, lists, onNavi
                 </Link>
               );
             })}
-          </div>
+          </SidebarFlyout>
+        ) : (
+          <SidebarTip label={label}>{trigger}</SidebarTip>
         )}
       </div>
     );
