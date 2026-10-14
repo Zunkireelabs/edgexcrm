@@ -16,6 +16,13 @@ export interface AutoresponderConfig {
   subject: string;
   body_html: string;
   body_format: "text" | "html";
+  sms?: SmsAutoresponderConfig;
+}
+
+export interface SmsAutoresponderConfig {
+  enabled: boolean;
+  fire_mode: "every" | "first";
+  body: string;
 }
 
 export interface BuilderState {

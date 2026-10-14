@@ -135,3 +135,36 @@ describe("buildSequenceReport", () => {
     await expect(buildSequenceReport(failing, "seq-1", [])).rejects.toThrow("sequence report: boom");
   });
 });
+
+describe("buildSequenceReport — SMS sequences", () => {
+  const smsSent = (id: string, step_order: number, smsStatus: string | null) => ({
+    id, status: "sent", step_order, due_at: PAST,
+    sequence_enrollments: { sequence_id: "seq-1", status: "active" },
+    sms_messages: smsStatus ? { status: smsStatus } : null,
+    email_messages: null,
+  });
+
+  it("reads delivery from the SMS messages (delivered / failed), never the email ones, and reports the channel", async () => {
+    tables = {
+      sequence_enrollments: [enr("e1", "active"), enr("e2", "completed")],
+      sequence_step_drafts: [smsSent("d1", 1, "delivered"), smsSent("d2", 1, "delivered"), smsSent("d3", 1, "failed"), smsSent("d4", 2, "submitted")],
+    };
+    selects = [];
+    const r = await buildSequenceReport(db, "seq-1", [1, 2], "sms");
+    expect(r.channel).toBe("sms");
+    expect(r.emails).toEqual({ sent: 4, delivered: 2, bounced: 1, complained: 0 }); // bounced = failed; no spam complaints on SMS
+    expect(selects.some((q) => q.includes("sms_messages!inner(status)"))).toBe(true);
+    expect(selects.some((q) => q.includes("email_messages!inner"))).toBe(false);
+    expect(r.steps).toEqual([{ stepOrder: 1, sent: 3 }, { stepOrder: 2, sent: 1 }]);
+  });
+
+  it("an email report still reads email_messages and carries the email channel", async () => {
+    tables = { sequence_enrollments: [], sequence_step_drafts: [sent("d1", 1, "delivered")] };
+    selects = [];
+    const r = await buildSequenceReport(db, "seq-1", [1]);
+    expect(r.channel).toBe("email");
+    expect(selects.some((q) => q.includes("email_messages!inner(status)"))).toBe(true);
+    expect(r.emails.delivered).toBe(1);
+  });
+});
+

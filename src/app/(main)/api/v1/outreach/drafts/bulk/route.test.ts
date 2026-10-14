@@ -10,6 +10,8 @@ const bulkEnabledMock = vi.fn();
 const skipMock = vi.fn();
 const resolveMock = vi.fn();
 const scheduleMock = vi.fn();
+const smsEnabledMock = vi.fn();
+const quietMock = vi.fn();
 
 vi.mock("@/lib/api/auth", () => ({ authenticateRequest: () => authMock() }));
 vi.mock("@/industries/_loader", () => ({ getFeatureAccess: (...a: unknown[]) => featureMock(...a) }));
@@ -18,6 +20,11 @@ vi.mock("@/lib/email/outbound/flag", () => ({
   isBulkEmailEnabledForTenant: (...a: unknown[]) => bulkEnabledMock(...a),
   isEmailOutboundSandbox: () => true,
 }));
+vi.mock("@/lib/sms/flag", () => ({
+  isSmsEnabledForTenant: (...a: unknown[]) => smsEnabledMock(...a),
+  isSmsSandbox: () => true,
+}));
+vi.mock("@/industries/_shared/features/outreach/lib/send-draft-sms", () => ({ smsQuietHoursDeferral: (...a: unknown[]) => quietMock(...a) }));
 vi.mock("@/lib/supabase/scoped", () => ({ scopedClient: async () => ({ marker: "db" }) }));
 vi.mock("@/industries/_shared/features/outreach/lib/engine", () => ({ skipDraft: (...a: unknown[]) => skipMock(...a) }));
 vi.mock("@/industries/_shared/features/outreach/lib/bulk-drafts", async (importOriginal) => {
@@ -34,7 +41,7 @@ const post = (body: unknown) => POST({ json: async () => body } as unknown as Ne
 const ids = (n: number) => ({ mode: "ids", ids: Array.from({ length: n }, (_, i) => U(i + 1)) });
 const eligible = (n: number, extra: Record<string, unknown> = {}) => ({
   eligible: Array.from({ length: n }, (_, i) => ({ id: U(i + 1), subject: "s", leads: { email: "a@b.com" } })),
-  matched: n, skipped: { noSubject: 0, noEmail: 0 }, notAvailable: 0, truncated: false, ...extra,
+  matched: n, skipped: { noSubject: 0, noEmail: 0, noPhone: 0 }, notAvailable: 0, truncated: false, ...extra,
 });
 
 beforeEach(() => {
@@ -45,6 +52,8 @@ beforeEach(() => {
   bulkEnabledMock.mockReset().mockResolvedValue(true);
   skipMock.mockReset().mockResolvedValue(true);
   resolveMock.mockReset().mockResolvedValue(eligible(3));
+  smsEnabledMock.mockReset().mockResolvedValue(true);
+  quietMock.mockReset().mockResolvedValue(null);
   scheduleMock.mockReset().mockImplementation(async (_db: unknown, _a: unknown, idList: string[]) => idList.length);
 });
 afterEach(() => vi.useRealTimers());
@@ -158,4 +167,68 @@ describe("skip", () => {
     resolveMock.mockResolvedValue(eligible(49));
     expect((await post({ action: "skip", selection: ids(49) })).status).toBe(200);
   });
+
+  describe("text (SMS) drafts", () => {
+    const smsEligible = (n: number) => ({
+      ...eligible(n),
+      eligible: Array.from({ length: n }, (_, i) => ({ id: U(i + 1), subject: "", channel: "sms", leads: { email: null, phone: "9801234567" } })),
+    });
+    const smsAuth = { ...edu, permissions: { canSendSms: true } };
+    beforeEach(() => {
+      authMock.mockResolvedValue(smsAuth);
+      resolveMock.mockResolvedValue(smsEligible(3));
+    });
+
+    it("send = scheduled for now through the same timer, and it does NOT need the bulk-email grant", async () => {
+      bulkEnabledMock.mockResolvedValue(false); // email sending off must not block texts
+      const res = await post({ action: "send", selection: ids(3) });
+      expect(res.status).toBe(200);
+      expect(scheduleMock).toHaveBeenCalled();
+      expect(bulkEnabledMock).not.toHaveBeenCalled();
+      const body = await res.json();
+      expect(body.data.applied).toBe(3);
+      expect(body.data.skipped).toMatchObject({ no_phone: 0 });
+    });
+
+    it("409 when SMS is off for the account, 403 without SMS permission", async () => {
+      smsEnabledMock.mockResolvedValue(false);
+      expect((await post({ action: "send", selection: ids(3) })).status).toBe(409);
+      smsEnabledMock.mockResolvedValue(true);
+      authMock.mockResolvedValue({ ...edu, permissions: { canSendSms: false } });
+      expect((await post({ action: "send", selection: ids(3) })).status).toBe(403);
+      expect(scheduleMock).not.toHaveBeenCalled();
+    });
+
+    it("refuses a bulk Send now inside the SMS quiet hours, with the time they end", async () => {
+      quietMock.mockResolvedValue(new Date("2026-10-05T02:15:00Z"));
+      const res = await post({ action: "send", selection: ids(3) });
+      expect(res.status).toBe(422);
+      expect((await res.json()).error.code).toBe("SMS_QUIET_HOURS");
+      expect(scheduleMock).not.toHaveBeenCalled();
+    });
+
+    it("refuses a bulk Schedule for a time inside the quiet hours", async () => {
+      quietMock.mockResolvedValue(new Date("2026-10-06T02:15:00Z"));
+      const sendAt = new Date("2026-10-05T20:30:00Z").toISOString();
+      expect((await post({ action: "schedule", selection: ids(3), send_at: sendAt })).status).toBe(422);
+      // the check is made for the time the texts would go out
+      expect(quietMock).toHaveBeenCalledWith(expect.anything(), "t1", new Date(sendAt));
+    });
+
+    it("skip needs neither the SMS grant nor permission, and is never held back by quiet hours", async () => {
+      smsEnabledMock.mockResolvedValue(false);
+      authMock.mockResolvedValue({ ...edu, permissions: { canSendSms: false } });
+      quietMock.mockResolvedValue(new Date("2026-10-06T02:15:00Z"));
+      expect((await post({ action: "skip", selection: ids(3) })).status).toBe(200);
+    });
+
+    it("a mixed selection needs BOTH gates", async () => {
+      resolveMock.mockResolvedValue({ ...eligible(2), eligible: [...smsEligible(1).eligible, { id: U(2), subject: "s", channel: "email", leads: { email: "a@b.com" } }] });
+      bulkEnabledMock.mockResolvedValue(false);
+      expect((await post({ action: "send", selection: ids(2) })).status).toBe(409);
+      bulkEnabledMock.mockResolvedValue(true);
+      expect((await post({ action: "send", selection: ids(2) })).status).toBe(200);
+    });
+  });
 });
+

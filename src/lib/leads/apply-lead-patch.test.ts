@@ -78,6 +78,7 @@ interface FakeDbOptions {
   pipelineStages?: RowMap; // keyed by id
   leadAssignmentHistory?: Array<{ lead_id: string; to_user_id: string; from_user_id: string | null }>;
   tenants?: Record<string, unknown>;
+  defaultBranchId?: string; // the tenant's is_default branch ("Global" for Admizz)
 }
 
 function makeFakeDb(opts: FakeDbOptions) {
@@ -142,6 +143,10 @@ function makeFakeDb(opts: FakeDbOptions) {
 
     if (table === "tenants") {
       return { data: opts.tenants ?? { name: "Test Tenant", primary_color: null }, error: null };
+    }
+
+    if (table === "branches") {
+      return { data: opts.defaultBranchId && state.eq.is_default === true ? { id: opts.defaultBranchId } : null, error: null };
     }
 
     if (table === "lead_notes") {
@@ -650,3 +655,148 @@ describe("applyLeadPatch — Processing fee lock (owner/admin only)", () => {
     if (outcome.kind === "ok") expect(outcome.lead.pre_app_fee_notes).toBe("verified with student");
   });
 });
+
+describe("applyLeadPatch — a Global lead becomes the assignee's branch lead", () => {
+  const ownerAuth = () =>
+    fixtureAuth({ role: "owner", permissions: { baseTier: "owner", leadScope: "all", canAssignLeads: true } as ResolvedPermissions });
+  const member = (branch: string | null) => ({
+    "member-y": { user_id: "member-y", branch_id: branch, role: "staff", positions: { slug: "counselor" } },
+  });
+  const leadIn = (branch: string | null) => ({ id: "lead-1", pipeline_id: "pipe-1", assigned_to: null, branch_id: branch, list_id: null });
+  const branchUpdates = (db: Awaited<ReturnType<typeof setFakeDb>>) =>
+    (db._updates.leads ?? []).filter((u) => "branch_id" in (u as Record<string, unknown>));
+
+  it("Global -> Birgunj: branch_id moves, and the origin row follows to the new branch + assignee", async () => {
+    const db = await setFakeDb({ leads: leadIn("global"), tenantUsers: member("birgunj"), defaultBranchId: "global" });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(ownerAuth(), "lead-1", { assigned_to: "member-y" }, OPTS);
+
+    expect(outcome.kind).toBe("ok");
+    if (outcome.kind === "ok") expect(outcome.lead.branch_id).toBe("birgunj");
+    expect(branchUpdates(db)).toHaveLength(1);
+    expect(syncOriginMembershipMock).toHaveBeenCalledWith(expect.anything(), "tenant-1", "lead-1", "birgunj", "member-y");
+  });
+
+  it("an existing KTM lead reassigned to Birgunj keeps KTM (only Global leads move)", async () => {
+    const db = await setFakeDb({ leads: leadIn("ktm"), tenantUsers: member("birgunj"), defaultBranchId: "global" });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(ownerAuth(), "lead-1", { assigned_to: "member-y" }, OPTS);
+
+    expect(outcome.kind).toBe("ok");
+    if (outcome.kind === "ok") expect(outcome.lead.branch_id).toBe("ktm");
+    expect(branchUpdates(db)).toHaveLength(0);
+  });
+
+  it("assigned to someone with no branch (owner/admin): the lead stays in Global", async () => {
+    const db = await setFakeDb({ leads: leadIn("global"), tenantUsers: member(null), defaultBranchId: "global" });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(ownerAuth(), "lead-1", { assigned_to: "member-y" }, OPTS);
+
+    expect(outcome.kind).toBe("ok");
+    expect(branchUpdates(db)).toHaveLength(0);
+  });
+
+  it("an explicit branch_id from the caller is never overridden", async () => {
+    const db = await setFakeDb({ leads: leadIn("global"), tenantUsers: member("birgunj"), defaultBranchId: "global" });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(ownerAuth(), "lead-1", { assigned_to: "member-y", branch_id: "ktm" }, OPTS);
+
+    // (the fake returns "not found" for the branches table, so the branch_id validation may reject it —
+    // either way, the automatic move must not have written "birgunj")
+    expect(branchUpdates(db).some((u) => (u as { branch_id: string }).branch_id === "birgunj")).toBe(false);
+    expect(["ok", "validation"]).toContain(outcome.kind);
+  });
+
+  it("unassigning never moves a lead", async () => {
+    const db = await setFakeDb({ leads: leadIn("global"), tenantUsers: member("birgunj"), defaultBranchId: "global" });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    await applyLeadPatch(ownerAuth(), "lead-1", { assigned_to: null }, OPTS);
+    expect(branchUpdates(db)).toHaveLength(0);
+  });
+});
+
+// The fields the client lost (Oct 2026): qualification address / awarding body / start & end date / stream (migration 236) and financial
+// details (migration 239) were rejected by this pipeline, so the Student Details pop-up could not save them.
+describe("applyLeadPatch — student record columns (migrations 236 + 239)", () => {
+  const LEAD = { id: "lead-1", pipeline_id: "pipe-1", assigned_to: "user-1", branch_id: null, list_id: null, status: "s" };
+  const written = (db: Awaited<ReturnType<typeof setFakeDb>>) => ((db._updates.leads ?? []) as Array<Record<string, unknown>>);
+
+  it("saves them, trimmed, for the counselor who owns the lead", async () => {
+    const db = await setFakeDb({ leads: LEAD });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(
+      fixtureAuth(),
+      "lead-1",
+      {
+        see_address: "  Baneshwor, Kathmandu ",
+        see_awarding_body: "NEB",
+        see_start_date: "2014-04-01",
+        see_end_date: "2019-03-31",
+        plus_two_stream_faculty: "Science",
+        bachelor_address: "Lalitpur",
+        masters_end_date: "2025-06-30",
+        sponsor_name: " Uncle ",
+        source_of_funds: "Bank loan",
+      },
+      OPTS,
+    );
+    expect(outcome.kind).toBe("ok");
+    expect(written(db)[0]).toMatchObject({
+      see_address: "Baneshwor, Kathmandu",
+      see_awarding_body: "NEB",
+      see_start_date: "2014-04-01",
+      see_end_date: "2019-03-31",
+      plus_two_stream_faculty: "Science",
+      bachelor_address: "Lalitpur",
+      masters_end_date: "2025-06-30",
+      sponsor_name: "Uncle",
+      source_of_funds: "Bank loan",
+    });
+  });
+
+  it("an emptied field is cleared (null), not left as an empty string", async () => {
+    const db = await setFakeDb({ leads: LEAD });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(fixtureAuth(), "lead-1", { see_address: "   ", see_start_date: "", sponsor_name: null }, OPTS);
+    expect(outcome.kind).toBe("ok");
+    expect(written(db)[0]).toMatchObject({ see_address: null, see_start_date: null, sponsor_name: null });
+  });
+
+  it("rejects a bad date per column and writes nothing (a bad DATE would otherwise be an opaque 500)", async () => {
+    const db = await setFakeDb({ leads: LEAD });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(fixtureAuth(), "lead-1", { see_start_date: "04/01/2014", bachelor_end_date: "2023-02-30", see_address: "ok" }, OPTS);
+    expect(outcome).toEqual({
+      kind: "validation",
+      errors: { see_start_date: ["Must be a valid date (YYYY-MM-DD)"], bachelor_end_date: ["Must be a valid date (YYYY-MM-DD)"] },
+    });
+    expect(written(db)).toHaveLength(0);
+  });
+
+  it("rejects text that is too long", async () => {
+    const db = await setFakeDb({ leads: LEAD });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(fixtureAuth(), "lead-1", { masters_address: "x".repeat(501) }, OPTS);
+    expect(outcome).toMatchObject({ kind: "validation", errors: { masters_address: [expect.stringContaining("500")] } });
+    expect(written(db)).toHaveLength(0);
+  });
+
+  it("an own-scope counselor cannot write them on a lead that is not theirs (the existing scope rule still applies)", async () => {
+    const db = await setFakeDb({ leads: { ...LEAD, assigned_to: "someone-else" } });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(fixtureAuth(), "lead-1", { see_address: "x" }, OPTS);
+    expect(outcome.kind).not.toBe("ok");
+    expect(written(db)).toHaveLength(0);
+  });
+
+  it("only real columns pass through — an unknown key is not written", async () => {
+    const db = await setFakeDb({ leads: LEAD });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    await applyLeadPatch(fixtureAuth(), "lead-1", { see_address: "ok", see_not_a_column: "x", tenant_id: "other-tenant" }, OPTS);
+    const w = written(db)[0] ?? {};
+    expect(w).toMatchObject({ see_address: "ok" });
+    expect(w).not.toHaveProperty("see_not_a_column");
+    expect(w).not.toHaveProperty("tenant_id");
+  });
+});
+

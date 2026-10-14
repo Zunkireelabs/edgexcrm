@@ -7,13 +7,21 @@ export const PERSONAL_DETAIL_TEXT_COLUMNS = [
   "father_name",
   "mother_name",
   "full_address",
+  // Structured Nepal address parts (migration 272). Country reuses leads.country.
+  "address_province",
+  "address_district",
+  "address_municipality",
+  "address_ward",
+  "address_tole",
   "emergency_contact_name",
   "emergency_contact_phone",
   "passport_number",
   "passport_issued_by",
   "citizenship_number",
   "citizenship_issued_by",
-  // Guardian contact (migration 266). Name is derived from father/mother, not stored.
+  // Guardian (migrations 266, 269). guardian_name is typed for non-parent guardians; Father/Mother
+  // relationships fall back to father_name / mother_name (see lib/consent/guardian.ts).
+  "guardian_name",
   "guardian_phone",
   "guardian_email",
   "guardian_relationship",
@@ -35,10 +43,10 @@ export type PersonalDetailColumn = (typeof PERSONAL_DETAIL_COLUMNS)[number];
 
 export const MARITAL_STATUSES = ["unmarried", "married"] as const;
 
-const TEXT_MAX_LENGTH = 500;
+export const TEXT_MAX_LENGTH = 500;
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
-function isRealCalendarDate(value: string): boolean {
+export function isRealCalendarDate(value: string): boolean {
   const m = ISO_DATE.exec(value);
   if (!m) return false;
   const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];

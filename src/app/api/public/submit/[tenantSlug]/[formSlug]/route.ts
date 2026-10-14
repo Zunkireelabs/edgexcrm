@@ -36,6 +36,7 @@ import { resolveLeadPipelineAndStage } from "@/lib/leads/pipeline-resolution";
 import { syncOriginMembership } from "@/lib/leads/branch-membership";
 import { processEmailForwardRules } from "@/lib/email/email-forward";
 import { processFormAutoresponder } from "@/lib/email/form-autoresponder";
+import { processFormSmsAutoresponder } from "@/lib/sms/form-autoresponder";
 import { assignDisplayIds } from "@/lib/leads/assign-display-ids";
 import {
   extractDestinationsFromCustomFields,
@@ -402,6 +403,11 @@ export async function POST(
       { ...canonical, ...patch } as Lead,
       { isResubmission: true, tenant: { name: tenant.name } }
     ).catch(() => {});
+    void processFormSmsAutoresponder(
+      formConfig as FormConfig,
+      { ...canonical, ...patch } as Lead,
+      { isResubmission: true }
+    ).catch(() => {});
 
     return cors(apiSuccess({ lead_id: canonicalId, deduped: true }, 200));
   }
@@ -701,6 +707,11 @@ export async function POST(
     formConfig as FormConfig,
     { ...leadPayload, id: leadId } as Lead,
     { isResubmission: false, tenant: { name: tenant.name } }
+  ).catch(() => {});
+  void processFormSmsAutoresponder(
+    formConfig as FormConfig,
+    { ...leadPayload, id: leadId } as Lead,
+    { isResubmission: false }
   ).catch(() => {});
 
   return cors(apiSuccess({ lead_id: leadId }, 201));

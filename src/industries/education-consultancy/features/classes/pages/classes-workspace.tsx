@@ -4,6 +4,7 @@ import { useState, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { PERMISSION_DENIED_MESSAGE, failureMessage } from "@/lib/permission-denied";
 import { Plus, Users, ClipboardCheck, Pencil, Loader2, Search, ArrowRight, TrendingUp, Wallet, CircleDollarSign } from "lucide-react";
 import { useSettingsModal } from "@/contexts/settings-modal-context";
 import { Badge } from "@/components/ui/badge";
@@ -47,6 +48,8 @@ interface Enrollment {
   enrollment_type: "demo" | "actual";
   status: "active" | "inactive" | "completed";
   created_at: string;
+  /** Set by the page from the same rule the API enforces. `false` = this user may not change it. */
+  can_edit?: boolean;
   leads?: {
     id: string;
     first_name: string | null;
@@ -201,6 +204,10 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
   }, [router]);
 
   function openEditFee(enrollment: Enrollment) {
+    if (enrollment.can_edit === false) {
+      toast.error(PERMISSION_DENIED_MESSAGE);
+      return;
+    }
     setEditFeeTarget(enrollment);
     setEditFeePaid(enrollment.fee_paid);
     setEditFeeAmount(enrollment.fee_amount != null ? String(enrollment.fee_amount) : "");
@@ -208,6 +215,10 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
 
   async function handleStatusChange(enrollment: Enrollment, status: "active" | "inactive" | "completed") {
     if (status === enrollment.status) return;
+    if (enrollment.can_edit === false) {
+      toast.error(PERMISSION_DENIED_MESSAGE);
+      return;
+    }
     setStatusUpdatingId(enrollment.id);
     try {
       const res = await fetch(`/api/v1/class-enrollments/${enrollment.id}`, {
@@ -215,7 +226,10 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
-      if (!res.ok) throw new Error("Failed to update status");
+      if (!res.ok) {
+        toast.error(failureMessage(res, "Failed to update status"));
+        return;
+      }
       toast.success("Status updated");
       handleRefresh();
     } catch {
@@ -227,6 +241,10 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
 
   async function handleConvertToActual(row: StudentRoster) {
     if (!selectedClassId || !row.demo) return;
+    if (row.demo.can_edit === false) {
+      toast.error(PERMISSION_DENIED_MESSAGE);
+      return;
+    }
     setConvertingLeadId(row.leadId);
     try {
       const res = await fetch("/api/v1/class-enrollments", {
@@ -240,7 +258,10 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
           fee_amount: row.demo.fee_amount,
         }),
       });
-      if (!res.ok) throw new Error("Failed to convert");
+      if (!res.ok) {
+        toast.error(failureMessage(res, "Failed to convert to actual class"));
+        return;
+      }
       toast.success("Converted to actual class");
       handleRefresh();
     } catch {
@@ -262,7 +283,10 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
           fee_amount: editFeeAmount.trim() ? Number(editFeeAmount) : null,
         }),
       });
-      if (!res.ok) throw new Error("Failed to update");
+      if (!res.ok) {
+        toast.error(failureMessage(res, "Failed to update fee"));
+        return;
+      }
       toast.success("Fee updated");
       setEditFeeTarget(null);
       handleRefresh();

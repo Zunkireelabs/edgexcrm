@@ -70,6 +70,9 @@ import { RunningTimerChip } from "./running-timer-chip";
 import { useBadgeCounts } from "@/hooks/use-badge-counts";
 import { useTrackPreviousPage } from "@/hooks/use-track-previous-page";
 import { Badge } from "@/components/ui/badge";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { SidebarTip } from "@/components/dashboard/sidebar-tooltip";
+import { SidebarFlyout } from "@/components/dashboard/sidebar-flyout";
 import type { SidebarEntry, SidebarGroup, SidebarItem } from "@/industries/_types";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
@@ -190,22 +193,23 @@ function SidebarGroupRender({
 
   if (collapsed) {
     return (
-      <div className="relative group/navgroup">
-        <button
-          type="button"
-          title={group.label}
-          className={`w-full flex items-center justify-center px-2 py-1.5 rounded-[8px] transition-colors ${
-            hasActiveChild
-              ? "bg-[#ebebeb] text-gray-900"
-              : "text-[#666666] hover:bg-[#ebebeb] hover:text-gray-900"
-          }`}
+      <div>
+        <SidebarFlyout
+          header={group.label}
+          trigger={
+            <button
+              type="button"
+              aria-label={group.label}
+              className={`w-full flex items-center justify-center px-2 py-1.5 rounded-[8px] transition-colors ${
+                hasActiveChild
+                  ? "bg-[#ebebeb] text-gray-900"
+                  : "text-[#666666] hover:bg-[#ebebeb] hover:text-gray-900"
+              }`}
+            >
+              <ParentIcon className="w-[18px] h-[18px] shrink-0" />
+            </button>
+          }
         >
-          <ParentIcon className="w-[18px] h-[18px] shrink-0" />
-        </button>
-        <div className="hidden group-hover/navgroup:block absolute left-full top-0 ml-1 z-50 min-w-[190px] bg-white rounded-lg shadow-lg border border-gray-200 py-1.5">
-          <p className="px-3 pb-1 text-[11px] font-medium text-gray-400 uppercase tracking-wider select-none">
-            {group.label}
-          </p>
           {group.children.map((child) => {
             const ChildIcon = INDUSTRY_ICONS[child.icon] ?? FileText;
             const active = isChildActive(child);
@@ -225,7 +229,7 @@ function SidebarGroupRender({
               </Link>
             );
           })}
-        </div>
+        </SidebarFlyout>
       </div>
     );
   }
@@ -456,11 +460,11 @@ export function DashboardShell({
       ? () => { item.onClick!(); setMobileOpen(false); }
       : () => setMobileOpen(false);
     return (
+      <SidebarTip key={item.href} label={item.label} enabled={sidebarCollapsed}>
       <Link
-        key={item.href}
         href={item.href}
         onClick={handleClick}
-        title={sidebarCollapsed ? item.label : undefined}
+        aria-label={sidebarCollapsed ? item.label : undefined}
         className={`relative w-full flex items-center gap-3 rounded-[8px] text-[13px] leading-5 font-medium transition-colors ${
           sidebarCollapsed ? "justify-center px-2 py-1.5" : "px-3 py-1.5"
         } ${
@@ -488,6 +492,7 @@ export function DashboardShell({
           <span className="absolute top-1 right-1.5 w-2 h-2 rounded-full bg-red-500" />
         ) : null}
       </Link>
+      </SidebarTip>
     );
   }
 
@@ -521,6 +526,7 @@ export function DashboardShell({
 
 
   const sidebarContent = (
+    <TooltipProvider delayDuration={0} skipDelayDuration={300}>
     <div className="flex flex-col h-full bg-sidebar-bg">
       {/* EdgeX product brand wordmark + sidebar collapse toggle, same row */}
       <div
@@ -536,10 +542,10 @@ export function DashboardShell({
             )}
           </span>
         )}
+        <SidebarTip label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}>
         <button
           type="button"
           onClick={() => setSidebarCollapsed((v) => !v)}
-          title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           className="p-1.5 rounded-md text-gray-400 hover:bg-[#ebebeb] hover:text-gray-700 transition-colors shrink-0"
         >
@@ -549,6 +555,7 @@ export function DashboardShell({
             <PanelLeftClose className="w-[18px] h-[18px]" />
           )}
         </button>
+        </SidebarTip>
       </div>
 
       {/* Mode switcher — Orca tab hidden entirely for AI-disabled tenants (env flag AND tenants.ai_enabled); also hidden while collapsed (no room for labeled tabs) */}
@@ -571,10 +578,11 @@ export function DashboardShell({
 
       {/* Global Search row — top of nav, opens command palette */}
       <div className="px-3 pt-4 pb-1">
+        <SidebarTip label="Global Search" enabled={sidebarCollapsed}>
         <button
           type="button"
           onClick={() => { openSearch(); setMobileOpen(false); }}
-          title={sidebarCollapsed ? "Global Search" : undefined}
+          aria-label={sidebarCollapsed ? "Global Search" : undefined}
           className={`w-full flex items-center gap-3 rounded-[8px] border border-gray-200 text-[13px] leading-5 font-medium transition-colors text-[#666666] bg-white hover:bg-[#ebebeb] hover:border-gray-300 hover:text-gray-900 ${
             sidebarCollapsed ? "justify-center px-2 py-1.5" : "px-3 py-1.5"
           }`}
@@ -589,6 +597,7 @@ export function DashboardShell({
             </>
           )}
         </button>
+        </SidebarTip>
       </div>
 
       {/* Navigation */}
@@ -963,9 +972,10 @@ export function DashboardShell({
 
       {/* Account — pinned to the bottom of the sidebar; menu opens upward */}
       <div className="border-t border-gray-200 p-3 relative">
+        <SidebarTip label={userName} enabled={sidebarCollapsed}>
         <button
           onClick={() => setShowAccountDropdown(!showAccountDropdown)}
-          title={sidebarCollapsed ? userName : undefined}
+          aria-label={sidebarCollapsed ? userName : undefined}
           className={`w-full flex items-center gap-3 rounded-md transition-colors hover:bg-[#ebebeb] ${
             sidebarCollapsed ? "justify-center px-1 py-2" : "px-2 py-2"
           }`}
@@ -986,6 +996,7 @@ export function DashboardShell({
             </>
           )}
         </button>
+        </SidebarTip>
 
         {showAccountDropdown && (
           <>
@@ -1033,6 +1044,7 @@ export function DashboardShell({
         )}
       </div>
     </div>
+    </TooltipProvider>
   );
 
   return (

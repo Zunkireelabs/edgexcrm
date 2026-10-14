@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import type { SendWindow } from "../lib/send-window";
+import type { OutreachChannel } from "../lib/channel";
 
 export interface SequenceStep {
   id: string;
@@ -19,6 +20,8 @@ export interface Sequence {
   name: string;
   description: string | null;
   status: string;
+  /** Which channel this sequence sends on (migration 274); fixed at creation. Absent on pre-274 rows = email. */
+  channel?: OutreachChannel;
   created_at: string;
   // OUTREACH-PHASE2-BRIEF.md §4/§6 — sequence-level auto-send flag. Defaults
   // false everywhere it_agency already has sequences; only a tenant whose
@@ -32,14 +35,14 @@ export interface Sequence {
   email_sequence_steps: SequenceStep[];
 }
 
-export function useSequences() {
+export function useSequences(channel?: OutreachChannel) {
   const [sequences, setSequences] = useState<Sequence[]>([]);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/v1/outreach/sequences");
+      const res = await fetch(channel ? `/api/v1/outreach/sequences?channel=${channel}` : "/api/v1/outreach/sequences");
       if (res.ok) {
         const json = await res.json();
         setSequences(json.data ?? []);
@@ -47,7 +50,7 @@ export function useSequences() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [channel]);
 
   useEffect(() => {
     refresh();

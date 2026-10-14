@@ -59,6 +59,7 @@ export async function stopEnrollmentsForSuppressedEmail(
     .from("sequence_enrollments")
     .select("id, lead_id, sequence_id")
     .in("lead_id", ids)
+    .eq("channel", "email") // an email unsubscribe says nothing about the lead's SMS sequence
     .in("status", ["active", "paused"]);
   if (enrollError) {
     logger.error({ err: enrollError, tenantId: params.tenantId }, "stopEnrollmentsForSuppressedEmail: failed to load enrollments");
@@ -101,6 +102,7 @@ export async function stopEnrollmentsForSuppressedEmail(
     .from("sequence_enrollment_queue")
     .update({ status: "cancelled", reason: "The address is on the do-not-contact list." })
     .in("lead_id", ids)
+    .eq("channel", "email") // a parked SMS sequence is unaffected by an email address being suppressed
     .eq("status", "waiting")
     .select("id");
   result.queueCancelled = (cancelled ?? []).length;

@@ -137,13 +137,18 @@ export function ApplicationsCard({ leadId, canManage, disabled = false }: Applic
   const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
   const [checkingProfile, setCheckingProfile] = useState(false);
-  const { showNotice, noticeDialog } = useBlockingNotice();
+  const { notify, showNotice, noticeDialog } = useBlockingNotice();
 
   // Check the student's profile BEFORE opening the form, so a missing item is shown up front in a big
   // pop-up instead of as a small message after the whole form is filled. If the check can't run we
   // open the form anyway — the create API still enforces the rule when saving.
   async function handleAddClick() {
-    if (disabled || checkingProfile) return;
+    if (checkingProfile) return;
+    // Consent not signed yet: the "+" stays clickable so it can say WHY (a dead button explains nothing).
+    if (disabled) {
+      notify({ code: "CONSENT_REQUIRED" });
+      return;
+    }
     setCheckingProfile(true);
     try {
       const res = await fetch(`/api/v1/leads/${leadId}/profile-completeness`);
@@ -230,16 +235,17 @@ export function ApplicationsCard({ leadId, canManage, disabled = false }: Applic
               )}
             </span>
             {canManage && (
-              // The tooltip lives on the wrapper: a disabled Button has pointer-events-none, so a
-              // title on the button itself never shows and the "+" looked dead with no explanation.
+              // While consent is unsigned the "+" is only dimmed (aria-disabled), not disabled: clicking it
+              // opens the "complete the consent form first" pop-up instead of doing nothing.
               <span title={disabled ? "Sign consent first" : "Add Application"}>
                 <Button
                   size="sm"
                   variant="ghost"
-                  className="h-6 w-6 p-0"
+                  className={`h-6 w-6 p-0${disabled ? " opacity-50" : ""}`}
                   onClick={handleAddClick}
                   aria-label={disabled ? "Add Application (sign consent first)" : "Add Application"}
-                  disabled={disabled || checkingProfile}
+                  aria-disabled={disabled || undefined}
+                  disabled={checkingProfile}
                 >
                   <Plus className="h-3.5 w-3.5" />
                 </Button>

@@ -32,38 +32,92 @@ export function emptyQualifications(): Qualifications {
   return { see: emptyEntry(), plusTwo: emptyEntry(), bachelor: emptyEntry(), masters: emptyEntry() };
 }
 
-/**
- * Auto-fills only what genuinely already exists (migration 159's per-level
- * GPA/institution columns) — Address, Awarding Body, Start Date, and End Date
- * have no existing data anywhere, so they start blank rather than guessing.
- */
+/** "YYYY-MM-DD" for a date input, from a DATE column (which may arrive with a time part) — "" when there is none. */
+function dateText(value: string | null | undefined): string {
+  return /^\d{4}-\d{2}-\d{2}/.exec(value ?? "")?.[0] ?? "";
+}
+
 function yearText(year: number | string | null | undefined): string {
   return year === null || year === undefined ? "" : String(year);
 }
 
+/**
+ * Everything a qualification card shows comes from the lead's real columns: institution / grade / passed year
+ * (migration 159) and address / awarding body / start & end date / stream (migration 236). Nothing here is a local-only
+ * "preview" — a field the card shows that is not read here would come back empty after a refresh.
+ */
 export function qualificationsFromLead(lead: Lead): Qualifications {
   return {
-    see: { ...emptyEntry(), institution: lead.see_institution ?? "", percentageGrade: lead.see_gpa ?? "", passedYear: yearText(lead.see_passed_year) },
-    plusTwo: { ...emptyEntry(), institution: lead.plus_two_institution ?? "", percentageGrade: lead.plus_two_gpa ?? "", passedYear: yearText(lead.plus_two_passed_year) },
-    bachelor: { ...emptyEntry(), institution: lead.bachelor_institution ?? "", percentageGrade: lead.bachelor_gpa ?? "", passedYear: yearText(lead.bachelor_passed_year) },
-    masters: { ...emptyEntry(), institution: lead.masters_institution ?? "", percentageGrade: lead.masters_gpa ?? "", passedYear: yearText(lead.masters_passed_year) },
+    see: {
+      ...emptyEntry(),
+      institution: lead.see_institution ?? "",
+      address: lead.see_address ?? "",
+      awardingBody: lead.see_awarding_body ?? "",
+      startDate: dateText(lead.see_start_date),
+      endDate: dateText(lead.see_end_date),
+      percentageGrade: lead.see_gpa ?? "",
+      passedYear: yearText(lead.see_passed_year),
+    },
+    plusTwo: {
+      ...emptyEntry(),
+      institution: lead.plus_two_institution ?? "",
+      address: lead.plus_two_address ?? "",
+      awardingBody: lead.plus_two_awarding_body ?? "",
+      startDate: dateText(lead.plus_two_start_date),
+      endDate: dateText(lead.plus_two_end_date),
+      percentageGrade: lead.plus_two_gpa ?? "",
+      passedYear: yearText(lead.plus_two_passed_year),
+      streamFaculty: lead.plus_two_stream_faculty ?? "",
+    },
+    bachelor: {
+      ...emptyEntry(),
+      institution: lead.bachelor_institution ?? "",
+      address: lead.bachelor_address ?? "",
+      awardingBody: lead.bachelor_awarding_body ?? "",
+      startDate: dateText(lead.bachelor_start_date),
+      endDate: dateText(lead.bachelor_end_date),
+      percentageGrade: lead.bachelor_gpa ?? "",
+      passedYear: yearText(lead.bachelor_passed_year),
+      streamFaculty: lead.bachelor_stream_faculty ?? "",
+    },
+    masters: {
+      ...emptyEntry(),
+      institution: lead.masters_institution ?? "",
+      address: lead.masters_address ?? "",
+      awardingBody: lead.masters_awarding_body ?? "",
+      startDate: dateText(lead.masters_start_date),
+      endDate: dateText(lead.masters_end_date),
+      percentageGrade: lead.masters_gpa ?? "",
+      passedYear: yearText(lead.masters_passed_year),
+      streamFaculty: lead.masters_stream_faculty ?? "",
+    },
   };
 }
 
 type Tier = "ug" | "pg" | "phd";
 
+/** Short forms of degrees, matched whole (a substring test on "ma" or "ba" would hit unrelated words). */
+const UG_CODES = new Set(["ug", "ba", "bsc", "bba", "bca", "bcom", "btech", "be", "beng", "bed", "llb"]);
+const PG_CODES = new Set(["pg", "ma", "msc", "mba", "mca", "mcom", "mtech", "me", "meng", "med", "llm", "mphil"]);
+
 /**
- * `degree_level` is a tenant-configurable catalog value (study_levels table),
- * not a fixed enum — matched by keyword rather than exact string so a
- * tenant's own wording ("Master's", "Postgraduate Diploma", etc.) still
- * resolves correctly instead of only matching one exact label.
+ * `degree_level` is a tenant-configurable catalog value (study_levels table), not a fixed enum, so any
+ * spelling can show up ("Under Graduate", "Master's", "B.Sc.", "Diploma", ...). It is matched by keyword,
+ * ignoring case, spaces, hyphens and punctuation — "Under Graduate" once fell through to "no degree
+ * level" and the Academic Information section showed nothing.
+ *
+ * The one rule that must never break: a level that IS chosen always shows qualifications. Wording we do
+ * not recognise (Diploma, Foundation, Certificate, a tenant's own invention) gets the base two — Grade X
+ * and Grade XI & XII — which every student has, instead of an empty section. Only a blank level
+ * returns null, and that alone shows the "Set a Degree Level" notice.
  */
 export function qualificationTier(degreeLevel: string): Tier | null {
-  const v = degreeLevel.toLowerCase();
-  if (v.includes("phd") || v.includes("doctor")) return "phd";
-  if (v.includes("post") || v.includes("master")) return "pg";
-  if (v.includes("undergrad") || v.includes("bachelor")) return "ug";
-  return null;
+  const v = degreeLevel.toLowerCase().replace(/[^a-z]/g, "");
+  if (!v) return null;
+  if (v.includes("phd") || v.includes("doctor") || v === "dphil" || v.includes("postdoc")) return "phd";
+  if (v.includes("post") || v.includes("master") || PG_CODES.has(v)) return "pg";
+  if (v.includes("undergrad") || v.includes("bachelor") || UG_CODES.has(v)) return "ug";
+  return "ug";
 }
 
 interface LevelMeta {
@@ -151,7 +205,7 @@ export function QualificationsSection({
                   leadId={leadId}
                   defaultDocumentType="marksheet"
                   fixedQualificationLevel={QUALIFICATION_DOCUMENT_LEVEL[meta.key]}
-                  label="Attach Marksheet"
+                  label="Attach"
                 />
               )
             }

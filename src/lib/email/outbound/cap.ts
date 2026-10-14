@@ -46,7 +46,8 @@ export interface GetDailyCapStatusOptions {
 }
 
 async function countDueAutoSendDraftsForTenant(db: ScopedClient): Promise<number> {
-  const { data: autoSendSequences } = await db.from("email_sequences").select("id").eq("auto_send", true);
+  // Only EMAIL sequences count: a due text uses SMS credits, never the daily email cap (migration 274).
+  const { data: autoSendSequences } = await db.from("email_sequences").select("id").eq("auto_send", true).eq("channel", "email");
   const sequenceIds = ((autoSendSequences ?? []) as unknown as { id: string }[]).map((s) => s.id);
   if (sequenceIds.length === 0) return 0;
 

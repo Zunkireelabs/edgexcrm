@@ -1,10 +1,12 @@
 import { buildUserAuthContext } from "@/lib/api/auth";
 import { logger } from "@/lib/logger";
 import { scopedClientForTenant, type ScopedClient } from "@/lib/supabase/scoped";
+import type { OutreachChannel } from "./channel";
 
-// "Queue next" (migration 259): a lead can be in only ONE running sequence, so a second sequence is parked in
-// sequence_enrollment_queue and started automatically when the lead's current enrollment ends (completes,
-// unenrolled, or ended by a reply with on_reply='end'). One waiting row per lead (partial unique index).
+// "Queue next" (migration 259): a lead can be in only ONE running sequence PER CHANNEL, so a second sequence is parked in
+// sequence_enrollment_queue and started automatically when the lead's current enrollment ON THE SAME CHANNEL ends
+// (completes, unenrolled, or ended by a reply with on_reply='end'). One waiting row per lead per channel (migration 275):
+// an email enrollment ending never starts a queued SMS sequence, and the other way round.
 
 export type QueueResult = "queued" | "already_queued";
 
@@ -39,13 +41,18 @@ export type StartQueuedResult = "none" | "started" | "waiting" | "failed";
  * Never throws for an expected situation — a lead that is (again) in a sequence just keeps waiting, a queued
  * sequence that was archived / a starter who left is marked failed with a reason.
  */
-export async function startQueuedEnrollment(tenantId: string, leadId: string): Promise<StartQueuedResult> {
+export async function startQueuedEnrollment(
+  tenantId: string,
+  leadId: string,
+  channel: OutreachChannel = "email"
+): Promise<StartQueuedResult> {
   const db = await scopedClientForTenant(tenantId);
 
   const { data } = await db
     .from("sequence_enrollment_queue")
     .select("id, sequence_id, queued_by")
     .eq("lead_id", leadId)
+    .eq("channel", channel)
     .eq("status", "waiting")
     .order("created_at", { ascending: true })
     .limit(1)
@@ -95,9 +102,9 @@ export async function startQueuedEnrollment(tenantId: string, leadId: string): P
 }
 
 /** Non-fatal wrapper for the places an enrollment ends: a failure here must never undo the end itself. */
-export async function promoteQueuedEnrollment(tenantId: string, leadId: string): Promise<void> {
+export async function promoteQueuedEnrollment(tenantId: string, leadId: string, channel: OutreachChannel = "email"): Promise<void> {
   try {
-    await startQueuedEnrollment(tenantId, leadId);
+    await startQueuedEnrollment(tenantId, leadId, channel);
   } catch (err) {
     logger.error({ err, tenantId, leadId }, "queue-next: promoting the queued sequence failed (non-fatal)");
   }

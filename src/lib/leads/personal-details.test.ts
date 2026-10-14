@@ -2,8 +2,26 @@ import { describe, expect, it } from "vitest";
 import { PERSONAL_DETAIL_COLUMNS, coercePersonalDetailsPayload } from "./personal-details";
 
 describe("coercePersonalDetailsPayload", () => {
-  it("covers the 14 migration-234 columns plus the 3 migration-266 guardian columns", () => {
-    expect(PERSONAL_DETAIL_COLUMNS).toHaveLength(17);
+  it("covers the 14 migration-234 columns, the 4 guardian columns (266, 269) and the 5 address columns (272)", () => {
+    expect(PERSONAL_DETAIL_COLUMNS).toHaveLength(23);
+  });
+
+  it("saves the structured address parts as trimmed text and clears them with blanks", () => {
+    const { values, errors } = coercePersonalDetailsPayload({
+      address_province: " Bagmati ",
+      address_district: "Kathmandu",
+      address_municipality: "Kathmandu Metropolitan City",
+      address_ward: "5",
+      address_tole: "",
+    });
+    expect(errors).toEqual({});
+    expect(values).toEqual({
+      address_province: "Bagmati",
+      address_district: "Kathmandu",
+      address_municipality: "Kathmandu Metropolitan City",
+      address_ward: "5",
+      address_tole: null,
+    });
   });
 
   it("only returns columns present in the body", () => {
@@ -38,5 +56,11 @@ describe("coercePersonalDetailsPayload", () => {
   it("rejects non-string values and over-long text", () => {
     expect(coercePersonalDetailsPayload({ passport_number: 12345 }).errors.passport_number).toBeDefined();
     expect(coercePersonalDetailsPayload({ full_address: "a".repeat(501) }).errors.full_address).toBeDefined();
+  });
+
+  it("trims and nulls guardian_name like the other text columns, and length-limits it", () => {
+    expect(coercePersonalDetailsPayload({ guardian_name: "  Hari Sharma " }).values).toEqual({ guardian_name: "Hari Sharma" });
+    expect(coercePersonalDetailsPayload({ guardian_name: "" }).values).toEqual({ guardian_name: null });
+    expect(coercePersonalDetailsPayload({ guardian_name: "x".repeat(501) }).errors.guardian_name).toBeDefined();
   });
 });

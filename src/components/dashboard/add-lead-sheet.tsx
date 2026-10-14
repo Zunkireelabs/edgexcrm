@@ -129,6 +129,7 @@ interface FormErrors {
   phone?: string;
   general?: string;
   archiveReason?: string;
+  listId?: string;
 }
 
 const CONTACT_METHODS = [
@@ -212,6 +213,8 @@ export function AddLeadSheet({
     setTestScores((prev) => ({ ...prev, [col]: value }));
 
   const isAdmin = role === "owner" || role === "admin";
+  // Education: Lead Source / Campaign are owner/admin-only. Other industries keep them for everyone.
+  const canSetLeadSource = isAdmin || industryId !== "education_consultancy";
   const defaultStage = stages.find((s) => s.is_default) || stages[0];
 
   useEffect(() => {
@@ -291,6 +294,19 @@ export function AddLeadSheet({
       return;
     }
 
+    // Non-admins can't see the staging list ("New Leads"). Without a Stage the lead
+    // would be routed there and disappear from the creator's view.
+    if (
+      isEducation &&
+      !isAdmin &&
+      !lockedList &&
+      !formData.listId &&
+      leadLists.some((l) => !l.is_staging && !l.is_archive)
+    ) {
+      setErrors({ listId: "Choose a stage so the lead stays in your view." });
+      return;
+    }
+
     setIsSubmitting(true);
     setErrors({});
 
@@ -313,10 +329,11 @@ export function AddLeadSheet({
         assigned_to: formData.assignedTo || null,
         entity_id: formData.entityId || null,
         branch_id: formData.branchId || null,
-        intake_source: formData.intakeSource || "manual_entry",
+        // Lead Source is owner/admin-only for education: everyone else there gets the default.
+        intake_source: (canSetLeadSource && formData.intakeSource) || "manual_entry",
         intake_medium: "dashboard",
         tags: industryId === "education_consultancy" ? ["student"] : [],
-        intake_campaign: formData.intakeCampaign || null,
+        intake_campaign: (canSetLeadSource && formData.intakeCampaign) || null,
         preferred_contact_method: formData.preferredContact || null,
         custom_fields: formData.initialNotes
           ? { initial_notes: formData.initialNotes }
@@ -586,6 +603,7 @@ export function AddLeadSheet({
               </SelectContent>
             </Select>
           )}
+          {errors.listId && <p className="text-xs text-red-500">{errors.listId}</p>}
         </div>
 
         <div className="space-y-1.5">
@@ -687,11 +705,12 @@ export function AddLeadSheet({
               sourceOpen ? "rotate-90" : ""
             }`}
           />
-          Lead Source
+          {canSetLeadSource ? "Lead Source" : "Contact Preference"}
           <span className="text-xs text-gray-400 font-normal">(optional)</span>
         </CollapsibleTrigger>
         <CollapsibleContent className="space-y-4 pt-2">
           <div className="grid grid-cols-2 gap-4">
+            {canSetLeadSource && (
             <div className="space-y-1.5">
               <Label htmlFor="source" className="text-xs text-gray-600">
                 Source
@@ -713,6 +732,9 @@ export function AddLeadSheet({
                 </SelectContent>
               </Select>
             </div>
+            )}
+            {/* The client dropped Preferred Contact for education (one less field for counselors to fill). */}
+            {!isEducation && (
             <div className="space-y-1.5">
               <Label htmlFor="preferredContact" className="text-xs text-gray-600">
                 Preferred Contact
@@ -734,7 +756,9 @@ export function AddLeadSheet({
                 </SelectContent>
               </Select>
             </div>
+            )}
           </div>
+          {canSetLeadSource && (
           <div className="space-y-1.5">
             <Label htmlFor="campaign" className="text-xs text-gray-600">
               Campaign / Referrer
@@ -747,6 +771,7 @@ export function AddLeadSheet({
               disabled={isSubmitting}
             />
           </div>
+          )}
         </CollapsibleContent>
       </Collapsible>
 

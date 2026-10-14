@@ -2,46 +2,58 @@
 
 import { useRef, useState } from "react";
 import { Paperclip } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import type { DocumentType } from "@/lib/documents/constants";
-import {
-  DocumentUploadDialog,
-  type QualificationLevel,
-} from "@/industries/education-consultancy/features/applicant-documents/document-upload-dialog";
+import type { QualificationLevel } from "@/industries/education-consultancy/features/applicant-documents/document-upload-dialog";
+import { MultiDocumentUploadDialog } from "@/industries/education-consultancy/features/applicant-documents/multi-document-upload-dialog";
+import { notifyDocumentsChanged } from "@/industries/education-consultancy/features/applicant-documents/documents-events";
+import { ACCEPT_ATTR, describeSkipped, pickFiles } from "@/industries/education-consultancy/features/applicant-documents/multi-upload";
+
+// What a document on each kind of card can be. The first entry is that card's usual document.
+const QUALIFICATION_TYPES: readonly DocumentType[] = ["marksheet", "transcript", "certificate", "english_test_result", "other"];
+const IDENTITY_TYPES: readonly DocumentType[] = ["passport", "identity_document", "other"];
 
 /**
- * A small "Attach Document" trigger for Passport & Citizenship / a specific
- * Qualification card — reuses DocumentUploadDialog (the same presign -> R2
- * PUT -> verified-complete flow the sidebar Documents card uses), just
- * pre-locked to the context it was opened from so the upload lands tagged
- * correctly without the user re-picking a type/qualification they already
- * told us by clicking this specific button.
+ * An "Attach" trigger for a Qualification card or Passport & Citizenship. Choose several files at once (up to 10),
+ * then say what each one is and name it in one dialog. Same safe upload as everywhere else (presign -> storage PUT ->
+ * server-verified complete); the dialog starts each file as this card's usual type, so a marksheet card needs no
+ * picking for the common case.
  */
 export function AttachDocumentButton({
   leadId,
   defaultDocumentType,
   fixedQualificationLevel,
-  label = "Attach Document",
+  label = "Attach",
+  onUploaded,
 }: {
   leadId: string;
   defaultDocumentType: DocumentType;
   fixedQualificationLevel?: QualificationLevel;
   label?: string;
+  onUploaded?: () => void;
 }) {
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[] | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const typeOptions = defaultDocumentType === "passport" ? IDENTITY_TYPES : QUALIFICATION_TYPES;
 
   return (
     <>
       <input
         ref={inputRef}
         type="file"
-        accept="application/pdf,image/jpeg,image/png,image/webp,.docx"
+        multiple
+        accept={ACCEPT_ATTR}
         className="hidden"
+        data-testid="attach-input"
         onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) setFile(f);
+          const chosen = Array.from(e.target.files ?? []);
           e.target.value = "";
+          if (chosen.length === 0) return;
+          const result = pickFiles([], chosen);
+          const note = describeSkipped(result);
+          if (note) toast.error(note);
+          if (result.accepted.length > 0) setFiles(result.accepted);
         }}
       />
       <Button
@@ -54,11 +66,16 @@ export function AttachDocumentButton({
         <Paperclip className="h-3.5 w-3.5 mr-1" />
         {label}
       </Button>
-      <DocumentUploadDialog
+      <MultiDocumentUploadDialog
         leadId={leadId}
-        file={file}
-        onOpenChange={(open) => !open && setFile(null)}
-        defaultDocumentType={defaultDocumentType}
+        files={files}
+        onClose={() => setFiles(null)}
+        onUploaded={() => {
+          notifyDocumentsChanged(leadId); // refresh the Documents card behind this pop-up
+          onUploaded?.();
+        }}
+        typeOptions={typeOptions}
+        defaultType={defaultDocumentType}
         fixedQualificationLevel={fixedQualificationLevel}
       />
     </>

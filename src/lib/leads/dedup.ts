@@ -287,6 +287,10 @@ export async function emitSubmissionAudit(
     isFirst: boolean;
     matchedExisting: boolean;
     formName: string | null;
+    // Staff member who created the lead (dashboard flows); null for anonymous form submissions.
+    userId?: string | null;
+    // How the submission arrived ("manual" for staff-created); lets the timeline word it correctly.
+    createdVia?: string;
     requestId?: string;
     ipAddress?: string | null;
     userAgent?: string | null;
@@ -296,6 +300,7 @@ export async function emitSubmissionAudit(
   await Promise.all([
     createAuditLog({
       tenantId: params.tenantId,
+      userId: params.userId ?? null,
       action: "lead.submission",
       entityType: "lead",
       entityId: params.leadId,
@@ -304,6 +309,7 @@ export async function emitSubmissionAudit(
         is_first: { old: null, new: params.isFirst },
         matched_existing: { old: null, new: params.matchedExisting },
         form_name: { old: null, new: params.formName },
+        ...(params.createdVia ? { created_via: { old: null, new: params.createdVia } } : {}),
       },
       ipAddress: params.ipAddress ?? undefined,
       userAgent: params.userAgent ?? undefined,

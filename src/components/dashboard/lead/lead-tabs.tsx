@@ -57,6 +57,8 @@ export interface LeadTabsRef {
   focusTaskComposer: () => void;
   /** Opens the Student Details pop-up in edit mode. Returns false when this tenant has no student record (the caller then falls back to inline edit). */
   openStudentDetails: () => boolean;
+  /** Opens Activity -> Documents (the last sub-tab). Used by the right-column documents card's "View all". */
+  openDocuments: () => void;
 }
 
 export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
@@ -80,6 +82,10 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
       },
       focusTaskComposer: () => {
         activitiesPanelRef.current?.openTasks(true);
+      },
+      openDocuments: () => {
+        onTabChange("activity");
+        setTimeout(() => activitiesPanelRef.current?.openDocuments(), 50);
       },
       openStudentDetails: () => {
         if (!studentRecordActive) return false;
@@ -375,6 +381,29 @@ function PossibleDuplicatesCard({ lead, onMerged }: { lead: Lead; onMerged?: () 
       masters_gpa: null,
       masters_institution: null,
       masters_passed_year: null,
+      see_address: null,
+      see_awarding_body: null,
+      see_start_date: null,
+      see_end_date: null,
+      plus_two_address: null,
+      plus_two_awarding_body: null,
+      plus_two_start_date: null,
+      plus_two_end_date: null,
+      plus_two_stream_faculty: null,
+      bachelor_address: null,
+      bachelor_awarding_body: null,
+      bachelor_start_date: null,
+      bachelor_end_date: null,
+      bachelor_stream_faculty: null,
+      masters_address: null,
+      masters_awarding_body: null,
+      masters_start_date: null,
+      masters_end_date: null,
+      masters_stream_faculty: null,
+      sponsor_name: null,
+      sponsor_relationship: null,
+      source_of_funds: null,
+      scholarship_loan: null,
       ielts_score: null,
       pte_score: null,
       toefl_score: null,
@@ -385,6 +414,11 @@ function PossibleDuplicatesCard({ lead, onMerged }: { lead: Lead; onMerged?: () 
       father_name: null,
       mother_name: null,
       full_address: null,
+      address_province: null,
+      address_district: null,
+      address_municipality: null,
+      address_ward: null,
+      address_tole: null,
       emergency_contact_name: null,
       emergency_contact_phone: null,
       passport_number: null,
@@ -397,6 +431,7 @@ function PossibleDuplicatesCard({ lead, onMerged }: { lead: Lead; onMerged?: () 
       guardian_phone: null,
       guardian_email: null,
       guardian_relationship: null,
+      guardian_name: null,
     };
     setMergeTarget(partial);
     setMergeDialogOpen(true);

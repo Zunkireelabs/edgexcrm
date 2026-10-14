@@ -16,7 +16,11 @@ interface FakeConfig {
   dueAutoSendDraftCount: number;
 }
 
+// every .eq() the email_sequences query made, so a test can pin that only EMAIL sequences reserve headroom
+let sequenceEqCalls: Array<[string, unknown]> = [];
+
 function fakeDb(cfg: FakeConfig): ScopedClient {
+  sequenceEqCalls = [];
   return {
     from(table: string) {
       if (table === "tenant_email_settings") {
@@ -31,7 +35,18 @@ function fakeDb(cfg: FakeConfig): ScopedClient {
       }
       if (table === "email_sequences") {
         return {
-          select: () => ({ eq: () => Promise.resolve({ data: cfg.autoSendSequenceIds.map((id) => ({ id })), error: null }) }),
+          select: () => {
+            const result = Promise.resolve({ data: cfg.autoSendSequenceIds.map((id) => ({ id })), error: null });
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const chain: any = {
+              eq: (col: string, val: unknown) => {
+                sequenceEqCalls.push([col, val]);
+                return chain;
+              },
+              then: (resolve: (v: unknown) => void) => result.then(resolve),
+            };
+            return chain;
+          },
         };
       }
       if (table === "sequence_enrollments") {
@@ -111,5 +126,12 @@ describe("getDailyCapStatus — drip-over-blast cap priority", () => {
     const status = await getDailyCapStatus(db, { reserveForDrip: true });
 
     expect(status.remaining).toBe(80);
+  });
+
+  it("only EMAIL auto-send sequences reserve headroom: a due text uses SMS credits, not the daily email cap", async () => {
+    const db = fakeDb({ dailyCap: 2000, sentToday: 0, autoSendSequenceIds: ["s1"], activeEnrollmentIds: ["e1"], dueAutoSendDraftCount: 5 });
+    await getDailyCapStatus(db, { reserveForDrip: true });
+    expect(sequenceEqCalls).toContainEqual(["auto_send", true]);
+    expect(sequenceEqCalls).toContainEqual(["channel", "email"]);
   });
 });

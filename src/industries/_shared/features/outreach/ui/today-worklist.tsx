@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DraftReviewPanel } from "./draft-review-panel";
+import { SmsDraftReviewPanel } from "./sms-draft-review-panel";
+import type { OutreachChannel } from "../lib/channel";
 import { BulkDraftDialog, type BulkDraftAction, type BulkDraftSelection } from "./bulk-draft-dialog";
 import { formatRelativeDay } from "../lib/format-due";
 import { formatDateTime12 } from "../lib/time-format";
@@ -20,11 +22,13 @@ export interface Draft {
   body_html: string;
   status: "pending" | "sent" | "skipped";
   draft_source: "template" | "ai";
+  /** 'email' | 'sms' (migration 274). For an SMS draft body_html is the plain-text message and subject is ''. */
+  channel?: "email" | "sms" | null;
   // Set when the rep scheduled an EdgeX send for this draft (Schedule send). `scheduled_error` explains
   // a scheduled send that did NOT go out.
   scheduled_send_at?: string | null;
   scheduled_error?: string | null;
-  leads: { first_name: string | null; last_name: string | null; email: string | null } | null;
+  leads: { first_name: string | null; last_name: string | null; email: string | null; phone?: string | null } | null;
   sequence_enrollments: {
     sequence_id: string;
     status: string;
@@ -34,6 +38,8 @@ export interface Draft {
 
 interface TodayWorklistProps {
   isAdmin: boolean;
+  /** Which channel's drafts to show (the Outreach channel tab). Omitted = both. */
+  channel?: OutreachChannel;
 }
 
 const PAGE_SIZE = 50;
@@ -42,7 +48,7 @@ const PAGE_SIZE = 50;
 // unpaged list was capped at 1,000 rows by the server and would have shown a wrong count. Rows can be ticked; ticking
 // every row on the page offers "select all N matching", and the bulk bar then acts on ALL of them (the server resolves the
 // same set the list shows). Send now / Schedule need EdgeX sending to be on (education); Skip is always available.
-export function TodayWorklist({ isAdmin }: TodayWorklistProps) {
+export function TodayWorklist({ isAdmin, channel }: TodayWorklistProps) {
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -54,14 +60,15 @@ export function TodayWorklist({ isAdmin }: TodayWorklistProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [allMatching, setAllMatching] = useState(false);
   const [bulkAction, setBulkAction] = useState<BulkDraftAction | null>(null);
-  const [capability, setCapability] = useState({ enabled: false, sandbox: true });
+  const [capability, setCapability] = useState({ enabled: false, sandbox: true, smsEnabled: false, smsSandbox: true });
 
   const due = showAll ? "all" : "today";
 
   const fetchDrafts = useCallback(async (dueParam: "today" | "all", pageParam: number) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/v1/outreach/drafts?due=${dueParam}&page=${pageParam}&pageSize=${PAGE_SIZE}`);
+      const channelQuery = channel ? `&channel=${channel}` : "";
+      const res = await fetch(`/api/v1/outreach/drafts?due=${dueParam}&page=${pageParam}&pageSize=${PAGE_SIZE}${channelQuery}`);
       if (res.ok) {
         const json = await res.json();
         setDrafts(json.data ?? []);
@@ -73,7 +80,14 @@ export function TodayWorklist({ isAdmin }: TodayWorklistProps) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [channel]);
+
+  // Switching channel starts again from page 1 with nothing selected.
+  useEffect(() => {
+    setPage(1);
+    setSelected(new Set());
+    setAllMatching(false);
+  }, [channel]);
 
   useEffect(() => {
     fetchDrafts(due, page);
@@ -85,7 +99,14 @@ export function TodayWorklist({ isAdmin }: TodayWorklistProps) {
     fetch("/api/v1/outreach/send-capability")
       .then((r) => (r.ok ? r.json() : null))
       .then((json) => {
-        if (!cancelled && json?.data) setCapability({ enabled: json.data.enabled === true, sandbox: json.data.sandbox !== false });
+        if (!cancelled && json?.data) {
+          setCapability({
+            enabled: json.data.enabled === true,
+            sandbox: json.data.sandbox !== false,
+            smsEnabled: json.data.sms?.enabled === true,
+            smsSandbox: json.data.sms?.sandbox !== false,
+          });
+        }
       })
       .catch(() => void 0);
     return () => {
@@ -144,7 +165,7 @@ export function TodayWorklist({ isAdmin }: TodayWorklistProps) {
     setSelected(checked ? new Set(pageIds) : new Set());
   };
 
-  const bulkSelection: BulkDraftSelection = allMatching ? { mode: "all", due } : { mode: "ids", ids: [...selected] };
+  const bulkSelection: BulkDraftSelection = allMatching ? { mode: "all", due, channel } : { mode: "ids", ids: [...selected] };
 
   return (
     <div className="space-y-3">
@@ -162,7 +183,7 @@ export function TodayWorklist({ isAdmin }: TodayWorklistProps) {
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-medium">{selectedCount.toLocaleString()} selected</span>
             <div className="ml-auto flex flex-wrap items-center gap-1.5">
-              {capability.enabled && (
+              {(channel === "sms" ? capability.smsEnabled : capability.enabled) && (
                 <>
                   <Button type="button" size="sm" variant="outline" onClick={() => setBulkAction("send")}>
                     <Send className="mr-1.5 h-3.5 w-3.5" /> Send now
@@ -232,9 +253,12 @@ export function TodayWorklist({ isAdmin }: TodayWorklistProps) {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-sm truncate">{leadName}</span>
-                      <span className="text-xs text-muted-foreground truncate">{draft.leads?.email}</span>
+                      <span className="text-xs text-muted-foreground truncate">
+                        {draft.channel === "sms" ? draft.leads?.phone : draft.leads?.email}
+                      </span>
+                      {draft.channel === "sms" && <Badge variant="outline" className="shrink-0">SMS</Badge>}
                     </div>
-                    <p className="text-sm text-muted-foreground truncate">{draft.subject}</p>
+                    <p className="text-sm text-muted-foreground truncate">{draft.channel === "sms" ? draft.body_html : draft.subject}</p>
                   </div>
                   <div className="shrink-0 flex items-center gap-2">
                     <Badge variant="secondary" className="whitespace-nowrap">
@@ -273,8 +297,15 @@ export function TodayWorklist({ isAdmin }: TodayWorklistProps) {
       )}
 
       <DraftReviewPanel
-        draft={activeDraft}
+        draft={activeDraft?.channel === "sms" ? null : activeDraft}
         isAdmin={isAdmin}
+        onOpenChange={(open) => !open && setActiveDraft(null)}
+        onSent={removeDraft}
+        onSkipped={removeDraft}
+        onUpdated={updateDraft}
+      />
+      <SmsDraftReviewPanel
+        draft={activeDraft?.channel === "sms" ? activeDraft : null}
         onOpenChange={(open) => !open && setActiveDraft(null)}
         onSent={removeDraft}
         onSkipped={removeDraft}
@@ -288,7 +319,8 @@ export function TodayWorklist({ isAdmin }: TodayWorklistProps) {
           action={bulkAction}
           selection={bulkSelection}
           count={selectedCount}
-          sandbox={capability.sandbox}
+          sandbox={channel === "sms" ? capability.smsSandbox : capability.sandbox}
+          channel={channel}
           onDone={() => {
             clearSelection();
             fetchDrafts(due, page);

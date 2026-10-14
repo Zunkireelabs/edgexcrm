@@ -15,6 +15,8 @@ import {
 } from "@/lib/api/response";
 import { requirePermission } from "@/lib/api/integration-permissions";
 import { addLeadCollaborator } from "@/lib/leads/collaborators";
+import { assignmentBranchTarget, branchMoveOnAssignment } from "@/lib/leads/branch-resolution";
+import { syncOriginMembership } from "@/lib/leads/branch-membership";
 import type { Lead } from "@/types/database";
 
 const UPDATABLE_FIELDS = [
@@ -179,6 +181,14 @@ export const PATCH = withIntegrationErrorBoundary(async function PATCH(
     return apiValidationError({ body: ["No valid fields to update"] });
   }
 
+  // A lead in the default ("Global") branch becomes the assignee's branch lead (same rule as the dashboard).
+  let moveTo: string | null = null;
+  if (typeof body.assigned_to === "string") {
+    const target = await assignmentBranchTarget(ctx.supabase, tenantId, body.assigned_to);
+    moveTo = branchMoveOnAssignment((existingLead as Lead).branch_id, target);
+    if (moveTo) updatePayload.branch_id = moveTo;
+  }
+
   const { data: updated, error } = await ctx.supabase
     .from("leads")
     .update(updatePayload)
@@ -189,6 +199,11 @@ export const PATCH = withIntegrationErrorBoundary(async function PATCH(
 
   if (error) {
     return apiServiceUnavailable("Failed to update lead");
+  }
+
+  // Keep the origin lead_branches row in step with the new branch / assignee.
+  if (moveTo) {
+    await syncOriginMembership(ctx.supabase, tenantId, id, moveTo, (updated as Lead).assigned_to ?? null);
   }
 
   // Build audit diff

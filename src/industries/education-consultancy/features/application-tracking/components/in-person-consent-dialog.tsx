@@ -11,6 +11,8 @@ interface InPersonConsentDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   leadId: string;
+  /** Owner/admin confirmed "send anyway" for an incomplete profile — forwarded to the API, which re-checks the role. */
+  overrideProfileCheck?: boolean;
   onSuccess: () => void;
 }
 
@@ -30,6 +32,7 @@ export function InPersonConsentDialog({
   open,
   onOpenChange,
   leadId,
+  overrideProfileCheck = false,
   onSuccess,
 }: InPersonConsentDialogProps) {
   const [state, setState] = useState<SessionState>("idle");
@@ -51,7 +54,7 @@ export function InPersonConsentDialog({
         const sendRes = await fetch(`/api/v1/leads/${leadId}/consent`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "send_in_person" }),
+          body: JSON.stringify({ action: "send_in_person", ...(overrideProfileCheck && { override_profile_check: true }) }),
         });
         if (!sendRes.ok) {
           const json = await sendRes.json().catch(() => null);
@@ -105,7 +108,7 @@ export function InPersonConsentDialog({
     }
 
     init();
-  }, [open, leadId, onOpenChange]);
+  }, [open, leadId, onOpenChange, overrideProfileCheck]);
 
   function handleSigned(name: string) {
     setSignerName(name);

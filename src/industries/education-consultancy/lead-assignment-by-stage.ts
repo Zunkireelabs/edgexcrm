@@ -17,6 +17,23 @@ export function positionsForStage(stageSlug: string | null | undefined): string[
   return STAGE_TEAM_MAP[stageSlug] ?? [];
 }
 
+/**
+ * Server-side guard for manual dashboard creates (POST /api/v1/leads): may this assignee be given a lead
+ * created into this stage? Yes when they are an admin, hold a position that works the stage, or manage
+ * the branch the lead will END UP in (`branchManagerId` — the branch after any Global -> assignee-branch move).
+ */
+export function isAssigneePermittedForStage(args: {
+  stageSlug: string | null | undefined;
+  assigneeId: string;
+  assigneeRole: string | null | undefined;
+  assigneeSlug: string | null | undefined;
+  branchManagerId?: string | null;
+}): boolean {
+  if (args.assigneeRole === "admin") return true;
+  if (args.assigneeSlug && positionsForStage(args.stageSlug).includes(args.assigneeSlug)) return true;
+  return !!args.branchManagerId && args.branchManagerId === args.assigneeId;
+}
+
 interface RosterMemberForStage {
   user_id: string;
   email: string;

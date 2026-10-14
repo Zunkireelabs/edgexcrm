@@ -23,6 +23,8 @@ interface SendConsentDialogProps {
   defaultTab?: "send" | "manual";
   /** Shows "Copy link instead" — creates the signing link without emailing it. Off by default. */
   allowCopyOnly?: boolean;
+  /** Owner/admin confirmed "send anyway" for an incomplete profile — forwarded to the API, which re-checks the role. */
+  overrideProfileCheck?: boolean;
   onSuccess: () => void;
 }
 
@@ -33,6 +35,7 @@ export function SendConsentDialog({
   tenantId,
   defaultTab = "send",
   allowCopyOnly = false,
+  overrideProfileCheck = false,
   onSuccess,
 }: SendConsentDialogProps) {
   const [tab, setTab] = useState<"send" | "manual">(defaultTab);
@@ -68,7 +71,7 @@ export function SendConsentDialog({
       const res = await fetch(`/api/v1/leads/${leadId}/consent`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "send", deliver }),
+        body: JSON.stringify({ action: "send", deliver, ...(overrideProfileCheck && { override_profile_check: true }) }),
       });
       const json = await res.json();
       if (!res.ok) {
@@ -146,6 +149,7 @@ export function SendConsentDialog({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "record_manual",
+          ...(overrideProfileCheck && { override_profile_check: true }),
           signer_name: signerName.trim(),
           document_url: documentUrl,
           signed_at: signedAt || undefined,

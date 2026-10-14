@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { GUARDIAN_SECTION_TITLE } from "@/lib/consent/guardian";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { toast } from "sonner";
 import { Pencil, X, Check, Loader2 } from "lucide-react";
 import {
@@ -12,6 +13,16 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -19,6 +30,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Lead } from "@/types/database";
+import { NATIONALITY_OPTIONS } from "@/lib/leads/contact-options";
+import { ADDRESS_COLUMNS, nextCity, updateAddress, type AddressField, type AddressParts } from "@/lib/leads/address";
+import { AddressFields } from "./address-fields";
+import { IdentityDocumentFields } from "./identity-document-fields";
 import { DestinationsMultiSelect } from "@/components/dashboard/destinations-multi-select";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 import { getDistinctFormValues, type LeadSubmissionSnapshot } from "@/lib/leads/submission-history";
@@ -27,9 +42,15 @@ import { TestScoresSection, testScoresFromLead, legacyScoreColumns, type TestSco
 import { QualificationsSection, qualificationsFromLead, type Qualifications } from "./qualifications-section";
 import { WorkExperienceSection, type WorkExperienceEntry } from "./work-experience-section";
 import { ReferencesSection, type ReferenceEntry } from "./references-section";
+import { GUARDIAN_RELATIONSHIP_OPTIONS, normalizeGuardianRelationship, guardianNameAfterRelationshipChange, resolveGuardian } from "@/lib/consent/guardian";
 import { SectionGroup, CardSection, FieldGrid, EditableField } from "./form-primitives";
+import { useStudentRecordLists } from "./use-student-record-lists";
+import { notifyStudentRecordChanged } from "./student-record-events";
+import { buildListsPayload, storedListsToState, type StoredLists } from "./student-record-lists";
 import { AttachDocumentButton } from "./attach-document-button";
 import { PERSONAL_DETAIL_COLUMNS, PERSONAL_DETAIL_DATE_COLUMNS } from "@/lib/leads/personal-details";
+import { FINANCIAL_COLUMNS } from "@/lib/leads/student-record-columns";
+import { getLeadCity, getLeadNationality } from "@/lib/leads/lead-location";
 
 /**
  * Personal / passport / citizenship details are real `leads` columns
@@ -50,7 +71,7 @@ export const CORE_IDENTITY_FIELDS = [
   { key: "lastName", label: "Last Name", type: "text" },
   { key: "email", label: "Email", type: "email" },
   { key: "phone", label: "Phone", type: "tel" },
-  { key: "nationality", label: "Nationality", type: "text" },
+  { key: "nationality", label: "Nationality", type: "select", options: NATIONALITY_OPTIONS },
   { key: "city", label: "City", type: "text" },
 ] as const;
 
@@ -68,27 +89,18 @@ export const PERSONAL_DETAIL_FIELDS = [
   { key: "marital_status", label: "Marital Status", type: "select", options: [{ value: "unmarried", label: "Unmarried" }, { value: "married", label: "Married" }] },
   { key: "father_name", label: "Father's Name", type: "text" },
   { key: "mother_name", label: "Mother's Name", type: "text" },
-  { key: "full_address", label: "Full Address", type: "text", span: 2 },
-  { key: "emergency_contact_name", label: "Emergency Contact Name", type: "text" },
-  { key: "emergency_contact_phone", label: "Emergency Contact No.", type: "tel" },
+  // Address lives in Personal Information (AddressFields). Emergency Contact is no longer asked here — the
+  // the guardian section below already captures a contact person; the old columns stay, untouched.
 ] as const;
 
-export const PASSPORT_CITIZENSHIP_FIELDS = [
-  { key: "passport_number", label: "Passport Number", type: "text" },
-  { key: "passport_issued_by", label: "Passport Issued By", type: "text", placeholder: "MOFA, Department of Passport" },
-  { key: "passport_issued_date", label: "Passport Issued Date", type: "date" },
-  { key: "passport_expiry_date", label: "Passport Expiry Date", type: "date" },
-  { key: "citizenship_number", label: "Citizenship Number", type: "text" },
-  { key: "citizenship_issued_by", label: "Citizenship Issued By", type: "text", placeholder: "Government of Home Minister, District Administration Office" },
-  { key: "citizenship_issued_date", label: "Citizenship Issued Date", type: "date" },
-] as const;
-
-// Guardian contact for the consent form's Parent/Guardian section (migration 266).
-// The guardian's name comes from Father's / Mother's Name above.
+// The ONE guardian shown on the consent form's Parent/Guardian section (migrations 266, 269).
+// Picking Father / Mother pre-fills Guardian Name from the parent names above; for anyone else, type it.
+// "None / Not applicable" prints N/A on the form instead of blocking the consent.
 export const GUARDIAN_FIELDS = [
+  { key: "guardian_relationship", label: "Guardian Relationship", type: "select", options: GUARDIAN_RELATIONSHIP_OPTIONS },
+  { key: "guardian_name", label: "Guardian Name", type: "text", placeholder: "e.g. Sita Sharma" },
   { key: "guardian_phone", label: "Guardian Phone", type: "tel" },
   { key: "guardian_email", label: "Guardian Email", type: "email" },
-  { key: "guardian_relationship", label: "Guardian Relationship", type: "text", placeholder: "e.g. Father, Uncle" },
 ] as const;
 
 // Not part of the client's original PDF template — flagged there as a
@@ -102,6 +114,15 @@ export const FINANCIAL_FIELDS = [
 ] as const;
 
 type FieldValues = Record<string, string>;
+
+/** A relationship typed before the dropdown existed (e.g. "Step-father") must still show, and survive a save. */
+function withLegacyRelationshipOption<F extends { key: string; options?: readonly { value: string; label: string }[] }>(
+  field: F,
+  current: string | undefined,
+): F {
+  if (field.key !== "guardian_relationship" || !current || field.options?.some((o) => o.value === current)) return field;
+  return { ...field, options: [...(field.options ?? []), { value: current, label: current }] };
+}
 
 export interface StudyInterest {
   destinations: string[];
@@ -154,6 +175,8 @@ export interface CoreIdentity {
   phone: string;
   nationality: string;
   city: string;
+  country: string;
+  preferredContact: string;
 }
 
 export function coreIdentityFromLead(lead: Lead): CoreIdentity {
@@ -162,8 +185,10 @@ export function coreIdentityFromLead(lead: Lead): CoreIdentity {
     lastName: lead.last_name ?? "",
     email: lead.email ?? "",
     phone: lead.phone ?? "",
-    nationality: lead.nationality ?? "",
-    city: lead.city ?? "",
+    nationality: getLeadNationality(lead) ?? "",
+    city: getLeadCity(lead) ?? "",
+    country: lead.country ?? "",
+    preferredContact: lead.preferred_contact_method ?? "",
   };
 }
 
@@ -179,7 +204,23 @@ export function personalDetailsFromLead(lead: Lead): FieldValues {
     const raw = lead[col];
     out[col] = dateColumns.includes(col) ? (/^\d{4}-\d{2}-\d{2}/.exec(raw ?? "")?.[0] ?? "") : (raw ?? "");
   }
+  // Financial / sponsor details are real columns too (migration 239).
+  for (const col of FINANCIAL_COLUMNS) out[col] = lead[col] ?? "";
+  // Older free-text values ("father") line up with the dropdown's options; anything else is kept as typed.
+  out.guardian_relationship = normalizeGuardianRelationship(out.guardian_relationship);
   return out;
+}
+
+/** The address as the UI edits it: Country lives with the core identity, the rest in the personal-detail values. */
+export function addressPartsOf(core: CoreIdentity, values: FieldValues): AddressParts {
+  return {
+    country: core.country,
+    province: values[ADDRESS_COLUMNS.province] ?? "",
+    district: values[ADDRESS_COLUMNS.district] ?? "",
+    municipality: values[ADDRESS_COLUMNS.municipality] ?? "",
+    ward: values[ADDRESS_COLUMNS.ward] ?? "",
+    tole: values[ADDRESS_COLUMNS.tole] ?? "",
+  };
 }
 
 export interface LeadSourceValues {
@@ -216,11 +257,12 @@ const QUALIFICATION_COLUMN_PREFIX: Record<keyof Qualifications, string> = {
  * (opened by the one Edit button on the contact card), so it also carries City, each
  * level's Passed Year, the five exam scores that have a column, and — for admins
  * only — Lead Source. It's held to the "only send what's whitelisted, never guess"
- * rule. The Personal / Passport & Citizenship fields (migration 234) are
- * real columns and are included. Everything else this dialog collects (the
- * richer Qualification fields, Work Experience/References, Financial) has no
- * live column or table yet, so it deliberately stays out of this payload —
- * sending it would just 500 against a column that doesn't exist.
+ * rule. The Personal / Passport & Citizenship fields (migration 234), the richer
+ * Qualification fields — address, awarding body, start/end date, stream
+ * (migration 236) — and the Financial fields (migration 239) are real columns
+ * and are included. The only things still left out are Work Experience,
+ * References and the per-exam score breakdown: they have a table but no API yet,
+ * so they stay on screen only (and are labelled "Not saved yet").
  *
  * Only fields that actually changed from their original (committed) value
  * are included — never blindly resend an untouched field. This isn't just
@@ -262,6 +304,8 @@ export function buildLivePatch(
   setIfChanged("phone", core.phone || null, coreOriginal.phone || null);
   setIfChanged("nationality", core.nationality || null, coreOriginal.nationality || null);
   setIfChanged("city", core.city || null, coreOriginal.city || null);
+  setIfChanged("country", core.country || null, coreOriginal.country || null);
+  setIfChanged("preferred_contact_method", core.preferredContact || null, coreOriginal.preferredContact || null);
 
   setIfChanged("destinations", study.destinations, studyOriginal.destinations);
   setIfChanged("field_of_study", study.fieldOfStudy || null, studyOriginal.fieldOfStudy || null);
@@ -276,6 +320,15 @@ export function buildLivePatch(
     setIfChanged(`${prefix}_institution`, entry.institution || null, entryOriginal.institution || null);
     setIfChanged(`${prefix}_gpa`, entry.percentageGrade || null, entryOriginal.percentageGrade || null);
     setIfChanged(`${prefix}_passed_year`, entry.passedYear.trim() || null, entryOriginal.passedYear.trim() || null);
+    // Migration 236 columns.
+    setIfChanged(`${prefix}_address`, entry.address.trim() || null, entryOriginal.address.trim() || null);
+    setIfChanged(`${prefix}_awarding_body`, entry.awardingBody.trim() || null, entryOriginal.awardingBody.trim() || null);
+    setIfChanged(`${prefix}_start_date`, entry.startDate || null, entryOriginal.startDate || null);
+    setIfChanged(`${prefix}_end_date`, entry.endDate || null, entryOriginal.endDate || null);
+    // Grade X (SEE) has no stream column; every level from +2 onward does.
+    if (prefix !== "see") {
+      setIfChanged(`${prefix}_stream_faculty`, entry.streamFaculty.trim() || null, entryOriginal.streamFaculty.trim() || null);
+    }
   }
 
   // Exam scores: only the five exams with a real column are saved (see legacyScoreColumns).
@@ -291,7 +344,7 @@ export function buildLivePatch(
     setIfChanged("intake_account", source.account || null, sourceOriginal.account || null);
     setIfChanged("intake_campaign", source.campaign || null, sourceOriginal.campaign || null);
   }
-  for (const col of PERSONAL_DETAIL_COLUMNS) {
+  for (const col of [...PERSONAL_DETAIL_COLUMNS, ...FINANCIAL_COLUMNS]) {
     setIfChanged(col, (personal[col] ?? "").trim() || null, (personalOriginal[col] ?? "").trim() || null);
   }
   return patch;
@@ -313,6 +366,25 @@ interface PersonalDetailsDialogProps {
   isAdmin?: boolean;
 }
 
+/** Shown above a list that is still loading (or failed to load): it cannot be edited until it is known, so it can never be saved over the stored rows. */
+function ListsLoadNote({ status, onRetry }: { status: "loading" | "ready" | "error"; onRetry: () => void }) {
+  if (status === "ready") return null;
+  return (
+    <p className="mb-2 text-xs text-muted-foreground">
+      {status === "loading" ? (
+        "Loading saved entries…"
+      ) : (
+        <>
+          Couldn&apos;t load the saved entries, so they can&apos;t be edited right now.{" "}
+          <button type="button" className="underline" onClick={onRetry}>
+            Try again
+          </button>
+        </>
+      )}
+    </p>
+  );
+}
+
 export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHistory, onLeadUpdate, canUploadDocuments, openInEditMode, isAdmin = false }: PersonalDetailsDialogProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -322,26 +394,46 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
   const [coreIdentityDraft, setCoreIdentityDraft] = useState<CoreIdentity>(coreIdentity);
   const [studyInterest, setStudyInterest] = useState<StudyInterest>(() => studyInterestFromLead(lead, submissionHistory));
   const [studyDraft, setStudyDraft] = useState<StudyInterest>(studyInterest);
-  const [testScores, setTestScores] = useState<TestScore[]>(() => testScoresFromLead(lead));
-  const [testScoresDraft, setTestScoresDraft] = useState<TestScore[]>([]);
   const [qualifications, setQualifications] = useState<Qualifications>(() => qualificationsFromLead(lead));
   const [qualificationsDraft, setQualificationsDraft] = useState<Qualifications>(qualifications);
-  const [workExperience, setWorkExperience] = useState<WorkExperienceEntry[]>([]);
-  const [workExperienceDraft, setWorkExperienceDraft] = useState<WorkExperienceEntry[]>([]);
-  const [references, setReferences] = useState<ReferenceEntry[]>([]);
-  const [referencesDraft, setReferencesDraft] = useState<ReferenceEntry[]>([]);
   const [leadSource, setLeadSource] = useState<LeadSourceValues>(() => leadSourceFromLead(lead, submissionHistory));
   const [leadSourceDraft, setLeadSourceDraft] = useState<LeadSourceValues>(leadSource);
 
+  // Work Experience, References and Test Scores are rows in their own tables: they are loaded from the server when the pop-up opens and
+  // saved with PUT /api/v1/leads/[id]/student-record. What is shown is derived from the loaded rows plus the user's own edits (null =
+  // untouched), so there is no copy to keep in step. Until they have loaded they are shown read-only, so an empty list that is really
+  // "not loaded yet" can never be saved over the stored one.
+  const { lists: storedLists, status: listsStatus, reload: reloadLists, setLists: setStoredLists } = useStudentRecordLists(lead, open);
+  const listsEditable = listsStatus === "ready";
+  const legacyScores = useMemo(() => testScoresFromLead(lead), [lead]);
+  const testScores: TestScore[] = listsEditable ? storedLists.testScores : legacyScores;
+  const workExperience: WorkExperienceEntry[] = storedLists.workExperience;
+  const references: ReferenceEntry[] = storedLists.references;
+  const [testScoresEdits, setTestScoresEdits] = useState<TestScore[] | null>(null);
+  const [workExperienceEdits, setWorkExperienceEdits] = useState<WorkExperienceEntry[] | null>(null);
+  const [referencesEdits, setReferencesEdits] = useState<ReferenceEntry[] | null>(null);
+  const testScoresDraft = testScoresEdits ?? testScores;
+  const workExperienceDraft = workExperienceEdits ?? workExperience;
+  const referencesDraft = referencesEdits ?? references;
+  const clearListEdits = () => {
+    setTestScoresEdits(null);
+    setWorkExperienceEdits(null);
+    setReferencesEdits(null);
+  };
+
+  // The last municipality City could have been filled from. Changing the province clears the municipality
+  // in between, so City is compared against this — not the (now empty) current municipality — to know it is
+  // still the auto-filled value and may follow the next pick.
+  const lastMunicipalityRef = useRef("");
+
   const startEditing = () => {
+    lastMunicipalityRef.current = values.address_municipality ?? "";
     setDraft(values);
     setCoreIdentityDraft(coreIdentity);
     setStudyDraft(studyInterest);
-    setTestScoresDraft(testScores);
     setQualificationsDraft(qualifications);
-    setWorkExperienceDraft(workExperience);
-    setReferencesDraft(references);
     setLeadSourceDraft(leadSource);
+    clearListEdits();
     setIsEditing(true);
   };
 
@@ -360,15 +452,15 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
     setDraft(values);
     setCoreIdentityDraft(coreIdentity);
     setStudyDraft(studyInterest);
-    setTestScoresDraft(testScores);
     setQualificationsDraft(qualifications);
-    setWorkExperienceDraft(workExperience);
-    setReferencesDraft(references);
     setLeadSourceDraft(leadSource);
+    clearListEdits();
     setIsEditing(false);
   };
 
-  const save = async () => {
+  // What the user has changed since opening Edit, worked out exactly the way Save sends it. The save, the "Save these changes?" box and the
+  // "Discard unsaved changes?" box all use this one answer, so they can never disagree about whether something changed.
+  const computeChanges = () => {
     const patch = buildLivePatch(
       coreIdentityDraft, coreIdentity,
       studyDraft, studyInterest,
@@ -377,9 +469,38 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
       isAdmin ? leadSourceDraft : null, leadSource,
       draft, values
     );
+    // The three lists are rows in their own tables, saved with PUT after the lead itself. Only lists that changed are sent, and only
+    // once they have loaded (never save a list that is really "not loaded yet" over the stored one).
+    const listsPayload = listsEditable
+      ? buildListsPayload(
+          { workExperience: workExperienceDraft, references: referencesDraft, testScores: testScoresDraft },
+          { workExperience, references, testScores },
+        )
+      : {};
     const hasLiveChanges = Object.keys(patch).length > 0;
+    const hasListChanges = Object.keys(listsPayload).length > 0;
+    return { patch, listsPayload, hasLiveChanges, hasListChanges, hasChanges: hasLiveChanges || hasListChanges };
+  };
+
+  // Which question is on screen: confirm a save, or confirm throwing away typed changes (by the Cancel button, or by closing the pop-up).
+  const [confirm, setConfirm] = useState<null | "save" | "discard" | "discard-close">(null);
+
+  const requestSave = () => {
+    // Nothing changed: skip the question, save() just says so.
+    if (!computeChanges().hasChanges) void save();
+    else setConfirm("save");
+  };
+  const requestCancel = () => {
+    if (computeChanges().hasChanges) setConfirm("discard");
+    else cancelEditing();
+  };
+
+  const save = async () => {
+    const { patch, listsPayload, hasLiveChanges, hasListChanges } = computeChanges();
     setIsSaving(true);
+    let listsFailed = false;
     try {
+      let saved: Lead | null = null;
       if (hasLiveChanges) {
         const res = await fetch(`/api/v1/leads/${lead.id}`, {
           method: "PATCH",
@@ -387,39 +508,105 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
           body: JSON.stringify(patch),
         });
         if (!res.ok) throw new Error("Failed to save");
-        onLeadUpdate?.(patch);
+        // The server answers with the row it actually STORED. That — not what was typed — is what the dialog shows afterwards, so a
+        // field that did not persist visibly reverts right away instead of only after a refresh.
+        const json = await Promise.resolve().then(() => res.json()).catch(() => null);
+        saved = (json?.data ?? null) as Lead | null;
+        onLeadUpdate?.(saved ?? patch);
       }
 
-      // Only commit local state — including the sections that don't persist
-      // yet — after the live save actually succeeds (or there was nothing
-      // live to save), so a failed save never silently discards what was typed.
-      setValues(draft);
-      setCoreIdentity(coreIdentityDraft);
-      setStudyInterest(studyDraft);
-      setTestScores(testScoresDraft);
-      setQualifications(qualificationsDraft);
-      setWorkExperience(workExperienceDraft);
-      setReferences(referencesDraft);
-      setLeadSource(leadSourceDraft);
+      // Only commit local state after the live save actually succeeded (or there was nothing live to save), so a failed save
+      // never silently discards what was typed.
+      const fresh = saved ? ({ ...lead, ...saved } as Lead) : null;
+      if (fresh) {
+        setValues(personalDetailsFromLead(fresh));
+        setCoreIdentity(coreIdentityFromLead(fresh));
+        setStudyInterest(studyInterestFromLead(fresh, submissionHistory));
+        setQualifications(qualificationsFromLead(fresh));
+        setLeadSource(leadSourceFromLead(fresh, submissionHistory));
+      } else {
+        setValues(draft);
+        setCoreIdentity(coreIdentityDraft);
+        setStudyInterest(studyDraft);
+        setQualifications(qualificationsDraft);
+        setLeadSource(leadSourceDraft);
+      }
+
+      if (hasListChanges) {
+        const listsRes = await fetch(`/api/v1/leads/${lead.id}/student-record`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(listsPayload),
+        });
+        if (!listsRes.ok) {
+          listsFailed = true;
+          throw new Error("Failed to save the lists");
+        }
+        // Same rule as above: show what the server STORED.
+        const listsJson = await Promise.resolve().then(() => listsRes.json()).catch(() => null);
+        setStoredLists(
+          listsJson?.data
+            ? storedListsToState(listsJson.data as StoredLists, fresh ?? lead)
+            : { workExperience: workExperienceDraft, references: referencesDraft, testScores: testScoresDraft },
+        );
+        notifyStudentRecordChanged(lead.id);
+      }
+      clearListEdits();
       setIsEditing(false);
-      toast.success(
-        hasLiveChanges
-          ? "Saved. Financial, work experience and reference details are kept locally for preview only — they don't have a database column yet."
-          : "Saved locally for preview only — nothing in the real-save fields changed."
-      );
+      toast.success(hasLiveChanges || hasListChanges ? "Saved." : "Nothing to save — no changes were made.");
     } catch {
-      toast.error("Failed to save — nothing was changed. Your edits are still here, try again.");
+      toast.error(
+        listsFailed
+          ? "Your other changes were saved, but the work experience, references or test scores could not be saved. Your entries are still here — try again."
+          : "Failed to save — nothing was changed. Your edits are still here, try again.",
+      );
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleChange = (key: string, value: string) => {
-    setDraft((prev) => ({ ...prev, [key]: value }));
+    setDraft((prev) => {
+      const next = { ...prev, [key]: value };
+      // Keep Guardian Name in step with the relationship (see guardianNameAfterRelationshipChange).
+      if (key === "guardian_relationship") {
+        next.guardian_name = guardianNameAfterRelationshipChange(value, {
+          guardianName: prev.guardian_name,
+          fatherName: prev.father_name,
+          motherName: prev.mother_name,
+        });
+      }
+      return next;
+    });
   };
 
   const handleCoreChange = (key: keyof CoreIdentity, value: string) => {
     setCoreIdentityDraft((prev) => ({ ...prev, [key]: value }));
+  };
+
+  // One edit to the address: clears dependent dropdowns, keeps full_address in step, and lets City
+  // follow the municipality (without overwriting a City someone typed).
+  const handleAddressPartChange = (field: AddressField, value: string) => {
+    const before = { parts: addressPartsOf(coreIdentityDraft, draft), fullAddress: draft.full_address ?? "" };
+    const after = updateAddress(before, field, value);
+    if (after === before) return;
+    // Read before updating the ref: the state updater below runs later, after the ref has moved on.
+    const previousMunicipality = lastMunicipalityRef.current;
+    if (field === "municipality" && value) lastMunicipalityRef.current = value;
+    setCoreIdentityDraft((prev) => ({
+      ...prev,
+      country: after.parts.country,
+      city: field === "municipality" ? nextCity(prev.city, previousMunicipality, value) : prev.city,
+    }));
+    setDraft((prev) => ({
+      ...prev,
+      [ADDRESS_COLUMNS.province]: after.parts.province,
+      [ADDRESS_COLUMNS.district]: after.parts.district,
+      [ADDRESS_COLUMNS.municipality]: after.parts.municipality,
+      [ADDRESS_COLUMNS.ward]: after.parts.ward,
+      [ADDRESS_COLUMNS.tole]: after.parts.tole,
+      full_address: after.fullAddress,
+    }));
   };
 
   const handleSourceChange = (key: keyof LeadSourceValues, value: string) => {
@@ -429,6 +616,11 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
   const handleOpenChange = (next: boolean) => {
     if (!next) {
       if (isSaving) return; // never let a close interrupt an in-flight save
+      // Closing (X, Esc, click outside) while editing would silently drop what was typed: ask first.
+      if (isEditing && computeChanges().hasChanges) {
+        setConfirm("discard-close");
+        return;
+      }
       setIsEditing(false);
     }
     onOpenChange(next);
@@ -450,11 +642,11 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
             <div className="flex items-center gap-2 shrink-0">
               {isEditing ? (
                 <>
-                  <Button variant="ghost" onClick={cancelEditing} disabled={isSaving}>
+                  <Button variant="ghost" onClick={requestCancel} disabled={isSaving}>
                     <X className="h-3.5 w-3.5 mr-1" />
                     Cancel
                   </Button>
-                  <Button onClick={save} disabled={isSaving}>
+                  <Button onClick={requestSave} disabled={isSaving}>
                     {isSaving ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Check className="h-3.5 w-3.5 mr-1" />}
                     Save
                   </Button>
@@ -468,7 +660,7 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
             </div>
           </div>
           <p className="text-xs text-muted-foreground">
-            Name, email, phone, nationality, city, personal and passport details, Study Interest, qualifications (institution, grade, passed year), the main exam scores{isAdmin ? " and Lead Source" : ""} save for real. Financial, work experience and references are a preview — they save locally for now and will start saving for real once their database update is live.
+            Everything on this form saves: contact, address, personal and passport details, Study Interest, qualifications, test scores, work experience, references, financial details{isAdmin ? " and Lead Source" : ""}.
           </p>
         </DialogHeader>
 
@@ -486,10 +678,36 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
                   />
                 ))}
               </FieldGrid>
-            </CardSection>
 
+              {/* Same card as Nationality and City: the client asked for the address "together with" them. */}
+              <div className="mt-5 border-t pt-4">
+                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Address</p>
+                <AddressFields
+                  isEditing={isEditing}
+                  parts={addressPartsOf(isEditing ? coreIdentityDraft : coreIdentity, isEditing ? draft : values)}
+                  fullAddress={(isEditing ? draft : values).full_address ?? ""}
+                  onPartChange={handleAddressPartChange}
+                  onFullAddressChange={(v) => handleChange("full_address", v)}
+                />
+              </div>
+            </CardSection>
+          </SectionGroup>
+
+          {/* Study Interest is the first thing staff need after the contact details, so it sits right under them rather than
+              after the long Basic Details / Guardian / Passport block (client request, Oct 13). */}
+          <SectionGroup title="Study Interest">
+            <CardSection>
+              <StudyInterestFields
+                isEditing={isEditing}
+                value={isEditing ? studyDraft : studyInterest}
+                onChange={setStudyDraft}
+              />
+            </CardSection>
+          </SectionGroup>
+
+          <SectionGroup title="Personal Details">
             <CardSection title="Basic Details">
-              <FieldGrid>
+              <FieldGrid columns={2}>
                 {PERSONAL_DETAIL_FIELDS.map((field) => (
                   <EditableField
                     key={field.key}
@@ -502,17 +720,45 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
               </FieldGrid>
             </CardSection>
 
-            <CardSection title="Guardian Details">
+            <CardSection title={GUARDIAN_SECTION_TITLE}>
+              <p className="mb-3 text-xs text-muted-foreground">
+                The guardian signs for the student on the consent. Pick the relationship: Father or Mother fills the name in
+                from their name above; for anyone else, type the name. Choose &quot;None / Not applicable&quot; if there is no
+                guardian.
+              </p>
               <FieldGrid>
-                {GUARDIAN_FIELDS.map((field) => (
-                  <EditableField
-                    key={field.key}
-                    field={field}
-                    isEditing={isEditing}
-                    value={(isEditing ? draft : values)[field.key] || ""}
-                    onChange={(v) => handleChange(field.key, v)}
-                  />
-                ))}
+                {GUARDIAN_FIELDS.map((field) => {
+                  const shown = isEditing ? draft : values;
+                  // Father / Mother (picked, or the only parent on file): the consent prints that parent's own
+                  // name, so show exactly that (locked) instead of a box whose contents the form would ignore.
+                  const effective = resolveGuardian({
+                    guardianName: shown.guardian_name,
+                    guardianRelationship: shown.guardian_relationship,
+                    fatherName: shown.father_name,
+                    motherName: shown.mother_name,
+                  });
+                  const parentName =
+                    effective.relationship === "Father" ? (shown.father_name ?? "").trim()
+                    : effective.relationship === "Mother" ? (shown.mother_name ?? "").trim()
+                    : "";
+                  const fromParent = field.key === "guardian_name" && !!parentName;
+                  const picked = !!normalizeGuardianRelationship(shown.guardian_relationship);
+                  const note = !fromParent
+                    ? undefined
+                    : picked
+                      ? `Taken from ${effective.relationship}'s Name above. Change it there.`
+                      : `Defaults to ${effective.relationship} (the only parent on file). Pick a relationship to change it.`;
+                  return (
+                    <EditableField
+                      key={field.key}
+                      field={withLegacyRelationshipOption(field, shown.guardian_relationship)}
+                      isEditing={isEditing}
+                      value={fromParent ? parentName : shown[field.key] || ""}
+                      onChange={(v) => handleChange(field.key, v)}
+                      readOnlyNote={note}
+                    />
+                  );
+                })}
               </FieldGrid>
             </CardSection>
 
@@ -524,26 +770,10 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
                 )
               }
             >
-              <FieldGrid>
-                {PASSPORT_CITIZENSHIP_FIELDS.map((field) => (
-                  <EditableField
-                    key={field.key}
-                    field={field}
-                    isEditing={isEditing}
-                    value={(isEditing ? draft : values)[field.key] || ""}
-                    onChange={(v) => handleChange(field.key, v)}
-                  />
-                ))}
-              </FieldGrid>
-            </CardSection>
-          </SectionGroup>
-
-          <SectionGroup title="Study Interest">
-            <CardSection>
-              <StudyInterestFields
+              <IdentityDocumentFields
                 isEditing={isEditing}
-                value={isEditing ? studyDraft : studyInterest}
-                onChange={setStudyDraft}
+                values={isEditing ? draft : values}
+                onChange={handleChange}
               />
             </CardSection>
           </SectionGroup>
@@ -576,27 +806,30 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
               canUploadDocuments={canUploadDocuments}
             />
             <CardSection title="Test Scores">
+              <ListsLoadNote status={listsStatus} onRetry={reloadLists} />
               <TestScoresSection
-                isEditing={isEditing}
+                isEditing={isEditing && listsEditable}
                 value={isEditing ? testScoresDraft : testScores}
-                onChange={setTestScoresDraft}
+                onChange={setTestScoresEdits}
               />
             </CardSection>
           </SectionGroup>
 
           <SectionGroup title="Professional Information">
             <CardSection title="Work Experience">
+              <ListsLoadNote status={listsStatus} onRetry={reloadLists} />
               <WorkExperienceSection
-                isEditing={isEditing}
+                isEditing={isEditing && listsEditable}
                 value={isEditing ? workExperienceDraft : workExperience}
-                onChange={setWorkExperienceDraft}
+                onChange={setWorkExperienceEdits}
               />
             </CardSection>
             <CardSection title="References">
+              <ListsLoadNote status={listsStatus} onRetry={reloadLists} />
               <ReferencesSection
-                isEditing={isEditing}
+                isEditing={isEditing && listsEditable}
                 value={isEditing ? referencesDraft : references}
-                onChange={setReferencesDraft}
+                onChange={setReferencesEdits}
               />
             </CardSection>
           </SectionGroup>
@@ -618,6 +851,36 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
           </SectionGroup>
         </div>
       </DialogContent>
+
+      <AlertDialog open={confirm !== null} onOpenChange={(next) => { if (!next) setConfirm(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{confirm === "save" ? "Save these changes?" : "Discard your changes?"}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirm === "save"
+                ? "The changes you made will be saved to this student's record."
+                : "You have unsaved changes. If you leave now, what you typed will be lost."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep editing</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const which = confirm;
+                setConfirm(null);
+                if (which === "save") void save();
+                else if (which === "discard") cancelEditing();
+                else if (which === "discard-close") {
+                  cancelEditing();
+                  onOpenChange(false);
+                }
+              }}
+            >
+              {confirm === "save" ? "Save" : "Discard"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }
@@ -692,6 +955,10 @@ function StudyInterestFields({
               {studyLevels.map((lvl) => (
                 <SelectItem key={lvl} value={lvl}>{lvl}</SelectItem>
               ))}
+              {/* A level saved earlier but no longer in the catalog must still show, not look blank. */}
+              {value.degreeLevel && !studyLevels.includes(value.degreeLevel) && (
+                <SelectItem value={value.degreeLevel}>{value.degreeLevel}</SelectItem>
+              )}
             </SelectContent>
           </Select>
         ) : (

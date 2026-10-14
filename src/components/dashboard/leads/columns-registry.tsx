@@ -12,6 +12,7 @@ import { AssigneeSelector, AssigneeChip } from "@/components/dashboard/leads/ass
 import type { Lead, LeadList, PipelineStage } from "@/types/database";
 import { normalizeDestinations, normalizeFieldOfStudy } from "@/lib/leads/destination-normalize";
 import { getLeadFullName } from "@/components/dashboard/lead/lead-name";
+import { getLeadCity } from "@/lib/leads/lead-location";
 
 // Fixed cap for the mobile card-style sub-block (not part of desktop column resize).
 export const EMAIL_MOBILE_WIDTH = 140;
@@ -375,11 +376,7 @@ const STATIC_COLUMNS: LeadColumn[] = [
       </th>
     ),
     renderTd: (lead) => {
-      // Prefer the real column; fall back to the legacy custom_fields value
-      // for leads whose city answer was never promoted (form-submitted leads
-      // that posted it nested under custom_fields instead of top-level).
-      const cf = (lead.custom_fields || {}) as Record<string, unknown>;
-      const city = lead.city || (typeof cf.city === "string" ? cf.city : null);
+      const city = getLeadCity(lead);
       // Country-only leads (e.g. a contact form that only asks for country, never
       // city) previously showed "—" here even though lead.country was captured
       // correctly — this column ignored country entirely. Fall back to it, and

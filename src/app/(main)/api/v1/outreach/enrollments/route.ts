@@ -16,6 +16,8 @@ import { scopedClient } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { enrollLead, EnrollmentConflictError } from "@/industries/_shared/features/outreach/lib/engine";
+import { channelOf, isOutreachChannel } from "@/industries/_shared/features/outreach/lib/channel";
+import { toProviderRecipient } from "@/lib/sms/phone";
 
 export async function GET(request: NextRequest) {
   const auth = await authenticateRequest();
@@ -27,12 +29,14 @@ export async function GET(request: NextRequest) {
   const leadId = searchParams.get("lead_id");
   const status = searchParams.get("status");
   const stopReason = searchParams.get("stop_reason");
+  const channelParam = searchParams.get("channel");
 
   let query = db
     .from("sequence_enrollments")
     .select("*, email_sequences(name), leads(first_name, last_name)");
   if (leadId) query = query.eq("lead_id", leadId);
   if (status) query = query.eq("status", status);
+  if (isOutreachChannel(channelParam)) query = query.eq("channel", channelParam);
   // "Lead replied" worklist: enrollments the system stopped because the lead replied (migration 257).
   if (stopReason === "replied") query = query.eq("stop_reason", "replied");
 
@@ -73,12 +77,12 @@ export async function POST(request: NextRequest) {
 
   const { data: lead } = await db
     .from("leads")
-    .select("id, assigned_to")
+    .select("id, assigned_to, phone")
     .eq("id", String(body.lead_id))
     .is("deleted_at", null)
     .maybeSingle();
   if (!lead) return apiNotFound("Lead");
-  const leadRow = lead as unknown as { id: string; assigned_to: string | null };
+  const leadRow = lead as unknown as { id: string; assigned_to: string | null; phone: string | null };
 
   // Counselors (own-scope) may only enroll leads assigned to them — same
   // convention as the activities route's counselor scoping.
@@ -88,10 +92,15 @@ export async function POST(request: NextRequest) {
 
   const { data: sequence } = await db
     .from("email_sequences")
-    .select("id, status")
+    .select("id, status, channel")
     .eq("id", String(body.sequence_id))
     .maybeSingle();
   if (!sequence || (sequence as unknown as { status: string }).status !== "active") return apiNotFound("Sequence");
+
+  // A text sequence needs a number we can actually text: refuse up front rather than enrolling a lead whose steps can never send.
+  if (channelOf(sequence as { channel?: string | null }) === "sms" && !toProviderRecipient(leadRow.phone).ok) {
+    return apiError("NO_PHONE", "This lead has no valid phone number, so they can't be added to an SMS sequence.", 422);
+  }
 
   const assignedTo = body.assigned_to ? String(body.assigned_to) : (leadRow.assigned_to ?? auth.userId);
 

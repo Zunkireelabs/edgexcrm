@@ -12,6 +12,8 @@ const createRunMock = vi.fn();
 const processRunMock = vi.fn();
 let sequenceRow: Record<string, unknown> | null = null;
 
+const smsEnabledMock = vi.fn();
+vi.mock("@/lib/sms/flag", () => ({ isSmsEnabledForTenant: (...a: unknown[]) => smsEnabledMock(...a) }));
 vi.mock("@/lib/api/auth", () => ({ authenticateRequest: () => authMock() }));
 vi.mock("@/industries/_loader", () => ({ getFeatureAccess: (...a: unknown[]) => featureMock(...a) }));
 vi.mock("@/lib/supabase/scoped", () => ({
@@ -64,7 +66,8 @@ beforeEach(() => {
   planMock.mockReset().mockResolvedValue(plan(5));
   createRunMock.mockReset().mockResolvedValue("run-1");
   processRunMock.mockReset().mockResolvedValue({});
-  sequenceRow = { id: SEQ, status: "active" };
+  sequenceRow = { id: SEQ, status: "active", channel: "email" };
+  smsEnabledMock.mockReset().mockResolvedValue(true);
 });
 
 describe("POST /api/v1/outreach/bulk-enroll", () => {
@@ -89,7 +92,7 @@ describe("POST /api/v1/outreach/bulk-enroll", () => {
       planMock.mockClear();
       createRunMock.mockClear();
       expect((await post(validBody({ conflict_policy: policy }))).status).toBe(201);
-      expect(planMock).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.anything(), { sequenceId: SEQ, conflictPolicy: policy });
+      expect(planMock).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.anything(), { sequenceId: SEQ, conflictPolicy: policy, channel: "email" });
       expect(createRunMock).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.objectContaining({ conflictPolicy: policy }));
     }
   });
@@ -137,5 +140,52 @@ describe("POST /api/v1/outreach/bulk-enroll", () => {
     createRunMock.mockRejectedValue(new Error("db down"));
     expect((await post(validBody())).status).toBe(500);
     expect(processRunMock).not.toHaveBeenCalled();
+  });
+
+  describe("SMS sequences", () => {
+    const smsAuth = { ...auth, permissions: { canSendSms: true } };
+    beforeEach(() => {
+      sequenceRow = { id: SEQ, status: "active", channel: "sms" };
+      authMock.mockResolvedValue(smsAuth);
+    });
+
+    it("is allowed: the plan is built for the SMS channel and the run is saved and handed to the worker", async () => {
+      expect((await post(validBody())).status).toBe(201);
+      expect(planMock).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.anything(), { sequenceId: SEQ, conflictPolicy: "skip", channel: "sms" });
+      expect(createRunMock).toHaveBeenCalled();
+      expect(processRunMock).toHaveBeenCalledWith("t1", "run-1");
+    });
+
+    it("403 when SMS is not turned on for the account (nothing is planned or saved)", async () => {
+      smsEnabledMock.mockResolvedValue(false);
+      expect((await post(validBody())).status).toBe(403);
+      expect(planMock).not.toHaveBeenCalled();
+      expect(createRunMock).not.toHaveBeenCalled();
+    });
+
+    it("403 for someone without SMS permission: texting many people needs the same standing as an SMS blast", async () => {
+      authMock.mockResolvedValue({ ...auth, permissions: { canSendSms: false } });
+      expect((await post(validBody())).status).toBe(403);
+      expect(createRunMock).not.toHaveBeenCalled();
+    });
+
+    it("keeps the same safety rules: type-to-confirm from 100 leads, nobody to enroll, over the per-run limit", async () => {
+      planMock.mockResolvedValue(plan(100));
+      expect((await post(validBody())).status).toBe(422);
+      expect((await post(validBody({ confirm: true }))).status).toBe(201);
+
+      planMock.mockResolvedValue(plan(0));
+      expect((await post(validBody())).status).toBe(422);
+
+      planMock.mockResolvedValue(plan(10001, true));
+      expect((await post(validBody({ confirm: true }))).status).toBe(422);
+    });
+
+    it("an EMAIL sequence is not affected by the SMS gates", async () => {
+      sequenceRow = { id: SEQ, status: "active", channel: "email" };
+      smsEnabledMock.mockResolvedValue(false);
+      authMock.mockResolvedValue({ ...auth, permissions: { canSendSms: false } });
+      expect((await post(validBody())).status).toBe(201);
+    });
   });
 });

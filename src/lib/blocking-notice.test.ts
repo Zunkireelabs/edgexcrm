@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyApiError, parseMissingItems, profileIncompleteNotice } from "./blocking-notice";
+import { classifyApiError, parseMissingItems, profileIncompleteNotice, consentProfileIncompleteMessage } from "./blocking-notice";
 
 describe("parseMissingItems", () => {
   it("reads the list the server puts after 'Missing:'", () => {
@@ -59,3 +59,20 @@ describe("classifyApiError", () => {
     expect(classifyApiError(null, "Failed to add application")).toEqual({ kind: "toast", message: "Failed to add application" });
   });
 });
+
+describe("consent-blocked pop-up", () => {
+  it("explains the guardian and counselor items in plain words, and leaves obvious ones bare", () => {
+    const result = classifyApiError({
+      code: "PROFILE_INCOMPLETE_FOR_CONSENT",
+      message: consentProfileIncompleteMessage(["Passport Number", "Guardian Relationship", "Assigned Counselor"]),
+    });
+    expect(result.kind).toBe("blocking");
+    if (result.kind !== "blocking") return;
+    const items = result.notice.items ?? [];
+    expect(items.map((i) => i.label)).toEqual(["Passport Number", "Guardian Relationship", "Assigned Counselor"]);
+    expect(items[0].hint).toBeUndefined();
+    expect(items[1].hint).toContain("None / Not applicable");
+    expect(items[2].hint).toContain("Assign a counselor");
+  });
+});
+

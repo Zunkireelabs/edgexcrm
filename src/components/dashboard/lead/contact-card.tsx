@@ -6,6 +6,9 @@ import {
   ArrowLeft,
   Mail,
   Phone,
+  MapPin,
+  Globe,
+  type LucideIcon,
   MessageSquare,
   CheckSquare,
   MoreHorizontal,
@@ -35,15 +38,15 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { CopyButton } from "@/components/ui/copy-button";
+import { CopyButton, copyToClipboard } from "@/components/ui/copy-button";
 import { TruncatedText } from "@/components/ui/truncated-text";
 import { formatPhoneForTel, formatPhoneForWhatsApp } from "@/lib/phone-utils";
-import { nationalityFromPhone } from "@/lib/leads/nationality";
+import { getLeadLocationRows } from "@/lib/leads/lead-location";
 import { toast } from "sonner";
 import type { Lead, PipelineStage } from "@/types/database";
 import { getLeadFullName, getLeadInitials } from "./lead-name";
 import { isOtherLead } from "@/lib/leads/lead-type";
-import { formatDateTime } from "@/lib/date";
+import { formatDateTime, formatRelativeTime } from "@/lib/date";
 import { displayCase } from "@/lib/display-case";
 
 interface LeadTypeOption {
@@ -186,6 +189,10 @@ interface ContactCardProps {
   convertedContactName?: string | null;
   onConvertClick?: () => void;
 }
+
+// Small leading icon for each contact line, so email / phone / place read at a glance.
+const CONTACT_ICON_CLASS = "h-3.5 w-3.5 shrink-0 text-muted-foreground";
+const LOCATION_ICONS: Record<string, LucideIcon> = { Nationality: Globe, City: MapPin };
 
 interface QuickActionButtonProps {
   icon: React.ReactNode;
@@ -440,50 +447,60 @@ export function ContactCard({
               <p className="text-xs text-muted-foreground mt-2">
                 Created {formatDateTime(lead.created_at)}
               </p>
+              {industryId === "education_consultancy" && lead.updated_at && (
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Last updated {formatRelativeTime(lead.updated_at)}
+                </p>
+              )}
             </>
           )}
         </div>
 
         {/* Contact Info (read-only — inputs shown above when editing) */}
         {!isEditing && (
-        <div className="space-y-3 mb-4">
+        <div className="space-y-1 mb-3">
           {lead.email && (
-            <div className="flex items-center justify-between gap-2 group">
-              <a href={`mailto:${lead.email}`} className="min-w-0 flex-1 hover:text-primary">
+            <div className="flex items-center gap-2 group">
+              <Mail className={CONTACT_ICON_CLASS} aria-hidden="true" />
+              <button
+                type="button"
+                title="Click to copy"
+                onClick={() => copyToClipboard(lead.email!, "Email")}
+                className="min-w-0 flex-1 cursor-pointer text-left hover:text-primary"
+              >
                 <TruncatedText text={lead.email} className="text-sm font-medium text-foreground" />
-              </a>
-              <CopyButton value={lead.email} label="Email" className="opacity-0 group-hover:opacity-100 transition-opacity" />
+              </button>
+              <CopyButton value={lead.email} label="Email" className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
           )}
           {lead.phone && (
-            <div className="flex items-center justify-between group">
-              <a
-                href={`tel:${formatPhoneForTel(lead.phone)}`}
-                className="text-sm font-medium text-foreground hover:text-primary"
-              >
-                {lead.phone}
-              </a>
-              <CopyButton value={lead.phone} label="Phone" className="opacity-0 group-hover:opacity-100 transition-opacity" />
+            <div className="flex items-center justify-between gap-2 group">
+              <span className="flex min-w-0 items-center gap-2">
+                <Phone className={CONTACT_ICON_CLASS} aria-hidden="true" />
+                <button
+                  type="button"
+                  title="Click to copy"
+                  onClick={() => copyToClipboard(lead.phone!, "Phone")}
+                  className="cursor-pointer text-left text-sm font-medium text-foreground hover:text-primary"
+                >
+                  {lead.phone}
+                </button>
+              </span>
+              <CopyButton value={lead.phone} label="Phone" className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
           )}
-          {(() => {
-            const nationality = lead.nationality ?? nationalityFromPhone(lead.phone);
-            const city = lead.city;
-            if (!nationality && !city) return null;
+          {getLeadLocationRows(lead).map((row) => {
+            const RowIcon = LOCATION_ICONS[row.label] ?? MapPin;
             return (
-              <div className="flex items-center gap-1.5 pt-1">
-                {nationality && (
-                  <span className="text-[13px] text-muted-foreground">{displayCase(nationality)}</span>
-                )}
-                {nationality && city && (
-                  <span className="text-[13px] text-muted-foreground">·</span>
-                )}
-                {city && (
-                  <span className="text-[13px] text-muted-foreground">{displayCase(city)}</span>
-                )}
-              </div>
+              <p key={row.label} className="flex items-center gap-2 text-sm">
+                <span title={row.label} className="flex shrink-0">
+                  <RowIcon className={CONTACT_ICON_CLASS} aria-hidden="true" />
+                  <span className="sr-only">{row.label}: </span>
+                </span>
+                <span className="font-medium text-foreground">{displayCase(row.value)}</span>
+              </p>
             );
-          })()}
+          })}
         </div>
         )}
 
@@ -491,7 +508,11 @@ export function ContactCard({
             margin cancels the section's own header padding so its text lines up with
             the contact details above. Stays visible while editing: it follows the same
             page-level edit mode as the fields above. */}
-        {detailsSlot && <div className="-mx-3 mt-3 mb-2">{detailsSlot}</div>}
+        {detailsSlot && (
+          <div className="mt-3 border-t border-border pt-2">
+            <div className="-mx-3 mb-2">{detailsSlot}</div>
+          </div>
+        )}
 
         {/* Quick Actions, or Save/Cancel while editing — page-level actions
             (Edit/Convert/Delete) live in the Action dropdown below instead

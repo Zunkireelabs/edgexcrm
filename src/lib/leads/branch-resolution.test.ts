@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { resolveLeadBranch } from "./branch-resolution";
+import { resolveLeadBranch, assignmentBranchTarget, branchMoveOnAssignment, creationBranchForAssignee } from "./branch-resolution";
 
 // Chainable `branches` table double for the tenant-default fallback query
 // (.select().eq().eq().limit().maybeSingle()).
@@ -70,5 +70,99 @@ describe("resolveLeadBranch", () => {
     const db = fakeDb(null);
     const result = await resolveLeadBranch(db, { tenantId: "tenant-1" });
     expect(result).toBeNull();
+  });
+});
+
+// tenant_users (assignee's branch) + branches (is_default) doubles, keyed by table name.
+function fakeAssignDb(opts: { assigneeBranchId?: string | null; defaultBranchId?: string | null }) {
+  const table = (data: unknown) => {
+    const chain = {
+      select: () => chain,
+      eq: () => chain,
+      limit: () => chain,
+      maybeSingle: () => Promise.resolve({ data }),
+    };
+    return chain;
+  };
+  const tenantUsers = table(opts.assigneeBranchId === undefined ? null : { branch_id: opts.assigneeBranchId });
+  const branches = table(opts.defaultBranchId ? { id: opts.defaultBranchId } : null);
+  return { from: vi.fn((name: string) => (name === "tenant_users" ? tenantUsers : branches)) } as unknown as Parameters<typeof assignmentBranchTarget>[0];
+}
+
+describe("assignmentBranchTarget — a Global lead becomes the assignee's branch lead", () => {
+  it("assignee in Birgunj, default branch Global -> move Global -> Birgunj", async () => {
+    const db = fakeAssignDb({ assigneeBranchId: "birgunj", defaultBranchId: "global" });
+    expect(await assignmentBranchTarget(db, "t", "u")).toEqual({ fromBranchId: "global", toBranchId: "birgunj" });
+  });
+
+  it("assignee with no branch (owner/admin) -> nothing to move to", async () => {
+    const db = fakeAssignDb({ assigneeBranchId: null, defaultBranchId: "global" });
+    expect(await assignmentBranchTarget(db, "t", "u")).toBeNull();
+  });
+
+  it("assignee already in the default branch -> nothing to move", async () => {
+    const db = fakeAssignDb({ assigneeBranchId: "global", defaultBranchId: "global" });
+    expect(await assignmentBranchTarget(db, "t", "u")).toBeNull();
+  });
+
+  it("tenant with no default branch -> nothing to move", async () => {
+    const db = fakeAssignDb({ assigneeBranchId: "birgunj", defaultBranchId: null });
+    expect(await assignmentBranchTarget(db, "t", "u")).toBeNull();
+  });
+
+  it("uses a branch the caller already read instead of querying tenant_users again", async () => {
+    const db = fakeAssignDb({ defaultBranchId: "global" }); // tenant_users would return null if asked
+    expect(await assignmentBranchTarget(db, "t", "u", "janakpur")).toEqual({ fromBranchId: "global", toBranchId: "janakpur" });
+    expect((db as unknown as { from: ReturnType<typeof vi.fn> }).from).not.toHaveBeenCalledWith("tenant_users");
+  });
+});
+
+describe("branchMoveOnAssignment — only leads in the default branch move", () => {
+  const target = { fromBranchId: "global", toBranchId: "birgunj" };
+
+  it("a lead in Global moves", () => {
+    expect(branchMoveOnAssignment("global", target)).toBe("birgunj");
+  });
+
+  it("existing leads in KTM / Birgunj / Janakpur keep their branch when reassigned", () => {
+    expect(branchMoveOnAssignment("ktm", target)).toBeNull();
+    expect(branchMoveOnAssignment("janakpur", target)).toBeNull();
+    expect(branchMoveOnAssignment("birgunj", target)).toBeNull();
+  });
+
+  it("a lead with no branch, or no target, is left alone", () => {
+    expect(branchMoveOnAssignment(null, target)).toBeNull();
+    expect(branchMoveOnAssignment(undefined, target)).toBeNull();
+    expect(branchMoveOnAssignment("global", null)).toBeNull();
+  });
+});
+
+describe("creationBranchForAssignee — a lead created with an assignee", () => {
+  const ARGS = { tenantId: "t", creationBranchId: "global", assigneeId: "u" };
+
+  it("created into Global with a Birgunj assignee -> starts in Birgunj", async () => {
+    const db = fakeAssignDb({ assigneeBranchId: "birgunj", defaultBranchId: "global" });
+    expect(await creationBranchForAssignee(db, ARGS)).toBe("birgunj");
+  });
+
+  it("an explicit branch from the caller wins (no lookup at all)", async () => {
+    const db = fakeAssignDb({ assigneeBranchId: "birgunj", defaultBranchId: "global" });
+    expect(await creationBranchForAssignee(db, { ...ARGS, creationBranchId: "ktm", explicitBranchId: "ktm" })).toBe("ktm");
+    expect((db as unknown as { from: ReturnType<typeof vi.fn> }).from).not.toHaveBeenCalled();
+  });
+
+  it("no assignee -> the creation branch (Global) is kept", async () => {
+    const db = fakeAssignDb({ assigneeBranchId: "birgunj", defaultBranchId: "global" });
+    expect(await creationBranchForAssignee(db, { ...ARGS, assigneeId: null })).toBe("global");
+  });
+
+  it("created into a non-default branch (e.g. the creator's own KTM) -> never moved", async () => {
+    const db = fakeAssignDb({ assigneeBranchId: "birgunj", defaultBranchId: "global" });
+    expect(await creationBranchForAssignee(db, { ...ARGS, creationBranchId: "ktm" })).toBe("ktm");
+  });
+
+  it("assignee with no branch, or a tenant with no creation branch -> unchanged", async () => {
+    expect(await creationBranchForAssignee(fakeAssignDb({ assigneeBranchId: null, defaultBranchId: "global" }), ARGS)).toBe("global");
+    expect(await creationBranchForAssignee(fakeAssignDb({ assigneeBranchId: "birgunj", defaultBranchId: null }), { ...ARGS, creationBranchId: null })).toBeNull();
   });
 });

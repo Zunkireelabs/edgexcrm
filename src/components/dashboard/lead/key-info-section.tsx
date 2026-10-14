@@ -16,7 +16,8 @@ import {
 } from "@/industries/real-estate/lib/investor-fields";
 import { isOtherLead } from "@/lib/leads/lead-type";
 import { canEditLeadWorkingData } from "@/lib/leads/lead-edit-scope";
-import { formatDateTime } from "@/lib/date";
+import { formatDateTime, formatRelativeTime } from "@/lib/date";
+import { RESIDENCE_COUNTRIES, CONTACT_METHODS } from "@/lib/leads/contact-options";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { SALUTATIONS } from "@/industries/it-agency/leads/salutations";
@@ -63,19 +64,9 @@ import { SECTION_TITLE_CLASS, SUBHEADING_CLASS } from "./section-title";
 import { useEditSection, useEditSession } from "./edit-session";
 import { ListStepper } from "@/components/dashboard/leads/list-stepper";
 import { StageMoveSelector } from "@/components/dashboard/leads/stage-move-selector";
-import { ACADEMIC_LEVELS, TEST_TYPES } from "@/lib/leads/prospect-qualification";
 
-const CONTACT_METHODS = [
-  { value: "phone", label: "Phone" },
-  { value: "email", label: "Email" },
-  { value: "whatsapp", label: "WhatsApp" },
-  { value: "any", label: "Any" },
-];
 
-const COUNTRIES = [
-  "Nepal", "India", "United States", "United Kingdom", "Canada", "Australia",
-  "Germany", "France", "Japan", "China", "Singapore", "UAE", "Other",
-];
+const COUNTRIES = RESIDENCE_COUNTRIES;
 
 interface TeamMember {
   id: string;
@@ -236,6 +227,7 @@ export function KeyInfoSection({
   // Other-tagged walk-ins (Contacts) never enter the pipeline/funnel — Status and
   // Stage are meaningless for them (see excludeOtherType across Stages/Pipeline).
   const isOtherContact = isOtherLead(lead.tags, industryId);
+  const isEducationDetails = industryId === "education_consultancy";
 
   // Custom fields
   const customFields = Object.entries(lead.custom_fields || {}).filter(
@@ -605,10 +597,17 @@ export function KeyInfoSection({
             />
           )}
 
-          {/* ── DETAILS ─────────────────────────────────────────────── */}
+          {/* ── DETAILS ───────────────────────────────────────────────
+              Education no longer shows Residence Country or Preferred Contact here: the client asked for both
+              to go (the address Country lives in Student Details, and Preferred Contact is dropped), and with
+              the pop-up no longer editing them there is nothing left to see or change. The College (entity)
+              still shows, and the box is hidden entirely when there is none. Other industries are unchanged:
+              the box is the only place they show / edit Residence Country, Preferred Contact and the Entity. */}
+          {!(isEducationDetails && !entity) && (<>
           <div className="border-t border-border" />
           <InfoSection title="Details" defaultOpen={false} titleClassName={SECTION_TITLE_CLASS}>
             <div className="space-y-2">
+              {!isEducationDetails && (<>
               {/* Residence Country */}
               {isEditing && draft ? (
                 <div>
@@ -633,19 +632,6 @@ export function KeyInfoSection({
               ) : lead.country ? (
                 <InfoRow label="Residence Country" value={lead.country} />
               ) : null}
-
-              {/* Interested Destinations / Degree Level — read-only here (edited
-                  via the Study Interest panel / Student Details popup above, not
-                  duplicated as a third editor); sourced from the real
-                  destinations/degree_level columns, not custom_fields, so this
-                  can never show a stale duplicate the way the generic Additional
-                  Details list used to. */}
-              {industryId === "education_consultancy" && lead.destinations && lead.destinations.length > 0 && (
-                <InfoRow label="Interested Destinations" value={lead.destinations.join(", ")} />
-              )}
-              {industryId === "education_consultancy" && lead.degree_level && (
-                <InfoRow label="Degree Level" value={lead.degree_level} />
-              )}
 
               {/* Preferred Contact */}
               {isEditing && draft ? (
@@ -675,6 +661,8 @@ export function KeyInfoSection({
                 />
               ) : null}
 
+              </>)}
+
               {/* Entity (e.g., College, Service, Project Type).
                   travel_agency has its own editable Package selector in the Trip
                   Inquiry panel above, so skip this read-only block there. */}
@@ -695,16 +683,21 @@ export function KeyInfoSection({
                 </div>
               )}
 
-              {/* Created */}
-              <InfoRow label="Created" value={formatDateTime(lead.created_at)} />
+              {isEducationDetails ? null : (
+                <>
+                  {/* Created */}
+                  <InfoRow label="Created" value={formatDateTime(lead.created_at)} />
 
-              {/* Last Updated */}
-              <InfoRow
-                label="Last Updated"
-                value={formatRelativeTime(lead.updated_at)}
-              />
+                  {/* Last Updated */}
+                  <InfoRow
+                    label="Last Updated"
+                    value={formatRelativeTime(lead.updated_at)}
+                  />
+                </>
+              )}
             </div>
           </InfoSection>
+          </>)}
 
           {/* ── ADDITIONAL DETAILS (true extras only) ───────────────── */}
           {customFields.length > 0 && (
@@ -802,36 +795,24 @@ export function StudyInterestPanel({ lead, isAdmin, isEditor, leadScope, submiss
   const effectiveDegreeLevel = normalizeDegreeLevel(leadWithEdu.degree_level) || distinctDegreeLevel.join(", ") || null;
   const effectiveIntakeTerm = leadWithEdu.intake_term?.trim() || null;
 
-  const leadRecord = lead as unknown as Record<string, unknown>;
   const hasAny =
     effectiveDestinations.length > 0 ||
     effectiveFieldOfStudy ||
     effectiveDegreeLevel ||
     effectiveIntakeTerm;
 
-  const academicLevelRows = ACADEMIC_LEVELS.map((level) => ({
-    level,
-    gpa: String(leadRecord[`${level.key}_gpa`] ?? "").trim(),
-    institution: String(leadRecord[`${level.key}_institution`] ?? "").trim(),
-    passedYear: String(leadRecord[`${level.key}_passed_year`] ?? "").trim(),
-  })).filter((r) => r.gpa || r.institution || r.passedYear);
-  const testScoreRows = TEST_TYPES.map((t) => ({
-    test: t,
-    score: String(leadRecord[`${t.key}_score`] ?? "").trim(),
-  })).filter((r) => r.score);
-  const hasAcademicData = academicLevelRows.length > 0 || testScoreRows.length > 0;
-
   return (
     <>
       <InfoSection
         title="Study Interest"
-        collapsible={false}
+        defaultOpen
         className="border-0 rounded-none bg-transparent"
+        headerClassName="px-3 pt-1 pb-1"
         titleClassName={SECTION_TITLE_CLASS}
       >
-      <div className="space-y-2">
+      <div>
       {hasAny ? (
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           {effectiveDestinations.length > 0 && (
             <div>
               <p className="text-xs text-muted-foreground">Destinations</p>
@@ -858,35 +839,6 @@ export function StudyInterestPanel({ lead, isAdmin, isEditor, leadScope, submiss
         <p className="text-xs text-muted-foreground italic">
           No study details yet.{canEditPanel ? " Use Edit to add." : ""}
         </p>
-      )}
-
-      {hasAcademicData && (
-        <div className="space-y-2 pt-1">
-          {academicLevelRows.length > 0 && (
-            <div className="space-y-1.5">
-              <p className={SUBHEADING_CLASS}>
-                Academic Qualification
-              </p>
-              {academicLevelRows.map(({ level, gpa, institution, passedYear }) => (
-                <InfoRow
-                  key={level.key}
-                  label={level.label}
-                  value={[gpa, institution, passedYear].filter(Boolean).join(" · ") || "—"}
-                />
-              ))}
-            </div>
-          )}
-          {testScoreRows.length > 0 && (
-            <div className="space-y-1.5">
-              <p className={SUBHEADING_CLASS}>
-                Test Report &amp; Score
-              </p>
-              {testScoreRows.map(({ test, score }) => (
-                <InfoRow key={test.key} label={test.label} value={score} />
-              ))}
-            </div>
-          )}
-        </div>
       )}
       </div>
       </InfoSection>
@@ -1494,30 +1446,6 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 }
 
 // Utility functions
-function formatRelativeTime(dateString: string): string {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-  if (diffDays === 0) {
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    if (diffHours === 0) {
-      const diffMinutes = Math.floor(diffMs / (1000 * 60));
-      return diffMinutes <= 1 ? "Just now" : `${diffMinutes} minutes ago`;
-    }
-    return diffHours === 1 ? "1 hour ago" : `${diffHours} hours ago`;
-  }
-  if (diffDays === 1) return "Yesterday";
-  if (diffDays < 7) return `${diffDays} days ago`;
-
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
 function formatFieldLabel(key: string): string {
   return key
     .replace(/_/g, " ")

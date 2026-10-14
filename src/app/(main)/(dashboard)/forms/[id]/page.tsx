@@ -5,6 +5,7 @@ import { FormBuilderPage } from "@/industries/_shared/features/form-builder/comp
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { canSeeNav } from "@/lib/api/permissions";
+import { isSmsEnabledForTenant } from "@/lib/sms/flag";
 import type { FormConfig } from "@/types/database";
 
 export default async function EditFormPage({
@@ -37,11 +38,14 @@ export default async function EditFormPage({
 
   if (!formConfig) notFound();
 
+  const smsEnabled = await isSmsEnabledForTenant(tenantData.tenant.id);
+
   return (
     <FormBuilderPage
       formConfig={formConfig as FormConfig}
       tenantSlug={tenantData.tenant.slug}
       industryId={tenantData.tenant.industry_id}
+      smsEnabled={smsEnabled}
     />
   );
 }

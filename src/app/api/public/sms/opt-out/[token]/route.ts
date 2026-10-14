@@ -4,6 +4,7 @@ import { scopedClientForTenant } from "@/lib/supabase/scoped";
 import { apiSuccess } from "@/lib/api/response";
 import { createRequestLogger } from "@/lib/logger";
 import { suppressPhone } from "@/lib/sms/suppression";
+import { stopSmsEnrollmentsForLead } from "@/industries/_shared/features/outreach/lib/stop-on-sms-optout";
 
 // Public, unauthenticated opt-out link (see docs/SMS-PHASE2-BRIEF.md §2g).
 //
@@ -87,6 +88,15 @@ export async function POST(_request: NextRequest, context: RouteContext) {
     source: "optout_link",
     leadId: data.lead_id,
   });
+
+  // The lead's running SMS sequence ends with the opt-out. Never allowed to fail the opt-out itself.
+  if (data.lead_id) {
+    try {
+      await stopSmsEnrollmentsForLead(scoped, { tenantId: data.tenant_id, leadId: data.lead_id, reason: "opt_out" });
+    } catch (err) {
+      log.error({ err }, "Failed to end the lead's SMS sequence after opt-out");
+    }
+  }
 
   // used_at is a record, not a gate — the link keeps working after use, so
   // this is a plain update every time, not conditioned on used_at being null.

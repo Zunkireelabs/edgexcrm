@@ -14,6 +14,7 @@ import { POSITION_ROUTE_MAP as POSITION_HOME_LIST } from "@/industries/education
 import { filterAssignableMembersByChain } from "@/lib/leads/assignable";
 import { canBypassProspectQualification } from "@/lib/leads/prospect-qualification";
 import { resolveThresholds } from "@/industries/education-consultancy/features/team-performance/lib/thresholds";
+import { isOffFunnelLeadList } from "@/lib/leads/list-funnel";
 import type { TenantEntity, Industry, LeadList, PipelineWithCounts, Lead, PipelineLead, TenantConfig } from "@/types/database";
 
 const FUNNEL_LABELS: Record<string, string> = {
@@ -90,6 +91,8 @@ export default async function LeadsPage({
       if (found) {
         // Staging lists (e.g. New Leads) are admin/owner only — block direct ?list= URL bypass.
         if (found.is_staging && !isAdminOrOwner) notFound();
+        // Archive/Delete lists are admin/owner only — same bypass block.
+        if (isOffFunnelLeadList(found) && !isAdminOrOwner) notFound();
         const accessible = canAccessList(
           tenantData.permissions,
           found.access as { mode: string; positionIds?: string[] },

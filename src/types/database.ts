@@ -217,6 +217,12 @@ export interface Lead {
   father_name: string | null;
   mother_name: string | null;
   full_address: string | null;
+  // Structured Nepal address (migration 272); country reuses `country`.
+  address_province: string | null;
+  address_district: string | null;
+  address_municipality: string | null;
+  address_ward: string | null;
+  address_tole: string | null;
   emergency_contact_name: string | null;
   emergency_contact_phone: string | null;
   passport_number: string | null;
@@ -230,6 +236,7 @@ export interface Lead {
   guardian_phone: string | null;
   guardian_email: string | null;
   guardian_relationship: string | null;
+  guardian_name: string | null;
   intake_account: string | null;
   // Pre-Application fee (education_consultancy — migration 084)
   pre_app_fee_status: "paid" | "unpaid" | "waiver" | null;
@@ -248,6 +255,31 @@ export interface Lead {
   masters_gpa: string | null;
   masters_institution: string | null;
   masters_passed_year: number | null;
+  // Qualification details (education_consultancy — migration 236). DATE columns arrive as "YYYY-MM-DD".
+  see_address: string | null;
+  see_awarding_body: string | null;
+  see_start_date: string | null;
+  see_end_date: string | null;
+  plus_two_address: string | null;
+  plus_two_awarding_body: string | null;
+  plus_two_start_date: string | null;
+  plus_two_end_date: string | null;
+  plus_two_stream_faculty: string | null;
+  bachelor_address: string | null;
+  bachelor_awarding_body: string | null;
+  bachelor_start_date: string | null;
+  bachelor_end_date: string | null;
+  bachelor_stream_faculty: string | null;
+  masters_address: string | null;
+  masters_awarding_body: string | null;
+  masters_start_date: string | null;
+  masters_end_date: string | null;
+  masters_stream_faculty: string | null;
+  // Financial / sponsor details (education_consultancy — migration 239)
+  sponsor_name: string | null;
+  sponsor_relationship: string | null;
+  source_of_funds: string | null;
+  scholarship_loan: string | null;
   ielts_score: string | null;
   pte_score: string | null;
   toefl_score: string | null;
@@ -428,9 +460,18 @@ export interface FormConfig {
     subject: string;
     body_html: string;
     body_format?: "text" | "html"; // absent === "text" (back-compat)
+    // Confirmation SMS — independent of the email fields above (its own enabled flag).
+    sms?: FormSmsAutoresponder;
   };
   created_at: string;
   updated_at: string;
+}
+
+/** Per-form confirmation SMS, stored at form_configs.autoresponder.sms. */
+export interface FormSmsAutoresponder {
+  enabled: boolean;
+  fire_mode: "every" | "first";
+  body: string;
 }
 
 export interface FormStep {

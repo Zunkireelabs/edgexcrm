@@ -1,5 +1,6 @@
 "use client";
 
+import { describeSubmission } from "./activities/lead-activity-labels";
 import {
   GitBranch,
   UserPlus,
@@ -204,14 +205,10 @@ function getActivityDisplay(
 
   // Submission (dedup-aware: first = created, subsequent = resubmission)
   if (action === "lead.submission") {
-    const isFirst = changes.is_first?.new === true;
-    const formName = changes.form_name?.new as string | null;
     return {
       icon: <FileText className="h-4 w-4" />,
       color: "bg-emerald-100 text-emerald-600",
-      description: isFirst
-        ? `Lead created${formName ? ` · Filled ${formName}` : ""}`
-        : `Filled ${formName || "form"}`,
+      description: describeSubmission(changes),
     };
   }
 

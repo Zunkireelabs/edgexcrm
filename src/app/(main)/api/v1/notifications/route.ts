@@ -7,6 +7,7 @@ import {
   apiServiceUnavailable,
 } from "@/lib/api/response";
 import { createRequestLogger } from "@/lib/logger";
+import { categoryOrFilter, isNotificationCategory } from "@/lib/notification-categories";
 
 /**
  * GET /api/v1/notifications
@@ -27,6 +28,8 @@ export async function GET(request: NextRequest) {
   const limit = Math.min(parseInt(searchParams.get("limit") || "20"), 50);
   const offset = parseInt(searchParams.get("offset") || "0");
   const unreadOnly = searchParams.get("unread") === "true";
+  const categoryParam = searchParams.get("category");
+  const category = isNotificationCategory(categoryParam) ? categoryParam : null;
 
   // Migrated to scopedClient — tenant_id filter auto-injected.
   const db = await scopedClient(auth);
@@ -40,6 +43,11 @@ export async function GET(request: NextRequest) {
 
   if (unreadOnly) {
     query = query.is("read_at", null);
+  }
+
+  // Optional type filter for the /notifications chips. Unknown values are ignored, never forwarded.
+  if (category) {
+    query = query.or(categoryOrFilter(category));
   }
 
   const { data, error } = await query;

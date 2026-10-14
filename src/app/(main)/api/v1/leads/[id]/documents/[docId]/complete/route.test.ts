@@ -171,6 +171,49 @@ describe("POST /api/v1/leads/[id]/documents/[docId]/complete", () => {
     expect(createAuditLogMock).toHaveBeenCalledWith(expect.objectContaining({ action: "document.uploaded", entityId: "doc-1" }));
   });
 
+  describe("qualification link (migration 240) — the level a document belongs to", () => {
+    type DocTable = { insert: ReturnType<typeof vi.fn> };
+    const docTable = (db: ReturnType<typeof fakeDb>) => db.from("applicant_documents") as unknown as DocTable;
+    const insertedRow = (db: ReturnType<typeof fakeDb>) => docTable(db).insert.mock.calls[0][0] as Record<string, unknown>;
+
+    it("STORES the level when one is given (it used to be sent by the screen and silently dropped)", async () => {
+      const db = fakeDb();
+      scopedClientMock.mockResolvedValue(db);
+      const { POST } = await import("./route");
+      const res = await POST(fakeReq(validBody({ document_type: "marksheet", qualification_level: "plus_two" })), params());
+      expect(res.status).toBe(201);
+      expect(insertedRow(db)).toMatchObject({ qualification_level: "plus_two", document_type: "marksheet" });
+    });
+
+    it.each(["see", "plus_two", "bachelor", "masters"])("accepts %s", async (level) => {
+      const db = fakeDb();
+      scopedClientMock.mockResolvedValue(db);
+      const { POST } = await import("./route");
+      expect((await POST(fakeReq(validBody({ qualification_level: level })), params())).status).toBe(201);
+      expect(insertedRow(db)).toMatchObject({ qualification_level: level });
+    });
+
+    it("an ordinary upload writes NO qualification_level at all (byte-for-byte what it was before)", async () => {
+      const db = fakeDb();
+      scopedClientMock.mockResolvedValue(db);
+      const { POST } = await import("./route");
+      for (const none of [undefined, null, ""]) {
+        docTable(db).insert.mockClear();
+        await POST(fakeReq(validBody({ qualification_level: none })), params());
+        expect(insertedRow(db)).not.toHaveProperty("qualification_level");
+      }
+    });
+
+    it("422s on an unknown level and writes nothing", async () => {
+      const db = fakeDb();
+      scopedClientMock.mockResolvedValue(db);
+      const { POST } = await import("./route");
+      const res = await POST(fakeReq(validBody({ qualification_level: "phd" })), params());
+      expect(res.status).toBe(422);
+      expect(docTable(db).insert).not.toHaveBeenCalled();
+    });
+  });
+
   it("422s with a {count,max} body when file_size exceeds the tenant's configured cap", async () => {
     scopedClientMock.mockResolvedValue(fakeDb({ settings: { max_document_size_mb: 1 } }));
     const { POST } = await import("./route");

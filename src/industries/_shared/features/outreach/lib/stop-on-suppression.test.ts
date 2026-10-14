@@ -86,10 +86,10 @@ beforeEach(() => {
       { id: "lead-3", email: "someone-else@example.com" },
     ],
     sequence_enrollments: [
-      { id: "e1", lead_id: "lead-1", sequence_id: "s1", status: "active", stop_reason: null },
-      { id: "e2", lead_id: "lead-2", sequence_id: "s2", status: "paused", stop_reason: "replied" },
-      { id: "e3", lead_id: "lead-3", sequence_id: "s1", status: "active", stop_reason: null },
-      { id: "e4", lead_id: "lead-1", sequence_id: "s3", status: "completed", stop_reason: null },
+      { id: "e1", lead_id: "lead-1", sequence_id: "s1", status: "active", channel: "email", stop_reason: null },
+      { id: "e2", lead_id: "lead-2", sequence_id: "s2", status: "paused", channel: "email", stop_reason: "replied" },
+      { id: "e3", lead_id: "lead-3", sequence_id: "s1", status: "active", channel: "email", stop_reason: null },
+      { id: "e4", lead_id: "lead-1", sequence_id: "s3", status: "completed", channel: "email", stop_reason: null },
     ],
     sequence_step_drafts: [
       { id: "d1", enrollment_id: "e1", status: "pending" },
@@ -98,8 +98,8 @@ beforeEach(() => {
       { id: "d4", enrollment_id: "e3", status: "pending" },
     ],
     sequence_enrollment_queue: [
-      { id: "q1", lead_id: "lead-1", sequence_id: "s9", status: "waiting" },
-      { id: "q2", lead_id: "lead-3", sequence_id: "s9", status: "waiting" },
+      { id: "q1", lead_id: "lead-1", sequence_id: "s9", status: "waiting", channel: "email" },
+      { id: "q2", lead_id: "lead-3", sequence_id: "s9", status: "waiting", channel: "email" },
     ],
   };
 });
@@ -116,6 +116,20 @@ describe("stopEnrollmentsForSuppressedEmail", () => {
       ["e4", "completed", null], // finished enrollments are untouched
     ]);
     expect(tables.sequence_enrollments[0].stopped_at).toEqual(expect.any(String));
+  });
+
+  it("leaves the lead's SMS sequence running: an email unsubscribe says nothing about SMS", async () => {
+    tables.sequence_enrollments.push({ id: "esms", lead_id: "lead-1", sequence_id: "s-sms", status: "active", channel: "sms", stop_reason: null });
+    await stopEnrollmentsForSuppressedEmail(makeDb(), P);
+    expect(tables.sequence_enrollments.find((e) => e.id === "esms")?.status).toBe("active");
+    expect(tables.sequence_enrollments.find((e) => e.id === "e1")?.status).toBe("unenrolled");
+  });
+
+  it("leaves a waiting SMS 'queue next' alone: an email address being suppressed says nothing about the lead's number", async () => {
+    tables.sequence_enrollment_queue.push({ id: "qsms", lead_id: "lead-1", sequence_id: "s-sms", status: "waiting", channel: "sms" });
+    await stopEnrollmentsForSuppressedEmail(makeDb(), P);
+    expect(tables.sequence_enrollment_queue.find((q) => q.id === "qsms")?.status).toBe("waiting");
+    expect(tables.sequence_enrollment_queue.find((q) => q.id === "q1")?.status).toBe("cancelled");
   });
 
   it("skips the pending drafts of the ended enrollments only (never a sent one, never someone else's)", async () => {
@@ -153,8 +167,8 @@ describe("stopEnrollmentsForSuppressedEmail", () => {
       { id: "lead-x", email: "axb@example.com" }, // would match a_b@ if "_" were a wildcard
     ];
     tables.sequence_enrollments = [
-      { id: "ea", lead_id: "lead-a", sequence_id: "s1", status: "active", stop_reason: null },
-      { id: "ex", lead_id: "lead-x", sequence_id: "s1", status: "active", stop_reason: null },
+      { id: "ea", lead_id: "lead-a", sequence_id: "s1", status: "active", channel: "email", stop_reason: null },
+      { id: "ex", lead_id: "lead-x", sequence_id: "s1", status: "active", channel: "email", stop_reason: null },
     ];
     tables.sequence_step_drafts = [];
     tables.sequence_enrollment_queue = [];
@@ -166,7 +180,7 @@ describe("stopEnrollmentsForSuppressedEmail", () => {
 
   it("also covers the lead id the caller already knows, even if the stored email differs", async () => {
     tables.leads = [{ id: "lead-known", email: "typo@exampel.com" }];
-    tables.sequence_enrollments = [{ id: "ek", lead_id: "lead-known", sequence_id: "s1", status: "active", stop_reason: null }];
+    tables.sequence_enrollments = [{ id: "ek", lead_id: "lead-known", sequence_id: "s1", status: "active", channel: "email", stop_reason: null }];
     tables.sequence_step_drafts = [];
     tables.sequence_enrollment_queue = [];
 

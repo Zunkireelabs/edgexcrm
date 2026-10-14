@@ -17,16 +17,18 @@ interface InfoSectionProps {
   forceOpen?: boolean;
   /** Set false for a section that is always shown: no toggle button and no chevron, just the title. */
   collapsible?: boolean;
+  /** Override the header row's default `p-3` padding (e.g. a tighter sidebar panel). */
+  headerClassName?: string;
 }
 
-export function InfoSection({ title, children, defaultOpen = true, className, headerAction, titleClassName, forceOpen = false, collapsible = true }: InfoSectionProps) {
+export function InfoSection({ title, children, defaultOpen = true, className, headerAction, titleClassName, forceOpen = false, collapsible = true, headerClassName }: InfoSectionProps) {
   const [isOpenState, setIsOpen] = useState(defaultOpen);
   const isOpen = !collapsible || forceOpen || isOpenState;
   const titleClasses = cn("text-[11px] font-medium text-muted-foreground uppercase tracking-wide", titleClassName);
 
   return (
     <div className={cn("border border-border rounded-lg bg-card shadow-none", className)}>
-      <div className="flex items-center justify-between w-full p-3 gap-2">
+      <div className={cn("flex items-center justify-between w-full p-3 gap-2", headerClassName)}>
         {collapsible ? (
           <button
             type="button"

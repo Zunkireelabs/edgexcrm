@@ -1,11 +1,17 @@
 "use client";
 
+import { notifyDocumentsChanged, onDocumentsChanged } from "./documents-events";
+import { replaceDocumentFile } from "./replace-document";
+import { formatRelativeTime } from "@/lib/date";
+import { groupDocuments, type ApplicationNames } from "./group-documents";
 import { SECTION_TITLE_CLASS, SUBHEADING_CLASS } from "@/components/dashboard/lead/section-title";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FileText, Upload, Trash2, Loader2, Download, LayoutGrid, List as ListIcon, Image as ImageIcon, AlertCircle } from "lucide-react";
+import Link from "next/link";
+import { FileText, Upload, Trash2, Loader2, Download, Eye, RefreshCw, LayoutGrid, List as ListIcon, Image as ImageIcon, AlertCircle, Search } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
   Dialog,
@@ -15,9 +21,12 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { formatBytes } from "@/lib/format";
-import { DOCUMENT_TYPE_CATEGORY, type DocumentType } from "@/lib/documents/constants";
-import { DOCUMENT_TYPE_LABELS, DOCUMENT_CATEGORY_LABELS, DOCUMENT_CATEGORY_ORDER } from "./labels";
-import { DocumentUploadDialog } from "./document-upload-dialog";
+import { DOCUMENT_TYPES, type DocumentType } from "@/lib/documents/constants";
+import { documentTypeLabel, DOCUMENT_CATEGORY_LABELS } from "./labels";
+import { MultiDocumentUploadDialog } from "./multi-document-upload-dialog";
+import { QUALIFICATION_LEVEL_LABELS } from "./document-upload-dialog";
+import type { QualificationLevel } from "@/lib/documents/constants";
+import { ACCEPTED_LABEL, ACCEPT_ATTR, describeSkipped, isSupportedFile, pickFiles } from "./multi-upload";
 
 interface ApplicantDocument {
   id: string;
@@ -31,29 +40,54 @@ interface ApplicantDocument {
   current_version_id: string | null;
   uploaded_by: string | null;
   created_at: string;
+  application_id?: string | null;
+  /** Academic level the document is linked to (migration 240), if any. */
+  qualification_level?: string | null;
 }
 
 type ViewMode = "grid" | "list";
 
+// How many of the newest documents the compact lead-page card lists before pointing at the full page.
+const SUMMARY_LIMIT = 3;
+
+/**
+ * "page" (default) is the full documents page: every file, grouped by category, with search.
+ * "summary" is the small card on the lead page: the newest few files plus a "View all" link, so a
+ * student with many documents doesn't stretch the narrow right column.
+ */
 export function ApplicantDocumentsCard({
   leadId,
   canManage,
   currentUserId,
   isAdmin,
+  variant = "page",
+  onViewAll,
 }: {
   leadId: string;
   canManage: boolean;
   currentUserId: string;
   isAdmin: boolean;
+  variant?: "page" | "summary";
+  /** Summary card only: when given, "View all" calls this (e.g. switch to the lead page's Documents tab) instead of leaving for the documents page. */
+  onViewAll?: () => void;
 }) {
+  const isSummary = variant === "summary";
   const [docs, setDocs] = useState<ApplicantDocument[]>([]);
+  // Names of the university applications some files are linked to, for the "University – Programme" groups.
+  const [applications, setApplications] = useState<ApplicationNames>({});
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>("list");
-  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  // The files chosen with the upload button (several at once); null = the upload dialog is closed.
+  const [pendingFiles, setPendingFiles] = useState<File[] | null>(null);
   const [viewerDoc, setViewerDoc] = useState<ApplicantDocument | null>(null);
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
   const [viewerLoading, setViewerLoading] = useState(false);
+  const [search, setSearch] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // "Replace": one hidden picker for the whole card; the row that was clicked is remembered while the picker is open.
+  const replaceInputRef = useRef<HTMLInputElement>(null);
+  const replaceTargetRef = useRef<ApplicantDocument | null>(null);
+  const [replacingId, setReplacingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -61,6 +95,7 @@ export function ApplicantDocumentsCard({
       if (!res.ok) return;
       const json = await res.json();
       setDocs((json.data?.documents ?? []) as ApplicantDocument[]);
+      setApplications((json.data?.applications ?? {}) as ApplicationNames);
     } catch {
       // silently fail — empty state renders
     } finally {
@@ -71,6 +106,9 @@ export function ApplicantDocumentsCard({
   useEffect(() => {
     load();
   }, [load]);
+
+  // Refresh when documents are added elsewhere on the page (e.g. the Attach button in the Student Details pop-up).
+  useEffect(() => onDocumentsChanged(leadId, load), [leadId, load]);
 
   async function handleDelete(doc: ApplicantDocument) {
     if (!confirm(`Delete "${doc.name}"? This cannot be undone.`)) return;
@@ -83,9 +121,36 @@ export function ApplicantDocumentsCard({
       }
       toast.success("Document deleted");
       setDocs((prev) => prev.filter((d) => d.id !== doc.id));
+      // the other Documents card showing this student (tab + summary) refreshes too
+      notifyDocumentsChanged(leadId);
     } catch {
       toast.error("Failed to delete document");
     }
+  }
+
+  function startReplace(doc: ApplicantDocument) {
+    replaceTargetRef.current = doc;
+    replaceInputRef.current?.click();
+  }
+
+  async function handleReplaceFile(file: File) {
+    const target = replaceTargetRef.current;
+    replaceTargetRef.current = null;
+    if (!target) return;
+    if (!isSupportedFile(file)) {
+      toast.error(`${file.name} isn't a supported file type. Use ${ACCEPTED_LABEL}.`);
+      return;
+    }
+    setReplacingId(target.id);
+    const result = await replaceDocumentFile({ documentId: target.id, file });
+    setReplacingId(null);
+    if (!result.ok) {
+      toast.error(result.message);
+      return;
+    }
+    toast.success(`"${target.name}" replaced. The previous file is kept as an earlier version.`);
+    // refreshes this card and any other Documents card showing this student
+    notifyDocumentsChanged(leadId);
   }
 
   async function openViewer(doc: ApplicantDocument) {
@@ -109,13 +174,51 @@ export function ApplicantDocumentsCard({
     }
   }
 
-  const grouped = DOCUMENT_CATEGORY_ORDER.map((category) => ({
-    category,
-    docs: docs.filter((d) => (DOCUMENT_TYPE_CATEGORY[d.document_type] ?? "other") === category),
-  })).filter((g) => g.docs.length > 0);
+  const query = search.trim().toLowerCase();
+  const visibleDocs = query
+    ? docs.filter(
+        (d) =>
+          d.name.toLowerCase().includes(query) ||
+          d.original_filename.toLowerCase().includes(query) ||
+          documentTypeLabel(d.document_type).toLowerCase().includes(query),
+      )
+    : docs;
+  const recentDocs = [...docs]
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, SUMMARY_LIMIT);
+
+  const grouped = groupDocuments(visibleDocs, applications);
+
+  // The small card: the latest few files, application files grouped under their name. Other files stay in one
+  // unheaded list — unless an application heading is showing, when they get an "Other documents" heading so
+  // they are not mistaken for part of the last application's group.
+  const summaryGroups = groupDocuments(recentDocs, applications);
+  const summaryApplicationSections = summaryGroups.filter((g) => g.kind === "application");
+  const summaryOtherDocs = summaryGroups.filter((g) => g.kind === "category").flatMap((g) => g.docs);
+  const summarySections: { key: string; title: string | null; docs: typeof recentDocs }[] = [
+    ...summaryApplicationSections.map((g) => ({ key: g.key, title: g.kind === "application" ? g.title : null, docs: g.docs })),
+    ...(summaryOtherDocs.length > 0
+      ? [{ key: "other", title: summaryApplicationSections.length > 0 ? "Other documents" : null, docs: summaryOtherDocs }]
+      : []),
+  ];
 
   return (
     <>
+      {canManage && (
+        <input
+          ref={replaceInputRef}
+          type="file"
+          accept={ACCEPT_ATTR}
+          className="hidden"
+          data-testid="documents-replace-input"
+          onChange={(e) => {
+            const chosen = e.target.files?.[0];
+            e.target.value = "";
+            if (chosen) void handleReplaceFile(chosen);
+            else replaceTargetRef.current = null; // the picker was cancelled
+          }}
+        />
+      )}
       <Card className="shadow-none rounded-lg py-0">
         <CardHeader className="pt-4 pb-3">
           <div className="flex items-center justify-between">
@@ -128,26 +231,35 @@ export function ApplicantDocumentsCard({
               )}
             </span>
             <div className="flex items-center gap-1 shrink-0">
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-6 w-6 p-0"
-                onClick={() => setViewMode((m) => (m === "list" ? "grid" : "list"))}
-                title={viewMode === "list" ? "Switch to grid view" : "Switch to list view"}
-              >
-                {viewMode === "list" ? <LayoutGrid className="h-3.5 w-3.5" /> : <ListIcon className="h-3.5 w-3.5" />}
-              </Button>
+              {!isSummary && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 w-6 p-0"
+                  onClick={() => setViewMode((m) => (m === "list" ? "grid" : "list"))}
+                  title={viewMode === "list" ? "Switch to grid view" : "Switch to list view"}
+                >
+                  {viewMode === "list" ? <LayoutGrid className="h-3.5 w-3.5" /> : <ListIcon className="h-3.5 w-3.5" />}
+                </Button>
+              )}
               {canManage && (
                 <>
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept="application/pdf,image/jpeg,image/png,image/webp,.docx"
+                    multiple
+                    accept={ACCEPT_ATTR}
                     className="hidden"
+                    data-testid="documents-upload-input"
                     onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) setPendingFile(f);
+                      const chosen = Array.from(e.target.files ?? []);
                       e.target.value = "";
+                      if (chosen.length === 0) return;
+                      // unsupported types, duplicates and anything past the batch limit are left out, and the rep is told
+                      const result = pickFiles([], chosen);
+                      const note = describeSkipped(result);
+                      if (note) toast.error(note);
+                      if (result.accepted.length > 0) setPendingFiles(result.accepted);
                     }}
                   />
                   <Button
@@ -155,7 +267,7 @@ export function ApplicantDocumentsCard({
                     variant="ghost"
                     className="h-6 w-6 p-0"
                     onClick={() => fileInputRef.current?.click()}
-                    title="Upload document"
+                    title="Upload documents"
                   >
                     <Upload className="h-3.5 w-3.5" />
                   </Button>
@@ -174,15 +286,61 @@ export function ApplicantDocumentsCard({
             <p className="text-xs text-muted-foreground text-center py-2">
               No documents yet.{canManage ? " Upload a passport, transcript, or other admissions document." : ""}
             </p>
+          ) : isSummary ? (
+            <div className="space-y-1.5">
+              {/* Files tied to a university application sit under "University – Programme"; the rest follow, as before. */}
+              {summarySections.map((section) => (
+                <div key={section.key} data-document-group={section.key} className="space-y-1.5">
+                  {section.title && <p className={`${SUBHEADING_CLASS} pt-1`}>{section.title}</p>}
+                  {section.docs.map((doc) => (
+                    <DocumentTile
+                      key={doc.id}
+                      doc={doc}
+                      viewMode="list"
+                      canDelete={isAdmin || doc.uploaded_by === currentUserId}
+                      canReplace={canManage}
+                      replacing={replacingId === doc.id}
+                      onView={() => openViewer(doc)}
+                      onReplace={() => startReplace(doc)}
+                      onDelete={() => handleDelete(doc)}
+                    />
+                  ))}
+                </div>
+              ))}
+              {onViewAll ? (
+                <button type="button" onClick={onViewAll} className="block pt-1 text-left text-xs text-primary hover:underline">
+                  {docs.length > SUMMARY_LIMIT ? `View all ${docs.length} documents →` : "Open all documents →"}
+                </button>
+              ) : (
+                <Link
+                  href={`/leads/${leadId}/documents`}
+                  className="block pt-1 text-xs text-primary hover:underline"
+                >
+                  {docs.length > SUMMARY_LIMIT ? `View all ${docs.length} documents →` : "Open documents page →"}
+                </Link>
+              )}
+            </div>
           ) : (
             <div className="space-y-4">
-              {grouped.map(({ category, docs: catDocs }) => (
-                <div key={category}>
+              <div className="relative max-w-sm">
+                <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search by name or type"
+                  className="h-8 pl-8 text-xs"
+                />
+              </div>
+              {grouped.length === 0 && (
+                <p className="text-xs text-muted-foreground text-center py-2">No documents match your search.</p>
+              )}
+              {grouped.map((group) => (
+                <div key={group.key} data-document-group={group.key}>
                   <p className={`${SUBHEADING_CLASS} mb-1.5`}>
-                    {DOCUMENT_CATEGORY_LABELS[category]}
+                    {group.kind === "application" ? group.title : DOCUMENT_CATEGORY_LABELS[group.category]}
                   </p>
-                  <div className={viewMode === "grid" ? "grid grid-cols-2 gap-2" : "space-y-1.5"}>
-                    {catDocs.map((doc) => (
+                  <div className={viewMode === "grid" ? "grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4" : "space-y-1.5"}>
+                    {group.docs.map((doc) => (
                       <DocumentTile
                         key={doc.id}
                         doc={doc}
@@ -192,6 +350,10 @@ export function ApplicantDocumentsCard({
                         // — canManage alone is broader (any editor) and would
                         // show a Delete button the server then 403s.
                         canDelete={isAdmin || doc.uploaded_by === currentUserId}
+                        // Replace adds a new version, which the server allows to anyone who may upload to this student.
+                        canReplace={canManage}
+                        replacing={replacingId === doc.id}
+                        onReplace={() => startReplace(doc)}
                         onView={() => openViewer(doc)}
                         onDelete={() => handleDelete(doc)}
                       />
@@ -204,12 +366,17 @@ export function ApplicantDocumentsCard({
         </CardContent>
       </Card>
 
-      <DocumentUploadDialog
+      {/* Several files at once: type, name and (for marksheets / transcripts / certificates) an optional linked qualification
+          for each. A file starts out named after itself, as a single upload always did on this card. */}
+      <MultiDocumentUploadDialog
         leadId={leadId}
-        file={pendingFile}
-        onOpenChange={(open) => !open && setPendingFile(null)}
-        onUploaded={load}
+        files={pendingFiles}
+        onClose={() => setPendingFiles(null)}
+        onUploaded={() => notifyDocumentsChanged(leadId)}
+        typeOptions={DOCUMENT_TYPES}
+        defaultType="other"
         showQualificationLevelPicker
+        nameFrom="file"
       />
 
       {/* Viewer dialog */}
@@ -288,77 +455,125 @@ function DocumentStatusBadge({ status, processingError }: { status: string; proc
   return null;
 }
 
+/**
+ * The three actions on every document, as icons (client request, Oct 2026): View (eye), Replace (a new version of the same
+ * document) and Delete (trash). View is always there; Replace and Delete follow their own permission.
+ */
+function DocumentActions({
+  doc,
+  canDelete,
+  canReplace,
+  replacing,
+  onView,
+  onReplace,
+  onDelete,
+  className = "",
+}: {
+  doc: ApplicantDocument;
+  canDelete: boolean;
+  canReplace: boolean;
+  replacing: boolean;
+  onView: () => void;
+  onReplace: () => void;
+  onDelete: () => void;
+  className?: string;
+}) {
+  const base = "inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors disabled:opacity-50";
+  return (
+    <div className={`flex shrink-0 items-center gap-0.5 ${className}`} role="group" aria-label={`Actions for ${doc.name}`}>
+      <button type="button" onClick={onView} className={`${base} hover:text-blue-600`} title="View" aria-label={`View ${doc.name}`}>
+        <Eye className="h-4 w-4" />
+      </button>
+      {canReplace && (
+        <button
+          type="button"
+          onClick={onReplace}
+          disabled={replacing}
+          className={`${base} hover:text-blue-600`}
+          title="Replace"
+          aria-label={`Replace ${doc.name}`}
+        >
+          {replacing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+        </button>
+      )}
+      {canDelete && (
+        <button type="button" onClick={onDelete} className={`${base} hover:text-red-600`} title="Delete" aria-label={`Delete ${doc.name}`}>
+          <Trash2 className="h-4 w-4" />
+        </button>
+      )}
+    </div>
+  );
+}
+
 function DocumentTile({
   doc,
   viewMode,
   canDelete,
+  canReplace,
+  replacing,
   onView,
+  onReplace,
   onDelete,
 }: {
   doc: ApplicantDocument;
   viewMode: ViewMode;
   canDelete: boolean;
+  canReplace: boolean;
+  replacing: boolean;
   onView: () => void;
+  onReplace: () => void;
   onDelete: () => void;
 }) {
   const Icon = doc.mime_type.startsWith("image/") ? ImageIcon : FileText;
+  const actions = (className?: string) => (
+    <DocumentActions
+      doc={doc}
+      canDelete={canDelete}
+      canReplace={canReplace}
+      replacing={replacing}
+      onView={onView}
+      onReplace={onReplace}
+      onDelete={onDelete}
+      className={className}
+    />
+  );
 
   if (viewMode === "grid") {
     return (
-      <button
-        type="button"
-        onClick={onView}
-        className="border rounded-md p-2.5 text-left hover:bg-muted/30 transition-colors group relative"
-      >
-        <Icon className="h-5 w-5 text-muted-foreground mb-1.5" />
-        <p className="text-xs font-medium truncate">{doc.name}</p>
-        <p className="text-[10px] text-muted-foreground truncate">{DOCUMENT_TYPE_LABELS[doc.document_type]}</p>
+      <div className="border rounded-md p-2.5 hover:bg-muted/30 transition-colors flex flex-col">
+        <button type="button" onClick={onView} className="text-left">
+          <Icon className="h-5 w-5 text-muted-foreground mb-1.5" />
+          <p className="text-xs font-medium truncate">{doc.name}</p>
+          <p className="text-[10px] text-muted-foreground truncate">{documentTypeLabel(doc.document_type)}</p>
+        </button>
         <DocumentStatusBadge status={doc.status} processingError={doc.processing_error} />
-        {canDelete && (
-          <span
-            role="button"
-            tabIndex={0}
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.stopPropagation();
-                onDelete();
-              }
-            }}
-            className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-red-600 transition-opacity"
-            title="Delete"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </span>
-        )}
-      </button>
+        {actions("mt-1.5 -ml-1")}
+      </div>
     );
   }
 
   return (
-    <div className="border rounded-md p-2.5 flex items-center gap-2.5 hover:bg-muted/30 transition-colors">
-      <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
-      <button type="button" onClick={onView} className="min-w-0 flex-1 text-left">
-        <p className="text-xs font-medium truncate">{doc.name}</p>
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <p className="text-[10px] text-muted-foreground">
-            {DOCUMENT_TYPE_LABELS[doc.document_type]}
-            {formatBytes(doc.file_size) && <> · {formatBytes(doc.file_size)}</>}
-          </p>
-          <DocumentStatusBadge status={doc.status} processingError={doc.processing_error} />
-        </div>
-      </button>
-      <button type="button" onClick={onView} className="shrink-0 text-muted-foreground hover:text-foreground" title="View">
-        <Download className="h-3.5 w-3.5" />
-      </button>
-      {canDelete && (
-        <button type="button" onClick={onDelete} className="shrink-0 text-muted-foreground hover:text-red-600" title="Delete">
-          <Trash2 className="h-3.5 w-3.5" />
+    <div className="border rounded-md p-2.5 flex items-start gap-2.5 hover:bg-muted/30 transition-colors">
+      <Icon className="mt-0.5 h-4 w-4 text-muted-foreground shrink-0" />
+      <div className="min-w-0 flex-1">
+        <button type="button" onClick={onView} className="block w-full text-left">
+          <p className="text-xs font-medium truncate">{doc.name}</p>
         </button>
-      )}
+        <div className="mt-0.5 flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-1.5 flex-wrap">
+            <p className="text-[10px] text-muted-foreground">
+              {documentTypeLabel(doc.document_type)}
+              {doc.qualification_level && QUALIFICATION_LEVEL_LABELS[doc.qualification_level as QualificationLevel] && (
+                <> · {QUALIFICATION_LEVEL_LABELS[doc.qualification_level as QualificationLevel]}</>
+              )}
+              {formatBytes(doc.file_size) && <> · {formatBytes(doc.file_size)}</>}
+              {doc.created_at && <> · Uploaded {formatRelativeTime(doc.created_at)}</>}
+            </p>
+            <DocumentStatusBadge status={doc.status} processingError={doc.processing_error} />
+          </div>
+          {actions()}
+        </div>
+      </div>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RepeatableList } from "./repeatable-list";
 import type { Lead } from "@/types/database";
+import { EXAM_TYPES } from "@/lib/leads/student-record-lists";
 
 // Matches the PDF's own "Test Scores" mockup: exam type picks which score
 // fields are relevant. IELTS/PTE/TOEFL break scores out by skill; Duolingo
@@ -12,7 +13,6 @@ import type { Lead } from "@/types/database";
 // only) but the CRM's existing single-score columns already track them
 // alongside IELTS/PTE/TOEFL under one "Test Report & Score" panel — kept
 // here too so those existing scores have somewhere to auto-fill into.
-const EXAM_TYPES = ["IELTS", "TOEFL", "PTE", "Duolingo English Test", "SAT", "GRE/GMAT", "Other Tests"] as const;
 const SKILL_BREAKDOWN_EXAMS: readonly string[] = ["IELTS", "TOEFL", "PTE"];
 
 export interface TestScore {

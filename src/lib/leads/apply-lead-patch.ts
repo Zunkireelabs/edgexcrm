@@ -3,6 +3,7 @@ import { validate, isPhoneForCountry } from "@/lib/api/validation";
 import { normalizePhoneForStorage } from "@/lib/phone-utils";
 import { requireAdmin, requireLeadAccess, resolvePositionSlug, type AuthContext } from "@/lib/api/auth";
 import { getLeadMembership, syncOriginMembership } from "@/lib/leads/branch-membership";
+import { assignmentBranchTarget, branchMoveOnAssignment } from "@/lib/leads/branch-resolution";
 import { isAdminAssignmentTarget } from "@/lib/leads/branch-assign-policy";
 import { addLeadCollaborator } from "@/lib/leads/collaborators";
 import { canAccessPipeline, canAccessList } from "@/lib/api/permissions";
@@ -27,10 +28,12 @@ import {
   canBypassProspectQualification,
 } from "@/lib/leads/prospect-qualification";
 import { PERSONAL_DETAIL_COLUMNS, coercePersonalDetailsPayload } from "@/lib/leads/personal-details";
+import { STUDENT_RECORD_COLUMNS, coerceStudentRecordPayload } from "@/lib/leads/student-record-columns";
 import { normalizeDestinations, normalizeFieldOfStudy, normalizeDegreeLevel } from "@/lib/leads/destination-normalize";
 import type { Lead } from "@/types/database";
 
-const UPDATABLE_FIELDS = [
+/** Every column a lead update may write. Exported so the Student Details contract test can prove the pop-up only sends these. */
+export const UPDATABLE_FIELDS = [
   "status",
   "stage_id",
   "pipeline_id",
@@ -90,6 +93,8 @@ const UPDATABLE_FIELDS = [
   "on_hold",
   // Student personal / passport / citizenship details (migration 234) — normalised below.
   ...PERSONAL_DETAIL_COLUMNS,
+  // Student record: qualification details (migration 236) + financial (migration 239) — validated below.
+  ...STUDENT_RECORD_COLUMNS,
 ] as const;
 
 // Blocked for plain counselors/viewers but NOT for team-scoped branch managers
@@ -610,6 +615,13 @@ export async function applyLeadPatch(
   }
   Object.assign(updatePayload, personal.values);
 
+  // Qualification details (address / awarding body / dates / stream) and financial details: same treatment.
+  const studentRecord = coerceStudentRecordPayload(body);
+  if (Object.keys(studentRecord.errors).length > 0) {
+    return { kind: "validation", errors: studentRecord.errors };
+  }
+  Object.assign(updatePayload, studentRecord.values);
+
   // Mirror lead_type on list move (keeps existing education UI working during transition)
   // Also resolve list names for the audit log so the activity timeline can render them.
   let newListName: string | null = null;
@@ -825,6 +837,15 @@ export async function applyLeadPatch(
         }
       }
     }
+  }
+
+  // A lead sitting in the default ("Global") branch becomes the assignee's branch lead when assigned
+  // to someone in a branch. Skipped when the caller set branch_id itself. Runs after every permission
+  // check above, so it can never widen what the caller was allowed to do.
+  if (body.assigned_to !== undefined && body.assigned_to !== null && body.branch_id === undefined) {
+    const target = await assignmentBranchTarget(supabase, auth.tenantId, body.assigned_to as string, newAssigneeBranchId);
+    const moveTo = branchMoveOnAssignment((existingLead as Lead).branch_id, target);
+    if (moveTo) updatePayload.branch_id = moveTo;
   }
 
   // Stage-age badge tracks stage/status moves only, not every field edit — set it here

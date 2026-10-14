@@ -40,8 +40,14 @@ interface DraftRow {
   sent_activity_id: string | null;
   sent_via: string | null;
   email_message_id: string | null;
+  sms_message_id: string | null;
   scheduled_send_at: string | null;
   scheduled_error: string | null;
+}
+
+interface SmsMessageStatusRow {
+  id: string;
+  status: string;
 }
 
 interface EmailMessageStatusRow {
@@ -89,7 +95,7 @@ export async function GET(_request: NextRequest, { params }: Props) {
   }
 
   const [{ data: sequence }, { data: steps }, { data: drafts }, { data: lead }, { data: tenant }] = await Promise.all([
-    db.from("email_sequences").select("id, name, auto_send").eq("id", enrollmentRow.sequence_id).maybeSingle(),
+    db.from("email_sequences").select("id, name, auto_send, channel").eq("id", enrollmentRow.sequence_id).maybeSingle(),
     db
       .from("email_sequence_steps")
       .select("step_order, delay_days, subject_template, body_template")
@@ -97,7 +103,7 @@ export async function GET(_request: NextRequest, { params }: Props) {
       .order("step_order", { ascending: true }),
     db
       .from("sequence_step_drafts")
-      .select("id, step_order, status, due_at, subject, body_html, sent_at, sent_activity_id, sent_via, email_message_id, scheduled_send_at, scheduled_error")
+      .select("id, step_order, status, due_at, subject, body_html, sent_at, sent_activity_id, sent_via, email_message_id, sms_message_id, scheduled_send_at, scheduled_error")
       .eq("enrollment_id", id)
       .order("step_order", { ascending: true }),
     db
@@ -112,7 +118,8 @@ export async function GET(_request: NextRequest, { params }: Props) {
     log.error({ enrollmentId: id, sequenceId: enrollmentRow.sequence_id }, "Enrollment references a missing sequence");
     return apiNotFound("Sequence");
   }
-  const sequenceRow = sequence as unknown as { id: string; name: string; auto_send: boolean };
+  const sequenceRow = sequence as unknown as { id: string; name: string; auto_send: boolean; channel?: string | null };
+  const isSms = sequenceRow.channel === "sms";
   const stepRows = (steps ?? []) as unknown as SequenceStepRow[];
   const draftRows = (drafts ?? []) as unknown as DraftRow[];
 
@@ -122,6 +129,13 @@ export async function GET(_request: NextRequest, { params }: Props) {
   if (messageIds.length > 0) {
     const { data: messages } = await db.from("email_messages").select("id, status").in("id", messageIds);
     for (const m of (messages ?? []) as unknown as EmailMessageStatusRow[]) messageStatusById.set(m.id, m.status);
+  }
+  // Same for texts: what the SMS provider reported (submitted / delivered / failed ...)
+  const smsIds = draftRows.map((d) => d.sms_message_id).filter((v): v is string => !!v);
+  const smsStatusById = new Map<string, string>();
+  if (smsIds.length > 0) {
+    const { data: smsMessages } = await db.from("sms_messages").select("id, status").in("id", smsIds);
+    for (const m of (smsMessages ?? []) as unknown as SmsMessageStatusRow[]) smsStatusById.set(m.id, m.status);
   }
   const leadCtx: LeadTemplateContext =
     (lead as unknown as LeadTemplateContext | null) ??
@@ -149,13 +163,15 @@ export async function GET(_request: NextRequest, { params }: Props) {
       return {
         step_order: step.step_order,
         state: draft.status,
-        subject: draft.subject,
+        // A text has no subject: its message is what the timeline shows (the SMS body is stored in body_html).
+        subject: isSms ? draft.body_html : draft.subject,
         due_at: draft.due_at,
         sent_at: draft.sent_at,
         draft_id: draft.id,
         sent_activity_id: draft.sent_activity_id,
         sent_via: draft.sent_via,
         email_message_status: draft.email_message_id ? messageStatusById.get(draft.email_message_id) ?? null : null,
+        sms_message_status: draft.sms_message_id ? smsStatusById.get(draft.sms_message_id) ?? null : null,
         // Only pending drafts need body_html — it's what lets the "due now"
         // row reuse DraftReviewPanel (draft-review-panel.tsx) unforked.
         body_html: draft.status === "pending" ? draft.body_html : undefined,
@@ -168,7 +184,7 @@ export async function GET(_request: NextRequest, { params }: Props) {
     return {
       step_order: step.step_order,
       state: "projected" as const,
-      subject: renderTemplate(step.subject_template, renderCtx),
+      subject: renderTemplate(isSms ? step.body_template : step.subject_template, renderCtx),
       projected_due_at: new Date(projectedMs).toISOString(),
     };
   });
@@ -180,7 +196,7 @@ export async function GET(_request: NextRequest, { params }: Props) {
       current_step_order: enrollmentRow.current_step_order,
       assigned_to: enrollmentRow.assigned_to,
     },
-    sequence: { id: sequenceRow.id, name: sequenceRow.name, total_steps: stepRows.length, auto_send: sequenceRow.auto_send },
+    sequence: { id: sequenceRow.id, name: sequenceRow.name, total_steps: stepRows.length, auto_send: sequenceRow.auto_send, channel: isSms ? "sms" : "email" },
     timeline,
   });
 }
