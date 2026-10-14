@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Archive, Trash2 } from "lucide-react";
 import type { LeadList } from "@/types/database";
+import { SidebarTip } from "@/components/dashboard/sidebar-tooltip";
 
 interface ArchiveNavLinksProps {
   /** Archive-type lists (Archived, Delete, …) rendered as top-level LEADS nav items. */
@@ -23,11 +24,11 @@ export function ArchiveNavLinks({ lists, onNavigate, collapsed = false }: Archiv
         const active = pathname === "/leads" && currentList === list.slug;
         const Icon = list.slug === "delete" ? Trash2 : Archive;
         return (
+          <SidebarTip key={list.id} label={list.name} enabled={collapsed}>
           <Link
-            key={list.id}
             href={`/leads?list=${list.slug}`}
             onClick={onNavigate}
-            title={collapsed ? list.name : undefined}
+            aria-label={collapsed ? list.name : undefined}
             className={`w-full flex items-center gap-3 rounded-md text-[13px] leading-5 font-medium transition-colors ${
               collapsed ? "justify-center px-2 py-1.5" : "px-3 py-1.5"
             } ${
@@ -39,6 +40,7 @@ export function ArchiveNavLinks({ lists, onNavigate, collapsed = false }: Archiv
             <Icon className="w-[18px] h-[18px] shrink-0" />
             {!collapsed && list.name}
           </Link>
+          </SidebarTip>
         );
       })}
     </>
