@@ -15,8 +15,12 @@ describe("getFeatureAccess", () => {
     expect(getFeatureAccess("it_agency", FEATURES.FORM_BUILDER)).toBe(true);
   });
 
-  it("returns false for an unknown industryId (falls back to the general manifest, which has no features)", () => {
-    expect(getFeatureAccess("not_a_real_industry", FEATURES.FORM_BUILDER)).toBe(false);
+  it("returns true for the shared form-builder feature under general", () => {
+    expect(getFeatureAccess("general", FEATURES.FORM_BUILDER)).toBe(true);
+  });
+
+  it("returns false for an unknown industryId for a feature the general manifest lacks (falls back to general)", () => {
+    expect(getFeatureAccess("not_a_real_industry", FEATURES.CHECK_IN)).toBe(false);
   });
 
   it("returns false for an unknown featureId", () => {
