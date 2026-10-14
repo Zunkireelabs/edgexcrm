@@ -1063,7 +1063,7 @@ export function DashboardShell({
       >
         {/* Desktop sidebar - Zunkireelabs style */}
         <aside
-          className={`hidden md:flex flex-shrink-0 flex-col h-full bg-sidebar-bg transition-[width] duration-200 ease-out print:hidden ${
+          className={`relative z-30 hidden md:flex flex-shrink-0 flex-col h-full bg-sidebar-bg transition-[width] duration-200 ease-out print:hidden ${
             sidebarCollapsed ? "w-[68px]" : "w-60"
           }`}
         >
