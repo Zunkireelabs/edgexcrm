@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { SidebarTip } from "@/components/dashboard/sidebar-tooltip";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { ChevronDown, Users, Settings2 } from "lucide-react";
@@ -33,10 +34,11 @@ export function LeadListsNavGroup({ lists, onNavigate, isAdmin = false, collapse
   if (collapsed) {
     return (
       <div className="relative group/navgroup">
+        <SidebarTip label="All Leads" enabled={lists.length === 0}>
         <Link
           href="/leads"
           onClick={onNavigate}
-          title="All Leads"
+          aria-label="All Leads"
           className={`w-full flex items-center justify-center px-2 py-1.5 rounded-md transition-colors ${
             parentActive || hasActiveChild
               ? "bg-[#ebebeb] text-gray-900"
@@ -45,6 +47,7 @@ export function LeadListsNavGroup({ lists, onNavigate, isAdmin = false, collapse
         >
           <Users className="w-[18px] h-[18px] shrink-0" />
         </Link>
+        </SidebarTip>
         {lists.length > 0 && (
           <div className="hidden group-hover/navgroup:block absolute left-full top-0 ml-1 z-50 min-w-[190px] bg-white rounded-lg shadow-lg border border-gray-200 py-1.5">
             <p className="px-3 pb-1 text-[11px] font-medium text-gray-400 uppercase tracking-wider select-none">
