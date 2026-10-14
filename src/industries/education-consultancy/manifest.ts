@@ -11,6 +11,7 @@ import { leadListsMeta } from "../_shared/features/lead-lists/meta";
 import { classesMeta } from "./features/classes/meta";
 import { affiliatesMeta } from "./features/affiliates/meta";
 import { applicantDocumentsMeta } from "./features/applicant-documents/meta";
+import { archivedLookupMeta } from "./features/archived-lookup/meta";
 import { smsMeta } from "../_shared/features/sms/meta";
 import { emailCampaignsMeta } from "../_shared/features/email-campaigns/meta";
 import { outreachMeta } from "../_shared/features/outreach/meta";
@@ -33,6 +34,7 @@ export const manifest: IndustryManifest = {
     { meta: teamPerformanceMeta },
     { meta: affiliatesMeta },
     { meta: applicantDocumentsMeta },
+    { meta: archivedLookupMeta },
     { meta: smsMeta },
     { meta: emailCampaignsMeta },
     { meta: outreachMeta },

@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, waitFor, cleanup } from "@testing-library/react";
+import { render, screen, waitFor, cleanup, fireEvent } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { ClassesCard } from "./classes-card";
+import { PERMISSION_DENIED_MESSAGE } from "@/lib/permission-denied";
 
 const toastError = vi.fn();
 vi.mock("sonner", () => ({
@@ -47,5 +48,41 @@ describe("ClassesCard", () => {
     global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ data: [enrollment] }) } as Response);
     render(<ClassesCard leadId="lead-1" canManage={false} />);
     await waitFor(() => expect(screen.getByText("IELTS Physical")).toBeInTheDocument());
+  });
+  describe("a refused action shows the right message", () => {
+    const enrollment = {
+      id: "enr-1",
+      class_id: "class-1",
+      fee_paid: true,
+      fee_amount: 4000,
+      enrollment_type: "actual",
+      status: "active",
+      created_at: new Date().toISOString(),
+      classes: { id: "class-1", name: "IELTS Physical", default_fee: 4000 },
+    };
+
+    async function clickMarkUnpaidWithPatchStatus(status: number) {
+      global.fetch = vi.fn(async (_url: unknown, init?: RequestInit) => {
+        if (init?.method === "PATCH") {
+          return { ok: false, status, json: async () => ({ error: { message: "x" } }) } as Response;
+        }
+        return { ok: true, status: 200, json: async () => ({ data: [enrollment] }) } as Response;
+      }) as typeof fetch;
+      render(<ClassesCard leadId="lead-1" canManage />);
+      await waitFor(() => expect(screen.getByText("IELTS Physical")).toBeInTheDocument());
+      const trigger = document.querySelector("button[aria-haspopup='menu']") as HTMLElement;
+      fireEvent.keyDown(trigger, { key: "Enter" });
+      fireEvent.click(await screen.findByText("Mark unpaid"));
+    }
+
+    it("shows the standard no-permission message on 403", async () => {
+      await clickMarkUnpaidWithPatchStatus(403);
+      await waitFor(() => expect(toastError).toHaveBeenCalledWith(PERMISSION_DENIED_MESSAGE));
+    });
+
+    it("keeps the normal failure message for other errors", async () => {
+      await clickMarkUnpaidWithPatchStatus(500);
+      await waitFor(() => expect(toastError).toHaveBeenCalledWith("Failed to update enrollment"));
+    });
   });
 });

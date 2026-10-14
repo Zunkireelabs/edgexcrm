@@ -9,6 +9,20 @@ vi.mock("@/lib/email/outbound/audience", () => ({
   resolveAudience: (...a: unknown[]) => resolveAudienceMock(...a),
   resolveAudienceForLeadIds: (...a: unknown[]) => resolveAudienceForLeadIdsMock(...a),
 }));
+const resolveSmsAudienceMock = vi.fn();
+const resolveSmsAudienceForLeadIdsMock = vi.fn();
+vi.mock("@/lib/sms/audience", () => ({
+  resolveAudience: (...a: unknown[]) => resolveSmsAudienceMock(...a),
+  resolveAudienceForLeadIds: (...a: unknown[]) => resolveSmsAudienceForLeadIdsMock(...a),
+}));
+vi.mock("@/lib/sms/flag", () => ({
+  isSmsEnabledForTenant: async () => true,
+  isSmsSandbox: () => true,
+}));
+vi.mock("@/lib/sms/settings", () => ({
+  loadTenantSmsSettings: async () => ({ sender_label: null, optout_footer: "", quiet_hours_enabled: true }),
+}));
+vi.mock("@/lib/sms/optout", () => ({ optOutUrl: (t: string) => `https://x.test/o/${t}` }));
 vi.mock("@/lib/email/outbound/cap", () => ({
   getDailyCapStatus: async () => ({ dailyCap: 2000, sentToday: 500, remaining: 1500 }),
 }));
@@ -21,6 +35,7 @@ import {
   BULK_ENROLL_MAX_LEADS,
   createBulkEnrollRun,
   estimateExtraDays,
+  estimateSmsCredits,
   parseBulkBody,
   planBulkEnroll,
   requestCancel,
@@ -39,29 +54,51 @@ function row(id: string, first = "A") {
 }
 
 /** Fake db: sequence_enrollments (for the already-in-sequence lookup) + the two bulk tables. */
-function makeDb(inSequence: Array<string | [string, string]> = []) {
+function makeDb(inSequence: Array<string | [string, string] | [string, string, string]> = []) {
   const tables: Record<string, Row[]> = {
     sequence_enrollments: inSequence.map((e) => {
-      const [lead_id, sequence_id] = typeof e === "string" ? [e, "seq-OTHER"] : e;
-      return { lead_id, sequence_id, status: "active" };
+      const [lead_id, sequence_id, channel] = typeof e === "string" ? [e, "seq-OTHER", "email"] : [e[0], e[1], e[2] ?? "email"];
+      return { lead_id, sequence_id, channel, status: "active" };
     }),
     sequence_bulk_enrollments: [],
     sequence_bulk_enrollment_items: [],
+    email_sequence_steps: [],
+    sms_credit_accounts: [{ balance: 1000 }],
+    tenants: [{ id: "t1", name: "Admizz" }],
   };
   const db = {
+    fromGlobal: (table: string) => db.from(table),
     from(table: string) {
       const rows = tables[table];
       return {
         select: () => {
           const ins: Array<[string, unknown[]]> = [];
+          const eqs: Array<[string, unknown]> = [];
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const b: any = {
             in(c: string, vs: unknown[]) {
               ins.push([c, vs]);
               return b;
             },
+            eq(c: string, v: unknown) {
+              eqs.push([c, v]);
+              return b;
+            },
+            order() {
+              return b;
+            },
+            limit() {
+              return b;
+            },
+            maybeSingle: async () => {
+              const hit = rows.filter((r) => eqs.every(([c, v]) => r[c] === v));
+              return { data: hit[0] ?? null, error: null };
+            },
             then(resolve: (v: unknown) => void) {
-              resolve({ data: rows.filter((r) => ins.every(([c, vs]) => vs.includes(r[c]) || c === "status")), error: null });
+              resolve({
+                data: rows.filter((r) => ins.every(([c, vs]) => vs.includes(r[c]) || c === "status") && eqs.every(([c, v]) => r[c] === v)),
+                error: null,
+              });
             },
           };
           return b;
@@ -115,6 +152,8 @@ const AUTH = { userId: "u1", tenantId: "t1", industryId: "education_consultancy"
 beforeEach(() => {
   resolveAudienceMock.mockReset();
   resolveAudienceForLeadIdsMock.mockReset();
+  resolveSmsAudienceMock.mockReset();
+  resolveSmsAudienceForLeadIdsMock.mockReset();
 });
 
 describe("parseBulkBody", () => {
@@ -182,7 +221,10 @@ describe("planBulkEnroll", () => {
       cap: { dailyCap: 2000, sentToday: 500, remaining: 1500 },
       estimatedExtraDays: 0,
     });
-    expect(preview.skipped).toEqual({ noEmail: 1, malformedEmail: 0, duplicateEmail: 0, suppressed: 1, alreadyInSequence: 1 });
+    expect(preview.skipped).toEqual({
+      noEmail: 1, malformedEmail: 0, duplicateEmail: 0, noPhone: 0, foreignNumber: 0, malformedPhone: 0, duplicatePhone: 0, suppressed: 1, alreadyInSequence: 1,
+    });
+    expect(preview).toMatchObject({ channel: "email", sms: null });
     expect(preview).toMatchObject({ conflictPolicy: "skip", inOtherSequence: 1, willSwitch: 0, willQueue: 0 });
     expect(items).toEqual([
       { leadId: "l1", outcome: "pending", reason: null },
@@ -282,6 +324,148 @@ describe("planBulkEnroll — conflict policies", () => {
     }
     // under switch / queue ONLY the this-sequence lead counts as "already in sequence"
     expect((await run("switch")).preview.skipped.alreadyInSequence).toBe(1);
+  });
+});
+
+function smsRow(id: string, first = "A", extra: Record<string, unknown> = {}) {
+  return { leadId: id, phone: "9801234567", phoneE164: "+9779801234567", lead: { id, first_name: first, last_name: "Lead", ...extra } };
+}
+
+describe("planBulkEnroll — SMS sequences", () => {
+  const smsAudience = () => ({
+    requested: 7,
+    audience: {
+      matched: 6,
+      sendable: [smsRow("l1", "Sita"), smsRow("l2")],
+      suppressed: [smsRow("l3")],
+      excluded: { noPhone: 1, foreignNumber: 1, malformed: 1, suppressed: 1, duplicatePhone: 1 },
+      excludedRows: [
+        { leadId: "l4", reason: "noPhone" },
+        { leadId: "l5", reason: "foreignNumber" },
+        { leadId: "l6", reason: "malformed" },
+        { leadId: "l7", reason: "duplicate" },
+      ],
+    },
+  });
+
+  it("uses the SMS audience (never the email one) and maps every phone skip reason", async () => {
+    resolveSmsAudienceForLeadIdsMock.mockResolvedValue(smsAudience());
+    const { db } = makeDb();
+    const planned = await planBulkEnroll(AUTH, { mode: "selected", leadIds: ["x"] }, { db } as never, { sequenceId: SEQ, channel: "sms" });
+    expect(planned.ok).toBe(true);
+    if (!planned.ok) return;
+    expect(resolveAudienceForLeadIdsMock).not.toHaveBeenCalled();
+    const { preview, items } = planned.plan;
+    expect(preview.channel).toBe("sms");
+    expect(preview.skipped).toEqual({
+      noEmail: 0, malformedEmail: 0, duplicateEmail: 0,
+      noPhone: 1, foreignNumber: 1, malformedPhone: 1, duplicatePhone: 1,
+      suppressed: 1, alreadyInSequence: 0,
+    });
+    expect(items.map((i) => [i.leadId, i.reason])).toEqual([
+      ["l1", null], ["l2", null], ["l3", "suppressed"],
+      ["l4", "no_phone"], ["l5", "foreign_number"], ["l6", "malformed_phone"], ["l7", "duplicate_phone"],
+    ]);
+  });
+
+  it("is not paced by the daily EMAIL cap: SMS reports zeros there, uses the SMS sandbox / SMS grant, and carries a credit estimate", async () => {
+    resolveSmsAudienceForLeadIdsMock.mockResolvedValue(smsAudience());
+    const { db, tables } = makeDb();
+    tables.email_sequence_steps.push({ sequence_id: SEQ, step_order: 1, body_template: "Hi {{first_name|there}}, checking in" });
+    const planned = await planBulkEnroll(AUTH, { mode: "selected", leadIds: ["x"] }, { db } as never, { sequenceId: SEQ, channel: "sms" });
+    if (!planned.ok) throw new Error("plan failed");
+    const { preview } = planned.plan;
+    expect(preview.cap).toEqual({ dailyCap: 0, sentToday: 0, remaining: 0 });
+    expect(preview.estimatedExtraDays).toBe(0);
+    expect(preview.sandbox).toBe(true); // the SMS sandbox flag, not the email one (which the mock sets to false)
+    expect(preview.sendingEnabled).toBe(true);
+    expect(preview.sms).toMatchObject({ stepCount: 1, balance: 1000, creditsFirstStep: 2, creditsAllSteps: 2, sufficientFirstStep: true, sufficientAllSteps: true });
+  });
+
+  it("warns when the credits don't cover the texts (balance below the first step / the whole run)", async () => {
+    resolveSmsAudienceForLeadIdsMock.mockResolvedValue(smsAudience());
+    const { db, tables } = makeDb();
+    tables.sms_credit_accounts[0].balance = 1;
+    tables.email_sequence_steps.push(
+      { sequence_id: SEQ, step_order: 1, body_template: "Step one" },
+      { sequence_id: SEQ, step_order: 2, body_template: "Step two" }
+    );
+    const planned = await planBulkEnroll(AUTH, { mode: "selected", leadIds: ["x"] }, { db } as never, { sequenceId: SEQ, channel: "sms" });
+    if (!planned.ok) throw new Error("plan failed");
+    expect(planned.plan.preview.sms).toMatchObject({ creditsFirstStep: 2, creditsAllSteps: 4, balance: 1, sufficientFirstStep: false, sufficientAllSteps: false });
+  });
+
+  it("filter mode resolves through the SMS audience too", async () => {
+    resolveSmsAudienceMock.mockResolvedValue({
+      ok: true,
+      audience: { matched: 1, sendable: [smsRow("l1")], suppressed: [], excluded: { noPhone: 0, foreignNumber: 0, malformed: 0, suppressed: 0, duplicatePhone: 0 }, excludedRows: [] },
+    });
+    const { db } = makeDb();
+    const tree = { id: "root", conjunction: "and", conditions: [] };
+    const planned = await planBulkEnroll(AUTH, { mode: "filter", tree } as never, { db } as never, { sequenceId: SEQ, channel: "sms" });
+    expect(planned.ok && planned.plan.preview.willEnroll).toBe(1);
+    expect(resolveAudienceMock).not.toHaveBeenCalled();
+  });
+
+  it("only SMS enrollments make a lead 'already in a sequence' for an SMS run (and email ones only for an email run)", async () => {
+    resolveSmsAudienceForLeadIdsMock.mockResolvedValue({
+      requested: 2,
+      audience: { matched: 2, sendable: [smsRow("emailOnly"), smsRow("smsBusy")], suppressed: [], excluded: { noPhone: 0, foreignNumber: 0, malformed: 0, suppressed: 0, duplicatePhone: 0 }, excludedRows: [] },
+    });
+    // emailOnly runs an EMAIL sequence; smsBusy runs an SMS one
+    const { db } = makeDb([["emailOnly", "seq-E", "email"], ["smsBusy", "seq-S", "sms"]]);
+    const sms = await planBulkEnroll(AUTH, { mode: "selected", leadIds: ["x"] }, { db } as never, { sequenceId: SEQ, channel: "sms" });
+    if (!sms.ok) throw new Error("plan failed");
+    expect(sms.plan.items).toEqual([
+      { leadId: "emailOnly", outcome: "pending", reason: null }, // an email enrollment does not block a text sequence
+      { leadId: "smsBusy", outcome: "skipped", reason: "already_in_sequence" },
+    ]);
+
+    resolveAudienceForLeadIdsMock.mockResolvedValue({
+      requested: 2,
+      audience: { matched: 2, sendable: [row("emailOnly"), row("smsBusy")], suppressed: [], excluded: { noEmail: 0, malformed: 0, suppressed: 0, duplicate: 0 }, excludedRows: [] },
+    });
+    const email = await planBulkEnroll(AUTH, { mode: "selected", leadIds: ["x"] }, { db } as never, { sequenceId: SEQ, channel: "email" });
+    if (!email.ok) throw new Error("plan failed");
+    expect(email.plan.items).toEqual([
+      { leadId: "emailOnly", outcome: "skipped", reason: "already_in_sequence" },
+      { leadId: "smsBusy", outcome: "pending", reason: null }, // a text enrollment does not block an email sequence
+    ]);
+  });
+});
+
+describe("estimateSmsCredits", () => {
+  const settings = { sender_label: null, optout_footer: "", quiet_hours_enabled: true } as never;
+  const lead = { first_name: "Sita", last_name: "Rai" };
+
+  it("counts credits on the final text: merge values filled in, per lead and per step", () => {
+    const r = estimateSmsCredits({ settings, stepTemplates: ["Hi {{first_name}}", "x".repeat(161)], leads: [lead, lead], tenantName: "Admizz" });
+    // step 1 = 1 credit each; step 2 = 161 chars = 2 segments (153 each) = 2 credits each
+    expect(r).toEqual({ creditsFirstStep: 2, creditsAllSteps: 6 });
+  });
+
+  it("a Nepali (Unicode) message costs more per character than a GSM-7 one", () => {
+    const gsm = estimateSmsCredits({ settings, stepTemplates: ["a".repeat(100)], leads: [lead], tenantName: "" });
+    const unicode = estimateSmsCredits({ settings, stepTemplates: ["न".repeat(100)], leads: [lead], tenantName: "" });
+    expect(gsm.creditsAllSteps).toBe(1);
+    expect(unicode.creditsAllSteps).toBe(2);
+  });
+
+  it("the sender label and the opt-out footer count towards the credits", () => {
+    const plain = estimateSmsCredits({ settings, stepTemplates: ["a".repeat(150)], leads: [lead], tenantName: "" });
+    const withFooter = estimateSmsCredits({
+      settings: { sender_label: "Admizz", optout_footer: "Opt out: {url}", quiet_hours_enabled: true } as never,
+      stepTemplates: ["a".repeat(150)],
+      leads: [lead],
+      tenantName: "",
+    });
+    expect(plain.creditsAllSteps).toBe(1);
+    expect(withFooter.creditsAllSteps).toBeGreaterThan(1);
+  });
+
+  it("no leads or no steps costs nothing", () => {
+    expect(estimateSmsCredits({ settings, stepTemplates: ["x"], leads: [], tenantName: "" })).toEqual({ creditsFirstStep: 0, creditsAllSteps: 0 });
+    expect(estimateSmsCredits({ settings, stepTemplates: [], leads: [lead], tenantName: "" })).toEqual({ creditsFirstStep: 0, creditsAllSteps: 0 });
   });
 });
 

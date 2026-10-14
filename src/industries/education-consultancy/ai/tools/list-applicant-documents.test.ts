@@ -100,7 +100,7 @@ describe("list_applicant_documents", () => {
     expect(result.documents[0]).toMatchObject({
       id: "doc-1",
       documentTypeLabel: "Passport",
-      category: "Identity",
+      category: "Personal Identity",
       status: "ready",
     });
   });

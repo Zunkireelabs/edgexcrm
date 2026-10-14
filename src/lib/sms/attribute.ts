@@ -8,6 +8,9 @@ import type { SmsSendResult } from "./provider/types";
 export interface AttributionMessage {
   id: string;
   to_phone: string;
+  // Our own up-front estimate for this message. Only used as the billing
+  // fallback for recipients the provider did not echo back (see below).
+  estimated_credits?: number | null;
 }
 
 export interface AttributionInput {
@@ -20,10 +23,10 @@ export type Attribution =
   | {
       messageId: string;
       outcome: "submitted";
-      providerMessageId: string;
-      credit: number;
-      network: string;
-      providerStatus: string;
+      providerMessageId: string | null;
+      credit: number | null;
+      network: string | null;
+      providerStatus: string | null;
       shortcode: string | null;
     }
   | { messageId: string; outcome: "failed"; errorCode: string; errorMessage: string };
@@ -31,6 +34,9 @@ export type Attribution =
 export interface AttributionResult {
   attributions: Attribution[];
   totalCreditsCharged: number;
+  // Portion of totalCreditsCharged that is OUR estimate for unmatched
+  // recipients rather than a provider-reported figure. Surfaced for logging.
+  estimatedUnmatchedCredits: number;
   unmatched: string[];
 }
 
@@ -85,7 +91,7 @@ export function attributeProviderResults(input: AttributionInput): AttributionRe
       });
     }
 
-    return { attributions, totalCreditsCharged, unmatched: [] };
+    return { attributions, totalCreditsCharged, estimatedUnmatchedCredits: 0, unmatched: [] };
   }
 
   const validByMobile = new Map<string, (typeof result.valid)[number]>();
@@ -96,6 +102,7 @@ export function attributeProviderResults(input: AttributionInput): AttributionRe
 
   const attributions: Attribution[] = [];
   const unmatched: string[] = [];
+  let estimatedUnmatchedCredits = 0;
 
   for (const msg of messages) {
     const key = normalizeMobile(msg.to_phone);
@@ -124,12 +131,23 @@ export function attributeProviderResults(input: AttributionInput): AttributionRe
       continue;
     }
 
+    // The provider accepted the call (error:false) but echoed this recipient
+    // in neither array. That is NOT evidence of failure — in production
+    // Aakash delivered messages we had marked failed this way (2026-10-09,
+    // UK Expo blast). Record it as submitted-but-unconfirmed so the delivery
+    // poller (matches the provider report by recipient + body + time) settles
+    // the real outcome, rather than writing a terminal "failed" the poller
+    // never revisits.
     unmatched.push(msg.id);
+    estimatedUnmatchedCredits += msg.estimated_credits ?? 0;
     attributions.push({
       messageId: msg.id,
-      outcome: "failed",
-      errorCode: "no_provider_result",
-      errorMessage: "Recipient found in neither the provider's valid nor invalid results.",
+      outcome: "submitted",
+      providerMessageId: null,
+      credit: null,
+      network: null,
+      providerStatus: "unconfirmed",
+      shortcode: null,
     });
   }
 
@@ -137,7 +155,14 @@ export function attributeProviderResults(input: AttributionInput): AttributionRe
   // per-row loop above — decouples attribution bugs from billing bugs, and
   // correctly counts a shared phone number's credit once even though both
   // message rows attribute to it.
-  const totalCreditsCharged = result.valid.reduce((sum, row) => sum + row.credit, 0);
+  //
+  // Unmatched recipients are the exception: the provider accepted the call
+  // and delivered them (UK Expo, 2026-10-09: 2 credits each) but never
+  // echoed a credit figure, so valid[] alone under-reports to 0 and
+  // sms_credits_settle would refund the whole reservation for messages we
+  // were really billed for. Count our estimate for them. settle is
+  // single-shot, so an estimate now beats an exact figure never.
+  const totalCreditsCharged = result.valid.reduce((sum, row) => sum + row.credit, 0) + estimatedUnmatchedCredits;
 
-  return { attributions, totalCreditsCharged, unmatched };
+  return { attributions, totalCreditsCharged, estimatedUnmatchedCredits, unmatched };
 }

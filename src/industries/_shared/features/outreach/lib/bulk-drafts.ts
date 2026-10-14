@@ -1,3 +1,5 @@
+import { isOutreachChannel, type OutreachChannel } from "./channel";
+import { toProviderRecipient } from "@/lib/sms/phone";
 import type { AuthContext } from "@/lib/api/auth";
 import type { ScopedClient } from "@/lib/supabase/scoped";
 import { buildDraftsQuery, cleanUuid } from "./draft-scope";
@@ -25,7 +27,7 @@ export type BulkDraftAction = "send" | "schedule" | "skip";
 
 export type BulkDraftSelection =
   | { mode: "ids"; ids: string[] }
-  | { mode: "all"; due: "today" | "all"; assignedTo: string | null };
+  | { mode: "all"; due: "today" | "all"; assignedTo: string | null; channel?: OutreachChannel };
 
 export interface ParsedBulkDraftBody {
   action: BulkDraftAction;
@@ -56,7 +58,7 @@ export function parseBulkDraftBody(
     }
     selection = { mode: "ids", ids: [...new Set(ids as string[])] };
   } else if (sel?.mode === "all") {
-    selection = { mode: "all", due: sel.due === "today" ? "today" : "all", assignedTo: cleanUuid(typeof sel.assigned_to === "string" ? sel.assigned_to : null) };
+    selection = { mode: "all", due: sel.due === "today" ? "today" : "all", assignedTo: cleanUuid(typeof sel.assigned_to === "string" ? sel.assigned_to : null), ...(isOutreachChannel(sel.channel) ? { channel: sel.channel } : {}) };
   } else {
     return { ok: false, status: 422, code: "VALIDATION", message: 'selection.mode must be "ids" or "all"', errors: { selection: ['Choose drafts: mode must be "ids" or "all".'] } };
   }
@@ -78,7 +80,9 @@ export function parseBulkDraftBody(
 export interface EligibleDraft {
   id: string;
   subject: string;
-  leads: { email: string | null } | null;
+  /** 'email' | 'sms' (migration 274). A text has no subject and is addressed by phone number. */
+  channel?: string | null;
+  leads: { email: string | null; phone?: string | null } | null;
 }
 
 export interface Eligibility {
@@ -86,15 +90,15 @@ export interface Eligibility {
   eligible: EligibleDraft[];
   /** How many drafts matched the selection in all (before the cap and the sending checks). */
   matched: number;
-  /** Matched drafts that can't be sent: no subject, or the lead has no email. (Skip ignores these.) */
-  skipped: { noSubject: number; noEmail: number };
+  /** Matched drafts that can't be sent: an email with no subject / no address, a text whose lead has no usable number. (Skip ignores these.) */
+  skipped: { noSubject: number; noEmail: number; noPhone: number };
   /** Ids asked for that are not available to this person (not theirs, no longer pending, lead deleted, enrollment paused…). Ids mode only. */
   notAvailable: number;
   /** There were more matches than `limit`. */
   truncated: boolean;
 }
 
-const ELIGIBLE_SELECT = "id, subject, leads!inner(email), sequence_enrollments!inner(status)";
+const ELIGIBLE_SELECT = "id, subject, channel, leads!inner(email, phone), sequence_enrollments!inner(status)";
 
 /**
  * The drafts a bulk action would act on. For send / schedule (`forSending`) a draft with no subject or whose lead has no
@@ -122,7 +126,7 @@ export async function resolveEligibleDrafts(
     }
     matched = found.length;
   } else {
-    const filters = { due: selection.due, assignedTo: selection.assignedTo } as const;
+    const filters = { due: selection.due, assignedTo: selection.assignedTo, channel: selection.channel } as const;
     const { count } = await buildDraftsQuery(db, auth, filters, ELIGIBLE_SELECT, { count: "exact", head: true });
     matched = count ?? 0;
     for (let from = 0; from < Math.min(matched, opts.limit + 1); from += PAGE) {
@@ -136,17 +140,25 @@ export async function resolveEligibleDrafts(
     }
   }
 
-  const skipped = { noSubject: 0, noEmail: 0 };
+  const skipped = { noSubject: 0, noEmail: 0, noPhone: 0 };
   let eligible: EligibleDraft[] = [];
   for (const d of found) {
     if (opts.forSending) {
-      if (!d.subject?.trim()) {
-        skipped.noSubject++;
-        continue;
-      }
-      if (!d.leads?.email?.trim()) {
-        skipped.noEmail++;
-        continue;
+      if (d.channel === "sms") {
+        // a text needs a number we can actually text (the message itself is checked when it is sent)
+        if (!toProviderRecipient(d.leads?.phone).ok) {
+          skipped.noPhone++;
+          continue;
+        }
+      } else {
+        if (!d.subject?.trim()) {
+          skipped.noSubject++;
+          continue;
+        }
+        if (!d.leads?.email?.trim()) {
+          skipped.noEmail++;
+          continue;
+        }
       }
     }
     eligible.push(d);

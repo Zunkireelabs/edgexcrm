@@ -2,6 +2,10 @@
 // API routes (validation) and, in a later phase, the UI. Kept as plain data
 // so nothing here needs the request/auth context.
 
+/** The academic levels a document can be linked to (migration 240: applicant_documents.qualification_level). */
+export const QUALIFICATION_LEVELS = ["see", "plus_two", "bachelor", "masters"] as const;
+export type QualificationLevel = (typeof QUALIFICATION_LEVELS)[number];
+
 export const DOCUMENT_TYPES = [
   "passport",
   "marksheet",
@@ -17,6 +21,11 @@ export const DOCUMENT_TYPES = [
   "unconditional_offer",
   "visa_document",
   "identity_document",
+  // Added Oct 2026 (client request: the nine document categories) so every category has something to file under.
+  "statement_of_purpose",
+  "experience_letter",
+  "gap_explanation",
+  "enrollment_document",
   "other",
 ] as const;
 
@@ -28,27 +37,42 @@ export type VerificationStatus = (typeof VERIFICATION_STATUSES)[number];
 export const DOCUMENT_STATUSES = ["uploaded", "queued", "processing", "ready", "failed"] as const;
 export type DocumentStatus = (typeof DOCUMENT_STATUSES)[number];
 
-// document_type -> a small, static grouping used for the future UI's grouped
-// view (Identity / Education / English Proficiency / Financial / Application)
-// and for GET /leads/[id]/documents's `by_category` grouping in this phase.
-export const DOCUMENT_CATEGORIES = ["identity", "education", "english_proficiency", "financial", "application", "other"] as const;
+// document_type -> a small, static grouping used for the Documents list's grouped view and for
+// GET /leads/[id]/documents's `by_category`. Computed from the type only — never stored — so changing it needs no data
+// migration. Nine categories (client request, Oct 2026), then "other" as the catch-all for anything not covered.
+export const DOCUMENT_CATEGORIES = [
+  "personal_identity",
+  "academic_records",
+  "english_proficiency",
+  "application_essays",
+  "work_experience_gap",
+  "financial",
+  "university_offers",
+  "visa_predeparture",
+  "enrollment",
+  "other",
+] as const;
 export type DocumentCategory = (typeof DOCUMENT_CATEGORIES)[number];
 
 export const DOCUMENT_TYPE_CATEGORY: Record<DocumentType, DocumentCategory> = {
-  passport: "identity",
-  identity_document: "identity",
-  marksheet: "education",
-  transcript: "education",
-  certificate: "education",
+  passport: "personal_identity",
+  identity_document: "personal_identity",
+  marksheet: "academic_records",
+  transcript: "academic_records",
+  certificate: "academic_records",
   english_test_result: "english_proficiency",
+  recommendation_letter: "application_essays",
+  statement_of_purpose: "application_essays",
+  cv: "work_experience_gap",
+  experience_letter: "work_experience_gap",
+  gap_explanation: "work_experience_gap",
   financial_document: "financial",
   bank_statement: "financial",
-  cv: "application",
-  recommendation_letter: "application",
-  offer_letter: "application",
-  conditional_offer: "application",
-  unconditional_offer: "application",
-  visa_document: "application",
+  offer_letter: "university_offers",
+  conditional_offer: "university_offers",
+  unconditional_offer: "university_offers",
+  visa_document: "visa_predeparture",
+  enrollment_document: "enrollment",
   other: "other",
 };
 

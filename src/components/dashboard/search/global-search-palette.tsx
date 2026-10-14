@@ -3,6 +3,8 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { toast } from "sonner";
+import { ArchivedLeadPreviewDialog } from "@/industries/education-consultancy/features/archived-lookup/components/archived-lead-preview-dialog";
+import type { ArchivedLeadPreview } from "@/industries/education-consultancy/features/archived-lookup/lib/types";
 import {
   Bot,
   Building2,
@@ -31,6 +33,7 @@ import {
   BookOpen,
   Loader2,
   ListPlus,
+  Archive,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -100,6 +103,8 @@ interface GlobalSearchPaletteProps {
   onClose: () => void;
   navIndex: NavResult[];
   currentUserId: string;
+  /** Education tenants: also search leads that sit in Archive, and offer to send them back to the pipeline. */
+  archivedLookupEnabled?: boolean;
 }
 
 // Substring/keyword match for nav results
@@ -121,6 +126,7 @@ export function GlobalSearchPalette({
   onClose,
   navIndex,
   currentUserId,
+  archivedLookupEnabled = false,
 }: GlobalSearchPaletteProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -128,6 +134,9 @@ export function GlobalSearchPalette({
   const [query, setQuery] = useState("");
   const [leads, setLeads] = useState<LeadResult[]>([]);
   const [leadsLoading, setLeadsLoading] = useState(false);
+  // Archived leads found by the same query, and the one whose preview panel is open.
+  const [archived, setArchived] = useState<ArchivedLeadPreview[]>([]);
+  const [archivedPreview, setArchivedPreview] = useState<ArchivedLeadPreview | null>(null);
   const [creatingTask, setCreatingTask] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -173,6 +182,7 @@ export function GlobalSearchPalette({
 
     if (query.length < 2) {
       setLeads([]);
+      setArchived([]);
       setLeadsLoading(false);
       return;
     }
@@ -181,6 +191,19 @@ export function GlobalSearchPalette({
     debounceRef.current = setTimeout(async () => {
       const controller = new AbortController();
       abortRef.current = controller;
+      // Archived leads: a separate, tiny search (the main leads list hides Archive on purpose). Runs alongside the
+      // lead search and is never awaited, so it can't slow the normal results; needs 3+ characters.
+      const archivedQuery = query.trim();
+      if (archivedLookupEnabled && archivedQuery.length >= 3) {
+        fetch(`/api/v1/archived-leads/search?q=${encodeURIComponent(archivedQuery)}`, { signal: controller.signal })
+          .then((r) => (r.ok ? r.json() : { data: [] }))
+          .then((j) => setArchived((j.data ?? []) as ArchivedLeadPreview[]))
+          .catch((err) => {
+            if ((err as Error).name !== "AbortError") setArchived([]);
+          });
+      } else {
+        setArchived([]);
+      }
       try {
         const res = await fetch(
           `/api/v1/leads?search=${encodeURIComponent(query)}&pageSize=8`,
@@ -200,7 +223,7 @@ export function GlobalSearchPalette({
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [query]);
+  }, [query, archivedLookupEnabled]);
 
   const handleNavSelect = useCallback(
     (item: NavResult) => {
@@ -212,6 +235,15 @@ export function GlobalSearchPalette({
       }
     },
     [onClose, router, openSettings]
+  );
+
+  // An archived lead opens the small preview panel (not the lead page — it may not be the user's lead).
+  const handleArchivedSelect = useCallback(
+    (lead: ArchivedLeadPreview) => {
+      setArchivedPreview(lead);
+      onClose();
+    },
+    [onClose]
   );
 
   const handleLeadSelect = useCallback(
@@ -361,11 +393,13 @@ export function GlobalSearchPalette({
     query.length >= 2 &&
     !leadsLoading &&
     leads.length === 0 &&
+    archived.length === 0 &&
     filteredNav.length === 0 &&
     !showQuickAdd &&
     !showMentionActions;
 
   return (
+    <>
     <CommandDialog
       open={isOpen}
       onOpenChange={(open) => { if (!open) onClose(); }}
@@ -570,6 +604,37 @@ export function GlobalSearchPalette({
           </>
         )}
 
+        {/* Archived leads (education): leads in Archive match the query too; selecting one opens the preview panel. */}
+        {archivedLookupEnabled && archived.length > 0 && (
+          <>
+            <CommandSeparator />
+            <CommandGroup heading="Archived">
+              {archived.map((lead) => (
+                <CommandItem
+                  key={lead.id}
+                  value={`archived-${lead.id} ${leadDisplayName(lead)} ${lead.email ?? ""} ${lead.phone ?? ""}`}
+                  onSelect={() => handleArchivedSelect(lead)}
+                  className="flex flex-col items-start gap-0.5"
+                >
+                  <span className="flex w-full items-center gap-2 font-medium">
+                    <span className="truncate">{leadDisplayName(lead)}</span>
+                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
+                      <Archive className="h-3 w-3" />
+                      Archived
+                    </span>
+                  </span>
+                  <span className="text-xs text-gray-400">
+                    {[lead.email, lead.phone].filter(Boolean).join(" · ")}
+                  </span>
+                  {lead.archive_reason && (
+                    <span className="max-w-full truncate text-xs text-gray-400">Reason: {lead.archive_reason}</span>
+                  )}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </>
+        )}
+
         {/* TODO Phase 2+: "Actions" / "Ask Orca" group — AI-native palette actions */}
       </CommandList>
 
@@ -580,5 +645,16 @@ export function GlobalSearchPalette({
         <span><kbd className="font-mono">esc</kbd> Close</span>
       </div>
     </CommandDialog>
+    {archivedLookupEnabled && (
+      <ArchivedLeadPreviewDialog
+        lead={archivedPreview}
+        onClose={() => setArchivedPreview(null)}
+        onRestored={(id) => {
+          setArchived((prev) => prev.filter((l) => l.id !== id));
+          router.refresh();
+        }}
+      />
+    )}
+    </>
   );
 }

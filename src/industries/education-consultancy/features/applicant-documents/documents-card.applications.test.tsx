@@ -57,8 +57,8 @@ describe("Documents grouped by application", () => {
     renderCard();
     await screen.findByText("Arden University – MSc Project Management");
     const keys = Array.from(document.querySelectorAll("[data-document-group]")).map((n) => n.getAttribute("data-document-group"));
-    expect(keys).toEqual(["app:app-1", "app:app-2", "cat:identity"]);
-    const identity = document.querySelector('[data-document-group="cat:identity"]') as HTMLElement;
+    expect(keys).toEqual(["app:app-1", "app:app-2", "cat:personal_identity"]);
+    const identity = document.querySelector('[data-document-group="cat:personal_identity"]') as HTMLElement;
     expect(within(identity).getByText("My passport")).toBeInTheDocument();
   });
 
@@ -67,7 +67,7 @@ describe("Documents grouped by application", () => {
     renderCard();
     await screen.findByText("Arden conditional offer");
     expect(screen.queryByText(/Arden University/)).toBeNull();
-    const application = document.querySelector('[data-document-group="cat:application"]') as HTMLElement;
+    const application = document.querySelector('[data-document-group="cat:university_offers"]') as HTMLElement;
     expect(within(application).getByText("Arden conditional offer")).toBeInTheDocument();
   });
 });

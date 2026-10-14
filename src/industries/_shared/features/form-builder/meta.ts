@@ -9,5 +9,6 @@ export const formBuilderMeta: FeatureMeta = {
     INDUSTRIES.TRAVEL_AGENCY,
     INDUSTRIES.HOME_MOVING,
     INDUSTRIES.IT_AGENCY,
+    INDUSTRIES.GENERAL,
   ],
 };

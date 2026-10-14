@@ -9,7 +9,7 @@ import type { SequenceReport } from "../lib/sequence-report";
 // to them, what the emails did, the step funnel and what is waiting to go out.
 
 interface ReportResponse extends SequenceReport {
-  sequence: { id: string; name: string; on_reply: "pause" | "end" | "continue" };
+  sequence: { id: string; name: string; on_reply: "pause" | "end" | "continue"; channel?: "email" | "sms" };
 }
 
 interface SequenceReportDialogProps {
@@ -59,6 +59,7 @@ export function SequenceReportDialog({ sequence, onClose }: SequenceReportDialog
   }, [sequence]);
 
   const maxStep = report ? Math.max(1, ...report.steps.map((s) => s.sent)) : 1;
+  const isSms = report?.sequence.channel === "sms";
 
   return (
     <Dialog open={!!sequence} onOpenChange={(open) => !open && onClose()}>
@@ -87,31 +88,35 @@ export function SequenceReportDialog({ sequence, onClose }: SequenceReportDialog
                 <Stat label="Ended early" value={report.enrollments.ended} />
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <Stat
-                  label="Replied"
-                  value={report.enrollments.replied}
-                  hint={report.sequence.on_reply === "continue" ? "Not tracked: this sequence keeps sending after a reply" : pctText(report.rates.repliedPct)}
-                />
-                <Stat label="Do not contact (unsubscribed / bounced)" value={report.enrollments.doNotContact} />
+                {/* The SMS provider has no inbound replies, so a text sequence has nothing to count here. */}
+                {!isSms && (
+                  <Stat
+                    label="Replied"
+                    value={report.enrollments.replied}
+                    hint={report.sequence.on_reply === "continue" ? "Not tracked: this sequence keeps sending after a reply" : pctText(report.rates.repliedPct)}
+                  />
+                )}
+                <Stat label={isSms ? "Do not contact (opted out)" : "Do not contact (unsubscribed / bounced)"} value={report.enrollments.doNotContact} />
               </div>
             </section>
 
             <section className="space-y-2">
-              <h3 className="text-sm font-medium">Emails</h3>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <h3 className="text-sm font-medium">{isSms ? "Texts" : "Emails"}</h3>
+              <div className={`grid grid-cols-2 gap-2 ${isSms ? "sm:grid-cols-3" : "sm:grid-cols-4"}`}>
                 <Stat label="Sent" value={report.emails.sent} />
                 <Stat label="Delivered" value={report.emails.delivered} hint={pctText(report.rates.deliveredPct)} />
-                <Stat label="Bounced" value={report.emails.bounced} hint={pctText(report.rates.bouncedPct)} />
-                <Stat label="Spam complaints" value={report.emails.complained} hint={pctText(report.rates.complainedPct)} />
+                <Stat label={isSms ? "Failed" : "Bounced"} value={report.emails.bounced} hint={pctText(report.rates.bouncedPct)} />
+                {!isSms && <Stat label="Spam complaints" value={report.emails.complained} hint={pctText(report.rates.complainedPct)} />}
               </div>
               <p className="text-xs text-muted-foreground">
-                &ldquo;Delivered&rdquo; counts only emails the mail provider has confirmed, so it can trail &ldquo;Sent&rdquo; for a while.
+                &ldquo;Delivered&rdquo; counts only {isSms ? "texts" : "emails"} the {isSms ? "SMS" : "mail"} provider has confirmed, so it can trail
+                &ldquo;Sent&rdquo; for a while.
               </p>
             </section>
 
             {report.steps.length > 0 && (
               <section className="space-y-2">
-                <h3 className="text-sm font-medium">Emails sent at each step</h3>
+                <h3 className="text-sm font-medium">{isSms ? "Texts" : "Emails"} sent at each step</h3>
                 <ul className="space-y-1.5">
                   {report.steps.map((s) => (
                     <li key={s.stepOrder} className="flex items-center gap-3 text-sm">

@@ -5,6 +5,7 @@ import { createRequestLogger } from "@/lib/logger";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
+import { channelOf } from "@/industries/_shared/features/outreach/lib/channel";
 import { buildSequenceReport } from "@/industries/_shared/features/outreach/lib/sequence-report";
 
 type Props = { params: Promise<{ id: string }> };
@@ -21,14 +22,14 @@ export async function GET(_request: NextRequest, { params }: Props) {
   if (!requireAdmin(auth)) return apiForbidden();
 
   const db = await scopedClient(auth);
-  const { data: sequence } = await db.from("email_sequences").select("id, name, auto_send, on_reply").eq("id", id).maybeSingle();
+  const { data: sequence } = await db.from("email_sequences").select("id, name, auto_send, on_reply, channel").eq("id", id).maybeSingle();
   if (!sequence) return apiNotFound("Sequence");
 
   const { data: steps } = await db.from("email_sequence_steps").select("step_order").eq("sequence_id", id).order("step_order", { ascending: true });
   const stepOrders = ((steps ?? []) as unknown as { step_order: number }[]).map((s) => s.step_order);
 
   try {
-    const report = await buildSequenceReport(db, id, stepOrders);
+    const report = await buildSequenceReport(db, id, stepOrders, channelOf(sequence as { channel?: string | null }));
     return apiSuccess({ sequence, ...report });
   } catch (err) {
     log.error({ err }, "sequence report failed");

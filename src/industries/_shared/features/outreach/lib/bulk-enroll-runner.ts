@@ -4,6 +4,10 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { scopedClientForTenant, type ScopedClient } from "@/lib/supabase/scoped";
 import { enrollLead, switchEnrollment, EnrollmentConflictError } from "./engine";
 import { queueNextSequence } from "./queue-next";
+import { channelOf, type OutreachChannel } from "./channel";
+import { isSmsEnabledForTenant } from "@/lib/sms/flag";
+import { toProviderRecipient, providerMsisdnToE164 } from "@/lib/sms/phone";
+import { loadSuppressedPhones } from "@/lib/sms/suppression";
 
 // Worker for bulk enroll (OUTREACH-BULK-ENROLL-BRIEF.md §7). NOT an Inngest function — like blast-runner.ts and
 // sequence-schedule-runner.ts it is driven by an in-process timer (src/instrumentation.ts) plus an immediate
@@ -29,6 +33,8 @@ interface RunRow {
   conflict_policy: "skip" | "switch" | "queue";
   status: "queued" | "running" | "completed" | "cancelled" | "failed";
   cancel_requested: boolean;
+  /** The channel of the run's sequence, read once per pass (migration 274). */
+  channel: OutreachChannel;
 }
 
 interface ItemRow {
@@ -40,6 +46,7 @@ interface LeadRow {
   id: string;
   assigned_to: string | null;
   deleted_at: string | null;
+  phone?: string | null;
 }
 
 export interface RunPassSummary {
@@ -80,6 +87,9 @@ async function resolveConflict(
     .from("sequence_enrollments")
     .select("id, sequence_id")
     .eq("lead_id", input.leadId)
+    // only the run's OWN channel counts: a lead may run one email AND one SMS sequence (migration 274), and without this
+    // filter two rows would come back and the lookup would fail
+    .eq("channel", run.channel)
     .in("status", ["active", "paused"])
     .maybeSingle();
   const current = currentRow as unknown as { id: string; sequence_id: string } | null;
@@ -198,9 +208,18 @@ async function runOnePass(tenantId: string, runId: string, budgetMs: number): Pr
       .eq("status", "queued");
   }
 
-  const { data: seq } = await db.from("email_sequences").select("id, status").eq("id", run.sequence_id).maybeSingle();
+  const { data: seq } = await db.from("email_sequences").select("id, status, channel").eq("id", run.sequence_id).maybeSingle();
   if (!seq || (seq as unknown as { status: string }).status !== "active") {
     await finish(db, runId, "failed", "The sequence is no longer active.");
+    summary.finished = true;
+    return summary;
+  }
+  run.channel = channelOf(seq as { channel?: string | null });
+
+  // A text run needs SMS to still be on for the account: if it was switched off since Start, stop with a reason instead
+  // of creating drafts that can never go out.
+  if (run.channel === "sms" && !(await isSmsEnabledForTenant(tenantId))) {
+    await finish(db, runId, "failed", "SMS was turned off for this account, so the run was stopped.");
     summary.finished = true;
     return summary;
   }
@@ -241,9 +260,21 @@ async function runOnePass(tenantId: string, runId: string, budgetMs: number): Pr
 
     const { data: leadData } = await db
       .from("leads")
-      .select("id, assigned_to, deleted_at")
+      .select("id, assigned_to, deleted_at, phone")
       .in("id", items.map((i) => i.lead_id));
     const leadById = new Map(((leadData ?? []) as unknown as LeadRow[]).map((l) => [l.id, l]));
+
+    // A text run re-checks each lead's number NOW: the list was saved at Start, and a big run takes a while, so a number
+    // may have been removed or opted out since. Such a lead is skipped instead of being enrolled into a sequence whose
+    // texts could never go out (and that would hold the lead's SMS slot). One batched suppression lookup per chunk.
+    let optedOut = new Set<string>();
+    if (run.channel === "sms") {
+      const e164s = [...leadById.values()].flatMap((l) => {
+        const recipient = toProviderRecipient(l.phone);
+        return recipient.ok ? [providerMsisdnToE164(recipient.msisdn)] : [];
+      });
+      optedOut = await loadSuppressedPhones(db, tenantId, [...new Set(e164s)]);
+    }
 
     for (const item of items) {
       const mark = async (outcome: "enrolled" | "skipped" | "failed", reason: string | null) => {
@@ -260,6 +291,17 @@ async function runOnePass(tenantId: string, runId: string, budgetMs: number): Pr
       if (!lead || lead.deleted_at) {
         await mark("skipped", "lead_deleted");
         continue;
+      }
+      if (run.channel === "sms") {
+        const recipient = toProviderRecipient(lead.phone);
+        if (!recipient.ok) {
+          await mark("skipped", "no_phone");
+          continue;
+        }
+        if (optedOut.has(providerMsisdnToE164(recipient.msisdn))) {
+          await mark("skipped", "suppressed");
+          continue;
+        }
       }
       const enrollInput = {
         sequenceId: run.sequence_id,

@@ -3,11 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const authMock = vi.fn();
 const bulkEnabledMock = vi.fn();
 const updateMock = vi.fn();
+const smsEnabledMock = vi.fn();
 let draftRow: Record<string, unknown> | null = null;
 
 vi.mock("@/lib/api/auth", () => ({ authenticateRequest: () => authMock() }));
 vi.mock("@/industries/_loader", () => ({ getFeatureAccess: () => true }));
 vi.mock("@/lib/email/outbound/flag", () => ({ isBulkEmailEnabledForTenant: (...a: unknown[]) => bulkEnabledMock(...a) }));
+vi.mock("@/lib/sms/flag", () => ({ isSmsEnabledForTenant: (...a: unknown[]) => smsEnabledMock(...a) }));
 vi.mock("@/lib/supabase/scoped", () => ({
   scopedClient: async () => ({
     from: () => ({
@@ -36,6 +38,7 @@ describe("POST /api/v1/outreach/drafts/[id]/schedule", () => {
     authMock.mockReset().mockResolvedValue(education);
     bulkEnabledMock.mockReset().mockResolvedValue(true);
     updateMock.mockReset();
+    smsEnabledMock.mockReset().mockResolvedValue(true);
     draftRow = { id: "d1", subject: "Hi", status: "pending", assigned_to: "u1" };
   });
 
@@ -92,6 +95,37 @@ describe("POST /api/v1/outreach/drafts/[id]/schedule", () => {
       "d1"
     );
   });
+  describe("text (SMS) drafts", () => {
+    beforeEach(() => {
+      draftRow = { id: "d1", subject: "", body_html: "Hi Sita", channel: "sms", status: "pending", assigned_to: "u1" };
+      bulkEnabledMock.mockResolvedValue(false); // email sending off must not block a scheduled text
+    });
+
+    it("schedules a text with no subject and without the bulk-email grant", async () => {
+      expect((await post(inMinutes(60))).status).toBe(200);
+      expect(updateMock).toHaveBeenCalled();
+      expect(bulkEnabledMock).not.toHaveBeenCalled();
+    });
+
+    it("409 when SMS is not turned on for the account (nothing is scheduled)", async () => {
+      smsEnabledMock.mockResolvedValue(false);
+      expect((await post(inMinutes(60))).status).toBe(409);
+      expect(updateMock).not.toHaveBeenCalled();
+    });
+
+    it("422 for an empty message", async () => {
+      draftRow = { ...draftRow, body_html: " " };
+      expect((await post(inMinutes(60))).status).toBe(422);
+      expect(updateMock).not.toHaveBeenCalled();
+    });
+
+    it("an EMAIL draft with no subject is still refused (the subject rule did not move)", async () => {
+      draftRow = { id: "d1", subject: "", body_html: "x", channel: "email", status: "pending", assigned_to: "u1" };
+      bulkEnabledMock.mockResolvedValue(true);
+      expect((await post(inMinutes(60))).status).toBe(422);
+    });
+  });
+
 });
 
 describe("DELETE /api/v1/outreach/drafts/[id]/schedule", () => {

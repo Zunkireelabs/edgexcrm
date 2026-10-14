@@ -40,6 +40,10 @@ vi.mock("./queue-next", () => ({
     return queueResult;
   },
 }));
+let smsEnabled = true;
+let optedOutE164: Set<string>;
+vi.mock("@/lib/sms/flag", () => ({ isSmsEnabledForTenant: async () => smsEnabled }));
+vi.mock("@/lib/sms/suppression", () => ({ loadSuppressedPhones: async () => optedOutE164 }));
 vi.mock("@/lib/api/auth", () => ({ buildUserAuthContext: async () => authResult }));
 vi.mock("@/lib/logger", () => ({ logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() } }));
 
@@ -109,7 +113,7 @@ import { processBulkEnrollRun, runBulkEnrollQueue } from "./bulk-enroll-runner";
 const T = "t1";
 const RUN = "run-1";
 
-function seed(opts: { leads?: number; runOverrides?: Row; seqStatus?: string } = {}) {
+function seed(opts: { leads?: number; runOverrides?: Row; seqStatus?: string; channel?: "email" | "sms" } = {}) {
   const n = opts.leads ?? 3;
   tables = {
     sequence_bulk_enrollments: [
@@ -118,8 +122,8 @@ function seed(opts: { leads?: number; runOverrides?: Row; seqStatus?: string } =
     sequence_bulk_enrollment_items: Array.from({ length: n }, (_, i) => ({
       id: `item-${i + 1}`, run_id: RUN, lead_id: `lead-${i + 1}`, outcome: "pending", reason: null, created_at: i,
     })),
-    email_sequences: [{ id: "seq-1", status: opts.seqStatus ?? "active" }],
-    leads: Array.from({ length: n }, (_, i) => ({ id: `lead-${i + 1}`, assigned_to: i === 0 ? "rep-1" : null, deleted_at: null })),
+    email_sequences: [{ id: "seq-1", status: opts.seqStatus ?? "active", channel: opts.channel ?? "email" }],
+    leads: Array.from({ length: n }, (_, i) => ({ id: `lead-${i + 1}`, assigned_to: i === 0 ? "rep-1" : null, deleted_at: null, phone: "9801234567" })),
   };
 }
 
@@ -135,6 +139,8 @@ beforeEach(() => {
   switchBehavior = async () => ({});
   queueCalls = [];
   queueResult = "queued";
+  smsEnabled = true;
+  optedOutE164 = new Set();
 });
 
 describe("processBulkEnrollRun", () => {
@@ -270,7 +276,7 @@ describe("two passes over the same run at once (Start route's first pass + the t
     enrollBehavior = async (leadId) => {
       await new Promise((r) => setTimeout(r, 0));
       if (tables.sequence_enrollments.some((e) => e.lead_id === leadId)) throw new FakeConflict("already");
-      tables.sequence_enrollments.push({ id: `enr-${leadId}`, lead_id: leadId, sequence_id: "seq-1", status: "active" });
+      tables.sequence_enrollments.push({ id: `enr-${leadId}`, lead_id: leadId, sequence_id: "seq-1", status: "active", channel: "email" });
       return {};
     };
 
@@ -291,7 +297,7 @@ describe("two passes over the same run at once (Start route's first pass + the t
 
   it("a lead already in THIS sequence is labelled as such under the default skip policy", async () => {
     seed({ leads: 1, runOverrides: { conflict_policy: "skip" } });
-    tables.sequence_enrollments = [{ id: "enr-same", lead_id: "lead-1", sequence_id: "seq-1", status: "active" }];
+    tables.sequence_enrollments = [{ id: "enr-same", lead_id: "lead-1", sequence_id: "seq-1", status: "active", channel: "email" }];
     enrollBehavior = async () => {
       throw new FakeConflict("already");
     };
@@ -324,7 +330,7 @@ describe("conflict policies (a lead already in a running sequence)", () => {
 
   it("switch: ends the current enrollment WITHOUT promoting the queue, then enrolls here", async () => {
     seed({ leads: 1, runOverrides: { conflict_policy: "switch" } });
-    tables.sequence_enrollments = [{ id: "enr-old", lead_id: "lead-1", sequence_id: "seq-OTHER", status: "active" }];
+    tables.sequence_enrollments = [{ id: "enr-old", lead_id: "lead-1", sequence_id: "seq-OTHER", status: "active", channel: "email" }];
     conflictOnFirst("lead-1");
 
     await processBulkEnrollRun(T, RUN);
@@ -339,7 +345,7 @@ describe("conflict policies (a lead already in a running sequence)", () => {
 
   it("switch: a lead already in THIS sequence is never restarted", async () => {
     seed({ leads: 1, runOverrides: { conflict_policy: "switch" } });
-    tables.sequence_enrollments = [{ id: "enr-same", lead_id: "lead-1", sequence_id: "seq-1", status: "paused" }];
+    tables.sequence_enrollments = [{ id: "enr-same", lead_id: "lead-1", sequence_id: "seq-1", status: "paused", channel: "email" }];
     conflictOnFirst("lead-1");
 
     await processBulkEnrollRun(T, RUN);
@@ -351,7 +357,7 @@ describe("conflict policies (a lead already in a running sequence)", () => {
 
   it("switch: if the lead lands in another sequence in between, it is skipped, not duplicated", async () => {
     seed({ leads: 1, runOverrides: { conflict_policy: "switch" } });
-    tables.sequence_enrollments = [{ id: "enr-old", lead_id: "lead-1", sequence_id: "seq-OTHER", status: "active" }];
+    tables.sequence_enrollments = [{ id: "enr-old", lead_id: "lead-1", sequence_id: "seq-OTHER", status: "active", channel: "email" }];
     conflictOnFirst("lead-1");
     switchBehavior = async () => {
       throw new FakeConflict("already"); // the transaction refuses: someone enrolled the lead meanwhile
@@ -381,6 +387,67 @@ describe("conflict policies (a lead already in a running sequence)", () => {
     conflictOnFirst("lead-1");
     await processBulkEnrollRun(T, RUN);
     expect(tables.sequence_bulk_enrollment_items[0].reason).toBe("already_queued");
+  });
+});
+
+describe("SMS runs", () => {
+  it("enrolls through the same enrollLead and completes, like an email run", async () => {
+    seed({ channel: "sms" });
+    await processBulkEnrollRun(T, RUN);
+    expect(outcomes()).toEqual(["enrolled", "enrolled", "enrolled"]);
+    expect(enrollCalls).toHaveLength(3);
+    expect(run().status).toBe("completed");
+  });
+
+  it("re-checks each number at run time: a lead whose phone was removed since Start is skipped, never enrolled", async () => {
+    seed({ channel: "sms" });
+    tables.leads[1].phone = null;
+    await processBulkEnrollRun(T, RUN);
+    expect(outcomes()).toEqual(["enrolled", "skipped", "enrolled"]);
+    expect(tables.sequence_bulk_enrollment_items[1].reason).toBe("no_phone");
+    expect(enrollCalls.map((c) => c.leadId)).toEqual(["lead-1", "lead-3"]);
+  });
+
+  it("re-checks opt-outs at run time: a number that opted out since Start is skipped as suppressed", async () => {
+    seed({ channel: "sms" });
+    optedOutE164 = new Set(["+9779801234567"]); // every seeded lead shares this number
+    await processBulkEnrollRun(T, RUN);
+    expect(outcomes()).toEqual(["skipped", "skipped", "skipped"]);
+    expect(tables.sequence_bulk_enrollment_items.every((i) => i.reason === "suppressed")).toBe(true);
+    expect(enrollCalls).toHaveLength(0);
+  });
+
+  it("stops the run, enrolling nobody, when SMS was turned off for the account after Start", async () => {
+    seed({ channel: "sms" });
+    smsEnabled = false;
+    await processBulkEnrollRun(T, RUN);
+    expect(run().status).toBe("failed");
+    expect(run().error).toMatch(/SMS was turned off/);
+    expect(enrollCalls).toHaveLength(0);
+  });
+
+  it("an EMAIL run does not look at phone numbers or the SMS grant", async () => {
+    seed({ channel: "email" });
+    tables.leads[0].phone = null;
+    smsEnabled = false;
+    await processBulkEnrollRun(T, RUN);
+    expect(outcomes()).toEqual(["enrolled", "enrolled", "enrolled"]);
+  });
+
+  it("a lead running an EMAIL sequence and an SMS one: the conflict lookup only sees the run's own channel (no 'multiple rows')", async () => {
+    seed({ channel: "sms", runOverrides: { conflict_policy: "switch" }, leads: 1 });
+    tables.sequence_enrollments = [
+      { id: "enr-email", lead_id: "lead-1", sequence_id: "seq-EMAIL", status: "active", channel: "email" },
+      { id: "enr-sms", lead_id: "lead-1", sequence_id: "seq-OTHER-SMS", status: "active", channel: "sms" },
+    ];
+    enrollBehavior = async () => {
+      throw new FakeConflict("already");
+    };
+    await processBulkEnrollRun(T, RUN);
+    // the SMS enrollment is the one switched; the email one is never touched
+    expect(switchCalls).toHaveLength(1);
+    expect(switchCalls[0]).toMatchObject({ oldEnrollmentId: "enr-sms", leadId: "lead-1" });
+    expect(outcomes()).toEqual(["enrolled"]);
   });
 });
 

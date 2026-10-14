@@ -969,6 +969,7 @@ export function LeadDetailV2({
                   currentUserId={userId}
                   isAdmin={isAdmin}
                   variant="summary"
+                  onViewAll={() => notesTabRef.current?.openDocuments()}
                 />
               )}
             </div>

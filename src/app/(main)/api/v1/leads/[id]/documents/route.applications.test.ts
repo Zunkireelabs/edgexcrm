@@ -70,7 +70,7 @@ describe("GET /api/v1/leads/[id]/documents — application names", () => {
     expect(json.data.applications).toEqual({});
   });
 
-  it("puts the new offer types in the Application category", async () => {
+  it("puts the offer types in the University Offers & Confirmations category", async () => {
     const f = fakeDb([
       { id: "d1", document_type: "conditional_offer", application_id: "app-1" },
       { id: "d2", document_type: "unconditional_offer", application_id: null },
@@ -78,6 +78,6 @@ describe("GET /api/v1/leads/[id]/documents — application names", () => {
     scopedClientMock.mockResolvedValue(f.db);
     const { GET } = await import("./route");
     const json = await (await GET(req(), params())).json();
-    expect(json.data.by_category.application).toHaveLength(2);
+    expect(json.data.by_category.university_offers).toHaveLength(2);
   });
 });

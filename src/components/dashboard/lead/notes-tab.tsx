@@ -1,5 +1,6 @@
 "use client";
 
+import { mergeNewestFirst } from "./merge-timeline";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Clock, Send, Pencil, X, Check } from "lucide-react";
@@ -30,6 +31,11 @@ interface NotesTabProps {
   currentUserId?: string;
   /** owner/admin, a branch-manager, or the lead's own-scope assignee — may edit any note on this lead. */
   canManageNotes?: boolean;
+  /**
+   * Other entries shown in the SAME list, in date order with the notes: the calls and meetings logged for the lead
+   * (they used to have tabs of their own). Each is already rendered by the caller; `at` orders it.
+   */
+  extraEntries?: { id: string; at: string; node: React.ReactNode }[];
 }
 
 /** Resolve a note author's display name: real name → team email → stored email. */
@@ -51,7 +57,7 @@ export interface NotesTabRef {
 
 export const NotesTab = forwardRef<NotesTabRef, NotesTabProps>(
   function NotesTab(
-    { leadId, notes, onNotesChange, teamMemberNames = {}, teamMemberEmails = {}, currentUserId, canManageNotes = false },
+    { leadId, notes, onNotesChange, teamMemberNames = {}, teamMemberEmails = {}, currentUserId, canManageNotes = false, extraEntries = [] },
     ref,
   ) {
     const router = useRouter();
@@ -281,7 +287,7 @@ export const NotesTab = forwardRef<NotesTabRef, NotesTabProps>(
         </Card>
 
         {/* Notes Timeline */}
-        {notes.length === 0 ? (
+        {notes.length === 0 && extraEntries.length === 0 ? (
           <Card className="shadow-none rounded-lg py-0">
             <CardContent className="p-8 pb-8 text-center">
               <p className="text-muted-foreground">No notes yet</p>
@@ -292,18 +298,25 @@ export const NotesTab = forwardRef<NotesTabRef, NotesTabProps>(
           </Card>
         ) : (
           <div className="space-y-3">
-            {notes.map((note) => (
-              <NoteCard
-                key={note.id}
-                leadId={leadId}
-                note={note}
-                teamMemberNames={teamMemberNames}
-                teamMemberEmails={teamMemberEmails}
-                currentUserId={currentUserId}
-                mentionLabels={mentionLabels}
-                onEdited={handleNoteEdited}
-              />
-            ))}
+            {mergeNewestFirst(
+              notes.map((n) => ({ at: n.created_at, note: n })),
+              extraEntries
+            ).map((item) =>
+              item.source === "primary" ? (
+                <NoteCard
+                  key={item.entry.note.id}
+                  leadId={leadId}
+                  note={item.entry.note}
+                  teamMemberNames={teamMemberNames}
+                  teamMemberEmails={teamMemberEmails}
+                  currentUserId={currentUserId}
+                  mentionLabels={mentionLabels}
+                  onEdited={handleNoteEdited}
+                />
+              ) : (
+                <div key={item.entry.id}>{item.entry.node}</div>
+              )
+            )}
           </div>
         )}
       </div>

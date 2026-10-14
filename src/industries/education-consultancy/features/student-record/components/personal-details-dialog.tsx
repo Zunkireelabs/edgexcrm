@@ -1,7 +1,7 @@
 "use client";
 
 import { GUARDIAN_SECTION_TITLE } from "@/lib/consent/guardian";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { toast } from "sonner";
 import { Pencil, X, Check, Loader2 } from "lucide-react";
 import {
@@ -12,6 +12,16 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Select,
   SelectContent,
@@ -34,8 +44,12 @@ import { WorkExperienceSection, type WorkExperienceEntry } from "./work-experien
 import { ReferencesSection, type ReferenceEntry } from "./references-section";
 import { GUARDIAN_RELATIONSHIP_OPTIONS, normalizeGuardianRelationship, guardianNameAfterRelationshipChange, resolveGuardian } from "@/lib/consent/guardian";
 import { SectionGroup, CardSection, FieldGrid, EditableField } from "./form-primitives";
+import { useStudentRecordLists } from "./use-student-record-lists";
+import { notifyStudentRecordChanged } from "./student-record-events";
+import { buildListsPayload, storedListsToState, type StoredLists } from "./student-record-lists";
 import { AttachDocumentButton } from "./attach-document-button";
 import { PERSONAL_DETAIL_COLUMNS, PERSONAL_DETAIL_DATE_COLUMNS } from "@/lib/leads/personal-details";
+import { FINANCIAL_COLUMNS } from "@/lib/leads/student-record-columns";
 import { getLeadCity, getLeadNationality } from "@/lib/leads/lead-location";
 
 /**
@@ -190,6 +204,8 @@ export function personalDetailsFromLead(lead: Lead): FieldValues {
     const raw = lead[col];
     out[col] = dateColumns.includes(col) ? (/^\d{4}-\d{2}-\d{2}/.exec(raw ?? "")?.[0] ?? "") : (raw ?? "");
   }
+  // Financial / sponsor details are real columns too (migration 239).
+  for (const col of FINANCIAL_COLUMNS) out[col] = lead[col] ?? "";
   // Older free-text values ("father") line up with the dropdown's options; anything else is kept as typed.
   out.guardian_relationship = normalizeGuardianRelationship(out.guardian_relationship);
   return out;
@@ -241,11 +257,12 @@ const QUALIFICATION_COLUMN_PREFIX: Record<keyof Qualifications, string> = {
  * (opened by the one Edit button on the contact card), so it also carries City, each
  * level's Passed Year, the five exam scores that have a column, and — for admins
  * only — Lead Source. It's held to the "only send what's whitelisted, never guess"
- * rule. The Personal / Passport & Citizenship fields (migration 234) are
- * real columns and are included. Everything else this dialog collects (the
- * richer Qualification fields, Work Experience/References, Financial) has no
- * live column or table yet, so it deliberately stays out of this payload —
- * sending it would just 500 against a column that doesn't exist.
+ * rule. The Personal / Passport & Citizenship fields (migration 234), the richer
+ * Qualification fields — address, awarding body, start/end date, stream
+ * (migration 236) — and the Financial fields (migration 239) are real columns
+ * and are included. The only things still left out are Work Experience,
+ * References and the per-exam score breakdown: they have a table but no API yet,
+ * so they stay on screen only (and are labelled "Not saved yet").
  *
  * Only fields that actually changed from their original (committed) value
  * are included — never blindly resend an untouched field. This isn't just
@@ -303,6 +320,15 @@ export function buildLivePatch(
     setIfChanged(`${prefix}_institution`, entry.institution || null, entryOriginal.institution || null);
     setIfChanged(`${prefix}_gpa`, entry.percentageGrade || null, entryOriginal.percentageGrade || null);
     setIfChanged(`${prefix}_passed_year`, entry.passedYear.trim() || null, entryOriginal.passedYear.trim() || null);
+    // Migration 236 columns.
+    setIfChanged(`${prefix}_address`, entry.address.trim() || null, entryOriginal.address.trim() || null);
+    setIfChanged(`${prefix}_awarding_body`, entry.awardingBody.trim() || null, entryOriginal.awardingBody.trim() || null);
+    setIfChanged(`${prefix}_start_date`, entry.startDate || null, entryOriginal.startDate || null);
+    setIfChanged(`${prefix}_end_date`, entry.endDate || null, entryOriginal.endDate || null);
+    // Grade X (SEE) has no stream column; every level from +2 onward does.
+    if (prefix !== "see") {
+      setIfChanged(`${prefix}_stream_faculty`, entry.streamFaculty.trim() || null, entryOriginal.streamFaculty.trim() || null);
+    }
   }
 
   // Exam scores: only the five exams with a real column are saved (see legacyScoreColumns).
@@ -318,7 +344,7 @@ export function buildLivePatch(
     setIfChanged("intake_account", source.account || null, sourceOriginal.account || null);
     setIfChanged("intake_campaign", source.campaign || null, sourceOriginal.campaign || null);
   }
-  for (const col of PERSONAL_DETAIL_COLUMNS) {
+  for (const col of [...PERSONAL_DETAIL_COLUMNS, ...FINANCIAL_COLUMNS]) {
     setIfChanged(col, (personal[col] ?? "").trim() || null, (personalOriginal[col] ?? "").trim() || null);
   }
   return patch;
@@ -340,6 +366,25 @@ interface PersonalDetailsDialogProps {
   isAdmin?: boolean;
 }
 
+/** Shown above a list that is still loading (or failed to load): it cannot be edited until it is known, so it can never be saved over the stored rows. */
+function ListsLoadNote({ status, onRetry }: { status: "loading" | "ready" | "error"; onRetry: () => void }) {
+  if (status === "ready") return null;
+  return (
+    <p className="mb-2 text-xs text-muted-foreground">
+      {status === "loading" ? (
+        "Loading saved entries…"
+      ) : (
+        <>
+          Couldn&apos;t load the saved entries, so they can&apos;t be edited right now.{" "}
+          <button type="button" className="underline" onClick={onRetry}>
+            Try again
+          </button>
+        </>
+      )}
+    </p>
+  );
+}
+
 export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHistory, onLeadUpdate, canUploadDocuments, openInEditMode, isAdmin = false }: PersonalDetailsDialogProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -349,16 +394,32 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
   const [coreIdentityDraft, setCoreIdentityDraft] = useState<CoreIdentity>(coreIdentity);
   const [studyInterest, setStudyInterest] = useState<StudyInterest>(() => studyInterestFromLead(lead, submissionHistory));
   const [studyDraft, setStudyDraft] = useState<StudyInterest>(studyInterest);
-  const [testScores, setTestScores] = useState<TestScore[]>(() => testScoresFromLead(lead));
-  const [testScoresDraft, setTestScoresDraft] = useState<TestScore[]>([]);
   const [qualifications, setQualifications] = useState<Qualifications>(() => qualificationsFromLead(lead));
   const [qualificationsDraft, setQualificationsDraft] = useState<Qualifications>(qualifications);
-  const [workExperience, setWorkExperience] = useState<WorkExperienceEntry[]>([]);
-  const [workExperienceDraft, setWorkExperienceDraft] = useState<WorkExperienceEntry[]>([]);
-  const [references, setReferences] = useState<ReferenceEntry[]>([]);
-  const [referencesDraft, setReferencesDraft] = useState<ReferenceEntry[]>([]);
   const [leadSource, setLeadSource] = useState<LeadSourceValues>(() => leadSourceFromLead(lead, submissionHistory));
   const [leadSourceDraft, setLeadSourceDraft] = useState<LeadSourceValues>(leadSource);
+
+  // Work Experience, References and Test Scores are rows in their own tables: they are loaded from the server when the pop-up opens and
+  // saved with PUT /api/v1/leads/[id]/student-record. What is shown is derived from the loaded rows plus the user's own edits (null =
+  // untouched), so there is no copy to keep in step. Until they have loaded they are shown read-only, so an empty list that is really
+  // "not loaded yet" can never be saved over the stored one.
+  const { lists: storedLists, status: listsStatus, reload: reloadLists, setLists: setStoredLists } = useStudentRecordLists(lead, open);
+  const listsEditable = listsStatus === "ready";
+  const legacyScores = useMemo(() => testScoresFromLead(lead), [lead]);
+  const testScores: TestScore[] = listsEditable ? storedLists.testScores : legacyScores;
+  const workExperience: WorkExperienceEntry[] = storedLists.workExperience;
+  const references: ReferenceEntry[] = storedLists.references;
+  const [testScoresEdits, setTestScoresEdits] = useState<TestScore[] | null>(null);
+  const [workExperienceEdits, setWorkExperienceEdits] = useState<WorkExperienceEntry[] | null>(null);
+  const [referencesEdits, setReferencesEdits] = useState<ReferenceEntry[] | null>(null);
+  const testScoresDraft = testScoresEdits ?? testScores;
+  const workExperienceDraft = workExperienceEdits ?? workExperience;
+  const referencesDraft = referencesEdits ?? references;
+  const clearListEdits = () => {
+    setTestScoresEdits(null);
+    setWorkExperienceEdits(null);
+    setReferencesEdits(null);
+  };
 
   // The last municipality City could have been filled from. Changing the province clears the municipality
   // in between, so City is compared against this — not the (now empty) current municipality — to know it is
@@ -370,11 +431,9 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
     setDraft(values);
     setCoreIdentityDraft(coreIdentity);
     setStudyDraft(studyInterest);
-    setTestScoresDraft(testScores);
     setQualificationsDraft(qualifications);
-    setWorkExperienceDraft(workExperience);
-    setReferencesDraft(references);
     setLeadSourceDraft(leadSource);
+    clearListEdits();
     setIsEditing(true);
   };
 
@@ -393,15 +452,15 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
     setDraft(values);
     setCoreIdentityDraft(coreIdentity);
     setStudyDraft(studyInterest);
-    setTestScoresDraft(testScores);
     setQualificationsDraft(qualifications);
-    setWorkExperienceDraft(workExperience);
-    setReferencesDraft(references);
     setLeadSourceDraft(leadSource);
+    clearListEdits();
     setIsEditing(false);
   };
 
-  const save = async () => {
+  // What the user has changed since opening Edit, worked out exactly the way Save sends it. The save, the "Save these changes?" box and the
+  // "Discard unsaved changes?" box all use this one answer, so they can never disagree about whether something changed.
+  const computeChanges = () => {
     const patch = buildLivePatch(
       coreIdentityDraft, coreIdentity,
       studyDraft, studyInterest,
@@ -410,9 +469,38 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
       isAdmin ? leadSourceDraft : null, leadSource,
       draft, values
     );
+    // The three lists are rows in their own tables, saved with PUT after the lead itself. Only lists that changed are sent, and only
+    // once they have loaded (never save a list that is really "not loaded yet" over the stored one).
+    const listsPayload = listsEditable
+      ? buildListsPayload(
+          { workExperience: workExperienceDraft, references: referencesDraft, testScores: testScoresDraft },
+          { workExperience, references, testScores },
+        )
+      : {};
     const hasLiveChanges = Object.keys(patch).length > 0;
+    const hasListChanges = Object.keys(listsPayload).length > 0;
+    return { patch, listsPayload, hasLiveChanges, hasListChanges, hasChanges: hasLiveChanges || hasListChanges };
+  };
+
+  // Which question is on screen: confirm a save, or confirm throwing away typed changes (by the Cancel button, or by closing the pop-up).
+  const [confirm, setConfirm] = useState<null | "save" | "discard" | "discard-close">(null);
+
+  const requestSave = () => {
+    // Nothing changed: skip the question, save() just says so.
+    if (!computeChanges().hasChanges) void save();
+    else setConfirm("save");
+  };
+  const requestCancel = () => {
+    if (computeChanges().hasChanges) setConfirm("discard");
+    else cancelEditing();
+  };
+
+  const save = async () => {
+    const { patch, listsPayload, hasLiveChanges, hasListChanges } = computeChanges();
     setIsSaving(true);
+    let listsFailed = false;
     try {
+      let saved: Lead | null = null;
       if (hasLiveChanges) {
         const res = await fetch(`/api/v1/leads/${lead.id}`, {
           method: "PATCH",
@@ -420,28 +508,58 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
           body: JSON.stringify(patch),
         });
         if (!res.ok) throw new Error("Failed to save");
-        onLeadUpdate?.(patch);
+        // The server answers with the row it actually STORED. That — not what was typed — is what the dialog shows afterwards, so a
+        // field that did not persist visibly reverts right away instead of only after a refresh.
+        const json = await Promise.resolve().then(() => res.json()).catch(() => null);
+        saved = (json?.data ?? null) as Lead | null;
+        onLeadUpdate?.(saved ?? patch);
       }
 
-      // Only commit local state — including the sections that don't persist
-      // yet — after the live save actually succeeds (or there was nothing
-      // live to save), so a failed save never silently discards what was typed.
-      setValues(draft);
-      setCoreIdentity(coreIdentityDraft);
-      setStudyInterest(studyDraft);
-      setTestScores(testScoresDraft);
-      setQualifications(qualificationsDraft);
-      setWorkExperience(workExperienceDraft);
-      setReferences(referencesDraft);
-      setLeadSource(leadSourceDraft);
+      // Only commit local state after the live save actually succeeded (or there was nothing live to save), so a failed save
+      // never silently discards what was typed.
+      const fresh = saved ? ({ ...lead, ...saved } as Lead) : null;
+      if (fresh) {
+        setValues(personalDetailsFromLead(fresh));
+        setCoreIdentity(coreIdentityFromLead(fresh));
+        setStudyInterest(studyInterestFromLead(fresh, submissionHistory));
+        setQualifications(qualificationsFromLead(fresh));
+        setLeadSource(leadSourceFromLead(fresh, submissionHistory));
+      } else {
+        setValues(draft);
+        setCoreIdentity(coreIdentityDraft);
+        setStudyInterest(studyDraft);
+        setQualifications(qualificationsDraft);
+        setLeadSource(leadSourceDraft);
+      }
+
+      if (hasListChanges) {
+        const listsRes = await fetch(`/api/v1/leads/${lead.id}/student-record`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(listsPayload),
+        });
+        if (!listsRes.ok) {
+          listsFailed = true;
+          throw new Error("Failed to save the lists");
+        }
+        // Same rule as above: show what the server STORED.
+        const listsJson = await Promise.resolve().then(() => listsRes.json()).catch(() => null);
+        setStoredLists(
+          listsJson?.data
+            ? storedListsToState(listsJson.data as StoredLists, fresh ?? lead)
+            : { workExperience: workExperienceDraft, references: referencesDraft, testScores: testScoresDraft },
+        );
+        notifyStudentRecordChanged(lead.id);
+      }
+      clearListEdits();
       setIsEditing(false);
-      toast.success(
-        hasLiveChanges
-          ? "Saved. Financial, work experience and reference details are kept locally for preview only — they don't have a database column yet."
-          : "Saved locally for preview only — nothing in the real-save fields changed."
-      );
+      toast.success(hasLiveChanges || hasListChanges ? "Saved." : "Nothing to save — no changes were made.");
     } catch {
-      toast.error("Failed to save — nothing was changed. Your edits are still here, try again.");
+      toast.error(
+        listsFailed
+          ? "Your other changes were saved, but the work experience, references or test scores could not be saved. Your entries are still here — try again."
+          : "Failed to save — nothing was changed. Your edits are still here, try again.",
+      );
     } finally {
       setIsSaving(false);
     }
@@ -498,6 +616,11 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
   const handleOpenChange = (next: boolean) => {
     if (!next) {
       if (isSaving) return; // never let a close interrupt an in-flight save
+      // Closing (X, Esc, click outside) while editing would silently drop what was typed: ask first.
+      if (isEditing && computeChanges().hasChanges) {
+        setConfirm("discard-close");
+        return;
+      }
       setIsEditing(false);
     }
     onOpenChange(next);
@@ -519,11 +642,11 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
             <div className="flex items-center gap-2 shrink-0">
               {isEditing ? (
                 <>
-                  <Button variant="ghost" onClick={cancelEditing} disabled={isSaving}>
+                  <Button variant="ghost" onClick={requestCancel} disabled={isSaving}>
                     <X className="h-3.5 w-3.5 mr-1" />
                     Cancel
                   </Button>
-                  <Button onClick={save} disabled={isSaving}>
+                  <Button onClick={requestSave} disabled={isSaving}>
                     {isSaving ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Check className="h-3.5 w-3.5 mr-1" />}
                     Save
                   </Button>
@@ -537,7 +660,7 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
             </div>
           </div>
           <p className="text-xs text-muted-foreground">
-            Name, email, phone, nationality, city, personal and passport details, Study Interest, qualifications (institution, grade, passed year), the main exam scores{isAdmin ? " and Lead Source" : ""} save for real. Financial, work experience and references are a preview — they save locally for now and will start saving for real once their database update is live.
+            Everything on this form saves: contact, address, personal and passport details, Study Interest, qualifications, test scores, work experience, references, financial details{isAdmin ? " and Lead Source" : ""}.
           </p>
         </DialogHeader>
 
@@ -568,7 +691,21 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
                 />
               </div>
             </CardSection>
+          </SectionGroup>
 
+          {/* Study Interest is the first thing staff need after the contact details, so it sits right under them rather than
+              after the long Basic Details / Guardian / Passport block (client request, Oct 13). */}
+          <SectionGroup title="Study Interest">
+            <CardSection>
+              <StudyInterestFields
+                isEditing={isEditing}
+                value={isEditing ? studyDraft : studyInterest}
+                onChange={setStudyDraft}
+              />
+            </CardSection>
+          </SectionGroup>
+
+          <SectionGroup title="Personal Details">
             <CardSection title="Basic Details">
               <FieldGrid columns={2}>
                 {PERSONAL_DETAIL_FIELDS.map((field) => (
@@ -641,16 +778,6 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
             </CardSection>
           </SectionGroup>
 
-          <SectionGroup title="Study Interest">
-            <CardSection>
-              <StudyInterestFields
-                isEditing={isEditing}
-                value={isEditing ? studyDraft : studyInterest}
-                onChange={setStudyDraft}
-              />
-            </CardSection>
-          </SectionGroup>
-
           {isAdmin && (
             <SectionGroup title="Lead Source">
               <CardSection>
@@ -679,27 +806,30 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
               canUploadDocuments={canUploadDocuments}
             />
             <CardSection title="Test Scores">
+              <ListsLoadNote status={listsStatus} onRetry={reloadLists} />
               <TestScoresSection
-                isEditing={isEditing}
+                isEditing={isEditing && listsEditable}
                 value={isEditing ? testScoresDraft : testScores}
-                onChange={setTestScoresDraft}
+                onChange={setTestScoresEdits}
               />
             </CardSection>
           </SectionGroup>
 
           <SectionGroup title="Professional Information">
             <CardSection title="Work Experience">
+              <ListsLoadNote status={listsStatus} onRetry={reloadLists} />
               <WorkExperienceSection
-                isEditing={isEditing}
+                isEditing={isEditing && listsEditable}
                 value={isEditing ? workExperienceDraft : workExperience}
-                onChange={setWorkExperienceDraft}
+                onChange={setWorkExperienceEdits}
               />
             </CardSection>
             <CardSection title="References">
+              <ListsLoadNote status={listsStatus} onRetry={reloadLists} />
               <ReferencesSection
-                isEditing={isEditing}
+                isEditing={isEditing && listsEditable}
                 value={isEditing ? referencesDraft : references}
-                onChange={setReferencesDraft}
+                onChange={setReferencesEdits}
               />
             </CardSection>
           </SectionGroup>
@@ -721,6 +851,36 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
           </SectionGroup>
         </div>
       </DialogContent>
+
+      <AlertDialog open={confirm !== null} onOpenChange={(next) => { if (!next) setConfirm(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{confirm === "save" ? "Save these changes?" : "Discard your changes?"}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirm === "save"
+                ? "The changes you made will be saved to this student's record."
+                : "You have unsaved changes. If you leave now, what you typed will be lost."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep editing</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const which = confirm;
+                setConfirm(null);
+                if (which === "save") void save();
+                else if (which === "discard") cancelEditing();
+                else if (which === "discard-close") {
+                  cancelEditing();
+                  onOpenChange(false);
+                }
+              }}
+            >
+              {confirm === "save" ? "Save" : "Discard"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }

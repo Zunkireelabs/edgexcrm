@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { authenticateRequest, requireLeadBranchAccess } from "@/lib/api/auth";
+import { authenticateRequest } from "@/lib/api/auth";
 import {
   apiSuccess,
   apiPaginated,
@@ -18,6 +18,8 @@ import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { shouldRestrictToSelf } from "@/lib/api/permissions";
+import { PERMISSION_DENIED_MESSAGE } from "@/lib/permission-denied";
+import { canActOnEnrollmentLead } from "@/lib/classes/enrollment-scope";
 import { canEnrollStudents } from "@/lib/api/class-attendance";
 import { getLeadMembership } from "@/lib/leads/branch-membership";
 
@@ -125,16 +127,7 @@ export async function POST(request: NextRequest) {
 
   // Parent-lead scope check
   const membership = await getLeadMembership(supabase, auth.tenantId, leadRow.id);
-  if (
-    shouldRestrictToSelf(auth.permissions) &&
-    !(
-      leadRow.assigned_to === auth.userId ||
-      membership.some((m: { assigned_to: string | null }) => m.assigned_to === auth.userId)
-    )
-  ) {
-    return apiNotFound("Lead");
-  }
-  if (!requireLeadBranchAccess(auth, leadRow, membership)) return apiNotFound("Lead");
+  if (!canActOnEnrollmentLead(auth, leadRow, membership)) return apiForbidden(PERMISSION_DENIED_MESSAGE);
 
   // Validate fields
   const feePaid = body.fee_paid === undefined ? false : Boolean(body.fee_paid);

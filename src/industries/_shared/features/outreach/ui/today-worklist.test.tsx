@@ -18,6 +18,9 @@ class ResizeObserverStub {
 vi.mock("./draft-review-panel", () => ({
   DraftReviewPanel: ({ draft }: { draft: { subject: string } | null }) => (draft ? <div data-testid="panel">{draft.subject}</div> : null),
 }));
+vi.mock("./sms-draft-review-panel", () => ({
+  SmsDraftReviewPanel: ({ draft }: { draft: { body_html: string } | null }) => (draft ? <div data-testid="sms-panel">{draft.body_html}</div> : null),
+}));
 const dialogProps = vi.fn();
 vi.mock("./bulk-draft-dialog", () => ({
   BulkDraftDialog: (props: Record<string, unknown>) => {
@@ -37,19 +40,25 @@ const draft = (n: number) => ({
 
 let urls: string[];
 let total: number;
-let capability: { enabled: boolean; sandbox: boolean };
+let capability: { enabled: boolean; sandbox: boolean; sms?: { enabled: boolean; sandbox: boolean } };
+let smsRows = false;
 
 beforeEach(() => {
   urls = [];
   total = 1234;
   capability = { enabled: true, sandbox: false };
+  smsRows = false;
   dialogProps.mockClear();
   globalThis.fetch = vi.fn(async (url: RequestInfo | URL) => {
     const u = String(url);
     urls.push(u);
     if (u.includes("send-capability")) return { ok: true, json: async () => ({ data: capability }) } as Response;
     const page = Number(new URL(u, "http://x").searchParams.get("page") ?? 1);
-    const rows = Array.from({ length: 3 }, (_, i) => draft((page - 1) * 3 + i + 1)); // 3 rows a page keeps the test small
+    const make = (n: number) =>
+      smsRows
+        ? { ...draft(n), subject: "", body_html: `Text message ${n}`, channel: "sms", leads: { first_name: `Lead${n}`, last_name: "Rai", email: null, phone: `98012345${n}` } }
+        : draft(n);
+    const rows = Array.from({ length: 3 }, (_, i) => make((page - 1) * 3 + i + 1)); // 3 rows a page keeps the test small
     return { ok: true, json: async () => ({ data: rows, meta: { page, pageSize: 50, total, totalPages: Math.max(1, Math.ceil(total / 50)) } }) } as Response;
   }) as typeof fetch;
 });
@@ -180,3 +189,67 @@ describe("selection and bulk actions", () => {
     expect(dialogProps).toHaveBeenLastCalledWith(expect.objectContaining({ sandbox: true }));
   });
 });
+
+describe("text (SMS) channel", () => {
+  beforeEach(() => {
+    smsRows = true;
+    capability = { enabled: false, sandbox: true, sms: { enabled: true, sandbox: true } }; // email sending off, SMS on
+  });
+
+  it("asks only for SMS drafts and shows the phone number and the message (there is no subject)", async () => {
+    render(<TodayWorklist isAdmin channel="sms" />);
+    await screen.findByText("1,234 due today");
+    expect(draftUrls()[0]).toBe("/api/v1/outreach/drafts?due=today&page=1&pageSize=50&channel=sms");
+    expect(screen.getByText("Text message 1")).toBeInTheDocument();
+    expect(screen.getByText("98012345" + "1")).toBeInTheDocument();
+    expect(screen.queryByText("l1@x.com")).toBeNull();
+  });
+
+  it("a text row opens the SMS review dialog, not the email one", async () => {
+    render(<TodayWorklist isAdmin channel="sms" />);
+    fireEvent.click(await screen.findByText("Text message 1"));
+    expect((await screen.findByTestId("sms-panel")).textContent).toBe("Text message 1");
+    expect(screen.queryByTestId("panel")).toBeNull();
+  });
+
+  it("offers bulk Send now / Schedule from the SMS grant, not the email one, and hands the dialog the SMS channel + sandbox flag", async () => {
+    render(<TodayWorklist isAdmin channel="sms" />);
+    await screen.findByText("Page 1 of 25");
+    fireEvent.click(screen.getByLabelText("Select Lead1 Rai"));
+    fireEvent.click(screen.getByRole("button", { name: /Send now/ }));
+    await screen.findByTestId("bulk-dialog");
+    expect(dialogProps).toHaveBeenLastCalledWith(expect.objectContaining({ channel: "sms", sandbox: true, action: "send" }));
+  });
+
+  it("hides bulk Send now / Schedule when SMS is not allowed (Skip stays), even though email sending is on", async () => {
+    capability = { enabled: true, sandbox: false, sms: { enabled: false, sandbox: true } };
+    render(<TodayWorklist isAdmin channel="sms" />);
+    await screen.findByText("Page 1 of 25");
+    fireEvent.click(screen.getByLabelText("Select Lead1 Rai"));
+    expect(screen.queryByRole("button", { name: /Send now/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Schedule/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /Skip/ })).toBeInTheDocument();
+  });
+
+  it("'select all matching' carries the channel, so it can never reach the other channel's drafts", async () => {
+    render(<TodayWorklist isAdmin channel="sms" />);
+    await screen.findByText("Page 1 of 25");
+    fireEvent.click(screen.getByLabelText("Select all on this page"));
+    fireEvent.click(await screen.findByRole("button", { name: /Select all 1,234/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Skip/ }));
+    await screen.findByTestId("bulk-dialog");
+    expect(dialogProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({ selection: { mode: "all", due: "today", channel: "sms" } })
+    );
+  });
+
+  it("an EMAIL view is unaffected: bulk Send now still follows the email grant", async () => {
+    smsRows = false;
+    capability = { enabled: true, sandbox: false, sms: { enabled: false, sandbox: true } };
+    render(<TodayWorklist isAdmin channel="email" />);
+    await screen.findByText("Page 1 of 25");
+    fireEvent.click(screen.getByLabelText("Select Lead1 Rai"));
+    expect(screen.getByRole("button", { name: /Send now/ })).toBeInTheDocument();
+  });
+});
+

@@ -22,7 +22,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { formatBytes } from "@/lib/format";
-import { DOCUMENT_TYPES, type DocumentType } from "@/lib/documents/constants";
+import { DOCUMENT_TYPES, type DocumentType, type QualificationLevel } from "@/lib/documents/constants";
 import { DOCUMENT_TYPE_LABELS } from "./labels";
 
 /**
@@ -34,7 +34,7 @@ import { DOCUMENT_TYPE_LABELS } from "./labels";
  * does.
  */
 
-export type QualificationLevel = "see" | "plus_two" | "bachelor" | "masters";
+export type { QualificationLevel };
 
 export const QUALIFICATION_LEVEL_LABELS: Record<QualificationLevel, string> = {
   see: "SEE / Grade X",

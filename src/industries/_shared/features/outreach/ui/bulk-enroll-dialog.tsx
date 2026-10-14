@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { useSequences } from "../hooks/use-sequences";
 import { AudienceFilterPicker } from "./audience-picker";
 import type { FilterTree } from "@/lib/filters/types";
+import type { OutreachChannel } from "../lib/channel";
 
 // "Enroll in sequence" for MANY leads (OUTREACH-BULK-ENROLL-BRIEF.md §4). Steps:
 //   pick a sequence -> preview (nothing is written) -> Start (type-to-confirm from `confirmFrom` leads)
@@ -29,7 +30,17 @@ export type BulkEnrollSource = { mode: "selected"; leadIds: string[] } | { mode:
 
 type Policy = "skip" | "switch" | "queue";
 
+interface SmsPreview {
+  creditsFirstStep: number;
+  creditsAllSteps: number;
+  stepCount: number;
+  balance: number;
+  sufficientFirstStep: boolean;
+  sufficientAllSteps: boolean;
+}
+
 interface Preview {
+  channel: OutreachChannel;
   matched: number;
   notVisible: number;
   willEnroll: number;
@@ -37,6 +48,10 @@ interface Preview {
     noEmail: number;
     malformedEmail: number;
     duplicateEmail: number;
+    noPhone: number;
+    foreignNumber: number;
+    malformedPhone: number;
+    duplicatePhone: number;
     suppressed: number;
     alreadyInSequence: number;
   };
@@ -51,8 +66,10 @@ interface Preview {
   willQueue: number;
   sandbox: boolean;
   sendingEnabled: boolean;
+  /** SMS sequences only: what the texts cost against the account's credits. */
+  sms: SmsPreview | null;
   sampleNames: string[];
-  sequence: { id: string; name: string; auto_send: boolean; send_window_text?: string | null };
+  sequence: { id: string; name: string; auto_send: boolean; channel?: OutreachChannel; send_window_text?: string | null };
 }
 
 interface Run {
@@ -296,6 +313,7 @@ export function BulkEnrollDialog({
                   {sequences.map((s) => (
                     <SelectItem key={s.id} value={s.id}>
                       {s.name}
+                      {s.channel === "sms" ? " · SMS" : ""}
                       {s.auto_send ? " · auto-send" : ""}
                     </SelectItem>
                   ))}
@@ -330,9 +348,14 @@ export function BulkEnrollDialog({
                 )}
                 <SkippedList preview={preview} />
                 {preview.inOtherSequence > 0 && (
-                  <PolicyChoice count={preview.inOtherSequence} value={policy} onChange={setPolicy} />
+                  <PolicyChoice
+                    count={preview.inOtherSequence}
+                    value={policy}
+                    onChange={setPolicy}
+                    channelLabel={preview.channel === "sms" ? "SMS " : ""}
+                  />
                 )}
-                {preview.willEnroll > 0 && (
+                {preview.willEnroll > 0 && preview.channel === "email" && (
                   <p className="text-xs text-muted-foreground">
                     The daily send limit is {preview.cap.dailyCap.toLocaleString()} (
                     {preview.cap.remaining.toLocaleString()} left today).
@@ -341,20 +364,37 @@ export function BulkEnrollDialog({
                       : " All first emails fit within today's limit."}
                   </p>
                 )}
+                {preview.willEnroll > 0 && preview.channel === "sms" && preview.sms && (
+                  <SmsCredits sms={preview.sms} />
+                )}
                 {preview.sequence.send_window_text && (
                   <p className="text-xs text-muted-foreground">
-                    This sequence sends {preview.sequence.send_window_text} (see its settings) — the first emails wait
-                    for that window too.
+                    This sequence sends {preview.sequence.send_window_text} (see its settings) — the first{" "}
+                    {preview.channel === "sms" ? "texts" : "emails"} wait for that window too.
+                  </p>
+                )}
+                {preview.channel === "sms" && (
+                  <p className="text-xs text-muted-foreground">
+                    Texts are never sent during your SMS quiet hours, and every text carries your opt-out link.
                   </p>
                 )}
                 {preview.sequence.auto_send && (
-                  <Warning>This sequence sends automatically — nobody reviews the emails before they go out.</Warning>
+                  <Warning>
+                    This sequence sends automatically — nobody reviews the {preview.channel === "sms" ? "texts" : "emails"}{" "}
+                    before they go out.
+                  </Warning>
                 )}
                 {!preview.sandbox && preview.sequence.auto_send && (
-                  <Warning>Emails go to the real leads, not a test address.</Warning>
+                  <Warning>
+                    {preview.channel === "sms" ? "Texts go to the real leads, not a test number." : "Emails go to the real leads, not a test address."}
+                  </Warning>
                 )}
                 {!preview.sendingEnabled && preview.sequence.auto_send && (
-                  <Warning>Sending from EdgeX is turned off for this account, so the emails will wait.</Warning>
+                  <Warning>
+                    {preview.channel === "sms"
+                      ? "SMS is turned off for this account, so the texts will wait."
+                      : "Sending from EdgeX is turned off for this account, so the emails will wait."}
+                  </Warning>
                 )}
                 {preview.overLimit && (
                   <Warning>
@@ -470,11 +510,21 @@ const POLICY_OPTIONS: { value: Policy; label: string; hint: string }[] = [
   },
 ];
 
-function PolicyChoice({ count, value, onChange }: { count: number; value: Policy; onChange: (p: Policy) => void }) {
+function PolicyChoice({
+  count,
+  value,
+  onChange,
+  channelLabel = "",
+}: {
+  count: number;
+  value: Policy;
+  onChange: (p: Policy) => void;
+  channelLabel?: string;
+}) {
   return (
     <fieldset className="space-y-1.5 rounded border p-2.5">
       <legend className="px-1 text-xs font-medium">
-        {count.toLocaleString()} {count === 1 ? "lead is" : "leads are"} already in another sequence
+        {count.toLocaleString()} {count === 1 ? "lead is" : "leads are"} already in another {channelLabel}sequence
       </legend>
       {POLICY_OPTIONS.map((o) => (
         <label key={o.value} className="flex cursor-pointer items-start gap-2 text-sm">
@@ -496,14 +546,25 @@ function PolicyChoice({ count, value, onChange }: { count: number; value: Policy
 }
 
 function SkippedList({ preview }: { preview: Preview }) {
-  const rows: [string, number][] = [
-    ["Already in a sequence", preview.skipped.alreadyInSequence],
-    ["No email address", preview.skipped.noEmail],
-    ["Invalid email address", preview.skipped.malformedEmail],
-    ["Unsubscribed or bounced", preview.skipped.suppressed],
-    ["Same email as another lead", preview.skipped.duplicateEmail],
-    ["Not visible to you / not found", preview.notVisible],
-  ];
+  const isSms = preview.channel === "sms";
+  const rows: [string, number][] = isSms
+    ? [
+        ["Already in an SMS sequence", preview.skipped.alreadyInSequence],
+        ["No phone number", preview.skipped.noPhone],
+        ["Not a Nepal mobile number", preview.skipped.foreignNumber],
+        ["Invalid phone number", preview.skipped.malformedPhone],
+        ["Opted out of SMS", preview.skipped.suppressed],
+        ["Same number as another lead", preview.skipped.duplicatePhone],
+        ["Not visible to you / not found", preview.notVisible],
+      ]
+    : [
+        ["Already in a sequence", preview.skipped.alreadyInSequence],
+        ["No email address", preview.skipped.noEmail],
+        ["Invalid email address", preview.skipped.malformedEmail],
+        ["Unsubscribed or bounced", preview.skipped.suppressed],
+        ["Same email as another lead", preview.skipped.duplicateEmail],
+        ["Not visible to you / not found", preview.notVisible],
+      ];
   const shown = rows.filter(([, n]) => n > 0);
   if (shown.length === 0) return null;
   return (
@@ -517,6 +578,29 @@ function SkippedList({ preview }: { preview: Preview }) {
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+function SmsCredits({ sms }: { sms: SmsPreview }) {
+  return (
+    <div className="space-y-1.5">
+      <p className="text-xs text-muted-foreground">
+        The first texts need about <strong>{sms.creditsFirstStep.toLocaleString()}</strong> credits
+        {sms.stepCount > 1 && <> ({sms.creditsAllSteps.toLocaleString()} for all {sms.stepCount} steps)</>}. You have{" "}
+        {sms.balance.toLocaleString()}.
+      </p>
+      {!sms.sufficientFirstStep && (
+        <Warning>
+          You don&apos;t have enough credits for the first texts. They will wait until credits are added — nothing is sent
+          without credits.
+        </Warning>
+      )}
+      {sms.sufficientFirstStep && !sms.sufficientAllSteps && (
+        <Warning>
+          Your credits cover the first texts but not the whole sequence. Later steps will wait if the balance runs out.
+        </Warning>
+      )}
     </div>
   );
 }

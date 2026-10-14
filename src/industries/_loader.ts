@@ -7,7 +7,7 @@
  * the answer here and it propagates everywhere.
  */
 
-import { INDUSTRIES, type FeatureId, type IndustryId } from "./_registry";
+import type { FeatureId, IndustryId } from "./_registry";
 import type { AiConfig, IndustryManifest, SidebarEntry, SidebarItem } from "./_types";
 import { canSeeNav, type ResolvedPermissions } from "@/lib/api/permissions";
 
@@ -17,7 +17,7 @@ import { manifest as constructionManifest } from "./construction/manifest";
 import { manifest as realEstateManifest } from "./real-estate/manifest";
 import { manifest as healthcareManifest } from "./healthcare/manifest";
 import { manifest as recruitmentManifest } from "./recruitment/manifest";
-import { manifest as generalManifest } from "./general/manifest";
+import { manifest as generalManifest, fallbackManifest } from "./general/manifest";
 import { manifest as travelAgencyManifest } from "./travel-agency/manifest";
 import { manifest as homeMovingManifest } from "./home-moving/manifest";
 
@@ -35,15 +35,16 @@ const MANIFESTS: Record<IndustryId, IndustryManifest> = {
 
 /**
  * Resolve a tenant's industry to its manifest. Tenants without an
- * `industry_id` fall back to the `general` manifest (see
- * `src/industries/general/manifest.ts`) — never null. An unknown
- * `industry_id` (in DB but not in `_registry.ts`) also falls back to
- * `general` so legacy/forward-compat tenants aren't locked out
- * entirely; ideally that mismatch is flagged separately.
+ * `industry_id`, or with one that isn't in `_registry.ts`, fall back to the
+ * bare `fallbackManifest` (see `src/industries/general/manifest.ts`) — never
+ * null — so legacy/forward-compat tenants aren't locked out entirely; ideally
+ * that mismatch is flagged separately. The fallback is intentionally NOT the
+ * `general` manifest: an explicit `industry_id = 'general'` tenant can opt into
+ * features without enabling them for every tenant that has no industry.
  */
 export function getManifest(industryId: string | null | undefined): IndustryManifest {
-  if (!industryId) return MANIFESTS[INDUSTRIES.GENERAL];
-  return MANIFESTS[industryId as IndustryId] ?? MANIFESTS[INDUSTRIES.GENERAL];
+  if (!industryId) return fallbackManifest;
+  return MANIFESTS[industryId as IndustryId] ?? fallbackManifest;
 }
 
 /**
@@ -117,7 +118,7 @@ export function getIndustrySidebarItems(
 /**
  * Returns the tenant's industry AI configuration (prompt addendum + tool
  * ids), if any. Mirrors getManifest's fallback semantics — a null/unknown
- * industryId resolves to the general manifest's `ai` config rather than
+ * industryId resolves to the fallback manifest's `ai` config rather than
  * undefined.
  */
 export function getIndustryAiConfig(industryId: string | null | undefined): AiConfig | undefined {
