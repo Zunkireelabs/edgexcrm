@@ -174,14 +174,14 @@ export async function PATCH(request: NextRequest) {
   }
 
   // Validate list_id: feature gate, resolve, check access, require archive_reason
-  let targetList: { id: string; slug: string; name: string; is_archive: boolean; access: unknown; pipeline_id: string | null } | null = null;
+  let targetList: { id: string; slug: string; name: string; is_archive: boolean; access: unknown; pipeline_id: string | null; sort_order: number } | null = null;
   if (body.list_id !== undefined && body.list_id !== null) {
     if (!getFeatureAccess(auth.industryId, FEATURES.LEAD_LISTS)) {
       return apiForbidden();
     }
     const { data: listCheck } = await supabase
       .from("lead_lists")
-      .select("id, slug, name, is_archive, access, pipeline_id")
+      .select("id, slug, name, is_archive, access, pipeline_id, sort_order")
       .eq("tenant_id", auth.tenantId)
       .eq("id", body.list_id)
       .maybeSingle();
@@ -288,9 +288,31 @@ export async function PATCH(request: NextRequest) {
       .select("id, see_gpa, see_institution, see_passed_year, plus_two_gpa, plus_two_institution, plus_two_passed_year, bachelor_gpa, bachelor_institution, bachelor_passed_year, masters_gpa, masters_institution, masters_passed_year, ielts_score, pte_score, toefl_score, sat_score, gre_gmat_score")
       .eq("tenant_id", auth.tenantId)
       .in("id", idsToUpdate);
+    // Backward moves (revert) skip the gate per lead — the lead already passed Prospects.
+    // Backward = the lead's current stage is non-archive with a higher sort_order than the target.
+    const sourceListIds = [...new Set(
+      idsToUpdate.map((id) => existingMap.get(id)?.list_id).filter((v): v is string => !!v),
+    )];
+    const sourceSort = new Map<string, number>();
+    if (sourceListIds.length > 0) {
+      const { data: sourceLists } = await supabase
+        .from("lead_lists")
+        .select("id, sort_order, is_archive")
+        .eq("tenant_id", auth.tenantId)
+        .in("id", sourceListIds);
+      for (const l of (sourceLists ?? []) as { id: string; sort_order: number; is_archive: boolean }[]) {
+        if (!l.is_archive) sourceSort.set(l.id, l.sort_order);
+      }
+    }
+    const isBackward = (leadId: string) => {
+      const from = existingMap.get(leadId)?.list_id;
+      const fromSort = from ? sourceSort.get(from) : undefined;
+      return fromSort !== undefined && targetList!.sort_order < fromSort;
+    };
     const failingIds = (academicRows ?? [])
       .filter((row) => !hasProspectQualification(row as Record<string, unknown>))
-      .map((row) => (row as { id: string }).id);
+      .map((row) => (row as { id: string }).id)
+      .filter((id) => !isBackward(id));
     if (failingIds.length > 0) {
       return apiValidationError({
         academic: ["Add the student's highest qualification (%/GPA) before moving to Prospects."],

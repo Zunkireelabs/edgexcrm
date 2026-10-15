@@ -168,10 +168,15 @@ export function FunnelKanbanBoard({ lists, initialColumns, canEdit, restrictToSe
     }
 
     // Prospect-qualification gate: block the move and open the fill-in dialog instead.
+    // Backward drag (revert) skips the gate — `lists` is ordered by sort_order, so column index is stage order.
     const targetList = lists.find((l) => l.id === targetListId);
+    const fromIdx = lists.findIndex((l) => l.id === (lead as { list_id?: string | null }).list_id);
+    const toIdx = lists.findIndex((l) => l.id === targetListId);
+    const isBackward = fromIdx !== -1 && toIdx !== -1 && toIdx < fromIdx;
     if (
       industryId === "education_consultancy" &&
       !bypassQualification &&
+      !isBackward &&
       targetList?.slug === "prospects" &&
       !hasProspectQualification(lead as unknown as Record<string, unknown>)
     ) {
