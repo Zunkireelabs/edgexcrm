@@ -489,6 +489,43 @@ describe("applyLeadPatch — governance branches", () => {
     });
   });
 
+  it("prospect gate — a backward move (revert) into Prospects skips the gate for a non-bypass member", async () => {
+    await setFakeDb({
+      leads: { id: "lead-1", pipeline_id: "pipe-1", assigned_to: "user-1", branch_id: null, list_id: "list-applications", status: "s", lead_type: "prospect" },
+      leadLists: {
+        "list-prospects": { id: "list-prospects", slug: "prospects", name: "Prospects", pipeline_id: null, is_archive: false, sort_order: 20, access: { mode: "all" } },
+        "list-applications": { id: "list-applications", slug: "applications", name: "Applications", pipeline_id: null, is_archive: false, sort_order: 30, access: { mode: "all" } },
+      },
+      leadAssignmentHistory: [{ lead_id: "lead-1", to_user_id: "user-1", from_user_id: "prev-holder" }],
+      tenantUsers: {
+        "prev-holder": { user_id: "prev-holder", branch_id: "branch-1", role: "staff", positions: { slug: "counselor" } },
+      },
+    });
+    const auth = fixtureAuth({
+      positionSlug: "application-executive",
+      branchId: "branch-1",
+      permissions: { leadScope: "own", canAssignLeads: true } as ResolvedPermissions,
+    });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(auth, "lead-1", { list_id: "list-prospects", assigned_to: "prev-holder" }, OPTS);
+    expect(outcome.kind).toBe("ok");
+  });
+
+  it("prospect gate — a move OUT of a staging list is a forward promotion, never exempted as a revert", async () => {
+    await setFakeDb({
+      leads: { id: "lead-1", pipeline_id: "pipe-1", assigned_to: "user-1", branch_id: null, list_id: "list-staging", status: "s", lead_type: "lead" },
+      leadLists: {
+        "list-prospects": { id: "list-prospects", slug: "prospects", name: "Prospects", pipeline_id: null, is_archive: false, sort_order: 20, access: { mode: "all" } },
+        // staging list whose sort_order is (oddly) ABOVE Prospects — must still not look like a revert
+        "list-staging": { id: "list-staging", slug: "migration-qc", name: "Migration QC", pipeline_id: null, is_archive: false, is_staging: true, sort_order: 99, access: { mode: "all" } },
+      },
+    });
+    const auth = fixtureAuth({ permissions: { leadScope: "own" } as ResolvedPermissions });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(auth, "lead-1", { list_id: "list-prospects" }, OPTS);
+    expect(outcome).toMatchObject({ kind: "validation" });
+  });
+
   // Regression guard for PRs #235/#236, whose bypass lived in the PATCH route
   // before Phase 4B extracted that route's body into apply-lead-patch.ts. The
   // extraction predated the bypass, so rebasing onto stage dropped it here

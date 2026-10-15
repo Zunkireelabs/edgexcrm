@@ -374,6 +374,9 @@ export async function applyLeadPatch(
   // so the assignee check below applies revert rules (previous holder's team) instead
   // of the forward chain check, and so the revert is not logged as a new handoff.
   let isRevert = false;
+  // True when the move leaves a staging/import list — those are pre-Prospect by definition,
+  // so a staging → Prospects move is a forward promotion even if sort_orders say otherwise.
+  let leavesStaging = false;
   let revertPrevHolderId: string | null = null;
   {
     const targetListId = typeof body.list_id === "string" ? body.list_id : null;
@@ -384,8 +387,9 @@ export async function applyLeadPatch(
       let curSort: number | null = null;
       if (curListId) {
         const { data: curL } = await supabase
-          .from("lead_lists").select("sort_order, is_archive").eq("id", curListId).maybeSingle();
+          .from("lead_lists").select("sort_order, is_archive, is_staging").eq("id", curListId).maybeSingle();
         curSort = curL && !curL.is_archive ? curL.sort_order : null;
+        leavesStaging = curL?.is_staging === true;
       }
       if (targetL && !targetL.is_archive && curSort !== null && targetL.sort_order < curSort) {
         isRevert = true;
@@ -640,10 +644,13 @@ export async function applyLeadPatch(
 
       // Prospect-qualification gate (server backstop): current lead's academic columns
       // merged with anything incoming in this same PATCH must satisfy the gate.
+      // Backward moves (revert) skip it — the lead already passed Prospects once.
+      // A move out of a staging list is never a revert for this purpose.
       if (
         targetList.slug === "prospects" &&
         auth.industryId === "education_consultancy" &&
-        !bypassQual
+        !bypassQual &&
+        !(isRevert && !leavesStaging)
       ) {
         const merged = { ...(existingLead as Record<string, unknown>), ...updatePayload };
         if (!hasProspectQualification(merged)) {
