@@ -511,6 +511,21 @@ describe("applyLeadPatch — governance branches", () => {
     expect(outcome.kind).toBe("ok");
   });
 
+  it("prospect gate — a move OUT of a staging list is a forward promotion, never exempted as a revert", async () => {
+    await setFakeDb({
+      leads: { id: "lead-1", pipeline_id: "pipe-1", assigned_to: "user-1", branch_id: null, list_id: "list-staging", status: "s", lead_type: "lead" },
+      leadLists: {
+        "list-prospects": { id: "list-prospects", slug: "prospects", name: "Prospects", pipeline_id: null, is_archive: false, sort_order: 20, access: { mode: "all" } },
+        // staging list whose sort_order is (oddly) ABOVE Prospects — must still not look like a revert
+        "list-staging": { id: "list-staging", slug: "migration-qc", name: "Migration QC", pipeline_id: null, is_archive: false, is_staging: true, sort_order: 99, access: { mode: "all" } },
+      },
+    });
+    const auth = fixtureAuth({ permissions: { leadScope: "own" } as ResolvedPermissions });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(auth, "lead-1", { list_id: "list-prospects" }, OPTS);
+    expect(outcome).toMatchObject({ kind: "validation" });
+  });
+
   // Regression guard for PRs #235/#236, whose bypass lived in the PATCH route
   // before Phase 4B extracted that route's body into apply-lead-patch.ts. The
   // extraction predated the bypass, so rebasing onto stage dropped it here

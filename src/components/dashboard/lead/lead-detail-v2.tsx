@@ -843,7 +843,7 @@ export function LeadDetailV2({
               // Backward move (revert) — the lead already passed Prospects, so skip the gate.
               const fromList = leadLists?.find((l) => l.id === currentLead.list_id);
               const isBackward =
-                !!fromList && !fromList.is_archive && !!targetList &&
+                !!fromList && !fromList.is_archive && !fromList.is_staging && !!targetList &&
                 targetList.sort_order < fromList.sort_order;
               if (
                 tenant.industry_id === "education_consultancy" &&

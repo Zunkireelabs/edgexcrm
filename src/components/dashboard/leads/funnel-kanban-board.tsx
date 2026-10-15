@@ -22,7 +22,7 @@ import type { LeadList, PipelineLead, PipelineStage } from "@/types/database";
 
 interface FunnelKanbanBoardProps {
   /** The funnel's stage-lists, ordered by sort_order — each becomes a kanban column. */
-  lists: Pick<LeadList, "id" | "name" | "slug" | "color">[];
+  lists: (Pick<LeadList, "id" | "name" | "slug" | "color"> & { is_staging?: boolean })[];
   /** SSR-seeded page 1 (20 cards) + true count per column, keyed by list.id
    * (KANBAN-PAGINATION-BRIEF §3.1) — replaces the old full-funnel-load `leads` prop. */
   initialColumns: Record<string, { cards: PipelineLead[]; total: number }>;
@@ -172,7 +172,7 @@ export function FunnelKanbanBoard({ lists, initialColumns, canEdit, restrictToSe
     const targetList = lists.find((l) => l.id === targetListId);
     const fromIdx = lists.findIndex((l) => l.id === (lead as { list_id?: string | null }).list_id);
     const toIdx = lists.findIndex((l) => l.id === targetListId);
-    const isBackward = fromIdx !== -1 && toIdx !== -1 && toIdx < fromIdx;
+    const isBackward = fromIdx !== -1 && toIdx !== -1 && toIdx < fromIdx && !lists[fromIdx].is_staging;
     if (
       industryId === "education_consultancy" &&
       !bypassQualification &&

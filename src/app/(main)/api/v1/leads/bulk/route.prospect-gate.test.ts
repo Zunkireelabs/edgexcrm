@@ -29,6 +29,7 @@ const LEAD = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1";
 const PROSPECTS = "11111111-1111-1111-1111-111111111111";
 const QUALIFIED = "22222222-2222-2222-2222-222222222222";
 const APPLICATIONS = "33333333-3333-3333-3333-333333333333";
+const STAGING = "44444444-4444-4444-4444-444444444444";
 
 const executive = {
   userId: "exec",
@@ -66,7 +67,8 @@ function setup(currentListId: string) {
         data: [
           { id: QUALIFIED, sort_order: 10, is_archive: false },
           { id: PROSPECTS, sort_order: 20, is_archive: false },
-          { id: APPLICATIONS, sort_order: 30, is_archive: false },
+          { id: APPLICATIONS, sort_order: 30, is_archive: false, is_staging: false },
+          { id: STAGING, sort_order: 99, is_archive: false, is_staging: true },
         ],
         error: null,
       },
@@ -96,5 +98,12 @@ describe("PATCH /api/v1/leads/bulk — Prospects qualification gate direction", 
     const res = await PATCH(req({ ids: [LEAD], list_id: PROSPECTS }));
     expect(res.status).not.toBe(422);
     expect(t.leads.update).toHaveBeenCalled();
+  });
+
+  it("a move OUT of a staging list (even with a higher sort_order) is forward — still blocked", async () => {
+    setup(STAGING);
+    const { PATCH } = await import("./route");
+    const res = await PATCH(req({ ids: [LEAD], list_id: PROSPECTS }));
+    expect(res.status).toBe(422);
   });
 });

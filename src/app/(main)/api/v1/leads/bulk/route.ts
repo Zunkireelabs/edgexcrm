@@ -297,11 +297,12 @@ export async function PATCH(request: NextRequest) {
     if (sourceListIds.length > 0) {
       const { data: sourceLists } = await supabase
         .from("lead_lists")
-        .select("id, sort_order, is_archive")
+        .select("id, sort_order, is_archive, is_staging")
         .eq("tenant_id", auth.tenantId)
         .in("id", sourceListIds);
-      for (const l of (sourceLists ?? []) as { id: string; sort_order: number; is_archive: boolean }[]) {
-        if (!l.is_archive) sourceSort.set(l.id, l.sort_order);
+      for (const l of (sourceLists ?? []) as { id: string; sort_order: number; is_archive: boolean; is_staging: boolean | null }[]) {
+        // Archive and staging sources are never "backward" — staging lists are pre-Prospect.
+        if (!l.is_archive && !l.is_staging) sourceSort.set(l.id, l.sort_order);
       }
     }
     const isBackward = (leadId: string) => {
