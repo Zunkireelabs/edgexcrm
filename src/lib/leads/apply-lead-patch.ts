@@ -640,10 +640,12 @@ export async function applyLeadPatch(
 
       // Prospect-qualification gate (server backstop): current lead's academic columns
       // merged with anything incoming in this same PATCH must satisfy the gate.
+      // Backward moves (revert) skip it — the lead already passed Prospects once.
       if (
         targetList.slug === "prospects" &&
         auth.industryId === "education_consultancy" &&
-        !bypassQual
+        !bypassQual &&
+        !isRevert
       ) {
         const merged = { ...(existingLead as Record<string, unknown>), ...updatePayload };
         if (!hasProspectQualification(merged)) {
