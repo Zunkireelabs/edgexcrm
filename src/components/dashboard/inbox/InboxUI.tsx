@@ -155,17 +155,18 @@ export function InboxUI({
 
     // The provider only lets ONE attachment ride a single message, so multiple picked
     // files become multiple sequential sends — the caption/content text rides with the
-    // FIRST file only (or alone, if there's no file at all).
+    // FIRST file only (or alone, if there's no file at all). A non-2xx response (or a
+    // thrown network error — e.g. an aborted upload) rejects so the composer's
+    // optimistic bubble can show failed+Retry instead of silently losing the file.
     if (files && files.length > 0) {
-      let ok = true;
       for (let i = 0; i < files.length; i++) {
         const form = new FormData();
         if (i === 0 && content) form.append("content", content);
         form.append("file", files[i]);
         const res = await fetch(`/api/v1/inbox/conversations/${selectedId}/messages`, { method: "POST", body: form });
-        if (!res.ok) ok = false;
+        if (!res.ok) throw new Error(`Attachment send failed (${res.status})`);
       }
-      if (ok) reloadConversations();
+      reloadConversations();
       return;
     }
 
@@ -176,10 +177,9 @@ export function InboxUI({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    if (res.ok) {
-      // Realtime will add the message; just refresh the list
-      reloadConversations();
-    }
+    if (!res.ok) throw new Error(`Send failed (${res.status})`);
+    // Realtime will add the message; just refresh the list
+    reloadConversations();
   };
 
   const handleApproveDraft = async (draftId: string) => {

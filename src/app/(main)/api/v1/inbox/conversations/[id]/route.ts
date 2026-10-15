@@ -85,6 +85,22 @@ export async function PATCH(
     return apiSuccess({});
   }
 
+  // Scope gap fix: the access check above only verifies the conversation's CURRENT
+  // lead is visible to the caller — without this, a counselor/branch-scoped caller
+  // could link the conversation to an arbitrary lead_id elsewhere in the tenant that
+  // they can't otherwise see. Apply the same visibility rule (leads API parity) to the
+  // NEW lead_id being set. Unsetting (lead_id: null) needs no check — it only removes
+  // exposure. 404, not 403, matches the leads API's own convention of never confirming
+  // a lead's existence to a caller who can't see it.
+  if ("lead_id" in patch && patch.lead_id) {
+    const canAccessNewLead = await canAccessConversationLead(
+      { user: userClient, service: supabase },
+      auth,
+      patch.lead_id as string
+    );
+    if (!canAccessNewLead) return apiNotFound("Lead");
+  }
+
   const { data, error } = await supabase
     .from("conversations")
     .update(patch)

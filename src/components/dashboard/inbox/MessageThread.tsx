@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Send, Bot, CheckCheck, Clock, AlertCircle, ThumbsUp, Paperclip, Download, FileText, X } from "lucide-react";
+import { Send, Bot, CheckCheck, Clock, AlertCircle, ThumbsUp, Paperclip, Download, FileText, X, Loader2, RotateCw } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -133,6 +134,64 @@ function formatTime(ts: string): string {
   return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+// Optimistic bubble for a send still in flight (or one that failed). A real `messages`
+// row eventually replaces it via realtime/reload — this local-only entry is removed as
+// soon as that happens (on success) or kept with a Retry button (on failure), since the
+// composer otherwise gives no UI signal while a large attachment uploads (evidence:
+// a 2.2 MB PDF cut off mid-upload with no sign anything went wrong).
+interface PendingSend {
+  id: string;
+  content: string;
+  fileNames: string[];
+  files: File[];
+  status: "sending" | "failed";
+}
+
+function PendingBubble({ pending, onRetry }: { pending: PendingSend; onRetry: (id: string) => void }) {
+  const isFailed = pending.status === "failed";
+  return (
+    <div className="flex flex-col gap-0.5 max-w-[75%] self-end items-end">
+      {pending.fileNames.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          {pending.fileNames.map((name, i) => (
+            <div key={`${pending.id}-file-${i}`} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs max-w-[220px] opacity-70">
+              <Paperclip className="w-4 h-4 shrink-0 text-muted-foreground" />
+              <span className="flex-1 truncate text-left">{name}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {pending.content && (
+        <div
+          className={cn(
+            "px-3 py-2 rounded-2xl text-sm",
+            isFailed ? "bg-destructive/10 border border-destructive/30 text-destructive" : "bg-primary/60 text-primary-foreground"
+          )}
+        >
+          {pending.content}
+        </div>
+      )}
+      <div className="flex items-center gap-1.5 px-1">
+        {isFailed ? (
+          <button
+            onClick={() => onRetry(pending.id)}
+            className="flex items-center gap-1 text-xs text-destructive hover:text-destructive/80 font-medium"
+            title="Retry send"
+          >
+            <RotateCw className="w-3 h-3" />
+            Failed — Retry
+          </button>
+        ) : (
+          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+            <Loader2 className="w-3 h-3 animate-spin" />
+            Sending…
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function MessageThread({
   conversation,
   messages,
@@ -145,6 +204,7 @@ export function MessageThread({
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [pendingSends, setPendingSends] = useState<PendingSend[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -156,21 +216,40 @@ export function MessageThread({
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, pendingSends]);
 
-  const handleSend = async () => {
-    const content = draft.trim();
-    if ((!content && pendingFiles.length === 0) || sending) return;
+  const attemptSend = async (content: string, files: File[], retryId?: string) => {
+    const id = retryId ?? crypto.randomUUID();
     setSending(true);
-    setDraft("");
-    const files = pendingFiles;
-    setPendingFiles([]);
+    setPendingSends((prev) => [
+      ...prev.filter((p) => p.id !== id),
+      { id, content, fileNames: files.map((f) => f.name), files, status: "sending" },
+    ]);
     try {
       await onSend(content, undefined, files.length > 0 ? files : undefined);
+      setPendingSends((prev) => prev.filter((p) => p.id !== id));
+    } catch {
+      setPendingSends((prev) => prev.map((p) => (p.id === id ? { ...p, status: "failed" } : p)));
+      toast.error(files.length > 0 ? "Failed to send attachment" : "Failed to send message");
     } finally {
       setSending(false);
       textareaRef.current?.focus();
     }
+  };
+
+  const handleSend = async () => {
+    const content = draft.trim();
+    if ((!content && pendingFiles.length === 0) || sending) return;
+    setDraft("");
+    const files = pendingFiles;
+    setPendingFiles([]);
+    await attemptSend(content, files);
+  };
+
+  const handleRetry = (id: string) => {
+    const item = pendingSends.find((p) => p.id === id);
+    if (!item || sending) return;
+    attemptSend(item.content, item.files, id);
   };
 
   const handleFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -284,6 +363,9 @@ export function MessageThread({
             );
           })
         )}
+        {pendingSends.map((p) => (
+          <PendingBubble key={p.id} pending={p} onRetry={handleRetry} />
+        ))}
         <div ref={bottomRef} />
       </div>
 
@@ -313,6 +395,7 @@ export function MessageThread({
             variant="outline"
             size="icon"
             onClick={() => fileInputRef.current?.click()}
+            disabled={sending}
             className="shrink-0 h-10 w-10"
             title="Attach a file"
           >

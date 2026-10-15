@@ -193,10 +193,13 @@ describe("sendMessage — session-window guard", () => {
 
 // D4 (docs/WHATSAPP-GOLIVE-SONNET-BRIEF.md / docs/INBOX-ATTACHMENTS-BRIEF.md): outbound
 // is the mirror of inbound — upload bytes to the provider FIRST (it hands back a media
-// id only after it has the bytes), THEN send a message referencing that id, THEN store
-// our own copy so the thread renders consistently and survives the provider's retention.
-describe("sendMessage — outbound attachments (D4)", () => {
+// id only after it has the bytes), THEN send a message referencing that id, THEN (S3:
+// via after(), same pattern as the inbound webhook — never on the request's critical
+// path) store our own copy so the thread renders consistently and survives the
+// provider's retention.
+describe("sendMessage — outbound attachments (D4 + S3 after()-deferred copy)", () => {
   const putBytesMock = vi.fn();
+  const afterMock = vi.fn();
   vi.doMock("@/lib/storage/provider", () => ({ getStorageProvider: () => ({ putBytes: putBytesMock }) }));
 
   beforeEach(() => {
@@ -204,6 +207,7 @@ describe("sendMessage — outbound attachments (D4)", () => {
     decryptTokenMock.mockClear();
     putBytesMock.mockReset();
     putBytesMock.mockResolvedValue(undefined);
+    afterMock.mockReset();
   });
 
   const ATTACHMENT = {
@@ -211,9 +215,17 @@ describe("sendMessage — outbound attachments (D4)", () => {
     filename: "passport.jpg",
     mimeType: "image/jpeg",
     type: "image" as const,
+    toEdgeXMs: 42,
   };
 
-  it("uploads to the provider first, sends referencing the returned media id, then stores our own copy", async () => {
+  function mockNextServerAfter() {
+    vi.doMock("next/server", async (importOriginal) => {
+      const actual = await importOriginal<typeof import("next/server")>();
+      return { ...actual, after: afterMock };
+    });
+  }
+
+  it("uploads to the provider first, sends referencing the returned media id immediately, then stores our own copy via after() — never on the request's critical path", async () => {
     const uploadMediaMock = vi.fn().mockResolvedValue({ providerMediaId: "media-xyz" });
     const adapterSendMock = vi.fn().mockResolvedValue({ providerMessageId: "wamid.img1", sentAt: new Date().toISOString() });
     getAdapterMock.mockReturnValue({ capabilities: WHATSAPP_CAPABILITIES, sendMessage: adapterSendMock, uploadMedia: uploadMediaMock });
@@ -223,6 +235,7 @@ describe("sendMessage — outbound attachments (D4)", () => {
     vi.doMock("@/lib/storage/provider", () => ({ getStorageProvider: () => ({ putBytes: putBytesMock }) }));
     vi.doMock("./adapters", () => ({ getAdapter: getAdapterMock }));
     vi.doMock("./crypto", () => ({ decryptToken: decryptTokenMock }));
+    mockNextServerAfter();
     const { sendMessage } = await import("./send-message");
 
     const result = await sendMessage({
@@ -240,13 +253,118 @@ describe("sendMessage — outbound attachments (D4)", () => {
     const [, , content] = adapterSendMock.mock.calls[0];
     expect(content.media).toEqual({ type: "image", providerMediaId: "media-xyz", filename: "passport.jpg" });
 
-    expect(putBytesMock).toHaveBeenCalledWith("inbox-media", expect.stringContaining("tenant-1/inbox/conv-1/msg-1-0"), ATTACHMENT.bytes, "image/jpeg");
     expect(result.status).toBe("sent");
 
-    const finalUpdate = fake.messageUpdates[fake.messageUpdates.length - 1];
-    expect(finalUpdate.attachments).toEqual([
+    // The response is ready without waiting on the storage copy at all.
+    expect(putBytesMock).not.toHaveBeenCalled();
+    const sentUpdate = fake.messageUpdates[fake.messageUpdates.length - 1];
+    expect(sentUpdate).toEqual({ status: "sent", provider_message_id: "wamid.img1" });
+
+    // Run the deferred after() callback — this is what the webhook's request lifecycle
+    // would do once the response is already on the wire.
+    expect(afterMock).toHaveBeenCalledTimes(1);
+    const scheduled = afterMock.mock.calls[0][0] as () => Promise<void>;
+    await scheduled();
+
+    expect(putBytesMock).toHaveBeenCalledWith("inbox-media", expect.stringContaining("tenant-1/inbox/conv-1/msg-1-0"), ATTACHMENT.bytes, "image/jpeg");
+    const attachmentUpdate = fake.messageUpdates[fake.messageUpdates.length - 1];
+    expect(attachmentUpdate.attachments).toEqual([
       expect.objectContaining({ type: "image", provider_media_id: "media-xyz", bucket: "inbox-media", filename: "passport.jpg" }),
     ]);
+  });
+
+  it("a failure storing our own copy inside after() patches an error-marked attachment but never changes the already-sent status (non-fatal)", async () => {
+    const uploadMediaMock = vi.fn().mockResolvedValue({ providerMediaId: "media-xyz" });
+    const adapterSendMock = vi.fn().mockResolvedValue({ providerMessageId: "wamid.img2", sentAt: new Date().toISOString() });
+    getAdapterMock.mockReturnValue({ capabilities: WHATSAPP_CAPABILITIES, sendMessage: adapterSendMock, uploadMedia: uploadMediaMock });
+    const fake = fakeSupabase({ lastInboundTs: new Date().toISOString() });
+    putBytesMock.mockRejectedValue(new Error("R2 unreachable"));
+    vi.resetModules();
+    vi.doMock("@/lib/supabase/server", () => ({ createServiceClient: () => Promise.resolve(fake.db) }));
+    vi.doMock("@/lib/storage/provider", () => ({ getStorageProvider: () => ({ putBytes: putBytesMock }) }));
+    vi.doMock("./adapters", () => ({ getAdapter: getAdapterMock }));
+    vi.doMock("./crypto", () => ({ decryptToken: decryptTokenMock }));
+    mockNextServerAfter();
+    const { sendMessage } = await import("./send-message");
+
+    const result = await sendMessage({
+      tenantId: "tenant-1",
+      conversationId: "conv-1",
+      content: "my passport",
+      author: { type: "human_agent", userId: "user-1" },
+      attachment: ATTACHMENT,
+    });
+    expect(result.status).toBe("sent");
+
+    const scheduled = afterMock.mock.calls[0][0] as () => Promise<void>;
+    await expect(scheduled()).resolves.toBeUndefined();
+
+    const attachmentUpdate = fake.messageUpdates[fake.messageUpdates.length - 1];
+    expect(attachmentUpdate.attachments).toEqual([
+      expect.objectContaining({ type: "image", provider_media_id: "media-xyz", error: "R2 unreachable" }),
+    ]);
+    // Status was never touched by the after() patch — still "sent" from the earlier update.
+    expect(fake.messageUpdates.some((u) => u.status === "failed")).toBe(false);
+  });
+
+  it("logs one timing line per outbound media send with byte size and per-stage ms, no content/PII", async () => {
+    const loggerInfoMock = vi.fn();
+    const uploadMediaMock = vi.fn().mockResolvedValue({ providerMediaId: "media-xyz" });
+    const adapterSendMock = vi.fn().mockResolvedValue({ providerMessageId: "wamid.img3", sentAt: new Date().toISOString() });
+    getAdapterMock.mockReturnValue({ capabilities: WHATSAPP_CAPABILITIES, sendMessage: adapterSendMock, uploadMedia: uploadMediaMock });
+    const fake = fakeSupabase({ lastInboundTs: new Date().toISOString() });
+    vi.resetModules();
+    vi.doMock("@/lib/supabase/server", () => ({ createServiceClient: () => Promise.resolve(fake.db) }));
+    vi.doMock("@/lib/storage/provider", () => ({ getStorageProvider: () => ({ putBytes: putBytesMock }) }));
+    vi.doMock("@/lib/logger", () => ({ logger: { info: loggerInfoMock, warn: vi.fn(), error: vi.fn() } }));
+    vi.doMock("./adapters", () => ({ getAdapter: getAdapterMock }));
+    vi.doMock("./crypto", () => ({ decryptToken: decryptTokenMock }));
+    mockNextServerAfter();
+    const { sendMessage } = await import("./send-message");
+
+    await sendMessage({
+      tenantId: "tenant-1",
+      conversationId: "conv-1",
+      content: "my passport",
+      author: { type: "human_agent", userId: "user-1" },
+      attachment: ATTACHMENT,
+    });
+
+    expect(loggerInfoMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: "conv-1",
+        bytes: ATTACHMENT.bytes.byteLength,
+        toEdgeXMs: 42,
+        toMetaMs: expect.any(Number),
+        toSendMs: expect.any(Number),
+      }),
+      "sendMessage: outbound media timing"
+    );
+    // No message content, filenames, or phone numbers in the logged payload.
+    const [payload] = loggerInfoMock.mock.calls[0];
+    expect(JSON.stringify(payload)).not.toMatch(/passport|my passport/);
+  });
+
+  it("a text-only send (no attachment) never logs the media timing line", async () => {
+    const loggerInfoMock = vi.fn();
+    const adapterSendMock = vi.fn().mockResolvedValue({ providerMessageId: "wamid.text2", sentAt: new Date().toISOString() });
+    getAdapterMock.mockReturnValue({ capabilities: WHATSAPP_CAPABILITIES, sendMessage: adapterSendMock });
+    const fake = fakeSupabase({ lastInboundTs: new Date().toISOString() });
+    vi.resetModules();
+    vi.doMock("@/lib/supabase/server", () => ({ createServiceClient: () => Promise.resolve(fake.db) }));
+    vi.doMock("@/lib/logger", () => ({ logger: { info: loggerInfoMock, warn: vi.fn(), error: vi.fn() } }));
+    vi.doMock("./adapters", () => ({ getAdapter: getAdapterMock }));
+    vi.doMock("./crypto", () => ({ decryptToken: decryptTokenMock }));
+    const { sendMessage } = await import("./send-message");
+
+    await sendMessage({
+      tenantId: "tenant-1",
+      conversationId: "conv-1",
+      content: "Sure, see you then!",
+      author: { type: "human_agent", userId: "user-1" },
+    });
+
+    expect(loggerInfoMock).not.toHaveBeenCalled();
   });
 
   it("fails cleanly (never calls sendMessage) when the provider upload itself fails", async () => {
