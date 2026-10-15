@@ -840,9 +840,15 @@ export function LeadDetailV2({
             stageAssigneeMap={stageAssigneeMap}
             onListChange={async (listId, archiveReason, assignToUserId) => {
               const targetList = leadLists?.find((l) => l.id === listId);
+              // Backward move (revert) — the lead already passed Prospects, so skip the gate.
+              const fromList = leadLists?.find((l) => l.id === currentLead.list_id);
+              const isBackward =
+                !!fromList && !fromList.is_archive && !fromList.is_staging && !!targetList &&
+                targetList.sort_order < fromList.sort_order;
               if (
                 tenant.industry_id === "education_consultancy" &&
                 !bypassQualification &&
+                !isBackward &&
                 targetList?.slug === "prospects" &&
                 !hasProspectQualification(currentLead as unknown as Record<string, unknown>)
               ) {
