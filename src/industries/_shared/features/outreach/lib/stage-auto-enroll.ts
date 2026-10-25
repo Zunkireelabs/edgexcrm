@@ -218,6 +218,20 @@ async function cancelQueuedRuleSequences(db: ScopedClient, leadIds: string[], ru
   return cancelled;
 }
 
+/**
+ * Who a rule's background run acts as. It is the admin who set the rule up — but that person can leave, be suspended or be
+ * demoted months later, and a run started as someone without access fails as a whole ("no longer has access"), silently
+ * enrolling nobody. So the rule keeps working: fall back to an active tenant owner, then an active admin. Null only if the tenant
+ * has neither (the run then fails with a clear message, as before).
+ */
+export async function resolveRuleActor(db: ScopedClient, createdBy: string | null): Promise<string | null> {
+  const { data, error } = await db.from("tenant_users").select("user_id, role").in("role", ["owner", "admin"]).is("suspended_at", null);
+  if (error) throw new Error(`stage-auto-enroll: failed to resolve who runs the rule: ${error.message}`);
+  const people = (data ?? []) as unknown as Array<{ user_id: string; role: string }>;
+  if (createdBy && people.some((p) => p.user_id === createdBy)) return createdBy;
+  return people.find((p) => p.role === "owner")?.user_id ?? people[0]?.user_id ?? null;
+}
+
 /** Saves one run for this rule (eligible leads only) and kicks the worker. Returns how many leads were queued. */
 async function startRun(db: ScopedClient, tenantId: string, leadIds: string[], rule: TriggerRow): Promise<number> {
   const { data: seq } = await db.from("email_sequences").select("id, status").eq("id", rule.sequence_id).maybeSingle();
@@ -246,7 +260,7 @@ async function startRun(db: ScopedClient, tenantId: string, leadIds: string[], r
     .from("sequence_bulk_enrollments")
     .insert({
       sequence_id: rule.sequence_id,
-      created_by: rule.created_by,
+      created_by: await resolveRuleActor(db, rule.created_by),
       source_mode: "selected",
       source_snapshot: { lead_ids: eligible.length, trigger: "stage_rule", list_id: rule.list_id },
       conflict_policy: "queue",

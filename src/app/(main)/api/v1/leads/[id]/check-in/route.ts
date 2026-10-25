@@ -193,6 +193,15 @@ export async function POST(request: NextRequest, context: RouteContext) {
         if (triageError) {
           logger.error({ err: triageError, leadId: id }, "Failed to apply check-in triage");
         } else {
+          // Stage auto-enroll: the front desk moved the lead into a stage (best-effort, never fails the check-in).
+          if (updatePayload.list_id !== undefined && updatePayload.list_id !== (lead.list_id ?? null)) {
+            await onLeadsEnteredStageSafe({
+              tenantId: auth.tenantId,
+              leadIds: [id],
+              fromListId: lead.list_id ?? null,
+              toListId: updatePayload.list_id as string,
+            });
+          }
           // Surface the triage move/assign in System Activity — was previously silent
           // (only the check-in note itself was audited), so a stage/status change from
           // check-in triage never showed up in the lead's activity timeline.

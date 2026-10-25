@@ -46,6 +46,7 @@ function makeDb() {
         const b: any = {
           eq: (c: string, v: unknown) => (f.eqs.push([c, v]), b),
           in: (c: string, vs: unknown[]) => (f.ins.push([c, vs]), b),
+          is: (c: string, v: unknown) => (f.eqs.push([c, v]), b),
           maybeSingle: async () => ({ data: rows.filter(f.matches)[0] ?? null, error: null }),
           then: (resolve: (v: unknown) => void, reject?: (e: unknown) => void) =>
             Promise.resolve({ data: rows.filter(f.matches), error: null }).then(resolve, reject),
@@ -101,6 +102,11 @@ const trigger = (over: Row = {}): Row => ({
 
 beforeEach(() => {
   tables = {
+    // the people a rule's background run may act as (active owners / admins)
+    tenant_users: [
+      { user_id: "admin-1", role: "admin", suspended_at: null },
+      { user_id: "owner-1", role: "owner", suspended_at: null },
+    ],
     email_sequences: [
       { id: "seq-email", status: "active" },
       { id: "seq-sms", status: "active" },
@@ -251,6 +257,33 @@ describe("leaving a stage", () => {
     tables.sequence_enrollments = [running()];
     const res = await onLeadsEnteredStage({ tenantId: T, leadIds: ["a"], fromListId: null, toListId: APPLICATIONS });
     expect(res.stopped).toBe(0);
+  });
+});
+
+describe("who the background run acts as", () => {
+  it("the admin who set the rule up, while they still have access", async () => {
+    tables.sequence_stage_triggers = [trigger()];
+    await onLeadsEnteredStage({ tenantId: T, leadIds: ["a"], fromListId: null, toListId: QUALIFIED });
+    expect(tables.sequence_bulk_enrollments[0].created_by).toBe("admin-1");
+  });
+
+  it("falls back to the tenant OWNER when that admin has left (otherwise the run would fail and enroll nobody)", async () => {
+    tables.sequence_stage_triggers = [trigger({ created_by: "gone-user" })];
+    await onLeadsEnteredStage({ tenantId: T, leadIds: ["a"], fromListId: null, toListId: QUALIFIED });
+    expect(tables.sequence_bulk_enrollments[0].created_by).toBe("owner-1");
+  });
+
+  it("…and when the creator was removed with no rule creator recorded at all (created_by NULL after a user delete)", async () => {
+    tables.sequence_stage_triggers = [trigger({ created_by: null })];
+    await onLeadsEnteredStage({ tenantId: T, leadIds: ["a"], fromListId: null, toListId: QUALIFIED });
+    expect(tables.sequence_bulk_enrollments[0].created_by).toBe("owner-1");
+  });
+
+  it("with no owner available, an active admin is used", async () => {
+    tables.tenant_users = [{ user_id: "admin-1", role: "admin", suspended_at: null }];
+    tables.sequence_stage_triggers = [trigger({ created_by: "gone-user" })];
+    await onLeadsEnteredStage({ tenantId: T, leadIds: ["a"], fromListId: null, toListId: QUALIFIED });
+    expect(tables.sequence_bulk_enrollments[0].created_by).toBe("admin-1");
   });
 });
 

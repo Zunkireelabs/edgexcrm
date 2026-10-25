@@ -50,6 +50,8 @@ interface LeadRow {
   assigned_to: string | null;
   deleted_at: string | null;
   phone?: string | null;
+  /** The lead's stage RIGHT NOW — a stage-rule run only enrolls a lead who is still in a linked stage. */
+  list_id?: string | null;
 }
 
 export interface RunPassSummary {
@@ -263,9 +265,23 @@ async function runOnePass(tenantId: string, runId: string, budgetMs: number): Pr
 
     const { data: leadData } = await db
       .from("leads")
-      .select("id, assigned_to, deleted_at, phone")
+      .select("id, assigned_to, deleted_at, phone, list_id")
       .in("id", items.map((i) => i.lead_id));
     const leadById = new Map(((leadData ?? []) as unknown as LeadRow[]).map((l) => [l.id, l]));
+
+    // A stage-rule run is saved the moment a lead ENTERS a stage but worked through a few seconds later (or after a restart). If
+    // the lead has moved on in between, or the rule was switched off, enrolling them now would start a sequence for a stage
+    // they are no longer in. So the stages the sequence is linked to are re-read for every chunk, and only leads still sitting
+    // in one are enrolled; the rest are skipped with a plain reason.
+    let linkedStageIds: Set<string> | null = null;
+    if (run.trigger_kind === "stage_rule") {
+      const { data: ruleRows } = await db
+        .from("sequence_stage_triggers")
+        .select("list_id")
+        .eq("sequence_id", run.sequence_id)
+        .eq("is_active", true);
+      linkedStageIds = new Set(((ruleRows ?? []) as unknown as Array<{ list_id: string }>).map((r) => r.list_id));
+    }
 
     // A text run re-checks each lead's number NOW: the list was saved at Start, and a big run takes a while, so a number
     // may have been removed or opted out since. Such a lead is skipped instead of being enrolled into a sequence whose
@@ -293,6 +309,10 @@ async function runOnePass(tenantId: string, runId: string, budgetMs: number): Pr
       const lead = leadById.get(item.lead_id);
       if (!lead || lead.deleted_at) {
         await mark("skipped", "lead_deleted");
+        continue;
+      }
+      if (linkedStageIds && (!lead.list_id || !linkedStageIds.has(lead.list_id))) {
+        await mark("skipped", linkedStageIds.size === 0 ? "rule_removed" : "left_stage");
         continue;
       }
       if (run.channel === "sms") {

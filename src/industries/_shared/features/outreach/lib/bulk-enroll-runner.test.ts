@@ -10,7 +10,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 type Row = Record<string, any>;
 
 let tables: Record<string, Row[]>;
-let enrollCalls: Array<{ leadId: string; assignedTo: string | null; enrolledBy: string }>;
+let enrollCalls: Array<{ leadId: string; assignedTo: string | null; enrolledBy: string; source?: string; triggerListId?: string | null }>;
 let enrollBehavior: (leadId: string) => Promise<unknown>;
 let authResult: { userId: string; tenantId: string } | null;
 let onChunk: (() => void) | null;
@@ -30,7 +30,7 @@ vi.mock("./engine", () => ({
     return switchBehavior(params.leadId);
   },
   enrollLead: async (_db: unknown, _auth: unknown, params: { leadId: string; assignedTo: string | null; enrolledBy: string }) => {
-    enrollCalls.push({ leadId: params.leadId, assignedTo: params.assignedTo, enrolledBy: params.enrolledBy });
+    enrollCalls.push({ leadId: params.leadId, assignedTo: params.assignedTo, enrolledBy: params.enrolledBy, source: (params as { source?: string }).source, triggerListId: (params as { triggerListId?: string | null }).triggerListId });
     return enrollBehavior(params.leadId);
   },
 }));
@@ -457,5 +457,55 @@ describe("runBulkEnrollQueue", () => {
     await runBulkEnrollQueue();
     expect(run().status).toBe("completed");
     expect(enrollCalls).toHaveLength(2);
+  });
+});
+
+describe("a run started by a stage rule", () => {
+  const QUALIFIED = "list-qualified";
+  const PROSPECTS = "list-prospects";
+  function seedRule(leadLists: Array<string | null>, rules: string[]) {
+    seed({ leads: leadLists.length, runOverrides: { trigger_kind: "stage_rule", trigger_list_id: QUALIFIED } });
+    tables.leads.forEach((l, i) => (l.list_id = leadLists[i]));
+    tables.sequence_stage_triggers = rules.map((list_id) => ({ sequence_id: "seq-1", list_id, is_active: true }));
+  }
+
+  it("enrolls the leads still in a linked stage, tagged as rule-started with the stage that started it", async () => {
+    seedRule([QUALIFIED, QUALIFIED], [QUALIFIED]);
+    await processBulkEnrollRun(T, RUN);
+    expect(outcomes()).toEqual(["enrolled", "enrolled"]);
+    expect(enrollCalls.map((c) => [c.leadId, c.source, c.triggerListId])).toEqual([
+      ["lead-1", "stage_rule", QUALIFIED],
+      ["lead-2", "stage_rule", QUALIFIED],
+    ]);
+  });
+
+  it("a lead who has ALREADY MOVED OUT of the stage is not enrolled (skipped: left_stage) — the others still are", async () => {
+    seedRule([QUALIFIED, PROSPECTS, null], [QUALIFIED]);
+    await processBulkEnrollRun(T, RUN);
+    expect(outcomes()).toEqual(["enrolled", "skipped", "skipped"]);
+    expect(tables.sequence_bulk_enrollment_items.map((i) => i.reason)).toEqual([null, "left_stage", "left_stage"]);
+    expect(enrollCalls.map((c) => c.leadId)).toEqual(["lead-1"]);
+  });
+
+  it("a sequence linked to SEVERAL stages enrolls a lead who is in any of them", async () => {
+    seedRule([QUALIFIED, PROSPECTS], [QUALIFIED, PROSPECTS]);
+    await processBulkEnrollRun(T, RUN);
+    expect(outcomes()).toEqual(["enrolled", "enrolled"]);
+  });
+
+  it("if the rule was switched off while the run was waiting, nobody is enrolled (skipped: rule_removed)", async () => {
+    seedRule([QUALIFIED, QUALIFIED], []);
+    await processBulkEnrollRun(T, RUN);
+    expect(outcomes()).toEqual(["skipped", "skipped"]);
+    expect(tables.sequence_bulk_enrollment_items.map((i) => i.reason)).toEqual(["rule_removed", "rule_removed"]);
+    expect(enrollCalls).toHaveLength(0);
+  });
+
+  it("a person's own bulk run is NOT subject to the stage check (leads in any stage are enrolled, untagged)", async () => {
+    seed({ leads: 2 });
+    tables.leads.forEach((l) => (l.list_id = null));
+    await processBulkEnrollRun(T, RUN);
+    expect(outcomes()).toEqual(["enrolled", "enrolled"]);
+    expect(enrollCalls.every((c) => c.source === undefined)).toBe(true);
   });
 });
