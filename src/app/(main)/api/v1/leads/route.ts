@@ -68,6 +68,7 @@ import { processFormSmsAutoresponder } from "@/lib/sms/form-autoresponder";
 import { assignDisplayIds } from "@/lib/leads/assign-display-ids";
 import { coerceAcademicPayload, hasProspectQualification, canBypassProspectQualification } from "@/lib/leads/prospect-qualification";
 import { normalizeDestinations, normalizeFieldOfStudy, normalizeDegreeLevel } from "@/lib/leads/destination-normalize";
+import { onLeadsEnteredStageSafe } from "@/industries/_shared/features/outreach/lib/stage-auto-enroll";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -1776,6 +1777,11 @@ async function handlePost(request: NextRequest) {
   }
 
   log.info({ leadId: lead.id }, "Lead created");
+
+  // Stage auto-enroll: a lead created straight into a stage starts that stage's sequences (best-effort).
+  if (leadPayload.list_id) {
+    await onLeadsEnteredStageSafe({ tenantId, leadIds: [lead.id], fromListId: null, toListId: leadPayload.list_id as string });
+  }
 
   // Register the initial assignee as a collaborator (engaged-user visibility).
   if ((lead as Lead).assigned_to) {

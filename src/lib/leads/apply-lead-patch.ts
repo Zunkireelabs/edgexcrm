@@ -11,6 +11,7 @@ import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { assignDisplayIds } from "@/lib/leads/assign-display-ids";
+import { onLeadsEnteredStageSafe } from "@/industries/_shared/features/outreach/lib/stage-auto-enroll";
 import { getPipelineLandingStage } from "@/lib/leads/pipeline-stage";
 import { createRequestLogger } from "@/lib/logger";
 import {
@@ -985,6 +986,13 @@ export async function applyLeadPatch(
               .update(promotePayload)
               .eq("id", leadId)
               .eq("tenant_id", auth.tenantId);
+            // The system moved the lead into Prospects: stage auto-enroll rules apply exactly as for a manual move.
+            await onLeadsEnteredStageSafe({
+              tenantId: auth.tenantId,
+              leadIds: [leadId],
+              fromListId: currentListId,
+              toListId: prospectsList.id,
+            });
           }
         }
       }
@@ -1010,6 +1018,20 @@ export async function applyLeadPatch(
     } catch (err) {
       log.error({ err }, "assignDisplayIds failed");
     }
+  }
+
+  // Stage auto-enroll: a real stage change starts the sequences linked to the new stage and stops the auto-enrolled ones
+  // that no longer apply (best-effort — it never fails the PATCH).
+  if (
+    updatePayload.list_id !== undefined &&
+    ((existingLead as Record<string, unknown>).list_id ?? null) !== (updatePayload.list_id ?? null)
+  ) {
+    await onLeadsEnteredStageSafe({
+      tenantId: auth.tenantId,
+      leadIds: [leadId],
+      fromListId: ((existingLead as Record<string, unknown>).list_id as string | null) ?? null,
+      toListId: (updatePayload.list_id as string | null) ?? null,
+    });
   }
 
   // Build audit diff

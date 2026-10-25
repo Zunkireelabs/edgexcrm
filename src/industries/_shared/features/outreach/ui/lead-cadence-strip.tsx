@@ -1,9 +1,21 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Pause, Play, UserX, Loader2, GitBranch, Mail, MessageSquare } from "lucide-react";
+import { Pause, Play, UserX, Loader2, GitBranch, Mail, MessageSquare, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Select,
   SelectContent,
@@ -27,8 +39,12 @@ interface Enrollment {
   current_step_order: number;
   assigned_to: string | null;
   // Set when the system stopped the enrollment because the lead replied (migration 257).
-  stop_reason?: "replied" | "sequence_paused" | "suppressed" | null;
+  stop_reason?: "replied" | "sequence_paused" | "suppressed" | "stage_left" | null;
   email_sequences: { name: string } | null;
+  // Where it came from (migration 277): a stage auto-enroll rule starts the enrollment on its own.
+  source?: "manual" | "bulk" | "stage_rule";
+  /** The stage the lead entered, for a rule-started enrollment. Only the Subscribed tab's source knows it. */
+  triggerStageName?: string | null;
 }
 
 interface DraftRow {
@@ -97,6 +113,10 @@ function ChannelCadenceStrip({
   const [loading, setLoading] = useState(true);
   const [selectedSequenceId, setSelectedSequenceId] = useState("");
   const [busy, setBusy] = useState(false);
+  // Stage auto-enroll (migration 277): this channel is switched off for the lead, and the "stop an auto-enrolled sequence" confirm.
+  const [autoEnrollOff, setAutoEnrollOff] = useState(false);
+  const [confirmingUnenroll, setConfirmingUnenroll] = useState(false);
+  const [alsoOptOut, setAlsoOptOut] = useState(false);
 
   const fetchEnrollment = useCallback(async () => {
     setLoading(true);
@@ -106,6 +126,10 @@ function ChannelCadenceStrip({
       );
       if (res.ok) {
         const json = await res.json();
+        if (readFromLead) {
+          const optOuts = (json.data as LeadSubscriptions | undefined)?.autoEnrollOptOuts;
+          setAutoEnrollOff(channel === "sms" ? optOuts?.sms === true : optOuts?.email === true);
+        }
         const rows: Enrollment[] = readFromLead
           ? ((json.data as LeadSubscriptions | undefined)?.sequences ?? [])
               .filter((r) => r.channel === channel)
@@ -117,6 +141,8 @@ function ChannelCadenceStrip({
                 assigned_to: r.assignedTo,
                 stop_reason: r.stopReason,
                 email_sequences: { name: r.sequenceName },
+                source: r.source,
+                triggerStageName: r.triggerStageName,
               }))
           : ((json.data ?? []) as Enrollment[]);
         const live = rows.find((r) => r.status === "active" || r.status === "paused");
@@ -192,6 +218,36 @@ function ChannelCadenceStrip({
     }
   };
 
+  // Unenrolling a sequence a RULE started asks one question first: should stage moves ever start another one for this lead?
+  const confirmUnenroll = async () => {
+    setConfirmingUnenroll(false);
+    const optOut = alsoOptOut;
+    setAlsoOptOut(false);
+    await runAction("unenroll");
+    if (optOut) await setOptOut("off");
+  };
+
+  const setOptOut = async (mode: "off" | "on") => {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/v1/leads/${leadId}/auto-enroll-optout`, {
+        method: mode === "off" ? "PUT" : "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ channels: [channel] }),
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => null);
+        toast.error(json?.error?.message ?? "Failed to update auto-enroll for this lead");
+        return;
+      }
+      setAutoEnrollOff(mode === "off");
+      toast.success(mode === "off" ? "Auto-enroll is off for this lead" : "Auto-enroll is back on for this lead");
+      onChanged?.();
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (loading) return null;
 
   const canManage = isAdmin || enrollment?.assigned_to === currentUserId;
@@ -222,6 +278,16 @@ function ChannelCadenceStrip({
               <Button type="button" size="sm" disabled={!selectedSequenceId || busy} onClick={handleEnroll}>
                 {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Enroll"}
               </Button>
+            </div>
+          )}
+          {autoEnrollOff && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-dashed px-2.5 py-2 text-xs text-muted-foreground">
+              <span>Auto-enroll by stage is off for this lead ({isSms ? "SMS" : "email"}).</span>
+              {canManage && (
+                <button type="button" disabled={busy} className="font-medium text-foreground underline underline-offset-2 disabled:opacity-50" onClick={() => setOptOut("on")}>
+                  Turn back on
+                </button>
+              )}
             </div>
           )}
         </ChannelBox>
@@ -278,8 +344,17 @@ function ChannelCadenceStrip({
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Badge variant={enrollment.status === "active" ? "default" : "secondary"}>{enrollment.status}</Badge>
+          {enrollment.source === "stage_rule" && (
+            <span
+              className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
+              title="Started automatically by a stage rule"
+            >
+              <Zap className="h-3 w-3" aria-hidden />
+              Auto-enrolled{enrollment.triggerStageName ? ` · entered ${enrollment.triggerStageName}` : ""}
+            </span>
+          )}
           {enrollment.stop_reason === "replied" && (
             <span className="text-xs text-muted-foreground">
               {enrollment.status === "paused" ? "Paused — the lead replied. Resume or unenroll when you've followed up." : "Ended — the lead replied."}
@@ -306,7 +381,7 @@ function ChannelCadenceStrip({
                     variant="ghost"
                     size="sm"
                     className="text-destructive hover:text-destructive"
-                    onClick={() => runAction("unenroll")}
+                    onClick={() => (enrollment.source === "stage_rule" ? setConfirmingUnenroll(true) : runAction("unenroll"))}
                   >
                     <UserX className="h-3.5 w-3.5 mr-1.5" /> Unenroll
                   </Button>
@@ -329,6 +404,39 @@ function ChannelCadenceStrip({
         isAdmin={isAdmin}
         onChanged={fetchEnrollment}
       />
+
+      <AlertDialog
+        open={confirmingUnenroll}
+        onOpenChange={(open) => {
+          setConfirmingUnenroll(open);
+          if (!open) setAlsoOptOut(false);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Unenroll from &ldquo;{sequenceName}&rdquo;?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {leadFirstName ?? "This lead"} won&apos;t get any more {isSms ? "texts" : "emails"} from this sequence. Steps not yet sent are cancelled.
+              It started automatically, so it won&apos;t restart on its own.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex items-start gap-2 rounded-md border p-3">
+            <Checkbox id={`optout-${channel}`} checked={alsoOptOut} onCheckedChange={(c) => setAlsoOptOut(c === true)} />
+            <div className="space-y-0.5">
+              <Label htmlFor={`optout-${channel}`} className="text-sm font-normal cursor-pointer">
+                Also don&apos;t auto-enroll {leadFirstName ?? "this lead"} into other stages&apos; {isSms ? "SMS" : "email"} sequences
+              </Label>
+              <p className="text-xs text-muted-foreground">Stage moves won&apos;t start any automatic {isSms ? "SMS" : "email"} sequence for this lead. You can still enroll them by hand.</p>
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-white hover:bg-destructive/90" onClick={confirmUnenroll}>
+              Unenroll
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
   return labelled ? <ChannelBox channel={channel}>{running}</ChannelBox> : running;

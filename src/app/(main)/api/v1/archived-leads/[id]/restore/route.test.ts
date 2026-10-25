@@ -1,4 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+
+vi.mock("@/industries/_shared/features/outreach/lib/stage-auto-enroll", () => ({
+  onLeadsEnteredStageSafe: vi.fn(async () => ({ stopped: 0, runsCreated: 0, leadsQueued: 0 })),
+}));
 import { PERMISSION_DENIED_MESSAGE } from "@/lib/permission-denied";
 
 // POST /api/v1/archived-leads/[id]/restore — sends an archived lead back to the pipeline. Everything is faked (no DB); the

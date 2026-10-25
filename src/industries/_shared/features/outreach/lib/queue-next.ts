@@ -32,6 +32,7 @@ interface QueueRow {
   id: string;
   sequence_id: string;
   queued_by: string | null;
+  run_id: string | null;
 }
 
 export type StartQueuedResult = "none" | "started" | "waiting" | "failed";
@@ -50,7 +51,7 @@ export async function startQueuedEnrollment(
 
   const { data } = await db
     .from("sequence_enrollment_queue")
-    .select("id, sequence_id, queued_by")
+    .select("id, sequence_id, queued_by, run_id")
     .eq("lead_id", leadId)
     .eq("channel", channel)
     .eq("status", "waiting")
@@ -77,6 +78,22 @@ export async function startQueuedEnrollment(
   const auth = row.queued_by ? await buildUserAuthContext(row.queued_by, tenantId) : null;
   if (!auth) return fail("The person who queued this no longer has access.");
 
+  // A queued sequence that was parked by a stage rule keeps its origin, so the Subscribed tab still says "Auto-enrolled".
+  let source: "manual" | "stage_rule" = "manual";
+  let triggerListId: string | null = null;
+  if (row.run_id) {
+    const { data: runRow } = await db
+      .from("sequence_bulk_enrollments")
+      .select("trigger_kind, trigger_list_id")
+      .eq("id", row.run_id)
+      .maybeSingle();
+    const run = runRow as unknown as { trigger_kind: string; trigger_list_id: string | null } | null;
+    if (run?.trigger_kind === "stage_rule") {
+      source = "stage_rule";
+      triggerListId = run.trigger_list_id;
+    }
+  }
+
   // dynamic: engine.ts calls back into this module when an enrollment ends (avoids an import cycle)
   const { enrollLead, EnrollmentConflictError } = await import("./engine");
   try {
@@ -85,6 +102,8 @@ export async function startQueuedEnrollment(
       leadId,
       assignedTo: leadRow.assigned_to ?? auth.userId,
       enrolledBy: auth.userId,
+      // only a rule-parked sequence is tagged; a person's queued sequence is enrolled exactly as before
+      ...(source === "stage_rule" ? { source, triggerListId } : {}),
     });
   } catch (err) {
     // the lead is in another running sequence again — keep waiting for that one to end

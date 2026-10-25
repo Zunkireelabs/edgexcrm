@@ -33,6 +33,9 @@ interface RunRow {
   conflict_policy: "skip" | "switch" | "queue";
   status: "queued" | "running" | "completed" | "cancelled" | "failed";
   cancel_requested: boolean;
+  /** 'stage_rule' = started by a stage auto-enroll rule rather than by a person (migration 277). */
+  trigger_kind: "manual" | "stage_rule";
+  trigger_list_id: string | null;
   /** The channel of the run's sequence, read once per pass (migration 274). */
   channel: OutreachChannel;
 }
@@ -188,7 +191,7 @@ async function runOnePass(tenantId: string, runId: string, budgetMs: number): Pr
 
   const { data: runData } = await db
     .from("sequence_bulk_enrollments")
-    .select("id, sequence_id, created_by, conflict_policy, status, cancel_requested")
+    .select("id, sequence_id, created_by, conflict_policy, status, cancel_requested, trigger_kind, trigger_list_id")
     .eq("id", runId)
     .maybeSingle();
   const run = runData as unknown as RunRow | null;
@@ -309,8 +312,13 @@ async function runOnePass(tenantId: string, runId: string, budgetMs: number): Pr
         assignedTo: lead.assigned_to ?? auth.userId,
         enrolledBy: auth.userId,
       };
+      // Only a stage-rule run is tagged; a person's bulk run keeps its enrollments as they always were.
+      const enrollWithSource =
+        run.trigger_kind === "stage_rule"
+          ? { ...enrollInput, source: "stage_rule" as const, triggerListId: run.trigger_list_id }
+          : enrollInput;
       try {
-        await enrollLead(db, auth, enrollInput);
+        await enrollLead(db, auth, enrollWithSource);
         await mark("enrolled", null);
       } catch (err) {
         if (err instanceof EnrollmentConflictError) {

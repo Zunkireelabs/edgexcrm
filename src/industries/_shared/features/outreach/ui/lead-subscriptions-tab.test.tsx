@@ -121,6 +121,21 @@ describe("Subscribed tab", () => {
     expect(calls.find((c) => c.method === "DELETE")?.url).toBe(`/api/v1/leads/${LEAD}/subscriptions/queue?queue_id=q-1`);
   });
 
+  it("a FINISHED auto-enrolled sequence still says it was automatic (a 1-step sequence ends at once, so History is where it is seen)", async () => {
+    data = {
+      sequences: [
+        { ...PAST, id: "e-auto", sequenceName: "Qualified follow-up", channel: "email", status: "completed", stopReason: null, source: "stage_rule", triggerStageName: "New Leads (Unrouted)" },
+        { ...PAST, id: "e-hand", sequenceName: "Hand enrolled", channel: "email", status: "completed", stopReason: null, source: "manual", triggerStageName: null },
+      ],
+      queued: [],
+      campaigns: [],
+    };
+    renderTab();
+    expect(await screen.findByText("Auto-enrolled · entered New Leads (Unrouted)")).toBeInTheDocument();
+    // only the rule-started row carries the tag
+    expect(screen.getAllByText(/Auto-enrolled/)).toHaveLength(1);
+  });
+
   it("plain empty states when there is no history and no campaign", async () => {
     data = { sequences: [], queued: [], campaigns: [] };
     renderTab();

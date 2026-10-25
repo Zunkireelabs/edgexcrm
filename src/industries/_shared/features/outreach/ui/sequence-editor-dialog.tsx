@@ -29,6 +29,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { SendWindowEditor } from "./send-window-editor";
+import { StageAutoEnrollCard, EMPTY_STAGE_RULE, type StageRuleDraft } from "./stage-auto-enroll-card";
 import { TimeOfDayPicker } from "./time-of-day-picker";
 import type { SendWindow } from "../lib/send-window";
 import { TipTapEditor, type TipTapEditorHandle } from "@/industries/_shared/features/email/components/tiptap-editor";
@@ -113,6 +114,11 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
   // "Send me a test": only offered where EdgeX can actually send (education, and sending turned on for the account).
   const [canSendTest, setCanSendTest] = useState(false);
   const [testingIndex, setTestingIndex] = useState<number | null>(null);
+  // Stage auto-enroll (migration 277): saved through its own endpoint right after the sequence. `stageRuleAvailable` is false on
+  // accounts without stages; `stageTaken` = the chosen stages are held by another sequence (the card's warning is the confirmation).
+  const [stageRule, setStageRule] = useState<StageRuleDraft>(EMPTY_STAGE_RULE);
+  const [stageRuleAvailable, setStageRuleAvailable] = useState(false);
+  const [stageTaken, setStageTaken] = useState(false);
   const [steps, setSteps] = useState<StepDraft[]>([]);
   const [saving, setSaving] = useState(false);
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
@@ -133,6 +139,8 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
       setOnReply(sequence?.on_reply ?? "pause");
       setSendWindow(sequence?.send_window ?? null);
       setSteps(stepsFromSequence(sequence));
+      const linked = (sequence?.sequence_stage_triggers ?? []).filter((t) => t.is_active).map((t) => t.list_id);
+      setStageRule({ enabled: linked.length > 0, listIds: linked, enrollExisting: false, dirty: false });
       setLastFocused(null);
       setPreviewIndex(null);
       setPendingRichIndex(null);
@@ -326,6 +334,31 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
     }
   };
 
+  const saveStageRule = async (sequenceId: string) => {
+    try {
+      const res = await fetch(`/api/v1/outreach/sequences/${sequenceId}/stage-triggers`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          list_ids: stageRule.enabled ? stageRule.listIds : [],
+          replace: stageTaken,
+          enroll_existing: stageRule.enabled && stageRule.enrollExisting,
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        toast.error(`The sequence was saved, but auto-enroll wasn't: ${json?.error?.message ?? "something went wrong"}`);
+        return;
+      }
+      const queued = Number(json?.data?.enrolled_existing?.leads_queued) || 0;
+      if (!stageRule.enabled) toast.success("Auto-enroll is off for this sequence");
+      else if (queued > 0) toast.success(`Auto-enroll is on. Enrolling ${queued.toLocaleString()} ${queued === 1 ? "lead" : "leads"} in the background.`);
+      else toast.success("Auto-enroll is on");
+    } catch {
+      toast.error("The sequence was saved, but auto-enroll wasn't: network error");
+    }
+  };
+
   const handleSave = async () => {
     if (!name.trim()) {
       toast.error("Name is required");
@@ -333,6 +366,10 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
     }
     if (steps.length === 0) {
       toast.error("Add at least one step");
+      return;
+    }
+    if (stageRuleAvailable && stageRule.enabled && stageRule.listIds.length === 0) {
+      toast.error("Choose at least one stage for auto-enroll, or untick it");
       return;
     }
     const missingInstructions = isSms ? undefined : steps.find((s) => s.draft_source === "ai" && !s.ai_instructions.trim());
@@ -383,6 +420,10 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
 
       toast.success(isEdit ? "Sequence updated" : "Sequence created");
       const savedRow = json?.data as { id?: string; name?: string } | undefined;
+      // The stage rule is its own call: the sequence is already saved, so a failure here is reported but never undoes it.
+      if (savedRow?.id && stageRuleAvailable && stageRule.dirty) {
+        await saveStageRule(savedRow.id);
+      }
       onSaved(savedRow?.id ? { id: savedRow.id, name: savedRow.name ?? "", created: !isEdit } : undefined);
       onOpenChange(false);
     } finally {
@@ -456,6 +497,16 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
             </p>
           </div>
           )}
+
+          <StageAutoEnrollCard
+            value={stageRule}
+            onChange={setStageRule}
+            channel={channel}
+            sequenceId={sequence?.id ?? null}
+            autoSend={autoSend}
+            onAvailable={setStageRuleAvailable}
+            onTakenChange={setStageTaken}
+          />
 
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground">Merge tags — click to insert at cursor</p>

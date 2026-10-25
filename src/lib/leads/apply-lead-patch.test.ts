@@ -14,6 +14,10 @@ const createNotificationsExceptMock = vi.fn(async () => {});
 const getTenantAdminRecipientsMock = vi.fn(async () => [] as string[]);
 const sendLeadAssignedEmailMock = vi.fn(async () => {});
 const processEmailForwardRulesMock = vi.fn(async () => {});
+const onLeadsEnteredStageMock = vi.fn(async (...args: unknown[]) => {
+  void args;
+  return { stopped: 0, runsCreated: 0, leadsQueued: 0 };
+});
 
 vi.mock("@/lib/api/auth", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api/auth")>();
@@ -25,6 +29,9 @@ vi.mock("@/lib/leads/branch-membership", () => ({
 }));
 vi.mock("@/lib/leads/collaborators", () => ({
   addLeadCollaborator: addLeadCollaboratorMock,
+}));
+vi.mock("@/industries/_shared/features/outreach/lib/stage-auto-enroll", () => ({
+  onLeadsEnteredStageSafe: onLeadsEnteredStageMock,
 }));
 vi.mock("@/lib/leads/assign-display-ids", () => ({
   assignDisplayIds: assignDisplayIdsMock,
@@ -287,6 +294,7 @@ beforeEach(() => {
   getTenantAdminRecipientsMock.mockClear();
   sendLeadAssignedEmailMock.mockClear();
   processEmailForwardRulesMock.mockClear();
+  onLeadsEnteredStageMock.mockClear();
 });
 
 describe("applyLeadPatch — governance branches", () => {
@@ -597,6 +605,51 @@ describe("applyLeadPatch — governance branches", () => {
     expect(outcome.lead.pipeline_id).toBe("pipe-new");
     expect(outcome.lead.stage_id).toBe("stage-landing");
     expect(outcome.lead.status).toBe("new");
+  });
+
+  it("stage auto-enroll — a real stage change hands the move (from -> to) to the auto-enroll helper", async () => {
+    await setFakeDb({
+      leads: {
+        id: "lead-1", pipeline_id: "pipe-old", assigned_to: "user-2", branch_id: null,
+        list_id: "list-current", status: "qualified", stage_id: "stage-cur", lead_type: "lead", archive_reason: null, archived_at: null,
+      },
+      leadLists: {
+        "list-current": { id: "list-current", slug: "current", name: "Pre-qualified", pipeline_id: "pipe-old", is_archive: false, sort_order: 10 },
+        "list-target": { id: "list-target", slug: "qualified", name: "Qualified", pipeline_id: "pipe-new", is_archive: false, sort_order: 20, access: { mode: "all" } },
+      },
+      pipelineStages: { "stage-landing": { is_terminal: false } },
+    });
+    getPipelineLandingStageMock.mockResolvedValue({ id: "stage-landing", slug: "new" });
+    const auth = fixtureAuth({ role: "owner", permissions: { baseTier: "owner", leadScope: "all" } as ResolvedPermissions });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(auth, "lead-1", { list_id: "list-target" }, OPTS);
+
+    expect(outcome.kind).toBe("ok");
+    expect(onLeadsEnteredStageMock).toHaveBeenCalledTimes(1);
+    expect(onLeadsEnteredStageMock).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      leadIds: ["lead-1"],
+      fromListId: "list-current",
+      toListId: "list-target",
+    });
+  });
+
+  it("stage auto-enroll — a patch that does not change the stage never calls the helper", async () => {
+    await setFakeDb({
+      leads: {
+        id: "lead-1", pipeline_id: "pipe-1", assigned_to: "user-2", branch_id: null,
+        list_id: "list-current", status: "qualified", stage_id: "stage-cur", lead_type: "lead", archive_reason: null, archived_at: null,
+      },
+      leadLists: {
+        "list-current": { id: "list-current", slug: "current", name: "Pre-qualified", pipeline_id: "pipe-1", is_archive: false, sort_order: 10 },
+      },
+    });
+    const auth = fixtureAuth({ role: "owner", permissions: { baseTier: "owner", leadScope: "all" } as ResolvedPermissions });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(auth, "lead-1", { intake_source: "walk-in" }, OPTS);
+
+    expect(outcome.kind).toBe("ok");
+    expect(onLeadsEnteredStageMock).not.toHaveBeenCalled();
   });
 });
 

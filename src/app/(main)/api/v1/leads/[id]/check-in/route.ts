@@ -17,6 +17,7 @@ import { hasProspectQualification, canBypassProspectQualification } from "@/lib/
 import { addLeadCollaborator } from "@/lib/leads/collaborators";
 import { createAuditLog } from "@/lib/api/audit";
 import { touchLeadUpdatedAt } from "@/lib/leads/touch-updated-at";
+import { onLeadsEnteredStageSafe } from "@/industries/_shared/features/outreach/lib/stage-auto-enroll";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -338,6 +339,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
           if (promoteError) {
             logger.error({ err: promoteError, leadId: id }, "Failed to auto-promote lead on check-in");
           } else {
+            await onLeadsEnteredStageSafe({
+              tenantId: auth.tenantId,
+              leadIds: [id],
+              fromListId: (lead as { list_id?: string | null }).list_id ?? null,
+              toListId: target.id,
+            });
             // Same gap as the triage block above — auto-promote was silent in System Activity.
             const promoteChanges: Record<string, { old: unknown; new: unknown }> = {
               list: { old: currentSlug, new: target.name },
