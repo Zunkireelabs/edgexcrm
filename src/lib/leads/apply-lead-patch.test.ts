@@ -733,6 +733,15 @@ describe("applyLeadPatch — Processing fee: counsellor reports, admin verifies"
     expect(params.every((p) => p.type === "lead.fee_claimed")).toBe(true);
   });
 
+  it("still saves the claim when the admin notification fails", async () => {
+    getTenantAdminRecipientsMock.mockRejectedValue(new Error("db down"));
+    await setFakeDb({ leads: LEAD });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(counsellor(), "lead-1", { pre_app_fee_status: "claimed", pre_app_fee_amount: 5000 }, OPTS);
+    expect(outcome.kind).toBe("ok");
+    if (outcome.kind === "ok") expect(outcome.lead.pre_app_fee_status).toBe("claimed");
+  });
+
   it.each(["paid", "unpaid", "waiver"])("a counsellor is still forbidden from setting the status to %s", async (status) => {
     await setFakeDb({ leads: LEAD });
     const { applyLeadPatch } = await import("./apply-lead-patch");

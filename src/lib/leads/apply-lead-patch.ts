@@ -1254,20 +1254,25 @@ export async function applyLeadPatch(
   }
 
   // A team member reported a received processing fee — tell the owners/admins so
-  // they can verify it. Fire-and-forget: a failed notification must never fail the save.
+  // they can verify it. Best-effort: the fee is already saved, so a failed
+  // notification must never turn this request into an error.
   if (changes.pre_app_fee_status?.new === "claimed") {
-    const adminIds = await getTenantAdminRecipients(supabase, auth.tenantId);
-    createNotificationsExcept(
-      auth.userId,
-      adminIds.map((adminId) => ({
-        tenantId: auth.tenantId,
-        userId: adminId,
-        type: NotificationTypes.FEE_CLAIMED,
-        title: "Processing fee needs verification",
-        message: `${leadName}: a processing fee was reported — please verify it`,
-        link: `/leads/${leadId}`,
-      })),
-    );
+    try {
+      const adminIds = await getTenantAdminRecipients(supabase, auth.tenantId);
+      await createNotificationsExcept(
+        auth.userId,
+        adminIds.map((adminId) => ({
+          tenantId: auth.tenantId,
+          userId: adminId,
+          type: NotificationTypes.FEE_CLAIMED,
+          title: "Processing fee needs verification",
+          message: `${leadName}: a processing fee was reported — please verify it`,
+          link: `/leads/${leadId}`,
+        })),
+      );
+    } catch (err) {
+      log.error({ err }, "Fee-claimed notification failed");
+    }
   }
 
   return { kind: "ok", lead: updated as Lead, changes, previousValues };
