@@ -58,6 +58,28 @@ export function canAssignOnBranchRow(
 }
 
 /**
+ * May a plain (own-scope, non-manager) team member CLAIM this row for themselves?
+ *  - Must sit in the row's branch, and that branch must actually hold the lead (origin or
+ *    shared-in) — same "does my branch hold it" check as the manager rule above.
+ *  - Does NOT grant picking anyone else; the caller (branches-block.tsx / the PATCH route) must
+ *    still require the target to equal `caller.userId`. Kept separate from `canAssignOnBranchRow`
+ *    so that function's existing "counselors may not assign on a branch row" meaning is unchanged
+ *    for the manager/admin picker — this is strictly the narrower self-claim case.
+ */
+export function canSelfClaimOnBranchRow(
+  caller: BranchAssignCaller,
+  rowBranchId: string,
+  membership: LeadMembership | { branch_id: string }[],
+): boolean {
+  return (
+    caller.permissions.leadScope === "own" &&
+    !!caller.branchId &&
+    rowBranchId === caller.branchId &&
+    membership.some((m) => m.branch_id === caller.branchId)
+  );
+}
+
+/**
  * Admins are always a valid assignment target, whichever branch they sit in (or none) —
  * education_consultancy's rule, previously copy-pasted inside apply-lead-patch.ts.
  */

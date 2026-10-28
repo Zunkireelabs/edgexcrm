@@ -3,7 +3,7 @@ import { addLeadCollaborator } from "@/lib/leads/collaborators";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, requireAdmin, getClientIp } from "@/lib/api/auth";
 import { getLeadMembership } from "@/lib/leads/branch-membership";
-import { canAssignOnBranchRow, isValidBranchRowAssignee } from "@/lib/leads/branch-assign-policy";
+import { canAssignOnBranchRow, canSelfClaimOnBranchRow, isValidBranchRowAssignee } from "@/lib/leads/branch-assign-policy";
 import {
   apiSuccess,
   apiValidationError,
@@ -144,8 +144,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
   // Who may act on this row — the single shared rule (branch-assign-policy.ts): owner/admin on any
   // row; a branch manager only on their OWN branch's row, and only when their branch holds the lead
-  // (which includes a lead another branch shared in to them).
-  if (!canAssignOnBranchRow(auth, branchId, membership)) return apiForbidden();
+  // (which includes a lead another branch shared in to them). A plain (own-scope) team member may
+  // additionally CLAIM their own branch's row for themselves — never pick anyone else.
+  const isManagerOrAdmin = canAssignOnBranchRow(auth, branchId, membership);
+  const isSelfClaim = !isManagerOrAdmin && assignedTo === auth.userId && canSelfClaimOnBranchRow(auth, branchId, membership);
+  if (!isManagerOrAdmin && !isSelfClaim) return apiForbidden();
 
   // Load the target membership row — 404 if lead not in this branch
   const { data: memberRow } = await supabase

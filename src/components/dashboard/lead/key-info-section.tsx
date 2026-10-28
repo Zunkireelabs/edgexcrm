@@ -470,6 +470,7 @@ export function KeyInfoSection({
             <BranchesBlock
               leadId={lead.id}
               isAdmin={isAdmin}
+              userId={userId ?? null}
               userBranchId={userBranchId ?? null}
               leadScope={leadScope ?? "all"}
             />

@@ -222,6 +222,48 @@ describe("PATCH /api/v1/leads/[id]/branches/[branchId]", () => {
     expect(res.status).toBe(403);
   });
 
+  const SELF_ID = "44444444-4444-4444-4444-444444444444";
+
+  it("a plain team member (own-scope) CAN claim their own branch's row for themselves", async () => {
+    requireAdminMock.mockReturnValue(false);
+    authenticateRequestMock.mockResolvedValue({
+      ...BRANCH_MANAGER_AUTH,
+      userId: SELF_ID,
+      permissions: { leadScope: "own", baseTier: "member" },
+    });
+    setupDb({ tenant_users: chain({ data: { user_id: SELF_ID, branch_id: "branch-birgunj", role: "staff" }, error: null }) });
+    const { PATCH } = await import("./route");
+    const res = await PATCH(fakeReq({ assigned_to: SELF_ID }), { params: params() });
+    expect(res.status).toBe(200);
+  });
+
+  it("a plain team member (own-scope) may NOT claim it for someone else, only themselves", async () => {
+    requireAdminMock.mockReturnValue(false);
+    authenticateRequestMock.mockResolvedValue({
+      ...BRANCH_MANAGER_AUTH,
+      userId: SELF_ID,
+      permissions: { leadScope: "own", baseTier: "member" },
+    });
+    setupDb();
+    const { PATCH } = await import("./route");
+    const res = await PATCH(fakeReq({ assigned_to: "11111111-1111-1111-1111-111111111111" }), { params: params() });
+    expect(res.status).toBe(403);
+  });
+
+  it("a plain team member (own-scope) may NOT claim a row outside their own branch", async () => {
+    requireAdminMock.mockReturnValue(false);
+    authenticateRequestMock.mockResolvedValue({
+      ...BRANCH_MANAGER_AUTH,
+      userId: SELF_ID,
+      branchId: "branch-ktm",
+      permissions: { leadScope: "own", baseTier: "member" },
+    });
+    setupDb({ tenant_users: chain({ data: { user_id: SELF_ID, branch_id: "branch-ktm", role: "staff" }, error: null }) });
+    const { PATCH } = await import("./route");
+    const res = await PATCH(fakeReq({ assigned_to: SELF_ID }), { params: params() });
+    expect(res.status).toBe(403);
+  });
+
   it("404 when the lead isn't shared into this branch at all", async () => {
     setupDb({ lead_branches: chain({ data: null, error: null }) });
     const { PATCH } = await import("./route");

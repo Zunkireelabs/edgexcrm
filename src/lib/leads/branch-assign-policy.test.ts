@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   canAssignOnBranchRow,
+  canSelfClaimOnBranchRow,
   isAdminAssignmentTarget,
   isBranchManagerCaller,
   isLeadInManagerBranch,
@@ -49,6 +50,31 @@ describe("canAssignOnBranchRow — who may act on a branch's row", () => {
     const roleOnly: BranchAssignCaller = { role: "admin", permissions: { baseTier: "member", leadScope: "own" }, branchId: null };
     expect(isOwnerOrAdminCaller(roleOnly)).toBe(true);
     expect(canAssignOnBranchRow(roleOnly, RECEIVING, lead)).toBe(true);
+  });
+});
+
+describe("canSelfClaimOnBranchRow — whether a plain team member may claim a row for themselves", () => {
+  it("an own-scope member sitting in the row's branch, which holds the lead, may claim it", () => {
+    expect(canSelfClaimOnBranchRow(counselor, RECEIVING, lead)).toBe(true);
+  });
+
+  it("not on another branch's row, even one that holds the lead", () => {
+    expect(canSelfClaimOnBranchRow(counselor, ORIGIN, lead)).toBe(false);
+  });
+
+  it("not when their branch does not hold the lead", () => {
+    const counselorElsewhere: BranchAssignCaller = { role: "staff", permissions: { baseTier: "member", leadScope: "own" }, branchId: OTHER };
+    expect(canSelfClaimOnBranchRow(counselorElsewhere, OTHER, lead)).toBe(false);
+  });
+
+  it("not a branchless own-scope member", () => {
+    const branchless: BranchAssignCaller = { role: "staff", permissions: { baseTier: "member", leadScope: "own" }, branchId: null };
+    expect(canSelfClaimOnBranchRow(branchless, RECEIVING, lead)).toBe(false);
+  });
+
+  it("not a manager (team scope) or admin — they already have the full picker via canAssignOnBranchRow", () => {
+    expect(canSelfClaimOnBranchRow(receivingManager, RECEIVING, lead)).toBe(false);
+    expect(canSelfClaimOnBranchRow(admin, RECEIVING, lead)).toBe(false);
   });
 });
 
