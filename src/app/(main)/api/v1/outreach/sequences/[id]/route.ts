@@ -173,6 +173,7 @@ export async function PATCH(request: NextRequest, { params }: Props) {
 
 export async function DELETE(_request: NextRequest, { params }: Props) {
   const { id } = await params;
+  const log = createRequestLogger({ requestId: crypto.randomUUID(), method: "DELETE", path: "/api/v1/outreach/sequences/[id]" });
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
   if (!getFeatureAccess(auth.industryId, FEATURES.OUTREACH)) return apiForbidden();
@@ -183,6 +184,11 @@ export async function DELETE(_request: NextRequest, { params }: Props) {
   if (!existing) return apiNotFound("Sequence");
 
   const { error } = await db.from("email_sequences").update({ status: "archived" }).eq("id", id);
+  // An archived sequence must stop claiming stages (one active rule per stage per channel) — migration 277.
+  if (!error) {
+    const { error: ruleError } = await db.from("sequence_stage_triggers").delete().eq("sequence_id", id);
+    if (ruleError) log.warn({ err: ruleError, sequenceId: id }, "Could not clear the archived sequence's stage rules (non-fatal)");
+  }
   if (error) return apiError("DB_ERROR", "Failed to archive sequence", 500);
 
   return apiSuccess({ id, status: "archived" });

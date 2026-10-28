@@ -17,6 +17,7 @@ import { hasProspectQualification, canBypassProspectQualification } from "@/lib/
 import { addLeadCollaborator } from "@/lib/leads/collaborators";
 import { createAuditLog } from "@/lib/api/audit";
 import { touchLeadUpdatedAt } from "@/lib/leads/touch-updated-at";
+import { onLeadsEnteredStageSafe } from "@/industries/_shared/features/outreach/lib/stage-auto-enroll";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -192,6 +193,15 @@ export async function POST(request: NextRequest, context: RouteContext) {
         if (triageError) {
           logger.error({ err: triageError, leadId: id }, "Failed to apply check-in triage");
         } else {
+          // Stage auto-enroll: the front desk moved the lead into a stage (best-effort, never fails the check-in).
+          if (updatePayload.list_id !== undefined && updatePayload.list_id !== (lead.list_id ?? null)) {
+            await onLeadsEnteredStageSafe({
+              tenantId: auth.tenantId,
+              leadIds: [id],
+              fromListId: lead.list_id ?? null,
+              toListId: updatePayload.list_id as string,
+            });
+          }
           // Surface the triage move/assign in System Activity — was previously silent
           // (only the check-in note itself was audited), so a stage/status change from
           // check-in triage never showed up in the lead's activity timeline.
@@ -338,6 +348,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
           if (promoteError) {
             logger.error({ err: promoteError, leadId: id }, "Failed to auto-promote lead on check-in");
           } else {
+            await onLeadsEnteredStageSafe({
+              tenantId: auth.tenantId,
+              leadIds: [id],
+              fromListId: (lead as { list_id?: string | null }).list_id ?? null,
+              toListId: target.id,
+            });
             // Same gap as the triage block above — auto-promote was silent in System Activity.
             const promoteChanges: Record<string, { old: unknown; new: unknown }> = {
               list: { old: currentSlug, new: target.name },

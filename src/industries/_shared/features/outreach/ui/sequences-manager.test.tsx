@@ -21,7 +21,12 @@ vi.mock("../hooks/use-sequences", () => ({
     loading: false,
     refresh,
     sequences: [
-      { id: "seq-1", name: "Welcome", description: null, status: "active", created_at: "2026-10-01T00:00:00Z", auto_send: false, on_reply: "pause", email_sequence_steps: [] },
+      { id: "seq-1", name: "Welcome", description: null, status: "active", created_at: "2026-10-01T00:00:00Z", auto_send: false, on_reply: "pause", email_sequence_steps: [],
+        sequence_stage_triggers: [
+          { list_id: "l2", is_active: true, lead_lists: { name: "Prospects", sort_order: 20 } },
+          { list_id: "l1", is_active: true, lead_lists: { name: "Qualified", sort_order: 10 } },
+          { list_id: "l9", is_active: false, lead_lists: { name: "Retired", sort_order: 1 } },
+        ] },
       { id: "seq-new", name: "Brand new", description: null, status: "active", created_at: "2026-10-03T00:00:00Z", auto_send: true, on_reply: "pause", email_sequence_steps: [] },
     ],
   }),
@@ -121,5 +126,16 @@ describe("SequencesManager — bulk enroll entry points", () => {
 
     render(<SequencesManager isAdmin={false} industryId="education_consultancy" />);
     expect(screen.queryByRole("button", { name: "Report" })).toBeNull();
+  });
+});
+
+describe("SequencesManager — stage auto-enroll pill", () => {
+  it("a sequence that auto-enrolls shows its stages in stage order (inactive rules ignored); one that doesn't shows nothing", () => {
+    render(<SequencesManager isAdmin industryId="education_consultancy" />);
+    const pill = screen.getByText("Auto-enroll · Qualified, Prospects");
+    expect(pill).toBeInTheDocument();
+    expect(pill.closest("span")).toHaveAttribute("title", expect.stringContaining("Qualified or Prospects"));
+    // only the Welcome row has rules: exactly one pill on the page
+    expect(screen.getAllByText(/^Auto-enroll ·/)).toHaveLength(1);
   });
 });

@@ -41,7 +41,13 @@ export interface SequenceEnrollmentRow {
   completed_at: string | null;
   /** 'email' | 'sms' (migration 274), copied from the sequence when the enrollment is created. */
   channel?: string;
+  /** Where the enrollment came from (migration 277). Absent on rows read before it shipped. */
+  source?: EnrollmentSource;
+  /** For a 'stage_rule' enrollment: the stage that started it. */
+  trigger_list_id?: string | null;
 }
+
+export type EnrollmentSource = "manual" | "bulk" | "stage_rule";
 
 export interface SequenceStepDraftRow {
   id: string;
@@ -283,9 +289,17 @@ async function startEnrollment(
 export async function enrollLead(
   db: ScopedClient,
   auth: AuthContext,
-  params: { sequenceId: string; leadId: string; assignedTo: string | null; enrolledBy: string }
+  params: {
+    sequenceId: string;
+    leadId: string;
+    assignedTo: string | null;
+    enrolledBy: string;
+    /** Defaults to 'manual'. A stage rule passes 'stage_rule' + the stage; a bulk run passes 'bulk'. */
+    source?: EnrollmentSource;
+    triggerListId?: string | null;
+  }
 ): Promise<SequenceEnrollmentRow> {
-  const { sequenceId, leadId, assignedTo, enrolledBy } = params;
+  const { sequenceId, leadId, assignedTo, enrolledBy, source = "manual", triggerListId = null } = params;
 
   const { data: step1 } = await db
     .from("email_sequence_steps")
@@ -304,6 +318,8 @@ export async function enrollLead(
       status: "active",
       current_step_order: 0,
       enrolled_by: enrolledBy,
+      source,
+      trigger_list_id: source === "stage_rule" ? triggerListId : null,
     })
     .select("*")
     .single();
@@ -701,7 +717,7 @@ export async function skipDraft(db: ScopedClient, auth: AuthContext, draftId: st
 export async function unenrollLead(
   db: ScopedClient,
   enrollmentId: string,
-  opts: { promoteQueue?: boolean } = {}
+  opts: { promoteQueue?: boolean; stopReason?: "stage_left" } = {}
 ): Promise<void> {
   const { data: existing } = await db
     .from("sequence_enrollments")
@@ -709,7 +725,10 @@ export async function unenrollLead(
     .eq("id", enrollmentId)
     .maybeSingle();
 
-  await db.from("sequence_enrollments").update({ status: "unenrolled" }).eq("id", enrollmentId);
+  await db
+    .from("sequence_enrollments")
+    .update({ status: "unenrolled", ...(opts.stopReason ? { stop_reason: opts.stopReason } : {}) })
+    .eq("id", enrollmentId);
 
   await db
     .from("sequence_step_drafts")

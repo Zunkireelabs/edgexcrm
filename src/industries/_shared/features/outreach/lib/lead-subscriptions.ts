@@ -7,7 +7,8 @@ import type { OutreachChannel } from "./channel";
 export const CAMPAIGN_LIMIT = 50;
 
 export type EnrollmentStatus = "active" | "paused" | "completed" | "unenrolled";
-export type StopReason = "replied" | "sequence_paused" | "suppressed" | null;
+export type StopReason = "replied" | "sequence_paused" | "suppressed" | "stage_left" | null;
+export type EnrollmentSource = "manual" | "bulk" | "stage_rule";
 
 export interface SubscribedSequence {
   id: string;
@@ -24,6 +25,10 @@ export interface SubscribedSequence {
   /** When it finished or was stopped; null while live. */
   endedAt: string | null;
   stopReason: StopReason;
+  /** Where it came from (migration 277): a person, a bulk run, or a stage auto-enroll rule. */
+  source: EnrollmentSource;
+  /** For a rule-started enrollment: the stage the lead entered ("Qualified"); null otherwise or if the stage was deleted. */
+  triggerStageName: string | null;
 }
 
 export interface QueuedSequence {
@@ -32,6 +37,12 @@ export interface QueuedSequence {
   sequenceName: string;
   channel: OutreachChannel;
   queuedAt: string;
+}
+
+/** Per channel: auto-enroll is switched OFF for this lead (a rule will not enroll them). */
+export interface AutoEnrollOptOuts {
+  email: boolean;
+  sms: boolean;
 }
 
 export interface CampaignReceived {
@@ -52,6 +63,7 @@ export interface LeadSubscriptions {
   queued: QueuedSequence[];
   /** Newest first. */
   campaigns: CampaignReceived[];
+  autoEnrollOptOuts: AutoEnrollOptOuts;
 }
 
 export interface RawEnrollment {
@@ -65,6 +77,8 @@ export interface RawEnrollment {
   completed_at: string | null;
   stopped_at?: string | null;
   stop_reason?: string | null;
+  source?: string | null;
+  lead_lists?: { name: string } | null;
   email_sequences: { name: string } | null;
 }
 export interface RawQueueRow {
@@ -93,7 +107,8 @@ export interface RawBlast {
 
 const channelOf = (c: string | null | undefined): OutreachChannel => (c === "sms" ? "sms" : "email");
 const STATUSES: EnrollmentStatus[] = ["active", "paused", "completed", "unenrolled"];
-const STOP_REASONS = ["replied", "sequence_paused", "suppressed"] as const;
+const STOP_REASONS = ["replied", "sequence_paused", "suppressed", "stage_left"] as const;
+const SOURCES: EnrollmentSource[] = ["manual", "bulk", "stage_rule"];
 
 export function toSequenceRows(rows: RawEnrollment[]): SubscribedSequence[] {
   return rows.map((r) => {
@@ -111,8 +126,14 @@ export function toSequenceRows(rows: RawEnrollment[]): SubscribedSequence[] {
       startedAt: r.started_at,
       endedAt: live ? null : (r.completed_at ?? r.stopped_at ?? null),
       stopReason: (STOP_REASONS as readonly string[]).includes(r.stop_reason ?? "") ? (r.stop_reason as StopReason) : null,
+      source: (SOURCES as string[]).includes(r.source ?? "") ? (r.source as EnrollmentSource) : "manual",
+      triggerStageName: r.lead_lists?.name ?? null,
     };
   });
+}
+
+export function toOptOuts(rows: { channel: string }[]): AutoEnrollOptOuts {
+  return { email: rows.some((r) => r.channel === "email"), sms: rows.some((r) => r.channel === "sms") };
 }
 
 export function toQueuedRows(rows: RawQueueRow[]): QueuedSequence[] {
@@ -156,6 +177,7 @@ export function endedBecause(s: SubscribedSequence): string {
   if (s.stopReason === "replied") return "Stopped — the lead replied";
   if (s.stopReason === "suppressed") return "Stopped — unsubscribed or bounced";
   if (s.stopReason === "sequence_paused") return "Stopped — the sequence was paused";
+  if (s.stopReason === "stage_left") return "Stopped — the lead moved to another stage";
   return s.status === "completed" ? "Finished all steps" : "Removed from the sequence";
 }
 

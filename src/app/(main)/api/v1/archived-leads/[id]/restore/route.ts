@@ -21,6 +21,7 @@ import {
   type RestoreList,
   type RestoreStage,
 } from "@/industries/education-consultancy/features/archived-lookup/lib/restore-target";
+import { onLeadsEnteredStageSafe } from "@/industries/_shared/features/outreach/lib/stage-auto-enroll";
 
 // POST /api/v1/archived-leads/[id]/restore — send an archived lead back to the pipeline.
 //
@@ -116,6 +117,13 @@ export async function POST(request: NextRequest, { params }: Props) {
   if (!updated || updated.length === 0) {
     return apiConflict("This lead was just changed by someone else. Refresh and try again.");
   }
+
+  await onLeadsEnteredStageSafe({
+    tenantId: auth.tenantId,
+    leadIds: [id],
+    fromListId: lead.list_id as string | null,
+    toListId: target.listId,
+  });
 
   await Promise.all([
     createAuditLog({

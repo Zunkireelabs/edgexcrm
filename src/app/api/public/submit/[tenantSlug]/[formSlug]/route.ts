@@ -49,6 +49,7 @@ import {
   resolveEmailField,
   foldUnknownFieldsIntoCustomFields,
 } from "@/lib/leads/submission-normalize";
+import { onLeadsEnteredStageSafe } from "@/industries/_shared/features/outreach/lib/stage-auto-enroll";
 
 const CORS_STATIC_HEADERS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -561,6 +562,11 @@ export async function POST(
   }
 
   log.info({ leadId: lead.id }, "Lead created via public API");
+
+  // Stage auto-enroll: a lead created straight into a stage starts that stage's sequences (best-effort).
+  if (routedListId) {
+    await onLeadsEnteredStageSafe({ tenantId: tenant.id, leadIds: [lead.id], fromListId: null, toListId: routedListId });
+  }
 
   // Assign display ID for education leads (best-effort; routedListId = null when no intake list).
   if (tenant.industry_id === "education_consultancy") {

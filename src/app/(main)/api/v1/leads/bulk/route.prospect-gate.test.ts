@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+
+vi.mock("@/industries/_shared/features/outreach/lib/stage-auto-enroll", () => ({
+  onLeadsEnteredStageSafe: vi.fn(async () => ({ stopped: 0, runsCreated: 0, leadsQueued: 0 })),
+}));
 import type { NextRequest } from "next/server";
+import { onLeadsEnteredStageSafe } from "@/industries/_shared/features/outreach/lib/stage-auto-enroll";
 import type { AuthContext } from "@/lib/api/auth";
 
 // Proves the bulk Prospects-qualification gate applies to FORWARD moves only:
@@ -105,5 +110,28 @@ describe("PATCH /api/v1/leads/bulk — Prospects qualification gate direction", 
     const { PATCH } = await import("./route");
     const res = await PATCH(req({ ids: [LEAD], list_id: PROSPECTS }));
     expect(res.status).toBe(422);
+  });
+
+  it("stage auto-enroll — a successful move hands the leads (grouped by the stage they came from) to the helper", async () => {
+    setup(APPLICATIONS);
+    vi.mocked(onLeadsEnteredStageSafe).mockClear();
+    const { PATCH } = await import("./route");
+    const res = await PATCH(req({ ids: [LEAD], list_id: PROSPECTS }));
+    expect(res.status).toBe(200);
+    expect(onLeadsEnteredStageSafe).toHaveBeenCalledTimes(1);
+    expect(onLeadsEnteredStageSafe).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      leadIds: [LEAD],
+      fromListId: APPLICATIONS,
+      toListId: PROSPECTS,
+    });
+  });
+
+  it("stage auto-enroll — a rejected move (gate blocks it) never reaches the helper", async () => {
+    setup(QUALIFIED);
+    vi.mocked(onLeadsEnteredStageSafe).mockClear();
+    const { PATCH } = await import("./route");
+    expect((await PATCH(req({ ids: [LEAD], list_id: PROSPECTS }))).status).toBe(422);
+    expect(onLeadsEnteredStageSafe).not.toHaveBeenCalled();
   });
 });
