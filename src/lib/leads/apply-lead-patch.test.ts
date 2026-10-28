@@ -48,6 +48,7 @@ vi.mock("@/lib/notifications", () => ({
     LEAD_ASSIGNED: "lead.assigned",
     LEAD_UNASSIGNED: "lead.unassigned",
     LEAD_STAGE_CHANGED: "lead.stage_changed",
+    FEE_CLAIMED: "lead.fee_claimed",
   },
   createNotificationsExcept: createNotificationsExceptMock,
   getTenantAdminRecipients: getTenantAdminRecipientsMock,
@@ -743,6 +744,97 @@ describe("applyLeadPatch — Processing fee lock (owner/admin only)", () => {
     const outcome = await applyLeadPatch(auth, "lead-1", { pre_app_fee_notes: "verified with student" }, OPTS);
     expect(outcome.kind).toBe("ok");
     if (outcome.kind === "ok") expect(outcome.lead.pre_app_fee_notes).toBe("verified with student");
+  });
+});
+
+describe("applyLeadPatch — Processing fee: counsellor reports, admin verifies", () => {
+  const LEAD = { id: "lead-1", pipeline_id: "pipe-1", assigned_to: "user-1", branch_id: null, list_id: null };
+  const counsellor = () => fixtureAuth({ permissions: { leadScope: "own", canEditLeads: true } as ResolvedPermissions });
+  const admin = () =>
+    fixtureAuth({ role: "admin", permissions: { baseTier: "admin", leadScope: "all" } as ResolvedPermissions });
+
+  beforeEach(() => {
+    createNotificationsExceptMock.mockClear();
+    getTenantAdminRecipientsMock.mockReset();
+    getTenantAdminRecipientsMock.mockResolvedValue(["owner-1", "admin-1"]);
+  });
+
+  it("a counsellor can report a received fee as 'claimed' with an amount", async () => {
+    await setFakeDb({ leads: LEAD });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(
+      counsellor(),
+      "lead-1",
+      { pre_app_fee_status: "claimed", pre_app_fee_amount: 5000, pre_app_fee_notes: "receipt 12" },
+      OPTS,
+    );
+    expect(outcome.kind).toBe("ok");
+    if (outcome.kind === "ok") {
+      expect(outcome.lead.pre_app_fee_status).toBe("claimed");
+      expect(outcome.lead.pre_app_fee_amount).toBe(5000);
+    }
+  });
+
+  it("notifies the owners/admins (not the counsellor) when a fee is claimed", async () => {
+    await setFakeDb({ leads: LEAD });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    await applyLeadPatch(counsellor(), "lead-1", { pre_app_fee_status: "claimed", pre_app_fee_amount: 5000 }, OPTS);
+    expect(createNotificationsExceptMock).toHaveBeenCalledTimes(1);
+    const [actorId, params] = createNotificationsExceptMock.mock.calls[0] as unknown as [string, Array<{ userId: string; type: string }>];
+    expect(actorId).toBe("user-1");
+    expect(params.map((p) => p.userId)).toEqual(["owner-1", "admin-1"]);
+    expect(params.every((p) => p.type === "lead.fee_claimed")).toBe(true);
+  });
+
+  it("still saves the claim when the admin notification fails", async () => {
+    getTenantAdminRecipientsMock.mockRejectedValue(new Error("db down"));
+    await setFakeDb({ leads: LEAD });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(counsellor(), "lead-1", { pre_app_fee_status: "claimed", pre_app_fee_amount: 5000 }, OPTS);
+    expect(outcome.kind).toBe("ok");
+    if (outcome.kind === "ok") expect(outcome.lead.pre_app_fee_status).toBe("claimed");
+  });
+
+  it.each(["paid", "unpaid", "waiver"])("a counsellor is still forbidden from setting the status to %s", async (status) => {
+    await setFakeDb({ leads: LEAD });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(counsellor(), "lead-1", { pre_app_fee_status: status }, OPTS);
+    expect(outcome).toEqual({ kind: "forbidden", message: "Only an owner or admin can edit the processing fee." });
+  });
+
+  it("a counsellor cannot overwrite a fee an admin already recorded", async () => {
+    await setFakeDb({ leads: { ...LEAD, pre_app_fee_status: "paid", pre_app_fee_amount: 5000 } });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(counsellor(), "lead-1", { pre_app_fee_status: "claimed", pre_app_fee_amount: 1 }, OPTS);
+    expect(outcome).toEqual({ kind: "forbidden", message: "Only an owner or admin can edit the processing fee." });
+  });
+
+  it("a counsellor can update their own earlier claim", async () => {
+    await setFakeDb({ leads: { ...LEAD, pre_app_fee_status: "claimed", pre_app_fee_amount: 4000 } });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(counsellor(), "lead-1", { pre_app_fee_status: "claimed", pre_app_fee_amount: 5000 }, OPTS);
+    expect(outcome.kind).toBe("ok");
+    if (outcome.kind === "ok") expect(outcome.lead.pre_app_fee_amount).toBe(5000);
+  });
+
+  it("an admin can verify a claim (claimed -> paid) and keeps the amount", async () => {
+    await setFakeDb({ leads: { ...LEAD, pre_app_fee_status: "claimed", pre_app_fee_amount: 5000 } });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(admin(), "lead-1", { pre_app_fee_status: "paid", pre_app_fee_amount: 5000 }, OPTS);
+    expect(outcome.kind).toBe("ok");
+    if (outcome.kind === "ok") expect(outcome.lead.pre_app_fee_status).toBe("paid");
+    expect(createNotificationsExceptMock).not.toHaveBeenCalled();
+  });
+
+  it("an admin can reject a claim (claimed -> unpaid), which clears the amount", async () => {
+    await setFakeDb({ leads: { ...LEAD, pre_app_fee_status: "claimed", pre_app_fee_amount: 5000 } });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(admin(), "lead-1", { pre_app_fee_status: "unpaid" }, OPTS);
+    expect(outcome.kind).toBe("ok");
+    if (outcome.kind === "ok") {
+      expect(outcome.lead.pre_app_fee_status).toBe("unpaid");
+      expect(outcome.lead.pre_app_fee_amount).toBeNull();
+    }
   });
 });
 

@@ -279,16 +279,18 @@ export async function applyLeadPatch(
     }
   }
 
-  // Processing/pre-application fee fields are owner/admin-only. Team members
-  // must report a received payment to an admin, who verifies and enters it
-  // themselves — closes the direct-API path so a non-admin with ordinary
-  // lead-edit access can't record an unverified fee.
+  // Processing/pre-application fee: only an owner/admin can record it as paid,
+  // waived or unpaid. A team member may only REPORT a received fee as "claimed"
+  // (with amount/notes) for an admin to verify — closes the direct-API path so a
+  // non-admin with ordinary lead-edit access can't record an unverified fee.
+  // "claimed" is an audit marker only; nothing downstream gates on it.
   const FEE_FIELDS = ["pre_app_fee_status", "pre_app_fee_amount", "pre_app_fee_notes"] as const;
-  if (!requireAdmin(auth)) {
-    for (const field of FEE_FIELDS) {
-      if (body[field] !== undefined) {
-        return { kind: "forbidden", message: "Only an owner or admin can edit the processing fee." };
-      }
+  if (!requireAdmin(auth) && FEE_FIELDS.some((field) => body[field] !== undefined)) {
+    const currentFeeStatus = (existingLead as Record<string, unknown>).pre_app_fee_status;
+    // Never overwrite a fee an admin already verified.
+    const adminRecorded = currentFeeStatus != null && currentFeeStatus !== "claimed";
+    if (body.pre_app_fee_status !== "claimed" || adminRecorded) {
+      return { kind: "forbidden", message: "Only an owner or admin can edit the processing fee." };
     }
   }
 
@@ -803,11 +805,11 @@ export async function applyLeadPatch(
   // Pre-Application fee normalization (migration 084)
   if (updatePayload.pre_app_fee_status !== undefined) {
     const fs = updatePayload.pre_app_fee_status;
-    if (fs !== null && !["paid", "unpaid", "waiver"].includes(fs as string)) {
-      return { kind: "validation", errors: { pre_app_fee_status: ["Must be one of: paid, unpaid, waiver"] } };
+    if (fs !== null && !["paid", "unpaid", "waiver", "claimed"].includes(fs as string)) {
+      return { kind: "validation", errors: { pre_app_fee_status: ["Must be one of: paid, unpaid, waiver, claimed"] } };
     }
-    // Amount only makes sense when paid — drop it otherwise to keep data clean.
-    if (fs !== "paid") updatePayload.pre_app_fee_amount = null;
+    // Amount only makes sense when paid or claimed — drop it otherwise to keep data clean.
+    if (fs !== "paid" && fs !== "claimed") updatePayload.pre_app_fee_amount = null;
   }
   if (updatePayload.pre_app_fee_amount !== undefined && updatePayload.pre_app_fee_amount !== null) {
     const amt = Number(updatePayload.pre_app_fee_amount);
@@ -1271,6 +1273,28 @@ export async function applyLeadPatch(
     }
 
     createNotificationsExcept(auth.userId, stageNotifications);
+  }
+
+  // A team member reported a received processing fee — tell the owners/admins so
+  // they can verify it. Best-effort: the fee is already saved, so a failed
+  // notification must never turn this request into an error.
+  if (changes.pre_app_fee_status?.new === "claimed") {
+    try {
+      const adminIds = await getTenantAdminRecipients(supabase, auth.tenantId);
+      await createNotificationsExcept(
+        auth.userId,
+        adminIds.map((adminId) => ({
+          tenantId: auth.tenantId,
+          userId: adminId,
+          type: NotificationTypes.FEE_CLAIMED,
+          title: "Processing fee needs verification",
+          message: `${leadName}: a processing fee was reported — please verify it`,
+          link: `/leads/${leadId}`,
+        })),
+      );
+    } catch (err) {
+      log.error({ err }, "Fee-claimed notification failed");
+    }
   }
 
   return { kind: "ok", lead: updated as Lead, changes, previousValues };
