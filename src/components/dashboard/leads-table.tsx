@@ -22,6 +22,7 @@ import { TOOLBAR_BTN } from "@/components/dashboard/leads/toolbar-btn";
 // stay as the flag-off fallback; see their @deprecated JSDoc.
 import { AdvancedFilterBar, DEFAULT_MAX_CONDITIONS } from "@/components/filters/advanced-filter-bar";
 import { AddFilterButton } from "@/components/filters/add-filter-button";
+import { SavedFiltersMenu } from "@/industries/education-consultancy/features/saved-lead-filters/components/saved-filters-menu";
 import { useFilterOptions } from "@/components/filters/use-filter-options";
 import { newConditionId, addOrMergeCondition } from "@/components/filters/condition-defaults";
 import type { FilterCondition, FilterTree } from "@/lib/filters/types";
@@ -585,6 +586,7 @@ export function LeadsTable({
   // Outreach bulk enroll (OUTREACH-BULK-ENROLL-BRIEF.md): the selected leads (or "all matching" via selectAllMatching) -> a sequence.
   const [bulkEnrollOpen, setBulkEnrollOpen] = useState(false);
   const hasOutreach = getFeatureAccess(industryId ?? null, FEATURES.OUTREACH);
+  const hasSavedLeadFilters = advancedFiltersEnabled && getFeatureAccess(industryId ?? null, FEATURES.SAVED_LEAD_FILTERS);
   const [isAssigning, setIsAssigning] = useState(false);
   const [assignTo, setAssignTo] = useState<string>("");
   // Staging (Leads Organise) only — Branch + Stage are required to leave staging via
@@ -2690,12 +2692,23 @@ export function LeadsTable({
           {!advancedFiltersEnabled ? (
             <FilterMenu filters={filterDefs} activeCount={activeFiltersCount} onClearAll={clearFilters} />
           ) : (
-            <AddFilterButton
-              fields={advancedVisibleFields}
-              getOptions={advancedGetOptions}
-              onAdd={handleAddAdvancedFilter}
-              disabled={displayFilterTree.conditions.length >= DEFAULT_MAX_CONDITIONS}
-            />
+            <>
+              <AddFilterButton
+                fields={advancedVisibleFields}
+                getOptions={advancedGetOptions}
+                onAdd={handleAddAdvancedFilter}
+                disabled={displayFilterTree.conditions.length >= DEFAULT_MAX_CONDITIONS}
+              />
+              {/* Saved (named) filters — education_consultancy. Private to the signed-in user (migration 279). */}
+              {hasSavedLeadFilters && (
+                <SavedFiltersMenu
+                  tree={displayFilterTree}
+                  registry={advancedFilterRegistry}
+                  onApply={handleAdvancedFilterChange}
+                  className={TOOLBAR_BTN}
+                />
+              )}
+            </>
           )}
 
           {/* Sort — row 1 in both modes, next to the filter trigger. */}

@@ -32,6 +32,7 @@ export type IndustryId = (typeof INDUSTRIES)[keyof typeof INDUSTRIES];
 export const FEATURES = {
   // Industry-scoped (education_consultancy)
   CHECK_IN: "check-in",
+  SAVED_LEAD_FILTERS: "saved-lead-filters",
   FORM_BUILDER: "form-builder",
   CONTACTS: "contacts",
   EMAIL: "email",
