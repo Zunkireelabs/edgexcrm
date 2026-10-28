@@ -14,6 +14,10 @@ const createNotificationsExceptMock = vi.fn(async () => {});
 const getTenantAdminRecipientsMock = vi.fn(async () => [] as string[]);
 const sendLeadAssignedEmailMock = vi.fn(async () => {});
 const processEmailForwardRulesMock = vi.fn(async () => {});
+const onLeadsEnteredStageMock = vi.fn(async (...args: unknown[]) => {
+  void args;
+  return { stopped: 0, runsCreated: 0, leadsQueued: 0 };
+});
 
 vi.mock("@/lib/api/auth", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api/auth")>();
@@ -25,6 +29,9 @@ vi.mock("@/lib/leads/branch-membership", () => ({
 }));
 vi.mock("@/lib/leads/collaborators", () => ({
   addLeadCollaborator: addLeadCollaboratorMock,
+}));
+vi.mock("@/industries/_shared/features/outreach/lib/stage-auto-enroll", () => ({
+  onLeadsEnteredStageSafe: onLeadsEnteredStageMock,
 }));
 vi.mock("@/lib/leads/assign-display-ids", () => ({
   assignDisplayIds: assignDisplayIdsMock,
@@ -41,6 +48,7 @@ vi.mock("@/lib/notifications", () => ({
     LEAD_ASSIGNED: "lead.assigned",
     LEAD_UNASSIGNED: "lead.unassigned",
     LEAD_STAGE_CHANGED: "lead.stage_changed",
+    FEE_CLAIMED: "lead.fee_claimed",
   },
   createNotificationsExcept: createNotificationsExceptMock,
   getTenantAdminRecipients: getTenantAdminRecipientsMock,
@@ -287,6 +295,7 @@ beforeEach(() => {
   getTenantAdminRecipientsMock.mockClear();
   sendLeadAssignedEmailMock.mockClear();
   processEmailForwardRulesMock.mockClear();
+  onLeadsEnteredStageMock.mockClear();
 });
 
 describe("applyLeadPatch — governance branches", () => {
@@ -598,6 +607,51 @@ describe("applyLeadPatch — governance branches", () => {
     expect(outcome.lead.stage_id).toBe("stage-landing");
     expect(outcome.lead.status).toBe("new");
   });
+
+  it("stage auto-enroll — a real stage change hands the move (from -> to) to the auto-enroll helper", async () => {
+    await setFakeDb({
+      leads: {
+        id: "lead-1", pipeline_id: "pipe-old", assigned_to: "user-2", branch_id: null,
+        list_id: "list-current", status: "qualified", stage_id: "stage-cur", lead_type: "lead", archive_reason: null, archived_at: null,
+      },
+      leadLists: {
+        "list-current": { id: "list-current", slug: "current", name: "Pre-qualified", pipeline_id: "pipe-old", is_archive: false, sort_order: 10 },
+        "list-target": { id: "list-target", slug: "qualified", name: "Qualified", pipeline_id: "pipe-new", is_archive: false, sort_order: 20, access: { mode: "all" } },
+      },
+      pipelineStages: { "stage-landing": { is_terminal: false } },
+    });
+    getPipelineLandingStageMock.mockResolvedValue({ id: "stage-landing", slug: "new" });
+    const auth = fixtureAuth({ role: "owner", permissions: { baseTier: "owner", leadScope: "all" } as ResolvedPermissions });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(auth, "lead-1", { list_id: "list-target" }, OPTS);
+
+    expect(outcome.kind).toBe("ok");
+    expect(onLeadsEnteredStageMock).toHaveBeenCalledTimes(1);
+    expect(onLeadsEnteredStageMock).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      leadIds: ["lead-1"],
+      fromListId: "list-current",
+      toListId: "list-target",
+    });
+  });
+
+  it("stage auto-enroll — a patch that does not change the stage never calls the helper", async () => {
+    await setFakeDb({
+      leads: {
+        id: "lead-1", pipeline_id: "pipe-1", assigned_to: "user-2", branch_id: null,
+        list_id: "list-current", status: "qualified", stage_id: "stage-cur", lead_type: "lead", archive_reason: null, archived_at: null,
+      },
+      leadLists: {
+        "list-current": { id: "list-current", slug: "current", name: "Pre-qualified", pipeline_id: "pipe-1", is_archive: false, sort_order: 10 },
+      },
+    });
+    const auth = fixtureAuth({ role: "owner", permissions: { baseTier: "owner", leadScope: "all" } as ResolvedPermissions });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(auth, "lead-1", { intake_source: "walk-in" }, OPTS);
+
+    expect(outcome.kind).toBe("ok");
+    expect(onLeadsEnteredStageMock).not.toHaveBeenCalled();
+  });
 });
 
 describe("applyLeadPatch — Lead Source lock (owner/admin only)", () => {
@@ -690,6 +744,97 @@ describe("applyLeadPatch — Processing fee lock (owner/admin only)", () => {
     const outcome = await applyLeadPatch(auth, "lead-1", { pre_app_fee_notes: "verified with student" }, OPTS);
     expect(outcome.kind).toBe("ok");
     if (outcome.kind === "ok") expect(outcome.lead.pre_app_fee_notes).toBe("verified with student");
+  });
+});
+
+describe("applyLeadPatch — Processing fee: counsellor reports, admin verifies", () => {
+  const LEAD = { id: "lead-1", pipeline_id: "pipe-1", assigned_to: "user-1", branch_id: null, list_id: null };
+  const counsellor = () => fixtureAuth({ permissions: { leadScope: "own", canEditLeads: true } as ResolvedPermissions });
+  const admin = () =>
+    fixtureAuth({ role: "admin", permissions: { baseTier: "admin", leadScope: "all" } as ResolvedPermissions });
+
+  beforeEach(() => {
+    createNotificationsExceptMock.mockClear();
+    getTenantAdminRecipientsMock.mockReset();
+    getTenantAdminRecipientsMock.mockResolvedValue(["owner-1", "admin-1"]);
+  });
+
+  it("a counsellor can report a received fee as 'claimed' with an amount", async () => {
+    await setFakeDb({ leads: LEAD });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(
+      counsellor(),
+      "lead-1",
+      { pre_app_fee_status: "claimed", pre_app_fee_amount: 5000, pre_app_fee_notes: "receipt 12" },
+      OPTS,
+    );
+    expect(outcome.kind).toBe("ok");
+    if (outcome.kind === "ok") {
+      expect(outcome.lead.pre_app_fee_status).toBe("claimed");
+      expect(outcome.lead.pre_app_fee_amount).toBe(5000);
+    }
+  });
+
+  it("notifies the owners/admins (not the counsellor) when a fee is claimed", async () => {
+    await setFakeDb({ leads: LEAD });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    await applyLeadPatch(counsellor(), "lead-1", { pre_app_fee_status: "claimed", pre_app_fee_amount: 5000 }, OPTS);
+    expect(createNotificationsExceptMock).toHaveBeenCalledTimes(1);
+    const [actorId, params] = createNotificationsExceptMock.mock.calls[0] as unknown as [string, Array<{ userId: string; type: string }>];
+    expect(actorId).toBe("user-1");
+    expect(params.map((p) => p.userId)).toEqual(["owner-1", "admin-1"]);
+    expect(params.every((p) => p.type === "lead.fee_claimed")).toBe(true);
+  });
+
+  it("still saves the claim when the admin notification fails", async () => {
+    getTenantAdminRecipientsMock.mockRejectedValue(new Error("db down"));
+    await setFakeDb({ leads: LEAD });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(counsellor(), "lead-1", { pre_app_fee_status: "claimed", pre_app_fee_amount: 5000 }, OPTS);
+    expect(outcome.kind).toBe("ok");
+    if (outcome.kind === "ok") expect(outcome.lead.pre_app_fee_status).toBe("claimed");
+  });
+
+  it.each(["paid", "unpaid", "waiver"])("a counsellor is still forbidden from setting the status to %s", async (status) => {
+    await setFakeDb({ leads: LEAD });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(counsellor(), "lead-1", { pre_app_fee_status: status }, OPTS);
+    expect(outcome).toEqual({ kind: "forbidden", message: "Only an owner or admin can edit the processing fee." });
+  });
+
+  it("a counsellor cannot overwrite a fee an admin already recorded", async () => {
+    await setFakeDb({ leads: { ...LEAD, pre_app_fee_status: "paid", pre_app_fee_amount: 5000 } });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(counsellor(), "lead-1", { pre_app_fee_status: "claimed", pre_app_fee_amount: 1 }, OPTS);
+    expect(outcome).toEqual({ kind: "forbidden", message: "Only an owner or admin can edit the processing fee." });
+  });
+
+  it("a counsellor can update their own earlier claim", async () => {
+    await setFakeDb({ leads: { ...LEAD, pre_app_fee_status: "claimed", pre_app_fee_amount: 4000 } });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(counsellor(), "lead-1", { pre_app_fee_status: "claimed", pre_app_fee_amount: 5000 }, OPTS);
+    expect(outcome.kind).toBe("ok");
+    if (outcome.kind === "ok") expect(outcome.lead.pre_app_fee_amount).toBe(5000);
+  });
+
+  it("an admin can verify a claim (claimed -> paid) and keeps the amount", async () => {
+    await setFakeDb({ leads: { ...LEAD, pre_app_fee_status: "claimed", pre_app_fee_amount: 5000 } });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(admin(), "lead-1", { pre_app_fee_status: "paid", pre_app_fee_amount: 5000 }, OPTS);
+    expect(outcome.kind).toBe("ok");
+    if (outcome.kind === "ok") expect(outcome.lead.pre_app_fee_status).toBe("paid");
+    expect(createNotificationsExceptMock).not.toHaveBeenCalled();
+  });
+
+  it("an admin can reject a claim (claimed -> unpaid), which clears the amount", async () => {
+    await setFakeDb({ leads: { ...LEAD, pre_app_fee_status: "claimed", pre_app_fee_amount: 5000 } });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(admin(), "lead-1", { pre_app_fee_status: "unpaid" }, OPTS);
+    expect(outcome.kind).toBe("ok");
+    if (outcome.kind === "ok") {
+      expect(outcome.lead.pre_app_fee_status).toBe("unpaid");
+      expect(outcome.lead.pre_app_fee_amount).toBeNull();
+    }
   });
 });
 

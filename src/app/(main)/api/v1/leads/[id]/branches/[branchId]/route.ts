@@ -3,7 +3,7 @@ import { addLeadCollaborator } from "@/lib/leads/collaborators";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, requireAdmin, getClientIp } from "@/lib/api/auth";
 import { getLeadMembership } from "@/lib/leads/branch-membership";
-import { canAssignOnBranchRow, isValidBranchRowAssignee } from "@/lib/leads/branch-assign-policy";
+import { canAssignOnBranchRow, canSelfClaimOnBranchRow, isValidBranchRowAssignee } from "@/lib/leads/branch-assign-policy";
 import {
   apiSuccess,
   apiValidationError,
@@ -12,6 +12,7 @@ import {
   apiNotFound,
   apiError,
   apiServiceUnavailable,
+  apiConflict,
 } from "@/lib/api/response";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { createRequestLogger } from "@/lib/logger";
@@ -144,8 +145,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
   // Who may act on this row — the single shared rule (branch-assign-policy.ts): owner/admin on any
   // row; a branch manager only on their OWN branch's row, and only when their branch holds the lead
-  // (which includes a lead another branch shared in to them).
-  if (!canAssignOnBranchRow(auth, branchId, membership)) return apiForbidden();
+  // (which includes a lead another branch shared in to them). A plain (own-scope) team member may
+  // additionally CLAIM their own branch's row for themselves — never pick anyone else.
+  const isManagerOrAdmin = canAssignOnBranchRow(auth, branchId, membership);
+  const isSelfClaim = !isManagerOrAdmin && assignedTo === auth.userId && canSelfClaimOnBranchRow(auth, branchId, membership);
+  if (!isManagerOrAdmin && !isSelfClaim) return apiForbidden();
 
   // Load the target membership row — 404 if lead not in this branch
   const { data: memberRow } = await supabase
@@ -156,6 +160,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     .eq("branch_id", branchId)
     .single();
   if (!memberRow) return apiNotFound("Branch membership");
+
+  // Self-claim is "unassigned -> me" only — a plain team member may not steal a row a colleague
+  // already claimed. The UI hides the Claim button once a row has an assignee, but that's
+  // client-side only; enforce it here too, against the row we just loaded.
+  if (isSelfClaim && memberRow.assigned_to !== null) {
+    return apiConflict("This lead has already been claimed by someone else.");
+  }
 
   // Validate assignedTo is a member of the target branch (when non-null)
   // Who may be picked — same shared rule: a member of this branch, or (education) an admin, who
@@ -181,15 +192,24 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
   const prevAssignedTo = memberRow.assigned_to as string | null;
 
-  const { error: updateError } = await supabase
+  // Self-claim: re-assert "still unassigned" IN the update (not just the read above) so two
+  // members claiming the same row at once can't both win — only the first update matches a row;
+  // the loser's WHERE clause matches nothing and `updated` comes back empty.
+  let updateQuery = supabase
     .from("lead_branches")
     .update({ assigned_to: assignedTo })
     .eq("tenant_id", auth.tenantId)
     .eq("lead_id", id)
     .eq("branch_id", branchId);
+  if (isSelfClaim) updateQuery = updateQuery.is("assigned_to", null);
+
+  const { data: updated, error: updateError } = await updateQuery.select("id");
   if (updateError) {
     log.error({ err: updateError }, "Failed to update branch assignee");
     return apiServiceUnavailable("Failed to update branch assignee");
+  }
+  if (isSelfClaim && (updated ?? []).length === 0) {
+    return apiConflict("This lead has already been claimed by someone else.");
   }
 
   // Origin row: mirror assignment to leads.assigned_to (keeps legacy readers in sync)

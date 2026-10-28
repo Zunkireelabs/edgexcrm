@@ -48,11 +48,12 @@ type AssigneeState = { status: "loading" } | { status: "error" } | { status: "re
 interface BranchesBlockProps {
   leadId: string;
   isAdmin: boolean;
+  userId: string | null;
   userBranchId: string | null;
   leadScope: "all" | "own" | "team";
 }
 
-export function BranchesBlock({ leadId, isAdmin, userBranchId, leadScope }: BranchesBlockProps) {
+export function BranchesBlock({ leadId, isAdmin, userId, userBranchId, leadScope }: BranchesBlockProps) {
   const [memberships, setMemberships] = useState<Membership[]>([]);
   const [allBranches, setAllBranches] = useState<Branch[]>([]);
   // Assignable people per branch id. Loaded from the server (never derived from /api/v1/team,
@@ -63,6 +64,8 @@ export function BranchesBlock({ leadId, isAdmin, userBranchId, leadScope }: Bran
   const [selectedBranch, setSelectedBranch] = useState("");
   const [selectedAssignee, setSelectedAssignee] = useState("");
   const [sending, setSending] = useState(false);
+  // Per-row "updating" flag for the picker/claim button, keyed by branch id.
+  const [assigning, setAssigning] = useState<Record<string, boolean>>({});
 
   const isBranchManager = leadScope === "team" && !!userBranchId;
   const canSend = isAdmin || isBranchManager;
@@ -112,7 +115,12 @@ export function BranchesBlock({ leadId, isAdmin, userBranchId, leadScope }: Bran
   const memberBranchIds = new Set(memberships.map((m) => m.branch_id));
   const availableBranches = allBranches.filter((b) => !memberBranchIds.has(b.id));
   const originBranch = memberships.find((m) => m.is_origin) ?? memberships[0];
-  const label = `Branch: ${originBranch?.branch_name ?? "—"}`;
+  // The branch relevant to THIS viewer: the one they belong to, if the lead has been shared into
+  // it — never the origin branch they may have nothing to do with. Falls back to origin for
+  // admin/owner (leadScope "all"), who have no single "current" branch of their own.
+  const viewerBranch = (userBranchId && memberships.find((m) => m.branch_id === userBranchId)) || originBranch;
+  const label = `Branch: ${viewerBranch?.branch_name ?? "—"}`;
+  const sharedElsewhere = memberships.length > 1;
 
   async function handleSend() {
     if (!selectedBranch) return;
@@ -140,6 +148,31 @@ export function BranchesBlock({ leadId, isAdmin, userBranchId, leadScope }: Bran
     }
   }
 
+  async function handleAssign(branchId: string, assignTo: string) {
+    setAssigning((prev) => ({ ...prev, [branchId]: true }));
+    try {
+      const res = await fetch(`/api/v1/leads/${leadId}/branches/${branchId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assigned_to: assignTo }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error?.message || "Failed to assign");
+      setMemberships((prev) =>
+        prev.map((m) =>
+          m.branch_id === branchId
+            ? { ...m, assigned_to: assignTo, assigned_to_name: assignTo === userId ? "You" : (assignees[branchId]?.status === "ready" ? (assignees[branchId] as { people: Assignee[] }).people.find((p) => p.user_id === assignTo)?.name ?? null : null) }
+            : m,
+        ),
+      );
+      toast.success(assignTo === userId ? "Lead claimed" : "Assignee updated");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to assign");
+    } finally {
+      setAssigning((prev) => ({ ...prev, [branchId]: false }));
+    }
+  }
+
   if (loading) return null;
 
   return (
@@ -159,6 +192,63 @@ export function BranchesBlock({ leadId, isAdmin, userBranchId, leadScope }: Bran
             </button>
           )}
         </div>
+
+        {/* Shared to more than one branch — show each branch's current assignee, with a
+            manager/admin picker or a plain team member's self-claim button where it applies. */}
+        {sharedElsewhere && (
+          <div className="space-y-1 mb-1.5">
+            {memberships.map((m) => {
+              const rowIsManagerOrAdmin = isAdmin || (isBranchManager && userBranchId === m.branch_id);
+              const rowIsSelfClaimable = !rowIsManagerOrAdmin && leadScope === "own" && userBranchId === m.branch_id && !m.assigned_to;
+              const isBusy = !!assigning[m.branch_id];
+
+              return (
+                <div key={m.branch_id} className="flex items-center justify-between gap-2 text-xs">
+                  <span className="truncate text-muted-foreground">
+                    {m.branch_name}
+                    {m.is_origin ? " (origin)" : ""}
+                  </span>
+
+                  {rowIsManagerOrAdmin ? (
+                    <Select
+                      value={m.assigned_to ?? ""}
+                      onOpenChange={(open) => open && void loadAssignees(m.branch_id)}
+                      onValueChange={(value) => handleAssign(m.branch_id, value)}
+                      disabled={isBusy}
+                    >
+                      <SelectTrigger size="sm" className="h-6 w-auto max-w-[140px] text-xs">
+                        <SelectValue placeholder="Unassigned" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {assignees[m.branch_id]?.status === "ready" &&
+                          (assignees[m.branch_id] as { status: "ready"; people: Assignee[] }).people.map((p) => (
+                            <SelectItem key={p.user_id} value={p.user_id}>
+                              {p.name || p.email}
+                              {p.is_admin_exempt ? " (admin)" : ""}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  ) : rowIsSelfClaimable ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-6 px-2 text-xs"
+                      disabled={isBusy}
+                      onClick={() => userId && handleAssign(m.branch_id, userId)}
+                    >
+                      {isBusy ? "Claiming…" : "Claim"}
+                    </Button>
+                  ) : (
+                    <span className="truncate font-medium">
+                      {m.assigned_to === userId ? "You" : m.assigned_to_name ?? "Unassigned"}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <Dialog

@@ -116,10 +116,24 @@ describe("GET /api/v1/leads/[id]/branches/[branchId]/assignees", () => {
     expect(body.data.assignees.map((a: { user_id: string }) => a.user_id)).toEqual(["u-recv"]);
   });
 
-  it("a counselor is refused", async () => {
-    authenticateRequestMock.mockResolvedValue(auth({ role: "staff", branchId: RECEIVING, permissions: { baseTier: "member", leadScope: "own" } }));
+  it("a plain team member (own-scope) in the receiving branch may self-claim — gets ONLY themselves, never a colleague", async () => {
+    authenticateRequestMock.mockResolvedValue(auth({ userId: "u-recv", role: "staff", branchId: RECEIVING, permissions: { baseTier: "member", leadScope: "own" } }));
+    const { GET } = await import("./route");
+    const res = await GET(req, { params: params() });
+    expect(res.status).toBe(200);
+    expect((await res.json()).data.assignees.map((a: { user_id: string }) => a.user_id)).toEqual(["u-recv"]);
+  });
+
+  it("a counselor whose branch does not hold the lead is refused", async () => {
+    authenticateRequestMock.mockResolvedValue(auth({ role: "staff", branchId: OTHER, permissions: { baseTier: "member", leadScope: "own" } }));
     const { GET } = await import("./route");
     expect((await GET(req, { params: params() })).status).toBe(403);
+  });
+
+  it("a counselor is refused on a branch the lead isn't shared into yet (share dialog stays manager/admin-only)", async () => {
+    authenticateRequestMock.mockResolvedValue(auth({ role: "staff", branchId: ORIGIN, permissions: { baseTier: "member", leadScope: "own" } }));
+    const { GET } = await import("./route");
+    expect((await GET(req, { params: params(OTHER) })).status).toBe(403);
   });
 
   it("422 on a malformed branch id, 404 when the lead doesn't exist", async () => {

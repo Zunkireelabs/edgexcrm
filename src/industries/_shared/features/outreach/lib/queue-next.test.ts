@@ -125,6 +125,24 @@ describe("startQueuedEnrollment", () => {
     expect(tables.sequence_enrollment_queue[0].started_at).toEqual(expect.any(String));
   });
 
+  it("a sequence a stage RULE parked keeps its origin when it finally starts (so the lead page still says 'Auto-enrolled')", async () => {
+    seed();
+    tables.sequence_enrollment_queue[0].run_id = "run-rule";
+    tables.sequence_bulk_enrollments = [{ id: "run-rule", trigger_kind: "stage_rule", trigger_list_id: "list-qualified" }];
+    expect(await startQueuedEnrollment(T, "lead-1")).toBe("started");
+    expect(enrollCalls).toEqual([
+      { sequenceId: "seq-B", leadId: "lead-1", assignedTo: "rep-1", enrolledBy: "user-1", source: "stage_rule", triggerListId: "list-qualified" },
+    ]);
+  });
+
+  it("one parked by a person's bulk run is enrolled exactly as before — no source tag", async () => {
+    seed();
+    tables.sequence_enrollment_queue[0].run_id = "run-person";
+    tables.sequence_bulk_enrollments = [{ id: "run-person", trigger_kind: "manual", trigger_list_id: null }];
+    expect(await startQueuedEnrollment(T, "lead-1")).toBe("started");
+    expect(enrollCalls).toEqual([{ sequenceId: "seq-B", leadId: "lead-1", assignedTo: "rep-1", enrolledBy: "user-1" }]);
+  });
+
   it("starts only the row queued on the SAME channel: an ended email enrollment never starts a queued SMS sequence", async () => {
     seed();
     tables.sequence_enrollment_queue.push({ id: "q2", lead_id: "lead-1", sequence_id: "seq-S", queued_by: "user-1", status: "waiting", created_at: 2, channel: "sms" });

@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest } from "@/lib/api/auth";
 import { getLeadMembership, canManageLeadBranches } from "@/lib/leads/branch-membership";
-import { canAssignOnBranchRow, isValidBranchRowAssignee } from "@/lib/leads/branch-assign-policy";
+import { canAssignOnBranchRow, canSelfClaimOnBranchRow, isValidBranchRowAssignee } from "@/lib/leads/branch-assign-policy";
 import { getTeamMembers } from "@/lib/supabase/queries";
 import { apiSuccess, apiUnauthorized, apiForbidden, apiNotFound, apiValidationError } from "@/lib/api/response";
 
@@ -51,14 +51,19 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 
   const membership = await getLeadMembership(supabase, auth.tenantId, id);
   const rowExists = membership.some((m) => m.branch_id === branchId);
-  // Existing row → the per-row rule (a manager: only their own branch's row). Not yet shared →
+  const isManagerOrAdmin = canAssignOnBranchRow(auth, branchId, membership);
+  // Existing row → the per-row rule (a manager/admin: the full roster) OR a plain team member
+  // claiming their own branch's row for themselves (narrowed to just them below). Not yet shared →
   // whoever may share this lead (canManageLeadBranches) may pick a person for the new row.
-  const allowed = rowExists ? canAssignOnBranchRow(auth, branchId, membership) : canManageLeadBranches(auth, membership);
+  const canSelfClaim = rowExists && !isManagerOrAdmin && canSelfClaimOnBranchRow(auth, branchId, membership);
+  const allowed = rowExists ? isManagerOrAdmin || canSelfClaim : canManageLeadBranches(auth, membership);
   if (!allowed) return apiForbidden();
 
   const team = await getTeamMembers(auth.tenantId);
   const assignees = team
     .filter((m) => isValidBranchRowAssignee({ branchId: m.branch_id ?? null, role: m.role ?? null }, branchId, auth.industryId))
+    // A self-claim-only caller may only pick themselves — never see or choose a colleague.
+    .filter((m) => !canSelfClaim || m.user_id === auth.userId)
     .map((m) => ({
       user_id: m.user_id,
       name: m.name || null,

@@ -33,6 +33,8 @@ export interface Sequence {
   // When steps may go out (migration 260); null = as soon as due.
   send_window: SendWindow | null;
   email_sequence_steps: SequenceStep[];
+  /** Stages this sequence auto-enrolls from (migration 277). Absent/empty = auto-enroll is off. */
+  sequence_stage_triggers?: Array<{ list_id: string; is_active: boolean; lead_lists: { name: string; sort_order: number } | null }>;
 }
 
 export function useSequences(channel?: OutreachChannel) {

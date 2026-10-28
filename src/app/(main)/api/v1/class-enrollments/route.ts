@@ -22,6 +22,7 @@ import { PERMISSION_DENIED_MESSAGE } from "@/lib/permission-denied";
 import { canActOnEnrollmentLead } from "@/lib/classes/enrollment-scope";
 import { canEnrollStudents } from "@/lib/api/class-attendance";
 import { getLeadMembership } from "@/lib/leads/branch-membership";
+import { onLeadsEnteredStageSafe } from "@/industries/_shared/features/outreach/lib/stage-auto-enroll";
 
 export async function GET(request: NextRequest) {
   const auth = await authenticateRequest();
@@ -270,6 +271,8 @@ async function autoMoveToQualified(
     log.error({ error: moveError }, "Failed to auto-move lead to Qualified");
     return;
   }
+
+  await onLeadsEnteredStageSafe({ tenantId: auth.tenantId, leadIds: [leadId], fromListId: oldListId, toListId: targetList.id });
 
   auditEvents.push(
     createAuditLog({

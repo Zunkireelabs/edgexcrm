@@ -78,6 +78,29 @@ describe("leads registry — legacy value-shape equivalence", () => {
     expect(b.calls).toEqual(["or(status.eq.contacted)"]);
   });
 
+  it("status: is_any_of with several values targets the status column with .in()", () => {
+    const b = compile(andTree(cond("c1", "status", "is_any_of", ["connected", "in_progress"])));
+    expect(b.calls).toEqual(["or(status.in.(connected,in_progress))"]);
+  });
+
+  it("status: is_any_of with one value is the same as 'is'", () => {
+    const b = compile(andTree(cond("c1", "status", "is_any_of", ["connected"])));
+    expect(b.calls).toEqual(["or(status.eq.connected)"]);
+  });
+
+  it("status: is_none_of is NULL-inclusive so leads with no status are not silently dropped", () => {
+    const b = compile(andTree(cond("c1", "status", "is_none_of", ["connected", "in_progress"])));
+    expect(b.calls[0]).toContain("status.is.null");
+    expect(b.calls[0]).toContain("status.not.in.(connected,in_progress)");
+  });
+
+  it("status: an empty value list throws instead of matching everything (fail-closed)", () => {
+    const status = registry.status.source;
+    if (status.kind !== "virtual") throw new Error("expected virtual source");
+    expect(() => status.compile({ id: "c1", field: "status", op: "is_any_of", value: [] }, ctx)).toThrow(FilterCompileError);
+    expect(() => status.compile({ id: "c1", field: "status", op: "is_none_of", value: [] }, ctx)).toThrow(FilterCompileError);
+  });
+
   it("source: a text slug list targets intake_source, matching route.ts's .in('intake_source', sourceFilter)", () => {
     const b = compile(andTree(cond("c1", "source", "is_any_of", ["google_ads", "referral"])));
     expect(b.calls).toEqual(["or(intake_source.in.(google_ads,referral))"]);

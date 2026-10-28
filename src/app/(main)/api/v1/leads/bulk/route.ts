@@ -6,6 +6,7 @@ import { assignmentBranchTarget, branchMoveOnAssignment } from "@/lib/leads/bran
 import { isAdminAssignmentTarget, isLeadInManagerBranch } from "@/lib/leads/branch-assign-policy";
 import { addLeadCollaborators } from "@/lib/leads/collaborators";
 import { assignDisplayIds } from "@/lib/leads/assign-display-ids";
+import { onLeadsEnteredStageSafe } from "@/industries/_shared/features/outreach/lib/stage-auto-enroll";
 import { getPipelineLandingStage } from "@/lib/leads/pipeline-stage";
 import { canAccessList } from "@/lib/api/permissions";
 import { getFeatureAccess } from "@/industries/_loader";
@@ -431,6 +432,21 @@ export async function PATCH(request: NextRequest) {
       });
     } catch (err) {
       log.error({ err }, "assignDisplayIds failed");
+    }
+  }
+
+  // Stage auto-enroll: group the moved leads by the stage they came from and hand each group over (best-effort; the work
+  // itself runs in the background, so a big bulk move returns immediately).
+  if (body.list_id !== undefined) {
+    const toListId = body.list_id ?? null;
+    const byFrom = new Map<string | null, string[]>();
+    for (const id of idsToUpdate) {
+      const from = existingMap.get(id)?.list_id ?? null;
+      if (from === toListId) continue;
+      byFrom.set(from, [...(byFrom.get(from) ?? []), id]);
+    }
+    for (const [fromListId, leadIds] of byFrom) {
+      await onLeadsEnteredStageSafe({ tenantId: auth.tenantId, leadIds, fromListId, toListId });
     }
   }
 

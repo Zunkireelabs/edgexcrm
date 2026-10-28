@@ -1,16 +1,15 @@
 import { NextRequest } from "next/server";
-import { authenticateRequest, requireLeadBranchAccess } from "@/lib/api/auth";
+import { authenticateRequest } from "@/lib/api/auth";
 import { apiSuccess, apiUnauthorized, apiForbidden, apiNotFound, apiValidationError, apiServiceUnavailable } from "@/lib/api/response";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { createRequestLogger } from "@/lib/logger";
-import { shouldRestrictToSelf } from "@/lib/api/permissions";
-import { getLeadMembership } from "@/lib/leads/branch-membership";
-import { isLeadCollaborator } from "@/lib/leads/collaborators";
+import { loadVisibleLead } from "@/industries/_shared/features/outreach/lib/lead-visibility";
 import {
   CAMPAIGN_LIMIT,
   toCampaignRows,
+  toOptOuts,
   toQueuedRows,
   toSequenceRows,
   type LeadSubscriptions,
@@ -44,26 +43,16 @@ export async function GET(_request: NextRequest, { params }: Props) {
   if (!UUID_REGEX.test(id)) return apiValidationError({ id: ["Invalid lead id"] });
 
   const db = await scopedClient(auth);
-  const { data: lead } = await db.from("leads").select("id, assigned_to, branch_id").eq("id", id).is("deleted_at", null).maybeSingle();
-  if (!lead) return apiNotFound("Lead");
-  const leadRow = lead as unknown as { id: string; assigned_to: string | null; branch_id: string | null };
-
-  const membership = await getLeadMembership(db.raw(), auth.tenantId, id);
-  const restrictedAndUnassigned =
-    shouldRestrictToSelf(auth.permissions) &&
-    !(membership.some((m) => m.assigned_to === auth.userId) || leadRow.assigned_to === auth.userId);
-  if (restrictedAndUnassigned || !requireLeadBranchAccess(auth, leadRow, membership)) {
-    if (!(await isLeadCollaborator(db.raw(), auth.tenantId, id, auth.userId))) return apiNotFound("Lead");
-  }
+  if (!(await loadVisibleLead(db, auth, id))) return apiNotFound("Lead");
 
   const withEmailCampaigns = getFeatureAccess(auth.industryId, FEATURES.EMAIL_CAMPAIGNS);
   const withSmsCampaigns = getFeatureAccess(auth.industryId, FEATURES.SMS);
   const none = Promise.resolve({ data: [] as unknown[], error: null });
 
-  const [enrollments, queue, emails, texts] = await Promise.all([
+  const [enrollments, queue, emails, texts, optOuts] = await Promise.all([
     db
       .from("sequence_enrollments")
-      .select("id, sequence_id, channel, status, current_step_order, assigned_to, started_at, completed_at, stopped_at, stop_reason, email_sequences(name)")
+      .select("id, sequence_id, channel, status, current_step_order, assigned_to, started_at, completed_at, stopped_at, stop_reason, source, lead_lists(name), email_sequences(name)")
       .eq("lead_id", id)
       .order("started_at", { ascending: false }),
     db
@@ -90,8 +79,9 @@ export async function GET(_request: NextRequest, { params }: Props) {
           .order("created_at", { ascending: false })
           .limit(CAMPAIGN_LIMIT)
       : none,
+    db.from("lead_auto_enroll_optouts").select("channel").eq("lead_id", id),
   ]);
-  if (enrollments.error || queue.error || emails.error || texts.error) {
+  if (enrollments.error || queue.error || emails.error || texts.error || optOuts.error) {
     log.error({ leadId: id }, "Failed to load the lead's subscriptions");
     return apiServiceUnavailable("Failed to load subscriptions");
   }
@@ -113,6 +103,7 @@ export async function GET(_request: NextRequest, { params }: Props) {
   const body: LeadSubscriptions = {
     sequences: toSequenceRows((enrollments.data ?? []) as unknown as RawEnrollment[]),
     queued: toQueuedRows((queue.data ?? []) as unknown as RawQueueRow[]),
+    autoEnrollOptOuts: toOptOuts((optOuts.data ?? []) as unknown as { channel: string }[]),
     campaigns: toCampaignRows(
       emailRows,
       smsRows,
