@@ -252,9 +252,9 @@ export function ConsentCard({
   const feeIsReported = savedFeeStatus === "claimed";
   const canReportFee = canManage && !canManageFee && (savedFeeStatus === "" || feeIsReported);
 
-  async function saveFee() {
+  async function saveFee(override?: FeeStatus) {
     setFeeSaving(true);
-    const statusToSave: FeeStatus | "" = canManageFee ? feeStatus : "claimed";
+    const statusToSave: FeeStatus | "" = override ?? (canManageFee ? feeStatus : "claimed");
     try {
       const res = await fetch(`/api/v1/leads/${leadId}`, {
         method: "PATCH",
@@ -269,7 +269,10 @@ export function ConsentCard({
         }),
       });
       if (!res.ok) throw new Error();
-      toast.success(canManageFee ? "Processing fee saved" : "Fee reported — the owner will verify it");
+      toast.success(
+        override === "paid" ? "Fee confirmed" : override === "unpaid" ? "Fee report rejected"
+          : canManageFee ? "Processing fee saved" : "Fee reported — the owner will verify it",
+      );
       setFeeStatus(statusToSave);
       setSavedFeeStatus(statusToSave);
       setFeeDirty(false);
@@ -525,8 +528,18 @@ export function ConsentCard({
                   />
                 </div>
 
+                {feeIsReported && !feeDirty && (
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={() => saveFee("paid")} disabled={feeSaving} className="h-7 text-xs">
+                      Confirm fee received
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => saveFee("unpaid")} disabled={feeSaving} className="h-7 text-xs">
+                      Reject
+                    </Button>
+                  </div>
+                )}
                 {feeDirty && (
-                  <Button size="sm" onClick={saveFee} disabled={feeSaving} className="h-7 text-xs">
+                  <Button size="sm" onClick={() => saveFee()} disabled={feeSaving} className="h-7 text-xs">
                     {feeSaving ? "Saving…" : "Save fee"}
                   </Button>
                 )}
@@ -568,7 +581,7 @@ export function ConsentCard({
                 {feeDirty && (
                   <Button
                     size="sm"
-                    onClick={saveFee}
+                    onClick={() => saveFee()}
                     disabled={feeSaving || feeAmount === "" || Number(feeAmount) <= 0}
                     className="h-7 text-xs"
                   >
@@ -587,7 +600,12 @@ export function ConsentCard({
                 {feeNotes && <p className="text-xs text-muted-foreground">{feeNotes}</p>}
               </div>
             ) : (
-              <p className="text-xs text-muted-foreground">Not set</p>
+              <p className="text-xs text-muted-foreground">Not set — an owner or admin records the fee</p>
+            )}
+            {!completeness.feeDone && (
+              <p className="text-[11px] text-muted-foreground">
+                The fee never blocks the consent form or the application — you can continue.
+              </p>
             )}
           </div>
           )}

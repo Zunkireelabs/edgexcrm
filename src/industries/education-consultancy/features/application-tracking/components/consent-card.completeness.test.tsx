@@ -147,6 +147,43 @@ describe("a counsellor-reported fee ('claimed')", () => {
     expect(await screen.findByText("Awaiting verification")).toBeInTheDocument();
   });
 
+  it("lets an owner/admin confirm a reported fee in one click (sends 'paid')", async () => {
+    renderCard({ feeStatus: "claimed", feeAmount: 5000, canManageFee: true });
+    await screen.findByText("Fee reported");
+    openCard();
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm fee received" }));
+    await waitFor(() => {
+      const patch = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.find(
+        (c) => (c[1] as RequestInit | undefined)?.method === "PATCH",
+      );
+      expect(patch).toBeTruthy();
+      const body = JSON.parse((patch![1] as RequestInit).body as string);
+      expect(body.pre_app_fee_status).toBe("paid");
+      expect(body.pre_app_fee_amount).toBe(5000);
+    });
+  });
+
+  it("lets an owner/admin reject a reported fee (sends 'unpaid')", async () => {
+    renderCard({ feeStatus: "claimed", feeAmount: 5000, canManageFee: true });
+    await screen.findByText("Fee reported");
+    openCard();
+    fireEvent.click(await screen.findByRole("button", { name: "Reject" }));
+    await waitFor(() => {
+      const patch = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.find(
+        (c) => (c[1] as RequestInit | undefined)?.method === "PATCH",
+      );
+      const body = JSON.parse((patch![1] as RequestInit).body as string);
+      expect(body.pre_app_fee_status).toBe("unpaid");
+    });
+  });
+
+  it("tells staff the fee never blocks consent or the application", async () => {
+    renderCard({ feeStatus: null, canManage: false });
+    await screen.findByText("Fee pending");
+    openCard();
+    expect(await screen.findByText(/never blocks the consent form or the application/)).toBeInTheDocument();
+  });
+
   it("does not offer the report form once an admin has recorded the fee", async () => {
     renderCard({ feeStatus: "unpaid" });
     await screen.findByText("Fee pending");
