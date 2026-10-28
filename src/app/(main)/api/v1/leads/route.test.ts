@@ -1,4 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+
+vi.mock("@/industries/_shared/features/outreach/lib/stage-auto-enroll", () => ({
+  onLeadsEnteredStageSafe: vi.fn(async () => ({ stopped: 0, runsCreated: 0, leadsQueued: 0 })),
+}));
 import type { NextRequest } from "next/server";
 import type { AuthContext } from "@/lib/api/auth";
 import type { ResolvedPermissions } from "@/lib/api/permissions";

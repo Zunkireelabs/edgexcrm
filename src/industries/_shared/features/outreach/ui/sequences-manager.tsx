@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Pencil, Archive, Layers, Pause, Play, UserPlus, BarChart3 } from "lucide-react";
+import { Plus, Pencil, Archive, Layers, Pause, Play, UserPlus, BarChart3, Zap } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,6 +17,7 @@ import {
 import { toast } from "sonner";
 import { useSequences, type Sequence } from "../hooks/use-sequences";
 import { SequenceEditorDialog } from "./sequence-editor-dialog";
+import { autoEnrollPillText, autoEnrollStageNames, autoEnrollTooltip } from "../lib/stage-rule-label";
 import { SequencePauseDialog } from "./sequence-pause-dialog";
 import { SequenceReportDialog } from "./sequence-report-dialog";
 import { BulkEnrollDialog } from "./bulk-enroll-dialog";
@@ -117,6 +118,15 @@ export function SequencesManager({ isAdmin, industryId, channel = "email" }: Seq
                   {sequence.auto_send && (
                     <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
                       Auto-send
+                    </span>
+                  )}
+                  {autoEnrollStageNames(sequence).length > 0 && (
+                    <span
+                      className="shrink-0 inline-flex items-center gap-0.5 rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
+                      title={autoEnrollTooltip(autoEnrollStageNames(sequence))}
+                    >
+                      <Zap className="h-2.5 w-2.5" aria-hidden />
+                      {autoEnrollPillText(autoEnrollStageNames(sequence))}
                     </span>
                   )}
                 </div>

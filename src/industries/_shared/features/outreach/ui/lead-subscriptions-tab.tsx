@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Mail, MessageSquare, X } from "lucide-react";
+import { Loader2, Mail, MessageSquare, X, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -35,7 +35,7 @@ interface LeadSubscriptionsTabProps {
   leadEmail?: string | null;
 }
 
-const EMPTY: LeadSubscriptions = { sequences: [], queued: [], campaigns: [] };
+const EMPTY: LeadSubscriptions = { sequences: [], queued: [], campaigns: [], autoEnrollOptOuts: { email: false, sms: false } };
 
 /** How many rows a list shows before "Show all". */
 const PREVIEW_ROWS = 5;
@@ -206,6 +206,12 @@ function PastRow({ s }: { s: SubscribedSequence }) {
       <span className="flex min-w-0 items-center gap-2">
         <ChannelTag channel={s.channel} />
         <span className="truncate font-medium">{s.sequenceName}</span>
+        {s.source === "stage_rule" && (
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+            <Zap className="h-3 w-3" aria-hidden />
+            Auto-enrolled{s.triggerStageName ? ` · entered ${s.triggerStageName}` : ""}
+          </span>
+        )}
         <span className="text-xs text-muted-foreground">{endedBecause(s)}</span>
       </span>
       <span className="shrink-0 text-xs text-muted-foreground">

@@ -34,7 +34,8 @@ export async function GET(request: NextRequest) {
   const db = await scopedClient(auth);
   let query = db
     .from("email_sequences")
-    .select("*, email_sequence_steps(*)")
+    // sequence_stage_triggers: the stages this sequence auto-enrolls from (migration 277), for the "Auto-enroll" pill on each row
+    .select("*, email_sequence_steps(*), sequence_stage_triggers(list_id, is_active, lead_lists(name, sort_order))")
     .eq("status", "active");
   if (channelParam) query = query.eq("channel", channelParam);
   const { data, error } = await query

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { campaignStatusLabel, endedBecause, toCampaignRows, toQueuedRows, toSequenceRows, type RawEnrollment } from "./lead-subscriptions";
+import { campaignStatusLabel, endedBecause, toCampaignRows, toOptOuts, toQueuedRows, toSequenceRows, type RawEnrollment } from "./lead-subscriptions";
 
 const enr = (over: Partial<RawEnrollment>): RawEnrollment => ({
   id: "e", sequence_id: "s", channel: "email", status: "completed", current_step_order: 3, started_at: "2026-01-01T00:00:00Z",
@@ -78,5 +78,34 @@ describe("campaign name when the campaign was deleted", () => {
       ["m1", "Your offer letter is ready", true],
       ["m2", "Spring", false],
     ]);
+  });
+});
+
+describe("stage auto-enroll fields (migration 277)", () => {
+  it("a rule-started enrollment says where it came from and which stage started it", () => {
+    const [auto, manual] = toSequenceRows([
+      enr({ status: "active", source: "stage_rule", lead_lists: { name: "Qualified" } }),
+      enr({ status: "active", source: "manual" }),
+    ]);
+    expect(auto).toMatchObject({ source: "stage_rule", triggerStageName: "Qualified" });
+    expect(manual).toMatchObject({ source: "manual", triggerStageName: null });
+  });
+
+  it("rows from before the column existed (or an unknown source) read as manual", () => {
+    const [old, weird] = toSequenceRows([enr({}), enr({ source: "alien" })]);
+    expect(old.source).toBe("manual");
+    expect(weird.source).toBe("manual");
+  });
+
+  it("'stage_left' is a known stop reason with a plain-words label", () => {
+    const [row] = toSequenceRows([enr({ status: "unenrolled", completed_at: null, stopped_at: "2026-03-01T00:00:00Z", stop_reason: "stage_left" })]);
+    expect(row.stopReason).toBe("stage_left");
+    expect(endedBecause(row)).toBe("Stopped — the lead moved to another stage");
+  });
+
+  it("opt-outs are read per channel", () => {
+    expect(toOptOuts([])).toEqual({ email: false, sms: false });
+    expect(toOptOuts([{ channel: "sms" }])).toEqual({ email: false, sms: true });
+    expect(toOptOuts([{ channel: "email" }, { channel: "sms" }])).toEqual({ email: true, sms: true });
   });
 });
