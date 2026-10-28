@@ -55,10 +55,15 @@ function compileStatus(cond: FilterCondition): string {
   if (cond.op === "is_empty") return "status.is.null";
   if (cond.op === "is_not_empty") return "status.not.is.null";
 
-  const value = String(cond.value);
-  if (cond.op === "is") return `status.eq.${pgVal(value)}`;
-  // is_not — NULL-inclusive negation rule.
-  return or("status.is.null", `status.neq.${pgVal(value)}`);
+  const values = asList(cond.value);
+  if (values.length === 0) throw new FilterCompileError(`${cond.op} requires at least one value`, "invalid_value");
+
+  const isNeg = cond.op === "is_not" || cond.op === "is_none_of";
+  if (!isNeg) {
+    return values.length === 1 ? `status.eq.${pgVal(values[0])}` : `status.in.(${values.map(pgVal).join(",")})`;
+  }
+  // is_not / is_none_of — NULL-inclusive negation rule.
+  return or("status.is.null", values.length === 1 ? `status.neq.${pgVal(values[0])}` : `status.not.in.(${values.map(pgVal).join(",")})`);
 }
 
 // ── source: virtual, strict single-column (intake_source only) ─────────────
@@ -194,7 +199,7 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       label: "Status",
       type: "select",
       source: { kind: "virtual", compile: compileStatus },
-      operators: ["is", "is_not", "is_empty", "is_not_empty"],
+      operators: ["is", "is_not", "is_any_of", "is_none_of", "is_empty", "is_not_empty"],
       group: "Basic",
       filterable: true,
       sortable: false,
