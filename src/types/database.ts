@@ -239,7 +239,7 @@ export interface Lead {
   guardian_name: string | null;
   intake_account: string | null;
   // Pre-Application fee (education_consultancy — migration 084)
-  pre_app_fee_status: "paid" | "unpaid" | "waiver" | null;
+  pre_app_fee_status: "paid" | "unpaid" | "waiver" | "claimed" | null;
   pre_app_fee_amount: number | null;
   pre_app_fee_notes: string | null;
   // Academic qualification + test scores (education_consultancy — migration 159)

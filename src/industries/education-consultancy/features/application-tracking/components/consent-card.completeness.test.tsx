@@ -28,17 +28,24 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function renderCard(props: { feeStatus?: "paid" | "unpaid" | "waiver" | null; showProcessingFee?: boolean }) {
+function renderCard(props: {
+  feeStatus?: "paid" | "unpaid" | "waiver" | "claimed" | null;
+  showProcessingFee?: boolean;
+  canManage?: boolean;
+  canManageFee?: boolean;
+  feeAmount?: number | null;
+}) {
   render(
     <ConsentCard
       leadId="lead-1"
       tenantId="tenant-1"
       consentEnabled
       consentSigned
-      canManage
-      canManageFee={false}
+      canManage={props.canManage ?? true}
+      canManageFee={props.canManageFee ?? false}
       showCollapsedStatus
       feeStatus={props.feeStatus ?? null}
+      feeAmount={props.feeAmount ?? null}
       showProcessingFee={props.showProcessingFee ?? true}
     />,
   );
@@ -100,5 +107,60 @@ describe("opened card", () => {
     expect(screen.getAllByText("Pending").length).toBeGreaterThan(0);
     // The facts are still shown: who signed and when.
     expect(screen.getByText(/Paras Karki/)).toBeInTheDocument();
+  });
+});
+
+describe("a counsellor-reported fee ('claimed')", () => {
+  it("is NOT green (awaiting owner verification) but is labelled as reported, not pending", async () => {
+    renderCard({ feeStatus: "claimed", feeAmount: 5000 });
+    expect(await screen.findByText("Fee reported")).toBeInTheDocument();
+    expect(screen.queryByText("Signed")).toBeNull();
+    expect(screen.queryByText("Fee pending")).toBeNull();
+  });
+
+  it("says the fee is awaiting owner verification when the card is opened", async () => {
+    renderCard({ feeStatus: "claimed", feeAmount: 5000 });
+    await screen.findByText("Fee reported");
+    openCard();
+    await waitFor(() => expect(screen.getByText("Consent signed")).toBeInTheDocument());
+    expect(screen.getByText("Awaiting verification")).toBeInTheDocument();
+    expect(screen.getByText("Processing fee reported — awaiting owner verification")).toBeInTheDocument();
+  });
+
+  it("lets a counsellor report a fee, sending only status 'claimed' (never 'paid')", async () => {
+    renderCard({ feeStatus: null });
+    await screen.findByText("Fee pending");
+    openCard();
+    const amount = await screen.findByPlaceholderText("0.00");
+    fireEvent.change(amount, { target: { value: "5000" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Report fee received" }));
+    await waitFor(() => {
+      const patch = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.find(
+        (c) => (c[1] as RequestInit | undefined)?.method === "PATCH",
+      );
+      expect(patch).toBeTruthy();
+      const body = JSON.parse((patch![1] as RequestInit).body as string);
+      expect(body.pre_app_fee_status).toBe("claimed");
+      expect(body.pre_app_fee_amount).toBe(5000);
+    });
+    // Card is open, so the collapsed-header badge is hidden; the inline status shows instead.
+    expect(await screen.findByText("Awaiting verification")).toBeInTheDocument();
+  });
+
+  it("does not offer the report form once an admin has recorded the fee", async () => {
+    renderCard({ feeStatus: "unpaid" });
+    await screen.findByText("Fee pending");
+    openCard();
+    await waitFor(() => expect(screen.getByText("Consent signed")).toBeInTheDocument());
+    expect(screen.queryByPlaceholderText("0.00")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Report fee received" })).toBeNull();
+  });
+
+  it("does not offer the report form to someone who cannot manage consent", async () => {
+    renderCard({ feeStatus: null, canManage: false });
+    await screen.findByText("Fee pending");
+    openCard();
+    await waitFor(() => expect(screen.getByText("Consent signed")).toBeInTheDocument());
+    expect(screen.queryByPlaceholderText("0.00")).toBeNull();
   });
 });

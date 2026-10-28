@@ -31,7 +31,7 @@ import { InPersonConsentDialog } from "./in-person-consent-dialog";
 import { useBlockingNotice } from "@/components/dashboard/blocking-notice";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
-type FeeStatus = "paid" | "unpaid" | "waiver";
+type FeeStatus = "paid" | "unpaid" | "waiver" | "claimed";
 
 interface ConsentStatus {
   consent_enabled: boolean;
@@ -247,22 +247,31 @@ export function ConsentCard({
   const [feeDirty, setFeeDirty] = useState(false);
   const [feeSaving, setFeeSaving] = useState(false);
 
+  // Owner/admin records the fee; anyone else can only REPORT a received fee ("claimed"),
+  // which an owner/admin verifies later. Reporting never blocks consent or the application.
+  const feeIsReported = savedFeeStatus === "claimed";
+  const canReportFee = canManage && !canManageFee && (savedFeeStatus === "" || feeIsReported);
+
   async function saveFee() {
     setFeeSaving(true);
+    const statusToSave: FeeStatus | "" = canManageFee ? feeStatus : "claimed";
     try {
       const res = await fetch(`/api/v1/leads/${leadId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          pre_app_fee_status: feeStatus || null,
+          pre_app_fee_status: statusToSave || null,
           pre_app_fee_amount:
-            feeStatus === "paid" && feeAmount !== "" ? Number(feeAmount) : null,
+            (statusToSave === "paid" || statusToSave === "claimed") && feeAmount !== ""
+              ? Number(feeAmount)
+              : null,
           pre_app_fee_notes: feeNotes.trim() || null,
         }),
       });
       if (!res.ok) throw new Error();
-      toast.success("Processing fee saved");
-      setSavedFeeStatus(feeStatus);
+      toast.success(canManageFee ? "Processing fee saved" : "Fee reported — the owner will verify it");
+      setFeeStatus(statusToSave);
+      setSavedFeeStatus(statusToSave);
       setFeeDirty(false);
     } catch {
       toast.error("Failed to save application fee");
@@ -429,11 +438,11 @@ export function ConsentCard({
               )}
               {showCollapsedStatus && !open && consentStatus === "signed" && !completeness.complete && (
                 <span
-                  title={`${L.signedTitle} · processing fee pending`}
+                  title={`${L.signedTitle} · ${feeIsReported ? "processing fee reported, awaiting verification" : "processing fee pending"}`}
                   className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700"
                 >
                   <AlertTriangle className="h-3 w-3 shrink-0" />
-                  Fee pending
+                  {feeIsReported ? "Fee reported" : "Fee pending"}
                 </span>
               )}
             </span>
@@ -457,7 +466,7 @@ export function ConsentCard({
               ) : (
                 <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-600">
                   <AlertTriangle className="h-3 w-3 shrink-0" />
-                  Pending
+                  {feeIsReported ? "Awaiting verification" : "Pending"}
                 </span>
               )}
             </div>
@@ -480,11 +489,12 @@ export function ConsentCard({
                       <SelectItem value="paid">Paid</SelectItem>
                       <SelectItem value="unpaid">Unpaid</SelectItem>
                       <SelectItem value="waiver">Waiver</SelectItem>
+                      {feeIsReported && <SelectItem value="claimed">Reported (verify)</SelectItem>}
                     </SelectContent>
                   </Select>
                 </div>
 
-                {feeStatus === "paid" && (
+                {(feeStatus === "paid" || feeStatus === "claimed") && (
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Amount</Label>
                     <Input
@@ -521,11 +531,56 @@ export function ConsentCard({
                   </Button>
                 )}
               </>
+            ) : canReportFee ? (
+              <>
+                <p className="text-xs text-muted-foreground">
+                  {feeIsReported
+                    ? "You reported this fee. The owner will verify it — you can keep working in the meantime."
+                    : "Received the fee? Report it here. The owner will verify it — you can keep working in the meantime."}
+                </p>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Amount received</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="0.00"
+                    value={feeAmount}
+                    onChange={(e) => {
+                      setFeeAmount(e.target.value);
+                      setFeeDirty(true);
+                    }}
+                    className="h-8 text-sm"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Notes</Label>
+                  <Textarea
+                    placeholder="Optional notes (e.g. receipt no., payment method)"
+                    value={feeNotes}
+                    onChange={(e) => {
+                      setFeeNotes(e.target.value);
+                      setFeeDirty(true);
+                    }}
+                    className="text-sm min-h-[60px]"
+                  />
+                </div>
+                {feeDirty && (
+                  <Button
+                    size="sm"
+                    onClick={saveFee}
+                    disabled={feeSaving || feeAmount === "" || Number(feeAmount) <= 0}
+                    className="h-7 text-xs"
+                  >
+                    {feeSaving ? "Saving…" : feeIsReported ? "Update report" : "Report fee received"}
+                  </Button>
+                )}
+              </>
             ) : feeStatus ? (
               <div className="text-sm space-y-1">
                 <p className="capitalize">
                   {feeStatus}
-                  {feeStatus === "paid" && feeAmount !== "" && (
+                  {(feeStatus === "paid" || feeStatus === "claimed") && feeAmount !== "" && (
                     <span className="text-muted-foreground"> · {feeAmount}</span>
                   )}
                 </p>
@@ -682,7 +737,11 @@ export function ConsentCard({
                 )}
                 <div>
                   <p className="text-sm font-medium">{L.signedTitle}</p>
-                  {!completeness.feeDone && <p className="text-xs font-medium">Processing fee pending</p>}
+                  {!completeness.feeDone && (
+                    <p className="text-xs font-medium">
+                      {feeIsReported ? "Processing fee reported — awaiting owner verification" : "Processing fee pending"}
+                    </p>
+                  )}
                   {current?.record?.signer_name && (
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {current.record.signer_name}
