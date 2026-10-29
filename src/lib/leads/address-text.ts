@@ -26,3 +26,17 @@ export function stripTrailingCountry(address: string | null | undefined, country
     rest = head.slice(0, -1).trim();
   }
 }
+
+/**
+ * True when the city is already part of the address text — as a whole word, ignoring case. A Nepal address is composed from its
+ * municipality ("…, Birgunj Metropolitan City, Parsa, …") and the City field is filled from that same municipality ("Birgunj"),
+ * so a document that prints both shows the city twice. "Birgunj" is found inside "Birgunj Metropolitan City", but "Lalit" is NOT
+ * found inside "Lalitpur" (the match must start and end at a word boundary). Display/merge time only; never changes what is saved.
+ */
+export function addressContainsCity(address: string | null | undefined, city: string | null | undefined): boolean {
+  const text = (address ?? "").trim();
+  const wanted = (city ?? "").trim();
+  if (!text || !wanted) return false;
+  const escaped = wanted.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^\\p{L}\\p{N}])${escaped}($|[^\\p{L}\\p{N}])`, "iu").test(text);
+}

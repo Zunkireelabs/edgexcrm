@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   EMPTY_ADDRESS,
+  addressContainsCity,
   applyAddressChange,
   cityFromMunicipality,
   districtOptions,
@@ -216,5 +217,44 @@ describe("stripTrailingCountry", () => {
     expect(stripTrailingCountry("", "Nepal")).toBe("");
     expect(stripTrailingCountry(null, "Nepal")).toBe("");
     expect(stripTrailingCountry(undefined, undefined)).toBe("");
+  });
+});
+
+// A Nepal address already contains its municipality and City is filled from it, so a document that prints both showed the city twice.
+describe("addressContainsCity", () => {
+  it("finds the city inside the municipality name", () => {
+    expect(addressContainsCity("Ward 14, Birgunj Metropolitan City, Parsa, Madhesh, Nepal", "Birgunj")).toBe(true);
+  });
+
+  it("ignores case and surrounding spaces", () => {
+    expect(addressContainsCity("ward 14, BIRGUNJ Metropolitan City", "  birgunj ")).toBe(true);
+  });
+
+  it("matches a city that is a whole comma-separated part", () => {
+    expect(addressContainsCity("Baneshwor, Kathmandu", "Kathmandu")).toBe(true);
+  });
+
+  it("is a whole-word match: Lalit is not inside Lalitpur", () => {
+    expect(addressContainsCity("Ward 3, Lalitpur Metropolitan City, Lalitpur", "Lalit")).toBe(false);
+  });
+
+  it("does not match when the city is only the tail of a longer word", () => {
+    expect(addressContainsCity("Ward 1, Nepalgunj", "gunj")).toBe(false);
+  });
+
+  it("is false when the city is not in the address", () => {
+    expect(addressContainsCity("12 Main St, Parsa", "Birgunj")).toBe(false);
+  });
+
+  it("is false for a blank or missing city or address", () => {
+    expect(addressContainsCity("Birgunj", "")).toBe(false);
+    expect(addressContainsCity("Birgunj", null)).toBe(false);
+    expect(addressContainsCity("", "Birgunj")).toBe(false);
+    expect(addressContainsCity(undefined, "Birgunj")).toBe(false);
+  });
+
+  it("treats regex characters in a city name literally", () => {
+    expect(addressContainsCity("Ward 1, St. (Old) Town", "St. (Old) Town")).toBe(true);
+    expect(addressContainsCity("Ward 1, StX Town", "St. Town")).toBe(false);
   });
 });

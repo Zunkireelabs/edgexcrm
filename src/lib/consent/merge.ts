@@ -8,7 +8,7 @@
  */
 
 import { resolveGuardian, NOT_APPLICABLE_TEXT } from "./guardian";
-import { stripTrailingCountry } from "@/lib/leads/address-text";
+import { addressContainsCity, stripTrailingCountry } from "@/lib/leads/address-text";
 
 export interface ConsentMergeData {
   student_name: string;
@@ -107,6 +107,11 @@ export function fillConsentTemplate(
   // A Nepal address is saved ending with the country ("…, Bagmati, Nepal"). When this document also prints {{country}}, the
   // address is filled WITHOUT its trailing country so "Nepal" shows once. A template that prints only the address keeps it.
   const printsCountry = /\{\{\s*country\s*\}\}/i.test(body) && !!map.country?.trim();
+  // Same idea for the city: a Nepal address already contains its municipality ("…, Birgunj Metropolitan City, …") and City is filled
+  // from that same municipality ("Birgunj"). When this document prints the address AND {{city}}, the city is left out if the
+  // address already has it, so it shows once. A template that prints only {{city}} (no address) keeps it.
+  const printsAddress = /\{\{\s*(street_address|full_address)\s*\}\}/i.test(body);
+  const savedAddress = map.full_address || map.street_address || "";
   const filled = body.replace(/\{\{\s*([a-z_]+)\s*\}\}/gi, (token, rawKey: string) => {
     const key = rawKey.toLowerCase();
     if (Object.prototype.hasOwnProperty.call(data, key)) {
@@ -114,6 +119,8 @@ export function fillConsentTemplate(
       if (value && printsCountry && (key === "full_address" || key === "street_address")) {
         value = stripTrailingCountry(value, map.country);
       }
+      // Already shown inside the address: print nothing here (tidyEmptyFields removes the orphan comma), even in a live preview.
+      if (value && key === "city" && printsAddress && addressContainsCity(savedAddress, value)) return EMPTY;
       if (value) return value;
       if (options.deferBlank?.has(key)) return token; // signer will fill this in
       return options.blankAs ?? EMPTY;
