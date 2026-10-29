@@ -271,9 +271,9 @@ describe("fillConsentTemplate — the country is printed once", () => {
     fillConsentTemplate(tpl, buildConsentMergeData({ ...base, fullAddress: SAVED, ...over }));
   const count = (text: string, word: string) => text.split(word).length - 1;
 
-  it("street, city, country on one line: Nepal appears once, at the end", () => {
+  it("street, city, country on one line: Nepal appears once, at the end (the city is already in the address)", () => {
     const out = fill("Address: {{street_address}}, {{city}}, {{country}}");
-    expect(out).toBe(`Address: ${WITHOUT}, Kathmandu, Nepal`);
+    expect(out).toBe(`Address: ${WITHOUT}, Nepal`);
     expect(count(out, "Nepal")).toBe(1);
   });
 
@@ -328,7 +328,7 @@ describe("fillConsentTemplate — the country is printed once", () => {
     const { body, missingFields } = prepareConsentBody("Address: {{street_address}}, {{city}}, {{country}}", data);
     expect(missingFields).toEqual([]);
     expect(count(body, "Nepal")).toBe(1);
-    expect(body).toBe(`Address: ${WITHOUT}, Kathmandu, Nepal`);
+    expect(body).toBe(`Address: ${WITHOUT}, Nepal`);
   });
 
   it("an address the STUDENT fills in later (blank on file) still flows through the signer step unchanged", () => {
@@ -339,3 +339,61 @@ describe("fillConsentTemplate — the country is printed once", () => {
   });
 });
 
+// A Nepal address already contains its municipality ("…, Birgunj Metropolitan City, …") and City is filled from that same municipality
+// ("Birgunj"), so a template that prints {{street_address}}, {{city}}, {{country}} showed the city twice (client, Oct 2026).
+describe("fillConsentTemplate — the city is printed once", () => {
+  const BIRGUNJ = "Ward 14, Birgunj Metropolitan City, Parsa, Madhesh, Nepal";
+  const TPL = "Address: {{street_address}}, {{city}}, {{country}}";
+  const fill = (tpl: string, over: Record<string, unknown> = {}) =>
+    fillConsentTemplate(tpl, buildConsentMergeData({ ...base, fullAddress: BIRGUNJ, city: "Birgunj", ...over }));
+  const count = (text: string, word: string) => text.split(word).length - 1;
+
+  it("the client's Birgunj case: Birgunj and Nepal each appear once, in the address", () => {
+    const out = fill(TPL);
+    expect(out).toBe("Address: Ward 14, Birgunj Metropolitan City, Parsa, Madhesh, Nepal");
+    expect(count(out, "Birgunj")).toBe(1);
+    expect(count(out, "Nepal")).toBe(1);
+  });
+
+  it("is not case sensitive", () => {
+    expect(fill(TPL, { city: "BIRGUNJ" })).toBe("Address: Ward 14, Birgunj Metropolitan City, Parsa, Madhesh, Nepal");
+  });
+
+  it("a typed address that repeats the city collapses it", () => {
+    expect(fill(TPL, { fullAddress: "Kathmandu, Nepal", city: "Kathmandu" })).toBe("Address: Kathmandu, Nepal");
+  });
+
+  it("a city that is NOT in the address still prints", () => {
+    expect(fill(TPL, { fullAddress: "12 Main St, Parsa", city: "Birgunj", country: "Nepal" })).toBe("Address: 12 Main St, Parsa, Birgunj, Nepal");
+  });
+
+  it("only a whole word counts: Lalit is not found inside Lalitpur", () => {
+    expect(fill(TPL, { fullAddress: "Ward 3, Lalitpur Metropolitan City, Lalitpur, Bagmati, Nepal", city: "Lalit" })).toBe(
+      "Address: Ward 3, Lalitpur Metropolitan City, Lalitpur, Bagmati, Lalit, Nepal",
+    );
+  });
+
+  it("a template that prints only the city (no address tag) keeps the city", () => {
+    expect(fill("Address: {{city}}, {{country}}")).toBe("Address: Birgunj, Nepal");
+  });
+
+  it("with no address on file the city still prints", () => {
+    expect(fill(TPL, { fullAddress: null })).toBe("Address: Birgunj, Nepal");
+  });
+
+  it("works for {{full_address}} as well as {{street_address}}", () => {
+    expect(fill("{{full_address}}, {{city}}, {{country}}")).toBe("Ward 14, Birgunj Metropolitan City, Parsa, Madhesh, Nepal");
+  });
+
+  it("the live preview / send path (prepareConsentBody) de-duplicates too", () => {
+    const data = buildConsentMergeData({ ...base, fullAddress: BIRGUNJ, city: "Birgunj" });
+    const { body } = prepareConsentBody(TPL, data);
+    expect(body).toBe("Address: Ward 14, Birgunj Metropolitan City, Parsa, Madhesh, Nepal");
+  });
+
+  it("a preview that shows blanks as lines does not turn the de-duplicated city into a blank line", () => {
+    const out = fillConsentTemplate(TPL, buildConsentMergeData({ ...base, fullAddress: BIRGUNJ, city: "Birgunj" }), { blankAs: "________" });
+    expect(out).not.toContain("________");
+    expect(count(out, "Birgunj")).toBe(1);
+  });
+});
