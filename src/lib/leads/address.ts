@@ -99,7 +99,7 @@ export function formatAddress(parts: AddressParts): string {
 
 // Lives in its own tiny module (no geo data) so the consent merge code — which also runs on the public signing page — can
 // use it without bundling the Nepal districts list. Re-exported here so address callers keep one import.
-export { stripTrailingCountry } from "./address-text";
+export { stripTrailingCountry, addressContainsCity } from "./address-text";
 
 const UNIT_SUFFIXES = /\s+(Sub-Metropolitan City|Metropolitan City|Rural Municipality|Municipality|Gaunpalika|Nagarpalika)$/i;
 
