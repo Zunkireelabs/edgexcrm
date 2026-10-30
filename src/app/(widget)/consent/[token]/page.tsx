@@ -1,4 +1,7 @@
+import { cache } from "react";
+import type { Metadata } from "next";
 import { ConsentSignForm } from "./consent-sign-form";
+import { buildConsentMetadata } from "./consent-metadata";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +20,8 @@ interface ConsentData {
   missing_fields?: string[];
 }
 
-async function fetchConsentData(token: string): Promise<ConsentData> {
+// React cache(): the page and its metadata both need this, so one request serves both within a render.
+const fetchConsentData = cache(async function fetchConsentData(token: string): Promise<ConsentData> {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   try {
     const res = await fetch(`${baseUrl}/api/public/consent/${token}`, {
@@ -29,6 +33,12 @@ async function fetchConsentData(token: string): Promise<ConsentData> {
   } catch {
     return { valid: false, reason: "Failed to load consent document." };
   }
+});
+
+// The link preview (WhatsApp, email, browser tab). Tenant branding only — never student data. See consent-metadata.ts.
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { token } = await params;
+  return buildConsentMetadata(await fetchConsentData(token));
 }
 
 export default async function ConsentTokenPage({ params }: PageProps) {
