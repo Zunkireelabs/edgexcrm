@@ -13,6 +13,7 @@ import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { assignDisplayIds } from "@/lib/leads/assign-display-ids";
 import { onLeadsEnteredStageSafe } from "@/industries/_shared/features/outreach/lib/stage-auto-enroll";
 import { getPipelineLandingStage } from "@/lib/leads/pipeline-stage";
+import { checkApplicationsReadiness, applicationsGateMessage } from "@/lib/leads/applications-readiness";
 import { createRequestLogger } from "@/lib/logger";
 import {
   createNotificationsExcept,
@@ -660,6 +661,25 @@ export async function applyLeadPatch(
           return {
             kind: "validation",
             errors: { academic: ["Add the student's highest qualification (%/GPA) before moving to Prospects."] },
+          };
+        }
+      }
+
+      // Applications gate (client request 2026-11-01): fee entered + basic info + consent
+      // signed before a lead enters Applications. No bypass for anyone. Backward moves
+      // (revert) skip it — the lead already passed it once. A move out of a staging list
+      // is never a revert for this purpose. Already in Applications → not a move.
+      if (
+        targetList.slug === "applications" &&
+        auth.industryId === "education_consultancy" &&
+        !(isRevert && !leavesStaging) &&
+        (existingLead as Record<string, unknown>).list_id !== targetList.id
+      ) {
+        const readiness = await checkApplicationsReadiness(supabase, auth.tenantId, existingLead.id as string);
+        if (!readiness.ready) {
+          return {
+            kind: "validation",
+            errors: { applications: [applicationsGateMessage(readiness.missing)] },
           };
         }
       }

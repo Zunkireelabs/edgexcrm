@@ -63,6 +63,14 @@ vi.mock("@/lib/logger", () => ({
   createRequestLogger: () => ({ info: vi.fn(), error: vi.fn() }),
 }));
 
+// Applications gate (fee + basic info + consent): readiness is its own unit-tested module;
+// here we only prove applyLeadPatch consults it for forward moves into Applications.
+const readinessMock = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/leads/applications-readiness", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/leads/applications-readiness")>();
+  return { ...actual, checkApplicationsReadiness: readinessMock };
+});
+
 // ── Scripted fake supabase client ──────────────────────────────────────
 // Keyed by table name; each table's rows are looked up by whichever `.eq()`
 // filter the real code applies (usually "id" or "user_id"). Callers supply
@@ -548,6 +556,59 @@ describe("applyLeadPatch — governance branches", () => {
       "list-prospects": { id: "list-prospects", slug: "prospects", name: "Prospects", pipeline_id: null, is_archive: false, sort_order: 20, access: { mode: "all" } },
     },
   };
+
+  describe("applications gate — fee + basic info + consent before entering Applications", () => {
+    const APPLICATIONS_DB = (currentListId: string) => ({
+      leads: { id: "lead-1", pipeline_id: "pipe-1", assigned_to: "user-1", branch_id: null, list_id: currentListId, status: "s", lead_type: "prospect" },
+      leadLists: {
+        "list-prospects": { id: "list-prospects", slug: "prospects", name: "Prospects", pipeline_id: null, is_archive: false, sort_order: 20, access: { mode: "all" } },
+        "list-applications": { id: "list-applications", slug: "applications", name: "Applications", pipeline_id: null, is_archive: false, sort_order: 30, access: { mode: "all" } },
+        "list-enrolled": { id: "list-enrolled", slug: "enrolled", name: "Enrolled", pipeline_id: null, is_archive: false, sort_order: 40, access: { mode: "all" } },
+      },
+    });
+
+    beforeEach(() => readinessMock.mockReset());
+
+    it("blocks a forward move when something is missing, and says what", async () => {
+      await setFakeDb(APPLICATIONS_DB("list-prospects"));
+      readinessMock.mockResolvedValue({ ready: false, missing: ["Processing fee", "Consent signed"] });
+      const auth = fixtureAuth({ permissions: { leadScope: "own" } as ResolvedPermissions });
+      const { applyLeadPatch } = await import("./apply-lead-patch");
+      const outcome = await applyLeadPatch(auth, "lead-1", { list_id: "list-applications" }, OPTS);
+      expect(outcome).toEqual({
+        kind: "validation",
+        errors: { applications: ["Before moving to Applications, complete: Processing fee, Consent signed."] },
+      });
+    });
+
+    it("an owner is NOT exempt (no bypass for anyone)", async () => {
+      await setFakeDb(APPLICATIONS_DB("list-prospects"));
+      readinessMock.mockResolvedValue({ ready: false, missing: ["Consent signed"] });
+      const auth = fixtureAuth({ role: "owner", permissions: { baseTier: "owner", leadScope: "all" } as ResolvedPermissions });
+      const { applyLeadPatch } = await import("./apply-lead-patch");
+      const outcome = await applyLeadPatch(auth, "lead-1", { list_id: "list-applications" }, OPTS);
+      expect(outcome.kind).toBe("validation");
+    });
+
+    it("allows the move once everything is done", async () => {
+      await setFakeDb(APPLICATIONS_DB("list-prospects"));
+      readinessMock.mockResolvedValue({ ready: true, missing: [] });
+      const auth = fixtureAuth({ permissions: { leadScope: "own" } as ResolvedPermissions });
+      const { applyLeadPatch } = await import("./apply-lead-patch");
+      const outcome = await applyLeadPatch(auth, "lead-1", { list_id: "list-applications" }, OPTS);
+      expect(outcome.kind).toBe("ok");
+    });
+
+    it("a backward move into Applications is not gated", async () => {
+      await setFakeDb(APPLICATIONS_DB("list-enrolled"));
+      readinessMock.mockResolvedValue({ ready: false, missing: ["Processing fee"] });
+      const auth = fixtureAuth({ permissions: { leadScope: "own" } as ResolvedPermissions });
+      const { applyLeadPatch } = await import("./apply-lead-patch");
+      const outcome = await applyLeadPatch(auth, "lead-1", { list_id: "list-applications" }, OPTS);
+      expect(readinessMock).not.toHaveBeenCalled();
+      expect(outcome.kind).not.toBe("validation");
+    });
+  });
 
   it("prospect gate — an owner may move an unqualified lead to Prospects (bypass)", async () => {
     await setFakeDb(PROSPECT_MOVE_DB);

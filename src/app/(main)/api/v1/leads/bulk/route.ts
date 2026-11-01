@@ -24,6 +24,7 @@ import { createNotificationsExcept, NotificationTypes } from "@/lib/notification
 import { ASSIGN_CHAIN_POSITIONS, assignableTargetSlugs } from "@/industries/education-consultancy/lead-assignment-chain";
 import { sendBulkAssignedEmail } from "@/lib/email/send-lead-assigned";
 import { hasProspectQualification, canBypassProspectQualification } from "@/lib/leads/prospect-qualification";
+import { checkApplicationsReadiness, applicationsGateMessage } from "@/lib/leads/applications-readiness";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -319,6 +320,48 @@ export async function PATCH(request: NextRequest) {
       return apiValidationError({
         academic: ["Add the student's highest qualification (%/GPA) before moving to Prospects."],
         academic_failed_ids: failingIds,
+      });
+    }
+  }
+
+  // Applications gate (bulk backstop, client request 2026-11-01): every lead entering the
+  // Applications stage needs fee entered + basic info + consent signed. No bypass for anyone.
+  // Backward moves and leads already in Applications are skipped. Returns failing_ids so the
+  // caller can show which leads are blocked.
+  if (targetList?.slug === "applications" && auth.industryId === "education_consultancy") {
+    const srcIds = [...new Set(
+      idsToUpdate.map((id) => existingMap.get(id)?.list_id).filter((v): v is string => !!v),
+    )];
+    const srcSort = new Map<string, number>();
+    if (srcIds.length > 0) {
+      const { data: srcLists } = await supabase
+        .from("lead_lists")
+        .select("id, sort_order, is_archive, is_staging")
+        .eq("tenant_id", auth.tenantId)
+        .in("id", srcIds);
+      for (const l of (srcLists ?? []) as { id: string; sort_order: number; is_archive: boolean; is_staging: boolean | null }[]) {
+        if (!l.is_archive && !l.is_staging) srcSort.set(l.id, l.sort_order);
+      }
+    }
+    const entersApplications = (leadId: string) => {
+      const from = existingMap.get(leadId)?.list_id;
+      if (from === targetList!.id) return false;
+      const fromSort = from ? srcSort.get(from) : undefined;
+      return !(fromSort !== undefined && targetList!.sort_order < fromSort);
+    };
+    const gateFailing: string[] = [];
+    const gateMissing = new Set<string>();
+    for (const leadId of idsToUpdate.filter(entersApplications)) {
+      const readiness = await checkApplicationsReadiness(supabase, auth.tenantId, leadId);
+      if (!readiness.ready) {
+        gateFailing.push(leadId);
+        readiness.missing.forEach((m) => gateMissing.add(m));
+      }
+    }
+    if (gateFailing.length > 0) {
+      return apiValidationError({
+        applications: [applicationsGateMessage([...gateMissing])],
+        applications_failed_ids: gateFailing,
       });
     }
   }

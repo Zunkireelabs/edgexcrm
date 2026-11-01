@@ -13,6 +13,7 @@ import {
   closestCorners,
 } from "@dnd-kit/core";
 import { toast } from "sonner";
+import { moveErrorMessage } from "@/lib/leads/gate-error";
 import { PipelineColumn } from "@/components/pipeline/PipelineColumn";
 import { LeadCard } from "@/components/pipeline/LeadCard";
 import { useKanbanColumns, type KanbanColumnDef, type KanbanColumnsState } from "@/components/pipeline/use-kanban-columns";
@@ -192,7 +193,10 @@ export function FunnelKanbanBoard({ lists, initialColumns, canEdit, restrictToSe
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ids: [leadId], list_id: targetListId }),
       });
-      if (!res.ok) throw new Error("Failed to move lead");
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        throw new Error(moveErrorMessage(errJson, "Failed to move lead"));
+      }
 
       // handleDragOver already moved the card + adjusted totals — just stamp the
       // persisted list_id onto the card object in its (already correct) column.
@@ -207,9 +211,9 @@ export function FunnelKanbanBoard({ lists, initialColumns, canEdit, restrictToSe
           },
         };
       });
-    } catch {
+    } catch (err) {
       if (prevColumnsRef.current) setColumns(prevColumnsRef.current);
-      toast.error("Failed to move lead. Please try again.");
+      toast.error(err instanceof Error && err.message !== "Failed to move lead" ? err.message : "Failed to move lead. Please try again.");
     }
 
     prevColumnsRef.current = null;
