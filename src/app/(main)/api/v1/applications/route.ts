@@ -19,6 +19,7 @@ import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { shouldRestrictToSelf, canManageApplications } from "@/lib/api/permissions";
 import { getLeadMembership } from "@/lib/leads/branch-membership";
 import { checkLeadProfileCompleteness } from "@/lib/leads/profile-completeness";
+import { checkProcessingFeeEntered } from "@/lib/leads/applications-readiness";
 import { alignStageToCountryPipeline } from "@/lib/applications/pipeline-resolution";
 import { normalizeDestinations, normalizeFieldOfStudy, normalizeDegreeLevel } from "@/lib/leads/destination-normalize";
 
@@ -159,6 +160,12 @@ export async function POST(request: NextRequest) {
       `Complete the student profile before creating an application. Missing: ${profileCheck.missing.join(", ")}`,
       409,
     );
+  }
+
+  // Processing-fee gate (client request 2026-11-01): a fee must be entered (reported by a
+  // counsellor, paid or waived) — an admin's verification is NOT required.
+  if (!(await checkProcessingFeeEntered(supabase, auth.tenantId, leadRow.id))) {
+    return apiError("FEE_REQUIRED", "Enter the processing fee before creating an application", 409);
   }
 
   // Resolve stage: use supplied stage_id or default to the 'shortlisted' (is_default) stage

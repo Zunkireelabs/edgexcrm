@@ -6,6 +6,7 @@ import { useLeadBackDestination } from "@/hooks/use-lead-back-destination";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { moveErrorMessage } from "@/lib/leads/gate-error";
 import {
   Dialog,
   DialogContent,
@@ -366,7 +367,7 @@ export function LeadDetailV2({
       });
       if (!res.ok) {
         const errJson = await res.json().catch(() => null);
-        throw new Error(errJson?.error?.message || "Failed to move lead");
+        throw new Error(moveErrorMessage(errJson, "Failed to move lead"));
       }
       const json = await res.json();
       const updated = json.data as Lead;
