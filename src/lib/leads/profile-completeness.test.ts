@@ -76,4 +76,19 @@ describe("checkLeadProfileCompleteness", () => {
     expect(result.complete).toBe(false);
     expect(result.missing).toContain("Name");
   });
+  it("judges values sent in the same request, not the stale stored row", async () => {
+    const db = fakeDb({
+      leads: { data: { ...COMPLETE_LEAD, phone: null } },
+      applicant_documents: { count: 1 },
+    });
+    expect((await checkLeadProfileCompleteness(db, "tenant-1", "lead-1")).missing).toEqual(["Phone"]);
+    const fixed = await checkLeadProfileCompleteness(db, "tenant-1", "lead-1", { phone: "+977-9865331614" });
+    expect(fixed).toEqual({ complete: true, missing: [] });
+  });
+
+  it("a pending value that clears a field makes it missing; unrelated pending keys are ignored", async () => {
+    const db = fakeDb({ leads: { data: COMPLETE_LEAD }, applicant_documents: { count: 1 } });
+    const r = await checkLeadProfileCompleteness(db, "tenant-1", "lead-1", { email: null, pre_app_fee_status: "paid" });
+    expect(r.missing).toEqual(["Email"]);
+  });
 });

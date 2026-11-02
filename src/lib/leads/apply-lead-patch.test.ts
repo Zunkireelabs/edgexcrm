@@ -599,6 +599,19 @@ describe("applyLeadPatch — governance branches", () => {
       expect(outcome.kind).toBe("ok");
     });
 
+    it("passes the in-flight fee to the readiness check (fee set + stage move in one request)", async () => {
+      await setFakeDb(APPLICATIONS_DB("list-prospects"));
+      readinessMock.mockResolvedValue({ ready: true, missing: [] });
+      const auth = fixtureAuth({ role: "owner", permissions: { baseTier: "owner", leadScope: "all" } as ResolvedPermissions });
+      const { applyLeadPatch } = await import("./apply-lead-patch");
+      const outcome = await applyLeadPatch(auth, "lead-1", { list_id: "list-applications", pre_app_fee_status: "paid" }, OPTS);
+      expect(outcome.kind).toBe("ok");
+      expect(readinessMock).toHaveBeenCalledWith(
+        expect.anything(), expect.anything(), "lead-1",
+        expect.objectContaining({ pre_app_fee_status: "paid" }),
+      );
+    });
+
     it("a backward move into Applications is not gated", async () => {
       await setFakeDb(APPLICATIONS_DB("list-enrolled"));
       readinessMock.mockResolvedValue({ ready: false, missing: ["Processing fee"] });

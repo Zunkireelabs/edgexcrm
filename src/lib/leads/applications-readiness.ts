@@ -30,7 +30,12 @@ export async function checkProcessingFeeEntered(
   supabase: SupabaseClient<any>,
   tenantId: string,
   leadId: string,
+  /** In-flight request values; a fee status sent in the same request wins over the stored one. */
+  pending?: Record<string, unknown>,
 ): Promise<boolean> {
+  if (pending && pending.pre_app_fee_status !== undefined) {
+    return isFeeEntered(pending.pre_app_fee_status as string | null);
+  }
   const { data } = await supabase
     .from("leads")
     .select("pre_app_fee_status")
@@ -55,14 +60,20 @@ export async function checkApplicationsReadiness(
   supabase: SupabaseClient<any>,
   tenantId: string,
   leadId: string,
+  /**
+   * Values from the request that is moving the lead (the PATCH body). Fee and basic-info
+   * fields sent in the same request count — otherwise "set the fee and move to Applications"
+   * in one call would be judged against the stale stored values.
+   */
+  pending?: Record<string, unknown>,
 ): Promise<ApplicationsReadiness> {
   const missing: string[] = [];
 
   // 1. Processing fee
-  if (!(await checkProcessingFeeEntered(supabase, tenantId, leadId))) missing.push("Processing fee");
+  if (!(await checkProcessingFeeEntered(supabase, tenantId, leadId, pending))) missing.push("Processing fee");
 
   // 2. Basic info
-  const profile = await checkLeadProfileCompleteness(supabase, tenantId, leadId);
+  const profile = await checkLeadProfileCompleteness(supabase, tenantId, leadId, pending);
   if (!profile.complete) missing.push(`Basic info (${profile.missing.join(", ")})`);
 
   // 3. Consent — only if the tenant has an active consent template

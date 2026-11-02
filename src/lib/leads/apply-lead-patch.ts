@@ -676,7 +676,7 @@ export async function applyLeadPatch(
         !(isRevert && !leavesStaging) &&
         (existingLead as Record<string, unknown>).list_id !== targetList.id
       ) {
-        const readiness = await checkApplicationsReadiness(supabase, auth.tenantId, existingLead.id as string);
+        const readiness = await checkApplicationsReadiness(supabase, auth.tenantId, existingLead.id as string, updatePayload);
         if (!readiness.ready) {
           return {
             kind: "validation",

@@ -20,6 +20,18 @@ interface LeadProfileRow {
   degree_level: string | null;
 }
 
+const PROFILE_FIELDS = ["first_name", "email", "phone", "field_of_study", "degree_level"] as const;
+
+/** Only the profile fields that are actually present in the pending request. */
+function pickPending(pending: Record<string, unknown>): Partial<Record<(typeof PROFILE_FIELDS)[number], string | null>> {
+  const out: Partial<Record<(typeof PROFILE_FIELDS)[number], string | null>> = {};
+  for (const f of PROFILE_FIELDS) {
+    if (pending[f] === undefined) continue;
+    out[f] = pending[f] == null ? null : String(pending[f]);
+  }
+  return out;
+}
+
 /**
  * Checks whether a lead's core profile (name/email/phone/study info) and at
  * least one uploaded document are present. Called right before an
@@ -30,6 +42,12 @@ export async function checkLeadProfileCompleteness(
   supabase: SupabaseClient<any>,
   tenantId: string,
   leadId: string,
+  /**
+   * Values arriving in the SAME request (e.g. a PATCH that sets the phone and moves the
+   * stage together). A key present here overrides the stored value, so the check judges
+   * what the lead WILL look like, not the pre-update row.
+   */
+  pending?: Record<string, unknown>,
 ): Promise<ProfileCompletenessGaps> {
   const missing: string[] = [];
 
@@ -39,7 +57,8 @@ export async function checkLeadProfileCompleteness(
     .eq("id", leadId)
     .eq("tenant_id", tenantId)
     .maybeSingle();
-  const lead = leadData as LeadProfileRow | null;
+  const stored = leadData as LeadProfileRow | null;
+  const lead = stored && pending ? ({ ...stored, ...pickPending(pending) } as LeadProfileRow) : stored;
 
   if (!lead?.first_name?.trim()) missing.push("Name");
   if (!lead?.email?.trim()) missing.push("Email");

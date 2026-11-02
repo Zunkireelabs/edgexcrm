@@ -76,6 +76,38 @@ describe("checkApplicationsReadiness", () => {
   });
 });
 
+describe("same-request values (fee / basic info sent together with the stage move)", () => {
+  it("a fee sent in the same request counts even though the stored fee is empty", async () => {
+    profile.mockResolvedValue({ complete: true, missing: [] });
+    const r = await checkApplicationsReadiness(
+      fakeDb({ fee: null, templateActive: false }), "t", "l", { pre_app_fee_status: "claimed" },
+    );
+    expect(r.ready).toBe(true);
+  });
+
+  it("a fee sent in the same request that is NOT acceptable still blocks, even if the stored fee was fine", async () => {
+    profile.mockResolvedValue({ complete: true, missing: [] });
+    const r = await checkApplicationsReadiness(
+      fakeDb({ fee: "paid", templateActive: false }), "t", "l", { pre_app_fee_status: "unpaid" },
+    );
+    expect(r.missing).toEqual(["Processing fee"]);
+  });
+
+  it("falls back to the stored fee when the request does not carry one", async () => {
+    profile.mockResolvedValue({ complete: true, missing: [] });
+    const r = await checkApplicationsReadiness(fakeDb({ fee: "paid", templateActive: false }), "t", "l", { phone: "123" });
+    expect(r.ready).toBe(true);
+  });
+
+  it("hands the pending values to the basic-info check", async () => {
+    profile.mockClear();
+    profile.mockResolvedValue({ complete: true, missing: [] });
+    const pending = { phone: "+977-9800000000" };
+    await checkApplicationsReadiness(fakeDb({ fee: "paid", templateActive: false }), "t", "l", pending);
+    expect(profile).toHaveBeenCalledWith(expect.anything(), "t", "l", pending);
+  });
+});
+
 describe("applicationsGateMessage", () => {
   it("lists what is missing", () => {
     expect(applicationsGateMessage(["Processing fee", "Consent signed"])).toBe(
