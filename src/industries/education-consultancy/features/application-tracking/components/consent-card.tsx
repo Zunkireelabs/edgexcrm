@@ -248,7 +248,7 @@ export function ConsentCard({
   const [feeSaving, setFeeSaving] = useState(false);
 
   // Owner/admin records the fee; anyone else can only REPORT a received fee ("claimed"),
-  // which an owner/admin verifies later. Reporting never blocks consent or the application.
+  // which an owner/admin verifies later. A reported fee is enough to move to Applications (admin verification is not awaited).
   const feeIsReported = savedFeeStatus === "claimed";
   const canReportFee = canManage && !canManageFee && (savedFeeStatus === "" || feeIsReported);
 
@@ -604,7 +604,7 @@ export function ConsentCard({
             )}
             {!completeness.feeDone && (
               <p className="text-[11px] text-muted-foreground">
-                The fee never blocks the consent form or the application — you can continue.
+                Enter the fee (a counsellor&apos;s report is enough) before moving to Applications.
               </p>
             )}
           </div>

@@ -284,7 +284,8 @@ export async function applyLeadPatch(
   // waived or unpaid. A team member may only REPORT a received fee as "claimed"
   // (with amount/notes) for an admin to verify — closes the direct-API path so a
   // non-admin with ordinary lead-edit access can't record an unverified fee.
-  // "claimed" is an audit marker only; nothing downstream gates on it.
+  // "claimed" counts as "fee entered" for the Applications gate (applications-readiness.ts) —
+  // admin verification is not awaited; an admin-rejected fee ("unpaid") blocks again.
   const FEE_FIELDS = ["pre_app_fee_status", "pre_app_fee_amount", "pre_app_fee_notes"] as const;
   if (!requireAdmin(auth) && FEE_FIELDS.some((field) => body[field] !== undefined)) {
     const currentFeeStatus = (existingLead as Record<string, unknown>).pre_app_fee_status;
