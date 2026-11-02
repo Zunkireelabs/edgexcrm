@@ -6,6 +6,7 @@ import { isLeadCollaborator } from "@/lib/leads/collaborators";
 import { shouldRestrictToSelf } from "@/lib/api/permissions";
 import { canCreateOrReorderApplications } from "@/lib/api/applications";
 import { checkLeadProfileCompleteness } from "@/lib/leads/profile-completeness";
+import { checkProcessingFeeEntered } from "@/lib/leads/applications-readiness";
 import { alignStageToCountryPipeline } from "@/lib/applications/pipeline-resolution";
 import {
   apiSuccess,
@@ -166,6 +167,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
       `Complete the student profile before creating an application. Missing: ${profileCheck.missing.join(", ")}`,
       409,
     );
+  }
+
+  // Processing-fee gate (client request 2026-11-01): a fee must be entered (reported by a
+  // counsellor, paid or waived) — an admin's verification is NOT required.
+  if (!(await checkProcessingFeeEntered(supabase, auth.tenantId, id))) {
+    return apiError("FEE_REQUIRED", "Enter the processing fee before creating an application", 409);
   }
 
   let body: Record<string, unknown>;

@@ -177,11 +177,11 @@ describe("a counsellor-reported fee ('claimed')", () => {
     });
   });
 
-  it("tells staff the fee never blocks consent or the application", async () => {
+  it("tells staff the fee must be entered before moving to Applications", async () => {
     renderCard({ feeStatus: null, canManage: false });
     await screen.findByText("Fee pending");
     openCard();
-    expect(await screen.findByText(/never blocks the consent form or the application/)).toBeInTheDocument();
+    expect(await screen.findByText(/before moving to Applications/)).toBeInTheDocument();
   });
 
   it("does not offer the report form once an admin has recorded the fee", async () => {

@@ -30,6 +30,9 @@ vi.mock("@/lib/api/applications", () => ({ canCreateOrReorderApplications: () =>
 vi.mock("@/lib/leads/branch-membership", () => ({ getLeadMembership: async () => [] }));
 vi.mock("@/lib/leads/collaborators", () => ({ isLeadCollaborator: async () => false }));
 vi.mock("@/lib/leads/profile-completeness", () => ({ checkLeadProfileCompleteness: async () => ({ complete: true, missing: [] }) }));
+// Fee gate: toggled per test (default = fee entered so the wiring tests stay focused on stage/pipeline).
+const feeState = vi.hoisted(() => ({ entered: true }));
+vi.mock("@/lib/leads/applications-readiness", () => ({ checkProcessingFeeEntered: async () => feeState.entered }));
 vi.mock("@/lib/leads/touch-updated-at", () => ({ touchLeadUpdatedAt: async () => {} }));
 vi.mock("@/lib/api/audit", () => ({ createAuditLog: async () => {}, emitEvent: async () => {} }));
 vi.mock("@/lib/logger", () => ({ createRequestLogger: () => ({ info() {}, error() {}, warn() {} }) }));
@@ -72,6 +75,7 @@ function post(body: Record<string, unknown>) {
 }
 
 beforeEach(() => {
+  feeState.entered = true;
   inserted.current = null;
   alignMock.mockReset();
 });
@@ -101,5 +105,12 @@ describe("POST /api/v1/applications — stage + pipeline wiring", () => {
     expect(res.status).toBe(201);
     expect(inserted.current).toMatchObject({ stage_id: "stage-sent", status: "sent" });
     expect(inserted.current).not.toHaveProperty("pipeline_id");
+  });
+  it("blocks creation with FEE_REQUIRED when no processing fee is entered", async () => {
+    feeState.entered = false;
+    const res = await POST(post({ lead_id: "lead-1" }));
+    expect(res.status).toBe(409);
+    expect((await res.json()).error.code).toBe("FEE_REQUIRED");
+    expect(inserted.current).toBeNull();
   });
 });

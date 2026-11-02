@@ -87,6 +87,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { PROSPECT_INDUSTRIES } from "@/industries/it-agency/leads/prospect-industries";
 import { toast } from "sonner";
+import { moveErrorMessage } from "@/lib/leads/gate-error";
 import { AddLeadSheet } from "@/components/dashboard/add-lead-sheet";
 import { LeadPreviewPanel } from "@/components/dashboard/lead-preview-panel";
 import { MergeDialog } from "@/components/dashboard/lead/merge-dialog";
@@ -1831,7 +1832,7 @@ export function LeadsTable({
         });
         const data = await response.json();
         if (!response.ok) {
-          throw new Error(data.error?.message || "Failed to move leads");
+          throw new Error(moveErrorMessage(data, "Failed to move leads"));
         }
         totalMoved += data.data.updated as number;
       }
@@ -2223,8 +2224,12 @@ export function LeadsTable({
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ list_id: listId, ...(archiveReason ? { archive_reason: archiveReason } : {}) }),
               });
-              if (!res.ok) throw new Error("Failed to move lead");
-            } catch {
+              if (!res.ok) {
+                const errJson = await res.json().catch(() => null);
+                throw new Error(moveErrorMessage(errJson, "Failed to move lead"));
+              }
+            } catch (err) {
+              toast.error(err instanceof Error ? err.message : "Failed to move lead");
               // Revert on failure
               setLocalLeads((prev) =>
                 prev.map((l) =>
