@@ -1241,7 +1241,7 @@ function groupByDay(
   return groups;
 }
 
-function getSystemActivityDescription(
+export function getSystemActivityDescription(
   activity: LeadActivity,
   teamMemberEmails: Record<string, string>,
   teamMemberNames: Record<string, string> = {}
@@ -1291,7 +1291,12 @@ function getSystemActivityDescription(
     const to = changes.list.new as string | null;
     const reason = changes.archive_reason?.new as string | null;
     if (reason) return `Archived · ${reason}`;
-    return from ? `Moved from "${from}" to "${to}"` : `Added to "${to}"`;
+    // Who the lead is assigned to (client request): a reassignment in the same move wins; otherwise the
+    // holder recorded at move time. Rows from before that was recorded simply have neither — show nothing.
+    const reassigned = nameOf(changes.assigned_to?.new);
+    const holder = nameOf(changes.holder?.new);
+    const who = reassigned ? ` · assigned to ${reassigned}` : holder ? ` · with ${holder}` : "";
+    return (from ? `Moved from "${from}" to "${to}"` : `Added to "${to}"`) + who;
   }
 
   if (changes.status || changes.stage_id) {

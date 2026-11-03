@@ -595,6 +595,12 @@ export async function PATCH(request: NextRequest) {
           const oldListName = oldListId ? (oldListNameMap.get(oldListId) ?? null) : null;
           const newListName = targetList?.name ?? null;
           changes.list = { old: oldListName, new: newListName };
+          // Who holds the lead after this move (the new assignee if this request sets one, else the current one) —
+          // lets System Activity show it even when the assignee didn't change.
+          changes.holder = {
+            old: null,
+            new: body.assigned_to !== undefined ? (body.assigned_to ?? null) : (prev?.assigned_to ?? null),
+          };
           if (body.archive_reason) {
             changes.archive_reason = { old: null, new: body.archive_reason };
           }
