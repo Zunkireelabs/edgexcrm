@@ -147,7 +147,9 @@ jobs:
 
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          # Pinned, NOT `latest`: Supabase CLI v3.0.0 (2026-11-02) removed the old [inbucket] config key and
+          # broke every PR's "Start local Supabase" step. Stay on the v2 line until we move to v3 on purpose.
+          version: 2.122.1
 
       - name: Start local Supabase
         run: supabase start
