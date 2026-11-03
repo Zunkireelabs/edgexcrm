@@ -3,14 +3,15 @@
 // Client request (Manish, 2026-11-03): in the lead's Activity, show the files attached inside a university
 // application, and show the real course name (the line used to print the UNIVERSITY labelled "Course:").
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor, cleanup } from "@testing-library/react";
+import { render, screen, waitFor, cleanup, fireEvent } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import React from "react";
 
 vi.mock("next/dynamic", () => ({ default: () => () => null }));
 vi.mock("next/link", () => ({ default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a> }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+const toastError = vi.hoisted(() => vi.fn());
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: toastError } }));
 vi.mock("@/industries/_shared/features/email/hooks/use-connected-inboxes", () => ({ useConnectedInboxes: () => ({ inboxes: [] }) }));
 vi.mock("@/industries/_shared/features/outreach/ui/lead-cadence-strip", () => ({ LeadCadenceStrip: () => null }));
 vi.mock("@/components/dashboard/tasks/task-list", () => ({ TaskList: () => null }));
@@ -38,9 +39,11 @@ beforeEach(() => {
       application_documents: [],
     },
   ];
+  toastError.mockClear();
   globalThis.fetch = vi.fn(async (url: RequestInfo | URL) => {
     const u = String(url);
     if (u.endsWith("/applications")) return { ok: true, json: async () => ({ data: apps }) } as Response;
+    if (u.endsWith("/download-url")) return { ok: true, json: async () => ({ data: { url: `https://files.example/${u.split("/")[4]}` } }) } as Response;
     return { ok: true, json: async () => ({ data: [] }) } as Response;
   }) as typeof fetch;
 });
@@ -115,5 +118,42 @@ describe("Activity feed — application notes and files", () => {
     renderPanel();
     await screen.findByText("Hello");
     expect(screen.getByText(/^Note added/).textContent).toBe("Note added · University of East London");
+  });
+
+  it("clicking a file under a note opens it in a new tab (server-signed link)", async () => {
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    apps[0].application_notes = [{
+      id: "n1", application_id: "app-1", content: "Offer received", user_id: "u1", created_at: "2026-11-03T10:00:00Z",
+      documents: [doc("doc-77", { name: "UEL-4212305", application_note_id: "n1" })],
+    }];
+    renderPanel();
+    fireEvent.click(await screen.findByRole("button", { name: "UEL-4212305 · Offer Letter" }));
+    await waitFor(() => expect(open).toHaveBeenCalledWith("https://files.example/doc-77", "_blank", "noopener,noreferrer"));
+    open.mockRestore();
+  });
+
+  it("clicking a 'Document added' file opens it too", async () => {
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    apps[0].application_documents = [doc("doc-88", { name: "Offer-UEL" })];
+    renderPanel();
+    fireEvent.click(await screen.findByRole("button", { name: "Offer-UEL · Offer Letter" }));
+    await waitFor(() => expect(open).toHaveBeenCalledWith("https://files.example/doc-88", "_blank", "noopener,noreferrer"));
+    open.mockRestore();
+  });
+
+  it("tells the user when the file can't be opened (e.g. no access) and opens nothing", async () => {
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async (url: RequestInfo | URL) => {
+      const u = String(url);
+      if (u.endsWith("/applications")) return { ok: true, json: async () => ({ data: apps }) } as Response;
+      if (u.endsWith("/download-url")) return { ok: false, json: async () => ({ error: { message: "You don't have access to this document" } }) } as Response;
+      return { ok: true, json: async () => ({ data: [] }) } as Response;
+    });
+    apps[0].application_documents = [doc("doc-99", { name: "Secret" })];
+    renderPanel();
+    fireEvent.click(await screen.findByRole("button", { name: "Secret · Offer Letter" }));
+    await waitFor(() => expect(toastError).toHaveBeenCalledWith("You don't have access to this document"));
+    expect(open).not.toHaveBeenCalled();
+    open.mockRestore();
   });
 });

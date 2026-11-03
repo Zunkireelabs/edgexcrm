@@ -35,6 +35,7 @@ import {
   applicationParts, directDocumentItems, feedDocumentLine, hideAutoAttachedText,
   type DirectDocumentItem, type FeedDocument,
 } from "./application-feed-labels";
+import { openFeedDocument } from "./open-feed-document";
 import { FEATURES } from "@/industries/_registry";
 import { LeadCadenceStrip } from "@/industries/_shared/features/outreach/ui/lead-cadence-strip";
 import { LeadSubscriptionsTab } from "@/industries/_shared/features/outreach/ui/lead-subscriptions-tab";
@@ -961,7 +962,9 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
                             </div>
                             <div className="min-w-0 pb-3 flex-1">
                               <AppFeedTitle label="Document added" university={d.university} course={d.course} applicationId={d.applicationId} />
-                              <p className="text-xs text-muted-foreground mt-0.5 break-words">{d.line}</p>
+                              <p className="text-xs text-muted-foreground mt-0.5 break-words">
+                                <FeedFileLink documentId={d.id} label={d.line} />
+                              </p>
                               <p className="text-xs text-muted-foreground mt-0.5">
                                 {[formatTimeOnly(d.at), resolveActorLabel(d.authorId, currentUserId, teamMemberNames, teamMemberEmails)]
                                   .filter(Boolean)
@@ -1030,7 +1033,21 @@ function AppFeedTitle({
   );
 }
 
-// Files attached to an application note: name · type, one per line. Names only — downloading stays inside the application.
+// A file's "name · type" that opens the file in a new tab. The server checks access and logs the download.
+function FeedFileLink({ documentId, label }: { documentId: string; label: string }) {
+  return (
+    <button
+      type="button"
+      onClick={() => openFeedDocument(documentId)}
+      title="Open file"
+      className="min-w-0 truncate text-left hover:underline hover:text-foreground"
+    >
+      {label}
+    </button>
+  );
+}
+
+// Files attached to an application note: name · type, one per line; click to open.
 function AppFeedFiles({ documents }: { documents: FeedDocument[] }) {
   if (documents.length === 0) return null;
   return (
@@ -1038,7 +1055,7 @@ function AppFeedFiles({ documents }: { documents: FeedDocument[] }) {
       {documents.map((d) => (
         <li key={d.id} className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <Paperclip className="h-3 w-3 shrink-0" />
-          <span className="min-w-0 truncate">{feedDocumentLine(d)}</span>
+          <FeedFileLink documentId={d.id} label={feedDocumentLine(d)} />
         </li>
       ))}
     </ul>
