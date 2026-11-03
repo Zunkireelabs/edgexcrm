@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isApplicationsGateError, parseGateMissing, moveErrorMessage } from "./gate-error";
+import { isApplicationsGateError, parseGateMissing, moveErrorMessage, gateMissingItems } from "./gate-error";
 
 describe("gate-error", () => {
   it("splits the gate message into items, keeping commas inside brackets together", () => {
@@ -24,5 +24,20 @@ describe("parseBasicInfoMissing", () => {
   it("returns the basic-info parts, or [] when basic info isn't missing", () => {
     expect(parseBasicInfoMissing(["Processing fee", "Basic info (Name, Study Information, a document)"])).toEqual(["Name", "Study Information", "a document"]);
     expect(parseBasicInfoMissing(["Consent signed"])).toEqual([]);
+  });
+});
+
+describe("gateMissingItems", () => {
+  it("prefers the structured list the server sends (no sentence parsing)", () => {
+    const body = { error: { details: { applications: ["any wording at all"], applications_missing: ["Processing fee", "Basic info (Name, a document)"] } } };
+    expect(gateMissingItems(body)).toEqual(["Processing fee", "Basic info (Name, a document)"]);
+  });
+  it("falls back to parsing the sentence for an older response", () => {
+    const body = { error: { details: { applications: ["Before moving to Applications, complete: Consent signed."] } } };
+    expect(gateMissingItems(body)).toEqual(["Consent signed"]);
+  });
+  it("is empty when it is not a gate response", () => {
+    expect(gateMissingItems({ error: { message: "nope" } })).toEqual([]);
+    expect(gateMissingItems(null)).toEqual([]);
   });
 });

@@ -6,7 +6,7 @@ import { useLeadBackDestination } from "@/hooks/use-lead-back-destination";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { moveErrorMessage, isApplicationsGateError, parseGateMissing, parseBasicInfoMissing } from "@/lib/leads/gate-error";
+import { moveErrorMessage, isApplicationsGateError, gateMissingItems, parseBasicInfoMissing } from "@/lib/leads/gate-error";
 import { ApplicationsGateDialog } from "@/components/dashboard/leads/applications-gate-dialog";
 import {
   Dialog,
@@ -394,7 +394,7 @@ export function LeadDetailV2({
         const errJson = await res.json().catch(() => null);
         const msg = moveErrorMessage(errJson, "Failed to move lead");
         if (isApplicationsGateError(errJson)) {
-          const items = parseGateMissing(msg);
+          const items = gateMissingItems(errJson);
           if (items.length > 0) {
             gateBlocked = items;
           }

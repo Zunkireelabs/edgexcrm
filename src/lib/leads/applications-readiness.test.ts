@@ -9,6 +9,7 @@ import {
   isFeeEntered,
   checkApplicationsReadiness,
   applicationsGateMessage,
+  applicationsGateApplies,
 } from "./applications-readiness";
 
 const profile = vi.mocked(checkLeadProfileCompleteness);
@@ -113,5 +114,16 @@ describe("applicationsGateMessage", () => {
     expect(applicationsGateMessage(["Processing fee", "Consent signed"])).toBe(
       "Before moving to Applications, complete: Processing fee, Consent signed.",
     );
+  });
+});
+
+describe("applicationsGateApplies (registry-driven, one answer for every caller)", () => {
+  it("applies to education consultancy, which has application tracking", () => {
+    expect(applicationsGateApplies("education_consultancy")).toBe(true);
+  });
+  it("does not apply to industries without application tracking, or when unknown", () => {
+    expect(applicationsGateApplies("it_agency")).toBe(false);
+    expect(applicationsGateApplies(null)).toBe(false);
+    expect(applicationsGateApplies(undefined)).toBe(false);
   });
 });

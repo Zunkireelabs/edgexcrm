@@ -4,7 +4,7 @@ import { authenticateRequest, requireLeadBranchAccess } from "@/lib/api/auth";
 import { getLeadMembership } from "@/lib/leads/branch-membership";
 import { isLeadCollaborator } from "@/lib/leads/collaborators";
 import { shouldRestrictToSelf } from "@/lib/api/permissions";
-import { checkApplicationsReadiness, applicationsGateMessage } from "@/lib/leads/applications-readiness";
+import { checkApplicationsReadiness, applicationsGateMessage, applicationsGateApplies } from "@/lib/leads/applications-readiness";
 import { apiSuccess, apiUnauthorized, apiNotFound } from "@/lib/api/response";
 
 interface RouteContext {
@@ -22,8 +22,8 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
-  // The gate only applies to education tenants — everyone else is always "ready".
-  if (auth.industryId !== "education_consultancy") return apiSuccess({ ready: true, missing: [], message: null });
+  // Same answer as the move itself (registry-driven). Tenants the gate doesn't apply to are always "ready".
+  if (!applicationsGateApplies(auth.industryId)) return apiSuccess({ ready: true, missing: [], message: null });
 
   const supabase = await createServiceClient();
 

@@ -13,7 +13,7 @@ import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { assignDisplayIds } from "@/lib/leads/assign-display-ids";
 import { onLeadsEnteredStageSafe } from "@/industries/_shared/features/outreach/lib/stage-auto-enroll";
 import { getPipelineLandingStage } from "@/lib/leads/pipeline-stage";
-import { checkApplicationsReadiness, applicationsGateMessage } from "@/lib/leads/applications-readiness";
+import { checkApplicationsReadiness, applicationsGateMessage, applicationsGateApplies } from "@/lib/leads/applications-readiness";
 import { createRequestLogger } from "@/lib/logger";
 import {
   createNotificationsExcept,
@@ -672,7 +672,7 @@ export async function applyLeadPatch(
       // is never a revert for this purpose. Already in Applications → not a move.
       if (
         targetList.slug === "applications" &&
-        auth.industryId === "education_consultancy" &&
+        applicationsGateApplies(auth.industryId) &&
         !(isRevert && !leavesStaging) &&
         (existingLead as Record<string, unknown>).list_id !== targetList.id
       ) {
@@ -680,7 +680,8 @@ export async function applyLeadPatch(
         if (!readiness.ready) {
           return {
             kind: "validation",
-            errors: { applications: [applicationsGateMessage(readiness.missing)] },
+            // `applications_missing` is the same list as a structured array, so the UI never has to parse the sentence.
+            errors: { applications: [applicationsGateMessage(readiness.missing)], applications_missing: readiness.missing },
           };
         }
       }

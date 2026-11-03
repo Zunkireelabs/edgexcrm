@@ -115,6 +115,7 @@ describe("PATCH /api/v1/leads/bulk — Applications gate (fee + basic info + con
     const body = await res.json();
     expect(body.error.details.applications[0]).toContain("Processing fee, Consent signed");
     expect(body.error.details.applications_failed_ids).toEqual([LEAD]);
+    expect(body.error.details.applications_missing).toEqual(["Processing fee", "Consent signed"]);
   });
 
   it("an owner/admin is NOT exempt — no bypass for anyone", async () => {

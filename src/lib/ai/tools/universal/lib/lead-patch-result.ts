@@ -31,7 +31,10 @@ export function leadPatchErrorResult(outcome: NonOkOutcome): { error: string } {
     case "forbidden":
       return { error: outcome.message ?? "You don't have permission to make this change." };
     case "validation": {
+      // `applications_missing` is the same information as the `applications` sentence, as a list for the UI —
+      // leave it out so the assistant doesn't read the missing items twice.
       const messages = Object.entries(outcome.errors)
+        .filter(([field]) => field !== "applications_missing")
         .map(([field, msgs]) => `${field}: ${msgs.join(", ")}`)
         .join("; ");
       return { error: messages };

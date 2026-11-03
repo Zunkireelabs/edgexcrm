@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { checkLeadProfileCompleteness } from "@/lib/leads/profile-completeness";
+import { getFeatureAccess } from "@/industries/_loader";
+import { FEATURES } from "@/industries/_registry";
 
 /**
  * Single source of truth for "is this lead ready for Applications?" (client request,
@@ -16,6 +18,15 @@ import { checkLeadProfileCompleteness } from "@/lib/leads/profile-completeness";
  * Nobody bypasses this (owner/admin included). Keep every caller on this helper so
  * the rule can't drift between the stage-move paths and the application-create paths.
  */
+
+/**
+ * Does the Applications gate apply to this tenant's industry? One answer for every caller (the move itself,
+ * the bulk move, and the pre-check route) so they can never disagree. Follows the feature registry — if
+ * application tracking is ever shared with another industry, the gate follows it everywhere at once.
+ */
+export function applicationsGateApplies(industryId: string | null | undefined): boolean {
+  return getFeatureAccess(industryId, FEATURES.APPLICATION_TRACKING);
+}
 
 /** Fee statuses that satisfy the gate. "claimed" = reported by a counsellor, unverified. */
 export const FEE_SATISFIED_STATUSES = ["claimed", "paid", "waiver"] as const;

@@ -8,6 +8,18 @@ export function moveErrorMessage(body: unknown, fallback: string): string {
   return err?.details?.applications?.[0] ?? err?.message ?? fallback;
 }
 
+/**
+ * What is missing, as a list. Reads the structured `details.applications_missing` the server sends; only
+ * falls back to splitting the sentence for an older response that doesn't carry it.
+ */
+export function gateMissingItems(body: unknown): string[] {
+  const details = (body as { error?: { details?: Record<string, string[]> } } | null)?.error?.details;
+  const structured = details?.applications_missing;
+  if (Array.isArray(structured) && structured.length > 0) return structured;
+  const message = details?.applications?.[0];
+  return message ? parseGateMissing(message) : [];
+}
+
 /** The Applications gate's own 422 (as opposed to any other move failure). */
 export function isApplicationsGateError(body: unknown): boolean {
   const err = (body as { error?: { details?: Record<string, string[]> } } | null)?.error;
