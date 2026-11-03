@@ -113,6 +113,7 @@ export function EditableField({
   onChange,
   readOnlyNote,
   disabled,
+  invalid,
 }: {
   field: FieldDef;
   isEditing: boolean;
@@ -122,14 +123,20 @@ export function EditableField({
   readOnlyNote?: string;
   /** Greys a dropdown out until the field it depends on is chosen (e.g. District before Province). */
   disabled?: boolean;
+  /** Marks the field red — it is still required before the lead can move to Applications. */
+  invalid?: boolean;
 }) {
+  const redBorder = invalid ? "border-red-500 focus-visible:ring-red-500" : "";
   return (
-    <div className={field.span === 2 ? "col-span-full" : undefined}>
-      <p className="text-xs text-muted-foreground mb-1">{field.label}</p>
+    <div className={field.span === 2 ? "col-span-full" : undefined} data-invalid={invalid ? "true" : undefined}>
+      <p className={invalid ? "text-xs font-medium text-red-600 mb-1" : "text-xs text-muted-foreground mb-1"}>
+        {field.label}
+        {invalid ? " — required" : ""}
+      </p>
       {isEditing ? (
         field.type === "select" ? (
           <Select value={value || "__none__"} onValueChange={(v) => onChange(v === "__none__" ? "" : v)} disabled={disabled}>
-            <SelectTrigger className="h-9 text-sm w-full">
+            <SelectTrigger className={`h-9 text-sm w-full ${redBorder}`}>
               <SelectValue placeholder="Select" />
             </SelectTrigger>
             <SelectContent>
@@ -145,7 +152,9 @@ export function EditableField({
           </Select>
         ) : field.type === "tel" ? (
           // Same country-code dropdown + number box the forms use; stored as "+977-98…".
-          <PhoneInput value={value} onChange={onChange} placeholder={field.placeholder ?? "Phone number"} />
+          <div className={invalid ? "rounded-md ring-1 ring-red-500" : undefined}>
+            <PhoneInput value={value} onChange={onChange} placeholder={field.placeholder ?? "Phone number"} />
+          </div>
         ) : (
           <>
             <Label htmlFor={field.key} className="sr-only">{field.label}</Label>
@@ -155,7 +164,7 @@ export function EditableField({
               value={value}
               onChange={(e) => onChange(e.target.value)}
               placeholder={field.placeholder ?? `Enter ${field.label.toLowerCase()}`}
-              className="h-9 text-sm"
+              className={`h-9 text-sm ${redBorder}`}
               readOnly={!!readOnlyNote}
               disabled={!!readOnlyNote}
             />

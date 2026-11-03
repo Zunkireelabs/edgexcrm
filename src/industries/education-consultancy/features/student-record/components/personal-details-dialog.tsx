@@ -364,6 +364,11 @@ interface PersonalDetailsDialogProps {
   openInEditMode?: boolean;
   /** Owner/admin — unlocks the Lead Source section (the server only accepts those fields from admins). */
   isAdmin?: boolean;
+  /**
+   * Set when the dialog was opened because the Applications gate blocked a move: the basic-info parts still
+   * missing ("Name", "Email", "Phone", "Study Information", "a document"). Those fields show in red until filled.
+   */
+  missingBeforeApplications?: string[];
 }
 
 /** Shown above a list that is still loading (or failed to load): it cannot be edited until it is known, so it can never be saved over the stored rows. */
@@ -385,7 +390,7 @@ function ListsLoadNote({ status, onRetry }: { status: "loading" | "ready" | "err
   );
 }
 
-export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHistory, onLeadUpdate, canUploadDocuments, openInEditMode, isAdmin = false }: PersonalDetailsDialogProps) {
+export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHistory, onLeadUpdate, canUploadDocuments, openInEditMode, isAdmin = false, missingBeforeApplications }: PersonalDetailsDialogProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [values, setValues] = useState<FieldValues>(() => personalDetailsFromLead(lead));
@@ -394,6 +399,23 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
   const [coreIdentityDraft, setCoreIdentityDraft] = useState<CoreIdentity>(coreIdentity);
   const [studyInterest, setStudyInterest] = useState<StudyInterest>(() => studyInterestFromLead(lead, submissionHistory));
   const [studyDraft, setStudyDraft] = useState<StudyInterest>(studyInterest);
+  // Applications gate: which required basic-info fields are STILL empty right now (so the red clears as the
+  // counsellor fills them). "a document" lives in the Documents card, so it is only named in the banner.
+  const gateMissing = missingBeforeApplications ?? [];
+  const shownCore = isEditing ? coreIdentityDraft : coreIdentity;
+  const shownStudy = isEditing ? studyDraft : studyInterest;
+  const redKeys = new Set<string>();
+  if (gateMissing.includes("Name") && !shownCore.firstName.trim()) redKeys.add("firstName");
+  if (gateMissing.includes("Email") && !shownCore.email.trim()) redKeys.add("email");
+  if (gateMissing.includes("Phone") && !shownCore.phone.trim()) redKeys.add("phone");
+  if (gateMissing.includes("Study Information")) {
+    if (!shownStudy.fieldOfStudy.trim()) redKeys.add("fieldOfStudy");
+    if (!shownStudy.degreeLevel.trim()) redKeys.add("degreeLevel");
+  }
+  const gateBannerItems = [
+    ...[...redKeys].map((k) => ({ firstName: "First Name", email: "Email", phone: "Phone", fieldOfStudy: "Field of Study", degreeLevel: "Degree Level" }[k] as string)),
+    ...(gateMissing.includes("a document") ? ["a document (upload it in the Documents card)"] : []),
+  ];
   const [qualifications, setQualifications] = useState<Qualifications>(() => qualificationsFromLead(lead));
   const [qualificationsDraft, setQualificationsDraft] = useState<Qualifications>(qualifications);
   const [leadSource, setLeadSource] = useState<LeadSourceValues>(() => leadSourceFromLead(lead, submissionHistory));
@@ -665,6 +687,12 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-7 no-scrollbar">
+          {gateBannerItems.length > 0 && (
+            <div role="alert" data-testid="gate-banner" className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <p className="font-medium">Fill these in before moving to Applications:</p>
+              <p className="mt-0.5">{gateBannerItems.join(", ")}</p>
+            </div>
+          )}
           <SectionGroup title="Personal Information">
             <CardSection title="From existing lead record">
               <FieldGrid>
@@ -675,6 +703,7 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
                     isEditing={isEditing}
                     value={(isEditing ? coreIdentityDraft : coreIdentity)[field.key]}
                     onChange={(v) => handleCoreChange(field.key, v)}
+                    invalid={redKeys.has(field.key)}
                   />
                 ))}
               </FieldGrid>
@@ -701,6 +730,8 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
                 isEditing={isEditing}
                 value={isEditing ? studyDraft : studyInterest}
                 onChange={setStudyDraft}
+                invalidFieldOfStudy={redKeys.has("fieldOfStudy")}
+                invalidDegreeLevel={redKeys.has("degreeLevel")}
               />
             </CardSection>
           </SectionGroup>
@@ -897,10 +928,15 @@ function StudyInterestFields({
   isEditing,
   value,
   onChange,
+  invalidFieldOfStudy,
+  invalidDegreeLevel,
 }: {
   isEditing: boolean;
   value: StudyInterest;
   onChange: (next: StudyInterest) => void;
+  /** Still required before Applications — shown in red. */
+  invalidFieldOfStudy?: boolean;
+  invalidDegreeLevel?: boolean;
 }) {
   const { destinations: destOptions, fieldsOfStudy, studyLevels, intakeMonths, intakeYears } = useEduTaxonomy();
   const intake = [value.intakeMonth, value.intakeYear].filter(Boolean).join(" ");
@@ -925,10 +961,12 @@ function StudyInterestFields({
       </div>
 
       <div>
-        <p className="text-xs text-muted-foreground mb-1">Field of Study</p>
+        <p className={invalidFieldOfStudy ? "text-xs font-medium text-red-600 mb-1" : "text-xs text-muted-foreground mb-1"}>
+          Field of Study{invalidFieldOfStudy ? " — required" : ""}
+        </p>
         {isEditing ? (
           <Select value={value.fieldOfStudy || "__none__"} onValueChange={(v) => onChange({ ...value, fieldOfStudy: v === "__none__" ? "" : v })}>
-            <SelectTrigger className="h-9 text-sm w-full">
+            <SelectTrigger className={`h-9 text-sm w-full ${invalidFieldOfStudy ? "border-red-500" : ""}`} data-invalid={invalidFieldOfStudy ? "true" : undefined}>
               <SelectValue placeholder="Select field" />
             </SelectTrigger>
             <SelectContent>
@@ -944,10 +982,12 @@ function StudyInterestFields({
       </div>
 
       <div>
-        <p className="text-xs text-muted-foreground mb-1">Degree Level</p>
+        <p className={invalidDegreeLevel ? "text-xs font-medium text-red-600 mb-1" : "text-xs text-muted-foreground mb-1"}>
+          Degree Level{invalidDegreeLevel ? " — required" : ""}
+        </p>
         {isEditing ? (
           <Select value={value.degreeLevel || "__none__"} onValueChange={(v) => onChange({ ...value, degreeLevel: v === "__none__" ? "" : v })}>
-            <SelectTrigger className="h-9 text-sm w-full">
+            <SelectTrigger className={`h-9 text-sm w-full ${invalidDegreeLevel ? "border-red-500" : ""}`} data-invalid={invalidDegreeLevel ? "true" : undefined}>
               <SelectValue placeholder="Select level" />
             </SelectTrigger>
             <SelectContent>

@@ -6,7 +6,8 @@ import { useLeadBackDestination } from "@/hooks/use-lead-back-destination";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { moveErrorMessage } from "@/lib/leads/gate-error";
+import { moveErrorMessage, isApplicationsGateError, parseGateMissing, parseBasicInfoMissing } from "@/lib/leads/gate-error";
+import { ApplicationsGateDialog } from "@/components/dashboard/leads/applications-gate-dialog";
 import {
   Dialog,
   DialogContent,
@@ -331,6 +332,29 @@ export function LeadDetailV2({
   // Prospects. Deferred until this fill-in dialog is confirmed.
   const [pendingAssignGate, setPendingAssignGate] = useState<{ userId: string } | null>(null);
 
+  // Move into Applications blocked by the readiness gate → shown as a pop-up (not a corner toast).
+  const [gateMissing, setGateMissing] = useState<string[] | null>(null);
+
+  // "Send to next" into Applications: ask the server (same rule as the move) BEFORE the confirm step, and
+  // show the pop-up straight away if something is missing. If the check itself fails we let the user
+  // carry on — the move re-checks on the server anyway.
+  async function precheckApplications(nextListId: string): Promise<boolean> {
+    const target = leadLists?.find((l) => l.id === nextListId);
+    if (target?.slug !== "applications") return true;
+    try {
+      const res = await fetch(`/api/v1/leads/${currentLead.id}/applications-readiness`);
+      if (!res.ok) return true;
+      const json = (await res.json()) as { data?: { ready?: boolean; missing?: string[] } };
+      if (json.data && json.data.ready === false && (json.data.missing?.length ?? 0) > 0) {
+        setGateMissing(json.data.missing!);
+        return false;
+      }
+    } catch {
+      /* network hiccup — the move itself is still gated server-side */
+    }
+    return true;
+  }
+
   async function performListMove(
     listId: string,
     archiveReason?: string,
@@ -353,6 +377,7 @@ export function LeadDetailV2({
       ...(academicPatch ?? {}),
     } as Lead));
     if (assignToUserId !== undefined) setAssignedTo(assignToUserId ?? "");
+    let gateBlocked: string[] | null = null;
     try {
       const body: Record<string, unknown> = {
         list_id: listId,
@@ -367,7 +392,14 @@ export function LeadDetailV2({
       });
       if (!res.ok) {
         const errJson = await res.json().catch(() => null);
-        throw new Error(moveErrorMessage(errJson, "Failed to move lead"));
+        const msg = moveErrorMessage(errJson, "Failed to move lead");
+        if (isApplicationsGateError(errJson)) {
+          const items = parseGateMissing(msg);
+          if (items.length > 0) {
+            gateBlocked = items;
+          }
+        }
+        throw new Error(msg);
       }
       const json = await res.json();
       const updated = json.data as Lead;
@@ -400,7 +432,8 @@ export function LeadDetailV2({
       setStageId(prevStageId);
       if (assignToUserId !== undefined) setAssignedTo(prevLead.assigned_to ?? "");
       setLeaving(false);
-      toast.error(err instanceof Error ? err.message : "Failed to move lead");
+      if (gateBlocked) setGateMissing(gateBlocked);
+      else toast.error(err instanceof Error ? err.message : "Failed to move lead");
     }
   }
 
@@ -872,6 +905,7 @@ export function LeadDetailV2({
               toast.success("Trip details saved");
             }}
             onQualify={openQualifyDialog}
+            onPrecheckNext={precheckApplications}
           />
         </div>
 
@@ -1113,6 +1147,20 @@ export function LeadDetailV2({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ApplicationsGateDialog
+        missing={gateMissing}
+        onClose={() => setGateMissing(null)}
+        onEditProfile={
+          canEdit && gateMissing && parseBasicInfoMissing(gateMissing).length > 0
+            ? () => {
+                const parts = parseBasicInfoMissing(gateMissing);
+                setGateMissing(null);
+                notesTabRef.current?.openStudentDetails(parts);
+              }
+            : undefined
+        }
+      />
 
       <ProspectQualificationDialog
         lead={currentLead as unknown as Record<string, unknown>}
