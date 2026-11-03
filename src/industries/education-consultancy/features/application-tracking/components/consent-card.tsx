@@ -582,7 +582,7 @@ export function ConsentCard({
                   <Button
                     size="sm"
                     onClick={() => saveFee()}
-                    disabled={feeSaving || feeAmount === "" || Number(feeAmount) <= 0}
+                    disabled={feeSaving || feeAmount.trim() === "" || !Number.isFinite(Number(feeAmount)) || Number(feeAmount) < 0}
                     className="h-7 text-xs"
                   >
                     {feeSaving ? "Saving…" : feeIsReported ? "Update report" : "Report fee received"}

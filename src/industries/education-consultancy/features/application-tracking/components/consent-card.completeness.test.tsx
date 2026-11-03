@@ -147,6 +147,39 @@ describe("a counsellor-reported fee ('claimed')", () => {
     expect(await screen.findByText("Awaiting verification")).toBeInTheDocument();
   });
 
+  it("lets a counsellor report a fee of 0 (waived fee) — only an empty amount is blocked", async () => {
+    renderCard({ feeStatus: null });
+    await screen.findByText("Fee pending");
+    openCard();
+    const amount = await screen.findByPlaceholderText("0.00");
+    const btn = () => screen.getByRole("button", { name: "Report fee received" });
+    fireEvent.change(amount, { target: { value: "" } });
+    fireEvent.change(amount, { target: { value: "0" } });
+    expect(btn()).not.toBeDisabled();
+    fireEvent.click(btn());
+    await waitFor(() => {
+      const patch = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.find(
+        (c) => (c[1] as RequestInit | undefined)?.method === "PATCH",
+      );
+      expect(patch).toBeTruthy();
+      const body = JSON.parse((patch![1] as RequestInit).body as string);
+      expect(body.pre_app_fee_status).toBe("claimed");
+      expect(body.pre_app_fee_amount).toBe(0);
+    });
+  });
+
+  it("keeps the report button disabled when the amount is empty or negative", async () => {
+    renderCard({ feeStatus: null });
+    await screen.findByText("Fee pending");
+    openCard();
+    const amount = await screen.findByPlaceholderText("0.00");
+    fireEvent.change(amount, { target: { value: "5" } });
+    fireEvent.change(amount, { target: { value: "" } });
+    expect(screen.getByRole("button", { name: "Report fee received" })).toBeDisabled();
+    fireEvent.change(amount, { target: { value: "-3" } });
+    expect(screen.getByRole("button", { name: "Report fee received" })).toBeDisabled();
+  });
+
   it("lets an owner/admin confirm a reported fee in one click (sends 'paid')", async () => {
     renderCard({ feeStatus: "claimed", feeAmount: 5000, canManageFee: true });
     await screen.findByText("Fee reported");
