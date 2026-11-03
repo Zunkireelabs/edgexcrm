@@ -11,6 +11,7 @@ const state = vi.hoisted(() => ({
   docs: [] as Record<string, unknown>[],
   docsError: null as unknown,
   docsFilters: [] as Array<[string, unknown[]]>,
+  documentsFeature: true,
 }));
 
 vi.mock("@/lib/api/auth", () => ({
@@ -21,7 +22,9 @@ vi.mock("@/lib/api/auth", () => ({
   requireLeadBranchAccess: () => true,
   getClientIp: () => "127.0.0.1",
 }));
-vi.mock("@/industries/_loader", () => ({ getFeatureAccess: () => true }));
+vi.mock("@/industries/_loader", () => ({
+  getFeatureAccess: (_industry: string, feature: string) => (feature === "applicant-documents" ? state.documentsFeature : true),
+}));
 vi.mock("@/lib/api/permissions", () => ({ shouldRestrictToSelf: () => false, canManageApplications: () => true }));
 vi.mock("@/lib/api/applications", () => ({ canCreateOrReorderApplications: () => true }));
 vi.mock("@/lib/leads/branch-membership", () => ({ getLeadMembership: async () => [] }));
@@ -78,6 +81,7 @@ beforeEach(() => {
   state.docs = [];
   state.docsError = null;
   state.docsFilters = [];
+  state.documentsFeature = true;
 });
 
 describe("GET /api/v1/leads/[id]/applications — files for the Activity feed", () => {
@@ -112,5 +116,16 @@ describe("GET /api/v1/leads/[id]/applications — files for the Activity feed", 
     expect(data).toHaveLength(2);
     expect(data[0].application_notes[0].content).toBe("Offer received");
     expect(data[0].application_notes[0].documents).toBeUndefined();
+  });
+
+  it("a tenant without the documents feature gets no file names (and the files aren't even queried)", async () => {
+    state.documentsFeature = false;
+    state.docs = [doc("secret", { application_note_id: "note-1" })];
+    const res = await call();
+    expect(res.status).toBe(200);
+    const { data } = await res.json();
+    expect(data[0].application_notes[0].documents).toBeUndefined();
+    expect(data[0].application_documents).toBeUndefined();
+    expect(state.docsFilters).toEqual([]);
   });
 });
