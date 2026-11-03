@@ -17,7 +17,8 @@ vi.mock("@/lib/api/auth", async (importOriginal) => {
   return { ...actual, authenticateRequest: authenticateRequestMock };
 });
 vi.mock("@/lib/supabase/server", () => ({ createServiceClient: createServiceClientMock }));
-vi.mock("@/lib/api/audit", () => ({ createAuditLog: vi.fn().mockResolvedValue(undefined), emitEvent: vi.fn().mockResolvedValue(undefined) }));
+const auditMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+vi.mock("@/lib/api/audit", () => ({ createAuditLog: auditMock, emitEvent: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("@/lib/notifications", () => ({
   createNotificationsExcept: vi.fn(),
   NotificationTypes: { LEAD_ASSIGNED: "lead.assigned", LEAD_UNASSIGNED: "lead.unassigned" },
@@ -133,6 +134,21 @@ describe("PATCH /api/v1/leads/bulk — Applications gate (fee + basic info + con
     const res = await PATCH(req({ ids: [LEAD], list_id: APPLICATIONS }));
     expect(res.status).not.toBe(422);
     expect(t.leads.update).toHaveBeenCalled();
+  });
+
+  it("System Activity — a bulk stage move records who holds each lead (assignee unchanged)", async () => {
+    auditMock.mockClear();
+    setup(PROSPECTS);
+    readinessMock.mockResolvedValue({ ready: true, missing: [] });
+    const { PATCH } = await import("./route");
+    await PATCH(req({ ids: [LEAD], list_id: APPLICATIONS }));
+    const call = auditMock.mock.calls.find((c) => (c[0] as { changes?: { list?: unknown } }).changes?.list) as
+      | [{ entityId: string; changes: Record<string, unknown> }]
+      | undefined;
+    expect(call).toBeTruthy();
+    expect(call![0].entityId).toBe(LEAD);
+    expect(call![0].changes.holder).toEqual({ old: null, new: "exec" }); // the lead's current assignee
+    expect(call![0].changes.assigned_to).toBeUndefined();
   });
 
   it("a backward move into Applications (from a later stage) is not gated", async () => {
