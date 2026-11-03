@@ -56,7 +56,7 @@ export interface LeadTabsRef {
   focusComposer: () => void;
   focusTaskComposer: () => void;
   /** Opens the Student Details pop-up in edit mode. Returns false when this tenant has no student record (the caller then falls back to inline edit). */
-  openStudentDetails: () => boolean;
+  openStudentDetails: (missingBeforeApplications?: string[]) => boolean;
   /** Opens Activity -> Documents (the last sub-tab). Used by the right-column documents card's "View all". */
   openDocuments: () => void;
 }
@@ -72,6 +72,8 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
     // True when opened by the page's single Edit button (top of the contact card), so the
     // pop-up skips straight to the editable form instead of the preview.
     const [personalDetailsOpenInEditMode, setPersonalDetailsOpenInEditMode] = useState(false);
+    // Set when the Applications gate sent the user here: those basic-info fields show in red until filled.
+    const [missingBeforeApplications, setMissingBeforeApplications] = useState<string[]>([]);
 
     const canUploadDocuments = getFeatureAccess(industryId, FEATURES.APPLICANT_DOCUMENTS) && (canEdit ?? isAdmin);
     const studentRecordActive = getFeatureAccess(industryId, FEATURES.STUDENT_RECORD);
@@ -87,8 +89,9 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
         onTabChange("activity");
         setTimeout(() => activitiesPanelRef.current?.openDocuments(), 50);
       },
-      openStudentDetails: () => {
+      openStudentDetails: (missing) => {
         if (!studentRecordActive) return false;
+        setMissingBeforeApplications(missing ?? []);
         setPersonalDetailsOpenInEditMode(true);
         setIsPersonalDetailsOpen(true);
         return true;
@@ -234,13 +237,17 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
           open={isPersonalDetailsOpen}
           onOpenChange={(next) => {
             setIsPersonalDetailsOpen(next);
-            if (!next) setPersonalDetailsOpenInEditMode(false);
+            if (!next) {
+              setPersonalDetailsOpenInEditMode(false);
+              setMissingBeforeApplications([]);
+            }
           }}
           submissionHistory={submissionHistory}
           onLeadUpdate={onLeadUpdate}
           canUploadDocuments={canUploadDocuments}
           openInEditMode={personalDetailsOpenInEditMode}
           isAdmin={isAdmin}
+          missingBeforeApplications={missingBeforeApplications}
         />
       )}
       </>

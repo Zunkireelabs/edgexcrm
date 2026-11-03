@@ -24,7 +24,7 @@ import { createNotificationsExcept, NotificationTypes } from "@/lib/notification
 import { ASSIGN_CHAIN_POSITIONS, assignableTargetSlugs } from "@/industries/education-consultancy/lead-assignment-chain";
 import { sendBulkAssignedEmail } from "@/lib/email/send-lead-assigned";
 import { hasProspectQualification, canBypassProspectQualification } from "@/lib/leads/prospect-qualification";
-import { checkApplicationsReadiness, applicationsGateMessage } from "@/lib/leads/applications-readiness";
+import { checkApplicationsReadiness, applicationsGateMessage, applicationsGateApplies } from "@/lib/leads/applications-readiness";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -328,7 +328,7 @@ export async function PATCH(request: NextRequest) {
   // Applications stage needs fee entered + basic info + consent signed. No bypass for anyone.
   // Backward moves and leads already in Applications are skipped. Returns failing_ids so the
   // caller can show which leads are blocked.
-  if (targetList?.slug === "applications" && auth.industryId === "education_consultancy") {
+  if (targetList?.slug === "applications" && applicationsGateApplies(auth.industryId)) {
     const srcIds = [...new Set(
       idsToUpdate.map((id) => existingMap.get(id)?.list_id).filter((v): v is string => !!v),
     )];
@@ -361,6 +361,7 @@ export async function PATCH(request: NextRequest) {
     if (gateFailing.length > 0) {
       return apiValidationError({
         applications: [applicationsGateMessage([...gateMissing])],
+        applications_missing: [...gateMissing],
         applications_failed_ids: gateFailing,
       });
     }

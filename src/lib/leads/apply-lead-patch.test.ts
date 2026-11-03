@@ -577,7 +577,10 @@ describe("applyLeadPatch — governance branches", () => {
       const outcome = await applyLeadPatch(auth, "lead-1", { list_id: "list-applications" }, OPTS);
       expect(outcome).toEqual({
         kind: "validation",
-        errors: { applications: ["Before moving to Applications, complete: Processing fee, Consent signed."] },
+        errors: {
+          applications: ["Before moving to Applications, complete: Processing fee, Consent signed."],
+          applications_missing: ["Processing fee", "Consent signed"],
+        },
       });
     });
 
