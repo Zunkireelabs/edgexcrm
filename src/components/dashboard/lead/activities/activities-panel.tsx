@@ -6,7 +6,7 @@ import Link from "next/link";
 import {
   Phone, Mail, Calendar, Clock, FileText, CheckSquare, ChevronDown,
   ArrowRight, Archive, CheckCircle2, Pencil, Users, UserMinus, UserPlus,
-  GitMerge, Check,
+  GitMerge, Check, Paperclip,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,10 @@ import { type EmailThread, type Email } from "@/industries/_shared/features/emai
 import { useConnectedInboxes } from "@/industries/_shared/features/email/hooks/use-connected-inboxes";
 import { getFeatureAccess } from "@/industries/_loader";
 import { describeSubmission, humanizeIntakeValue } from "./lead-activity-labels";
+import {
+  applicationParts, directDocumentItems, feedDocumentLine, hideAutoAttachedText,
+  type DirectDocumentItem, type FeedDocument,
+} from "./application-feed-labels";
 import { FEATURES } from "@/industries/_registry";
 import { LeadCadenceStrip } from "@/industries/_shared/features/outreach/ui/lead-cadence-strip";
 import { LeadSubscriptionsTab } from "@/industries/_shared/features/outreach/ui/lead-subscriptions-tab";
@@ -164,6 +168,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
       created_at: string;
       updated_at: string | null;
       university_name: string | null;
+      program_name: string | null;
       created_by: string | null;
       notes_updated_by: string | null;
       notes_updated_at: string | null;
@@ -179,8 +184,13 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
       user_id: string | null;
       created_at: string;
       university_name: string | null;
+      program_name: string | null;
+      /** Files attached to this note (so the feed can show what was attached). */
+      documents: FeedDocument[];
     }[]
   >([]);
+  // Files added straight to an application (no note) — each shows as its own "Document added" entry.
+  const [appDirectDocs, setAppDirectDocs] = useState<DirectDocumentItem[]>([]);
 
   const hasEmail = getFeatureAccess(industryId, FEATURES.EMAIL);
   const hasOutreach = getFeatureAccess(industryId, FEATURES.OUTREACH);
@@ -225,6 +235,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
           created_at: string;
           updated_at: string | null;
           university_name: string | null;
+          program_name: string | null;
           created_by: string | null;
           notes_updated_by: string | null;
           notes_updated_at: string | null;
@@ -234,7 +245,9 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
             content: string;
             user_id: string | null;
             created_at: string;
+            documents?: FeedDocument[];
           }[];
+          application_documents?: FeedDocument[];
         }[];
         setAppNotes(apps.filter((a): a is typeof apps[number] & { notes: string } => Boolean(a.notes && a.notes.trim())));
         setAppNoteEntries(
@@ -246,9 +259,12 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
               user_id: n.user_id,
               created_at: n.created_at,
               university_name: a.university_name,
+              program_name: a.program_name ?? null,
+              documents: n.documents ?? [],
             }))
           )
         );
+        setAppDirectDocs(directDocumentItems(apps));
       }
     } catch {
       // silent — non-critical
@@ -724,8 +740,9 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
               | { kind: "system"; id: string; at: string; event: LeadActivity }
               | { kind: "note"; id: string; at: string; note: LeadNote }
               | { kind: "activity"; id: string; at: string; record: LeadActivityRecord }
-              | { kind: "app_note"; id: string; at: string; content: string; institution: string | null; authorId: string | null }
-              | { kind: "app_note_entry"; id: string; at: string; content: string; institution: string | null; authorId: string | null; applicationId: string };
+              | { kind: "app_note"; id: string; at: string; content: string; institution: string | null; course: string | null; authorId: string | null }
+              | { kind: "app_note_entry"; id: string; at: string; content: string; institution: string | null; course: string | null; documents: FeedDocument[]; authorId: string | null; applicationId: string }
+              | { kind: "app_document"; id: string; at: string; item: DirectDocumentItem };
 
             // Audit events (skip note_added — replaced by actual note items below)
             const sysItems: UnifiedItem[] = systemActivities
@@ -749,7 +766,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
             // moving this entry in the timeline.
             const appNoteItems: UnifiedItem[] = appNotes.map((a) => ({
               kind: "app_note", id: `appnote-${a.id}`, at: a.notes_updated_at ?? a.created_at,
-              content: a.notes, institution: a.university_name,
+              content: a.notes, institution: a.university_name, course: applicationParts(a).course,
               authorId: a.notes_updated_by ?? a.created_by,
             }));
 
@@ -758,11 +775,16 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
             // that an application update be traceable back to its application.
             const appNoteEntryItems: UnifiedItem[] = appNoteEntries.map((n) => ({
               kind: "app_note_entry", id: `appnote-entry-${n.id}`, at: n.created_at,
-              content: n.content, institution: n.university_name,
-              authorId: n.user_id, applicationId: n.application_id,
+              content: n.content, institution: n.university_name, course: applicationParts(n).course,
+              documents: n.documents, authorId: n.user_id, applicationId: n.application_id,
             }));
 
-            const all: UnifiedItem[] = [...sysItems, ...noteItems, ...activityItems, ...appNoteItems, ...appNoteEntryItems]
+            // Files added straight to an application (not through a note).
+            const appDocumentItems: UnifiedItem[] = appDirectDocs.map((d) => ({
+              kind: "app_document", id: `appdoc-${d.id}`, at: d.at, item: d,
+            }));
+
+            const all: UnifiedItem[] = [...sysItems, ...noteItems, ...activityItems, ...appNoteItems, ...appNoteEntryItems, ...appDocumentItems]
               .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
 
             if (all.length === 0) return (
@@ -882,9 +904,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
                               {!isLast && <div className="w-px bg-border flex-1 mt-1" />}
                             </div>
                             <div className="min-w-0 pb-3 flex-1">
-                              <p className="text-sm text-foreground">
-                                Application note{item.institution ? ` · Course: ${item.institution}` : ""}
-                              </p>
+                              <AppFeedTitle label="Application note" university={item.institution} course={item.course} />
                               <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-wrap break-words">
                                 {item.content}
                               </p>
@@ -910,25 +930,40 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
                               {!isLast && <div className="w-px bg-border flex-1 mt-1" />}
                             </div>
                             <div className="min-w-0 pb-3 flex-1">
-                              <p className="text-sm text-foreground">
-                                Note added
-                                {item.institution && (
-                                  <>
-                                    {" · "}
-                                    <Link href={`/applications/${item.applicationId}`} className="hover:underline">
-                                      Course: {item.institution}
-                                    </Link>
-                                  </>
-                                )}
-                              </p>
-                              <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-wrap break-words">
-                                {item.content}
-                              </p>
+                              <AppFeedTitle label="Note added" university={item.institution} course={item.course} applicationId={item.applicationId} />
+                              {!hideAutoAttachedText(item.content, item.documents) && (
+                                <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-wrap break-words">
+                                  {item.content}
+                                </p>
+                              )}
+                              <AppFeedFiles documents={item.documents} />
                               <p className="text-xs text-muted-foreground mt-0.5">
                                 {[
                                   formatTimeOnly(item.at),
                                   resolveActorLabel(item.authorId, currentUserId, teamMemberNames, teamMemberEmails),
                                 ]
+                                  .filter(Boolean)
+                                  .join(" · ")}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      }
+                      if (item.kind === "app_document") {
+                        const d = item.item;
+                        return (
+                          <div key={item.id} className="flex gap-3">
+                            <div className="flex flex-col items-center">
+                              <div className="h-6 w-6 rounded-full border border-border bg-background flex items-center justify-center shrink-0">
+                                <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
+                              </div>
+                              {!isLast && <div className="w-px bg-border flex-1 mt-1" />}
+                            </div>
+                            <div className="min-w-0 pb-3 flex-1">
+                              <AppFeedTitle label="Document added" university={d.university} course={d.course} applicationId={d.applicationId} />
+                              <p className="text-xs text-muted-foreground mt-0.5 break-words">{d.line}</p>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {[formatTimeOnly(d.at), resolveActorLabel(d.authorId, currentUserId, teamMemberNames, teamMemberEmails)]
                                   .filter(Boolean)
                                   .join(" · ")}
                               </p>
@@ -972,6 +1007,44 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
 });
 
 // System activity item — monochrome timeline node
+// "Note added · University of East London · BA Hons Hospitality" — the university links to the application (when
+// there is one), and the course is the application's program name.
+function AppFeedTitle({
+  label, university, course, applicationId,
+}: { label: string; university: string | null; course: string | null; applicationId?: string }) {
+  return (
+    <p className="text-sm text-foreground">
+      {label}
+      {university && (
+        <>
+          {" · "}
+          {applicationId ? (
+            <Link href={`/applications/${applicationId}`} className="hover:underline">{university}</Link>
+          ) : (
+            university
+          )}
+        </>
+      )}
+      {course && <>{" · "}{course}</>}
+    </p>
+  );
+}
+
+// Files attached to an application note: name · type, one per line. Names only — downloading stays inside the application.
+function AppFeedFiles({ documents }: { documents: FeedDocument[] }) {
+  if (documents.length === 0) return null;
+  return (
+    <ul className="mt-1 space-y-0.5" data-testid="app-feed-files">
+      {documents.map((d) => (
+        <li key={d.id} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Paperclip className="h-3 w-3 shrink-0" />
+          <span className="min-w-0 truncate">{feedDocumentLine(d)}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function SystemActivityItem({
   activity,
   teamMemberEmails,
