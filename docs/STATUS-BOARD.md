@@ -21,4 +21,26 @@ All carry `needs-verification` in Plane, because the source text is from 2026-09
 | Admizz "email campaigns from admizz.com": Brevo or EdgeX Outreach? | EDGEX-27 (DECIDE) |
 | Backlog PR triage | EDGEX-18 (DECIDE #91/#33); #396 → EDGEX-17, #417 → EDGEX-16; #26/#98/#134/#176/#177/#285/#310 are closed on GitHub (checked 2026-11-03) |
 
-The "Parked" items were archived as written. They were **not** ticketed in this pass; see the archive and the EDGEX-33 ticket.
+## Where the 2026-09-07 "Parked" items went
+
+| Former Parked item | Plane |
+|---|---|
+| Migrate the remaining legacy authenticated routes (67) to `scopedClient(auth)` | EDGEX-36 |
+| AI-native Phase 5: env vars (`AI_TOOL_APPROVAL_SECRET` overdue on stage, `AI_AGENTS_ENABLED`, `AI_MCP_ENABLED`) | EDGEX-34 |
+| AI-native Phase 5: stage PR + deferred live verifications | EDGEX-35 |
+| Lead Detail Associations Rail (built, awaiting review + smoke) | EDGEX-37 |
+| Domain migration `lead-crm` → `edgex` (EDGEX-DRAIN, then Phase 3) | EDGEX-38 |
+| IT-agency surface pass (paused) | EDGEX-39 |
+| PROD-WEDGE leftovers (stray compose rename, memory sampler, capacity decision) | EDGEX-40 |
+| `deriveHomeTip` server-timezone day boundaries | EDGEX-41 |
+| Wire `events` → webhook dispatcher | EDGEX-42 |
+| Per-industry AI agent prompts/tools | EDGEX-43 |
+| Time Tracking smoke gaps | EDGEX-44 |
+| Promote tags UI to `_shared` | EDGEX-45 |
+| `DELETE /api/v1/email/inboxes/[id]` FK check | EDGEX-46 |
+| Shared deploy concurrency group (optional) | EDGEX-47 |
+| Low-severity code-review findings | EDGEX-48 |
+| CLAUDE.md "Developer Persona & System Guardrails" fate | EDGEX-49 (DECIDE) |
+| `ai-insight` stubs: dormant or on the roadmap? | EDGEX-50 (DECIDE) |
+
+The "Recently closed" items were already done; they are kept in the archive only.
