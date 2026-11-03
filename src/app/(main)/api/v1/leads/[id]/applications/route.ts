@@ -107,12 +107,17 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     // `documents` under the note a file was attached to, and `application_documents` for files added straight to
     // the application (no note). Best effort, like the Notes tab's own route: if this lookup fails the notes
     // still load, just without their files — a missing file line must never hide a note.
-    const { data: docsData, error: docsError } = await db
-      .from("applicant_documents")
-      .select("id, name, document_type, original_filename, application_id, application_note_id, uploaded_by, created_at")
-      .in("application_id", appIds)
-      .is("deleted_at", null)
-      .order("created_at", { ascending: true });
+    // Only for tenants that have the documents feature — the same gate the documents routes apply — so file
+    // names never reach a tenant that doesn't use documents.
+    const withDocuments = getFeatureAccess(auth.industryId, FEATURES.APPLICANT_DOCUMENTS);
+    const { data: docsData, error: docsError } = withDocuments
+      ? await db
+          .from("applicant_documents")
+          .select("id, name, document_type, original_filename, application_id, application_note_id, uploaded_by, created_at")
+          .in("application_id", appIds)
+          .is("deleted_at", null)
+          .order("created_at", { ascending: true })
+      : { data: null, error: { message: "documents feature off" } };
     if (!docsError) {
       const byNote = new Map<string, Record<string, unknown>[]>();
       const byApp = new Map<string, Record<string, unknown>[]>();
