@@ -10,7 +10,7 @@ local-only; nothing applied to stage or prod.
 > **Provenance note.** This file was reconstructed on 2026-08-15 after the original was lost before
 > being committed. HIGH-1/2 and M-1..M-4 are restated from the fix commit `9dc79879` and its
 > regression tests, which record them precisely; L-1..L-5 are restated verbatim from
-> `docs/SMS-PHASE2-BRIEF.md` §7, where they were carried forward at the time. §NEW-1 is a **new
+> `docs/archive/features/SMS-PHASE2-BRIEF.md` §7, where they were carried forward at the time. §NEW-1 is a **new
 > finding from the reconstruction pass** — it was not in the original review and had not been
 > reported before this document. It is not backdated.
 
@@ -138,7 +138,7 @@ that the accommodation was applied unconditionally.
 
 ---
 
-## LOW — carried into Phase 2 (`docs/SMS-PHASE2-BRIEF.md` §7)
+## LOW — carried into Phase 2 (`docs/archive/features/SMS-PHASE2-BRIEF.md` §7)
 
 - **L-1** *(not cosmetic)* — `sms_credits_settle` hardcodes `ref_type = 'sms_blast'` in its ledger
   inserts while `sms_credits_reserve` takes `p_ref_type` as a parameter. Phase 5's 1:1 sends

@@ -1,6 +1,6 @@
 # Applicant Document Intelligence — Status
 
-> Forward-looking companion to `docs/APPLICANT-DOCUMENTS-PHASE1-BRIEF.md` (the historical build
+> Forward-looking companion to `docs/archive/features/APPLICANT-DOCUMENTS-PHASE1-BRIEF.md` (the historical build
 > brief for Phase 1 specifically). This doc is the one to read first if you're picking this
 > project back up cold — it says what's done, what isn't, and what to build next. Keep it current
 > as each phase ships; once the whole project is feature-complete, fold the final state into
@@ -749,7 +749,7 @@ see §2d.)
 
 ## 5. How to resume — where to look first
 
-1. Read `docs/APPLICANT-DOCUMENTS-PHASE1-BRIEF.md` for the exact Phase 1 schema/route
+1. Read `docs/archive/features/APPLICANT-DOCUMENTS-PHASE1-BRIEF.md` for the exact Phase 1 schema/route
    specification (field-by-field), and this doc for what's actually built vs. planned.
 2. `src/lib/documents/` is the whole feature's shared library: `access.ts` (lead-visibility gate,
    read this first — every route goes through it), `constants.ts` (document types, MIME allowlist,
