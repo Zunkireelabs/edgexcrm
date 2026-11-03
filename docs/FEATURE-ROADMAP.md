@@ -7,8 +7,6 @@
 >
 > Move entries between sections as their state changes. Cross-reference shipped features to their SESSION-LOG entry and commit SHA, then keep them in `## ✅ Shipped` here only briefly before relying on FEATURE-CATALOG as the source of truth.
 
-> **📋 Plane is the board (from 2026-11-03, EDGEX-1).** Open work is tracked in Plane (project **EdgeX**, key `EDGEX`); the generated to-do file is [`tasks/TRACKER.md`](../tasks/TRACKER.md). **Do not add new to-dos to this file.** Its open items are being backfilled into Plane; once that is done they move out and this file keeps feature intent and direction only.
-
 Last updated: 2026-07-10 (it_agency Delivery **Tiers 0–4 batch BUILT ON BRANCH** `feature/it-agency-delivery-tier0` — 12 commits, migs 129–135 local-only, PR #160 held at the merge gate; **all pending merge to stage.** Per-tier record in memory `project_it_agency_delivery_workflow`. Prior: 2026-07-09 Phase 1+1.5 shipped to stage.)
 
 ---
