@@ -271,7 +271,7 @@ export function ConsentCard({
       if (!res.ok) throw new Error();
       toast.success(
         override === "paid" ? "Fee confirmed" : override === "unpaid" ? "Fee report rejected"
-          : canManageFee ? "Processing fee saved" : "Fee reported — the owner will verify it",
+          : canManageFee ? "Processing fee saved" : "Fee reported — the Account will verify it",
       );
       setFeeStatus(statusToSave);
       setSavedFeeStatus(statusToSave);
@@ -548,8 +548,8 @@ export function ConsentCard({
               <>
                 <p className="text-xs text-muted-foreground">
                   {feeIsReported
-                    ? "You reported this fee. The owner will verify it — you can keep working in the meantime."
-                    : "Received the fee? Report it here. The owner will verify it — you can keep working in the meantime."}
+                    ? "You reported this fee. The Account will verify it — you can keep working in the meantime."
+                    : "Fee Deposited? Report it here. The Account will verify it — you can keep working in the meantime."}
                 </p>
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Amount received</Label>
@@ -757,7 +757,7 @@ export function ConsentCard({
                   <p className="text-sm font-medium">{L.signedTitle}</p>
                   {!completeness.feeDone && (
                     <p className="text-xs font-medium">
-                      {feeIsReported ? "Processing fee reported — awaiting owner verification" : "Processing fee pending"}
+                      {feeIsReported ? "Processing fee reported — awaiting Account verification" : "Processing fee pending"}
                     </p>
                   )}
                   {current?.record?.signer_name && (

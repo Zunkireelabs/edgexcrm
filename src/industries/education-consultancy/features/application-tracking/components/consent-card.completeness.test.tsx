@@ -111,20 +111,40 @@ describe("opened card", () => {
 });
 
 describe("a counsellor-reported fee ('claimed')", () => {
-  it("is NOT green (awaiting owner verification) but is labelled as reported, not pending", async () => {
+  it("is NOT green (awaiting Account verification) but is labelled as reported, not pending", async () => {
     renderCard({ feeStatus: "claimed", feeAmount: 5000 });
     expect(await screen.findByText("Fee reported")).toBeInTheDocument();
     expect(screen.queryByText("Signed")).toBeNull();
     expect(screen.queryByText("Fee pending")).toBeNull();
   });
 
-  it("says the fee is awaiting owner verification when the card is opened", async () => {
+  it("says the fee is awaiting Account verification when the card is opened", async () => {
     renderCard({ feeStatus: "claimed", feeAmount: 5000 });
     await screen.findByText("Fee reported");
     openCard();
     await waitFor(() => expect(screen.getByText("Consent signed")).toBeInTheDocument());
     expect(screen.getByText("Awaiting verification")).toBeInTheDocument();
-    expect(screen.getByText("Processing fee reported — awaiting owner verification")).toBeInTheDocument();
+    expect(screen.getByText("Processing fee reported — awaiting Account verification")).toBeInTheDocument();
+  });
+
+  it("asks 'Fee Deposited?' and says the Account will verify it (client wording)", async () => {
+    renderCard({ feeStatus: null });
+    await screen.findByText("Fee pending");
+    openCard();
+    expect(
+      await screen.findByText("Fee Deposited? Report it here. The Account will verify it — you can keep working in the meantime."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/owner will verify/i)).toBeNull();
+    expect(screen.queryByText(/Received the fee/)).toBeNull();
+  });
+
+  it("after reporting, the sentence also says the Account will verify it", async () => {
+    renderCard({ feeStatus: "claimed", feeAmount: 5000 });
+    await screen.findByText("Fee reported");
+    openCard();
+    expect(
+      await screen.findByText("You reported this fee. The Account will verify it — you can keep working in the meantime."),
+    ).toBeInTheDocument();
   });
 
   it("lets a counsellor report a fee, sending only status 'claimed' (never 'paid')", async () => {
