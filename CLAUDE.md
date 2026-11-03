@@ -12,7 +12,49 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Git Hooks
 
-A `commit-msg` hook (`.git/hooks/commit-msg`) replaces the default Anthropic co-author line with `Co-Authored-By: Anish Balami <anishbalami38@gmail.com>` on every commit. This hook lives in `.git/hooks/` (not tracked by git) and must be re-created if the repo is re-cloned.
+**Commit trailer (decided by Sadin, 2026-11-03, EDGEX-1): the committing developer.** A local `commit-msg` hook (`.git/hooks/commit-msg`) rewrites any `Co-Authored-By: Claude … <noreply@anthropic.com>` line to `Co-Authored-By: <git config user.name> <<git config user.email>>`, i.e. whoever is committing in that clone. If `user.name` or `user.email` is unset it leaves the message alone. (This section previously said the hook always writes Anish's name; that was out of date — the hook uses the committer.) The hook lives in `.git/hooks/` (not tracked by git) and must be re-created on every fresh clone. Don't hand-write a different co-author line.
+
+---
+
+## Task Management — Plane is the single source of truth
+
+All development work is tracked in **Plane** (project **EdgeX**, key `EDGEX`, workspace `zunkireelabs`),
+via the `plane` MCP server. If the `plane` tools are missing, run `/mcp` → plane → authenticate (or see the
+onboarding SOP).
+
+- Project id: `39af7c40-d158-4870-bddf-fd6d85ed8c86` (use with `mcp__plane__*` tools). Ids and queries: `.claude/skills/project-pm/plane.md`.
+- No work without a ticket. Search Plane first; create one only if none exists.
+- Ticket id goes in the branch name and PR title: `feature|fix|hotfix/EDGEX-123-short-name`, `EDGEX-123: ...`
+  (from 2026-11-03; older branches are not renamed).
+- Move the ticket as the work moves:
+  `Backlog → Todo → In Progress → In Review (PR open) → On Stage (merged to stage) → Done (live on main)`
+- Done means live in production, not merged to staging.
+- Anything you can't verify gets the `needs-verification` label; never state it as fact.
+
+**HARD RULE — every developer, every session (human or Claude), no exceptions:**
+1. **Your work is in Plane before you start it.** Every fix, feature, migration, data fix, hotfix, investigation
+   or follow-up has an `EDGEX` ticket with an assignee. Untracked work is not allowed, however small.
+2. **One ticket per piece of work — no duplicates.** Search Plane before creating. If someone else's ticket
+   already covers it, comment on that ticket or link a child; never open a second one.
+3. **`tasks/TRACKER.md` is the one to-do file in this repo**, for the whole team. It is **generated from Plane**
+   by `/project-pm sync`. **Never hand-edit it, and never push its content back into Plane.** A git conflict in
+   it → take either side and re-run sync. **Use `/project-pm` for all of this:** "status", "what's mine?",
+   "start EDGEX-n", "sync".
+4. **No other to-do lists.** Not in `todo.md`, handoffs, briefs, PR descriptions, session logs,
+   `docs/STATUS-BOARD.md` or `docs/FEATURE-ROADMAP.md`.
+5. **Claim your migration number in Plane** (in the ticket description) after checking `supabase/migrations/` on
+   `stage` and open PRs. Two PRs must never use the same number.
+6. **Keep the state honest** as the work moves. A PR without an `EDGEX` id in its title doesn't get merged.
+
+**Per-project choices:**
+
+| Choice | EdgeX |
+|---|---|
+| Staging branch / production branch | `stage` / `main` |
+| PR target | `stage` (never `main` from a feature branch; only `promote/*` stage→main PRs target `main`) |
+| Migration file pattern | `supabase/migrations/NNN_name.sql`, applied by `scripts/migrate-apply.sh` in the deploy pipelines, recorded in `schema_migrations` |
+| Commit trailer | the committing developer (`commit-msg` hook, see Git Hooks above) |
+| Who approves merges | Sadin and Anish |
 
 ---
 
@@ -194,8 +236,9 @@ Multi-tenant lead generation CRM SaaS (Zunkiree Labs). White-label system where 
 
 0. **`docs/dev-collab/DEV-WORKFLOW-AND-DEPLOYMENT.md` — how code & DB changes move to prod safely (branch/PR discipline, migration-before-code ordering, promotion & rollback runbooks, shared-file conflict rules). Non-negotiable process. Read before any branch/PR/migration/deploy. This is what keeps features from "reverting" on prod.**
 1. `docs/SESSION-LOG.md` — current state of the project. The "🟢 NEXT SESSION — RESUME HERE" block at the top tells you exactly where to pick up.
-2. `docs/STATUS-BOARD.md` — live status of open user-side actions and questions.
-3. `docs/FEATURE-ROADMAP.md` — forward-looking pipeline of features by state (ideas → approved → planned → in-progress). Where new feature ideas are logged and where we pick the next thing to build.
+2. **`tasks/TRACKER.md` — the one to-do file, generated from Plane (`EDGEX`) by `/project-pm sync`. What is open, who owns it, what is waiting on Sadin. Plane wins if they disagree.**
+3. `docs/STATUS-BOARD.md` — decisions and history of open user-side questions. **Plane is the board:** open items are being moved into Plane; don't add new to-dos here.
+3a. `docs/FEATURE-ROADMAP.md` — feature intent and direction (ideas → approved → planned). **Plane is the board:** the work itself is tracked as EDGEX tickets; don't add new to-dos here.
 4. `docs/FEATURE-CATALOG.md` — features that currently exist in code (current state, not future plans).
 5. `docs/reference/` — stable docs:
    - `00-PRODUCT-VISION.md` — what we're building and why.
@@ -211,8 +254,9 @@ Multi-tenant lead generation CRM SaaS (Zunkiree Labs). White-label system where 
 
 **Each living doc has one job — don't conflate them:**
 - `SESSION-LOG.md` = historical record of what shipped, dated entries.
-- `STATUS-BOARD.md` = open decisions / blockers needing Sadin's input.
-- `FEATURE-ROADMAP.md` = forward pipeline of features (ideas → planned → WIP).
+- `tasks/TRACKER.md` = what is open now (generated from Plane; never hand-edited).
+- `STATUS-BOARD.md` = decisions / context on questions for Sadin (the open item itself is a `DECIDE …` ticket in Plane).
+- `FEATURE-ROADMAP.md` = feature intent and direction (the work itself is EDGEX tickets).
 - `FEATURE-CATALOG.md` = features that exist in code today.
 
 When a piece of work ships, append to SESSION-LOG, update FEATURE-CATALOG, move ROADMAP entry to "shipped" then prune, and `git mv` any associated brief into `docs/archive/<series>/`. Top-level `docs/` should only contain the four living docs above plus any in-flight `<CONTEXT>-BRIEF.md`.
