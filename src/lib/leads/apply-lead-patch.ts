@@ -13,6 +13,7 @@ import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { assignDisplayIds } from "@/lib/leads/assign-display-ids";
 import { onLeadsEnteredStageSafe } from "@/industries/_shared/features/outreach/lib/stage-auto-enroll";
 import { getPipelineLandingStage } from "@/lib/leads/pipeline-stage";
+import { holderChange } from "@/lib/leads/stage-move-audit";
 import { checkApplicationsReadiness, applicationsGateMessage, applicationsGateApplies } from "@/lib/leads/applications-readiness";
 import { createRequestLogger } from "@/lib/logger";
 import {
@@ -1084,6 +1085,10 @@ export async function applyLeadPatch(
   if (listChanged && newListName !== null) {
     delete changes.list_id;
     changes.list = { old: oldListName, new: newListName };
+    // Who holds the lead at the moment of the move, so System Activity can say "moved … · with <name>" even when
+    // the move did not change the assignee (client request). A separate key — NOT assigned_to — so it can't be
+    // mistaken for an assignment change; added after previousValues so undo is unaffected.
+    changes.holder = holderChange(updated.assigned_to as string | null | undefined);
     if (updated.archive_reason) {
       changes.archive_reason = { old: null, new: updated.archive_reason };
     }
