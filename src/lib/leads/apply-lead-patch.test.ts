@@ -577,7 +577,10 @@ describe("applyLeadPatch — governance branches", () => {
       const outcome = await applyLeadPatch(auth, "lead-1", { list_id: "list-applications" }, OPTS);
       expect(outcome).toEqual({
         kind: "validation",
-        errors: { applications: ["Before moving to Applications, complete: Processing fee, Consent signed."] },
+        errors: {
+          applications: ["Before moving to Applications, complete: Processing fee, Consent signed."],
+          applications_missing: ["Processing fee", "Consent signed"],
+        },
       });
     });
 
@@ -680,6 +683,32 @@ describe("applyLeadPatch — governance branches", () => {
     expect(outcome.lead.pipeline_id).toBe("pipe-new");
     expect(outcome.lead.stage_id).toBe("stage-landing");
     expect(outcome.lead.status).toBe("new");
+  });
+
+  it("System Activity — a stage move records who holds the lead (even when the assignee didn't change), and undo data is untouched", async () => {
+    await setFakeDb({
+      leads: {
+        id: "lead-1", pipeline_id: "pipe-old", assigned_to: "user-2", branch_id: null,
+        list_id: "list-current", status: "qualified", stage_id: "stage-cur", lead_type: "lead", archive_reason: null, archived_at: null,
+      },
+      leadLists: {
+        "list-current": { id: "list-current", slug: "current", name: "Pre-qualified", pipeline_id: "pipe-old", is_archive: false, sort_order: 10 },
+        "list-target": { id: "list-target", slug: "qualified", name: "Qualified", pipeline_id: "pipe-new", is_archive: false, sort_order: 20, access: { mode: "all" } },
+      },
+      pipelineStages: { "stage-landing": { is_terminal: false } },
+    });
+    getPipelineLandingStageMock.mockResolvedValue({ id: "stage-landing", slug: "new" });
+    const auth = fixtureAuth({ role: "owner", permissions: { baseTier: "owner", leadScope: "all" } as ResolvedPermissions });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(auth, "lead-1", { list_id: "list-target" }, OPTS);
+
+    expect(outcome.kind).toBe("ok");
+    if (outcome.kind !== "ok") return;
+    expect(outcome.changes.assigned_to).toBeUndefined(); // the assignee did not change…
+    expect(outcome.changes.holder).toEqual({ old: null, new: "user-2" }); // …but the holder is still recorded
+    expect(outcome.previousValues).not.toHaveProperty("holder"); // undo only ever restores real columns
+    const logged = createAuditLogMock.mock.calls.at(-1) as unknown as [{ changes: Record<string, unknown> }];
+    expect(logged[0].changes.holder).toEqual({ old: null, new: "user-2" });
   });
 
   it("stage auto-enroll — a real stage change hands the move (from -> to) to the auto-enroll helper", async () => {

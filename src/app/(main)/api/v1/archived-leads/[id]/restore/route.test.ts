@@ -199,4 +199,10 @@ describe("POST /archived-leads/[id]/restore — what it writes", () => {
       payload: { old_list_id: "arch", new_list_id: "qual", restored_from_archive: true },
     });
   });
+
+  it("records who holds the lead in the audit entry, so System Activity can say 'with <name>'", async () => {
+    state.lead = { ...state.lead, assigned_to: "counselor-7" };
+    await call();
+    expect(state.audit.mock.calls[0][0]).toMatchObject({ changes: { holder: { old: null, new: "counselor-7" } } });
+  });
 });

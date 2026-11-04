@@ -17,6 +17,7 @@ import { hasProspectQualification, canBypassProspectQualification } from "@/lib/
 import { addLeadCollaborator } from "@/lib/leads/collaborators";
 import { createAuditLog } from "@/lib/api/audit";
 import { touchLeadUpdatedAt } from "@/lib/leads/touch-updated-at";
+import { holderChange } from "@/lib/leads/stage-move-audit";
 import { onLeadsEnteredStageSafe } from "@/industries/_shared/features/outreach/lib/stage-auto-enroll";
 
 interface RouteContext {
@@ -361,6 +362,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
             if (typeof promotePayload.assigned_to !== "undefined") {
               promoteChanges.assigned_to = { old: lead.assigned_to, new: promotePayload.assigned_to };
             }
+            // Who holds the lead after the move, so System Activity can show it even when it didn't change.
+            promoteChanges.holder = holderChange(
+              typeof promotePayload.assigned_to !== "undefined"
+                ? (promotePayload.assigned_to as string | null)
+                : (lead.assigned_to as string | null | undefined),
+            );
             await createAuditLog({
               tenantId: auth.tenantId,
               userId: auth.userId,

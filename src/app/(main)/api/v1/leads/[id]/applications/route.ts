@@ -102,6 +102,40 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     for (const app of apps) {
       app.application_notes = notesByApp.get(app.id as string) ?? [];
     }
+
+    // Files on these applications, so the Activity feed can show what was attached (client request, 2026-11-03):
+    // `documents` under the note a file was attached to, and `application_documents` for files added straight to
+    // the application (no note). Best effort, like the Notes tab's own route: if this lookup fails the notes
+    // still load, just without their files — a missing file line must never hide a note.
+    // Only for tenants that have the documents feature — the same gate the documents routes apply — so file
+    // names never reach a tenant that doesn't use documents.
+    const withDocuments = getFeatureAccess(auth.industryId, FEATURES.APPLICANT_DOCUMENTS);
+    const { data: docsData, error: docsError } = withDocuments
+      ? await db
+          .from("applicant_documents")
+          .select("id, name, document_type, original_filename, application_id, application_note_id, uploaded_by, created_at")
+          .in("application_id", appIds)
+          .is("deleted_at", null)
+          .order("created_at", { ascending: true })
+      : { data: null, error: { message: "documents feature off" } };
+    if (!docsError) {
+      const byNote = new Map<string, Record<string, unknown>[]>();
+      const byApp = new Map<string, Record<string, unknown>[]>();
+      for (const doc of (docsData ?? []) as unknown as Record<string, unknown>[]) {
+        const noteId = doc.application_note_id as string | null;
+        const target = noteId ? byNote : byApp;
+        const key = noteId ?? (doc.application_id as string);
+        const bucket = target.get(key) ?? [];
+        bucket.push(doc);
+        target.set(key, bucket);
+      }
+      for (const app of apps) {
+        for (const note of (app.application_notes as Record<string, unknown>[])) {
+          note.documents = byNote.get(note.id as string) ?? [];
+        }
+        app.application_documents = byApp.get(app.id as string) ?? [];
+      }
+    }
   }
 
   return apiSuccess(apps);

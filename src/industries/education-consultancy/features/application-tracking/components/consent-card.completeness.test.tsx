@@ -111,20 +111,40 @@ describe("opened card", () => {
 });
 
 describe("a counsellor-reported fee ('claimed')", () => {
-  it("is NOT green (awaiting owner verification) but is labelled as reported, not pending", async () => {
+  it("is NOT green (awaiting Account verification) but is labelled as reported, not pending", async () => {
     renderCard({ feeStatus: "claimed", feeAmount: 5000 });
     expect(await screen.findByText("Fee reported")).toBeInTheDocument();
     expect(screen.queryByText("Signed")).toBeNull();
     expect(screen.queryByText("Fee pending")).toBeNull();
   });
 
-  it("says the fee is awaiting owner verification when the card is opened", async () => {
+  it("says the fee is awaiting Account verification when the card is opened", async () => {
     renderCard({ feeStatus: "claimed", feeAmount: 5000 });
     await screen.findByText("Fee reported");
     openCard();
     await waitFor(() => expect(screen.getByText("Consent signed")).toBeInTheDocument());
     expect(screen.getByText("Awaiting verification")).toBeInTheDocument();
-    expect(screen.getByText("Processing fee reported — awaiting owner verification")).toBeInTheDocument();
+    expect(screen.getByText("Processing fee reported — awaiting Account verification")).toBeInTheDocument();
+  });
+
+  it("asks 'Fee Deposited?' and says the Account will verify it (client wording)", async () => {
+    renderCard({ feeStatus: null });
+    await screen.findByText("Fee pending");
+    openCard();
+    expect(
+      await screen.findByText("Fee Deposited? Report it here. The Account will verify it — you can keep working in the meantime."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/owner will verify/i)).toBeNull();
+    expect(screen.queryByText(/Received the fee/)).toBeNull();
+  });
+
+  it("after reporting, the sentence also says the Account will verify it", async () => {
+    renderCard({ feeStatus: "claimed", feeAmount: 5000 });
+    await screen.findByText("Fee reported");
+    openCard();
+    expect(
+      await screen.findByText("You reported this fee. The Account will verify it — you can keep working in the meantime."),
+    ).toBeInTheDocument();
   });
 
   it("lets a counsellor report a fee, sending only status 'claimed' (never 'paid')", async () => {
@@ -145,6 +165,39 @@ describe("a counsellor-reported fee ('claimed')", () => {
     });
     // Card is open, so the collapsed-header badge is hidden; the inline status shows instead.
     expect(await screen.findByText("Awaiting verification")).toBeInTheDocument();
+  });
+
+  it("lets a counsellor report a fee of 0 (waived fee) — only an empty amount is blocked", async () => {
+    renderCard({ feeStatus: null });
+    await screen.findByText("Fee pending");
+    openCard();
+    const amount = await screen.findByPlaceholderText("0.00");
+    const btn = () => screen.getByRole("button", { name: "Report fee received" });
+    fireEvent.change(amount, { target: { value: "" } });
+    fireEvent.change(amount, { target: { value: "0" } });
+    expect(btn()).not.toBeDisabled();
+    fireEvent.click(btn());
+    await waitFor(() => {
+      const patch = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.find(
+        (c) => (c[1] as RequestInit | undefined)?.method === "PATCH",
+      );
+      expect(patch).toBeTruthy();
+      const body = JSON.parse((patch![1] as RequestInit).body as string);
+      expect(body.pre_app_fee_status).toBe("claimed");
+      expect(body.pre_app_fee_amount).toBe(0);
+    });
+  });
+
+  it("keeps the report button disabled when the amount is empty or negative", async () => {
+    renderCard({ feeStatus: null });
+    await screen.findByText("Fee pending");
+    openCard();
+    const amount = await screen.findByPlaceholderText("0.00");
+    fireEvent.change(amount, { target: { value: "5" } });
+    fireEvent.change(amount, { target: { value: "" } });
+    expect(screen.getByRole("button", { name: "Report fee received" })).toBeDisabled();
+    fireEvent.change(amount, { target: { value: "-3" } });
+    expect(screen.getByRole("button", { name: "Report fee received" })).toBeDisabled();
   });
 
   it("lets an owner/admin confirm a reported fee in one click (sends 'paid')", async () => {

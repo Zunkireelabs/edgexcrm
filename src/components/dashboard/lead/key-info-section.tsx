@@ -135,6 +135,8 @@ interface KeyInfoSectionProps {
   activeLeadLists?: LeadList[];
   onSaveTripFields?: (fields: Record<string, unknown>) => Promise<void>;
   onQualify?: () => void;
+  /** Pre-check run when "Send to next" is clicked and the next stage is Applications (see ListStepper). */
+  onPrecheckNext?: (nextListId: string) => Promise<boolean>;
   maxBranches?: number;
   userBranchId?: string | null;
   leadScope?: "all" | "own" | "team";
@@ -169,6 +171,7 @@ export function KeyInfoSection({
   activeLeadLists,
   onSaveTripFields,
   onQualify,
+  onPrecheckNext,
   maxBranches,
   userBranchId,
   leadScope,
@@ -350,6 +353,7 @@ export function KeyInfoSection({
                   industryId={industryId}
                   onMove={onListChange ? (listId, assignToUserId) => onListChange(listId, undefined, assignToUserId) : async () => {}}
                   onQualify={onQualify}
+                  onPrecheckNext={onPrecheckNext}
                   nextPositionMembers={nextPositionMembers}
                   revertTargetUserId={revertTargetUserId}
                   revertTargetName={revertTargetName}

@@ -21,6 +21,7 @@ import {
   type RestoreList,
   type RestoreStage,
 } from "@/industries/education-consultancy/features/archived-lookup/lib/restore-target";
+import { holderChange } from "@/lib/leads/stage-move-audit";
 import { onLeadsEnteredStageSafe } from "@/industries/_shared/features/outreach/lib/stage-auto-enroll";
 
 // POST /api/v1/archived-leads/[id]/restore — send an archived lead back to the pipeline.
@@ -52,7 +53,7 @@ export async function POST(request: NextRequest, { params }: Props) {
 
   const { data: leadRow } = await db
     .from("leads")
-    .select("id, list_id, archived_from_list_id, archived_from_status")
+    .select("id, list_id, assigned_to, archived_from_list_id, archived_from_status")
     .eq("id", id)
     .is("deleted_at", null)
     .is("converted_at", null)
@@ -61,6 +62,7 @@ export async function POST(request: NextRequest, { params }: Props) {
   const lead = leadRow as unknown as {
     id: string;
     list_id: string | null;
+    assigned_to: string | null;
     archived_from_list_id: string | null;
     archived_from_status: string | null;
   };
@@ -134,6 +136,8 @@ export async function POST(request: NextRequest, { params }: Props) {
       entityId: id,
       changes: {
         list: { old: current.name, new: target.listName },
+        // Restoring does not change the assigned counselor — record who holds the lead for System Activity.
+        holder: holderChange(lead.assigned_to),
         restored_from_archive: { old: false, new: true },
       },
       ipAddress: getClientIp(request),

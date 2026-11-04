@@ -22,6 +22,7 @@ import { PERMISSION_DENIED_MESSAGE } from "@/lib/permission-denied";
 import { canActOnEnrollmentLead } from "@/lib/classes/enrollment-scope";
 import { canEnrollStudents } from "@/lib/api/class-attendance";
 import { getLeadMembership } from "@/lib/leads/branch-membership";
+import { holderChange } from "@/lib/leads/stage-move-audit";
 import { onLeadsEnteredStageSafe } from "@/industries/_shared/features/outreach/lib/stage-auto-enroll";
 
 export async function GET(request: NextRequest) {
@@ -190,7 +191,7 @@ export async function POST(request: NextRequest) {
   // Auto-move: if lead's current list is below Qualified (or NULL), move to Qualified
   if (leadRow.list_id === null) {
     // No list → move to Qualified
-    await autoMoveToQualified(supabase, db, auth, leadRow.id, leadRow.list_id, requestId, auditEvents, log);
+    await autoMoveToQualified(supabase, db, auth, leadRow.id, leadRow.list_id, leadRow.assigned_to, requestId, auditEvents, log);
   } else {
     // Check sort_order relative to Qualified
     const { data: currentList } = await supabase
@@ -215,7 +216,7 @@ export async function POST(request: NextRequest) {
       currentListRow &&
       currentListRow.sort_order < qualifiedListRow.sort_order
     ) {
-      await autoMoveToQualified(supabase, db, auth, leadRow.id, leadRow.list_id, requestId, auditEvents, log, currentListRow.name, qualifiedListRow);
+      await autoMoveToQualified(supabase, db, auth, leadRow.id, leadRow.list_id, leadRow.assigned_to, requestId, auditEvents, log, currentListRow.name, qualifiedListRow);
     }
   }
 
@@ -230,6 +231,8 @@ async function autoMoveToQualified(
   auth: { tenantId: string; userId: string },
   leadId: string,
   oldListId: string | null,
+  /** The lead's current assignee (unchanged by this move) — recorded so System Activity can show who holds it. */
+  assignedTo: string | null,
   requestId: string,
   auditEvents: Promise<unknown>[],
   log: { error: (ctx: unknown, msg: string) => void },
@@ -281,7 +284,7 @@ async function autoMoveToQualified(
       action: "lead.updated",
       entityType: "lead",
       entityId: leadId,
-      changes: { list: { old: oldName, new: targetList.name } },
+      changes: { list: { old: oldName, new: targetList.name }, holder: holderChange(assignedTo) },
       requestId,
     }),
     emitEvent({

@@ -13,7 +13,8 @@ import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { assignDisplayIds } from "@/lib/leads/assign-display-ids";
 import { onLeadsEnteredStageSafe } from "@/industries/_shared/features/outreach/lib/stage-auto-enroll";
 import { getPipelineLandingStage } from "@/lib/leads/pipeline-stage";
-import { checkApplicationsReadiness, applicationsGateMessage } from "@/lib/leads/applications-readiness";
+import { holderChange } from "@/lib/leads/stage-move-audit";
+import { checkApplicationsReadiness, applicationsGateMessage, applicationsGateApplies } from "@/lib/leads/applications-readiness";
 import { createRequestLogger } from "@/lib/logger";
 import {
   createNotificationsExcept,
@@ -672,7 +673,7 @@ export async function applyLeadPatch(
       // is never a revert for this purpose. Already in Applications → not a move.
       if (
         targetList.slug === "applications" &&
-        auth.industryId === "education_consultancy" &&
+        applicationsGateApplies(auth.industryId) &&
         !(isRevert && !leavesStaging) &&
         (existingLead as Record<string, unknown>).list_id !== targetList.id
       ) {
@@ -680,7 +681,8 @@ export async function applyLeadPatch(
         if (!readiness.ready) {
           return {
             kind: "validation",
-            errors: { applications: [applicationsGateMessage(readiness.missing)] },
+            // `applications_missing` is the same list as a structured array, so the UI never has to parse the sentence.
+            errors: { applications: [applicationsGateMessage(readiness.missing)], applications_missing: readiness.missing },
           };
         }
       }
@@ -1083,6 +1085,10 @@ export async function applyLeadPatch(
   if (listChanged && newListName !== null) {
     delete changes.list_id;
     changes.list = { old: oldListName, new: newListName };
+    // Who holds the lead at the moment of the move, so System Activity can say "moved … · with <name>" even when
+    // the move did not change the assignee (client request). A separate key — NOT assigned_to — so it can't be
+    // mistaken for an assignment change; added after previousValues so undo is unaffected.
+    changes.holder = holderChange(updated.assigned_to as string | null | undefined);
     if (updated.archive_reason) {
       changes.archive_reason = { old: null, new: updated.archive_reason };
     }

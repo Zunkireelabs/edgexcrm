@@ -46,6 +46,11 @@ interface ListStepperProps {
   onMove: (listId: string, assignToUserId?: string | null) => Promise<void>;
   /** Opens the dedicated Qualify dialog for the intake → Qualified step (education only). */
   onQualify?: () => void;
+  /**
+   * Runs the moment "Send to next" is clicked when the next stage is Applications — BEFORE the confirm/assignee
+   * step. Resolve false to stop (the caller has already told the user what is missing); true to carry on.
+   */
+  onPrecheckNext?: (nextListId: string) => Promise<boolean>;
   /** Next-position members to assign when sending to next stage. Empty = no picker shown. */
   nextPositionMembers?: NextPositionMember[];
   /** Who Revert would hand the lead back to (education only). Null = current holder is the lead's origin. */
@@ -76,6 +81,7 @@ export function ListStepper({
   industryId,
   onMove,
   onQualify,
+  onPrecheckNext,
   nextPositionMembers = [],
   revertTargetUserId = null,
   revertTargetName = null,
@@ -115,11 +121,17 @@ export function ListStepper({
     industryId === "education_consultancy" &&
     !!onQualify;
 
-  function handleNext() {
+  async function handleNext() {
     if (!nextList || !canNext) return;
     if (isQualifyStep) {
       onQualify?.();
       return;
+    }
+    // Moving into Applications: warn straight away if something is still missing (client request),
+    // instead of making the user pick an assignee and confirm first.
+    if (nextList.slug === "applications" && onPrecheckNext) {
+      const ok = await onPrecheckNext(nextList.id);
+      if (!ok) return;
     }
     setIsNextDirection(true);
     setSelectedAssignee("");
