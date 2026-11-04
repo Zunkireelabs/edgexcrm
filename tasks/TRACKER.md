@@ -4,7 +4,7 @@
 > `EDGEX`) is the source of truth; this file is a read-only snapshot for everyone in the repo. Never copy
 > anything from this file back into Plane. Stale or conflicted? Run `/project-pm sync`.
 
-Last synced: **2026-11-03** by Project Manager · 69 open tickets (area parents EDGEX-2 to EDGEX-11 excluded)
+Last synced: **2026-11-04** by Project Manager · 69 open tickets (area parents EDGEX-2 to EDGEX-11 excluded)
 
 ---
 
@@ -33,7 +33,7 @@ Full SOP: `~/Projects/zunkireelabs-org/SOPs/developer-workflow/README.md` §4. S
 ## In progress
 | Ticket | Owner | Priority | What |
 |---|---|---|---|
-| EDGEX-71 | Sadin | medium | Sync tasks/TRACKER.md from Plane (first generation after the backfill) |
+
 
 ## In review / on stage
 | Ticket | Owner | Priority | State | What |
@@ -42,6 +42,7 @@ Full SOP: `~/Projects/zunkireelabs-org/SOPs/developer-workflow/README.md` §4. S
 | EDGEX-15 | Hardik | high | In Review | Client fixes (Nov 3): assignee on stage moves, application files and course in Activity, fee box wording (PR #657) |
 | EDGEX-12 | Sadin | medium | In Review | Inbox send UX polish, deferred media copy, lead_id scope gap (PR #613) |
 | EDGEX-13 | Hardik | medium | On Stage | Applications gate follow-ups: allow fee 0, warning on Send to next, red required fields (PR #653) |
+| EDGEX-71 | Sadin | medium | In Review | Sync tasks/TRACKER.md from Plane (first generation after the backfill) (PR #661) |
 | EDGEX-33 | Sadin | medium | In Review | Reconcile STATUS-BOARD and FEATURE-ROADMAP with Plane, then trim them to pointers (PR #659) |
 | EDGEX-69 | none | medium | In Review | Sweep about 120 *-BRIEF.md files and .claude/RESUME.md for open to-dos, then archive or ticket them |
 | EDGEX-14 | Sadin | low | On Stage | CI: pin Supabase CLI to 2.122.1, rename [inbucket] to [local_smtp] (PR #654) |
@@ -51,6 +52,7 @@ Full SOP: `~/Projects/zunkireelabs-org/SOPs/developer-workflow/README.md` §4. S
 ## Todo
 | Ticket | Owner | Priority | What |
 |---|---|---|---|
+| EDGEX-70 | Anish, Hardik | high | Join EdgeX: Anish and Hardik start working from Plane in the edgexcrm repo (project join) |
 
 ## Waiting on owner
 | Ticket | Owner | Priority | What |
@@ -70,7 +72,6 @@ Full SOP: `~/Projects/zunkireelabs-org/SOPs/developer-workflow/README.md` §4. S
 | EDGEX-21 | Sadin | high | Back up the prod .env.local secrets (INBOX_TOKEN_ENC_KEY exists nowhere else) |
 | EDGEX-22 | Sadin | high | Remove OLD_SUPABASE_* from prod .env.local and rotate the old service-role key |
 | EDGEX-34 | Sadin | high | Set AI_TOOL_APPROVAL_SECRET on stage (overdue) plus AI_AGENTS_ENABLED and AI_MCP_ENABLED |
-| EDGEX-70 | Sadin | high | Join EdgeX: Anish and Hardik start working from Plane in the edgexcrm repo (project join) |
 | EDGEX-77 | Sadin | high | Stage DB still holds real customer PII: run the supervised scrub (script exists, never run) |
 | EDGEX-20 | Sadin | medium | Register a branded SMS sender ID with NTC/Ncell |
 | EDGEX-23 | Sadin | medium | Delete the stray dev docker-compose.yml on the prod box |
