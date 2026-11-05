@@ -1,10 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Download } from "lucide-react";
+import Link from "next/link";
+import { Activity, Download } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { EventsQuery, PersonRow, Signal } from "../lib/types";
+import { activityOf, type EventsQuery, type PersonRow, type Signal } from "../lib/types";
 import { PulseBriefingCard } from "./briefing-card";
 import { EvidenceDrawer } from "./evidence-drawer";
 import type { EvidenceTarget } from "./evidence";
@@ -49,6 +49,11 @@ export function PulsePage() {
     URL.revokeObjectURL(a.href);
   };
 
+  // Empty = nothing in ANY of the five windows (a quiet week for an established team is data, not an empty state).
+  const isEmpty = !!data && data.funnel.newLeads.current + data.funnel.newLeads.previous + data.funnel.newLeads.usual === 0
+    && data.funnel.stages.every((st) => st.entered.every((n) => n === 0))
+    && data.people.every((p) => activityOf(p.current) + activityOf(p.usual) + p.current.received + p.usual.received === 0);
+
   const periodLabel = win.key === "24h" ? "today" : win.key === "30d" ? "this month" : win.key === "7d" ? "this week" : "in this period";
 
   return (
@@ -77,13 +82,17 @@ export function PulsePage() {
               <input type="date" aria-label="To" value={win.to ?? ""} onChange={(e) => setWin({ ...win, to: e.target.value })} className="rounded-lg border border-gray-200 px-2 py-1.5" />
             </div>
           )}
-          <Select value={role} onValueChange={setRole}>
-            <SelectTrigger size="sm" className="w-auto gap-1.5 text-sm" aria-label="Role filter"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All roles</SelectItem>
-              {roles.map(([slug, name]) => <SelectItem key={slug} value={slug}>{name}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          {/* Native select on purpose: this is the only control rendered during SSR, and Radix Select's generated
+              ids mismatch between server and client (hydration warning). */}
+          <select
+            value={role}
+            onChange={(e) => setRole(e.target.value)}
+            aria-label="Role filter"
+            className="h-8 rounded-md border border-gray-200 bg-white px-2.5 text-sm text-gray-800"
+          >
+            <option value="all">All roles</option>
+            {roles.map(([slug, name]) => <option key={slug} value={slug}>{name}</option>)}
+          </select>
           <button type="button" onClick={exportCsv} disabled={!data}
             className="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:opacity-50">
             <Download className="h-4 w-4" /> Export
@@ -105,14 +114,21 @@ export function PulsePage() {
         </div>
       )}
 
-      {data && (data.people.length === 0 && data.funnel.newLeads.current === 0) && !loading && (
-        <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-12 text-center">
-          <h2 className="text-base font-semibold text-gray-900">No activity in this period</h2>
-          <p className="mt-1 text-sm text-gray-500">Once your team starts calling, noting and moving leads, Pulse shows what changed here.</p>
+      {data && isEmpty && !loading && (
+        <div className="grid place-items-center rounded-2xl border border-gray-200 bg-white px-6 py-20 text-center">
+          <span className="grid h-14 w-14 place-items-center rounded-2xl bg-gray-900 text-white"><Activity className="h-6 w-6" /></span>
+          <h2 className="mt-5 text-lg font-semibold text-gray-900">Pulse starts as your team starts</h2>
+          <p className="mt-2 max-w-lg text-sm text-gray-500">
+            Once your team moves leads, writes notes and makes calls, Pulse shows who did what, what changed and what needs you.
+          </p>
+          <div className="mt-5 flex gap-2">
+            <Link href="/team" className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-900 hover:bg-gray-50">Invite your team</Link>
+            <Link href="/leads" className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-900 hover:bg-gray-50">Import leads</Link>
+          </div>
         </div>
       )}
 
-      {data && !(data.people.length === 0 && data.funnel.newLeads.current === 0) && (
+      {data && !isEmpty && (
         <div className={loading ? "opacity-60 transition-opacity" : "transition-opacity"}>
           <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
             <PulseBriefingCard source="rules" signals={data.signals.keyChanges} periodLabel={periodLabel} onOpen={openSignal} />

@@ -91,6 +91,10 @@ describe("bulk heuristic", () => {
     const mixed = rows(20).map((r, i) => ({ ...r, actorId: i % 2 ? "u1" : "u2" }));
     expect(bulkMoveIds(mixed, 20, 60).size).toBe(0);
   });
+  it("tagged rows count toward the bucket (parity with the SQL): 19 untagged + 1 tagged = 20 = bulk", () => {
+    const r = rows(20).map((x, i) => (i === 0 ? { ...x, via: "bulk" } : x));
+    expect(bulkMoveIds(r, 20, 60).size).toBe(20);
+  });
   it("an explicit via=bulk tag counts regardless of volume", () => {
     expect(bulkMoveIds([{ id: "x", actorId: "u", at: new Date(), via: "bulk" }], 20, 60).has("x")).toBe(true);
   });
