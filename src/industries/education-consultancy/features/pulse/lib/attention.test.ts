@@ -14,7 +14,7 @@ const P = (id: string, name: string, cur: Partial<MetricCounts>, usual: Partial<
 const people = [P("a", "Asha", { calls: 18, notes: 13 }, { calls: 82, notes: 54 }), P("b", "Binod", { received: 104, calls: 80 }, { received: 28, calls: 80 }), P("d", "Dipa", { received: 20, calls: 60 }, { received: 20, calls: 60 })];
 const signals = computeSignals({ people, stageFlows: [], untouched: { count: 63, byPerson: [] }, branchKpis: [], thresholds: T }).all;
 const input = (o: Partial<AttentionInput> = {}): AttentionInput => ({
-  people, signals, stageFlows: [], leakReasons: {}, staleHeld: { a: 34 }, heldLoad: { a: 200, b: 100, d: 100 }, flags7d: { b: "amber" },
+  people, signals, stageFlows: [], leakReasons: {}, staleHeld: { a: 34 }, heldLoad: { a: 200, b: 100, d: 100 }, flags7d: { a: "red", b: "amber" },
   untouched: { count: 63, byBranch: [{ name: "Butwal", count: 41 }, { name: "Pokhara", count: 22 }], byRole: [{ key: "telecaller", label: "TeleCaller", count: 50 }] }, ...o,
 });
 
@@ -46,9 +46,10 @@ describe("buildAttention — the one list", () => {
   });
   it("untouched leads: branch share and a role target, both from the real tally", () => {
     const u = items.find((i) => i.id === "untouched_leads")!;
-    expect(u.what).toBe("untouched for 3+ days, 41 of them with Butwal");
-    expect(u.action?.label).toBe("Spread across TeleCallers");
-    expect(u.action?.href).toMatch(/^\/leads\?f=/);
+    expect(u.what).toBe("untouched for over 48 hours, 41 of them with Butwal");
+    expect(u.action?.label).toBe("Review 63 leads"); // Dipa (100 held) can take at most +50
+    expect(u.action?.href).toContain("/leads?list=pre-qualified");
+    expect(u.action?.label).toMatch(/^(Assign \d+ (to|·)|Review \d+ leads)/);
   });
   it("over capacity is a rule item without a Suggested tag", () => {
     const o = items.find((i) => i.subject === "Binod")!;
@@ -115,5 +116,28 @@ describe("reassign target safety (round 11)", () => {
     expect(a.action?.label).toBe("Review 34 leads");
     expect(a.meta).toMatch(/no TeleCaller has spare capacity$/);
     expect(a.suggested).toBe(false);
+  });
+});
+
+describe("the seeded 7d story (round 12)", () => {
+  const items = buildAttention(input());
+  it("lists exactly Asha (drop), the 48h new-lead row, Binod (over capacity) as Needs action", () => {
+    expect(items.filter((i) => i.category === "needs_action").map((i) => i.subject)).toEqual(["Asha", "63 new leads", "Binod"]);
+  });
+  it("there is no team-wide held-lead row (that neglect lives on the person rows)", () => {
+    expect(items.some((i) => /held lead/.test(i.subject))).toBe(false);
+  });
+  it("every Needs-action button carries a value", () => {
+    for (const i of items.filter((x) => x.category === "needs_action")) expect(i.action?.label).toMatch(/^(Reassign|Assign|Review) \d+/);
+  });
+  it("Binod's over-capacity button shows the plan and its why", () => {
+    const b = items.find((i) => i.subject === "Binod")!;
+    expect(b.action?.label).toBe("Review 76 leads");
+    expect(b.meta).toMatch(/no TeleCaller has spare capacity$/);
+  });
+  it("the 48h row names a plan: split across same-role people when one can't take it", () => {
+    const t = [...people, P("e", "Esha", {}, {})];
+    const u = buildAttention(input({ people: t, untouched: { count: 63, byBranch: [], byRole: [{ key: "telecaller", label: "TeleCaller", count: 50 }] }, heldLoad: { a: 200, b: 100, d: 80, e: 80 } })).find((i) => i.id === "untouched_leads")!;
+    expect(u.action?.label).toBe("Assign 63 · split across 2 TeleCallers"); // caps 40 + 40
   });
 });

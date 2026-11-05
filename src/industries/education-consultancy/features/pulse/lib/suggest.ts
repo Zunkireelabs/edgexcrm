@@ -30,7 +30,7 @@ export type ReassignPlan =
  */
 export function planReassign(
   people: PersonRow[],
-  subject: PersonRow,
+  subject: { userId: string | null; positionKey: string },
   n: number,
   heldLoad: Record<string, number>,
   flags7d: Record<string, "red" | "amber" | "green">,

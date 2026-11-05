@@ -1,7 +1,7 @@
 import { loadUserNames, isUuid, type PulseContext } from "./context";
 import { assemblePeople } from "../lib/assemble";
 import { loadPeople } from "./load-pulse";
-import { untouchedLeadsHref } from "../lib/leads-links";
+import { untouchedHeldHref } from "../lib/leads-links";
 import { untouchedHeldCutoff } from "../lib/untouched";
 import { loadCoverage } from "./coverage";
 import { loadBuckets } from "./buckets";
@@ -31,7 +31,7 @@ export function leadsHrefFor(metric: EventMetric): string | null {
   switch (metric) {
     case "prospects": return "/leads?list=prospects";
     case "reached_applications": return "/leads?list=applications";
-    case "untouched": return untouchedLeadsHref();
+    case "untouched": return untouchedHeldHref();
     default: return null;
   }
 }

@@ -73,24 +73,6 @@ export async function loadPeople(ctx: PulseContext, activeIds: Set<string>): Pro
   return out;
 }
 
-/** Held, undeleted leads in active lists with no touch and no stage move since the cutoff (paged: PostgREST caps a page). */
-async function loadUntouchedHeld(ctx: PulseContext, activeIds: string[], cutoff: string): Promise<{ data: Array<{ assigned_to: string | null; branch_id: string | null }>; error: { message: string } | null }> {
-  if (activeIds.length === 0) return { data: [], error: null };
-  const rows: Array<{ assigned_to: string | null; branch_id: string | null }> = [];
-  const PAGE = 1000;
-  for (let from = 0; from < 50_000; from += PAGE) {
-    let q = ctx.db.from("leads").select("assigned_to, branch_id").in("list_id", activeIds).not("assigned_to", "is", null).is("deleted_at", null)
-      .or(`last_touched_at.is.null,last_touched_at.lt.${cutoff}`).lt("stage_changed_at", cutoff).order("id").range(from, from + PAGE - 1);
-    if (ctx.branchId) q = q.eq("branch_id", ctx.branchId);
-    const { data, error } = await q;
-    if (error) return { data: [], error };
-    const page = (data ?? []) as unknown as Array<{ assigned_to: string | null; branch_id: string | null }>;
-    rows.push(...page);
-    if (page.length < PAGE) break;
-  }
-  return { data: rows, error: null };
-}
-
 /**
  * Row flags (red = activity drop, amber = over capacity) from the WEEKLY view, whatever window is on screen — a
  * reassign target must be safe this week, not just today. The shown window is reused when it already is the 7d one.
@@ -131,18 +113,23 @@ export async function loadPulse(ctx: PulseContext): Promise<PulseResponse> {
 
   // One pass: the stage moves are resolved once for both the scoreboard and the funnel (migration 280).
   // Active (non-archive) lists: a plain lookup, NOT an embed (leads has two FKs to lead_lists → PGRST201 on an embed).
-  const { data: listRows } = await db.from("lead_lists").select("id, is_archive");
+  const { data: listRows } = await db.from("lead_lists").select("id, is_archive, is_intake");
   const activeIds = ((listRows ?? []) as unknown as Array<{ id: string; is_archive: boolean }>).filter((l) => !l.is_archive).map((l) => l.id);
+  const intakeIds = ((listRows ?? []) as unknown as Array<{ id: string; is_intake?: boolean }>).filter((l) => l.is_intake).map((l) => l.id);
   const untouchedCutoff = untouchedHeldCutoff(new Date());
+  const cutoff48 = new Date(window.to.getTime() - 48 * 3600_000).toISOString();
   const [overviewAll, untouchedRes, askEnabled] = await Promise.all([
     loadBuckets<OverviewJson>(
       ctx,
       (span) => db.raw().rpc("education_pulse_overview", { p_tenant: auth.tenantId, p_from: span.from.toISOString(), p_to: span.to.toISOString(), p_tz: tz, p_branch: branchId, ...bulk }),
       (d) => d?.people ?? [],
     ).catch((e: Error) => { throw new Error(`education_pulse_overview: ${e.message}`); }),
-    // The untouched set = the `untouched_held` filter behind "See the N leads": held in an active list, no touch and no
-    // stage move for 3+ days. Absolute — it does not depend on the Pulse window.
-    loadUntouchedHeld(ctx, activeIds, untouchedCutoff),
+    // The intake alarm: NEW leads in the intake list nobody has touched for 48h+ (the `untouched_new` filter's set).
+    // Held-lead neglect (3+ days) is a per-person matter: the person rows and the drawer tile.
+    intakeIds.length === 0
+      ? Promise.resolve({ data: [], error: null })
+      : db.from("leads").select("assigned_to, branch_id").in("list_id", intakeIds).is("deleted_at", null).is("last_touched_at", null)
+          .lt("created_at", cutoff48).limit(5000),
     isAssistantEnabledForTenant(auth.tenantId).catch(() => false),
   ]);
   if (untouchedRes.error) throw new Error(`untouched leads: ${untouchedRes.error.message}`);
