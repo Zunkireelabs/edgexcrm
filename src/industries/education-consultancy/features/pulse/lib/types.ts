@@ -55,6 +55,8 @@ export interface PersonInfo {
   branchName: string | null;
   /** tenant_users.created_at — the earliest their numbers can count toward a "usual". */
   joinedAt?: string | null;
+  /** Their first activity record in the tenant (education_pulse_first_activity). */
+  firstActivityAt?: string | null;
 }
 
 export interface PersonRow extends PersonInfo {

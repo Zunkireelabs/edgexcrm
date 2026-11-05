@@ -12,12 +12,16 @@ export interface CoverageInput {
   tenantFirst: Date | null;
 }
 
-/** When data for one person can start counting: after both the tenant's first record and the person's join date. */
-export function firstAtFor(tenantFirst: Date | null, joinedAt: string | null | undefined): Date | null {
+/**
+ * When data for one person can start counting: the EARLIEST of their first activity record and their join date
+ * (activity proves they were working — imported staff have accounts created after their first activity — and a
+ * join date with no activity still counts their quiet first weeks), never earlier than the tenant's first record.
+ * With neither, the tenant's start. */
+export function firstAtFor(tenantFirst: Date | null, joinedAt: string | null | undefined, firstActivityAt?: string | null): Date | null {
   if (!tenantFirst) return null;
-  if (!joinedAt) return tenantFirst;
-  const j = new Date(joinedAt);
-  return Number.isNaN(j.getTime()) || j.getTime() < tenantFirst.getTime() ? tenantFirst : j;
+  const times = [joinedAt, firstActivityAt].map((s) => (s ? new Date(s).getTime() : NaN)).filter((t) => !Number.isNaN(t));
+  if (times.length === 0) return tenantFirst;
+  return new Date(Math.max(tenantFirst.getTime(), Math.min(...times)));
 }
 
 /** Indices (0 = the window right before the current one) of the prior windows that START on or after `firstAt`. */

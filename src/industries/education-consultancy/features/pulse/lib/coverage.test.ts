@@ -36,3 +36,20 @@ describe("coverage-aware usual", () => {
     expect(firstAtFor(null, ago(5).toISOString())).toBeNull();
   });
 });
+
+describe("firstAtFor — earliest of first activity and join date, bounded by the tenant's start", () => {
+  it("(a) activity before the join date → coverage from the first activity", () => {
+    expect(firstAtFor(ago(100), ago(2).toISOString(), ago(40).toISOString())?.getTime()).toBe(ago(40).getTime());
+    expect(coveredUsualIndices(win7, firstAtFor(ago(100), ago(2).toISOString(), ago(40).toISOString()))).toEqual([0, 1, 2, 3]);
+  });
+  it("(b) join before activity → from the join date (their quiet first weeks count)", () => {
+    expect(firstAtFor(ago(100), ago(30).toISOString(), ago(10).toISOString())?.getTime()).toBe(ago(30).getTime());
+  });
+  it("never earlier than the tenant's first record", () => {
+    expect(firstAtFor(ago(20), ago(90).toISOString(), ago(60).toISOString())?.getTime()).toBe(ago(20).getTime());
+  });
+  it("no join date and no activity → the tenant's start; no tenant data → null", () => {
+    expect(firstAtFor(ago(20), null, null)?.getTime()).toBe(ago(20).getTime());
+    expect(firstAtFor(null, ago(5).toISOString(), ago(9).toISOString())).toBeNull();
+  });
+});

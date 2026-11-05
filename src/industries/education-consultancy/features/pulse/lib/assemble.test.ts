@@ -92,3 +92,34 @@ describe("assemblePeople — coverage-aware usual", () => {
     expect(p.usual.calls).toBe(2);
   });
 });
+
+describe("assemblePeople — the seeded story at 7d keeps its signals (accounts created today, activity for 35 days)", () => {
+  const DAY = 86_400_000;
+  const now = new Date("2026-11-05T12:00:00Z").getTime();
+  const seeded = (id: string, slug: string): PersonInfo => ({ ...info(id), positionSlug: slug, positionKey: slug === "counselor" ? "counsellor" : slug, positionLabel: slug, joinedAt: new Date(now).toISOString(), firstActivityAt: new Date(now - 35 * DAY).toISOString() });
+  const cov7 = { windowFrom: new Date(now - 7 * DAY), lenMs: 7 * DAY, tenantFirst: new Date(now - 35 * DAY) };
+  it("(c) activity-down, over-capacity and the % above usual all come back", async () => {
+    const { computeSignals } = await import("./signals");
+    const { DEFAULT_PULSE_THRESHOLDS: T } = await import("./thresholds");
+    const { buildBriefing } = await import("./briefing");
+    const { rollups } = await import("./rollup");
+    const rows = [
+      ...[0, 1, 2, 3, 4].map((b) => row("asha", b, b === 0 ? 18 : 82)),
+      ...[0, 1, 2, 3, 4].map((b) => row("binod", b, 80, { counts: { calls: 80, received: b === 0 ? 104 : 28 } })),
+      ...[0, 1, 2, 3, 4].map((b) => row("esha", b, 20, { counts: { calls: 20, reached_applications: b === 0 ? 9 : 6 } })),
+    ];
+    const people = assemblePeople([seeded("asha", "telecaller"), seeded("binod", "telecaller"), seeded("esha", "counselor")], rows, 4, cov7);
+    for (const p of people) expect(p.hasUsual).toBe(true);
+    const sig = computeSignals({ people, stageFlows: [], untouched: { count: 0, byPerson: [] }, branchKpis: [], thresholds: T, baselineCovered: true });
+    expect(sig.all.map((s) => s.kind)).toEqual(expect.arrayContaining(["activity_drop", "over_capacity", "top_mover"]));
+    const b = buildBriefing({ people, team: rollups(people).team, stageFlows: [], leakReasons: {}, untouched: { count: 0 }, thresholds: T, baselineCovered: true })!;
+    expect(b.items.find((i) => i.id === "win")!.headline).toContain("50% above their usual");
+  });
+  it("(d) the 30d honesty rules still hold for the same people", () => {
+    const cov30 = { windowFrom: new Date(now - 30 * DAY), lenMs: 30 * DAY, tenantFirst: new Date(now - 35 * DAY) };
+    const people = assemblePeople([seeded("asha", "telecaller")], [row("asha", 0, 90), row("asha", 1, 20)], 4, cov30);
+    expect(people[0].hasUsual).toBe(false);
+    expect(people[0].previousCovered).toBe(false);
+    expect(people[0].usual.calls).toBe(0);
+  });
+});
