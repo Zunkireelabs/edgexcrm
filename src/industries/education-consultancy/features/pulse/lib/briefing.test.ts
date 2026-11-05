@@ -131,7 +131,7 @@ describe("Orca's read", () => {
   });
   it("synthesizes: direction → facts with places/people → fix; no 5-word run is shared with any item headline", () => {
     const b = buildBriefing(input(people, { untouched: { count: 63 }, stageFlows: [flow({ out: 15, previousOut: 5 })], newLeads: { current: 120, previous: 60 } }))!;
-    expect(b.read).toMatch(/^Applications are up sharply, but fewer leads are moving forward\./);
+    expect(b.read).toMatch(/^Applications are well ahead, but fewer leads are moving forward\./);
     expect(b.read).toContain("Prospects fell 83%, mostly in Kathmandu, and Asha has gone quiet");
     expect(b.read).toContain("Fix those two");
     const words = (t: string) => t.toLowerCase().replace(/[^a-z0-9% ]/g, " ").split(/\s+/).filter(Boolean);

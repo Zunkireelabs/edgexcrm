@@ -42,21 +42,22 @@ describe("leadsOfPersonHref — Reassign lands on exactly that person's leads", 
 
 describe("untouchedLeadsHref — Reassign for the untouched signal lands on exactly that set", () => {
   const ctx = { tz: "Asia/Kathmandu", now: new Date("2026-11-05T12:00:00.000Z"), industryId: "education_consultancy", permissions: {} } as unknown as CompileCtx;
-  it("stays on the intake list and is valid for the real registry", () => {
+  it("is valid for the real registry", () => {
     const href = untouchedLeadsHref();
-    expect(new URL(href, "http://x").searchParams.get("list")).toBe("pre-qualified");
     expect(planFilter(treeOf(href), leadFields(ctx), ctx).ok).toBe(true);
   });
-  it("compiles to never-touched AND created more than 48h ago (the Pulse rule)", () => {
+  it("compiles to no touch AND no stage move for 3+ days, not archived (the Pulse rule, any window)", () => {
     const rec: string[] = [];
     const b: Record<string, unknown> = new Proxy({}, { get: (_t, name: string) => (...args: unknown[]) => { rec.push(`${name}(${args.map((a) => JSON.stringify(a)).join(",")})`); return b; } });
     compileFilter(b as never, treeOf(untouchedLeadsHref()), leadFields(ctx), ctx);
     const joined = rec.join(" ");
     expect(joined).toContain("last_touched_at.is.null");
-    expect(joined).toContain("created_at.lt.\\\"2026-11-03T12:00:00.000Z"); // now − 48h exactly (the compiler quotes the timestamp)
+    expect(joined).toContain("last_touched_at.lt.");
+    expect(joined).toContain("stage_changed_at.lt.\\\"2026-11-02T12:00:00.000Z"); // now − 3d exactly (the compiler quotes the timestamp)
+    expect(joined).toContain("archived_at.is.null");
   });
   it("is hidden from other industries' registries", () => {
     const other = leadFields({ ...ctx, industryId: "it_agency" } as unknown as CompileCtx);
-    expect(other["untouched_new"]?.industries).toEqual(["education_consultancy"]);
+    expect(other["untouched_held"]?.industries).toEqual(["education_consultancy"]);
   });
 });

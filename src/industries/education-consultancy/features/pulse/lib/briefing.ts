@@ -171,21 +171,21 @@ function composeRead(input: BriefingInput, neg: { ctx: NegCtx } | null, win: Bri
   const rise = (label: string, key: string, cur: number, prev: number) => {
     if (input.baselineCovered !== false && prev > 0 && cur - prev >= 3 && cur > prev) cands.push({ label, key, pct: ((cur - prev) / prev) * 100 });
   };
-  if (input.newLeads) rise("Intake is up", "intake", input.newLeads.current, input.newLeads.previous);
-  rise("Prospects are up", "prospects", input.team.current.prospects, input.team.previous.prospects);
-  rise("Applications are up", "reached_applications", input.team.current.reached_applications, input.team.previous.reached_applications);
+  if (input.newLeads) rise("Intake is", "intake", input.newLeads.current, input.newLeads.previous);
+  rise("Prospects are", "prospects", input.team.current.prospects, input.team.previous.prospects);
+  rise("Applications are", "reached_applications", input.team.current.reached_applications, input.team.previous.reached_applications);
   const up = cands.filter((c) => c.key !== neg?.ctx.metricKey).sort((x, y) => y.pct - x.pct)[0];
   const negPhrase = neg ? (neg.ctx.metricKey === "prospects" ? "fewer leads are moving forward" : "fewer students are reaching Applications") : null;
   const sentences: string[] = [];
-  if (up && negPhrase) sentences.push(`${up.label}${up.pct >= 50 ? " sharply" : ""}, but ${negPhrase}.`);
+  if (up && negPhrase) sentences.push(`${up.label} ${up.pct >= 50 ? "well ahead" : "up"}, but ${negPhrase}.`);
   else if (negPhrase) sentences.push(`${cap(negPhrase)} than ${base}.`);
-  else if (up) sentences.push(`${up.label}${up.pct >= 50 ? " sharply" : ""} on ${base}.`);
+  else if (up) sentences.push(`${up.label} ${up.pct >= 50 ? "well ahead of" : "ahead of"} ${base}.`);
 
   // 2. exactly the top TWO causes (fewer only if that is all we hold), worded differently from the item headlines
   const causes: string[] = [];
   if (neg) causes.push(`${neg.ctx.noun} fell ${neg.ctx.fallPct}${neg.ctx.branchName ? `, mostly in ${neg.ctx.branchName}` : ""}`);
   if (neg?.ctx.culpritName) causes.push(`${neg.ctx.culpritName} has gone quiet at ${neg.ctx.culpritPct} of the usual pace`);
-  if (input.untouched.count > 0) causes.push(`${input.untouched.count} new lead${input.untouched.count === 1 ? " has" : "s have"} waited over 48 hours for a first touch`);
+  if (input.untouched.count > 0) causes.push(`${input.untouched.count} held lead${input.untouched.count === 1 ? " has" : "s have"} had no touch in 3+ days`);
   const l = lk ? biggestLeak(input) : null;
   if (l) causes.push(`${l.flow.out} leads left ${l.flow.name} backwards or to Archive${l.rising ? `, up from ${l.flow.previousOut}` : ""}`);
   const used = causes.slice(0, 2);

@@ -23,12 +23,12 @@ export function leadsOfPersonHref(userId: string, listSlug?: string | null): str
   return `/leads?${p.toString()}`;
 }
 
-/** `/leads` on the intake list, filtered to leads nobody has touched for 48h+ — exactly Pulse's "untouched" set. */
-export function untouchedLeadsHref(listSlug = "pre-qualified"): string {
+/** `/leads` filtered to held leads with no touch or move for 3+ days — exactly Pulse's "untouched" set (any window). */
+export function untouchedLeadsHref(): string {
   const tree: FilterTree = {
     conjunction: "and",
-    conditions: [{ id: "pulse:untouched", field: "untouched_new", op: "is_true" }],
+    conditions: [{ id: "pulse:untouched", field: "untouched_held", op: "is_true" }],
   };
-  const p = new URLSearchParams({ list: listSlug, f: encodeFilterTree(tree) });
+  const p = new URLSearchParams({ f: encodeFilterTree(tree) });
   return `/leads?${p.toString()}`;
 }

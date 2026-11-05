@@ -191,6 +191,17 @@ function compileUntouchedNew(_cond: FilterCondition, ctx: CompileCtx): string {
   return and("last_touched_at.is.null", `created_at.lt.${pgVal(cutoff.toISOString())}`);
 }
 
+// ── untouched_held: virtual — a held lead with no touch AND no stage move for 3+ days (Pulse "untouched") ─
+// Pulse's absolute definition (lib/untouched.ts there): last_touched_at null/old AND stage_changed_at old, not archived.
+// Window-independent, so the Pulse count and "See the N leads" are the same set.
+
+const UNTOUCHED_HELD_DAYS = 3;
+
+function compileUntouchedHeld(_cond: FilterCondition, ctx: CompileCtx): string {
+  const cutoff = pgVal(new Date(ctx.now.getTime() - UNTOUCHED_HELD_DAYS * 86_400_000).toISOString());
+  return and(or("last_touched_at.is.null", `last_touched_at.lt.${cutoff}`), `stage_changed_at.lt.${cutoff}`, "archived_at.is.null");
+}
+
 // ── callback_due: virtual — a pending callback window that has fully elapsed ─
 // (migration 250). "Due" = window elapsed, not merely a missed call: a lead
 // still inside its grace period has callback_due_at set but in the future —
@@ -500,6 +511,16 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       label: "Untouched for 48h+",
       type: "boolean",
       source: { kind: "virtual", compile: compileUntouchedNew },
+      operators: ["is_true"],
+      group: "Basic",
+      filterable: true,
+      industries: ["education_consultancy"],
+    },
+    {
+      key: "untouched_held",
+      label: "Untouched for 3+ days",
+      type: "boolean",
+      source: { kind: "virtual", compile: compileUntouchedHeld },
       operators: ["is_true"],
       group: "Basic",
       filterable: true,

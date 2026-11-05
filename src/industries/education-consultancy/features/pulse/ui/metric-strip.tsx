@@ -2,16 +2,18 @@
 
 import { stageConversion } from "../lib/definitions";
 import type { EventsQuery, PulseResponse } from "../lib/types";
-import { deltaLabel } from "./format";
+import { compareToUsual, formatChange } from "../lib/compare";
 import { SparkLine } from "./spark-line";
 
 type Open = (title: string, crumbs: string[], q: EventsQuery) => void;
 
 function Chg({ cur, base, covered }: { cur: number; base: number; covered: boolean }) {
   // No change figure when the previous period starts before the data does (an empty base is not a baseline).
-  const d = covered ? deltaLabel(cur, base) : null;
-  if (!d) return <span className="chg flat" />;
-  return <span className={`chg ${d.tone === "good" ? "up" : d.tone === "bad" ? "dn" : "flat"}`}>{d.text}</span>;
+  // And none when the previous value is below the noise floor (MIN_USUAL): "0 vs 4 = −100%" is a false alarm.
+  const c = compareToUsual(cur, base, covered);
+  const text = formatChange(c);
+  if (!c || !text) return <span className="chg flat" />;
+  return <span className={`chg ${c.pct > 0 ? "up" : c.pct < 0 ? "dn" : "flat"}`}>{text}</span>;
 }
 
 /** Four tiles in one bordered strip: label + change top-right, big number + sparkline, caption with the ≤100% conversion. */

@@ -63,3 +63,13 @@ describe("formatChange — fits a 5-character slot", () => {
   });
   it("null in, null out", () => expect(formatChange(null)).toBeNull());
 });
+
+describe("metric strip previous-period chip (round 11): the >= 5 base guard", () => {
+  it("shows no % when the previous value is below 5 (0 vs 4, 3 vs 4)", () => {
+    expect(formatChange(compareToUsual(0, 4))).toBeNull();
+    expect(formatChange(compareToUsual(3, 4))).toBeNull();
+  });
+  it("shows the change from a real base", () => {
+    expect(formatChange(compareToUsual(2, 10))).toBe("−80%");
+  });
+});
