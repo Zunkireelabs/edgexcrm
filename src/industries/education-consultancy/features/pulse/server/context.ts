@@ -21,6 +21,9 @@ export interface PulseContext {
   branchId: string | null;
   branches: Array<{ id: string; name: string }>;
   thresholds: PulseThresholds;
+  tenantName: string;
+  /** "preview" unless the tenant config explicitly turns the AI surfaces off (tenants.config.pulse_ai_preview = false). */
+  aiMode: "preview" | "off";
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -39,8 +42,8 @@ export async function resolvePulseContext(
   if (auth.role !== "owner" && auth.role !== "admin") return { ok: false, response: apiForbidden() };
 
   const db = await scopedClient(auth);
-  const { data: tenantRow } = await db.raw().from("tenants").select("timezone, config").eq("id", auth.tenantId).single();
-  const tenant = tenantRow as unknown as { timezone: string | null; config: TenantConfig | null } | null;
+  const { data: tenantRow } = await db.raw().from("tenants").select("name, timezone, config").eq("id", auth.tenantId).single();
+  const tenant = tenantRow as unknown as { name: string | null; timezone: string | null; config: TenantConfig | null } | null;
   const tz = tenant?.timezone ?? "Asia/Kathmandu";
 
   const sp = request.nextUrl.searchParams;
@@ -81,6 +84,8 @@ export async function resolvePulseContext(
       branchId,
       branches,
       thresholds: resolvePulseThresholds(tenant?.config),
+      tenantName: tenant?.name ?? "",
+      aiMode: tenant?.config?.pulse_ai_preview === false ? "off" : "preview",
     },
   };
 }

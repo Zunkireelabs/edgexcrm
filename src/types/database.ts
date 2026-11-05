@@ -83,6 +83,8 @@ export interface TenantConfig {
   // touched/pile ratio, not dwell-based).
   // Pulse (EDGEX-82) rule thresholds — every key optional, code defaults in
   // features/pulse/lib/thresholds.ts.
+  /** Pulse AI surfaces (briefing, Suggested tags…): shown in Preview mode unless this is explicitly false. */
+  pulse_ai_preview?: boolean;
   pulse_thresholds?: {
     activity_drop_ratio?: number;
     activity_drop_min_usual?: number;

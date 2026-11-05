@@ -310,6 +310,12 @@ BEGIN
       END LOOP;
     END LOOP;
   END LOOP;
+
+  -- Archive moves carry the reason the app records (changes.archive_reason), so "why leads left" is real data.
+  UPDATE audit_logs SET changes = changes || jsonb_build_object('archive_reason', jsonb_build_object('old', null,
+    'new', (ARRAY['Not reachable','Not reachable','Not reachable','Not interested','Chose another consultancy','Duplicate lead'])[1 + (abs(hashtext(id::text)) % 6)]))
+  WHERE tenant_id = t AND entity_type = 'lead' AND changes #>> '{list,new}' = 'Archived'
+    AND entity_id IN (SELECT id FROM leads WHERE tenant_id = t AND custom_fields ? 'pulse_seed');
 END
 $seed$;
 

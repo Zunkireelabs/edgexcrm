@@ -46,6 +46,7 @@
 --
 --   Expected before/after row counts: 0 rows touched (functions + indexes only).
 --   Rollback:
+--     DROP FUNCTION IF EXISTS education_pulse_leak_reasons(UUID, TIMESTAMPTZ, TIMESTAMPTZ, UUID);
 --     DROP FUNCTION IF EXISTS education_pulse_person_timeline(UUID, TIMESTAMPTZ, TIMESTAMPTZ, UUID, INT, INT, INT);
 --     DROP FUNCTION IF EXISTS education_pulse_person_daily(UUID, TIMESTAMPTZ, TIMESTAMPTZ, TEXT, UUID, INT, INT);
 --     DROP FUNCTION IF EXISTS education_pulse_events(UUID, TIMESTAMPTZ, TIMESTAMPTZ, TEXT, UUID, TEXT, UUID, INT, INT, INT, INT);
@@ -695,6 +696,25 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   ORDER BY r.at DESC LIMIT GREATEST(p_limit, 1);
 $$;
 
+-- ── why leads left a stage ───────────────────────────────────────────────────
+-- Top archive reasons for leads that left ONE stage backwards / to the archive in the window. The app writes
+-- changes.archive_reason when a lead is archived (bulk route + patch), so this is a real count, never a guess.
+CREATE OR REPLACE FUNCTION education_pulse_leak_reasons(
+  p_tenant UUID, p_from TIMESTAMPTZ, p_to TIMESTAMPTZ, p_list UUID
+)
+RETURNS TABLE (reason TEXT, leads BIGINT)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT a.changes #>> '{archive_reason,new}' AS reason, count(DISTINCT a.entity_id) AS leads
+  FROM audit_logs a
+  JOIN lead_lists ll ON ll.id = p_list AND ll.tenant_id = p_tenant
+  WHERE a.tenant_id = p_tenant AND a.entity_type = 'lead' AND a.action IN ('lead.updated', 'lead.graduated')
+    AND a.created_at >= p_from AND a.created_at < p_to
+    AND a.changes ? 'archive_reason' AND COALESCE(a.changes #>> '{archive_reason,new}', '') <> ''
+    AND (a.changes #>> '{list_ids,old}' = p_list::TEXT OR lower(btrim(a.changes #>> '{list,old}')) = lower(btrim(ll.name)))
+  GROUP BY 1 ORDER BY 2 DESC, 1 LIMIT 5;
+$$;
+
+REVOKE ALL ON FUNCTION education_pulse_leak_reasons(UUID, TIMESTAMPTZ, TIMESTAMPTZ, UUID) FROM PUBLIC;
 REVOKE ALL ON FUNCTION education_pulse_person_daily(UUID, TIMESTAMPTZ, TIMESTAMPTZ, TEXT, UUID, INT, INT) FROM PUBLIC;
 REVOKE ALL ON FUNCTION education_pulse_person_timeline(UUID, TIMESTAMPTZ, TIMESTAMPTZ, UUID, INT, INT, INT) FROM PUBLIC;
 REVOKE ALL ON FUNCTION education_pulse_moves(UUID, TIMESTAMPTZ, TIMESTAMPTZ, INT, INT) FROM PUBLIC;
@@ -706,6 +726,7 @@ GRANT EXECUTE ON FUNCTION education_pulse_moves(UUID, TIMESTAMPTZ, TIMESTAMPTZ, 
 GRANT EXECUTE ON FUNCTION education_pulse_overview(UUID, TIMESTAMPTZ, TIMESTAMPTZ, TEXT, UUID, INT, INT) TO service_role;
 GRANT EXECUTE ON FUNCTION education_pulse_person_stats(UUID, TIMESTAMPTZ, TIMESTAMPTZ, UUID, INT, INT) TO service_role;
 GRANT EXECUTE ON FUNCTION education_pulse_funnel(UUID, TIMESTAMPTZ, TIMESTAMPTZ, TEXT, UUID, INT, INT) TO service_role;
+GRANT EXECUTE ON FUNCTION education_pulse_leak_reasons(UUID, TIMESTAMPTZ, TIMESTAMPTZ, UUID) TO service_role;
 GRANT EXECUTE ON FUNCTION education_pulse_person_daily(UUID, TIMESTAMPTZ, TIMESTAMPTZ, TEXT, UUID, INT, INT) TO service_role;
 GRANT EXECUTE ON FUNCTION education_pulse_person_timeline(UUID, TIMESTAMPTZ, TIMESTAMPTZ, UUID, INT, INT, INT) TO service_role;
 GRANT EXECUTE ON FUNCTION education_pulse_events(UUID, TIMESTAMPTZ, TIMESTAMPTZ, TEXT, UUID, TEXT, UUID, INT, INT, INT, INT) TO service_role;

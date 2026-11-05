@@ -201,7 +201,84 @@ export interface PulseGroup {
   backByStage: StageSeries;
 }
 
+// ── Briefing + attention (rule-built, "Preview" mode) ───────────────────────
+
+export type AttentionCategory = "needs_action" | "heads_up" | "wins";
+export type AttentionTone = "bad" | "warn" | "good" | "info";
+export type AttentionIcon = "down" | "up" | "clock" | "alert" | "archive";
+
+export interface AttentionLink {
+  label: string;
+  /** Internal href (the existing leads list / filter links). */
+  href?: string;
+  /** Or open the evidence drawer. */
+  drill?: EventsQuery;
+  /** Or open this person's drawer. */
+  personId?: string;
+}
+
+export interface AttentionItem {
+  id: string;
+  category: AttentionCategory;
+  tone: AttentionTone;
+  icon: AttentionIcon;
+  subject: string;
+  what: string;
+  /** Right-hand key figure: `strong` is rendered bold, `text` follows it. */
+  figure: { strong?: string; text: string } | null;
+  /** Rule-generated suggestion → gradient "Suggested" tag. */
+  suggested: boolean;
+  /** The concrete action, carrying its value ("Reassign 12 to Anil KC"). */
+  action: { label: string; href: string; primary: boolean } | null;
+  /** Expanded: the why sentence (an AI paragraph block in Preview mode), a meta line and links. */
+  why: string | null;
+  meta: string | null;
+  links: AttentionLink[];
+  drill: EventsQuery;
+}
+
+export type BriefingTone = "bad" | "good" | "info";
+export interface BriefingItem {
+  id: string;
+  tone: BriefingTone;
+  icon: "down" | "up" | "archive";
+  /** Bold headline sentence. */
+  headline: string;
+  /** Plain follow-on sentence(s). */
+  detail: string;
+  evidenceLabel: "Evidence" | "What works" | "Pattern";
+  evidence: string;
+  link: { label: string; drill: EventsQuery };
+}
+
+export interface Briefing {
+  /** "Orca's read": 2–3 sentences, null when fewer than 2 meaningful signals exist. */
+  read: string | null;
+  items: BriefingItem[];
+  /** Activity records the briefing was computed from (provenance byline). */
+  recordCount: number;
+}
+
+export interface LeakReason {
+  reason: string;
+  leads: number;
+}
+
+export interface PulseHeader {
+  tenantShortName: string;
+  newLeads: number;
+  students: number;
+  needsAction: number;
+}
+
 export interface PulseResponse {
+  /** "preview": AI slots visible, filled by rules (tagged Preview). "off": plain rule text, no gradient, no tag. */
+  aiMode: "preview" | "off";
+  /** The existing Ask Orca is enabled for this tenant (env flag AND tenants.ai_enabled). */
+  askEnabled: boolean;
+  header: PulseHeader;
+  briefing: Briefing | null;
+  attention: AttentionItem[];
   window: PulseWindowInfo;
   branchId: string | null;
   branches: Array<{ id: string; name: string }>;
