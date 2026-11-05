@@ -8,6 +8,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **HARD RULE: No database access of any kind — no migrations, no direct SQL (stage or prod), no `scripts/migrate-apply.sh`, no Supabase MCP writes/reads used to modify data, no `createServiceClient()`/`scopedClient()` calls run ad hoc against a live DB.** This supersedes the "Production DB changes — per-action approval" carve-out further down this file — that section is currently paused. Schema/migration work in this repo happens through code review and the normal PR pipeline only, not through an interactive session touching the DB directly. If a task appears to require a DB change, stop and say so instead of running it.
 
+**Exception: the LOCAL Supabase on the dev Mac (`127.0.0.1:54322`) is allowed** (Sadin, 2026-11-05). Sessions may run
+`scripts/migrate-apply.sh local`, local seed scripts, and SQL against it to verify work before a PR. It holds only synthetic
+or seeded data. Stage (`dymeudcddasqpomfpjvt`) and prod (`pirhnklvtjjpuvbvibxf`) stay fully off-limits. Never point a local
+script at them, and never copy their data down without asking first.
+
 ---
 
 ## Git Hooks
