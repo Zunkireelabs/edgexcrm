@@ -1,4 +1,6 @@
 import { assemblePeople } from "../lib/assemble";
+import { normalizePosition } from "../lib/positions";
+import { rollups } from "../lib/rollup";
 import { computeSignals } from "../lib/signals";
 import { mean } from "../lib/window";
 import {
@@ -43,6 +45,8 @@ export async function loadPeople(ctx: PulseContext, activeIds: Set<string>): Pro
       email: u?.email ?? null,
       positionSlug: pos?.slug ?? null,
       positionName: pos?.name ?? null,
+      positionKey: normalizePosition(pos?.slug, pos?.name).key,
+      positionLabel: normalizePosition(pos?.slug, pos?.name).label,
       branchId: m.branch_id,
       branchName: m.branch_id ? (branchName.get(m.branch_id) ?? null) : null,
     });
@@ -138,6 +142,7 @@ export async function loadPulse(ctx: PulseContext): Promise<PulseResponse> {
     branchId,
     branches: ctx.branches,
     people,
+    ...rollups(people),
     funnel: {
       stages: funnel.stages.map(
         (s): PulseFunnelStage => ({

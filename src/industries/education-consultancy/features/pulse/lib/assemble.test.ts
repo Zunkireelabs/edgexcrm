@@ -2,9 +2,9 @@ import { describe, it, expect } from "vitest";
 import { assemblePeople } from "./assemble";
 import type { PersonBucketRow, PersonInfo } from "./types";
 
-const info = (id: string): PersonInfo => ({ userId: id, name: id, email: null, positionSlug: "telecaller", positionName: "TeleCaller", branchId: null, branchName: null });
+const info = (id: string): PersonInfo => ({ userId: id, name: id, email: null, positionSlug: "telecaller", positionName: "TeleCaller", positionKey: "telecaller", positionLabel: "TeleCaller", branchId: null, branchName: null });
 const row = (user_id: string, bucket: number, calls: number, extra: Partial<PersonBucketRow> = {}): PersonBucketRow => ({
-  user_id, bucket, counts: { calls }, notes_new: 0, notes_edited: 0, moves_by_stage: {}, bulk_moves: 0, ...extra,
+  user_id, bucket, counts: { calls }, notes_new: 0, notes_edited: 0, moves_by_stage: {}, back_by_stage: {}, bulk_moves: 0, ...extra,
 });
 
 describe("assemblePeople", () => {
@@ -37,5 +37,22 @@ describe("assemblePeople", () => {
       row("a", 1, 1, { notes_new: 50, bulk_moves: 50 }),
     ]);
     expect([p.notesNew, p.notesEdited, p.movesByStage, p.bulkMoves]).toEqual([3, 1, { s1: 2 }, 7]);
+  });
+});
+
+describe("per-destination-stage series (forward and back kept apart)", () => {
+  it("current / previous / usual per stage, missing buckets count as 0", () => {
+    const [p] = assemblePeople([info("a")], [
+      row("a", 0, 0, { moves_by_stage: { S1: 6 }, back_by_stage: { ARCH: 2 } }),
+      row("a", 1, 0, { moves_by_stage: { S1: 4 }, back_by_stage: { ARCH: 1 } }),
+      row("a", 2, 0, { moves_by_stage: { S1: 8 } }),
+    ]);
+    expect(p.forwardByStage.S1).toEqual({ current: 6, previous: 4, usual: 3 }); // (4+8+0+0)/4
+    expect(p.backByStage.ARCH).toEqual({ current: 2, previous: 1, usual: 0.25 });
+  });
+  it("forward and back never leak into each other", () => {
+    const [p] = assemblePeople([info("a")], [row("a", 0, 0, { moves_by_stage: { S1: 1 }, back_by_stage: { S2: 9 } })]);
+    expect(Object.keys(p.forwardByStage)).toEqual(["S1"]);
+    expect(Object.keys(p.backByStage)).toEqual(["S2"]);
   });
 });

@@ -227,6 +227,15 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
     WHERE NOT is_bulk AND NOT to_excluded AND actor_id IS NOT NULL AND ((to_sort < from_sort) OR to_is_archive)
     GROUP BY actor_id, b
   ),
+  -- Back / archived moves broken down by DESTINATION (an earlier stage, or the archive list) — the v4 scoreboard has
+  -- one numeric column per destination stage, forward and back kept apart.
+  back_stage_a AS (
+    SELECT u, b, jsonb_object_agg(sk, n) AS m
+    FROM (SELECT actor_id AS u, b, COALESCE(to_list_id::TEXT, 'other') AS sk, count(*) AS n FROM mv
+          WHERE NOT is_bulk AND NOT to_excluded AND actor_id IS NOT NULL AND ((to_sort < from_sort) OR to_is_archive)
+          GROUP BY actor_id, b, 3) x
+    GROUP BY u, b
+  ),
   bulk_a AS (SELECT actor_id AS u, b, count(*) AS n FROM mv WHERE is_bulk AND actor_id IS NOT NULL GROUP BY actor_id, b),
   pros_a AS (
     SELECT holder_id AS u, b, count(DISTINCT lead_id) AS n FROM mv
@@ -328,8 +337,11 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   people_json AS (
     SELECT COALESCE(jsonb_agg(jsonb_build_object(
       'user_id', p.u, 'bucket', p.b, 'counts', p.counts, 'notes_new', p.notes_new, 'notes_edited', p.notes_edited,
-      'moves_by_stage', COALESCE(sa.m, '{}'::JSONB), 'bulk_moves', p.bulk_moves)), '[]'::JSONB) AS j
-    FROM people p LEFT JOIN stage_a sa ON sa.u = p.u AND sa.b = p.b
+      'moves_by_stage', COALESCE(sa.m, '{}'::JSONB), 'back_by_stage', COALESCE(ba.m, '{}'::JSONB),
+      'bulk_moves', p.bulk_moves)), '[]'::JSONB) AS j
+    FROM people p
+    LEFT JOIN stage_a sa ON sa.u = p.u AND sa.b = p.b
+    LEFT JOIN back_stage_a ba ON ba.u = p.u AND ba.b = p.b
   ),
   -- ── funnel ──
   fmv AS (SELECT m.* FROM mv m JOIN leads l ON l.id = m.lead_id AND (p_branch IS NULL OR l.branch_id = p_branch)),
@@ -442,11 +454,12 @@ CREATE OR REPLACE FUNCTION education_pulse_person_stats(
   p_bulk_min INT DEFAULT 20, p_bulk_seconds INT DEFAULT 60
 )
 RETURNS TABLE (
-  user_id UUID, bucket INT, counts JSONB, notes_new BIGINT, notes_edited BIGINT, moves_by_stage JSONB, bulk_moves BIGINT
+  user_id UUID, bucket INT, counts JSONB, notes_new BIGINT, notes_edited BIGINT, moves_by_stage JSONB,
+  back_by_stage JSONB, bulk_moves BIGINT
 )
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   SELECT (r ->> 'user_id')::UUID, (r ->> 'bucket')::INT, r -> 'counts', (r ->> 'notes_new')::BIGINT,
-         (r ->> 'notes_edited')::BIGINT, r -> 'moves_by_stage', (r ->> 'bulk_moves')::BIGINT
+         (r ->> 'notes_edited')::BIGINT, r -> 'moves_by_stage', r -> 'back_by_stage', (r ->> 'bulk_moves')::BIGINT
   FROM jsonb_array_elements(
     education_pulse_overview(p_tenant, p_from, p_to, 'UTC', p_branch, p_bulk_min, p_bulk_seconds) -> 'people') r;
 $$;
