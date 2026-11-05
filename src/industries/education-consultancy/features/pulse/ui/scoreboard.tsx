@@ -1,14 +1,18 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { activityOf, type EventsQuery, type MetricKey, type PersonRow, type PulseResponse } from "../lib/types";
-import { avatarColor, deltaLabel, fmtNum, initials } from "./format";
-import { Sparkline } from "./sparkline";
+import { POSITION_ORDER, normalizePosition, pluralLabel } from "../lib/positions";
+import { FieldSelect } from "./field-select";
+import { avatarColor, initials } from "./format";
+import { stageChipClass } from "./stage-style";
+import { TrendSpark } from "./sparkline";
+import { CARD, SEC_SUB, SEC_TITLE } from "./tokens";
 
 type OpenFn = (title: string, crumbs: string[], q: EventsQuery) => void;
-
 type SortKey = "moves" | "calls" | "received" | "reached_applications" | "name";
+type ColKey = MetricKey | "moves_forward";
+
 const SORTS: Array<{ key: SortKey; label: string }> = [
   { key: "moves", label: "Moved forward" },
   { key: "calls", label: "Calls" },
@@ -17,40 +21,50 @@ const SORTS: Array<{ key: SortKey; label: string }> = [
   { key: "name", label: "Name" },
 ];
 
-const COLS: Array<{ key: MetricKey | "moves"; label: string; group: "activity" | "results"; sub: "usual" | "delta" }> = [
-  { key: "received", label: "Leads received", group: "activity", sub: "usual" },
-  { key: "moves", label: "Moved forward", group: "activity", sub: "delta" },
-  { key: "status_changes", label: "Status changes", group: "activity", sub: "delta" },
+/** Column order is the mockup's: Leads received | Moved forward | Back / archived | Status | Notes | Calls | Results… */
+const COLS: Array<{ key: ColKey; label: string; group: "activity" | "results"; sub: "usual" | "delta"; badWhenHigh?: boolean; gl?: boolean }> = [
+  { key: "received", label: "Leads\nreceived", group: "activity", sub: "usual", badWhenHigh: true, gl: true },
+  { key: "moves_forward", label: "Moved forward", group: "activity", sub: "delta" },
+  { key: "back_archived", label: "Back /\narchived", group: "activity", sub: "usual", badWhenHigh: true },
+  { key: "status_changes", label: "Status\nchanges", group: "activity", sub: "delta" },
   { key: "notes", label: "Notes", group: "activity", sub: "delta" },
   { key: "calls", label: "Calls", group: "activity", sub: "delta" },
-  { key: "prospects", label: "Prospects", group: "results", sub: "delta" },
-  { key: "reached_applications", label: "Students in Apps", group: "results", sub: "delta" },
-  { key: "applications_filed", label: "Apps filed", group: "results", sub: "delta" },
+  { key: "prospects", label: "Prospects", group: "results", sub: "delta", gl: true },
+  { key: "reached_applications", label: "Students\nin Apps", group: "results", sub: "delta" },
+  { key: "applications_filed", label: "Apps\nfiled", group: "results", sub: "delta" },
 ];
+const NCOLS = COLS.length + 2; // person + trend
 
-const POSITION_ORDER = ["telecaller", "executive", "counsellor", "counselor", "app-executive"];
+/** ".dv" in the mockup: green when clearly up, red when clearly down, grey when flat (±0 / small moves). */
+function deltaSub(cur: number, usual: number): { text: string; cls: string } {
+  if (usual <= 0) return cur > 0 ? { text: "new", cls: "text-[#9ca3af] font-medium" } : { text: "", cls: "" };
+  const pct = Math.round(((cur - usual) / usual) * 100);
+  if (pct === 0) return { text: "±0", cls: "text-[#9ca3af] font-medium" };
+  const text = `${pct > 0 ? "+" : "−"}${Math.abs(pct)}%`;
+  if (pct >= 5) return { text, cls: "text-[#047857]" };
+  if (pct <= -5) return { text, cls: "text-[#b91c1c]" };
+  return { text, cls: "text-[#9ca3af] font-medium" };
+}
 
-function Cell({
-  value, usual, mode, max, onClick, extra, tint,
-}: { value: number; usual: number; mode: "usual" | "delta"; max: number; onClick: () => void; extra?: string; tint: string }) {
-  const d = deltaLabel(value, usual);
+function Num({
+  value, usual, mode, max, tint, extra, badWhenHigh, onClick,
+}: { value: number; usual: number; mode: "usual" | "delta"; max: number; tint: string; extra?: string; badWhenHigh?: boolean; onClick: () => void }) {
   const width = max > 0 ? Math.max(4, Math.round((value / max) * 100)) : 0;
-  const alarm = mode === "usual" && usual > 0 && value >= usual * 1.8 && value >= 20;
+  let sub: { text: string; cls: string };
+  if (extra) sub = { text: extra, cls: "text-[#9ca3af] font-medium" };
+  else if (mode === "usual") {
+    const hot = badWhenHigh && usual > 0 && value >= usual * 1.8 && value - usual >= 3;
+    sub = { text: `usual ${Math.round(usual)}`, cls: hot ? "text-[#b91c1c]" : "text-[#9ca3af] font-medium" };
+  } else sub = deltaSub(value, usual);
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={value === 0}
-      className="relative block w-full px-2 py-2.5 text-right disabled:cursor-default"
-      aria-label={`${value}`}
-    >
-      {value > 0 && (
-        <span className="absolute inset-y-2 right-1 rounded-md" style={{ width: `${width}%`, maxWidth: "calc(100% - 8px)", background: tint, opacity: 0.55 }} aria-hidden />
-      )}
-      <span className="relative block text-[15px] font-semibold leading-5 text-gray-900">{value === 0 ? <span className="text-gray-300">—</span> : fmtNum(value)}</span>
-      <span className={`relative block text-[11px] leading-4 ${mode === "usual" ? (alarm ? "font-semibold text-red-600" : "text-gray-500") : extra ? "text-gray-500" : d?.tone === "bad" ? "font-semibold text-red-600" : d?.tone === "good" ? "font-semibold text-emerald-600" : "text-gray-500"}`}>
-        {mode === "usual" ? `usual ${Math.round(usual)}` : (extra ?? d?.text ?? "")}
+    <button type="button" onClick={onClick} disabled={value === 0} className="block w-full text-right disabled:cursor-default" aria-label={String(value)}>
+      <span className="relative inline-block min-w-[44px] text-right">
+        {value > 0 && width > 0 && (
+          <span className="absolute right-0 top-1/2 h-[18px] -translate-y-1/2 rounded-[4px]" style={{ width: `${width}%`, background: tint }} aria-hidden />
+        )}
+        <b className="relative z-[1] text-[13.5px] font-semibold text-[#171717]">{value === 0 ? <span className="text-[#9ca3af]">—</span> : value}</b>
       </span>
+      <span className={`block text-[10.5px] font-semibold leading-[1.2] ${sub.cls}`}>{sub.text}</span>
     </button>
   );
 }
@@ -66,11 +80,14 @@ export function Scoreboard({
   const [sort, setSort] = useState<SortKey>("moves");
   const [group, setGroup] = useState<"role" | "none">("role");
 
-  const stageName = useMemo(() => new Map(data.funnel.stages.map((s) => [s.listId, s])), [data.funnel.stages]);
-  const people = useMemo(() => data.people.filter((p) => roleFilter === "all" || p.positionSlug === roleFilter), [data.people, roleFilter]);
+  const stages = useMemo(() => new Map(data.funnel.stages.map((s) => [s.listId, s])), [data.funnel.stages]);
+  const people = useMemo(
+    () => data.people.filter((p) => roleFilter === "all" || normalizePosition(p.positionSlug, p.positionName).key === roleFilter),
+    [data.people, roleFilter],
+  );
   const max = useMemo(() => {
     const m: Record<string, number> = {};
-    for (const c of COLS) m[c.key] = Math.max(0, ...people.map((p) => p.current[c.key as MetricKey]));
+    for (const c of COLS) m[c.key] = Math.max(0, ...people.map((p) => p.current[c.key === "moves_forward" ? "moves" : (c.key as MetricKey)]));
     return m;
   }, [people]);
 
@@ -84,8 +101,8 @@ export function Scoreboard({
     if (group === "none") return [{ key: "all", name: "", rows: sorted }];
     const m = new Map<string, { key: string; name: string; rows: PersonRow[] }>();
     for (const p of sorted) {
-      const key = p.positionSlug ?? "none";
-      const g = m.get(key) ?? { key, name: p.positionName ?? "No position", rows: [] };
+      const { key, label } = normalizePosition(p.positionSlug, p.positionName);
+      const g = m.get(key) ?? { key, name: pluralLabel(label), rows: [] };
       g.rows.push(p);
       m.set(key, g);
     }
@@ -95,81 +112,82 @@ export function Scoreboard({
     });
   }, [sorted, group]);
 
-  const open = (p: PersonRow, key: MetricKey | "moves", label: string, detail?: string) =>
-    onOpen(`${p.current[key as MetricKey]} ${label} — ${p.name}`, [p.name, label], { metric: key as MetricKey, userId: p.userId, detail: detail ?? null });
+  const open = (p: PersonRow, metric: EventsQuery["metric"], n: number, label: string, detail?: string) =>
+    onOpen(`${n} ${label} — ${p.name}`, [p.name, label], { metric, userId: p.userId, detail: detail ?? null });
 
   return (
-    <section className="rounded-2xl border border-gray-200 bg-white p-5" aria-label="Team scoreboard">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <section className={CARD} aria-label="Team scoreboard">
+      <div className="mb-2.5 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold text-gray-900">Team scoreboard</h2>
-          <p className="mt-0.5 text-sm text-gray-500">Click any number to see the exact leads. Small figures show the change against that person&apos;s usual.</p>
+          <div className={SEC_TITLE}>Team scoreboard</div>
+          <div className={SEC_SUB}>Click any number to see the exact leads. Small figures show the change against that person&apos;s usual.</div>
         </div>
-        <div className="flex items-center gap-2">
-          <Select value={group} onValueChange={(v) => setGroup(v as "role" | "none")}>
-            <SelectTrigger size="sm" className="w-auto gap-1.5 text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="role">Group: Role</SelectItem>
-              <SelectItem value="none">No grouping</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={sort} onValueChange={(v) => setSort(v as SortKey)}>
-            <SelectTrigger size="sm" className="w-auto gap-1.5 text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {SORTS.map((s) => <SelectItem key={s.key} value={s.key}>Sort: {s.label}</SelectItem>)}
-            </SelectContent>
-          </Select>
+        <div className="flex gap-1.5">
+          <FieldSelect label="Group" value={group} onChange={(v) => setGroup(v as "role" | "none")}>
+            <option value="role">Group: Role</option>
+            <option value="none">No grouping</option>
+          </FieldSelect>
+          <FieldSelect label="Sort" value={sort} onChange={(v) => setSort(v as SortKey)}>
+            {SORTS.map((s) => <option key={s.key} value={s.key}>Sort: {s.label}</option>)}
+          </FieldSelect>
         </div>
       </div>
 
-      <div className="mt-4 overflow-x-auto">
-        <table className="w-full min-w-[1080px] border-separate border-spacing-0 text-sm">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[1160px] border-separate border-spacing-0">
           <thead>
-            <tr className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+            <tr className="text-[10.5px] font-semibold tracking-[0.07em] text-[#9ca3af]">
               <th className="sticky left-0 z-20 bg-white" />
-              <th colSpan={5} className="px-2 pb-1 text-left">Activity · what they did</th>
-              <th colSpan={3} className="border-l border-gray-100 px-2 pb-1 text-left">Results · on leads they hold</th>
-              <th />
+              <th colSpan={6} className="border-l border-[#e5e7eb] px-[7px] text-left">ACTIVITY · what they did</th>
+              <th colSpan={3} className="border-l border-[#e5e7eb] px-[7px] text-left">RESULTS · on leads they hold</th>
+              <th className="border-l border-[#e5e7eb]" />
             </tr>
-            <tr className="text-xs font-medium text-gray-500">
-              <th className="sticky left-0 z-20 bg-white px-2 pb-2 text-left">Person</th>
-              {COLS.map((c, i) => (
-                <th key={c.key} className={`px-2 pb-2 text-right ${c.key === "prospects" ? "border-l border-gray-100" : ""} ${i === 1 ? "min-w-[180px]" : "min-w-[84px]"}`}>{c.label}</th>
+            <tr className="text-[11px] font-medium leading-[1.25] text-[#6b7280]">
+              <th className="sticky left-0 z-20 border-b border-[#e5e7eb] bg-white px-[7px] py-[7px] text-left align-bottom">Person</th>
+              {COLS.map((c) => (
+                <th key={c.key} className={`whitespace-pre-line border-b border-[#e5e7eb] px-[7px] py-[7px] align-bottom ${c.key === "moves_forward" ? "text-left" : "text-right"} ${c.gl ? "border-l" : ""}`}>
+                  {c.label}
+                </th>
               ))}
-              <th className="px-2 pb-2 text-left">Trend vs usual</th>
+              <th className="whitespace-pre-line border-b border-l border-[#e5e7eb] px-[7px] py-[7px] text-left align-bottom">{"Trend\nvs usual"}</th>
             </tr>
           </thead>
           <tbody>
             {groups.map((g) => (
-              <GroupRows key={g.key} g={g} showHeader={group === "role"}>
+              <GroupRows key={g.key} name={g.name} count={g.rows.length} show={group === "role"}>
                 {g.rows.map((p) => {
-                  const flagCls = p.flag === "red" ? "border-l-red-500" : p.flag === "amber" ? "border-l-amber-500" : "border-l-transparent";
+                  const edge = p.flag === "red" ? "shadow-[inset_3px_0_0_#ef4444]" : p.flag === "amber" ? "shadow-[inset_3px_0_0_#f59e0b]" : p.flag === "green" ? "shadow-[inset_3px_0_0_#10b981]" : "";
+                  const tint = p.flag === "red" ? "bg-[rgba(239,68,68,0.04)]" : p.flag === "amber" ? "bg-[rgba(245,158,11,0.05)]" : "bg-white";
+                  const role = normalizePosition(p.positionSlug, p.positionName).label;
+                  const forward = Object.entries(p.movesByStage)
+                    .map(([id, n]) => ({ id, n, s: stages.get(id) }))
+                    .sort((a, b) => (a.s?.sortOrder ?? 99) - (b.s?.sortOrder ?? 99));
+                  const trendColor = p.flag === "red" ? "#ef4444" : p.flag === "green" ? "#10b981" : activityOf(p.current) >= activityOf(p.usual) * 1.05 ? "#2272B4" : "#94a3b8";
                   return (
-                    <tr key={p.userId} className="group border-t border-gray-100">
-                      <td className={`sticky left-0 z-10 border-l-[3px] bg-white px-2 py-2 ${flagCls}`}>
+                    <tr key={p.userId} className={tint}>
+                      <td className={`sticky left-0 z-10 border-b border-[#f3f3f3] px-[7px] py-[9px] ${tint} ${edge}`}>
                         <button type="button" onClick={() => onPerson(p)} className="flex items-center gap-2.5 text-left">
-                          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-[11px] font-semibold text-white" style={{ background: avatarColor(p.userId) }}>{initials(p.name)}</span>
+                          <span className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full text-[11px] font-semibold text-white" style={{ background: avatarColor(p.userId) }}>{initials(p.name)}</span>
                           <span>
-                            <span className="block text-sm font-semibold text-gray-900 hover:underline">{p.name}</span>
-                            <span className="block text-xs text-gray-500">{[p.positionName, p.branchName].filter(Boolean).join(" · ")}</span>
+                            <span className="block whitespace-nowrap font-medium text-[#171717]">{p.name}</span>
+                            <span className="block whitespace-nowrap text-[11.5px] text-[#6b7280]">{[role, p.branchName].filter(Boolean).join(" · ")}</span>
                           </span>
                         </button>
                       </td>
                       {COLS.map((c) => {
-                        const tint = c.group === "results" ? "#d1fae5" : "#dbeafe";
-                        const border = c.key === "prospects" ? "border-l border-gray-100" : "";
-                        if (c.key === "moves") {
-                          const entries = Object.entries(p.movesByStage)
-                            .map(([id, n]) => ({ id, n, s: stageName.get(id) }))
-                            .sort((a, b) => (a.s?.sortOrder ?? 99) - (b.s?.sortOrder ?? 99));
+                        const gl = c.gl ? "border-l border-[#e5e7eb]" : "";
+                        const cell = "border-b border-[#f3f3f3] px-[7px] py-[9px] align-middle";
+                        const isResult = c.group === "results";
+                        // Results columns only apply to the roles that hold leads at those stages (the mockup shows "—").
+                        if (c.key === "moves_forward") {
                           return (
-                            <td key={c.key} className={`px-1 ${border}`}>
-                              <div className="flex flex-wrap items-center justify-end gap-1">
-                                {entries.length === 0 && <span className="px-2 text-gray-300">—</span>}
-                                {entries.map((e) => (
+                            <td key={c.key} className={cell}>
+                              <div className="flex flex-wrap gap-1">
+                                {forward.length === 0 && <span className="text-[#9ca3af]">—</span>}
+                                {forward.map((e) => (
                                   <button key={e.id} type="button"
-                                    onClick={() => open(p, "moves", `moved to ${e.s?.name ?? "Other stage"}`, e.id)}
-                                    className="rounded-md bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-700 hover:bg-slate-200">
+                                    onClick={() => open(p, "moves_forward", e.n, `moved forward to ${e.s?.name ?? "Other stage"}`, e.id)}
+                                    className={`whitespace-nowrap rounded-[6px] px-[7px] py-px text-[11.5px] font-medium ${stageChipClass(e.s?.name ?? e.s?.slug)}`}>
                                     → {e.s?.name ?? "Other stage"} {e.n}
                                   </button>
                                 ))}
@@ -178,17 +196,22 @@ export function Scoreboard({
                           );
                         }
                         const k = c.key as MetricKey;
-                        const extra = k === "notes" && p.notesEdited > 0 ? `${p.notesEdited} edited` : undefined;
+                        const value = p.current[k];
+                        if (isResult && value === 0 && p.usual[k] === 0) {
+                          return <td key={c.key} className={`${cell} ${gl} text-right text-[#9ca3af]`}>—</td>;
+                        }
                         return (
-                          <td key={c.key} className={border}>
-                            <Cell value={p.current[k]} usual={p.usual[k]} mode={c.sub} max={max[c.key]} tint={tint}
-                              extra={extra}
-                              onClick={() => open(p, k, c.label.toLowerCase(), undefined)} />
+                          <td key={c.key} className={`${cell} ${gl}`}>
+                            <Num value={value} usual={p.usual[k]} mode={c.sub} max={max[c.key]}
+                              badWhenHigh={c.badWhenHigh}
+                              tint={isResult ? "rgba(16,185,129,0.16)" : "rgba(34,114,180,0.10)"}
+                              extra={k === "notes" ? `${p.notesEdited} edited` : undefined}
+                              onClick={() => open(p, k, value, c.label.replace("\n", " ").toLowerCase())} />
                           </td>
                         );
                       })}
-                      <td className="px-2">
-                        <Sparkline values={p.trend} color={p.flag === "red" ? "#dc2626" : "#2563eb"} width={92} height={28} reference={activityOf(p.usual)} />
+                      <td className="border-b border-l border-[#e5e7eb] border-b-[#f3f3f3] px-[7px] py-[9px]">
+                        <TrendSpark values={p.trend} usual={activityOf(p.usual)} color={trendColor} />
                       </td>
                     </tr>
                   );
@@ -196,31 +219,32 @@ export function Scoreboard({
               </GroupRows>
             ))}
             {people.length === 0 && (
-              <tr><td colSpan={COLS.length + 2} className="py-10 text-center text-sm text-gray-500">No team members match this filter.</td></tr>
+              <tr><td colSpan={NCOLS} className="py-10 text-center text-[#6b7280]">No team members match this filter.</td></tr>
             )}
           </tbody>
         </table>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-gray-50 px-4 py-3 text-sm text-gray-700">
-        <span>
-          <span className="font-semibold">Not in scores:</span>{" "}
-          {data.bulk.moves === 0
-            ? "no bulk stage moves in this period."
-            : `${data.bulk.moves} stage move${data.bulk.moves === 1 ? "" : "s"} made in bulk (${data.bulk.byPerson.map((b) => `${b.name} ${b.count}`).join(", ")}). They count for leads and results, not for anyone's activity.`}
-        </span>
+      <div className="mt-2.5 flex items-center justify-between gap-2.5">
+        <div className="flex flex-1 items-center gap-2 rounded-[10px] bg-[#f5f5f5] px-3 py-2 text-[12px] text-[#6b7280]">
+          <span><b className="font-semibold text-[#333]">Not in scores:</b>{" "}
+            {data.bulk.moves === 0
+              ? "no bulk stage moves in this period."
+              : `${data.bulk.moves} stage move${data.bulk.moves === 1 ? "" : "s"} made in bulk (${data.bulk.byPerson.map((b) => `${b.name} ${b.count}`).join(", ")}) — they count for leads and results, not for anyone's activity.`}
+          </span>
+        </div>
       </div>
     </section>
   );
 }
 
-function GroupRows({ g, showHeader, children }: { g: { name: string; rows: PersonRow[] }; showHeader: boolean; children: React.ReactNode }) {
+function GroupRows({ name, count, show, children }: { name: string; count: number; show: boolean; children: React.ReactNode }) {
   return (
     <>
-      {showHeader && (
+      {show && (
         <tr>
-          <td colSpan={COLS.length + 2} className="bg-gray-50 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-            {g.name} · {g.rows.length}
+          <td colSpan={NCOLS} className="bg-[#fafafa] px-2.5 py-1.5 text-[10.5px] font-semibold uppercase tracking-[0.07em] text-[#6b7280]">
+            {name} · {count}
           </td>
         </tr>
       )}

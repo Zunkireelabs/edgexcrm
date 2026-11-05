@@ -2,11 +2,18 @@
 
 import { ArrowRight, ChartNoAxesColumn, TrendingDown, TrendingUp } from "lucide-react";
 import type { Signal } from "../lib/types";
+import { BTN_LINK, CARD } from "./tokens";
+
+const TAG: Record<Signal["tone"], string> = {
+  bad: "bg-[#fee2e2] text-[#b91c1c]",
+  good: "bg-[#d1fae5] text-[#047857]",
+  neutral: "bg-[#dbeafe] text-[#2563eb]",
+};
 
 /**
- * "Key changes" — the briefing slot. `source` is the seam for the later AI layer: only "rules" is implemented in
- * slice 1 (a plain card, no gradient, no spark — violet/gradient are reserved for AI). An "ai" source will render
- * the narrated briefing from the SAME typed signals.
+ * "Key changes" — the briefing slot (v2-s3-ai-off.png). `source` is the seam for the later AI layer; only "rules" is
+ * implemented. This is the AI-OFF card, so it is plain: white, standard border, NO gradient top bar and no spark —
+ * the gradient and the spark are reserved for AI (the "ai" source will add them).
  */
 export function PulseBriefingCard({
   source,
@@ -19,50 +26,37 @@ export function PulseBriefingCard({
   periodLabel: string;
   onOpen: (s: Signal) => void;
 }) {
-  // source === "ai" is not built yet; fall through to the rules rendering so the slot never renders empty.
-  void source;
+  void source; // "ai" is not built yet; it falls through to the rules rendering so the slot never renders empty.
   return (
-    <section className="rounded-2xl border border-gray-200 bg-white overflow-hidden" aria-label="Key changes">
-      <div className="h-[3px] bg-gradient-to-r from-sky-500 to-slate-400" aria-hidden />
-      <div className="p-5">
-        <div className="flex items-center justify-between gap-3 pb-3 border-b border-gray-100">
-          <div className="flex items-center gap-2.5">
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-slate-100 text-slate-500">
-              <ChartNoAxesColumn className="h-4 w-4" />
-            </span>
-            <h2 className="text-base font-semibold text-gray-900">Key changes {periodLabel}</h2>
-          </div>
-          <span className="text-xs text-gray-500">Calculated · AI explanations are off</span>
+    <section className={CARD} aria-label="Key changes">
+      <div className="mb-1.5 flex items-center justify-between">
+        <div className="flex items-center gap-2.5 text-[15px] font-semibold text-[#171717]">
+          <span className="grid h-[26px] w-[26px] place-items-center rounded-[8px] bg-[#9ca3af] text-white">
+            <ChartNoAxesColumn className="h-[15px] w-[15px]" />
+          </span>
+          Key changes {periodLabel}
         </div>
-        {signals.length === 0 ? (
-          <p className="py-8 text-sm text-gray-500">Nothing stands out against the usual pattern this period.</p>
-        ) : (
-          <ul>
-            {signals.map((s) => (
-              <li key={s.id} className="flex items-start gap-3 py-3.5 border-b border-gray-100 last:border-0">
-                <span
-                  className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg ${
-                    s.tone === "good" ? "bg-emerald-50 text-emerald-600" : s.tone === "bad" ? "bg-red-50 text-red-500" : "bg-slate-100 text-slate-500"
-                  }`}
-                >
-                  {s.tone === "good" ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-                </span>
-                <div className="min-w-0 flex-1 text-sm text-gray-800">
-                  <p className="font-semibold text-gray-900">{s.title}</p>
-                  <p className="mt-0.5 text-gray-600">{s.detail}</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => onOpen(s)}
-                  className="mt-0.5 inline-flex shrink-0 items-center gap-1 text-sm text-gray-500 hover:text-gray-900"
-                >
-                  Open <ArrowRight className="h-3.5 w-3.5" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+        <div className="text-[12px] text-[#6b7280]">Calculated · AI explanations are off</div>
       </div>
+      {signals.length === 0 ? (
+        <p className="py-8 text-[#6b7280]">Nothing stands out against the usual pattern this period.</p>
+      ) : (
+        <div>
+          {signals.map((s, i) => (
+            <div key={s.id} className={`grid grid-cols-[30px_1fr_auto] items-start gap-3 py-[13px] ${i > 0 ? "border-t border-[#e8eef6]" : ""}`}>
+              <span className={`grid h-7 w-7 place-items-center rounded-[9px] ${TAG[s.tone]}`}>
+                {s.tone === "good" ? <TrendingUp className="h-[15px] w-[15px]" /> : <TrendingDown className="h-[15px] w-[15px]" />}
+              </span>
+              <p className="text-[13.5px] text-[#1f2937]">
+                <b className="font-semibold text-[#171717]">{s.title}</b> {s.detail}
+              </p>
+              <button type="button" onClick={() => onOpen(s)} className={BTN_LINK}>
+                Open <ArrowRight className="h-[15px] w-[15px]" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }

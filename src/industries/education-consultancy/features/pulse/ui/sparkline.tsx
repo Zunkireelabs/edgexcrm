@@ -1,32 +1,32 @@
-/** Tiny inline SVG line. `dashed` draws a flat reference line (the "usual") across the chart. */
-export function Sparkline({
-  values,
-  color = "#2563eb",
-  width = 96,
-  height = 28,
-  reference,
-  fluid = false,
-}: {
-  values: number[];
-  color?: string;
-  width?: number;
-  height?: number;
-  reference?: number;
-  /** Fill the parent's width instead of a fixed pixel width (funnel tiles shrink with the viewport). */
-  fluid?: boolean;
-}) {
-  if (values.length < 2) return <div style={{ width, height }} aria-hidden />;
-  const max = Math.max(...values, reference ?? 0, 1);
-  const pad = 2;
-  const x = (i: number) => pad + (i * (width - pad * 2)) / (values.length - 1);
-  const y = (v: number) => height - pad - (v / max) * (height - pad * 2);
-  const d = values.map((v, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+/** Sparklines drawn exactly like the mockup: a polyline in a 0 0 100 26 box stretched to the tile's width. */
+function points(values: number[], w: number, h: number, max: number, pad = 2): string {
+  const x = (i: number) => (i * w) / Math.max(values.length - 1, 1);
+  const y = (v: number) => h - pad - (v / Math.max(max, 1)) * (h - pad * 2);
+  return values.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+}
+
+/** Funnel-tile sparkline: full width, 26px tall, 1.8px stroke (.spark in the mockup). */
+export function FlowSpark({ values, color }: { values: number[]; color: string }) {
+  // No series (e.g. applications filed has no per-day data) → an empty spacer, never a flat zero line that reads as data.
+  if (values.length < 2) return <div className="mt-1.5 h-[26px]" aria-hidden />;
+  const v = values;
+  const max = Math.max(...v, 1);
   return (
-    <svg width={fluid ? "100%" : width} height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio={fluid ? "none" : undefined} aria-hidden>
-      {reference !== undefined && (
-        <line x1={pad} x2={width - pad} y1={y(reference)} y2={y(reference)} stroke="#cbd5e1" strokeDasharray="3 3" vectorEffect={fluid ? "non-scaling-stroke" : undefined} />
-      )}
-      <path d={d} fill="none" stroke={color} strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" vectorEffect={fluid ? "non-scaling-stroke" : undefined} />
+    <svg className="mt-1.5 block h-[26px] w-full" viewBox="0 0 100 26" preserveAspectRatio="none" aria-hidden>
+      <polyline points={points(v, 100, 26, max)} fill="none" stroke={color} strokeWidth={1.8} vectorEffect="non-scaling-stroke" />
+    </svg>
+  );
+}
+
+/** Row trend: 66×26, a dashed line at the person's usual, the polyline over it (the "Trend vs usual" column). */
+export function TrendSpark({ values, usual, color }: { values: number[]; usual: number; color: string }) {
+  const v = values.length >= 2 ? values : [0, 0];
+  const max = Math.max(...v, usual, 1);
+  const ref = 26 - 2 - (usual / max) * 22;
+  return (
+    <svg width={66} height={26} viewBox="0 0 86 26" preserveAspectRatio="none" aria-hidden>
+      <line x1={0} y1={ref} x2={86} y2={ref} stroke="#e5e7eb" strokeDasharray="3 3" />
+      <polyline points={points(v, 86, 26, max)} fill="none" stroke={color} strokeWidth={2} vectorEffect="non-scaling-stroke" />
     </svg>
   );
 }
