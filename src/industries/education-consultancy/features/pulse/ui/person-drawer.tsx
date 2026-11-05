@@ -3,7 +3,9 @@
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { EventsQuery, MetricKey, PersonRow } from "../lib/types";
+import { coachingNote } from "../lib/notes";
 import { avatarColor, deltaLabel, fmtNum, fmtWhen, initials } from "./format";
+import { Spark } from "./icons";
 import { usePulsePerson, type WindowSelection } from "./use-pulse";
 
 const KINDS: Record<string, string> = { call: "Call", note: "Note on", move: "Moved", bulk_move: "Moved (bulk)", status: "Status" };
@@ -23,10 +25,11 @@ function Kpi({ label, value, usual, onClick }: { label: string; value: number; u
 
 /** Person view: 4 KPIs against their own usual, the daily chart with the dashed usual line, what they did. */
 export function PersonDrawer({
-  person, window: win, onClose, onOpen,
+  person, window: win, mode, onClose, onOpen,
 }: {
   person: PersonRow | null;
   window: WindowSelection;
+  mode: "preview" | "off";
   onClose: () => void;
   onOpen: (title: string, crumbs: string[], q: EventsQuery) => void;
 }) {
@@ -59,6 +62,19 @@ export function PersonDrawer({
               {kpi("received", "Leads received", "new leads received")}
             </div>
           )}
+          {p && (() => {
+            const note = coachingNote(p);
+            if (!note) return null;
+            // The coaching note is an AI-written paragraph: in Preview it sits on the wash block with a sparkle label.
+            return mode === "preview" ? (
+              <div className="rounded-xl p-3.5" style={{ background: "linear-gradient(135deg,rgba(34,114,180,.06),rgba(124,92,240,.08))" }}>
+                <div className="mb-1 flex items-center gap-1.5 text-xs font-medium" style={{ color: "#5b47d6" }}><Spark className="h-3 w-3" />Orca&apos;s read</div>
+                <p className="text-[13.5px] leading-relaxed text-gray-900">{note}</p>
+              </div>
+            ) : (
+              <p className="text-[13.5px] leading-relaxed text-gray-700">{note}</p>
+            );
+          })()}
           {error && <p className="text-sm text-red-600">Couldn&apos;t load this person&apos;s activity.</p>}
           {loading && !data && <Skeleton className="h-40 w-full" />}
           {data && (

@@ -3,61 +3,47 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Activity, Download, MapPin } from "lucide-react";
-import { Skeleton } from "@/components/ui/skeleton";
-import { activityOf, type EventsQuery, type PersonRow, type Signal } from "../lib/types";
-import { leadsOfPersonHref, untouchedLeadsHref } from "../lib/leads-links";
-import { POSITION_ORDER, normalizePosition } from "../lib/positions";
+import { Download } from "lucide-react";
+import type { EventsQuery, PersonRow } from "../lib/types";
+import { activityOf } from "../lib/types";
+import { windowTitle } from "../lib/notes";
+import { AttentionList } from "./attention-list";
 import { PulseBriefingCard } from "./briefing-card";
 import { EvidenceDrawer } from "./evidence-drawer";
 import type { EvidenceTarget } from "./evidence";
-import { FieldSelect } from "./field-select";
-import { FunnelStrip } from "./funnel-strip";
-import { NeedsYou } from "./needs-you";
+import { Caret } from "./icons";
+import { MetricStrip } from "./metric-strip";
 import { PersonDrawer } from "./person-drawer";
 import { Scoreboard } from "./scoreboard";
-import { BTN, ROOT } from "./tokens";
-import { csvEscape, fmtRange, PREVIOUS_LABEL, WINDOW_LABEL } from "./format";
+import { csvEscape, fmtRange } from "./format";
 import { usePulse, type WindowSelection } from "./use-pulse";
+import "./pulse.css";
 
-const KEYS: WindowSelection["key"][] = ["24h", "7d", "30d", "custom"];
+const SEG: Array<{ key: WindowSelection["key"]; label: string }> = [
+  { key: "24h", label: "Today" }, { key: "7d", label: "7 days" }, { key: "30d", label: "30 days" }, { key: "custom", label: "Custom" },
+];
 
 export function PulsePage() {
   const router = useRouter();
   const [win, setWin] = useState<WindowSelection>({ key: "7d" });
-  const [role, setRole] = useState("all");
   const [evidence, setEvidence] = useState<EvidenceTarget | null>(null);
   const [person, setPerson] = useState<PersonRow | null>(null);
   const { data, loading, error, reload } = usePulse(win);
 
   const open = (title: string, crumbs: string[], query: EventsQuery) => setEvidence({ title, crumbs, query });
-  const openSignal = (s: Signal) => open(s.needs?.title ?? s.title, [s.kind.replace(/_/g, " ")], s.drill);
-  const roles = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const p of data?.people ?? []) {
-      const { key, label } = normalizePosition(p.positionSlug, p.positionName);
-      if (key !== "none") m.set(key, label);
-    }
-    return [...m.entries()].sort(([a], [b]) => (POSITION_ORDER.indexOf(a) + 100) % 100 - (POSITION_ORDER.indexOf(b) + 100) % 100);
-  }, [data]);
+  const openPerson = (id: string) => { const p = data?.people.find((x) => x.userId === id); if (p) setPerson(p); };
 
-  // The branch switcher in the top bar only renders for tenants entitled to >1 branch. Pulse carries its own so the
-  // filter is always reachable: it writes the SAME `edgex_branch` cookie the top bar uses (the API reads it) and
-  // refreshes, so the two controls can never disagree.
+  // The top-bar branch switcher only renders for tenants entitled to >1 branch; Pulse carries its own. It writes the
+  // SAME `edgex_branch` cookie (the API reads it) and refreshes, so the two controls can never disagree.
   const setBranch = (id: string) => {
     document.cookie = `edgex_branch=${id};path=/;max-age=31536000`;
     router.refresh();
   };
 
-  // Reassign lands on the EXISTING leads list + bulk-reassign flow (no new write path). A person's signal opens
-  // exactly that person's leads (a ?f= filter tree: assignees is_any_of [id]); the untouched signal opens the intake list.
-  const reassignHref = (s: Signal) =>
-    s.subject.type === "person" ? leadsOfPersonHref(s.subject.id) : s.kind === "untouched_leads" ? untouchedLeadsHref() : "/leads";
-
   const exportCsv = () => {
     if (!data) return;
-    const head = ["Person", "Position", "Branch", "Leads received", "Moves", "Back / archived", "Status changes", "Notes", "Calls", "Prospects", "Students in Apps", "Apps filed"];
-    const rows = data.people.map((p) => [p.name, normalizePosition(p.positionSlug, p.positionName).label, p.branchName ?? "", p.current.received, p.current.moves, p.current.back_archived, p.current.status_changes, p.current.notes, p.current.calls, p.current.prospects, p.current.reached_applications, p.current.applications_filed]);
+    const head = ["Person", "Position", "Branch", "Received", "Moves", "Back / archived", "Status changes", "Notes", "Calls", "Prospects", "Students", "Apps filed"];
+    const rows = data.people.map((p) => [p.name, p.positionLabel, p.branchName ?? "", p.current.received, p.current.moves, p.current.back_archived, p.current.status_changes, p.current.notes, p.current.calls, p.current.prospects, p.current.reached_applications, p.current.applications_filed]);
     const csv = [head, ...rows].map((r) => r.map(csvEscape).join(",")).join("\n");
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
@@ -66,102 +52,94 @@ export function PulsePage() {
     URL.revokeObjectURL(a.href);
   };
 
-  const periodLabel = win.key === "24h" ? "today" : win.key === "30d" ? "this month" : win.key === "7d" ? "this week" : "in this period";
-
   // Empty = nothing in ANY of the five windows (a quiet week for an established team is data, not an empty state).
   const isEmpty = !!data && data.funnel.newLeads.current + data.funnel.newLeads.previous + data.funnel.newLeads.usual === 0
     && data.funnel.stages.every((st) => st.entered.every((n) => n === 0))
     && data.people.every((p) => activityOf(p.current) + activityOf(p.usual) + p.current.received + p.usual.received === 0);
 
+  const range = data ? fmtRange(data.window.from, data.window.to, data.window.tz) : "";
+  const title = data ? windowTitle(win.key, data.header.tenantShortName, range) : "Pulse";
+  const periodLabel = win.key === "24h" ? "Today" : win.key === "7d" ? "This week" : win.key === "30d" ? "This period" : "This period";
+  const prevLabel = win.key === "7d" ? "last week" : win.key === "24h" ? "yesterday" : "before";
+  const time = useMemo(() => (data ? new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: data.window.tz }).format(new Date(data.generatedAt)) : ""), [data]);
+  const briefingTitle = win.key === "24h" ? "Today's briefing" : win.key === "7d" ? "This week's briefing" : win.key === "30d" ? "This month's briefing" : "Briefing for this period";
+
   return (
-    <div className={`${ROOT} mx-auto max-w-[1500px] p-4 md:px-6 md:py-[18px]`}>
-      <header className="mb-3.5 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-[24px] font-semibold tracking-[-0.01em] text-[#171717]">Pulse</h1>
-          <p className="mt-0.5 text-[#6b7280]">
-            Your team {periodLabel}: what changed and what needs you
-            {data && ` · ${fmtRange(data.window.from, data.window.to, data.window.tz)} vs ${PREVIOUS_LABEL[win.key]}`}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex rounded-[12px] border border-[#e5e7eb] bg-white p-[3px]" role="tablist" aria-label="Time window">
-            {KEYS.map((k) => (
-              <button key={k} role="tab" aria-selected={win.key === k}
-                onClick={() => setWin(k === "custom" ? { key: "custom", from: win.from, to: win.to } : { key: k })}
-                className={`rounded-[9px] px-3 py-1.5 ${win.key === k ? "bg-[#171717] text-white" : "text-[#6b7280] hover:text-[#171717]"}`}>
-                {WINDOW_LABEL[k]}
-              </button>
-            ))}
-          </div>
-          {win.key === "custom" && (
-            <div className="flex items-center gap-1.5">
-              <input type="date" aria-label="From" value={win.from ?? ""} onChange={(e) => setWin({ ...win, from: e.target.value })} className="rounded-[10px] border border-[#e5e7eb] bg-white px-2 py-[6px]" />
-              <span className="text-[#9ca3af]">–</span>
-              <input type="date" aria-label="To" value={win.to ?? ""} onChange={(e) => setWin({ ...win, to: e.target.value })} className="rounded-[10px] border border-[#e5e7eb] bg-white px-2 py-[6px]" />
+    <div className="pulse">
+      <div className="body">
+        <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: 12 }}>
+          <div>
+            <h1 className="h1">{title}</h1>
+            <div className="lede">
+              {data ? (<><b>{data.header.newLeads.toLocaleString("en-US")}</b> new leads · <b>{data.header.students.toLocaleString("en-US")}</b> students reached Applications · <b>{data.header.needsAction}</b> {data.header.needsAction === 1 ? "thing needs" : "things need"} you</>) : " "}
             </div>
-          )}
-          {data && data.branches.length > 1 && (
-            <FieldSelect label="Branch" value={data.branchId ?? "all"} onChange={setBranch} icon={<MapPin className="h-[15px] w-[15px]" />}>
-              <option value="all">All branches</option>
-              {data.branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </FieldSelect>
-          )}
-          <FieldSelect label="Role filter" value={role} onChange={setRole}>
-            <option value="all">All roles</option>
-            {roles.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
-          </FieldSelect>
-          <button type="button" onClick={exportCsv} disabled={!data} className={`${BTN} disabled:opacity-50`}>
-            <Download className="h-[15px] w-[15px]" /> Export
-          </button>
-        </div>
-      </header>
-
-      {error && (
-        <div role="alert" className="rounded-[16px] border border-red-200 bg-red-50 p-6 text-red-700">
-          Pulse couldn&apos;t load. <button className="font-semibold underline" onClick={reload}>Try again</button>
-        </div>
-      )}
-
-      {loading && !data && !error && (
-        <div className="space-y-3.5" aria-busy="true" aria-label="Loading Pulse">
-          <div className="grid gap-3.5 lg:grid-cols-[1fr_372px]"><Skeleton className="h-72 rounded-[16px]" /><Skeleton className="h-72 rounded-[16px]" /></div>
-          <Skeleton className="h-44 rounded-[16px]" />
-          <Skeleton className="h-96 rounded-[16px]" />
-        </div>
-      )}
-
-      {data && isEmpty && !loading && (
-        <div className="grid place-items-center rounded-[16px] border border-[#e5e7eb] bg-white px-6 py-20 text-center">
-          <span className="grid h-14 w-14 place-items-center rounded-2xl bg-[#171717] text-white"><Activity className="h-6 w-6" /></span>
-          <h2 className="mt-5 text-[18px] font-semibold text-[#171717]">Pulse starts as your team starts</h2>
-          <p className="mt-2 max-w-lg text-[#6b7280]">
-            Once your team moves leads, writes notes and makes calls, Pulse shows who did what, what changed and what needs you.
-          </p>
-          <div className="mt-5 flex gap-2">
-            <Link href="/team" className={BTN}>Invite your team</Link>
-            <Link href="/leads" className={BTN}>Import leads</Link>
+          </div>
+          <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+            <div className="seg" role="tablist" aria-label="Time window">
+              {SEG.map((s) => (
+                <button key={s.key} type="button" role="tab" aria-selected={win.key === s.key} onClick={() => setWin(s.key === "custom" ? { key: "custom", from: win.from, to: win.to } : { key: s.key })}
+                  style={{ padding: "5px 11px", borderRadius: 8, fontWeight: 500, fontSize: 12.5, color: win.key === s.key ? "var(--ink)" : "var(--muted)", background: win.key === s.key ? "var(--surface)" : "transparent", boxShadow: win.key === s.key ? "0 1px 2px rgba(0,0,0,.06)" : "none" }}>
+                  {s.label}
+                </button>
+              ))}
+            </div>
+            {win.key === "custom" && (
+              <div className="row" style={{ gap: 6 }}>
+                <input type="date" aria-label="From" value={win.from ?? ""} onChange={(e) => setWin({ ...win, from: e.target.value })} className="btn" />
+                <span style={{ color: "var(--faint)" }}>–</span>
+                <input type="date" aria-label="To" value={win.to ?? ""} onChange={(e) => setWin({ ...win, to: e.target.value })} className="btn" />
+              </div>
+            )}
+            {data && data.branches.length > 1 && (
+              <span className="selwrap">
+                <select aria-label="Branch" value={data.branchId ?? "all"} onChange={(e) => setBranch(e.target.value)}>
+                  <option value="all">All branches</option>
+                  {data.branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+                <Caret />
+              </span>
+            )}
+            <button type="button" className="btn ghost" onClick={exportCsv} disabled={!data}><Download className="i s" aria-hidden />Export</button>
           </div>
         </div>
-      )}
 
-      {data && !isEmpty && (
-        <div className={loading ? "opacity-60 transition-opacity" : "transition-opacity"}>
-          <div className="grid gap-3.5 lg:grid-cols-[1fr_372px]">
-            <PulseBriefingCard source="rules" signals={data.signals.keyChanges} periodLabel={periodLabel} onOpen={openSignal} />
-            <NeedsYou signals={data.signals.needsYou} onOpen={openSignal} reassignHref={reassignHref} />
+        {error && (
+          <div role="alert" style={{ marginTop: 22, border: "1px solid #f3c6c1", background: "var(--bad-soft)", color: "var(--bad)", borderRadius: 12, padding: 20 }}>
+            Pulse couldn&apos;t load. <button type="button" onClick={reload} style={{ fontWeight: 600, textDecoration: "underline" }}>Try again</button>
           </div>
-          <FunnelStrip data={data} prevLabel={win.key === "7d" ? "last week" : "before"} onOpen={open} />
-          <Scoreboard data={data} roleFilter={role} onOpen={open} onPerson={setPerson} />
-        </div>
-      )}
+        )}
 
-      <EvidenceDrawer
-        target={evidence}
-        window={win}
-        windowInfo={data?.window ?? { from: new Date().toISOString(), to: new Date().toISOString(), tz: "UTC" }}
-        onClose={() => setEvidence(null)}
-      />
-      <PersonDrawer person={person} window={win} onClose={() => setPerson(null)} onOpen={open} />
+        {loading && !data && !error && (
+          <div aria-busy="true" aria-label="Loading Pulse" style={{ marginTop: 22, display: "grid", gap: 16 }}>
+            <div className="skel" style={{ height: 300 }} /><div className="skel" style={{ height: 96 }} /><div className="skel" style={{ height: 260 }} /><div className="skel" style={{ height: 360 }} />
+          </div>
+        )}
+
+        {data && isEmpty && !loading && (
+          <div style={{ marginTop: 22, border: "1px solid var(--border)", borderRadius: 16, padding: "72px 24px", textAlign: "center" }}>
+            <h2 className="h2" style={{ fontSize: 18 }}>Pulse starts as your team starts</h2>
+            <p className="meta" style={{ margin: "8px auto 20px", maxWidth: 460 }}>Once your team moves leads, writes notes and makes calls, Pulse shows who did what, what changed and what needs you.</p>
+            <div className="row" style={{ gap: 8, justifyContent: "center" }}>
+              <Link href="/team" className="btn">Invite your team</Link>
+              <Link href="/leads" className="btn">Import leads</Link>
+            </div>
+          </div>
+        )}
+
+        {data && !isEmpty && (
+          <div style={{ opacity: loading ? 0.6 : 1, transition: "opacity .15s" }}>
+            {data.briefing && (
+              <PulseBriefingCard source="rules" briefing={data.briefing} mode={data.aiMode} title={briefingTitle} time={time} askEnabled={data.askEnabled} onOpen={open} />
+            )}
+            <MetricStrip data={data} prevLabel={prevLabel} onOpen={open} />
+            <AttentionList items={data.attention} mode={data.aiMode} windowKey={win.key} onDrill={open} onPerson={openPerson} />
+            <Scoreboard data={data} mode={data.aiMode} periodLabel={periodLabel} onOpen={open} onPerson={setPerson} />
+          </div>
+        )}
+      </div>
+
+      <EvidenceDrawer target={evidence} window={win} windowInfo={data?.window ?? { from: new Date().toISOString(), to: new Date().toISOString(), tz: "UTC" }} onClose={() => setEvidence(null)} />
+      <PersonDrawer person={person} window={win} mode={data?.aiMode ?? "preview"} onClose={() => setPerson(null)} onOpen={open} />
     </div>
   );
 }
