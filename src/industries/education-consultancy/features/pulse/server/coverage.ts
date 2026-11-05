@@ -1,5 +1,5 @@
 import type { PulseContext } from "./context";
-import { windowLengthMs } from "../lib/window";
+import { periodSpans, windowLengthMs } from "../lib/window";
 import type { CoverageInput } from "../lib/coverage";
 
 /**
@@ -19,5 +19,9 @@ export async function loadTenantFirstActivity(ctx: PulseContext): Promise<Date |
 }
 
 export async function loadCoverage(ctx: PulseContext): Promise<CoverageInput> {
-  return { windowFrom: ctx.window.from, lenMs: windowLengthMs(ctx.window), tenantFirst: await loadTenantFirstActivity(ctx) };
+  const spans = periodSpans(ctx.window, ctx.tz);
+  return {
+    windowFrom: ctx.window.from, lenMs: windowLengthMs(ctx.window), tenantFirst: await loadTenantFirstActivity(ctx),
+    ...(spans.aligned ? { usualFroms: spans.usual.map((s) => s.from), previousFrom: spans.previous.from } : {}),
+  };
 }

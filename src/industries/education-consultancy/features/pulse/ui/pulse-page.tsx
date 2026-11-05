@@ -20,7 +20,7 @@ import { usePulse, type WindowSelection } from "./use-pulse";
 import "./pulse.css";
 
 const SEG: Array<{ key: WindowSelection["key"]; label: string }> = [
-  { key: "24h", label: "Today" }, { key: "7d", label: "7 days" }, { key: "30d", label: "30 days" }, { key: "custom", label: "Custom" },
+  { key: "today", label: "Today" }, { key: "7d", label: "7 days" }, { key: "30d", label: "30 days" }, { key: "custom", label: "Custom" },
 ];
 
 export function PulsePage() {
@@ -59,10 +59,10 @@ export function PulsePage() {
 
   const range = data ? fmtRange(data.window.from, data.window.to, data.window.tz) : "";
   const title = data ? windowTitle(win.key, data.header.tenantShortName, range) : "Pulse";
-  const periodLabel = win.key === "24h" ? "Today" : win.key === "7d" ? "This week" : win.key === "30d" ? "This period" : "This period";
-  const prevLabel = win.key === "7d" ? "last week" : win.key === "24h" ? "yesterday" : "before";
+  const periodLabel = win.key === "today" ? "Today" : win.key === "7d" ? "This week" : win.key === "30d" ? "This period" : "This period";
+  const prevLabel = win.key === "7d" ? "last week" : win.key === "today" ? "by this time yesterday" : "before";
   const time = useMemo(() => (data ? new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: data.window.tz }).format(new Date(data.generatedAt)) : ""), [data]);
-  const briefingTitle = win.key === "24h" ? "Today's briefing" : win.key === "7d" ? "This week's briefing" : win.key === "30d" ? "Last 30 days' briefing" : "Briefing for this period";
+  const briefingTitle = win.key === "today" ? "Today's briefing" : win.key === "7d" ? "This week's briefing" : win.key === "30d" ? "Last 30 days' briefing" : "Briefing for this period";
 
   return (
     <div className="pulse">

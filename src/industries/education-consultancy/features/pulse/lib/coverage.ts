@@ -10,6 +10,9 @@ export interface CoverageInput {
   lenMs: number;
   /** The tenant's first activity record; null = no data at all. */
   tenantFirst: Date | null;
+  /** Aligned windows (Today): the explicit start of each usual span (most recent first) and of the previous span. */
+  usualFroms?: Date[];
+  previousFrom?: Date;
 }
 
 /**
@@ -25,16 +28,20 @@ export function firstAtFor(tenantFirst: Date | null, joinedAt: string | null | u
 }
 
 /** Indices (0 = the window right before the current one) of the prior windows that START on or after `firstAt`. */
-export function coveredUsualIndices(c: { windowFrom: Date; lenMs: number }, firstAt: Date | null, count = USUAL_COUNT): number[] {
+export function coveredUsualIndices(c: { windowFrom: Date; lenMs: number; usualFroms?: Date[] }, firstAt: Date | null, count = USUAL_COUNT): number[] {
   if (!firstAt) return [];
   const out: number[] = [];
-  for (let i = 0; i < count; i++) if (c.windowFrom.getTime() - c.lenMs * (i + 1) >= firstAt.getTime()) out.push(i);
+  for (let i = 0; i < count; i++) {
+    const start = c.usualFroms ? c.usualFroms[i]?.getTime() : c.windowFrom.getTime() - c.lenMs * (i + 1);
+    if (start !== undefined && start >= firstAt.getTime()) out.push(i);
+  }
   return out;
 }
 
 /** The previous window (index 0) is only a fair baseline if it starts on or after `firstAt`. */
-export function previousCovered(c: { windowFrom: Date; lenMs: number }, firstAt: Date | null): boolean {
-  return !!firstAt && c.windowFrom.getTime() - c.lenMs >= firstAt.getTime();
+export function previousCovered(c: { windowFrom: Date; lenMs: number; previousFrom?: Date }, firstAt: Date | null): boolean {
+  const start = c.previousFrom ? c.previousFrom.getTime() : c.windowFrom.getTime() - c.lenMs;
+  return !!firstAt && start >= firstAt.getTime();
 }
 
 /** Mean over only the covered windows; null (no usual) when fewer than MIN_COVERED_WINDOWS are covered. */

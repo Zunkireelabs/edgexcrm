@@ -3,14 +3,14 @@ import { coveredMean, coveredUsualIndices, firstAtFor, previousCovered, type Cov
 import { METRIC_KEYS, ZERO_COUNTS, activityOf, type MetricCounts, type PersonBucketRow, type PersonInfo, type PersonRow, type StageSeries } from "./types";
 
 /** bucket 0 = current, 1 = previous, 1..4 = the usual windows. A stage missing from a bucket counts as 0. */
-function stageSeries(rows: PersonBucketRow[], field: "moves_by_stage" | "back_by_stage", usualCount: number, covered?: number[]): StageSeries {
+function stageSeries(rows: PersonBucketRow[], field: "moves_by_stage" | "back_by_stage", usualCount: number, covered?: number[], ub?: number[]): StageSeries {
   const ids = new Set<string>();
   for (const r of rows) for (const id of Object.keys(r[field] ?? {})) ids.add(id);
   const out: StageSeries = {};
   for (const id of ids) {
     const at = (b: number) => Number(rows.find((r) => r.bucket === b)?.[field]?.[id] ?? 0);
     const idx = covered ?? Array.from({ length: usualCount }, (_, i) => i);
-    out[id] = { current: at(0), previous: at(1), usual: coveredMean((i) => at(i + 1), idx) ?? (covered ? 0 : mean(idx.map((i) => at(i + 1)))) };
+    out[id] = { current: at(0), previous: at(1), usual: coveredMean((i) => at((ub ?? [])[i] ?? i + 1), idx) ?? (covered ? 0 : mean(idx.map((i) => at((ub ?? [])[i] ?? i + 1)))) };
   }
   return out;
 }
@@ -23,7 +23,10 @@ function fill(c: Partial<MetricCounts> | undefined): MetricCounts {
  * Fold the RPC's (user, bucket) rows into one PersonRow per person.
  * bucket 0 = current window, 1 = previous, 1..4 = the 4 usual windows (so "previous" is also one of them).
  */
-export function assemblePeople(people: PersonInfo[], rows: PersonBucketRow[], usualCount = 4, coverage?: CoverageInput): PersonRow[] {
+export function assemblePeople(people: PersonInfo[], rows: PersonBucketRow[], usualCount = 4, coverage?: CoverageInput, usualBuckets?: number[]): PersonRow[] {
+  // Which bucket numbers hold the usual spans (most recent first). Default = buckets 1..N (rolling windows, which
+  // include the previous one). Today uses 2..5: bucket 1 is yesterday, buckets 2..5 are the same weekday ×4.
+  const ub = usualBuckets ?? Array.from({ length: usualCount }, (_, i) => i + 1);
   const byUser = new Map<string, PersonBucketRow[]>();
   for (const r of rows) {
     const l = byUser.get(r.user_id);
@@ -42,7 +45,7 @@ export function assemblePeople(people: PersonInfo[], rows: PersonBucketRow[], us
     const usual = { ...ZERO_COUNTS };
     if (hasUsual) {
       const idx = covered ?? Array.from({ length: usualCount }, (_, i) => i);
-      for (const k of METRIC_KEYS) usual[k] = mean(idx.map((i) => fill(at(i + 1)?.counts)[k]));
+      for (const k of METRIC_KEYS) usual[k] = mean(idx.map((i) => fill(at(ub[i])?.counts)[k]));
     }
     return {
       ...p,
@@ -52,10 +55,10 @@ export function assemblePeople(people: PersonInfo[], rows: PersonBucketRow[], us
       notesNew: cur?.notes_new ?? 0,
       notesEdited: cur?.notes_edited ?? 0,
       movesByStage: cur?.moves_by_stage ?? {},
-      forwardByStage: stageSeries(mine, "moves_by_stage", usualCount, hasUsual ? covered : []),
-      backByStage: stageSeries(mine, "back_by_stage", usualCount, hasUsual ? covered : []),
+      forwardByStage: stageSeries(mine, "moves_by_stage", usualCount, hasUsual ? covered : [], ub),
+      backByStage: stageSeries(mine, "back_by_stage", usualCount, hasUsual ? covered : [], ub),
       bulkMoves: cur?.bulk_moves ?? 0,
-      trend: Array.from({ length: usualCount + 1 }, (_, i) => activityOf(fill(at(usualCount - i)?.counts))),
+      trend: [...ub].reverse().map((b) => activityOf(fill(at(b)?.counts))).concat(activityOf(fill(cur?.counts))),
       flag: null,
       hasUsual,
       previousCovered: coverage ? previousCovered(coverage, firstAt) : true,

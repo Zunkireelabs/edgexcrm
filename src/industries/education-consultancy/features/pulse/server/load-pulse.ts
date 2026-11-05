@@ -2,6 +2,7 @@ import { assemblePeople } from "../lib/assemble";
 import { quietSinceDay } from "../lib/quiet";
 import { coveredUsualIndices, previousCovered as prevCovered, MIN_COVERED_WINDOWS } from "../lib/coverage";
 import { loadCoverage } from "./coverage";
+import { loadBuckets, mergeFunnels, type OverviewJson } from "./buckets";
 import { normalizePosition } from "../lib/positions";
 import { rollups } from "../lib/rollup";
 import { buildAttention } from "../lib/attention";
@@ -13,10 +14,8 @@ import {
   activityOf,
   type BranchKpi,
   type LeakReason,
-  type PersonBucketRow,
   type PersonInfo,
   type PulseFunnelStage,
-  type PulseQuality,
   type PulseResponse,
   type StageFlow,
 } from "../lib/types";
@@ -72,23 +71,6 @@ export async function loadPeople(ctx: PulseContext, activeIds: Set<string>): Pro
   return out;
 }
 
-type FunnelJson = {
-  stages: Array<{
-    list_id: string; name: string; slug: string; sort_order: number; is_archive: boolean; base: number;
-    entered: number[]; forward: number[]; out: number[]; daily: Array<{ day: string; n: number }>;
-  }>;
-  new_leads: number[];
-  new_leads_daily: Array<{ day: string; n: number }>;
-  imported_excluded: number;
-  quality: {
-    total: number;
-    holder_source: PulseQuality["holderSource"];
-    destination: PulseQuality["destination"];
-    origin_slug_shaped: PulseQuality["originSlugShaped"];
-    origin_name_shaped: PulseQuality["originNameShaped"];
-  };
-};
-
 export async function loadPulse(ctx: PulseContext): Promise<PulseResponse> {
   const { db, auth, window, tz, branchId, thresholds } = ctx;
   const p_from = window.from.toISOString();
@@ -100,8 +82,12 @@ export async function loadPulse(ctx: PulseContext): Promise<PulseResponse> {
   // The intake list id(s): a plain lookup, NOT an embed (leads has two FKs to lead_lists → PGRST201 on an embed).
   const { data: intakeLists } = await db.from("lead_lists").select("id").eq("is_intake", true);
   const intakeIds = ((intakeLists ?? []) as unknown as Array<{ id: string }>).map((l) => l.id);
-  const [overviewRes, untouchedRes, askEnabled] = await Promise.all([
-    db.raw().rpc("education_pulse_overview", { p_tenant: auth.tenantId, p_from, p_to, p_tz: tz, p_branch: branchId, ...bulk }),
+  const [overviewAll, untouchedRes, askEnabled] = await Promise.all([
+    loadBuckets<OverviewJson>(
+      ctx,
+      (span) => db.raw().rpc("education_pulse_overview", { p_tenant: auth.tenantId, p_from: span.from.toISOString(), p_to: span.to.toISOString(), p_tz: tz, p_branch: branchId, ...bulk }),
+      (d) => d?.people ?? [],
+    ).catch((e: Error) => { throw new Error(`education_pulse_overview: ${e.message}`); }),
     // The untouched set = the leads link's filter (never touched, older than 48h, in the intake list) — one definition.
     intakeIds.length === 0
       ? Promise.resolve({ data: [], error: null })
@@ -109,14 +95,13 @@ export async function loadPulse(ctx: PulseContext): Promise<PulseResponse> {
           .lt("created_at", cutoff48).limit(5000),
     isAssistantEnabledForTenant(auth.tenantId).catch(() => false),
   ]);
-  if (overviewRes.error) throw new Error(`education_pulse_overview: ${overviewRes.error.message}`);
   if (untouchedRes.error) throw new Error(`untouched leads: ${untouchedRes.error.message}`);
 
-  const overview = overviewRes.data as { people: PersonBucketRow[]; funnel: FunnelJson };
-  const bucketRows = overview.people ?? [];
-  const funnel = overview.funnel;
+  const { results: overviews, buckets } = overviewAll;
+  const bucketRows = buckets.rows;
+  const funnel = mergeFunnels(overviews);
   const coverage = await loadCoverage(ctx);
-  const people = assemblePeople(await loadPeople(ctx, new Set(bucketRows.map((r) => r.user_id))), bucketRows, 4, coverage);
+  const people = assemblePeople(await loadPeople(ctx, new Set(bucketRows.map((r) => r.user_id))), bucketRows, 4, coverage, buckets.usualBuckets);
   const teamFirst = coverage.tenantFirst;
   const teamHasUsual = coveredUsualIndices(coverage, teamFirst).length >= MIN_COVERED_WINDOWS;
   const baselineCovered = prevCovered(coverage, teamFirst);
@@ -218,7 +203,7 @@ export async function loadPulse(ctx: PulseContext): Promise<PulseResponse> {
   );
 
   const winDays0 = (new Date(ctx.windowInfo.to).getTime() - new Date(ctx.windowInfo.from).getTime()) / 86_400_000;
-  const win7 = Math.abs(winDays0 - 7) < 0.1, win1 = Math.abs(winDays0 - 1) < 0.1;
+  const win7 = Math.abs(winDays0 - 7) < 0.1, win1 = ctx.window.key === "today";
   const { groups, team } = rollups(people);
   const attention = buildAttention({
     people, signals: signals.all, stageFlows, leakReasons, staleHeld,
@@ -227,8 +212,8 @@ export async function loadPulse(ctx: PulseContext): Promise<PulseResponse> {
     baselineCovered,
   });
   const winDays = (new Date(ctx.windowInfo.to).getTime() - new Date(ctx.windowInfo.from).getTime()) / 86_400_000;
-  const horizon = winDays <= 1.1 ? "tomorrow's" : winDays >= 21 ? "next month's" : "next week's";
-  const baselineLabel = Math.abs(winDays - 7) < 0.1 ? "last week" : Math.abs(winDays - 1) < 0.1 ? "yesterday" : "the period before";
+  const horizon = ctx.window.key === "today" ? "tomorrow's" : winDays >= 21 ? "next month's" : "next week's";
+  const baselineLabel = Math.abs(winDays - 7) < 0.1 ? "last week" : ctx.window.key === "today" ? "yesterday at this time" : "the period before";
   const nl0 = funnel.new_leads?.[0] ?? 0, nl1 = funnel.new_leads?.[1] ?? 0;
   const briefing = buildBriefing({ people, team, stageFlows, leakReasons, untouched: { count: untouchedCount }, thresholds, baselineLabel, baselineCovered, horizon, newLeads: { current: nl0, previous: nl1 } });
   const appsStage = funnel.stages.find((s) => s.slug === "applications");
@@ -265,7 +250,7 @@ export async function loadPulse(ctx: PulseContext): Promise<PulseResponse> {
       newLeads: {
         current: nl[0] ?? 0,
         previous: nl[1] ?? 0,
-        usual: (() => { const idx = coveredUsualIndices(coverage, teamFirst); return idx.length >= MIN_COVERED_WINDOWS ? mean(idx.map((i) => nl[i + 1] ?? 0)) : 0; })(),
+        usual: (() => { const idx = coveredUsualIndices(coverage, teamFirst); return idx.length >= MIN_COVERED_WINDOWS ? mean(idx.map((i) => nl[buckets.usualBuckets[i]] ?? 0)) : 0; })(),
         daily: funnel.new_leads_daily ?? [],
       },
       importedExcluded: Number(funnel.imported_excluded ?? 0),

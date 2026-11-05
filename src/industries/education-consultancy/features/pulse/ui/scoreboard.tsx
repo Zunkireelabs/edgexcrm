@@ -62,8 +62,8 @@ function change(v: CellValues, hasUsual: boolean, rise?: "bad" | "warn"): { text
 }
 
 function Cell({
-  v, col, na, onOpen, plain, periodLabel, hasUsual, previousCovered, unit, slot,
-}: { slot: number; v: CellValues; col: Col; na: boolean; onOpen?: () => void; plain?: boolean; periodLabel: string; hasUsual: boolean; previousCovered: boolean; unit: string }) {
+  v, col, na, onOpen, plain, periodLabel, hasUsual, previousCovered, unit, slot, today,
+}: { slot: number; v: CellValues; col: Col; na: boolean; onOpen?: () => void; plain?: boolean; periodLabel: string; hasUsual: boolean; previousCovered: boolean; unit: string; today?: boolean }) {
   const first = FIRST_OF_GROUP.has(col.id) ? "sp" : "";
   if (na) return <td className={first}><span className="z">–</span></td>;
   const ch = change(v, hasUsual, col.rise);
@@ -81,8 +81,8 @@ function Cell({
         {col.group !== "Moved to" && slot > 0 && <span className={`d ${ch?.cls ?? ""}`} style={{ width: `calc(${slot}ch + 4px)` }}>{ch?.text ?? ""}</span>}
         <span className="tip" role="tooltip">
           <div><span>{periodLabel}</span><b>{v.current}</b></div>
-          {hasUsual ? <div><span>Usual</span><b>{Math.round(v.usual)}</b></div> : <div className="nu">No usual yet · needs 2 earlier {unit} periods</div>}
-          {previousCovered && <div><span>Last period</span><b>{v.previous}</b></div>}
+          {hasUsual ? <div><span>{today ? "Usual by this time" : "Usual"}</span><b>{Math.round(v.usual)}</b></div> : <div className="nu">No usual yet · needs 2 earlier {unit} periods</div>}
+          {previousCovered && <div><span>{today ? "Yesterday by this time" : "Last period"}</span><b>{v.previous}</b></div>}
         </span>
       </span>
     </td>
@@ -98,7 +98,7 @@ export function Scoreboard({
   onOpen: Open;
   onPerson: (p: PersonRow) => void;
 }) {
-  const unit = data.window.key === "7d" ? "7-day" : data.window.key === "30d" ? "30-day" : data.window.key === "24h" ? "24-hour" : "equal-length";
+  const unit = data.window.key === "7d" ? "7-day" : data.window.key === "30d" ? "30-day" : data.window.key === "today" ? "same-weekday" : "equal-length";
   const [sort, setSort] = useState<SortKey>("moves");
   // Right-edge fade only when the table actually scrolls horizontally and there is more to the right.
   const tblRef = useRef<HTMLDivElement>(null);
@@ -184,7 +184,7 @@ export function Scoreboard({
   const cells = (r: RowLike, roleKey: string | null, p?: PersonRow) =>
     COLS.map((col) => {
       const sid = col.stageSlug ? stageId[col.stageSlug] : undefined;
-      return <Cell key={col.id} col={col} v={col.value(r, sid)} na={roleKey !== null && col.naRoles.includes(roleKey)} plain={!p} periodLabel={periodLabel} hasUsual={r.hasUsual !== false} previousCovered={r.previousCovered !== false} unit={unit} slot={slotLen[col.id] ?? 0} onOpen={p ? () => open(p, col) : undefined} />;
+      return <Cell key={col.id} col={col} v={col.value(r, sid)} na={roleKey !== null && col.naRoles.includes(roleKey)} plain={!p} periodLabel={periodLabel} hasUsual={r.hasUsual !== false} previousCovered={r.previousCovered !== false} unit={unit} today={data.window.key === "today"} slot={slotLen[col.id] ?? 0} onOpen={p ? () => open(p, col) : undefined} />;
     });
 
   const personRow = (p: PersonRow) => {

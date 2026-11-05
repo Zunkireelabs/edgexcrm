@@ -7,7 +7,7 @@ import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import type { TenantConfig } from "@/types/database";
 import { resolvePulseThresholds, type PulseThresholds } from "../lib/thresholds";
-import { previousWindow, resolvePulseWindow, windowLengthMs, type PulseWindow } from "../lib/window";
+import { periodSpans, resolvePulseWindow, windowLengthMs, type PulseWindow } from "../lib/window";
 import type { PulseWindowInfo } from "../lib/types";
 import { displayName } from "../lib/people";
 
@@ -65,7 +65,7 @@ export async function resolvePulseContext(
   }
   const branchId = isUuid(branchParam) && branches.some((b) => b.id === branchParam) ? branchParam : null;
 
-  const prev = previousWindow(window);
+  const prev = periodSpans(window, tz).previous;
   return {
     ok: true,
     ctx: {
