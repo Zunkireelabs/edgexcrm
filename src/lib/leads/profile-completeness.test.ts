@@ -8,6 +8,7 @@ function makeChain(result: { data?: unknown; count?: number | null }) {
     select: () => chain,
     eq: () => chain,
     is: () => chain,
+    limit: () => chain,
     maybeSingle: () => Promise.resolve(result),
     then: (resolve: (v: typeof result) => unknown) => Promise.resolve(result).then(resolve),
   };
@@ -85,6 +86,24 @@ describe("checkLeadProfileCompleteness — basic info = consent fields, no docum
       consent_templates: { data: CONSENT_TEMPLATE },
     });
     expect(await checkLeadProfileCompleteness(db, "tenant-1", "lead-1")).toEqual({ complete: true, missing: [] });
+  });
+
+  it("a lead whose consent is already SIGNED is not re-checked against template fields (a later template edit can't lock them out)", async () => {
+    const db = fakeDb({
+      leads: { data: COMPLETE_LEAD },
+      consent_templates: { data: CONSENT_TEMPLATE },
+      lead_consents: { data: { id: "consent-1" } },
+    });
+    expect(await checkLeadProfileCompleteness(db, "tenant-1", "lead-1")).toEqual({ complete: true, missing: [] });
+  });
+
+  it("a signed consent does not excuse the always-required fields (name / email / phone / study info)", async () => {
+    const db = fakeDb({
+      leads: { data: { ...COMPLETE_LEAD, phone: null } },
+      consent_templates: { data: CONSENT_TEMPLATE },
+      lead_consents: { data: { id: "consent-1" } },
+    });
+    expect((await checkLeadProfileCompleteness(db, "tenant-1", "lead-1")).missing).toEqual(["Phone"]);
   });
 
   it("an inactive template adds no extra requirements", async () => {

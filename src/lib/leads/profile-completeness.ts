@@ -71,7 +71,25 @@ export async function checkLeadProfileCompleteness(
   const stored = (leadData as unknown as ConsentProfile | null) ?? EMPTY_PROFILE;
   const profile: ConsentProfile = pending ? { ...stored, ...pickPending(pending) } : stored;
 
-  // No active template -> no placeholders to check; only the always-required fields remain.
-  const result = computeConsentReadiness(template?.is_active ? template.body : null, profile);
+  // Template fields are only needed to GENERATE the consent. Once the lead has a signed consent they were
+  // satisfied at signing, so a later template edit (new placeholders) must not lock signed leads out of
+  // Applications — only the always-required fields remain. Same "signed" definition as the consent check
+  // in applications-readiness.ts (any non-deleted signed row).
+  let templateBody: string | null = template?.is_active ? template.body : null;
+  if (templateBody) {
+    const { data: signed } = await supabase
+      .from("lead_consents")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .eq("lead_id", leadId)
+      .eq("status", "signed")
+      .is("deleted_at", null)
+      .limit(1)
+      .maybeSingle();
+    if (signed) templateBody = null;
+  }
+
+  // No active template (or already signed) -> no placeholders to check; only the always-required fields remain.
+  const result = computeConsentReadiness(templateBody, profile);
   return { complete: result.ready, missing: result.missing };
 }
