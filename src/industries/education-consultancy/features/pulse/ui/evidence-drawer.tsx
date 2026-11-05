@@ -108,6 +108,7 @@ export function EvidenceDrawer({
           )}
           <p className="mt-4 rounded-xl bg-gray-50 p-3 text-xs text-gray-500">
             Source: each lead&apos;s System Activity (who did it, when) and the lead&apos;s own records — the same data you see on the lead itself.
+            {(q?.metric === "prospects" || q?.metric === "reached_applications") && " Results are credited to whoever held the lead before the move."}
           </p>
         </div>
       </SheetContent>
