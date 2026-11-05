@@ -12,7 +12,8 @@ import { FEATURES } from "@/industries/_registry";
  *     does NOT wait for an owner/admin to verify it. (The admin still gets the
  *     notification and can confirm/reject — that flow is unchanged.) A fee the admin
  *     rejected ("unpaid") or one never entered fails this check.
- *  2. Basic info complete (name / email / phone / study info + a document).
+ *  2. Basic info complete — only what the consent form needs (name / email / phone / study info + the
+ *     fields behind the consent template's placeholders). Documents are NOT required (Admizz, 2026-11-05).
  *  3. Consent signed — only when the tenant has an ACTIVE consent template.
  *
  * Nobody bypasses this (owner/admin included). Keep every caller on this helper so

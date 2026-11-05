@@ -405,6 +405,15 @@ export function ConsentCard({
       : [{ section: "", fields: readiness.missing }]
     : [];
   const blockedHint = actionsBlocked && readiness ? missingGroups : null;
+  // What still stands between this lead and Applications — same three checks as the Applications gate
+  // (applications-readiness.ts): a counsellor's REPORTED fee ("claimed") counts, documents are not part of it.
+  const feeEnteredForGate = ["claimed", "paid", "waiver"].includes(savedFeeStatus);
+  const preAppMissing: string[] = [];
+  if (consentStatus !== "signed" && readiness && !readiness.ready) {
+    preAppMissing.push(`Basic Info (${readiness.missing.join(", ")})`);
+  }
+  if (showProcessingFee && !feeEnteredForGate) preAppMissing.push("Processing Fee");
+  if (consentStatus !== "signed") preAppMissing.push("Consent Form");
 
   return (
     <>
@@ -456,6 +465,24 @@ export function ConsentCard({
         </CardHeader>
         {open && (
         <CardContent className="pb-4 space-y-3">
+          {/* ── Early warning (Admizz, 2026-11-05): the same three things the "Can't move to Applications yet" pop-up
+              names, shown while Pre-Application is still incomplete — so they are seen BEFORE the move is blocked. ── */}
+          {preAppMissing.length > 0 && (
+            <div role="alert" data-testid="pre-app-warning" className="rounded-md border border-red-200 bg-red-50 p-3">
+              <p className="flex items-center gap-2 text-sm font-medium text-red-600">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                Still needed before this lead can go to Applications
+              </p>
+              <ul className="mt-2 space-y-1">
+                {preAppMissing.map((item) => (
+                  <li key={item} className="flex items-start gap-2 text-sm text-red-600">
+                    <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-red-600" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {/* ── Processing Fee (pre-application, lead-level) — education only. Shown above the consent. ── */}
           {showProcessingFee && (
           <div className="border-b pb-3 space-y-3">

@@ -27,7 +27,7 @@ export function isApplicationsGateError(body: unknown): boolean {
 }
 
 /**
- * Split "Before moving to Applications, complete: Processing fee, Basic info (Name, Email), Consent signed."
+ * Split "Before moving to Applications, complete: Processing fee, Basic info (First Name, Email), Consent signed."
  * into its items. Commas inside brackets belong to one item and are not split.
  */
 export function parseGateMissing(message: string): string[] {
@@ -50,7 +50,7 @@ export function parseGateMissing(message: string): string[] {
 }
 
 /**
- * The parts of "Basic info (Name, Email, a document)" — what the Student Details pop-up can
+ * The parts of "Basic info (First Name, Email, Passport Number)" — what the Student Details pop-up can
  * highlight. Returns [] when basic info isn't among the missing items.
  */
 export function parseBasicInfoMissing(items: string[]): string[] {
