@@ -18,6 +18,14 @@ const input = (o: Partial<AttentionInput> = {}): AttentionInput => ({
   untouched: { count: 63, byBranch: [{ name: "Butwal", count: 41 }, { name: "Pokhara", count: 22 }], byRole: [{ key: "telecaller", label: "TeleCaller", count: 50 }] }, ...o,
 });
 
+describe("activity-drop row text", () => {
+  it("says since which day when a clean stop day exists", () => {
+    const withDay = people.map((p) => (p.userId === "a" ? { ...p, quietSinceDay: "2025-11-06" } : p));
+    const a = buildAttention(input({ people: withDay })).find((i) => i.subject === "Asha")!;
+    expect(a.what).toBe("activity down 77% since Thu");
+  });
+});
+
 describe("buildAttention — the one list", () => {
   const items = buildAttention(input());
   it("splits into Needs action / Heads-up / Wins with counts", () => {
@@ -27,11 +35,13 @@ describe("buildAttention — the one list", () => {
     const a = items.find((i) => i.subject === "Asha")!;
     expect(a.action).toMatchObject({ label: "Reassign 34 to Dipa", primary: true });
     expect(a.suggested).toBe(true);
+    expect(a.meta).toMatch(/Dipa has the lightest load this week$/);
     expect(a.figure).toEqual({ strong: "34", text: " leads untouched" });
   });
   it("never invents a target: with nobody else in the role there is no 'to <name>'", () => {
     const solo = buildAttention(input({ people: [people[0]] })).find((i) => i.subject === "Asha")!;
-    expect(solo.action?.label).toBe("Review leads");
+    expect(solo.action?.label).toBe("Review 34 leads");
+    expect(solo.meta).toMatch(/no TeleCaller has spare capacity this week$/);
     expect(solo.suggested).toBe(false);
   });
   it("untouched leads: branch share and a role target, both from the real tally", () => {

@@ -72,6 +72,8 @@ export interface PersonRow extends PersonInfo {
   trend: number[];
   /** red = activity drop, amber = over capacity, green = top mover (never violet: that is reserved for AI). */
   flag: "red" | "amber" | "green" | null;
+  /** Day (tenant tz, YYYY-MM-DD) they went quiet — only computed for red-flagged people. */
+  quietSinceDay?: string | null;
 }
 
 /** One cell's three numbers: this window, the window before it, and the mean of the 4 before that. */

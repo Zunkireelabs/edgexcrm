@@ -78,14 +78,20 @@ describe("Orca's read", () => {
     expect(b.read).toContain("63 new leads have waited over 48 hours");
     expect(b.read!.split(/(?<=\.)\s/).length).toBeLessThanOrEqual(3);
   });
-  it("synthesizes across signals: no sentence of the read equals an item headline", () => {
-    const b = buildBriefing(input(people, { untouched: { count: 63 }, stageFlows: [flow({ out: 15, previousOut: 5 })] }))!;
-    const sentences = b.read!.split(/(?<=\.)\s+/);
-    const headlines = b.items.map((i) => i.headline);
-    for (const s of sentences) expect(headlines).not.toContain(s);
-    expect(b.read).toContain("Applications are up, but the pipeline behind them is thinning.");
-    expect(b.read).toContain("because Asha's activity is at");
+  it("synthesizes: direction → facts with places/people → fix; no 5-word run is shared with any item headline", () => {
+    const b = buildBriefing(input(people, { untouched: { count: 63 }, stageFlows: [flow({ out: 15, previousOut: 5 })], newLeads: { current: 120, previous: 60 } }))!;
+    expect(b.read).toMatch(/^Applications are up sharply, but fewer leads are moving forward\./);
+    expect(b.read).toContain("Prospects fell 83%, mostly in Kathmandu");
     expect(b.read).toContain("Fix those two");
+    const words = (t: string) => t.toLowerCase().replace(/[^a-z0-9% ]/g, " ").split(/\s+/).filter(Boolean);
+    const grams = (t: string) => { const w = words(t); const out = new Set<string>(); for (let i = 0; i + 5 <= w.length; i++) out.add(w.slice(i, i + 5).join(" ")); return out; };
+    const head = new Set(b.items.flatMap((i) => [...grams(i.headline)]));
+    for (const g of grams(b.read!)) expect(head.has(g)).toBe(false);
+  });
+  it("with no positive move, sentence 1 states the negative trend plainly", () => {
+    const flatApps = [P("Asha", "telecaller", "Kathmandu", { calls: 18, prospects: 2 }, { prospects: 12 }, { calls: 82, prospects: 12 })];
+    const b = buildBriefing(input(flatApps, { untouched: { count: 5 } }))!;
+    expect(b.read).toMatch(/^Fewer leads are moving forward than last week\./);
   });
   it("is omitted with fewer than 2 meaningful signals", () => {
     const one = [P("Esha", "counsellor", "K", { reached_applications: 9 }, { reached_applications: 3 }, { reached_applications: 5 })];

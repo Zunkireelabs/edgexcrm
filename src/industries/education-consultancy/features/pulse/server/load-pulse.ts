@@ -1,4 +1,5 @@
 import { assemblePeople } from "../lib/assemble";
+import { quietSinceDay } from "../lib/quiet";
 import { normalizePosition } from "../lib/positions";
 import { rollups } from "../lib/rollup";
 import { buildAttention } from "../lib/attention";
@@ -7,6 +8,7 @@ import { isAssistantEnabledForTenant } from "@/lib/ai/flag";
 import { computeSignals } from "../lib/signals";
 import { mean } from "../lib/window";
 import {
+  activityOf,
   type BranchKpi,
   type LeakReason,
   type PersonBucketRow,
@@ -164,6 +166,17 @@ export async function loadPulse(ctx: PulseContext): Promise<PulseResponse> {
     thresholds,
   });
   for (const p of people) p.flag = signals.flags[p.userId] ?? null;
+  // "Quiet since Thu": only for the few red-flagged people, from their daily series.
+  await Promise.all(
+    people.filter((p) => p.flag === "red").map(async (p) => {
+      const { data } = await db.raw().rpc("education_pulse_person_daily", {
+        p_tenant: auth.tenantId, p_from, p_to, p_tz: ctx.windowInfo.tz, p_user_id: p.userId,
+        p_bulk_min: thresholds.bulkMinRows, p_bulk_seconds: thresholds.bulkBucketSeconds,
+      });
+      const daily = ((data ?? []) as Array<{ day: string; calls: number; notes: number; moves: number }>).map((d) => ({ day: d.day, calls: Number(d.calls), notes: Number(d.notes), moves: Number(d.moves) }));
+      p.quietSinceDay = quietSinceDay(daily, activityOf(p.usual) / Math.max(ctx.windowInfo.days, 1));
+    }),
+  );
 
   // Real numbers for the suggestion values: leads a flagged-red person still holds that nobody touched this period
   // (active lists only), and why leads left the stages that leaked.
@@ -186,14 +199,18 @@ export async function loadPulse(ctx: PulseContext): Promise<PulseResponse> {
     }),
   );
 
+  const winDays0 = (new Date(ctx.windowInfo.to).getTime() - new Date(ctx.windowInfo.from).getTime()) / 86_400_000;
+  const win7 = Math.abs(winDays0 - 7) < 0.1, win1 = Math.abs(winDays0 - 1) < 0.1;
   const { groups, team } = rollups(people);
   const attention = buildAttention({
     people, signals: signals.all, stageFlows, leakReasons, staleHeld,
     untouched: { count: untouchedCount, byBranch: byBranchCount, byRole },
+    periodNoun: win7 ? "this week" : win1 ? "today" : "this period",
   });
   const winDays = (new Date(ctx.windowInfo.to).getTime() - new Date(ctx.windowInfo.from).getTime()) / 86_400_000;
   const baselineLabel = Math.abs(winDays - 7) < 0.1 ? "last week" : Math.abs(winDays - 1) < 0.1 ? "yesterday" : "the period before";
-  const briefing = buildBriefing({ people, team, stageFlows, leakReasons, untouched: { count: untouchedCount }, thresholds, baselineLabel });
+  const nl0 = funnel.new_leads?.[0] ?? 0, nl1 = funnel.new_leads?.[1] ?? 0;
+  const briefing = buildBriefing({ people, team, stageFlows, leakReasons, untouched: { count: untouchedCount }, thresholds, baselineLabel, newLeads: { current: nl0, previous: nl1 } });
   const appsStage = funnel.stages.find((s) => s.slug === "applications");
 
   const nl = funnel.new_leads ?? [];

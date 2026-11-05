@@ -1,6 +1,7 @@
 import { leadsOfPersonHref, untouchedLeadsHref } from "./leads-links";
 import { pickLightestLoad } from "./suggest";
 import { pluralLabel } from "./positions";
+import { weekdayShort } from "./quiet";
 import { activityOf, type AttentionItem, type LeakReason, type PersonRow, type Signal, type StageFlow } from "./types";
 
 /**
@@ -16,6 +17,8 @@ export interface AttentionInput {
   untouched: { count: number; byBranch: Array<{ name: string; count: number }>; byRole: Array<{ key: string; label: string; count: number }> };
   /** Leads each person still holds that nobody touched this window (for the "Reassign N" value). */
   staleHeld: Record<string, number>;
+  /** How the current window is named in sentences: "this week" | "today" | "this period". */
+  periodNoun?: string;
 }
 
 const personOf = (people: PersonRow[], id: string) => people.find((p) => p.userId === id);
@@ -23,6 +26,7 @@ const pctOf = (cur: number, base: number) => Math.round(Math.abs((cur - base) / 
 
 export function buildAttention(input: AttentionInput): AttentionItem[] {
   const out: AttentionItem[] = [];
+  const period = input.periodNoun ?? "this week";
   for (const s of input.signals) {
     if (s.kind === "activity_drop") {
       const p = personOf(input.people, s.subject.id);
@@ -32,14 +36,14 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
       const stale = input.staleHeld[p.userId] ?? 0;
       out.push({
         id: s.id, category: "needs_action", tone: "bad", icon: "down", subject: p.name,
-        what: `activity down ${pctOf(cur, usual)}% against usual`,
+        what: p.quietSinceDay ? `activity down ${pctOf(cur, usual)}% since ${weekdayShort(p.quietSinceDay)}` : `activity down ${pctOf(cur, usual)}% against usual`,
         figure: stale > 0 ? { strong: String(stale), text: " leads untouched" } : { strong: String(cur), text: ` vs usual ${Math.round(usual)}` },
         suggested: !!target && stale > 0,
-        action: target && stale > 0 ? { label: `Reassign ${stale} to ${target.name}`, href: leadsOfPersonHref(p.userId), primary: true } : { label: "Review leads", href: leadsOfPersonHref(p.userId), primary: true },
+        action: target && stale > 0 ? { label: `Reassign ${stale} to ${target.name}`, href: leadsOfPersonHref(p.userId), primary: true } : { label: stale > 0 ? `Review ${stale} leads` : "Review leads", href: leadsOfPersonHref(p.userId), primary: true },
         why: `Calls, notes and stage moves dropped together: ${cur} against a usual ${Math.round(usual)}.` +
           (stale > 0 ? ` ${stale} of the leads ${p.name} holds have had no call or note this period.` : "") +
           (target ? ` ${target.name} has the lightest ${p.positionLabel} load this period (${target.current.received} new leads).` : ""),
-        meta: [`${p.current.calls} calls vs usual ${Math.round(p.usual.calls)}`, `${p.notesNew + p.notesEdited} notes vs usual ${Math.round(p.usual.notes)}`, [p.positionLabel, p.branchName].filter(Boolean).join(", "), ...(target ? [`${target.name} has the lightest load this period`] : [])].join(" · "),
+        meta: [`${p.current.calls} calls vs usual ${Math.round(p.usual.calls)}`, `${p.notesNew + p.notesEdited} notes vs usual ${Math.round(p.usual.notes)}`, [p.positionLabel, p.branchName].filter(Boolean).join(", "), target ? `${target.name} has the lightest load ${period}` : `no ${p.positionLabel} has spare capacity ${period}`].join(" · "),
         links: [{ label: stale > 0 ? `See the ${stale} leads →` : "See their leads →", href: leadsOfPersonHref(p.userId) }, { label: `${p.name}'s week →`, personId: p.userId }],
         drill: s.drill,
       });
