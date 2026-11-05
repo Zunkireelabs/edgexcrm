@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Activity, Download, MapPin } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { activityOf, type EventsQuery, type PersonRow, type Signal } from "../lib/types";
-import { leadsOfPersonHref } from "../lib/leads-links";
+import { leadsOfPersonHref, untouchedLeadsHref } from "../lib/leads-links";
 import { POSITION_ORDER, normalizePosition } from "../lib/positions";
 import { PulseBriefingCard } from "./briefing-card";
 import { EvidenceDrawer } from "./evidence-drawer";
@@ -52,7 +52,7 @@ export function PulsePage() {
   // Reassign lands on the EXISTING leads list + bulk-reassign flow (no new write path). A person's signal opens
   // exactly that person's leads (a ?f= filter tree: assignees is_any_of [id]); the untouched signal opens the intake list.
   const reassignHref = (s: Signal) =>
-    s.subject.type === "person" ? leadsOfPersonHref(s.subject.id) : s.kind === "untouched_leads" ? "/leads?list=pre-qualified" : "/leads";
+    s.subject.type === "person" ? leadsOfPersonHref(s.subject.id) : s.kind === "untouched_leads" ? untouchedLeadsHref() : "/leads";
 
   const exportCsv = () => {
     if (!data) return;
