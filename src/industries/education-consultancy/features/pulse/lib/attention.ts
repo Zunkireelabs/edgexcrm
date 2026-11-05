@@ -2,7 +2,7 @@ import { leadsOfPersonHref, untouchedLeadsHref } from "./leads-links";
 import { pickLightestLoad } from "./suggest";
 import { pluralLabel } from "./positions";
 import { weekdayShort } from "./quiet";
-import { compareToUsual } from "./compare";
+import { compareToUsual, usualShare } from "./compare";
 import { activityOf, type AttentionItem, type LeakReason, type PersonRow, type Signal, type StageFlow } from "./types";
 
 /**
@@ -38,7 +38,7 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
       const stale = input.staleHeld[p.userId] ?? 0;
       out.push({
         id: s.id, category: "needs_action", tone: "bad", icon: "down", subject: p.name,
-        what: p.quietSinceDay ? `activity down ${pctOf(cur, usual)}% since ${weekdayShort(p.quietSinceDay)}` : `activity down ${pctOf(cur, usual)}% against usual`,
+        what: p.quietSinceDay ? `activity down ${usualShare(cur, usual)?.down ?? pctOf(cur, usual)}% since ${weekdayShort(p.quietSinceDay)}` : `activity down ${usualShare(cur, usual)?.down ?? pctOf(cur, usual)}% against usual`,
         figure: stale > 0 ? { strong: String(stale), text: " leads untouched" } : { strong: String(cur), text: ` vs usual ${Math.round(usual)}` },
         suggested: !!target && stale > 0,
         action: target && stale > 0 ? { label: `Reassign ${stale} to ${target.name}`, href: leadsOfPersonHref(p.userId), primary: true } : { label: stale > 0 ? `Review ${stale} leads` : "Review leads", href: leadsOfPersonHref(p.userId), primary: true },

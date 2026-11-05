@@ -2,6 +2,15 @@ import { loadUserNames, isUuid, type PulseContext } from "./context";
 import { assemblePeople } from "../lib/assemble";
 import { loadPeople } from "./load-pulse";
 import { loadCoverage } from "./coverage";
+import { statusChangeLabel, statusLabel } from "../lib/status-label";
+
+/** The tenant's status labels (pipeline stage name by slug — what the Leads page shows). */
+async function loadStatusLabels(db: PulseContext["db"]): Promise<Record<string, string>> {
+  const { data } = await db.from("pipeline_stages").select("slug,name");
+  const out: Record<string, string> = {};
+  for (const r of ((data ?? []) as unknown as Array<{ slug: string; name: string }>)) out[r.slug] = r.name;
+  return out;
+}
 import { activityOf, type PersonBucketRow, type PulseEventRow, type PulseEventsResponse, type PulsePersonResponse } from "../lib/types";
 
 export const EVENT_METRICS = [
@@ -52,12 +61,14 @@ export async function loadEvents(
   const rows = (data ?? []) as EventRpcRow[];
   const names = await loadUserNames(db);
   const nameOf = (id: string | null) => (id ? (names.get(id)?.name ?? null) : null);
+  const statusLabels = q.metric === "status_changes" ? await loadStatusLabels(db) : null;
+  const lab = (s: string | null) => (statusLabels && s ? statusLabel(s, statusLabels) : s);
   return {
     rows: rows.map(
       (r): PulseEventRow => ({
         leadId: r.lead_id, displayId: r.display_id, leadName: r.lead_name, at: r.at,
         actorId: r.actor_id, actorName: nameOf(r.actor_id), holderId: r.holder_id, holderName: nameOf(r.holder_id),
-        fromLabel: r.from_label, toLabel: r.to_label, detail: r.detail,
+        fromLabel: lab(r.from_label), toLabel: lab(r.to_label), detail: r.detail,
       }),
     ),
     total: rows.length ? Number(rows[0].total) : 0,
@@ -99,6 +110,8 @@ export async function loadPerson(ctx: PulseContext, userId: string): Promise<Pul
         .or(`last_touched_at.is.null,last_touched_at.lt.${p_from}`)
     : { count: 0 };
 
+  const statusLabels = await loadStatusLabels(db);
+
   type Daily = { day: string; calls: number; notes: number; moves: number };
   type Tl = { at: string; kind: PulsePersonResponse["timeline"][number]["kind"]; lead_id: string; display_id: string | null; lead_name: string; detail: string | null };
   return {
@@ -109,7 +122,8 @@ export async function loadPerson(ctx: PulseContext, userId: string): Promise<Pul
     holds: held.count ?? 0,
     untouched: stale.count ?? 0,
     timeline: ((timelineRes.data ?? []) as Tl[]).map((t) => ({
-      at: t.at, kind: t.kind, leadId: t.lead_id, displayId: t.display_id, leadName: t.lead_name, detail: t.detail,
+      at: t.at, kind: t.kind, leadId: t.lead_id, displayId: t.display_id, leadName: t.lead_name,
+      detail: t.kind === "status" ? statusChangeLabel(t.detail, statusLabels) : t.detail,
     })),
     window: ctx.windowInfo,
   };

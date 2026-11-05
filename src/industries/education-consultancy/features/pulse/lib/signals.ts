@@ -1,5 +1,5 @@
 import type { PulseThresholds } from "./thresholds";
-import { MIN_OVER_CAPACITY_RATIO, MIN_USUAL, compareToUsual } from "./compare";
+import { MIN_OVER_CAPACITY_RATIO, MIN_USUAL, compareToUsual, usualShare } from "./compare";
 import {
   activityOf,
   type BranchKpi,
@@ -42,7 +42,7 @@ export function activityDropSignals(people: PersonRow[], t: PulseThresholds): Si
         id: `activity_drop:${p.userId}`,
         kind: "activity_drop",
         severity: "high",
-        title: `${p.name}'s activity dropped to ${pct((current / Math.round(usual)) * 100)} of usual`,
+        title: `${p.name}'s activity dropped to ${usualShare(current, usual)?.at ?? Math.round((current / Math.round(usual)) * 100)}% of usual`,
         detail: `${current} calls, notes and stage moves vs usual ${Math.round(usual)}. Their leads may be going cold.`,
         evidence: { metric: "activity", value: current, baseline: usual },
         subject: { type: "person", id: p.userId },

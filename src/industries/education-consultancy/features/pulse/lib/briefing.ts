@@ -1,6 +1,6 @@
 import { activityOf, type Briefing, type BriefingItem, type LeakReason, type PersonRow, type StageFlow, type MetricCounts, type PulseGroup } from "./types";
 import type { PulseThresholds } from "./thresholds";
-import { compareToUsual } from "./compare";
+import { compareToUsual, usualShare } from "./compare";
 
 /**
  * "Preview mode": the briefing the LLM layer will later write, built TODAY from real numbers by deterministic
@@ -81,7 +81,7 @@ function negativeMoveCtx(input: BriefingInput): { item: BriefingItem; ctx: NegCt
     .filter((p) => p.hasUsual !== false && activityOf(p.usual) >= input.thresholds.activityDropMinUsual && activityOf(p.current) < activityOf(p.usual) * 0.6)
     .sort((a, b) => activityOf(b.usual) - activityOf(b.current) - (activityOf(a.usual) - activityOf(a.current)))[0];
   const detail = culprit
-    ? `${culprit.name}'s activity is at ${pct((activityOf(culprit.current) / activityOf(culprit.usual)) * 100)} of usual.`
+    ? `${culprit.name}'s activity is at ${usualShare(activityOf(culprit.current), activityOf(culprit.usual))?.at ?? 0}% of usual.`
     : `${worst.name} went from ${worst.people.reduce((a, p) => a + p.previous[best!.m.key], 0)} to ${worst.people.reduce((a, p) => a + p.current[best!.m.key], 0)}.`;
   return {
     item: {
@@ -94,7 +94,7 @@ function negativeMoveCtx(input: BriefingInput): { item: BriefingItem; ctx: NegCt
     },
     ctx: {
       metricKey: best.m.key, noun: best.m.noun, fallPct, branchName: worst.name,
-      culpritName: culprit?.name ?? null, culpritPct: culprit ? pct((activityOf(culprit.current) / activityOf(culprit.usual)) * 100) : null,
+      culpritName: culprit?.name ?? null, culpritPct: culprit ? `${usualShare(activityOf(culprit.current), activityOf(culprit.usual))?.at ?? 0}%` : null,
     },
   };
 }

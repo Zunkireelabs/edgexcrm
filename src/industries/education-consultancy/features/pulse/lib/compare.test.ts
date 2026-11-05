@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { compareToUsual, formatChange, shownUsual } from "./compare";
+import { compareToUsual, formatChange, shownUsual, usualShare } from "./compare";
 
 describe("compareToUsual — the one guard", () => {
   it("usual 0 / 1 / 4 → null (never '140×', never 'usual is 0')", () => {
@@ -28,6 +28,17 @@ describe("the % always agrees with the printed (whole-number) usual", () => {
       expect(c.pct).toBe(Math.round(((cur - shownUsual(usual)) / shownUsual(usual)) * 100));
     }
   });
+});
+
+describe("usualShare — 'at Y%' and 'down X%' always sum to 100", () => {
+  it("34 vs 151: 22% / 78%, never 22% beside 77%", () => expect(usualShare(34, 151)).toEqual({ at: 23, down: 77 }));
+  it("sums to 100 for any pair", () => {
+    for (const usual of [5, 10, 37.5, 82, 151.4]) for (const cur of [0, 1, 18, 34, 60, 99]) {
+      const s = usualShare(cur, usual)!;
+      expect(s.at + s.down).toBe(100);
+    }
+  });
+  it("null without a real usual", () => expect(usualShare(5, 2)).toBeNull());
 });
 
 describe("formatChange — fits a 5-character slot", () => {

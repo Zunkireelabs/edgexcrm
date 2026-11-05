@@ -1,6 +1,6 @@
 import { activityOf, type PersonRow } from "./types";
 import { weekdayShort } from "./quiet";
-import { compareToUsual } from "./compare";
+import { compareToUsual, usualShare } from "./compare";
 
 /**
  * At most ONE row note per person, from the rule signals (never guessed): activity drop → "check in first",
@@ -12,7 +12,7 @@ const clip = (t: string) => (t.length > ROW_NOTE_MAX ? `${t.slice(0, ROW_NOTE_MA
 export function rowNote(p: PersonRow): { kind: "red" | "amber" | "green"; text: string } | null {
   const usualAct = activityOf(p.usual);
   if (p.flag === "red" && usualAct > 0 && p.hasUsual !== false) {
-    const text = p.quietSinceDay ? `Quiet since ${weekdayShort(p.quietSinceDay)} · check in first` : `Activity ${Math.round((activityOf(p.current) / usualAct) * 100)}% of usual`;
+    const text = p.quietSinceDay ? `Quiet since ${weekdayShort(p.quietSinceDay)} · check in first` : `Activity ${usualShare(activityOf(p.current), usualAct)?.at ?? Math.round((activityOf(p.current) / usualAct) * 100)}% of usual`;
     return { kind: "red", text: clip(text) };
   }
   if (p.flag === "amber" && compareToUsual(p.current.received, p.usual.received, p.hasUsual)) {
