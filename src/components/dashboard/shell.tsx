@@ -12,6 +12,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import {
+  Activity,
   Bot,
   Building2,
   Contact,
@@ -153,6 +154,7 @@ const INDUSTRY_ICONS: Record<string, LucideIcon> = {
   Gauge,
   FolderOpen,
   Send,
+  Activity,
 };
 
 function NavSectionHeader({ label, collapsed }: { label: string; collapsed?: boolean }) {
@@ -635,6 +637,7 @@ export function DashboardShell({
 
                 {/* Intelligence */}
                 <NavSectionHeader label="Intelligence" collapsed={sidebarCollapsed} />
+                {eduItem("/pulse") && renderIndustryEntry(eduItem("/pulse")!)}
                 {eduItem("/insights/dashboards") && renderIndustryEntry(eduItem("/insights/dashboards")!)}
                 {navAllowed("/knowledge-bases") && renderNavItem({ href: "/knowledge-bases", label: "Knowledge Base", icon: Library })}
 

@@ -8,6 +8,7 @@
 --   education_pulse_person_stats(...)  one row per (user, window-bucket): every scoreboard column
 --   education_pulse_funnel(...)        stage flow per bucket + daily series + new leads in + data-quality stats
 --   education_pulse_events(...)        the rows behind any number (evidence drawer)
+--   education_pulse_person_daily / _timeline   the person drawer's daily chart and "What they did"
 --
 -- WINDOWS. The caller passes the CURRENT window [p_from, p_to). Bucket 0 = that window, bucket 1 = the equal-length
 -- window immediately before it ("previous"), buckets 1..4 = the 4 windows "usual" is the mean of. One call covers
@@ -42,6 +43,8 @@
 --
 --   Expected before/after row counts: 0 rows touched (functions + indexes only).
 --   Rollback:
+--     DROP FUNCTION IF EXISTS education_pulse_person_timeline(UUID, TIMESTAMPTZ, TIMESTAMPTZ, UUID, INT, INT, INT);
+--     DROP FUNCTION IF EXISTS education_pulse_person_daily(UUID, TIMESTAMPTZ, TIMESTAMPTZ, TEXT, UUID, INT, INT);
 --     DROP FUNCTION IF EXISTS education_pulse_events(UUID, TIMESTAMPTZ, TIMESTAMPTZ, TEXT, UUID, TEXT, UUID, INT, INT, INT, INT);
 --     DROP FUNCTION IF EXISTS education_pulse_funnel(UUID, TIMESTAMPTZ, TIMESTAMPTZ, TEXT, UUID, INT, INT);
 --     DROP FUNCTION IF EXISTS education_pulse_person_stats(UUID, TIMESTAMPTZ, TIMESTAMPTZ, UUID, INT, INT);
@@ -503,6 +506,79 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   LIMIT GREATEST(p_limit, 1) OFFSET GREATEST(p_offset, 0);
 $$;
 
+-- ── person drawer: daily series + timeline ──────────────────────────────────
+-- Daily Did-activity (calls + new/edited notes + non-bulk stage moves) for ONE person, in the tenant timezone.
+CREATE OR REPLACE FUNCTION education_pulse_person_daily(
+  p_tenant UUID, p_from TIMESTAMPTZ, p_to TIMESTAMPTZ, p_tz TEXT, p_user_id UUID,
+  p_bulk_min INT DEFAULT 20, p_bulk_seconds INT DEFAULT 60
+)
+RETURNS TABLE (day TEXT, calls BIGINT, notes BIGINT, moves BIGINT)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  WITH ev AS (
+    SELECT ((la.created_at AT TIME ZONE p_tz)::DATE) AS d, 'calls' AS k
+    FROM lead_activities la
+    WHERE la.tenant_id = p_tenant AND la.activity_type = 'call' AND la.user_id = p_user_id
+      AND la.created_at >= p_from AND la.created_at < p_to
+    UNION ALL
+    SELECT ((n.created_at AT TIME ZONE p_tz)::DATE), 'notes'
+    FROM lead_notes n JOIN leads l ON l.id = n.lead_id AND l.tenant_id = p_tenant AND l.deleted_at IS NULL
+    WHERE n.user_id = p_user_id AND n.ai_tool_call_id IS NULL AND n.created_at >= p_from AND n.created_at < p_to
+    UNION ALL
+    SELECT ((n.edited_at AT TIME ZONE p_tz)::DATE), 'notes'
+    FROM lead_notes n JOIN leads l ON l.id = n.lead_id AND l.tenant_id = p_tenant AND l.deleted_at IS NULL
+    WHERE n.user_id = p_user_id AND n.ai_tool_call_id IS NULL AND n.edited_at >= p_from AND n.edited_at < p_to
+      AND n.edited_at > n.created_at + INTERVAL '1 minute'
+    UNION ALL
+    SELECT ((m.at AT TIME ZONE p_tz)::DATE), 'moves'
+    FROM education_pulse_moves(p_tenant, p_from, p_to, p_bulk_min, p_bulk_seconds) m
+    WHERE m.actor_id = p_user_id AND NOT m.is_bulk AND NOT m.to_excluded
+  ),
+  days AS (
+    SELECT generate_series((p_from AT TIME ZONE p_tz)::DATE, ((p_to - INTERVAL '1 microsecond') AT TIME ZONE p_tz)::DATE, INTERVAL '1 day')::DATE AS d
+  )
+  SELECT days.d::TEXT,
+         count(*) FILTER (WHERE ev.k = 'calls'),
+         count(*) FILTER (WHERE ev.k = 'notes'),
+         count(*) FILTER (WHERE ev.k = 'moves')
+  FROM days LEFT JOIN ev ON ev.d = days.d
+  GROUP BY days.d ORDER BY days.d;
+$$;
+
+-- "What they did": the person's own recent actions, newest first.
+CREATE OR REPLACE FUNCTION education_pulse_person_timeline(
+  p_tenant UUID, p_from TIMESTAMPTZ, p_to TIMESTAMPTZ, p_user_id UUID, p_limit INT DEFAULT 30,
+  p_bulk_min INT DEFAULT 20, p_bulk_seconds INT DEFAULT 60
+)
+RETURNS TABLE (at TIMESTAMPTZ, kind TEXT, lead_id UUID, display_id TEXT, lead_name TEXT, detail TEXT)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  WITH rows_ AS (
+    SELECT la.created_at AS at, 'call' AS kind, la.lead_id, la.call_outcome::TEXT AS detail
+    FROM lead_activities la
+    WHERE la.tenant_id = p_tenant AND la.activity_type = 'call' AND la.user_id = p_user_id
+      AND la.created_at >= p_from AND la.created_at < p_to
+    UNION ALL
+    SELECT n.created_at, 'note', n.lead_id, NULL
+    FROM lead_notes n JOIN leads l ON l.id = n.lead_id AND l.tenant_id = p_tenant AND l.deleted_at IS NULL
+    WHERE n.user_id = p_user_id AND n.ai_tool_call_id IS NULL AND n.created_at >= p_from AND n.created_at < p_to
+    UNION ALL
+    SELECT m.at, CASE WHEN m.is_bulk THEN 'bulk_move' ELSE 'move' END, m.lead_id,
+           COALESCE(m.old_label, '—') || ' → ' || COALESCE(m.new_label, '—')
+    FROM education_pulse_moves(p_tenant, p_from, p_to, p_bulk_min, p_bulk_seconds) m
+    WHERE m.actor_id = p_user_id
+    UNION ALL
+    SELECT a.created_at, 'status', a.entity_id, (a.changes #>> '{status,old}') || ' → ' || (a.changes #>> '{status,new}')
+    FROM audit_logs a
+    WHERE a.tenant_id = p_tenant AND a.entity_type = 'lead' AND a.action IN ('lead.updated', 'lead.graduated')
+      AND a.user_id = p_user_id AND a.created_at >= p_from AND a.created_at < p_to AND a.changes ? 'status'
+      AND (a.changes #>> '{status,old}') IS DISTINCT FROM (a.changes #>> '{status,new}')
+  )
+  SELECT r.at, r.kind, r.lead_id, l.display_id::TEXT, btrim(COALESCE(l.first_name, '') || ' ' || COALESCE(l.last_name, '')), r.detail
+  FROM rows_ r JOIN leads l ON l.id = r.lead_id AND l.tenant_id = p_tenant
+  ORDER BY r.at DESC LIMIT GREATEST(p_limit, 1);
+$$;
+
+REVOKE ALL ON FUNCTION education_pulse_person_daily(UUID, TIMESTAMPTZ, TIMESTAMPTZ, TEXT, UUID, INT, INT) FROM PUBLIC;
+REVOKE ALL ON FUNCTION education_pulse_person_timeline(UUID, TIMESTAMPTZ, TIMESTAMPTZ, UUID, INT, INT, INT) FROM PUBLIC;
 REVOKE ALL ON FUNCTION education_pulse_moves(UUID, TIMESTAMPTZ, TIMESTAMPTZ, INT, INT) FROM PUBLIC;
 REVOKE ALL ON FUNCTION education_pulse_person_stats(UUID, TIMESTAMPTZ, TIMESTAMPTZ, UUID, INT, INT) FROM PUBLIC;
 REVOKE ALL ON FUNCTION education_pulse_funnel(UUID, TIMESTAMPTZ, TIMESTAMPTZ, TEXT, UUID, INT, INT) FROM PUBLIC;
@@ -510,6 +586,8 @@ REVOKE ALL ON FUNCTION education_pulse_events(UUID, TIMESTAMPTZ, TIMESTAMPTZ, TE
 GRANT EXECUTE ON FUNCTION education_pulse_moves(UUID, TIMESTAMPTZ, TIMESTAMPTZ, INT, INT) TO service_role;
 GRANT EXECUTE ON FUNCTION education_pulse_person_stats(UUID, TIMESTAMPTZ, TIMESTAMPTZ, UUID, INT, INT) TO service_role;
 GRANT EXECUTE ON FUNCTION education_pulse_funnel(UUID, TIMESTAMPTZ, TIMESTAMPTZ, TEXT, UUID, INT, INT) TO service_role;
+GRANT EXECUTE ON FUNCTION education_pulse_person_daily(UUID, TIMESTAMPTZ, TIMESTAMPTZ, TEXT, UUID, INT, INT) TO service_role;
+GRANT EXECUTE ON FUNCTION education_pulse_person_timeline(UUID, TIMESTAMPTZ, TIMESTAMPTZ, UUID, INT, INT, INT) TO service_role;
 GRANT EXECUTE ON FUNCTION education_pulse_events(UUID, TIMESTAMPTZ, TIMESTAMPTZ, TEXT, UUID, TEXT, UUID, INT, INT, INT, INT) TO service_role;
 
 INSERT INTO public.schema_migrations (version) VALUES ('280_education_pulse.sql')
