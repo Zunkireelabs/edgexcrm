@@ -64,11 +64,11 @@ describe("untouched new leads", () => {
     const s = untouchedSignal({ count: 3, byPerson: [] });
     expect(s).toHaveLength(1);
     expect(s[0].surfaces).toEqual(["needs_you"]);
-    expect(s[0].title).toContain("3 held leads");
+    expect(s[0].title).toContain("3 new leads");
   });
   it("is silent at 0 and singular for 1", () => {
     expect(untouchedSignal({ count: 0, byPerson: [] })).toHaveLength(0);
-    expect(untouchedSignal({ count: 1, byPerson: [] })[0].title).toContain("1 held lead untouched");
+    expect(untouchedSignal({ count: 1, byPerson: [] })[0].title).toContain("1 new lead untouched");
   });
 });
 
@@ -185,7 +185,7 @@ describe("Needs you is phrased as ACTIONS; Key changes stays observational (revi
     expect(s.surfaces).toContain("needs_you");
   });
   it("untouched asks to assign", () => {
-    expect(untouchedSignal({ count: 37, byPerson: [] })[0].needs?.title).toBe("Pick up the 37 untouched leads");
+    expect(untouchedSignal({ count: 37, byPerson: [] })[0].needs?.title).toBe("Assign the 37 untouched new leads");
   });
   it("no Needs-you item repeats its Key-changes text word for word", () => {
     const people = [person("a", { calls: 2 }, { calls: 20 }), person("b", { received: 104 }, { received: 28 })];

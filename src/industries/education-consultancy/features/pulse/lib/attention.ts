@@ -29,7 +29,7 @@ export interface AttentionInput {
 
 const personOf = (people: PersonRow[], id: string) => people.find((p) => p.userId === id);
 /** "split across 2 TeleCallers" etc. — the label, meta and (when one person) the name for a plan. */
-function planText(plan: ReassignPlan, n: number, roleLabel: string, verb: "Reassign" | "Rebalance"): { label: string; meta: string; why: string; suggested: boolean } {
+function planText(plan: ReassignPlan, n: number, roleLabel: string, verb: "Reassign" | "Assign"): { label: string; meta: string; why: string; suggested: boolean } {
   if (plan.kind === "one") return { label: `${verb} ${n} to ${plan.target.name}`, meta: `${plan.target.name} holds ${plan.held} open leads now`, why: ` ${plan.target.name} holds ${plan.held} open leads now, so ${n} more is within +50%.`, suggested: true };
   if (plan.kind === "split") {
     const k = plan.targets.length;
@@ -65,13 +65,15 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
       const n = input.untouched.count;
       const topB = input.untouched.byBranch[0];
       const topR = input.untouched.byRole[0];
+      const plan = topR ? planReassign(input.people, { userId: null, positionKey: topR.key }, n, input.heldLoad ?? {}, input.flags7d ?? {}) : ({ kind: "none" } as ReassignPlan);
+      const pt = planText(plan, n, topR?.label ?? "team member", "Assign");
       out.push({
-        id: s.id, category: "needs_action", tone: "warn", icon: "clock", subject: `${n} held lead${n === 1 ? "" : "s"}`,
-        what: `untouched for 3+ days${topB && topB.count < n ? `, ${topB.count} of them with ${topB.name}` : ""}`,
-        figure: null, suggested: !!topR,
-        action: { label: topR ? `Spread across ${pluralLabel(topR.label)}` : "Review leads", href: untouchedLeadsHref(), primary: false },
-        why: `No call, email, meeting, note or stage move in 3+ days.` + (topR ? ` ${topR.count} of them are held by ${pluralLabel(topR.label)}.` : ""),
-        meta: input.untouched.byBranch.slice(0, 3).map((b) => `${b.name} ${b.count}`).join(" · ") || null,
+        id: s.id, category: "needs_action", tone: "warn", icon: "clock", subject: `${n} new lead${n === 1 ? "" : "s"}`,
+        what: `untouched for over 48 hours${topB && topB.count < n ? `, ${topB.count} of them with ${topB.name}` : ""}`,
+        figure: null, suggested: pt.suggested,
+        action: { label: pt.label, href: untouchedLeadsHref(), primary: false },
+        why: `No call, email, meeting or note since they arrived.` + (topR ? ` ${topR.count} of them are held by ${pluralLabel(topR.label)}.` : "") + (topR ? pt.why : ""),
+        meta: [input.untouched.byBranch.slice(0, 3).map((b) => `${b.name} ${b.count}`).join(" · "), topR ? pt.meta : ""].filter(Boolean).join(" · ") || null,
         links: [{ label: `See the ${n} leads →`, href: untouchedLeadsHref() }],
         drill: s.drill,
       });
@@ -80,15 +82,15 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
       if (!p || !compareToUsual(p.current.received, p.usual.received, p.hasUsual)) continue;
       const excess = Math.max(0, p.current.received - Math.round(p.usual.received));
       const plan = planReassign(input.people, p, excess, input.heldLoad ?? {}, input.flags7d ?? {});
-      const pt = planText(plan, excess, p.positionLabel, "Rebalance");
+      const pt = planText(plan, excess, p.positionLabel, "Reassign");
       out.push({
         id: s.id, category: "needs_action", tone: "warn", icon: "alert", subject: p.name,
         what: `received ${p.current.received} new leads, usual is ${Math.round(p.usual.received)}`,
         figure: { text: `${(Math.round((p.current.received / Math.round(p.usual.received)) * 10) / 10).toString()}× usual` },
         suggested: false,
-        action: { label: plan.kind === "one" ? `Rebalance with ${plan.target.name}` : plan.kind === "split" ? pt.label : "Rebalance", href: leadsOfPersonHref(p.userId), primary: false },
+        action: { label: pt.label, href: leadsOfPersonHref(p.userId), primary: false },
         why: `${p.name} received ${p.current.received} new leads against a usual ${Math.round(p.usual.received)}.` + (plan.kind !== "none" ? pt.why : ""),
-        meta: [p.positionLabel, p.branchName].filter(Boolean).join(", ") || null,
+        meta: [[p.positionLabel, p.branchName].filter(Boolean).join(", "), pt.meta].filter(Boolean).join(" · ") || null,
         links: [{ label: "See the leads →", href: leadsOfPersonHref(p.userId) }, { label: `${p.name}'s activity →`, personId: p.userId }],
         drill: s.drill,
       });

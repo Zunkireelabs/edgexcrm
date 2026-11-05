@@ -185,7 +185,7 @@ function composeRead(input: BriefingInput, neg: { ctx: NegCtx } | null, win: Bri
   const causes: string[] = [];
   if (neg) causes.push(`${neg.ctx.noun} fell ${neg.ctx.fallPct}${neg.ctx.branchName ? `, mostly in ${neg.ctx.branchName}` : ""}`);
   if (neg?.ctx.culpritName) causes.push(`${neg.ctx.culpritName} has gone quiet at ${neg.ctx.culpritPct} of the usual pace`);
-  if (input.untouched.count > 0) causes.push(`${input.untouched.count} held lead${input.untouched.count === 1 ? " has" : "s have"} had no touch in 3+ days`);
+  if (input.untouched.count > 0) causes.push(`${input.untouched.count} new lead${input.untouched.count === 1 ? " has" : "s have"} waited over 48 hours for a first touch`);
   const l = lk ? biggestLeak(input) : null;
   if (l) causes.push(`${l.flow.out} leads left ${l.flow.name} backwards or to Archive${l.rising ? `, up from ${l.flow.previousOut}` : ""}`);
   const used = causes.slice(0, 2);
