@@ -8,11 +8,39 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **HARD RULE: No database access of any kind — no migrations, no direct SQL (stage or prod), no `scripts/migrate-apply.sh`, no Supabase MCP writes/reads used to modify data, no `createServiceClient()`/`scopedClient()` calls run ad hoc against a live DB.** This supersedes the "Production DB changes — per-action approval" carve-out further down this file — that section is currently paused. Schema/migration work in this repo happens through code review and the normal PR pipeline only, not through an interactive session touching the DB directly. If a task appears to require a DB change, stop and say so instead of running it.
 
+**Exception: the LOCAL Supabase on the dev Mac (`127.0.0.1:54322`) is allowed** (Sadin, 2026-11-05). Sessions may run
+`scripts/migrate-apply.sh local`, local seed scripts, and SQL against it to verify work before a PR. It holds only synthetic
+or seeded data. Stage (`dymeudcddasqpomfpjvt`) and prod (`pirhnklvtjjpuvbvibxf`) stay fully off-limits. Never point a local
+script at them, and never copy their data down without asking first.
+
 ---
 
 ## Git Hooks
 
 A `commit-msg` hook (`.git/hooks/commit-msg`) replaces the default Anthropic co-author line with `Co-Authored-By: Anish Balami <anishbalami38@gmail.com>` on every commit. This hook lives in `.git/hooks/` (not tracked by git) and must be re-created if the repo is re-cloned.
+
+---
+
+## AI-Native By Default
+
+**EdgeX is an AI-native operating system, not a CRM with a chatbot.** We build for `education_consultancy`
+first. Every feature, brief and PR must look for AI touchpoints beyond chat, using five verbs:
+**Observe, Explain, Recommend, Act (a human approves), Hold accountable.** Point the touchpoints out
+without being asked.
+
+- **The database computes numbers, and the LLM interprets them.** Every AI claim links to its evidence
+  records.
+- **Same permission spine as humans.** Use `scopedClient`, role and counsellor scoping, and the approval
+  gate for writes.
+- **Always gated.** Use the flag + `tenants.ai_enabled` + budget, with tracing. Pages work with AI off.
+  No fake or mock AI in the UI.
+- **Proactive by default.** A trigger (Inngest or an event) produces an insight or draft, which goes to
+  a review queue, then a human acts. Reporting leads with *what changed → why → what to do → who*.
+- **Every brief and PR carries an "AI touchpoints" section.** New ideas go to the touchpoint register
+  plus a ticket under EDGEX-4.
+
+Full principles, the template and the register:
+[`docs/reference/07-AI-NATIVE-PRINCIPLES.md`](./docs/reference/07-AI-NATIVE-PRINCIPLES.md).
 
 ---
 
@@ -204,6 +232,7 @@ Multi-tenant lead generation CRM SaaS (Zunkiree Labs). White-label system where 
    - **`03-INNGEST-BACKGROUND-JOBS.md` — background/scheduled work runbook: Inngest architecture, environments, function inventory, free-tier budget. Read before adding or changing any scheduled/background job.**
    - **`04-PROD-RESILIENCE.md` — ops runbook for keeping a wedged container from becoming a silent multi-hour outage: the bare-Traefik-404 signature, autoheal, and what's actually live for detection (UptimeRobot) vs. available-but-not-installed (`scripts/uptime-watchdog.sh`). Read before touching prod resilience/ops.**
    - `05-GRAPHIFY-CODE-GRAPH.md` — the code knowledge graph: setup, querying, limitations, refresh. Read if graph queries look wrong or you need to rebuild.
+   - **`07-AI-NATIVE-PRINCIPLES.md` — the product's AI-native direction: the five AI verbs, non-negotiables, AI-native reporting, the required "AI touchpoints" section for briefs and PRs, and the touchpoint register. Read before designing ANY feature.**
    - `api-contracts/` — integration API specs.
    - `PRICING.md` — live product pricing reference.
    Read for context; don't edit per-task.
