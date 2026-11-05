@@ -57,6 +57,8 @@ export interface PersonRow extends PersonInfo {
   notesEdited: number;
   movesByStage: Record<string, number>;
   bulkMoves: number;
+  /** Activity (calls+notes+moves) per window, oldest usual window first → current window last. For the row trend line. */
+  trend: number[];
   flag: "red" | "amber" | null;
 }
 
@@ -125,4 +127,94 @@ export interface UntouchedSummary {
   count: number;
   /** oldest-first? not needed; only the count and the owners drive the signal */
   byPerson: Array<{ userId: string | null; count: number }>;
+}
+
+// ── API contract (GET /api/v1/pulse) ─────────────────────────────────────────
+
+export interface PulseWindowInfo {
+  key: string;
+  from: string;
+  to: string;
+  tz: string;
+  previousFrom: string;
+  previousTo: string;
+  /** Length of the window in days (fractional) — for "usual per day". */
+  days: number;
+}
+
+export interface PulseFunnelStage {
+  listId: string;
+  name: string;
+  slug: string;
+  sortOrder: number;
+  isArchive: boolean;
+  /** Per window bucket: 0 = current, 1 = previous, 1..4 = the "usual" windows. */
+  entered: number[];
+  forward: number[];
+  out: number[];
+  daily: Array<{ day: string; n: number }>;
+}
+
+export interface PulseQuality {
+  total: number;
+  holderSource: { holder: number; assigned_to: number; prior_audit: number; current_fallback: number; none: number };
+  destination: { id: number; name: number; slug: number; unmatched: number };
+  originSlugShaped: { total: number; unmatched: number };
+  originNameShaped: { total: number; unmatched: number };
+}
+
+export interface PulseResponse {
+  window: PulseWindowInfo;
+  branchId: string | null;
+  branches: Array<{ id: string; name: string }>;
+  people: PersonRow[];
+  funnel: {
+    stages: PulseFunnelStage[];
+    newLeads: { current: number; previous: number; usual: number; daily: Array<{ day: string; n: number }> };
+    importedExcluded: number;
+  };
+  bulk: { moves: number; byPerson: Array<{ userId: string; name: string; count: number }> };
+  signals: { keyChanges: Signal[]; needsYou: Signal[] };
+  quality: PulseQuality;
+  generatedAt: string;
+}
+
+export interface PulseEventRow {
+  leadId: string;
+  displayId: string | null;
+  leadName: string;
+  at: string;
+  actorId: string | null;
+  actorName: string | null;
+  holderId: string | null;
+  holderName: string | null;
+  fromLabel: string | null;
+  toLabel: string | null;
+  detail: string | null;
+}
+
+export interface PulseEventsResponse {
+  rows: PulseEventRow[];
+  total: number;
+  limit: number;
+  offset: number;
+  /** Deep link into the Leads list when the metric maps onto existing leads filters; null otherwise. */
+  openInLeadsHref: string | null;
+}
+
+export interface PulsePersonResponse {
+  person: PersonRow;
+  /** Daily Did-activity across the current window, in the tenant timezone. */
+  daily: Array<{ day: string; calls: number; notes: number; moves: number }>;
+  /** Usual activity per day (mean of the 4 prior windows / window days) — the dashed line. */
+  usualPerDay: number;
+  timeline: Array<{
+    at: string;
+    kind: "call" | "note" | "move" | "bulk_move" | "status";
+    leadId: string;
+    displayId: string | null;
+    leadName: string;
+    detail: string | null;
+  }>;
+  window: PulseWindowInfo;
 }

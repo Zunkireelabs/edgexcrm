@@ -30,6 +30,7 @@ const person = (id: string, cur: Partial<MetricCounts>, usual: Partial<MetricCou
   notesEdited: 0,
   movesByStage: {},
   bulkMoves: 0,
+  trend: [],
   flag: null,
 });
 
