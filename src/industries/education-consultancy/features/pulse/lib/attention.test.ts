@@ -72,3 +72,19 @@ describe("branch heads-up threshold", () => {
     expect(buildAttention({ people: [], signals: sig, stageFlows: [], leakReasons: {}, staleHeld: {}, untouched: { count: 0, byBranch: [], byRole: [] } })).toEqual([]);
   });
 });
+
+describe("the same fact reads the same on every surface", () => {
+  it("34 vs a usual of 151: briefing 'at 23%' and attention 'down 77%' sum to 100", async () => {
+    const { buildBriefing } = await import("./briefing");
+    const { rollups } = await import("./rollup");
+    const a = P("a", "Asha", { calls: 34 }, { calls: 151, prospects: 12 });
+    a.previous = c({ prospects: 12 }); a.current = c({ calls: 34, prospects: 2 });
+    const ppl = [a];
+    const sig = computeSignals({ people: ppl, stageFlows: [], untouched: { count: 0, byPerson: [] }, branchKpis: [], thresholds: T }).all;
+    const row = buildAttention({ people: ppl, signals: sig, stageFlows: [], leakReasons: {}, staleHeld: {}, untouched: { count: 0, byBranch: [], byRole: [] } }).find((i) => i.subject === "Asha")!;
+    const down = Number(/down (\d+)%/.exec(row.what)![1]);
+    const b = buildBriefing({ people: ppl, team: rollups(ppl).team, stageFlows: [], leakReasons: {}, untouched: { count: 5 }, thresholds: T })!;
+    const at = Number(/at (\d+)% of usual/.exec(b.items[0].detail)![1]);
+    expect(at + down).toBe(100);
+  });
+});

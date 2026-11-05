@@ -35,3 +35,13 @@ export function formatChange(c: Comparison | null): string | null {
   if (c.pct === 0) return "±0";
   return `${c.pct > 0 ? "+" : "−"}${Math.abs(c.pct)}%`;
 }
+
+/**
+ * The ONE rounding for "at Y% of usual" / "down X%": at = round(current / printed usual); down = 100 − at, so the pair
+ * always sums to 100 (never "22% of usual" next to "down 77%"). Null without a real usual.
+ */
+export function usualShare(current: number, usual: number | null | undefined, hasUsual = true): { at: number; down: number } | null {
+  if (!hasUsual || usual == null || !Number.isFinite(usual) || usual < MIN_USUAL || !Number.isFinite(current)) return null;
+  const at = Math.round((current / Math.round(usual)) * 100);
+  return { at, down: 100 - at };
+}
