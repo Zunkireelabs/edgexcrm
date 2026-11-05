@@ -172,23 +172,19 @@ function composeRead(input: BriefingInput, neg: { ctx: NegCtx } | null, win: Bri
   else if (negPhrase) sentences.push(`${cap(negPhrase)} than ${base}.`);
   else if (up) sentences.push(`${up.label}${up.pct >= 50 ? " sharply" : ""} on ${base}.`);
 
-  // 2. facts, worded differently from the item headlines
-  const facts: string[] = [];
-  if (neg) facts.push(`${neg.ctx.noun} fell ${neg.ctx.fallPct}${neg.ctx.branchName ? `, mostly in ${neg.ctx.branchName}` : ""}`);
-  const actions: string[] = [];
-  if (neg?.ctx.culpritName) actions.push(`${neg.ctx.culpritName} has gone quiet at ${neg.ctx.culpritPct} of the usual pace`);
-  if (input.untouched.count > 0) actions.push(`${input.untouched.count} new lead${input.untouched.count === 1 ? " has" : "s have"} waited over 48 hours for a first touch`);
+  // 2. exactly the top TWO causes (fewer only if that is all we hold), worded differently from the item headlines
+  const causes: string[] = [];
+  if (neg) causes.push(`${neg.ctx.noun} fell ${neg.ctx.fallPct}${neg.ctx.branchName ? `, mostly in ${neg.ctx.branchName}` : ""}`);
+  if (neg?.ctx.culpritName) causes.push(`${neg.ctx.culpritName} has gone quiet at ${neg.ctx.culpritPct} of the usual pace`);
+  if (input.untouched.count > 0) causes.push(`${input.untouched.count} new lead${input.untouched.count === 1 ? " has" : "s have"} waited over 48 hours for a first touch`);
   const l = lk ? biggestLeak(input) : null;
-  if (l) actions.push(`${l.flow.out} leads left ${l.flow.name} backwards or to Archive, up from ${l.flow.previousOut}`);
-  const usedActions = actions.slice(0, neg ? 2 : 3);
-  facts.push(...usedActions);
-  if (facts.length) {
-    const joined = facts.length > 1 ? `${facts.slice(0, -1).join(", ")} and ${facts[facts.length - 1]}` : facts[0];
-    sentences.push(`${cap(joined)}.`);
-  }
+  if (l) causes.push(`${l.flow.out} leads left ${l.flow.name} backwards or to Archive, up from ${l.flow.previousOut}`);
+  const used = causes.slice(0, 2);
+  if (used.length) sentences.push(`${cap(used.join(", and "))}.`);
 
-  // 3. what to fix
-  if (usedActions.length) sentences.push(usedActions.length >= 2 ? "Fix those two and next week's Applications should hold." : "Fix that first to protect next week's Applications.");
+  // 3. what to fix: the number word matches the causes named above
+  if (used.length >= 2) sentences.push("Fix those two and next week's Applications should hold.");
+  else if (used.length === 1) sentences.push("Fix that and next week's Applications should hold.");
   return sentences.length >= 2 ? sentences.join(" ") : null;
 }
 

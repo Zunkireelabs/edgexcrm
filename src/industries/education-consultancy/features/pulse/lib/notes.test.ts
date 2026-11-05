@@ -1,8 +1,13 @@
 import { describe, it, expect } from "vitest";
+import { normalizePosition } from "./positions";
 import { coachingNote, rowNote, ROW_NOTE_MAX, windowTitle } from "./notes";
 import { ZERO_COUNTS, type MetricCounts, type PersonRow } from "./types";
 
 const c = (o: Partial<MetricCounts> = {}): MetricCounts => ({ ...ZERO_COUNTS, ...o });
+const R = (slug: string, cur: Partial<MetricCounts>, usual: Partial<MetricCounts>): PersonRow => {
+  const { key, label } = normalizePosition(slug);
+  return { ...P(cur, usual), positionSlug: slug, positionKey: key, positionLabel: label, positionName: label };
+};
 const P = (cur: Partial<MetricCounts>, usual: Partial<MetricCounts>, flag: PersonRow["flag"] = null): PersonRow => ({
   userId: "u", name: "Asha", email: null, positionSlug: null, positionName: null, positionKey: "telecaller", positionLabel: "TeleCaller", branchId: null, branchName: null,
   current: c(cur), previous: c(), usual: c(usual), notesNew: 0, notesEdited: 0, movesByStage: {}, forwardByStage: {}, backByStage: {}, bulkMoves: 0, trend: [], flag,
@@ -42,8 +47,15 @@ describe("coachingNote — the most notable signal first, then the context", () 
     expect(coachingNote(P({ calls: 18, notes: 13 }, { calls: 82, notes: 54 }))).toBe("Asha made 18 calls, 78% below usual. Notes 13 vs usual 54.");
   });
   it("a results metric can lead, and normal-level activity is context, not the headline", () => {
-    const t = coachingNote(P({ calls: 50, notes: 20, reached_applications: 9 }, { calls: 49, notes: 20, reached_applications: 6 }));
+    const t = coachingNote(R("counsellor", { calls: 50, notes: 20, reached_applications: 9 }, { calls: 49, notes: 20, reached_applications: 6 }));
     expect(t).toBe("Asha moved 9 students to Applications, 50% above usual, with calls and notes at their normal level.");
+  });
+  it("uses the role's own result term, the same one its tile uses", () => {
+    expect(coachingNote(R("counselor", { calls: 50, notes: 20, moves: 9, reached_applications: 9 }, { calls: 49, notes: 20, moves: 6, reached_applications: 6 })))
+      .toBe("Asha moved 9 students to Applications, 50% above usual, with calls and notes at their normal level.");
+    expect(coachingNote(R("executive", { calls: 20, notes: 20, prospects: 12 }, { calls: 20, notes: 20, prospects: 6 }))).toMatch(/^Asha moved 12 leads to Prospects, 100% above usual/);
+    expect(coachingNote(R("app-executive", { calls: 20, notes: 20, applications_filed: 9 }, { calls: 20, notes: 20, applications_filed: 6 }))).toMatch(/^Asha filed 9 applications, 50% above usual/);
+    expect(coachingNote(R("telecaller", { calls: 20, notes: 20, moves: 30 }, { calls: 20, notes: 20, moves: 10 }))).toMatch(/^Asha moved 30 leads to Qualified, 200% above usual/);
   });
   it("is null when there is nothing meaningful to say", () => {
     expect(coachingNote(P({ calls: 1 }, { calls: 1 }))).toBeNull();

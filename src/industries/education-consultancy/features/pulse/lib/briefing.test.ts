@@ -75,18 +75,31 @@ describe("Orca's read", () => {
   it("is composed from the signals: 2–3 sentences, each a fact from the items", () => {
     const b = buildBriefing(input(people, { untouched: { count: 63 }, stageFlows: [flow({ out: 15, previousOut: 5 })] }))!;
     expect(b.read).toContain("Prospects fell");
-    expect(b.read).toContain("63 new leads have waited over 48 hours");
+    expect(b.read).toContain("Asha has gone quiet"); // exactly two causes: the fall and the next-strongest, so untouched waits its turn
     expect(b.read!.split(/(?<=\.)\s/).length).toBeLessThanOrEqual(3);
   });
   it("synthesizes: direction → facts with places/people → fix; no 5-word run is shared with any item headline", () => {
     const b = buildBriefing(input(people, { untouched: { count: 63 }, stageFlows: [flow({ out: 15, previousOut: 5 })], newLeads: { current: 120, previous: 60 } }))!;
     expect(b.read).toMatch(/^Applications are up sharply, but fewer leads are moving forward\./);
-    expect(b.read).toContain("Prospects fell 83%, mostly in Kathmandu");
+    expect(b.read).toContain("Prospects fell 83%, mostly in Kathmandu, and Asha has gone quiet");
     expect(b.read).toContain("Fix those two");
     const words = (t: string) => t.toLowerCase().replace(/[^a-z0-9% ]/g, " ").split(/\s+/).filter(Boolean);
     const grams = (t: string) => { const w = words(t); const out = new Set<string>(); for (let i = 0; i + 5 <= w.length; i++) out.add(w.slice(i, i + 5).join(" ")); return out; };
     const head = new Set(b.items.flatMap((i) => [...grams(i.headline)]));
     for (const g of grams(b.read!)) expect(head.has(g)).toBe(false);
+  });
+  it("sentence 3's number word matches the causes in sentence 2 (two causes → 'those two', one → 'that')", () => {
+    const two = buildBriefing(input(people, { untouched: { count: 63 }, stageFlows: [flow({ out: 15, previousOut: 5 })] }))!.read!.split(/(?<=\.)\s+/);
+    expect(two[two.length - 2].split(", and ")).toHaveLength(2);
+    expect(two[two.length - 1]).toMatch(/^Fix those two /);
+    const flatApps = [P("Asha", "telecaller", "Kathmandu", { calls: 18, prospects: 12 }, { prospects: 12 }, { calls: 18, prospects: 12 })];
+    const one = buildBriefing(input(flatApps, { untouched: { count: 5 }, stageFlows: [] }));
+    // a single cause (untouched) plus no other signal is below the 2-signal bar, so no read at all
+    expect(one?.read ?? null).toBeNull();
+    const oneCause = [P("Esha", "counsellor", "K", { reached_applications: 9 }, { reached_applications: 3 }, { reached_applications: 5 })];
+    const r = buildBriefing(input(oneCause, { untouched: { count: 5 } }))!.read!.split(/(?<=\.)\s+/);
+    expect(r[r.length - 1]).toMatch(/^Fix that and /);
+    expect(r[r.length - 2].split(", and ")).toHaveLength(1);
   });
   it("with no positive move, sentence 1 states the negative trend plainly", () => {
     const flatApps = [P("Asha", "telecaller", "Kathmandu", { calls: 18, prospects: 2 }, { prospects: 12 }, { calls: 82, prospects: 12 })];
