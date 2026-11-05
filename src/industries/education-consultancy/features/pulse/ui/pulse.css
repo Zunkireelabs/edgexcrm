@@ -145,7 +145,7 @@
 .pulse .selwrap{position:relative;display:inline-flex;align-items:center;height:30px;border:1px solid var(--border);border-radius:9px;background:var(--surface);padding:0 28px 0 12px;font-weight:500}
 .pulse .selwrap svg{position:absolute;right:9px;pointer-events:none;color:var(--muted)}
 .pulse a{text-decoration:none;color:inherit}
-.pulse .body{padding:28px 36px 40px}
+.pulse .body{padding:0 0 24px;max-width:1360px}
 .pulse .tbl{overflow-x:auto}
 .pulse .tbl table{min-width:960px}
 .pulse .tblwrap{position:relative;margin-top:12px}
@@ -172,7 +172,7 @@
 .pulse .brief.off:before{display:none}
 .pulse .ev b{color:#55554f}
 .pulse .skel{background:linear-gradient(90deg,var(--sunken),var(--hover),var(--sunken));border-radius:12px}
-@media (max-width:1100px){.pulse .body{padding:20px 16px 32px}.pulse .metrics{grid-template-columns:repeat(2,1fr)}.pulse .m:nth-child(3){border-left:0}}
+@media (max-width:1100px){.pulse .body{padding:0 0 24px}.pulse .metrics{grid-template-columns:repeat(2,1fr)}.pulse .m:nth-child(3){border-left:0}}
 
 /* ---- drawers (v4-s3): portal content carries .pulse itself ---- */
 .pulse.pdr{background:var(--surface);padding:0;gap:0;color:var(--text)}
