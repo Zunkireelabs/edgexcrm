@@ -24,7 +24,7 @@ export interface AttentionInput {
 }
 
 const personOf = (people: PersonRow[], id: string) => people.find((p) => p.userId === id);
-const pctOf = (cur: number, base: number) => Math.round(Math.abs((cur - base) / base) * 100);
+const pctOf = (cur: number, base: number) => { const shown = Math.max(1, Math.round(base)); return Math.round(Math.abs((cur - shown) / shown) * 100); };
 
 export function buildAttention(input: AttentionInput): AttentionItem[] {
   const out: AttentionItem[] = [];
@@ -70,7 +70,7 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
       out.push({
         id: s.id, category: "needs_action", tone: "warn", icon: "alert", subject: p.name,
         what: `received ${p.current.received} new leads, usual is ${Math.round(p.usual.received)}`,
-        figure: { text: `${(Math.round((p.current.received / p.usual.received) * 10) / 10).toString()}× usual` },
+        figure: { text: `${(Math.round((p.current.received / Math.round(p.usual.received)) * 10) / 10).toString()}× usual` },
         suggested: false,
         action: { label: target ? `Rebalance with ${target.name}` : "Rebalance", href: leadsOfPersonHref(p.userId), primary: false },
         why: `${p.name} received ${p.current.received} new leads against a usual ${Math.round(p.usual.received)}.` + (target ? ` ${target.name} received ${target.current.received}.` : ""),

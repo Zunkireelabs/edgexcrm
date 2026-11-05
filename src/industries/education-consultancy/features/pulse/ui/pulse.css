@@ -84,7 +84,7 @@
 .pulse .nm{font-weight:500;color:var(--ink)}
 .pulse .sub{color:var(--faint);font-size:12px}
 .pulse .z{color:var(--ghost)}
-.pulse .d{display:inline-block;overflow:hidden;white-space:nowrap;text-align:right;vertical-align:baseline;font-size:11.5px;font-weight:600;margin-left:6px}
+.pulse .d{display:inline-block;overflow:clip;white-space:nowrap;text-align:right;vertical-align:baseline;font-size:11.5px;font-weight:600;margin-left:6px}
 .pulse .d.up{color:var(--good)}
 .pulse .d.dn{color:var(--bad)}
 .pulse .d.am{color:var(--warn)}

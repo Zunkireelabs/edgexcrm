@@ -46,6 +46,17 @@
 --   small/medium tables; see the PR for the measured row count and build time before promoting to prod.
 --   (Notes-by-time indexes are added only if EXPLAIN demands them — see the PR.)
 --
+--   The three first-activity probes (education_pulse_first_activity: per member, ORDER BY created_at LIMIT 1) each get
+--   a supporting index, because at prod scale (~40 members x 3 probes per request over a large audit_logs) an unindexed
+--   probe is a real risk to the 1.0s page budget:
+--   idx_lead_activities_tenant_user_created — lead_activities (tenant_id, user_id, created_at): makes the probe one row.
+--   idx_audit_logs_tenant_user_created      — audit_logs (tenant_id, user_id, created_at): same. audit_logs is
+--                                             WRITE-HEAVY, so this costs a little on every insert (accepted).
+--   idx_lead_notes_user_created             — lead_notes (user_id, created_at): lead_notes has no tenant_id; the probe
+--                                             joins leads for the tenant.
+--   Like the partial index above, these are plain (non-CONCURRENTLY) CREATE INDEX: this file runs in a transaction,
+--   where CONCURRENTLY is not allowed. Each takes a SHARE lock on its table during the build (blocks writes, not reads).
+--
 --   Expected before/after row counts: 0 rows touched (functions + indexes only).
 --   Rollback:
 --     DROP FUNCTION IF EXISTS education_pulse_first_activity(UUID);
@@ -59,6 +70,9 @@
 --     DROP FUNCTION IF EXISTS education_pulse_moves(UUID, TIMESTAMPTZ, TIMESTAMPTZ, INT, INT);
 --     DROP FUNCTION IF EXISTS education_pulse_bucket(TIMESTAMPTZ, TIMESTAMPTZ, INTERVAL);
 --     DROP INDEX IF EXISTS idx_audit_logs_lead_stage_events;
+--     DROP INDEX IF EXISTS idx_lead_activities_tenant_user_created;
+--     DROP INDEX IF EXISTS idx_audit_logs_tenant_user_created;
+--     DROP INDEX IF EXISTS idx_lead_notes_user_created;
 --   Applied: stage HELD / prod HELD (local only).
 
 BEGIN;
@@ -66,6 +80,11 @@ BEGIN;
 CREATE INDEX IF NOT EXISTS idx_audit_logs_lead_stage_events
   ON audit_logs (tenant_id, created_at)
   WHERE entity_type = 'lead' AND action IN ('lead.updated', 'lead.graduated');
+
+-- Serve the per-member first-activity probes (see INDEXES above).
+CREATE INDEX IF NOT EXISTS idx_lead_activities_tenant_user_created ON lead_activities (tenant_id, user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_tenant_user_created ON audit_logs (tenant_id, user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_lead_notes_user_created ON lead_notes (user_id, created_at);
 
 -- Which window bucket a timestamp falls in: 0 = current, 1 = previous, ... (t must be < p_to).
 CREATE OR REPLACE FUNCTION education_pulse_bucket(p_t TIMESTAMPTZ, p_to TIMESTAMPTZ, p_len INTERVAL)
@@ -723,18 +742,8 @@ $$;
 -- tenant_users.created_at, bounded by the tenant's own first record. One call, one row per member; each source is an
 -- ORDER BY created_at ASC LIMIT 1 probe per member.
 --
--- INDEX USE (from the migrations as they stand; NOT yet measured, no index added here):
---   lead_activities: single-column idx on tenant_id, user_id and created_at DESC (014). No composite, so the probe
---                    (tenant_id, user_id) ORDER BY created_at LIMIT 1 is served by idx_lead_activities_user_id plus a
---                    filter + sort of that user's rows, or by a backward scan of the created_at idx — not a one-row probe.
---                    A composite (tenant_id, user_id, created_at) would make it one.
---   lead_notes:      only idx_lead_notes_lead_id (001) and a partial ai_tool_call idx (175). NO index on user_id, and
---                    the table has no tenant_id, so the probe joins leads (tenant) and filters user_id: unsupported.
---                    A (user_id, created_at) index would serve it.
---   audit_logs:      idx on tenant_id, (entity_type, entity_id), created_at DESC (002) and the partial
---                    (tenant_id, created_at) WHERE entity_type='lead' AND action IN (...) above. NO user_id index, and
---                    the partial one cannot serve this probe (its predicate is not implied). Unsupported:
---                    (tenant_id, user_id, created_at) would serve it.
+-- INDEX USE: each probe is served by an index created above (idx_lead_activities_tenant_user_created,
+-- idx_audit_logs_tenant_user_created; lead_notes has no tenant_id, so idx_lead_notes_user_created + a join to leads).
 CREATE OR REPLACE FUNCTION education_pulse_first_activity(p_tenant UUID)
 RETURNS TABLE (user_id UUID, first_at TIMESTAMPTZ)
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$

@@ -64,3 +64,11 @@ describe("buildAttention — the one list", () => {
     for (const i of items) expect(i.drill.metric).toBeDefined();
   });
 });
+
+describe("branch heads-up threshold", () => {
+  it("a 5% branch change produces no attention item", () => {
+    const sig = computeSignals({ people: [], stageFlows: [], untouched: { count: 0, byPerson: [] }, thresholds: T,
+      branchKpis: [{ branchId: "k", name: "Kathmandu", metric: "prospects", current: 10, usual: 11, hasUsual: true }] }).all;
+    expect(buildAttention({ people: [], signals: sig, stageFlows: [], leakReasons: {}, staleHeld: {}, untouched: { count: 0, byBranch: [], byRole: [] } })).toEqual([]);
+  });
+});

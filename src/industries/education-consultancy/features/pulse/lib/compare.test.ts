@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { compareToUsual, formatChange } from "./compare";
+import { compareToUsual, formatChange, shownUsual } from "./compare";
 
 describe("compareToUsual — the one guard", () => {
   it("usual 0 / 1 / 4 → null (never '140×', never 'usual is 0')", () => {
@@ -14,6 +14,19 @@ describe("compareToUsual — the one guard", () => {
   it("non-finite input → null", () => {
     expect(compareToUsual(NaN, 10)).toBeNull();
     expect(compareToUsual(5, null)).toBeNull();
+  });
+});
+
+describe("the % always agrees with the printed (whole-number) usual", () => {
+  it("18 against a raw usual of 5.5 prints usual 6 and +200%, never +227%", () => {
+    expect(compareToUsual(18, 5.5)).toEqual({ pct: 200, ratio: 3 });
+    expect(shownUsual(5.5)).toBe(6);
+  });
+  it("for any current/usual, pct recomputed from the printed usual matches", () => {
+    for (const usual of [5, 5.4, 5.5, 6.6, 12.5, 28.4, 82.5]) for (const cur of [0, 3, 18, 104]) {
+      const c = compareToUsual(cur, usual)!;
+      expect(c.pct).toBe(Math.round(((cur - shownUsual(usual)) / shownUsual(usual)) * 100));
+    }
   });
 });
 

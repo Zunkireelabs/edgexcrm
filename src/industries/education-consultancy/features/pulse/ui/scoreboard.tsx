@@ -81,7 +81,7 @@ function Cell({
         {col.group !== "Moved to" && slot > 0 && <span className={`d ${ch?.cls ?? ""}`} style={{ width: `calc(${slot}ch + 4px)` }}>{ch?.text ?? ""}</span>}
         <span className="tip" role="tooltip">
           <div><span>{periodLabel}</span><b>{v.current}</b></div>
-          {hasUsual ? <div><span>Usual</span><b>{Math.round(v.usual * 10) / 10}</b></div> : <div className="nu">No usual yet · needs 2 earlier {unit} periods</div>}
+          {hasUsual ? <div><span>Usual</span><b>{Math.round(v.usual)}</b></div> : <div className="nu">No usual yet · needs 2 earlier {unit} periods</div>}
           {previousCovered && <div><span>Last period</span><b>{v.previous}</b></div>}
         </span>
       </span>

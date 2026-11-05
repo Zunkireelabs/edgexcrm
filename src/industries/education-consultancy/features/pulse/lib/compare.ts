@@ -7,6 +7,9 @@ export const MIN_USUAL = 5;
 /** Over capacity also needs the intake to be at least this multiple of usual. */
 export const MIN_OVER_CAPACITY_RATIO = 2.5;
 
+/** How a usual is printed (whole number). Every "usual N" in the UI and every % beside it goes through this. */
+export const shownUsual = (usual: number) => Math.round(usual);
+
 export interface Comparison {
   /** Rounded percentage change, e.g. 50 or −78. */
   pct: number;
@@ -16,7 +19,10 @@ export interface Comparison {
 
 export function compareToUsual(current: number, usual: number | null | undefined, hasUsual = true): Comparison | null {
   if (!hasUsual || usual == null || !Number.isFinite(usual) || usual < MIN_USUAL || !Number.isFinite(current)) return null;
-  return { pct: Math.round(((current - usual) / usual) * 100), ratio: current / usual };
+  // The usual is PRINTED as a whole number everywhere, so the percentage is computed from that printed value:
+  // "18 vs usual 6" must read +200%, never +227% (from a raw 5.5).
+  const shown = Math.round(usual);
+  return { pct: Math.round(((current - shown) / shown) * 100), ratio: current / shown };
 }
 
 /**
