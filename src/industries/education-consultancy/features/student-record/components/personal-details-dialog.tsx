@@ -366,7 +366,7 @@ interface PersonalDetailsDialogProps {
   isAdmin?: boolean;
   /**
    * Set when the dialog was opened because the Applications gate blocked a move: the basic-info parts still
-   * missing ("Name", "Email", "Phone", "Study Information", "a document"). Those fields show in red until filled.
+   * missing (consent-form fields such as "First Name", "Email", "Phone", "Field of Study", "Passport Number"). The core ones show in red until filled.
    */
   missingBeforeApplications?: string[];
 }
@@ -400,21 +400,22 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
   const [studyInterest, setStudyInterest] = useState<StudyInterest>(() => studyInterestFromLead(lead, submissionHistory));
   const [studyDraft, setStudyDraft] = useState<StudyInterest>(studyInterest);
   // Applications gate: which required basic-info fields are STILL empty right now (so the red clears as the
-  // counsellor fills them). "a document" lives in the Documents card, so it is only named in the banner.
+  // counsellor fills them). Documents are not part of the gate.
   const gateMissing = missingBeforeApplications ?? [];
   const shownCore = isEditing ? coreIdentityDraft : coreIdentity;
   const shownStudy = isEditing ? studyDraft : studyInterest;
   const redKeys = new Set<string>();
-  if (gateMissing.includes("Name") && !shownCore.firstName.trim()) redKeys.add("firstName");
+  if (gateMissing.includes("First Name") && !shownCore.firstName.trim()) redKeys.add("firstName");
   if (gateMissing.includes("Email") && !shownCore.email.trim()) redKeys.add("email");
   if (gateMissing.includes("Phone") && !shownCore.phone.trim()) redKeys.add("phone");
-  if (gateMissing.includes("Study Information")) {
-    if (!shownStudy.fieldOfStudy.trim()) redKeys.add("fieldOfStudy");
-    if (!shownStudy.degreeLevel.trim()) redKeys.add("degreeLevel");
-  }
+  if (gateMissing.includes("Field of Study") && !shownStudy.fieldOfStudy.trim()) redKeys.add("fieldOfStudy");
+  if (gateMissing.includes("Degree Level") && !shownStudy.degreeLevel.trim()) redKeys.add("degreeLevel");
+  // The rest of the missing consent fields (Passport Number, Address, Guardian Name, …) are named in the banner; they
+  // live in other sections of this pop-up and aren't highlighted individually.
+  const CORE_GATE_LABELS = ["First Name", "Email", "Phone", "Field of Study", "Degree Level"];
   const gateBannerItems = [
     ...[...redKeys].map((k) => ({ firstName: "First Name", email: "Email", phone: "Phone", fieldOfStudy: "Field of Study", degreeLevel: "Degree Level" }[k] as string)),
-    ...(gateMissing.includes("a document") ? ["a document (upload it in the Documents card)"] : []),
+    ...gateMissing.filter((label) => !CORE_GATE_LABELS.includes(label)),
   ];
   const [qualifications, setQualifications] = useState<Qualifications>(() => qualificationsFromLead(lead));
   const [qualificationsDraft, setQualificationsDraft] = useState<Qualifications>(qualifications);
