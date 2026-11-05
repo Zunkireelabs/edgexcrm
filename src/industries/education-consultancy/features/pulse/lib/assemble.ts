@@ -36,7 +36,7 @@ export function assemblePeople(people: PersonInfo[], rows: PersonBucketRow[], us
     const cur = at(0);
     // Coverage-aware usual: average only the prior windows the person's data actually covers (never count the
     // empty windows before the data starts as zeros), and need at least 2 of them — else there is no usual.
-    const firstAt = coverage ? firstAtFor(coverage.tenantFirst, p.joinedAt) : null;
+    const firstAt = coverage ? firstAtFor(coverage.tenantFirst, p.joinedAt, p.firstActivityAt) : null;
     const covered = coverage ? coveredUsualIndices(coverage, firstAt, usualCount) : undefined;
     const hasUsual = covered ? covered.length >= 2 : true;
     const usual = { ...ZERO_COUNTS };

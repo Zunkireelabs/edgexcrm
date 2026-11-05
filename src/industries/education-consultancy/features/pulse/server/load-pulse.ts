@@ -33,11 +33,17 @@ interface TenantUserRow {
 
 /** Everyone the scoreboard can show: active members with a position, plus anyone with activity in the span. */
 export async function loadPeople(ctx: PulseContext, activeIds: Set<string>): Promise<PersonInfo[]> {
-  const { db, branchId, branches } = ctx;
+  const { db, auth, branchId, branches } = ctx;
   const { data } = await db
     .from("tenant_users")
     .select("user_id, created_at, role, branch_id, suspended_at, positions(name, slug)");
   const names = await loadUserNames(db);
+  // One grouped call: each member's first activity. If the function is not deployed yet, fall back to the tenant's
+  // start for everyone (optimistic) rather than hiding every comparison.
+  const firstRes = await db.raw().rpc("education_pulse_first_activity", { p_tenant: auth.tenantId });
+  const firstBy = new Map<string, string | null>();
+  if (!firstRes.error) for (const r of (firstRes.data ?? []) as Array<{ user_id: string; first_at: string | null }>) firstBy.set(r.user_id, r.first_at);
+  const firstKnown = !firstRes.error;
   const branchName = new Map(branches.map((b) => [b.id, b.name]));
   const out: PersonInfo[] = [];
   for (const m of (data ?? []) as unknown as TenantUserRow[]) {
@@ -58,7 +64,9 @@ export async function loadPeople(ctx: PulseContext, activeIds: Set<string>): Pro
       positionLabel: normalizePosition(pos?.slug, pos?.name).label,
       branchId: m.branch_id,
       branchName: m.branch_id ? (branchName.get(m.branch_id) ?? null) : null,
-      joinedAt: m.created_at,
+      // Unknown first activity (function missing) → assume they predate the window rather than hide comparisons.
+      joinedAt: firstKnown ? m.created_at : null,
+      firstActivityAt: firstBy.get(m.user_id) ?? null,
     });
   }
   return out;
