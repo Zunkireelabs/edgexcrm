@@ -61,7 +61,7 @@ export function FunnelStrip({
     <div className="hidden md:flex w-[112px] shrink-0 flex-col items-center justify-center gap-1 border-x border-gray-100 bg-gray-50/40 px-2 text-center">
       <div className="flex items-center gap-1 text-lg font-semibold text-gray-900">{pct}<ArrowRight className="h-3.5 w-3.5 text-gray-400" /></div>
       <div className="text-xs text-gray-500">{label}</div>
-      <button type="button" onClick={onOut} className="mt-1 rounded-md bg-red-50 px-2 py-0.5 text-xs font-medium text-red-600 hover:bg-red-100">
+      <button type="button" onClick={onOut} className={`mt-1 rounded-md px-2 py-0.5 text-xs font-medium ${out > 0 ? "bg-red-50 text-red-600 hover:bg-red-100" : "bg-gray-100 text-gray-500"}`}>
         {out} out
       </button>
     </div>

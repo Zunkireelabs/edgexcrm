@@ -48,8 +48,8 @@ function Cell({
         <span className="absolute inset-y-2 right-1 rounded-md" style={{ width: `${width}%`, maxWidth: "calc(100% - 8px)", background: tint, opacity: 0.55 }} aria-hidden />
       )}
       <span className="relative block text-[15px] font-semibold leading-5 text-gray-900">{value === 0 ? <span className="text-gray-300">—</span> : fmtNum(value)}</span>
-      <span className={`relative block text-[11px] leading-4 ${mode === "usual" ? (alarm ? "font-semibold text-red-600" : "text-gray-500") : d?.tone === "bad" ? "font-semibold text-red-600" : d?.tone === "good" ? "font-semibold text-emerald-600" : "text-gray-500"}`}>
-        {mode === "usual" ? `usual ${fmtNum(usual)}` : (extra ?? d?.text ?? "")}
+      <span className={`relative block text-[11px] leading-4 ${mode === "usual" ? (alarm ? "font-semibold text-red-600" : "text-gray-500") : extra ? "text-gray-500" : d?.tone === "bad" ? "font-semibold text-red-600" : d?.tone === "good" ? "font-semibold text-emerald-600" : "text-gray-500"}`}>
+        {mode === "usual" ? `usual ${Math.round(usual)}` : (extra ?? d?.text ?? "")}
       </span>
     </button>
   );

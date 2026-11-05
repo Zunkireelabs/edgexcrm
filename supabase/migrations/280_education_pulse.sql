@@ -5,8 +5,8 @@
 -- service_role only (the API always goes through authenticateRequest + scopedClient -> db.raw().rpc()).
 --
 --   education_pulse_moves(...)         resolved stage moves (shared building block of the three below)
---   education_pulse_person_stats(...)  one row per (user, window-bucket): every scoreboard column
---   education_pulse_funnel(...)        stage flow per bucket + daily series + new leads in + data-quality stats
+--   education_pulse_overview(...)      scoreboard + funnel in ONE pass (what the page calls); person_stats / funnel
+--                                      are thin wrappers over it: one row per (user, window-bucket), and the funnel JSON
 --   education_pulse_events(...)        the rows behind any number (evidence drawer)
 --   education_pulse_person_daily / _timeline   the person drawer's daily chart and "What they did"
 --
@@ -48,6 +48,7 @@
 --     DROP FUNCTION IF EXISTS education_pulse_events(UUID, TIMESTAMPTZ, TIMESTAMPTZ, TEXT, UUID, TEXT, UUID, INT, INT, INT, INT);
 --     DROP FUNCTION IF EXISTS education_pulse_funnel(UUID, TIMESTAMPTZ, TIMESTAMPTZ, TEXT, UUID, INT, INT);
 --     DROP FUNCTION IF EXISTS education_pulse_person_stats(UUID, TIMESTAMPTZ, TIMESTAMPTZ, UUID, INT, INT);
+--     DROP FUNCTION IF EXISTS education_pulse_overview(UUID, TIMESTAMPTZ, TIMESTAMPTZ, TEXT, UUID, INT, INT);
 --     DROP FUNCTION IF EXISTS education_pulse_moves(UUID, TIMESTAMPTZ, TIMESTAMPTZ, INT, INT);
 --     DROP FUNCTION IF EXISTS education_pulse_bucket(TIMESTAMPTZ, TIMESTAMPTZ, INTERVAL);
 --     DROP INDEX IF EXISTS idx_audit_logs_lead_stage_events;
@@ -100,7 +101,9 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   ),
   by_name AS (SELECT DISTINCT ON (n) * FROM lists ORDER BY n, sort_order),
   by_slug AS (SELECT DISTINCT ON (s) * FROM lists ORDER BY s, sort_order),
-  raw AS (
+  -- MATERIALIZED: pull every JSON field out ONCE into scalar columns. Left inlined, the planner re-extracted the
+  -- jsonb paths for each of the six list joins below (~450ms of 600ms at Admizz scale).
+  raw AS MATERIALIZED (
     SELECT a.id AS audit_id, a.entity_id AS lead_id, a.user_id AS actor_id, a.created_at AS at,
            a.changes #>> '{list,old}' AS old_label,
            a.changes #>> '{list,new}' AS new_label,
@@ -108,7 +111,9 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
            NULLIF(a.changes #>> '{list_ids,new}', '')::UUID AS new_id,
            NULLIF(a.changes #>> '{holder,new}', '')::UUID AS holder_new,
            NULLIF(a.changes #>> '{assigned_to,new}', '')::UUID AS assigned_new,
-           a.changes #>> '{via,new}' AS via
+           a.changes #>> '{via,new}' AS via,
+           lower(btrim(a.changes #>> '{list,new}')) AS new_key,
+           lower(btrim(a.changes #>> '{list,old}')) AS old_key
     FROM audit_logs a
     WHERE a.tenant_id = p_tenant
       AND a.entity_type = 'lead'
@@ -132,11 +137,11 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
            WHEN fs.id IS NOT NULL THEN 'slug' ELSE 'unmatched' END AS from_via
     FROM raw r
     LEFT JOIN lists   ti ON ti.id = r.new_id
-    LEFT JOIN by_name tn ON tn.n = lower(btrim(r.new_label))
-    LEFT JOIN by_slug ts ON ts.s = lower(btrim(r.new_label))
+    LEFT JOIN by_name tn ON tn.n = r.new_key
+    LEFT JOIN by_slug ts ON ts.s = r.new_key
     LEFT JOIN lists   fi ON fi.id = r.old_id
-    LEFT JOIN by_name fn ON fn.n = lower(btrim(r.old_label))
-    LEFT JOIN by_slug fs ON fs.s = lower(btrim(r.old_label))
+    LEFT JOIN by_name fn ON fn.n = r.old_key
+    LEFT JOIN by_slug fs ON fs.s = r.old_key
   ),
   held AS (
     SELECT res.*,
@@ -156,163 +161,170 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
         AND p.changes ? 'assigned_to' AND p.created_at < res.at
       ORDER BY p.created_at DESC LIMIT 1
     ) prior ON true
+  ),
+  -- Historical bulk heuristic: stage moves per (actor, p_bulk_seconds bucket). A narrow GROUP BY joined back — much
+  -- cheaper than a window function over the wide rows (which sorted ~35k jsonb-carrying rows to disk at Admizz scale).
+  bk AS (
+    SELECT COALESCE(actor_id, '00000000-0000-0000-0000-000000000000'::UUID) AS actor_k,
+           floor(extract(epoch FROM at) / GREATEST(p_bulk_seconds, 1)) AS b,
+           count(*) AS c
+    FROM held GROUP BY 1, 2
   )
   SELECT h.audit_id, h.lead_id, h.actor_id, h.at, h.old_label, h.new_label,
          CASE WHEN h.old_label ~ '^[a-z0-9]+(-[a-z0-9]+)*$' THEN 'slug' ELSE 'name' END,
          h.from_id, h.to_id, h.from_sort, h.to_sort, h.from_slug, h.to_slug, h.to_archive, h.to_excluded,
          h.from_via, h.to_via, h.holder_id, h.holder_source,
-         (COALESCE(h.via = 'bulk', false)
-          OR count(*) OVER (PARTITION BY h.actor_id, floor(extract(epoch FROM h.at) / GREATEST(p_bulk_seconds, 1))) >= p_bulk_min)
-  FROM held h;
+         (COALESCE(h.via = 'bulk', false) OR bk.c >= p_bulk_min)
+  FROM held h
+  JOIN bk ON bk.actor_k = COALESCE(h.actor_id, '00000000-0000-0000-0000-000000000000'::UUID)
+         AND bk.b = floor(extract(epoch FROM h.at) / GREATEST(p_bulk_seconds, 1));
 $$;
 
--- ── scoreboard ───────────────────────────────────────────────────────────────
-CREATE OR REPLACE FUNCTION education_pulse_person_stats(
-  p_tenant UUID, p_from TIMESTAMPTZ, p_to TIMESTAMPTZ, p_branch UUID DEFAULT NULL,
-  p_bulk_min INT DEFAULT 20, p_bulk_seconds INT DEFAULT 60
-)
-RETURNS TABLE (
-  user_id        UUID,
-  bucket         INT,
-  counts         JSONB,
-  notes_new      BIGINT,
-  notes_edited   BIGINT,
-  moves_by_stage JSONB,
-  bulk_moves     BIGINT
-)
-LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
-  WITH w AS (SELECT (p_to - p_from) AS len, p_from - 4 * (p_to - p_from) AS span_from),
-  mv AS (
-    SELECT m.* FROM w, education_pulse_moves(p_tenant, w.span_from, p_to, p_bulk_min, p_bulk_seconds) m
-  ),
-  ev AS (
-    -- Did: stage moves (not bulk, not into an excluded list), by actor
-    SELECT mv.actor_id AS u, education_pulse_bucket(mv.at, p_to, w.len) AS b, 'moves' AS k,
-           mv.lead_id, COALESCE(mv.to_list_id::TEXT, 'other') AS sk
-    FROM mv, w WHERE NOT mv.is_bulk AND NOT mv.to_excluded AND mv.actor_id IS NOT NULL
-    UNION ALL
-    SELECT mv.actor_id, education_pulse_bucket(mv.at, p_to, w.len), 'bulk_moves', mv.lead_id, NULL
-    FROM mv, w WHERE mv.is_bulk AND mv.actor_id IS NOT NULL
-    UNION ALL
-    -- Owns: moves into Prospects / Applications, by holder (bulk included — it is about the lead's journey)
-    SELECT mv.holder_id, education_pulse_bucket(mv.at, p_to, w.len), 'prospects', mv.lead_id, NULL
-    FROM mv, w WHERE mv.to_slug = 'prospects' AND NOT mv.to_excluded AND mv.holder_id IS NOT NULL
-    UNION ALL
-    SELECT mv.holder_id, education_pulse_bucket(mv.at, p_to, w.len), 'reached_applications', mv.lead_id, NULL
-    FROM mv, w WHERE mv.to_slug = 'applications' AND NOT mv.to_excluded AND mv.holder_id IS NOT NULL
-    UNION ALL
-    -- Did: status changes
-    SELECT a.user_id, education_pulse_bucket(a.created_at, p_to, w.len), 'status_changes', a.entity_id, NULL
-    FROM audit_logs a, w
-    WHERE a.tenant_id = p_tenant AND a.entity_type = 'lead' AND a.action IN ('lead.updated', 'lead.graduated')
-      AND a.created_at >= w.span_from AND a.created_at < p_to AND a.user_id IS NOT NULL
-      AND a.changes ? 'status'
-      AND (a.changes #>> '{status,old}') IS DISTINCT FROM (a.changes #>> '{status,new}')
-    UNION ALL
-    -- Did: calls
-    SELECT la.user_id, education_pulse_bucket(la.created_at, p_to, w.len), 'calls', la.lead_id, NULL
-    FROM lead_activities la, w
-    WHERE la.tenant_id = p_tenant AND la.activity_type = 'call'
-      AND la.created_at >= w.span_from AND la.created_at < p_to
-    UNION ALL
-    -- Did: notes (new)
-    SELECT n.user_id, education_pulse_bucket(n.created_at, p_to, w.len), 'notes_new', n.lead_id, NULL
-    FROM lead_notes n JOIN leads l ON l.id = n.lead_id AND l.tenant_id = p_tenant AND l.deleted_at IS NULL, w
-    WHERE n.created_at >= w.span_from AND n.created_at < p_to AND n.ai_tool_call_id IS NULL
-    UNION ALL
-    -- Did: notes (edited in window)
-    SELECT n.user_id, education_pulse_bucket(n.edited_at, p_to, w.len), 'notes_edited', n.lead_id, NULL
-    FROM lead_notes n JOIN leads l ON l.id = n.lead_id AND l.tenant_id = p_tenant AND l.deleted_at IS NULL, w
-    WHERE n.edited_at >= w.span_from AND n.edited_at < p_to AND n.edited_at > n.created_at + INTERVAL '1 minute'
-      AND n.ai_tool_call_id IS NULL
-    UNION ALL
-    -- Received (a): became the assignee via an audited change
-    SELECT NULLIF(a.changes #>> '{assigned_to,new}', '')::UUID, education_pulse_bucket(a.created_at, p_to, w.len),
-           'received', a.entity_id, NULL
-    FROM audit_logs a, w
-    WHERE a.tenant_id = p_tenant AND a.entity_type = 'lead' AND a.action IN ('lead.updated', 'lead.graduated')
-      AND a.created_at >= w.span_from AND a.created_at < p_to
-      AND a.changes ? 'assigned_to'
-      AND (a.changes #>> '{assigned_to,old}') IS DISTINCT FROM (a.changes #>> '{assigned_to,new}')
-      AND NULLIF(a.changes #>> '{assigned_to,new}', '') IS NOT NULL
-    UNION ALL
-    -- Received (b): created in the window, held by the person at creation (initial assignment is not audited)
-    SELECT CASE WHEN fr.has THEN fr.old_u ELSE l.assigned_to END,
-           education_pulse_bucket(l.created_at, p_to, w.len), 'received', l.id, NULL
-    FROM leads l, w
-    LEFT JOIN LATERAL (
-      SELECT true AS has, NULLIF(a.changes #>> '{assigned_to,old}', '')::UUID AS old_u
-      FROM audit_logs a
-      WHERE a.entity_type = 'lead' AND a.entity_id = l.id AND a.changes ? 'assigned_to' AND a.created_at >= l.created_at
-      ORDER BY a.created_at LIMIT 1
-    ) fr ON true
-    WHERE l.tenant_id = p_tenant AND l.deleted_at IS NULL AND l.created_at >= w.span_from AND l.created_at < p_to
-    UNION ALL
-    -- Owns: applications filed
-    SELECT COALESCE(ap.assigned_to, l.assigned_to), education_pulse_bucket(ap.created_at, p_to, w.len),
-           'applications_filed', ap.lead_id, NULL
-    FROM applications ap JOIN leads l ON l.id = ap.lead_id, w
-    WHERE ap.tenant_id = p_tenant AND ap.deleted_at IS NULL
-      AND ap.created_at >= w.span_from AND ap.created_at < p_to
-  ),
-  stage_counts AS (
-    SELECT u, b, jsonb_object_agg(sk, n) AS m
-    FROM (SELECT u, b, sk, count(*) AS n FROM ev WHERE k = 'moves' GROUP BY u, b, sk) s
-    GROUP BY u, b
-  )
-  SELECT ev.u, ev.b,
-         jsonb_build_object(
-           'calls',                count(*)                FILTER (WHERE ev.k = 'calls'),
-           'notes',                count(*)                FILTER (WHERE ev.k IN ('notes_new', 'notes_edited')),
-           'moves',                count(*)                FILTER (WHERE ev.k = 'moves'),
-           'status_changes',       count(*)                FILTER (WHERE ev.k = 'status_changes'),
-           'received',             count(DISTINCT ev.lead_id) FILTER (WHERE ev.k = 'received'),
-           'prospects',            count(DISTINCT ev.lead_id) FILTER (WHERE ev.k = 'prospects'),
-           'reached_applications', count(DISTINCT ev.lead_id) FILTER (WHERE ev.k = 'reached_applications'),
-           'applications_filed',   count(*)                FILTER (WHERE ev.k = 'applications_filed')
-         ),
-         count(*) FILTER (WHERE ev.k = 'notes_new'),
-         count(*) FILTER (WHERE ev.k = 'notes_edited'),
-         COALESCE(sc.m, '{}'::JSONB),
-         count(*) FILTER (WHERE ev.k = 'bulk_moves')
-  FROM ev
-  LEFT JOIN stage_counts sc ON sc.u = ev.u AND sc.b = ev.b
-  WHERE ev.u IS NOT NULL
-    AND (p_branch IS NULL OR EXISTS (
-      SELECT 1 FROM tenant_users tu WHERE tu.tenant_id = p_tenant AND tu.user_id = ev.u AND tu.branch_id = p_branch))
-  GROUP BY ev.u, ev.b, sc.m;
-$$;
-
--- ── funnel ───────────────────────────────────────────────────────────────────
-CREATE OR REPLACE FUNCTION education_pulse_funnel(
+-- ── overview: scoreboard + funnel in ONE pass ───────────────────────────────
+-- The stage moves are resolved once (MATERIALIZED) and shared by the people aggregates and the funnel. Every event
+-- source is aggregated to (person, bucket) BEFORE anything is unioned, so nothing wide is ever sorted (an earlier
+-- version unioned ~250k raw event rows and sorted them: 1.4s at Admizz scale).
+CREATE OR REPLACE FUNCTION education_pulse_overview(
   p_tenant UUID, p_from TIMESTAMPTZ, p_to TIMESTAMPTZ, p_tz TEXT, p_branch UUID DEFAULT NULL,
   p_bulk_min INT DEFAULT 20, p_bulk_seconds INT DEFAULT 60
 )
 RETURNS JSONB
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   WITH w AS (SELECT (p_to - p_from) AS len, p_from - 4 * (p_to - p_from) AS span_from),
-  allmv AS (
-    SELECT m.* FROM w, education_pulse_moves(p_tenant, w.span_from, p_to, p_bulk_min, p_bulk_seconds) m
-  ),
-  mv AS (
+  mv AS MATERIALIZED (
     SELECT m.*, education_pulse_bucket(m.at, p_to, w.len) AS b
-    FROM allmv m JOIN leads l ON l.id = m.lead_id AND (p_branch IS NULL OR l.branch_id = p_branch), w
+    FROM w, education_pulse_moves(p_tenant, w.span_from, p_to, p_bulk_min, p_bulk_seconds) m
   ),
+  -- ── people ──
+  moves_a AS (
+    SELECT actor_id AS u, b, count(*) AS n FROM mv
+    WHERE NOT is_bulk AND NOT to_excluded AND actor_id IS NOT NULL GROUP BY actor_id, b
+  ),
+  stage_a AS (
+    SELECT u, b, jsonb_object_agg(sk, n) AS m
+    FROM (SELECT actor_id AS u, b, COALESCE(to_list_id::TEXT, 'other') AS sk, count(*) AS n FROM mv
+          WHERE NOT is_bulk AND NOT to_excluded AND actor_id IS NOT NULL GROUP BY actor_id, b, 3) x
+    GROUP BY u, b
+  ),
+  bulk_a AS (SELECT actor_id AS u, b, count(*) AS n FROM mv WHERE is_bulk AND actor_id IS NOT NULL GROUP BY actor_id, b),
+  pros_a AS (
+    SELECT holder_id AS u, b, count(DISTINCT lead_id) AS n FROM mv
+    WHERE to_slug = 'prospects' AND NOT to_excluded AND holder_id IS NOT NULL GROUP BY holder_id, b
+  ),
+  reach_a AS (
+    SELECT holder_id AS u, b, count(DISTINCT lead_id) AS n FROM mv
+    WHERE to_slug = 'applications' AND NOT to_excluded AND holder_id IS NOT NULL GROUP BY holder_id, b
+  ),
+  status_a AS (
+    SELECT a.user_id AS u, education_pulse_bucket(a.created_at, p_to, w.len) AS b, count(*) AS n
+    FROM audit_logs a, w
+    WHERE a.tenant_id = p_tenant AND a.entity_type = 'lead' AND a.action IN ('lead.updated', 'lead.graduated')
+      AND a.created_at >= w.span_from AND a.created_at < p_to AND a.user_id IS NOT NULL AND a.changes ? 'status'
+      AND (a.changes #>> '{status,old}') IS DISTINCT FROM (a.changes #>> '{status,new}')
+    GROUP BY 1, 2
+  ),
+  calls_a AS (
+    SELECT la.user_id AS u, education_pulse_bucket(la.created_at, p_to, w.len) AS b, count(*) AS n
+    FROM lead_activities la, w
+    WHERE la.tenant_id = p_tenant AND la.activity_type = 'call' AND la.created_at >= w.span_from AND la.created_at < p_to
+    GROUP BY 1, 2
+  ),
+  notes_new_a AS (
+    SELECT n.user_id AS u, education_pulse_bucket(n.created_at, p_to, w.len) AS b, count(*) AS n
+    FROM lead_notes n JOIN leads l ON l.id = n.lead_id AND l.tenant_id = p_tenant AND l.deleted_at IS NULL, w
+    WHERE n.created_at >= w.span_from AND n.created_at < p_to AND n.ai_tool_call_id IS NULL GROUP BY 1, 2
+  ),
+  notes_ed_a AS (
+    SELECT n.user_id AS u, education_pulse_bucket(n.edited_at, p_to, w.len) AS b, count(*) AS n
+    FROM lead_notes n JOIN leads l ON l.id = n.lead_id AND l.tenant_id = p_tenant AND l.deleted_at IS NULL, w
+    WHERE n.edited_at >= w.span_from AND n.edited_at < p_to AND n.edited_at > n.created_at + INTERVAL '1 minute'
+      AND n.ai_tool_call_id IS NULL GROUP BY 1, 2
+  ),
+  recv_a AS (
+    SELECT u, b, count(*) AS n FROM (
+      SELECT DISTINCT u, b, lead_id FROM (
+        SELECT NULLIF(a.changes #>> '{assigned_to,new}', '')::UUID AS u,
+               education_pulse_bucket(a.created_at, p_to, w.len) AS b, a.entity_id AS lead_id
+        FROM audit_logs a, w
+        WHERE a.tenant_id = p_tenant AND a.entity_type = 'lead' AND a.action IN ('lead.updated', 'lead.graduated')
+          AND a.created_at >= w.span_from AND a.created_at < p_to AND a.changes ? 'assigned_to'
+          AND (a.changes #>> '{assigned_to,old}') IS DISTINCT FROM (a.changes #>> '{assigned_to,new}')
+          AND NULLIF(a.changes #>> '{assigned_to,new}', '') IS NOT NULL
+        UNION ALL
+        SELECT CASE WHEN fr.has THEN fr.old_u ELSE l.assigned_to END,
+               education_pulse_bucket(l.created_at, p_to, w.len), l.id
+        FROM leads l, w
+        LEFT JOIN LATERAL (
+          SELECT true AS has, NULLIF(a.changes #>> '{assigned_to,old}', '')::UUID AS old_u
+          FROM audit_logs a
+          WHERE a.entity_type = 'lead' AND a.entity_id = l.id AND a.changes ? 'assigned_to' AND a.created_at >= l.created_at
+          ORDER BY a.created_at LIMIT 1
+        ) fr ON true
+        WHERE l.tenant_id = p_tenant AND l.deleted_at IS NULL AND l.created_at >= w.span_from AND l.created_at < p_to
+      ) src WHERE u IS NOT NULL
+    ) d GROUP BY u, b
+  ),
+  apps_a AS (
+    SELECT COALESCE(ap.assigned_to, l.assigned_to) AS u, education_pulse_bucket(ap.created_at, p_to, w.len) AS b, count(*) AS n
+    FROM applications ap JOIN leads l ON l.id = ap.lead_id, w
+    WHERE ap.tenant_id = p_tenant AND ap.deleted_at IS NULL AND ap.created_at >= w.span_from AND ap.created_at < p_to
+    GROUP BY 1, 2
+  ),
+  agg AS (
+    SELECT u, b, 'moves' AS k, n FROM moves_a
+    UNION ALL SELECT u, b, 'bulk_moves', n FROM bulk_a
+    UNION ALL SELECT u, b, 'prospects', n FROM pros_a
+    UNION ALL SELECT u, b, 'reached_applications', n FROM reach_a
+    UNION ALL SELECT u, b, 'status_changes', n FROM status_a
+    UNION ALL SELECT u, b, 'calls', n FROM calls_a
+    UNION ALL SELECT u, b, 'notes_new', n FROM notes_new_a
+    UNION ALL SELECT u, b, 'notes_edited', n FROM notes_ed_a
+    UNION ALL SELECT u, b, 'received', n FROM recv_a
+    UNION ALL SELECT u, b, 'applications_filed', n FROM apps_a
+  ),
+  people AS (
+    SELECT g.u, g.b,
+           jsonb_build_object(
+             'calls',                COALESCE(sum(g.n) FILTER (WHERE g.k = 'calls'), 0),
+             'notes',                COALESCE(sum(g.n) FILTER (WHERE g.k IN ('notes_new', 'notes_edited')), 0),
+             'moves',                COALESCE(sum(g.n) FILTER (WHERE g.k = 'moves'), 0),
+             'status_changes',       COALESCE(sum(g.n) FILTER (WHERE g.k = 'status_changes'), 0),
+             'received',             COALESCE(sum(g.n) FILTER (WHERE g.k = 'received'), 0),
+             'prospects',            COALESCE(sum(g.n) FILTER (WHERE g.k = 'prospects'), 0),
+             'reached_applications', COALESCE(sum(g.n) FILTER (WHERE g.k = 'reached_applications'), 0),
+             'applications_filed',   COALESCE(sum(g.n) FILTER (WHERE g.k = 'applications_filed'), 0)) AS counts,
+           COALESCE(sum(g.n) FILTER (WHERE g.k = 'notes_new'), 0)    AS notes_new,
+           COALESCE(sum(g.n) FILTER (WHERE g.k = 'notes_edited'), 0) AS notes_edited,
+           COALESCE(sum(g.n) FILTER (WHERE g.k = 'bulk_moves'), 0)   AS bulk_moves
+    FROM agg g
+    WHERE g.u IS NOT NULL
+      AND (p_branch IS NULL OR EXISTS (
+        SELECT 1 FROM tenant_users tu WHERE tu.tenant_id = p_tenant AND tu.user_id = g.u AND tu.branch_id = p_branch))
+    GROUP BY g.u, g.b
+  ),
+  people_json AS (
+    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+      'user_id', p.u, 'bucket', p.b, 'counts', p.counts, 'notes_new', p.notes_new, 'notes_edited', p.notes_edited,
+      'moves_by_stage', COALESCE(sa.m, '{}'::JSONB), 'bulk_moves', p.bulk_moves)), '[]'::JSONB) AS j
+    FROM people p LEFT JOIN stage_a sa ON sa.u = p.u AND sa.b = p.b
+  ),
+  -- ── funnel ──
+  fmv AS (SELECT m.* FROM mv m JOIN leads l ON l.id = m.lead_id AND (p_branch IS NULL OR l.branch_id = p_branch)),
   lists AS (
     SELECT id, name, slug, sort_order, is_archive FROM lead_lists
     WHERE tenant_id = p_tenant AND NOT (is_staging OR slug = 'migration-qc' OR COALESCE(access->>'mode', 'all') <> 'all')
   ),
   buckets AS (SELECT generate_series(0, 4) AS b),
-  ent AS (SELECT to_list_id AS id, b, count(DISTINCT lead_id) AS n FROM mv GROUP BY to_list_id, b),
+  ent AS (SELECT to_list_id AS id, b, count(DISTINCT lead_id) AS n FROM fmv GROUP BY to_list_id, b),
   flow AS (
     SELECT from_list_id AS id, b,
            count(DISTINCT lead_id) FILTER (WHERE to_sort > from_sort AND NOT to_is_archive) AS fwd,
            count(DISTINCT lead_id) FILTER (WHERE (to_sort < from_sort) OR to_is_archive)    AS outn
-    FROM mv WHERE from_list_id IS NOT NULL AND to_list_id IS NOT NULL GROUP BY from_list_id, b
+    FROM fmv WHERE from_list_id IS NOT NULL AND to_list_id IS NOT NULL GROUP BY from_list_id, b
   ),
   daily AS (
     SELECT to_list_id AS id, ((at AT TIME ZONE p_tz)::DATE)::TEXT AS d, count(DISTINCT lead_id) AS n
-    FROM mv WHERE b = 0 AND to_list_id IS NOT NULL GROUP BY to_list_id, ((at AT TIME ZONE p_tz)::DATE)
+    FROM fmv WHERE b = 0 AND to_list_id IS NOT NULL GROUP BY to_list_id, ((at AT TIME ZONE p_tz)::DATE)
   ),
   stages AS (
     SELECT jsonb_agg(jsonb_build_object(
@@ -325,16 +337,14 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
     FROM lists l
   ),
   newleads AS (
-    SELECT jsonb_agg(COALESCE(x.n, 0) ORDER BY bk.b) AS j,
-           COALESCE(sum(x.imported), 0) AS imported
+    SELECT jsonb_agg(COALESCE(x.n, 0) ORDER BY bk.b) AS j, COALESCE(sum(x.imported), 0) AS imported
     FROM buckets bk
     LEFT JOIN (
       SELECT education_pulse_bucket(l.created_at, p_to, w.len) AS b,
              count(*) FILTER (WHERE NOT (l.custom_fields ? 'import_batch')) AS n,
              count(*) FILTER (WHERE l.custom_fields ? 'import_batch')       AS imported
       FROM leads l, w
-      WHERE l.tenant_id = p_tenant AND l.deleted_at IS NULL
-        AND l.created_at >= w.span_from AND l.created_at < p_to
+      WHERE l.tenant_id = p_tenant AND l.deleted_at IS NULL AND l.created_at >= w.span_from AND l.created_at < p_to
         AND (p_branch IS NULL OR l.branch_id = p_branch)
       GROUP BY 1
     ) x ON x.b = bk.b
@@ -370,15 +380,40 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
         'total',     count(*) FILTER (WHERE old_label IS NOT NULL AND label_shape = 'name'),
         'unmatched', count(*) FILTER (WHERE old_label IS NOT NULL AND label_shape = 'name' AND from_via = 'unmatched'))
     ) AS j
-    FROM allmv
+    FROM mv
   )
   SELECT jsonb_build_object(
-    'stages',           COALESCE((SELECT j FROM stages), '[]'::JSONB),
-    'new_leads',        (SELECT j FROM newleads),
-    'new_leads_daily',  (SELECT j FROM newleads_daily),
-    'imported_excluded', (SELECT imported FROM newleads),
-    'quality',          (SELECT j FROM quality)
-  );
+    'people', (SELECT j FROM people_json),
+    'funnel', jsonb_build_object(
+      'stages',            COALESCE((SELECT j FROM stages), '[]'::JSONB),
+      'new_leads',         (SELECT j FROM newleads),
+      'new_leads_daily',   (SELECT j FROM newleads_daily),
+      'imported_excluded', (SELECT imported FROM newleads),
+      'quality',           (SELECT j FROM quality)));
+$$;
+
+-- Thin wrappers (stable signatures): one implementation, two views of it.
+CREATE OR REPLACE FUNCTION education_pulse_person_stats(
+  p_tenant UUID, p_from TIMESTAMPTZ, p_to TIMESTAMPTZ, p_branch UUID DEFAULT NULL,
+  p_bulk_min INT DEFAULT 20, p_bulk_seconds INT DEFAULT 60
+)
+RETURNS TABLE (
+  user_id UUID, bucket INT, counts JSONB, notes_new BIGINT, notes_edited BIGINT, moves_by_stage JSONB, bulk_moves BIGINT
+)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT (r ->> 'user_id')::UUID, (r ->> 'bucket')::INT, r -> 'counts', (r ->> 'notes_new')::BIGINT,
+         (r ->> 'notes_edited')::BIGINT, r -> 'moves_by_stage', (r ->> 'bulk_moves')::BIGINT
+  FROM jsonb_array_elements(
+    education_pulse_overview(p_tenant, p_from, p_to, 'UTC', p_branch, p_bulk_min, p_bulk_seconds) -> 'people') r;
+$$;
+
+CREATE OR REPLACE FUNCTION education_pulse_funnel(
+  p_tenant UUID, p_from TIMESTAMPTZ, p_to TIMESTAMPTZ, p_tz TEXT, p_branch UUID DEFAULT NULL,
+  p_bulk_min INT DEFAULT 20, p_bulk_seconds INT DEFAULT 60
+)
+RETURNS JSONB
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT education_pulse_overview(p_tenant, p_from, p_to, p_tz, p_branch, p_bulk_min, p_bulk_seconds) -> 'funnel';
 $$;
 
 -- ── evidence drawer ──────────────────────────────────────────────────────────
@@ -496,11 +531,19 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
       AND l.created_at < p_to - INTERVAL '48 hours'
       AND NOT EXISTS (SELECT 1 FROM lead_activities la WHERE la.lead_id = l.id AND la.activity_type IN ('call', 'email', 'meeting'))
       AND NOT EXISTS (SELECT 1 FROM lead_notes ln WHERE ln.lead_id = l.id)
+  ),
+  -- The scoreboard counts these once per (lead, person); list them once too, so a number always equals its list.
+  deduped AS (
+    (SELECT DISTINCT ON (lead_id, holder_id) * FROM rows_
+      WHERE p_metric IN ('received', 'prospects', 'reached_applications')
+      ORDER BY lead_id, holder_id, at)
+    UNION ALL
+    SELECT * FROM rows_ WHERE p_metric NOT IN ('received', 'prospects', 'reached_applications')
   )
   SELECT r.lead_id, l.display_id::TEXT, btrim(COALESCE(l.first_name, '') || ' ' || COALESCE(l.last_name, '')),
          r.at, r.actor_id, r.holder_id, r.from_label, r.to_label, r.detail,
          count(*) OVER () AS total
-  FROM rows_ r
+  FROM deduped r
   JOIN leads l ON l.id = r.lead_id AND l.tenant_id = p_tenant AND (p_branch IS NULL OR l.branch_id = p_branch)
   ORDER BY r.at DESC, r.lead_id
   LIMIT GREATEST(p_limit, 1) OFFSET GREATEST(p_offset, 0);
@@ -580,10 +623,12 @@ $$;
 REVOKE ALL ON FUNCTION education_pulse_person_daily(UUID, TIMESTAMPTZ, TIMESTAMPTZ, TEXT, UUID, INT, INT) FROM PUBLIC;
 REVOKE ALL ON FUNCTION education_pulse_person_timeline(UUID, TIMESTAMPTZ, TIMESTAMPTZ, UUID, INT, INT, INT) FROM PUBLIC;
 REVOKE ALL ON FUNCTION education_pulse_moves(UUID, TIMESTAMPTZ, TIMESTAMPTZ, INT, INT) FROM PUBLIC;
+REVOKE ALL ON FUNCTION education_pulse_overview(UUID, TIMESTAMPTZ, TIMESTAMPTZ, TEXT, UUID, INT, INT) FROM PUBLIC;
 REVOKE ALL ON FUNCTION education_pulse_person_stats(UUID, TIMESTAMPTZ, TIMESTAMPTZ, UUID, INT, INT) FROM PUBLIC;
 REVOKE ALL ON FUNCTION education_pulse_funnel(UUID, TIMESTAMPTZ, TIMESTAMPTZ, TEXT, UUID, INT, INT) FROM PUBLIC;
 REVOKE ALL ON FUNCTION education_pulse_events(UUID, TIMESTAMPTZ, TIMESTAMPTZ, TEXT, UUID, TEXT, UUID, INT, INT, INT, INT) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION education_pulse_moves(UUID, TIMESTAMPTZ, TIMESTAMPTZ, INT, INT) TO service_role;
+GRANT EXECUTE ON FUNCTION education_pulse_overview(UUID, TIMESTAMPTZ, TIMESTAMPTZ, TEXT, UUID, INT, INT) TO service_role;
 GRANT EXECUTE ON FUNCTION education_pulse_person_stats(UUID, TIMESTAMPTZ, TIMESTAMPTZ, UUID, INT, INT) TO service_role;
 GRANT EXECUTE ON FUNCTION education_pulse_funnel(UUID, TIMESTAMPTZ, TIMESTAMPTZ, TEXT, UUID, INT, INT) TO service_role;
 GRANT EXECUTE ON FUNCTION education_pulse_person_daily(UUID, TIMESTAMPTZ, TIMESTAMPTZ, TEXT, UUID, INT, INT) TO service_role;

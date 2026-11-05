@@ -73,16 +73,16 @@ export async function loadPulse(ctx: PulseContext): Promise<PulseResponse> {
   const p_to = window.to.toISOString();
   const bulk = { p_bulk_min: thresholds.bulkMinRows, p_bulk_seconds: thresholds.bulkBucketSeconds };
 
-  const [statsRes, funnelRes, intakeRes] = await Promise.all([
-    db.raw().rpc("education_pulse_person_stats", { p_tenant: auth.tenantId, p_from, p_to, p_branch: branchId, ...bulk }),
-    db.raw().rpc("education_pulse_funnel", { p_tenant: auth.tenantId, p_from, p_to, p_tz: tz, p_branch: branchId, ...bulk }),
+  // One pass: the stage moves are resolved once for both the scoreboard and the funnel (migration 280).
+  const [overviewRes, intakeRes] = await Promise.all([
+    db.raw().rpc("education_pulse_overview", { p_tenant: auth.tenantId, p_from, p_to, p_tz: tz, p_branch: branchId, ...bulk }),
     db.raw().rpc("education_intake_alarm", { p_tenant: auth.tenantId, p_now: p_to, p_bucket1_hours: 24, p_bucket2_hours: 48 }),
   ]);
-  if (statsRes.error) throw new Error(`education_pulse_person_stats: ${statsRes.error.message}`);
-  if (funnelRes.error) throw new Error(`education_pulse_funnel: ${funnelRes.error.message}`);
+  if (overviewRes.error) throw new Error(`education_pulse_overview: ${overviewRes.error.message}`);
 
-  const bucketRows = (statsRes.data ?? []) as PersonBucketRow[];
-  const funnel = funnelRes.data as FunnelJson;
+  const overview = overviewRes.data as { people: PersonBucketRow[]; funnel: FunnelJson };
+  const bucketRows = overview.people ?? [];
+  const funnel = overview.funnel;
   const people = assemblePeople(await loadPeople(ctx, new Set(bucketRows.map((r) => r.user_id))), bucketRows);
 
   const stageFlows: StageFlow[] = funnel.stages
