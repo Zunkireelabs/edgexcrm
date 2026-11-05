@@ -106,7 +106,11 @@ Calm everywhere else, so AI can stand out with a **subtle** signature (Sadin's c
   - a 2px blue→violet top line
   - a gradient sparkle badge
   - a faint violet shadow
+- **AI paragraph block:** any AI-written paragraph sits on a soft blue→violet wash block (radius 12) with a sparkle
+  label ("Orca's read", "Why Orca suggests this"). Examples: Orca's read, the "why" in an expanded attention row, the
+  coaching note in the person view, Ask Orca answers. Long AI text never blends into page text.
 - **Inline AI** ("Suggested" tags, row notes): a soft gradient tint pill with a violet sparkle.
+- **Size ladder:** label → pill · paragraph → wash block · whole section → full AI card (wash, top line, badge).
 - **The ask box:** a white field with a 1px blue→violet gradient border.
 - **Gradients appear ONLY on AI elements.** Plain data, tables and rule-only UI never use them, so the gradient keeps
   meaning "Orca".
@@ -133,6 +137,7 @@ Calm everywhere else, so AI can stand out with a **subtle** signature (Sadin's c
 | D9 | Scoreboard: one metric per column, groups, fixed delta slot, threshold rule, `0` vs `–`, subtotals | **9** | Fixed the "cramped" table: aligned, scannable, no blobs or chips |
 | D10 | Flags as coloured text in the person line, plus a 2px row edge | **9** | Visible without shouting; no chip clutter |
 | D11 | AI signature = subtle blue→violet gradient on AI surfaces only, plus provenance and confidence | **9.5** | Eye goes to AI first (Sadin's ask) while the rest stays calm; gradient = "Orca", never decoration |
+| D16 | Every AI paragraph sits on the gradient wash block; Orca's read is merged into the top of the briefing card | **9.5** | One AI voice and one look; summary first, proof underneath (Sadin, 2026-11-05) |
 | D15 | Preview mode: AI slots placed now and filled by rules from real data, tagged "Preview" until the LLM is on | **9.5** | The end-product feel today, with zero fake content; the LLM later just swaps the text |
 | D12 | AI suggestions live in the same attention queue, tagged "Suggested" | **9** | One place to act; AI is a teammate, not a separate inbox |
 | D13 | Docked Ask Orca rail with steps, inline charts and record links | **9** | Follow-ups without leaving context |

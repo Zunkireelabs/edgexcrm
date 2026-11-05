@@ -171,6 +171,10 @@ tr.rowflag-am td:first-child{box-shadow:inset 2px 0 0 var(--warn)}
 .sugg svg{width:11px;height:11px;stroke-width:2.2}
 .rnote{display:inline-flex;align-items:center;gap:4px;margin-top:3px;height:20px;padding:0 7px 0 5px;border-radius:6px;background:linear-gradient(135deg,rgba(34,114,180,.07),rgba(124,92,240,.11));color:#4a3cc0;font-size:11.5px;font-weight:500;white-space:nowrap}
 .rnote svg{width:11px;height:11px;stroke-width:2.2;color:var(--ai)}
+.read{margin:6px 0 4px;padding:12px 14px;border-radius:12px;background:linear-gradient(135deg,rgba(34,114,180,.06),rgba(124,92,240,.08));}
+.read .lb{display:flex;align-items:center;gap:6px;color:var(--ai);font-size:12px;font-weight:500;margin-bottom:4px}
+.read .lb svg{width:12px;height:12px;stroke-width:2.2}
+.read p{font-size:14.5px;line-height:1.55;color:var(--ink);max-width:980px}
 </style></head><body>
 <svg width="0" height="0" style="position:absolute">
  <symbol id="spark" viewBox="0 0 24 24"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></symbol>
@@ -254,6 +258,8 @@ tr.rowflag-am td:first-child{box-shadow:inset 2px 0 0 var(--warn)}
    <div class="brief">
     <div class="bhd"><div class="bt"><span class="badge"><svg class="i"><use href="#spark"/></svg></span>This week's briefing<span class="prev" title="Written from your data by rules. Full AI explanations switch on with Orca.">Preview</span></div>
      <span class="meta">Orca · 9:00 AM · from 2,316 activity records</span></div>
+    <div class="read"><div class="lb"><svg class="i"><use href="#spark"/></svg>Orca's read</div>
+     <p>Conversions are up, but the pipeline behind them is thinning. Prospects fell 12% because one Kathmandu TeleCaller stopped working on Wednesday, and Butwal's intake is waiting more than two days for a first call. Fix those two and next week's Applications hold.</p></div>
     <div class="bi"><span class="tg r"><svg class="i"><use href="#down"/></svg></span><div><p><b>Prospects fell 12%, and Kathmandu accounts for nearly all of it.</b> Asha Tamang's activity stopped on Wednesday. Her 34 leads have had no call or note since.</p><div class="ev"><b>Evidence</b>Kathmandu −7 of the team's −13 · Asha 18 calls vs her usual 82</div></div><span class="go">34 leads<svg class="i s"><use href="#arrow"/></svg></span></div>
     <div class="bi"><span class="tg g"><svg class="i"><use href="#up"/></svg></span><div><p><b>Esha Thapa delivered 9 of the 31 students to Applications</b>, 80% above her usual.</p><div class="ev"><b>What works</b>She calls new Prospects within 2h. The team median is 19h.</div></div><span class="go">9 students<svg class="i s"><use href="#arrow"/></svg></span></div>
     <div class="bi"><span class="tg b"><svg class="i"><use href="#archive"/></svg></span><div><p><b>More leads are leaving Qualified: 15 this week, up from 5.</b> The top reason is "Not reachable".</p><div class="ev"><b>Pattern</b>11 of the 15 had only one call attempt.</div></div><span class="go">15 leads<svg class="i s"><use href="#arrow"/></svg></span></div>
@@ -278,7 +284,7 @@ tr.rowflag-am td:first-child{box-shadow:inset 2px 0 0 var(--warn)}
      <div class="it open"><span class="ic bad"><svg class="i"><use href="#down"/></svg></span>
       <div><div class="ln"><b>Asha Tamang</b><span class="sep">·</span>activity down 79% since Wednesday<span class="sugg"><svg class="i"><use href="#spark"/></svg>Suggested</span></div></div>
       <div class="row"><span class="fig"><b>34</b> leads untouched</span><span class="btn pri">Reassign 12 to Anil KC</span></div><span class="chev"><svg class="i"><use href="#chev"/></svg></span>
-      <div class="exp"><p>Calls, notes and stage moves all dropped together from Wednesday. Her 12 Qualified leads are next in line for a follow-up and would wait longest.</p>
+      <div class="exp"><div class="read" style="margin:2px 0 0"><div class="lb"><svg class="i"><use href="#spark"/></svg>Why Orca suggests this</div><p style="font-size:13.5px">Calls, notes and stage moves all dropped together from Wednesday, which usually means an absence. Her 12 Qualified leads are next in line for a follow-up and would wait longest. Anil KC has the lightest load this week.</p></div>
        <div class="meta">18 calls vs usual 82 · 13 notes vs usual 54 · TeleCaller, Kathmandu · Anil KC has the lightest load this week</div>
        <div class="links"><span class="lnk">See the 34 leads →</span><span class="lnk">Asha's week →</span><span class="btn ghost" style="margin-left:auto;height:24px">Dismiss</span></div></div></div>
      <div class="it"><span class="ic warn"><svg class="i"><use href="#clock"/></svg></span>

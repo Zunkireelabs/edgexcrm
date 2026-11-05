@@ -68,3 +68,11 @@ appear only on AI elements.
    `pulse-v5-s1.png`, region by region**, and write a gap list. Fix the gaps until there are none you can't explain.
 3. Re-run the 1.0s performance gate.
 4. Report to edgexcrm-69. I verify in the browser before Sadin sees it.
+
+## Addendum (2026-11-05, Sadin): AI paragraph block
+- **The briefing card now opens with "Orca's read":** a 2–3 sentence summary on a soft gradient wash block (see
+  `pulse-v5-s1.png`), above the 3 insight rows.
+  - In Preview mode it's built by `buildBriefing()` from the top signals.
+  - Omit it when there are fewer than 2 meaningful signals.
+- **Any AI-written paragraph uses the same wash block** with a sparkle label: the expanded attention-row "why" ("Why
+  Orca suggests this") and the person-view coaching note. Rule-only text (AI fully off) renders plain.
