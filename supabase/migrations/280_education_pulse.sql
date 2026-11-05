@@ -365,15 +365,20 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   -- that have NO stage move in the window were there all window; leads WITH a move are counted by the moves
   -- (a move out of N means it was in N; a move into N means it entered). The two sets are disjoint, and every lead
   -- that moved forward out of N is in the base, so forward / base can never exceed 100%.
-  cur_a AS (
+  -- Distinct ids of leads that moved in the window, built ONCE and hash-anti-joined. (A correlated NOT EXISTS over the
+  -- unindexed fmv CTE rescanned ~34k rows per lead: 46 s at Admizz scale.)
+  moved_ids AS MATERIALIZED (SELECT DISTINCT lead_id FROM fmv WHERE b = 0),
+  -- NOT IN (subquery) plans as a HASHED subplan (lead_id is never NULL); the planner's 1-row CTE estimate otherwise
+  -- picks a nested-loop anti join. MATERIALIZED so the five per-stage lookups below read it once, not five times.
+  cur_a AS MATERIALIZED (
     SELECT l.list_id AS id, count(*) AS n
     FROM leads l
     WHERE l.tenant_id = p_tenant AND l.deleted_at IS NULL AND l.list_id IS NOT NULL
       AND (p_branch IS NULL OR l.branch_id = p_branch)
-      AND NOT EXISTS (SELECT 1 FROM fmv WHERE fmv.b = 0 AND fmv.lead_id = l.id)
+      AND l.id NOT IN (SELECT lead_id FROM moved_ids)
     GROUP BY l.list_id
   ),
-  touch_a AS (
+  touch_a AS MATERIALIZED (
     SELECT id, count(DISTINCT lead_id) AS n FROM (
       SELECT from_list_id AS id, lead_id FROM fmv WHERE b = 0 AND from_list_id IS NOT NULL
       UNION ALL
