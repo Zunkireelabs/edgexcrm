@@ -32,10 +32,10 @@ export function PulsePage() {
     return [...m.entries()];
   }, [data]);
 
-  const reassignHref = (s: Signal) => {
-    const base = "/leads?list=pre-qualified";
-    return s.subject.type === "person" ? `${base}&assignees=${s.subject.id}` : base;
-  };
+  // Reassign goes to the EXISTING leads list + bulk-reassign flow; Pulse adds no write path. The leads page keeps its
+  // assignee filter in client state (not the URL), so we can land on the right LIST but cannot pre-filter to the
+  // person yet — tracked as a follow-up (needs the leads page to read ?assignees=).
+  const reassignHref = (s: Signal) => (s.kind === "untouched_leads" ? "/leads?list=pre-qualified" : "/leads");
 
   const exportCsv = () => {
     if (!data) return;
