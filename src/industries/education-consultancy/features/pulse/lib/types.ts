@@ -225,7 +225,7 @@ export interface AttentionItem {
   subject: string;
   what: string;
   /** Right-hand key figure: `strong` is rendered bold, `text` follows it. */
-  figure: { strong?: string; text: string } | null;
+  figure: { strong?: string; text: string; textFirst?: boolean } | null;
   /** Rule-generated suggestion → gradient "Suggested" tag. */
   suggested: boolean;
   /** The concrete action, carrying its value ("Reassign 12 to Anil KC"). */
@@ -326,6 +326,9 @@ export interface PulsePersonResponse {
   daily: Array<{ day: string; calls: number; notes: number; moves: number }>;
   /** Usual activity per day (mean of the 4 prior windows / window days) — the dashed line. */
   usualPerDay: number;
+  /** Active (non-archive-list) leads they hold, and how many of those nobody touched this window. */
+  holds: number;
+  untouched: number;
   timeline: Array<{
     at: string;
     kind: "call" | "note" | "move" | "bulk_move" | "status";

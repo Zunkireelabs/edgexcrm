@@ -25,7 +25,7 @@ describe("rowNote — at most one, from the signals", () => {
 
 describe("coachingNote — the person's own numbers only", () => {
   it("states the share of usual and the figures", () => {
-    expect(coachingNote(P({ calls: 18, notes: 13 }, { calls: 82, notes: 54 }))).toBe("Asha's activity is at 23% of usual. calls 18 vs usual 82 · notes 13 vs usual 54.");
+    expect(coachingNote(P({ calls: 18, notes: 13 }, { calls: 82, notes: 54 }))).toBe("Asha's activity is at 23% of usual. Calls 18 vs usual 82 and notes 13 vs usual 54.");
   });
   it("is null when there is nothing meaningful to say", () => {
     expect(coachingNote(P({ calls: 1 }, { calls: 1 }))).toBeNull();

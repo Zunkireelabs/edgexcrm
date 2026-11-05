@@ -1,4 +1,4 @@
-import { Archive, ArrowRight, ChevronDown, ChevronRight, CircleAlert, Clock, Sparkles, TrendingDown, TrendingUp } from "lucide-react";
+import { Archive, ArrowRight, ChevronDown, ChevronRight, CircleAlert, Clock, Sparkles, TrendingDown, TrendingUp, X } from "lucide-react";
 import type { AttentionIcon } from "../lib/types";
 
 /** Mockup icon sizing comes from `.pulse svg.i` (16px, 1.75 stroke) / `.s` (14px). */
@@ -11,3 +11,4 @@ export function ItemIcon({ icon }: { icon: AttentionIcon | "down" | "up" | "arch
   const C = { down: TrendingDown, up: TrendingUp, clock: Clock, alert: CircleAlert, archive: Archive }[icon];
   return <C className="i" aria-hidden />;
 }
+export const XClose = () => <X className="i" aria-hidden />;

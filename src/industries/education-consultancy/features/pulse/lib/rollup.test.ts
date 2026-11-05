@@ -40,16 +40,16 @@ describe("rollups", () => {
   const { groups, team } = rollups(people);
 
   it("splits 'counselor' and 'counsellor' into ONE group, in display order", () => {
-    expect(groups.map((g) => [g.key, g.label, g.people])).toEqual([["counsellor", "Counsellors", 2], ["telecaller", "TeleCallers", 1]]);
+    expect(groups.map((g) => [g.key, g.label, g.people])).toEqual([["telecaller", "TeleCallers", 1], ["counsellor", "Counsellors", 2]]);
   });
   it("subtotals are the sums of their people (current and usual)", () => {
-    expect(groups[0].current.calls).toBe(15);
-    expect(groups[0].usual.calls).toBe(12);
-    expect(groups[0].current.prospects).toBe(4);
+    expect(groups[1].current.calls).toBe(15);
+    expect(groups[1].usual.calls).toBe(12);
+    expect(groups[1].current.prospects).toBe(4);
   });
   it("per-stage series are summed, forward and back separately", () => {
-    expect(groups[0].forwardByStage.S1).toEqual({ current: 4, previous: 1, usual: 3 });
-    expect(groups[0].backByStage.ARCH).toEqual({ current: 2, previous: 0, usual: 0.5 });
+    expect(groups[1].forwardByStage.S1).toEqual({ current: 4, previous: 1, usual: 3 });
+    expect(groups[1].backByStage.ARCH).toEqual({ current: 2, previous: 0, usual: 0.5 });
   });
   it("the team row equals the sum of the groups", () => {
     expect(team.current.calls).toBe(groups.reduce((a, g) => a + g.current.calls, 0));
@@ -59,5 +59,12 @@ describe("rollups", () => {
     const r = rollups([]);
     expect(r.groups).toEqual([]);
     expect(r.team.current.calls).toBe(0);
+  });
+});
+
+describe("group order is the relay, fixed", () => {
+  it("TeleCallers → Executives → Counsellors → App Executives regardless of input order or count", () => {
+    const ps = [person("a", "counsellor", {}, {}), person("b", "counsellor", {}, {}), person("c", "app-executive", {}, {}), person("d", "executive", {}, {}), person("e", "telecaller", {}, {})];
+    expect(rollups(ps).groups.map((g) => g.key)).toEqual(["telecaller", "executive", "counsellor", "app-executive"]);
   });
 });

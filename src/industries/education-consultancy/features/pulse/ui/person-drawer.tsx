@@ -1,29 +1,30 @@
 "use client";
 
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Skeleton } from "@/components/ui/skeleton";
-import type { EventsQuery, MetricKey, PersonRow } from "../lib/types";
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
+import type { EventsQuery, PersonRow, PulsePersonResponse } from "../lib/types";
 import { coachingNote } from "../lib/notes";
+import { personTiles } from "../lib/person-tiles";
 import { avatarColor, deltaLabel, fmtNum, fmtWhen, initials } from "./format";
-import { Spark } from "./icons";
+import { Spark, XClose } from "./icons";
 import { usePulsePerson, type WindowSelection } from "./use-pulse";
 
-const KINDS: Record<string, string> = { call: "Call", note: "Note on", move: "Moved", bulk_move: "Moved (bulk)", status: "Status" };
+type Tl = PulsePersonResponse["timeline"][number];
 
-function Kpi({ label, value, usual, onClick }: { label: string; value: number; usual: number; onClick: () => void }) {
-  const d = deltaLabel(value, usual);
-  return (
-    <button type="button" onClick={onClick} className="rounded-xl border border-gray-200 p-3 text-left hover:bg-gray-50">
-      <div className="text-xs text-gray-500">{label}</div>
-      <div className="mt-1 text-2xl font-semibold text-gray-900">{fmtNum(value)}</div>
-      <div className={`text-xs font-semibold ${d?.tone === "bad" ? "text-red-600" : d?.tone === "good" ? "text-emerald-600" : "text-gray-500"}`}>
-        {d ? `${d.text} vs ${Math.round(usual)} usual` : "no usual yet"}
-      </div>
-    </button>
-  );
+/** One "what they did" sentence: plain text with the lead name emphasised. */
+function Sentence({ t }: { t: Tl }) {
+  const name = <b>{t.leadName || "a lead"}</b>;
+  const to = t.detail?.includes("→") ? t.detail.split("→").pop()!.trim() : null;
+  switch (t.kind) {
+    case "call": return <>Call to {name}{t.detail ? `, ${t.detail.replace(/_/g, " ").toLowerCase()}` : ""}</>;
+    case "note": return <>Note on {name}</>;
+    case "move": return <>Moved {name}{to ? ` to ${to}` : ""}</>;
+    case "bulk_move": return <>Moved {name}{to ? ` to ${to}` : ""} <span className="faint">(bulk)</span></>;
+    case "status": return <>Status of {name}: {t.detail}</>;
+    default: return <>{t.kind} {name}</>;
+  }
 }
 
-/** Person view: 4 KPIs against their own usual, the daily chart with the dashed usual line, what they did. */
+/** Person view (v4-s3): header, one 4-across tile strip, daily bars with the dashed usual line, "What they did". */
 export function PersonDrawer({
   person, window: win, mode, onClose, onOpen,
 }: {
@@ -37,95 +38,77 @@ export function PersonDrawer({
   const tz = data?.window.tz ?? "UTC";
   const p = data?.person ?? person;
   const daily = data?.daily ?? [];
-  const maxDay = Math.max(1, data?.usualPerDay ?? 0, ...daily.map((d) => d.calls + d.notes + d.moves));
-  const kpi = (key: MetricKey, label: string, noun: string) =>
-    p ? <Kpi label={label} value={p.current[key]} usual={p.usual[key]} onClick={() => onOpen(`${p.current[key]} ${noun} — ${p.name}`, [p.name, label], { metric: key, userId: p.userId })} /> : null;
+  const usualDay = data?.usualPerDay ?? 0;
+  const maxDay = Math.max(1, usualDay, ...daily.map((d) => d.calls + d.notes + d.moves));
+  const tiles = p ? personTiles(p, data?.untouched ?? 0) : [];
+  const note = p ? coachingNote(p) : null;
+  const sub = p ? [p.positionLabel, p.branchName ?? "No branch", data ? `holds ${data.holds} lead${data.holds === 1 ? "" : "s"}` : null].filter(Boolean).join(" · ") : "";
 
   return (
     <Sheet open={!!person} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-[560px]">
-        <SheetHeader>
-          <div className="flex items-center gap-3">
-            {p && <span className="grid h-12 w-12 place-items-center rounded-full text-sm font-semibold text-white" style={{ background: avatarColor(p.userId) }}>{initials(p.name)}</span>}
-            <div>
-              <SheetTitle className="text-xl">{p?.name ?? ""}</SheetTitle>
-              <SheetDescription>{p ? [p.positionName, p.branchName].filter(Boolean).join(" · ") : ""}</SheetDescription>
-            </div>
+      <SheetContent side="right" showCloseButton={false} className="pulse pdr w-full overflow-y-auto sm:max-w-[560px]">
+        <header className="dh">
+          {p && <span className="av lg" style={{ background: avatarColor(p.userId) }}>{initials(p.name)}</span>}
+          <div className="grow">
+            <SheetTitle className="dt">{p?.name ?? ""}</SheetTitle>
+            <SheetDescription className="dsub">{sub}</SheetDescription>
           </div>
-        </SheetHeader>
-        <div className="space-y-5 px-4 pb-6">
-          {p && (
-            <div className="grid grid-cols-2 gap-2.5">
-              {kpi("calls", "Calls", "calls")}
-              {kpi("notes", "Notes", "notes")}
-              {kpi("prospects", "→ Prospects", "leads moved to Prospects")}
-              {kpi("received", "Leads received", "new leads received")}
+          <button type="button" className="xbtn" onClick={onClose} aria-label="Close"><XClose /></button>
+        </header>
+
+        {p && (
+          <div className="strip">
+            {tiles.map((t) => {
+              const d = t.usual != null ? deltaLabel(t.value, t.usual) : null;
+              return (
+                <button key={t.key} type="button" className="tile" onClick={() => onOpen(`${t.value} ${t.label.toLowerCase()} — ${p.name}`, [p.name, t.label], { metric: t.metric, userId: p.userId })}>
+                  <span className="tl">{t.label}</span>
+                  <span className="tn">{fmtNum(t.value)}</span>
+                  <span className={`td ${d?.tone === "bad" ? "dn" : d?.tone === "good" ? "up" : ""}`}>{d && t.usual != null ? `${d.text} vs ${Math.round(t.usual)}` : ""}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {note && (mode === "preview" ? (
+          <div className="read dread"><div className="lb"><Spark />Orca&apos;s read</div><p>{note}</p></div>
+        ) : <p className="plain-read dread">{note}</p>)}
+
+        {error && <p className="derr">Couldn&apos;t load this person&apos;s activity.</p>}
+        {loading && !data && <div className="skel" style={{ height: 160, margin: "20px 24px" }} />}
+        {data && (
+          <>
+            <div className="dsec muted">Daily activity · dashed line is their usual</div>
+            <div className="bars">
+              <div className="plot">
+                {usualDay > 0 && <div className="usual" style={{ bottom: `${(usualDay / maxDay) * 100}%` }} aria-hidden />}
+                {daily.map((d) => {
+                  const v = d.calls + d.notes + d.moves;
+                  const dow = new Date(`${d.day}T00:00:00Z`).getUTCDay();
+                  const weekend = dow === 0 || dow === 6;
+                  const low = usualDay > 0 && v <= usualDay * 0.4;
+                  const cls = low ? (weekend ? "neutral" : "red") : "blue";
+                  return <div key={d.day} className={`bar ${cls}`} title={`${d.day}: ${v}`} style={{ height: `${Math.max((v / maxDay) * 100, 3)}%` }} />;
+                })}
+              </div>
+              <div className="days">
+                {daily.map((d) => <span key={d.day}>{new Date(`${d.day}T00:00:00Z`).toLocaleDateString("en-GB", { weekday: "short", timeZone: "UTC" })}</span>)}
+              </div>
             </div>
-          )}
-          {p && (() => {
-            const note = coachingNote(p);
-            if (!note) return null;
-            // The coaching note is an AI-written paragraph: in Preview it sits on the wash block with a sparkle label.
-            return mode === "preview" ? (
-              <div className="rounded-xl p-3.5" style={{ background: "linear-gradient(135deg,rgba(34,114,180,.06),rgba(124,92,240,.08))" }}>
-                <div className="mb-1 flex items-center gap-1.5 text-xs font-medium" style={{ color: "#5b47d6" }}><Spark className="h-3 w-3" />Orca&apos;s read</div>
-                <p className="text-[13.5px] leading-relaxed text-gray-900">{note}</p>
-              </div>
+
+            <div className="dsec cap" style={{ marginTop: 22 }}>What they did</div>
+            {data.timeline.length === 0 ? (
+              <p className="meta" style={{ padding: "8px 24px" }}>Nothing recorded in this period.</p>
             ) : (
-              <p className="text-[13.5px] leading-relaxed text-gray-700">{note}</p>
-            );
-          })()}
-          {error && <p className="text-sm text-red-600">Couldn&apos;t load this person&apos;s activity.</p>}
-          {loading && !data && <Skeleton className="h-40 w-full" />}
-          {data && (
-            <>
-              <div>
-                <h3 className="text-sm font-semibold text-gray-900">Daily activity <span className="font-normal text-gray-500">· dashed line = their usual</span></h3>
-                <div className="mt-3">
-                  {/* Plot area has an explicit height so the bars' percentage heights resolve. */}
-                  <div className="relative h-28">
-                    <div className="pointer-events-none absolute inset-x-0 border-t border-dashed border-slate-300" style={{ bottom: `${(data.usualPerDay / maxDay) * 100}%` }} aria-hidden />
-                    <div className="absolute inset-0 flex items-end gap-2">
-                      {daily.map((d) => {
-                        const v = d.calls + d.notes + d.moves;
-                        const low = data.usualPerDay > 0 && v <= data.usualPerDay * 0.4;
-                        return (
-                          <div key={d.day} title={`${d.day}: ${v}`}
-                            className={`flex-1 rounded-sm ${low ? "bg-red-400" : "bg-blue-200"}`}
-                            style={{ height: `${Math.max((v / maxDay) * 100, 3)}%` }} />
-                        );
-                      })}
-                    </div>
-                  </div>
-                  <div className="mt-1 flex gap-2">
-                    {daily.map((d) => (
-                      <span key={d.day} className="flex-1 text-center text-[10px] text-gray-500">
-                        {new Date(`${d.day}T00:00:00Z`).toLocaleDateString("en-GB", { weekday: "short", timeZone: "UTC" })}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-gray-900">What they did</h3>
-                {data.timeline.length === 0 ? (
-                  <p className="py-4 text-sm text-gray-500">Nothing recorded in this period.</p>
-                ) : (
-                  <ul className="mt-2 border-l border-gray-200 pl-4">
-                    {data.timeline.map((t, i) => (
-                      <li key={i} className="relative py-1.5 text-sm text-gray-700">
-                        <span className="absolute -left-[21px] top-3 h-2 w-2 rounded-full bg-gray-300" aria-hidden />
-                        {KINDS[t.kind] ?? t.kind} <span className="font-semibold text-gray-900">{t.leadName}</span>
-                        {t.detail ? <span className="text-gray-600"> · {t.detail}</span> : null}
-                        <span className="ml-2 text-xs text-gray-500">{fmtWhen(t.at, tz)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </>
-          )}
-        </div>
+              <ul className="tlist">
+                {data.timeline.map((t, i) => (
+                  <li key={i}><span className="when">{fmtWhen(t.at, tz)}</span><span className="what"><Sentence t={t} /></span></li>
+                ))}
+              </ul>
+            )}
+          </>
+        )}
       </SheetContent>
     </Sheet>
   );

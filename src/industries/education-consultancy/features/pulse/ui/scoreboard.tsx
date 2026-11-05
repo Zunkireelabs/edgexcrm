@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { rowNote } from "../lib/notes";
 import { pluralLabel } from "../lib/positions";
 import type { CellValues, EventsQuery, PersonRow, PulseGroup, PulseResponse, StageSeries } from "../lib/types";
@@ -97,6 +97,21 @@ export function Scoreboard({
   onPerson: (p: PersonRow) => void;
 }) {
   const [sort, setSort] = useState<SortKey>("moves");
+  // Right-edge fade only when the table actually scrolls horizontally and there is more to the right.
+  const tblRef = useRef<HTMLDivElement>(null);
+  const [fade, setFade] = useState(false);
+  const measure = useCallback(() => {
+    const el = tblRef.current;
+    if (el) setFade(el.scrollWidth - el.clientWidth - el.scrollLeft > 2);
+  }, []);
+  useEffect(() => {
+    const el = tblRef.current;
+    if (!el) return;
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [measure, data.people.length]);
   const [view, setView] = useState<"role" | "branch" | "none">("role");
   const stageId = useMemo(() => {
     const m: Record<string, string> = {};
@@ -157,7 +172,7 @@ export function Scoreboard({
             <span className="av" style={{ background: avatarColor(p.userId) }}>{initials(p.name)}</span>
             <div className="two">
               <button type="button" className="nm" onClick={() => onPerson(p)}>{p.name}</button>
-              <span className="sub">{p.branchName ?? p.positionLabel}</span>
+              <span className="sub">{p.branchName ?? "No branch"}</span>
               {note && (mode === "preview"
                 ? <span className="rnote"><Spark className="i" />{note.text}</span>
                 : <span className={`flag ${note.kind === "amber" ? "am" : note.kind === "green" ? "gd" : ""}`}>{note.text}</span>)}
@@ -192,7 +207,8 @@ export function Scoreboard({
         </div>
       </div>
 
-      <div className="tbl">
+      <div className={`tblwrap ${fade ? "fade" : ""}`}>
+      <div className="tbl" ref={tblRef} onScroll={measure}>
         <table>
           <thead>
             <tr className="g">
@@ -222,6 +238,7 @@ export function Scoreboard({
             </tr>
           </tbody>
         </table>
+      </div>
       </div>
 
       <div className="foot">

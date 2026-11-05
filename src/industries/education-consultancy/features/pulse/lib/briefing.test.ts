@@ -34,14 +34,14 @@ describe("buildBriefing — each template, from real numbers only", () => {
     expect(neg.headline).toBe("Prospects fell 40%, and Kathmandu accounts for nearly all of it.");
     expect(neg.detail).toContain("Asha's activity is at");
     // Kathmandu fell 10 while Pokhara rose 2: the team's NET drop is 8, and the evidence must not claim "−10 of −8".
-    expect(neg.evidence).toContain("Kathmandu −10 · team net −8");
+    expect(neg.evidence).toContain("Kathmandu (vs last week) −10 · team net −8");
     expect(neg.evidence).toContain("Asha 18 calls vs usual 82");
     expect(neg.link).toEqual({ label: "18 calls", drill: { metric: "calls", userId: "Asha" } });
   });
   it("(b) the top win is the person furthest above their OWN usual, with a drill to their records", () => {
     const win = buildBriefing(input(people))!.items.find((i) => i.id === "win")!;
     expect(win.headline).toContain("Esha delivered 9 of the 12 students to Applications");
-    expect(win.headline).toContain("80% above their usual");
+    expect(win.headline).toContain(", 80% above their usual");
     expect(win.link.drill).toEqual({ metric: "reached_applications", userId: "Esha" });
   });
   it("(c) the biggest stage leak carries its top archive reason; without reasons it prints a count instead", () => {
@@ -77,6 +77,15 @@ describe("Orca's read", () => {
     expect(b.read).toContain("Prospects fell");
     expect(b.read).toContain("63 new leads have waited over 48 hours");
     expect(b.read!.split(/(?<=\.)\s/).length).toBeLessThanOrEqual(3);
+  });
+  it("synthesizes across signals: no sentence of the read equals an item headline", () => {
+    const b = buildBriefing(input(people, { untouched: { count: 63 }, stageFlows: [flow({ out: 15, previousOut: 5 })] }))!;
+    const sentences = b.read!.split(/(?<=\.)\s+/);
+    const headlines = b.items.map((i) => i.headline);
+    for (const s of sentences) expect(headlines).not.toContain(s);
+    expect(b.read).toContain("Applications are up, but the pipeline behind them is thinning.");
+    expect(b.read).toContain("because Asha's activity is at");
+    expect(b.read).toContain("Fix those two");
   });
   it("is omitted with fewer than 2 meaningful signals", () => {
     const one = [P("Esha", "counsellor", "K", { reached_applications: 9 }, { reached_applications: 3 }, { reached_applications: 5 })];

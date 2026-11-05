@@ -15,6 +15,8 @@ export interface BriefingInput {
   leakReasons: Record<string, LeakReason[]>;
   untouched: { count: number };
   thresholds: PulseThresholds;
+  /** What the previous window is called in the UI ("last week", "yesterday", "the period before"). Default "last week". */
+  baselineLabel?: string;
 }
 
 const METRICS = [
@@ -29,7 +31,9 @@ export function recordCountOf(c: MetricCounts): number {
 }
 
 /** (a) The biggest negative KPI move vs the previous window, explained by its largest contributing branch + person. */
-function negativeMove(input: BriefingInput): BriefingItem | null {
+interface NegCtx { metricKey: (typeof METRICS)[number]["key"]; noun: string; fallPct: string; branchName: string | null; culpritName: string | null; culpritPct: string | null }
+
+function negativeMoveCtx(input: BriefingInput): { item: BriefingItem; ctx: NegCtx } | null {
   let best: { m: (typeof METRICS)[number]; prev: number; cur: number; drop: number } | null = null;
   for (const m of METRICS) {
     const cur = input.team.current[m.key], prev = input.team.previous[m.key];
@@ -48,11 +52,15 @@ function negativeMove(input: BriefingInput): BriefingItem | null {
   }
   const worst = [...byBranch.values()].filter((b) => b.delta < 0).sort((a, b) => a.delta - b.delta)[0];
   const head = `${best.m.noun} fell ${pct(((best.cur - best.prev) / best.prev) * 100)}`;
+  const fallPct = pct(((best.cur - best.prev) / best.prev) * 100);
   if (!worst) {
     return {
-      id: "neg", tone: "bad", icon: "down", headline: `${head}.`, detail: `${best.cur} this period against ${best.prev} before.`,
-      evidenceLabel: "Evidence", evidence: `${best.m.noun}: ${best.cur} vs ${best.prev} the period before`,
-      link: { label: `${best.cur} leads`, drill: { metric: best.m.key } },
+      item: {
+        id: "neg", tone: "bad", icon: "down", headline: `${head}.`, detail: `${best.cur} this period against ${best.prev} before.`,
+        evidenceLabel: "Evidence", evidence: `${best.m.noun}: ${best.cur} vs ${best.prev} the period before`,
+        link: { label: `${best.cur} leads`, drill: { metric: best.m.key } },
+      },
+      ctx: { metricKey: best.m.key, noun: best.m.noun, fallPct, branchName: null, culpritName: null, culpritPct: null },
     };
   }
   // Share of the GROSS decline (sum of the branches that fell) — a branch can fall by more than the team's NET drop
@@ -68,12 +76,18 @@ function negativeMove(input: BriefingInput): BriefingItem | null {
     ? `${culprit.name}'s activity is at ${pct((activityOf(culprit.current) / activityOf(culprit.usual)) * 100)} of usual.`
     : `${worst.name} went from ${worst.people.reduce((a, p) => a + p.previous[best!.m.key], 0)} to ${worst.people.reduce((a, p) => a + p.current[best!.m.key], 0)}.`;
   return {
-    id: "neg", tone: "bad", icon: "down",
-    headline: `${head}, and ${clause}.`,
-    detail,
-    evidenceLabel: "Evidence",
-    evidence: `${worst.name} −${Math.abs(worst.delta)} · team net −${best.drop}` + (culprit ? ` · ${culprit.name} ${culprit.current.calls} calls vs usual ${Math.round(culprit.usual.calls)}` : ""),
-    link: culprit ? { label: `${culprit.current.calls} calls`, drill: { metric: "calls", userId: culprit.userId } } : { label: `${best.cur} leads`, drill: { metric: best.m.key } },
+    item: {
+      id: "neg", tone: "bad", icon: "down",
+      headline: `${head}, and ${clause}.`,
+      detail,
+      evidenceLabel: "Evidence",
+      evidence: `${worst.name} (vs ${input.baselineLabel ?? "last week"}) −${Math.abs(worst.delta)} · team net −${best.drop}` + (culprit ? ` · ${culprit.name} ${culprit.current.calls} calls vs usual ${Math.round(culprit.usual.calls)}` : ""),
+      link: culprit ? { label: `${culprit.current.calls} calls`, drill: { metric: "calls", userId: culprit.userId } } : { label: `${best.cur} leads`, drill: { metric: best.m.key } },
+    },
+    ctx: {
+      metricKey: best.m.key, noun: best.m.noun, fallPct, branchName: worst.name,
+      culpritName: culprit?.name ?? null, culpritPct: culprit ? pct((activityOf(culprit.current) / activityOf(culprit.usual)) * 100) : null,
+    },
   };
 }
 
@@ -87,7 +101,7 @@ function topWin(input: BriefingInput): BriefingItem | null {
     const top = ranked[0];
     if (!top) continue;
     const { p } = top;
-    const above = p.usual[m.key] > 0 ? ` — ${pct(((p.current[m.key] - p.usual[m.key]) / p.usual[m.key]) * 100)} above their usual` : "";
+    const above = p.usual[m.key] > 0 ? `, ${pct(((p.current[m.key] - p.usual[m.key]) / p.usual[m.key]) * 100)} above their usual` : "";
     const peers = input.people.filter((x) => x.positionKey === p.positionKey);
     const avg = peers.length ? peers.reduce((a, x) => a + x.current[m.key], 0) / peers.length : 0;
     const total = input.team.current[m.key];
@@ -127,17 +141,43 @@ function leak(input: BriefingInput): BriefingItem | null {
   };
 }
 
+const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
+
+/**
+ * Orca's read: ONE synthesized paragraph, never a restatement of an item headline.
+ * Shape: "{direction}. {metric} fell N% because {cause 1}, and {cause 2}. {what to fix}." Every clause comes from a
+ * signal we hold; a clause whose signal is missing is skipped. Null with fewer than 2 meaningful signals.
+ */
+function composeRead(input: BriefingInput, neg: { ctx: NegCtx } | null, win: BriefingItem | null, lk: BriefingItem | null): string | null {
+  const signals = [neg, input.untouched.count > 0, lk, win].filter(Boolean).length;
+  if (signals < 2) return null;
+  const causes: string[] = [];
+  if (neg?.ctx.culpritName) causes.push(`${neg.ctx.culpritName}'s activity is at ${neg.ctx.culpritPct} of usual`);
+  else if (neg?.ctx.branchName) causes.push(`${neg.ctx.branchName} accounts for most of the drop`);
+  if (input.untouched.count > 0) causes.push(`${input.untouched.count} new lead${input.untouched.count === 1 ? " has" : "s have"} waited over 48 hours for a first touch`);
+  if (lk) {
+    const l = biggestLeak(input);
+    if (l) causes.push(`more leads are leaving ${l.flow.name} (${l.flow.out}, up from ${l.flow.previousOut})`);
+  }
+  const used = causes.slice(0, 2);
+  const sentences: string[] = [];
+  const up = METRICS.find((m) => input.team.current[m.key] > input.team.previous[m.key] && m.key !== neg?.ctx.metricKey);
+  if (neg && up) {
+    sentences.push(neg.ctx.metricKey === "prospects" ? "Applications are up, but the pipeline behind them is thinning." : "Prospects are up, but fewer students are reaching Applications.");
+  } else if (!neg && up) {
+    sentences.push(`${up.key === "reached_applications" ? "Applications are" : "Prospects are"} up, from ${input.team.previous[up.key]} to ${input.team.current[up.key]}.`);
+  }
+  if (neg) sentences.push(used.length ? `${neg.ctx.noun} fell ${neg.ctx.fallPct} because ${used.join(", and ")}.` : `${neg.ctx.noun} fell ${neg.ctx.fallPct}.`);
+  else if (used.length) sentences.push(`${cap(used.join(", and "))}.`);
+  if (used.length) sentences.push(used.length >= 2 ? "Fix those two and next week's Applications should hold." : "Fix that first to protect next week's Applications.");
+  return sentences.length >= 2 ? sentences.join(" ") : null;
+}
+
 export function buildBriefing(input: BriefingInput): Briefing | null {
-  const neg = negativeMove(input), win = topWin(input), lk = leak(input);
+  const negC = negativeMoveCtx(input), neg = negC?.item ?? null, win = topWin(input), lk = leak(input);
   const items = [neg, win, lk].filter((x): x is BriefingItem => !!x).slice(0, 3);
   const recordCount = recordCountOf(input.team.current);
-  // Orca's read is composed ONLY from the same facts, and only when there are at least two meaningful signals.
-  const facts: string[] = [];
-  if (neg) facts.push(neg.headline.replace(/\.$/, "") + (neg.detail.includes("activity") ? ` — ${neg.detail.replace(/\.$/, "")}` : "") + ".");
-  if (input.untouched.count > 0) facts.push(`${input.untouched.count} new lead${input.untouched.count === 1 ? " has" : "s have"} waited over 48 hours for a first touch.`);
-  if (lk) facts.push(lk.headline);
-  if (win) facts.push(win.headline);
-  const read = facts.length >= 2 ? facts.slice(0, 3).join(" ") : null;
+  const read = composeRead(input, negC, win, lk);
   if (items.length === 0 && !read) return null;
   return { read, items, recordCount };
 }

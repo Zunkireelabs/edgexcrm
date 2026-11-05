@@ -94,12 +94,24 @@ export async function loadPerson(ctx: PulseContext, userId: string): Promise<Pul
   );
   const days = Math.max((window.to.getTime() - window.from.getTime()) / 86_400_000, 1);
 
+  const { data: lists } = await db.from("lead_lists").select("id,is_archive");
+  const activeListIds = ((lists ?? []) as unknown as Array<{ id: string; is_archive: boolean }>).filter((l) => !l.is_archive).map((l) => l.id);
+  const held = activeListIds.length
+    ? await db.from("leads").select("id", { count: "exact", head: true }).eq("assigned_to", userId).is("deleted_at", null).in("list_id", activeListIds)
+    : { count: 0 };
+  const stale = activeListIds.length
+    ? await db.from("leads").select("id", { count: "exact", head: true }).eq("assigned_to", userId).is("deleted_at", null).in("list_id", activeListIds)
+        .or(`last_touched_at.is.null,last_touched_at.lt.${p_from}`)
+    : { count: 0 };
+
   type Daily = { day: string; calls: number; notes: number; moves: number };
   type Tl = { at: string; kind: PulsePersonResponse["timeline"][number]["kind"]; lead_id: string; display_id: string | null; lead_name: string; detail: string | null };
   return {
     person,
     daily: ((dailyRes.data ?? []) as Daily[]).map((d) => ({ day: d.day, calls: Number(d.calls), notes: Number(d.notes), moves: Number(d.moves) })),
     usualPerDay: usualActivity / days,
+    holds: held.count ?? 0,
+    untouched: stale.count ?? 0,
     timeline: ((timelineRes.data ?? []) as Tl[]).map((t) => ({
       at: t.at, kind: t.kind, leadId: t.lead_id, displayId: t.display_id, leadName: t.lead_name, detail: t.detail,
     })),
