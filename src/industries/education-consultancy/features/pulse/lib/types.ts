@@ -53,6 +53,8 @@ export interface PersonInfo {
   positionLabel: string;
   branchId: string | null;
   branchName: string | null;
+  /** tenant_users.created_at — the earliest their numbers can count toward a "usual". */
+  joinedAt?: string | null;
 }
 
 export interface PersonRow extends PersonInfo {
@@ -74,6 +76,10 @@ export interface PersonRow extends PersonInfo {
   flag: "red" | "amber" | "green" | null;
   /** Day (tenant tz, YYYY-MM-DD) they went quiet — only computed for red-flagged people. */
   quietSinceDay?: string | null;
+  /** false → fewer than 2 earlier windows are covered by data: `usual` is zeroed and nothing may compare against it. */
+  hasUsual?: boolean;
+  /** false → the previous window starts before their data does: no "vs last period" figure. */
+  previousCovered?: boolean;
 }
 
 /** One cell's three numbers: this window, the window before it, and the mean of the 4 before that. */
@@ -147,6 +153,7 @@ export interface BranchKpi {
   current: number;
   usual: number;
   metric: MetricKey;
+  hasUsual?: boolean;
 }
 
 export interface UntouchedSummary {
@@ -201,6 +208,8 @@ export interface PulseGroup {
   usual: MetricCounts;
   forwardByStage: StageSeries;
   backByStage: StageSeries;
+  hasUsual?: boolean;
+  previousCovered?: boolean;
 }
 
 // ── Briefing + attention (rule-built, "Preview" mode) ───────────────────────
@@ -281,6 +290,8 @@ export interface PulseResponse {
   header: PulseHeader;
   briefing: Briefing | null;
   attention: AttentionItem[];
+  /** Whether "last period" and "usual" are backed by data (the tenant has records that far back). */
+  coverage?: { baselineCovered: boolean; hasUsual: boolean };
   window: PulseWindowInfo;
   branchId: string | null;
   branches: Array<{ id: string; name: string }>;
@@ -328,6 +339,8 @@ export interface PulsePersonResponse {
   daily: Array<{ day: string; calls: number; notes: number; moves: number }>;
   /** Usual activity per day (mean of the 4 prior windows / window days) — the dashed line. */
   usualPerDay: number;
+  /** false → no usual yet: the dashed line and tile deltas are hidden. */
+  hasUsual?: boolean;
   /** Active (non-archive-list) leads they hold, and how many of those nobody touched this window. */
   holds: number;
   untouched: number;

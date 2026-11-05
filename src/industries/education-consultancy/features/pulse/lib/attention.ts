@@ -2,6 +2,7 @@ import { leadsOfPersonHref, untouchedLeadsHref } from "./leads-links";
 import { pickLightestLoad } from "./suggest";
 import { pluralLabel } from "./positions";
 import { weekdayShort } from "./quiet";
+import { compareToUsual } from "./compare";
 import { activityOf, type AttentionItem, type LeakReason, type PersonRow, type Signal, type StageFlow } from "./types";
 
 /**
@@ -63,7 +64,7 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
       });
     } else if (s.kind === "over_capacity") {
       const p = personOf(input.people, s.subject.id);
-      if (!p || p.usual.received <= 0) continue;
+      if (!p || !compareToUsual(p.current.received, p.usual.received, p.hasUsual)) continue;
       const target = pickLightestLoad(input.people, p);
       out.push({
         id: s.id, category: "needs_action", tone: "warn", icon: "alert", subject: p.name,
@@ -101,7 +102,7 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
     } else if (s.kind === "top_mover") {
       const p = personOf(input.people, s.subject.id);
       if (!p) continue;
-      const above = s.evidence.baseline > 0 ? `, ${pctOf(s.evidence.value, s.evidence.baseline)}% above usual` : "";
+      const above = compareToUsual(s.evidence.value, s.evidence.baseline) ? `, ${pctOf(s.evidence.value, s.evidence.baseline)}% above usual` : "";
       out.push({
         id: s.id, category: "wins", tone: "good", icon: "up", subject: p.name,
         what: `delivered ${s.evidence.value} ${s.evidence.metric === "reached_applications" ? "students to Applications" : "leads to Prospects"}${above}`,

@@ -67,6 +67,22 @@ describe("buildBriefing — each template, from real numbers only", () => {
   });
 });
 
+describe("no real usual / no covered baseline → no claims from them", () => {
+  const people = [
+    P("Asha", "telecaller", "Kathmandu", { calls: 18, prospects: 2 }, { prospects: 12 }, { calls: 82, notes: 20, prospects: 12 }),
+    P("Esha", "counsellor", "Kathmandu", { reached_applications: 9 }, { reached_applications: 3 }, { reached_applications: 5 }),
+  ].map((p) => ({ ...p, hasUsual: false }));
+  it("the win drops '% above their usual' when the person has no usual", () => {
+    const win = buildBriefing(input(people))!.items.find((i) => i.id === "win")!;
+    expect(win.headline).not.toMatch(/above their usual/);
+  });
+  it("an uncovered previous period yields no negative move and no 'is up' direction", () => {
+    const b = buildBriefing(input(people, { baselineCovered: false, untouched: { count: 9 }, newLeads: { current: 120, previous: 10 } }))!;
+    expect(b.items.find((i) => i.id === "neg")).toBeUndefined();
+    expect(b.read ?? "").not.toMatch(/ up/);
+  });
+});
+
 describe("Orca's read", () => {
   const people = [
     P("Asha", "telecaller", "Kathmandu", { calls: 18, prospects: 2 }, { prospects: 12 }, { calls: 82, notes: 20, prospects: 12 }),

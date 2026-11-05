@@ -1,8 +1,8 @@
 import { loadUserNames, isUuid, type PulseContext } from "./context";
-import { usualWindows, mean } from "../lib/window";
 import { assemblePeople } from "../lib/assemble";
 import { loadPeople } from "./load-pulse";
-import type { PersonBucketRow, PulseEventRow, PulseEventsResponse, PulsePersonResponse } from "../lib/types";
+import { loadCoverage } from "./coverage";
+import { activityOf, type PersonBucketRow, type PulseEventRow, type PulseEventsResponse, type PulsePersonResponse } from "../lib/types";
 
 export const EVENT_METRICS = [
   "calls", "notes", "moves", "moves_forward", "back_archived", "status_changes", "received", "prospects", "reached_applications",
@@ -84,14 +84,9 @@ export async function loadPerson(ctx: PulseContext, userId: string): Promise<Pul
   const rows = ((statsRes.data ?? []) as PersonBucketRow[]).filter((r) => r.user_id === userId);
   const infos = (await loadPeople(ctx, new Set([userId]))).filter((p) => p.userId === userId);
   if (infos.length === 0) return null;
-  const [person] = assemblePeople(infos, rows);
+  const [person] = assemblePeople(infos, rows, 4, await loadCoverage(ctx));
 
-  const usualActivity = mean(
-    usualWindows(window).map((_, i) => {
-      const c = rows.find((r) => r.bucket === i + 1)?.counts ?? {};
-      return (c.calls ?? 0) + (c.notes ?? 0) + (c.moves ?? 0);
-    }),
-  );
+  const usualActivity = activityOf(person.usual); // coverage-aware: only windows the data covers
   const days = Math.max((window.to.getTime() - window.from.getTime()) / 86_400_000, 1);
 
   const { data: lists } = await db.from("lead_lists").select("id,is_archive");
@@ -109,7 +104,8 @@ export async function loadPerson(ctx: PulseContext, userId: string): Promise<Pul
   return {
     person,
     daily: ((dailyRes.data ?? []) as Daily[]).map((d) => ({ day: d.day, calls: Number(d.calls), notes: Number(d.notes), moves: Number(d.moves) })),
-    usualPerDay: usualActivity / days,
+    usualPerDay: person.hasUsual === false ? 0 : usualActivity / days,
+    hasUsual: person.hasUsual !== false,
     holds: held.count ?? 0,
     untouched: stale.count ?? 0,
     timeline: ((timelineRes.data ?? []) as Tl[]).map((t) => ({

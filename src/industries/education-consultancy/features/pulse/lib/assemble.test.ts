@@ -56,3 +56,39 @@ describe("per-destination-stage series (forward and back kept apart)", () => {
     expect(Object.keys(p.backByStage)).toEqual(["S2"]);
   });
 });
+
+describe("assemblePeople — coverage-aware usual", () => {
+  const DAY = 86_400_000;
+  const now = new Date("2026-11-05T12:00:00Z").getTime();
+  const rowsAll = [row("a", 0, 120), row("a", 1, 100, { counts: { calls: 100, received: 35 } }), row("a", 2, 0), row("a", 3, 0), row("a", 4, 0)];
+  const cov = (days: number, win: number) => ({ windowFrom: new Date(now - win * DAY), lenMs: win * DAY, tenantFirst: new Date(now - days * DAY) });
+
+  it("a tenant with 34 days of history at 30d: no usual, no previous baseline, zero deltas possible", async () => {
+    const { computeSignals } = await import("./signals");
+    const { DEFAULT_PULSE_THRESHOLDS: T } = await import("./thresholds");
+    const [p] = assemblePeople([info("a")], rowsAll, 4, cov(34, 30));
+    expect(p.hasUsual).toBe(false);
+    expect(p.previousCovered).toBe(false);
+    expect(p.usual.calls).toBe(0);
+    expect(p.usual.received).toBe(0);
+    const out = computeSignals({ people: [{ ...p, current: { ...p.current, received: 35 } }], stageFlows: [], untouched: { count: 0, byPerson: [] }, branchKpis: [], thresholds: T });
+    expect(out.all).toEqual([]);
+    expect(out.flags).toEqual({});
+  });
+  it("the same tenant at 7d has a usual again, from covered windows only", () => {
+    const [p] = assemblePeople([info("a")], [row("a", 0, 10), row("a", 1, 8), row("a", 2, 4), row("a", 3, 6), row("a", 4, 0)], 4, cov(34, 7));
+    expect(p.hasUsual).toBe(true);
+    expect(p.usual.calls).toBe(6); // windows 1..3 covered: (8+4+6)/3; the empty 4th (before the data) is NOT a zero
+    expect(p.previousCovered).toBe(true);
+  });
+  it("a new hire with 1 covered window has none", () => {
+    const [p] = assemblePeople([{ ...info("n"), joinedAt: new Date(now - 15 * DAY).toISOString() }], [row("n", 0, 10), row("n", 1, 8)], 4, cov(100, 7));
+    expect(p.hasUsual).toBe(false);
+    expect(p.usual.calls).toBe(0);
+  });
+  it("no coverage info (old callers / tests) keeps the old behaviour", () => {
+    const [p] = assemblePeople([info("a")], [row("a", 0, 5), row("a", 1, 8)]);
+    expect(p.hasUsual).toBe(true);
+    expect(p.usual.calls).toBe(2);
+  });
+});
