@@ -3,6 +3,7 @@
 **Goal:** EdgeX becomes the AI-native operating system per industry tenant — AI agents deployed *from within* EdgeX ("Orca" is the brand for this agent layer), doing real work under the same tenant-isolation, permission, and audit rules as human employees.
 
 **Status:** Planning complete 2026-07-07; **ADR-001 ACCEPTED 2026-07-07 (all decisions signed — see its Decision Log). Phase 1 is unblocked and next up.**
+**Product direction (what AI must do for users, touchpoint register):** [`docs/reference/07-AI-NATIVE-PRINCIPLES.md`](../reference/07-AI-NATIVE-PRINCIPLES.md). This folder covers how the AI layer is built.
 **Owner:** Sadin (decisions) · Opus session (briefs/review) · dev sessions (implementation).
 
 ---

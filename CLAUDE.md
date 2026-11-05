@@ -16,6 +16,29 @@ A `commit-msg` hook (`.git/hooks/commit-msg`) replaces the default Anthropic co-
 
 ---
 
+## AI-Native By Default
+
+**EdgeX is an AI-native operating system, not a CRM with a chatbot.** We build for `education_consultancy`
+first. Every feature, brief and PR must look for AI touchpoints beyond chat, using five verbs:
+**Observe, Explain, Recommend, Act (a human approves), Hold accountable.** Point the touchpoints out
+without being asked.
+
+- **The database computes numbers, and the LLM interprets them.** Every AI claim links to its evidence
+  records.
+- **Same permission spine as humans.** Use `scopedClient`, role and counsellor scoping, and the approval
+  gate for writes.
+- **Always gated.** Use the flag + `tenants.ai_enabled` + budget, with tracing. Pages work with AI off.
+  No fake or mock AI in the UI.
+- **Proactive by default.** A trigger (Inngest or an event) produces an insight or draft, which goes to
+  a review queue, then a human acts. Reporting leads with *what changed → why → what to do → who*.
+- **Every brief and PR carries an "AI touchpoints" section.** New ideas go to the touchpoint register
+  plus a ticket under EDGEX-4.
+
+Full principles, the template and the register:
+[`docs/reference/07-AI-NATIVE-PRINCIPLES.md`](./docs/reference/07-AI-NATIVE-PRINCIPLES.md).
+
+---
+
 ## Industry Scoping Rules
 
 **IMPORTANT: Current development focus is `education_consultancy` ONLY.** ALL new features default to education_consultancy unless the user explicitly says otherwise. If unsure whether a feature is universal or industry-specific, ASK — don't assume. Every new feature MUST have its own folder at `src/industries/education-consultancy/features/<feature-name>/`. When modifying universal components, gate education-only UI with `industryId === "education_consultancy"`.
@@ -204,6 +227,7 @@ Multi-tenant lead generation CRM SaaS (Zunkiree Labs). White-label system where 
    - **`03-INNGEST-BACKGROUND-JOBS.md` — background/scheduled work runbook: Inngest architecture, environments, function inventory, free-tier budget. Read before adding or changing any scheduled/background job.**
    - **`04-PROD-RESILIENCE.md` — ops runbook for keeping a wedged container from becoming a silent multi-hour outage: the bare-Traefik-404 signature, autoheal, and what's actually live for detection (UptimeRobot) vs. available-but-not-installed (`scripts/uptime-watchdog.sh`). Read before touching prod resilience/ops.**
    - `05-GRAPHIFY-CODE-GRAPH.md` — the code knowledge graph: setup, querying, limitations, refresh. Read if graph queries look wrong or you need to rebuild.
+   - **`07-AI-NATIVE-PRINCIPLES.md` — the product's AI-native direction: the five AI verbs, non-negotiables, AI-native reporting, the required "AI touchpoints" section for briefs and PRs, and the touchpoint register. Read before designing ANY feature.**
    - `api-contracts/` — integration API specs.
    - `PRICING.md` — live product pricing reference.
    Read for context; don't edit per-task.
