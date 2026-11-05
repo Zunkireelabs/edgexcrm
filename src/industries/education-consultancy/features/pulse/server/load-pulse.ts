@@ -1,10 +1,14 @@
 import { assemblePeople } from "../lib/assemble";
 import { normalizePosition } from "../lib/positions";
 import { rollups } from "../lib/rollup";
+import { buildAttention } from "../lib/attention";
+import { buildBriefing } from "../lib/briefing";
+import { isAssistantEnabledForTenant } from "@/lib/ai/flag";
 import { computeSignals } from "../lib/signals";
 import { mean } from "../lib/window";
 import {
   type BranchKpi,
+  type LeakReason,
   type PersonBucketRow,
   type PersonInfo,
   type PulseFunnelStage,
@@ -78,9 +82,13 @@ export async function loadPulse(ctx: PulseContext): Promise<PulseResponse> {
   const bulk = { p_bulk_min: thresholds.bulkMinRows, p_bulk_seconds: thresholds.bulkBucketSeconds };
 
   // One pass: the stage moves are resolved once for both the scoreboard and the funnel (migration 280).
-  const [overviewRes, intakeRes] = await Promise.all([
+  const cutoff48 = new Date(window.to.getTime() - 48 * 3600_000).toISOString();
+  const [overviewRes, untouchedRes, askEnabled] = await Promise.all([
     db.raw().rpc("education_pulse_overview", { p_tenant: auth.tenantId, p_from, p_to, p_tz: tz, p_branch: branchId, ...bulk }),
-    db.raw().rpc("education_intake_alarm", { p_tenant: auth.tenantId, p_now: p_to, p_bucket1_hours: 24, p_bucket2_hours: 48 }),
+    // The untouched set = the leads link's filter (never touched, older than 48h, in the intake list) — one definition.
+    db.from("leads").select("assigned_to, branch_id, lead_lists!inner(is_intake)").is("deleted_at", null).is("last_touched_at", null)
+      .lt("created_at", cutoff48).eq("lead_lists.is_intake", true).limit(5000),
+    isAssistantEnabledForTenant(auth.tenantId).catch(() => false),
   ]);
   if (overviewRes.error) throw new Error(`education_pulse_overview: ${overviewRes.error.message}`);
 
@@ -121,28 +129,86 @@ export async function loadPulse(ctx: PulseContext): Promise<PulseResponse> {
     }
   }
 
-  const alarm = ((intakeRes.data ?? []) as Array<{ buckets: Array<{ bucket: string; cnt: number }> }>)[0];
-  const untouchedCount = (alarm?.buckets ?? []).find((b) => b.bucket === "48h+")?.cnt ?? 0;
+  const untouchedRows = (untouchedRes.data ?? []) as unknown as Array<{ assigned_to: string | null; branch_id: string | null }>;
+  const untouchedCount = untouchedRows.length;
+  const branchName = new Map(ctx.branches.map((b) => [b.id, b.name]));
+  const personById = new Map(people.map((p) => [p.userId, p]));
+  const tally = <K extends string>(keyOf: (r: { assigned_to: string | null; branch_id: string | null }) => K | null) => {
+    const m = new Map<K, number>();
+    for (const r of untouchedRows) { const k = keyOf(r); if (k) m.set(k, (m.get(k) ?? 0) + 1); }
+    return m;
+  };
+  const byBranchCount = [...tally((r) => (r.branch_id ? (branchName.get(r.branch_id) ?? null) : null)).entries()]
+    .map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
+  const roleCounts = new Map<string, { key: string; label: string; count: number }>();
+  for (const r of untouchedRows) {
+    const holder = r.assigned_to ? personById.get(r.assigned_to) : null;
+    if (!holder || holder.positionKey === "none") continue;
+    const e = roleCounts.get(holder.positionKey) ?? { key: holder.positionKey, label: holder.positionLabel, count: 0 };
+    e.count += 1;
+    roleCounts.set(holder.positionKey, e);
+  }
+  const byRole = [...roleCounts.values()].sort((a, b) => b.count - a.count);
 
   const signals = computeSignals({
     people,
     stageFlows,
-    untouched: { count: Number(untouchedCount), byPerson: [] },
+    untouched: { count: untouchedCount, byPerson: [] },
     branchKpis,
     thresholds,
   });
   for (const p of people) p.flag = signals.flags[p.userId] ?? null;
+
+  // Real numbers for the suggestion values: leads a flagged-red person still holds that nobody touched this period
+  // (active lists only), and why leads left the stages that leaked.
+  const activeListIds = funnel.stages.filter((s) => !s.is_archive).map((s) => s.list_id);
+  const staleHeld: Record<string, number> = {};
+  await Promise.all(
+    signals.all.filter((s) => s.kind === "activity_drop").map(async (s) => {
+      const { count } = await db.from("leads").select("id", { count: "exact", head: true })
+        .eq("assigned_to", s.subject.id).is("deleted_at", null).in("list_id", activeListIds)
+        .or(`last_touched_at.is.null,last_touched_at.lt.${p_from}`);
+      staleHeld[s.subject.id] = count ?? 0;
+    }),
+  );
+  const leakReasons: Record<string, LeakReason[]> = {};
+  await Promise.all(
+    stageFlows.filter((f) => f.out >= 5).map(async (f) => {
+      const { data } = await db.raw().rpc("education_pulse_leak_reasons", { p_tenant: auth.tenantId, p_from, p_to, p_list: f.listId });
+      const rows = ((data ?? []) as Array<{ reason: string; leads: number }>).map((r) => ({ reason: r.reason, leads: Number(r.leads) }));
+      if (rows.length) leakReasons[f.listId] = rows;
+    }),
+  );
+
+  const { groups, team } = rollups(people);
+  const attention = buildAttention({
+    people, signals: signals.all, stageFlows, leakReasons, staleHeld,
+    untouched: { count: untouchedCount, byBranch: byBranchCount, byRole },
+  });
+  const briefing = buildBriefing({ people, team, stageFlows, leakReasons, untouched: { count: untouchedCount }, thresholds });
+  const appsStage = funnel.stages.find((s) => s.slug === "applications");
 
   const nl = funnel.new_leads ?? [];
   const bulkByPerson = people.filter((p) => p.bulkMoves > 0).map((p) => ({ userId: p.userId, name: p.name, count: p.bulkMoves }));
 
   const q = funnel.quality;
   return {
+    aiMode: ctx.aiMode,
+    askEnabled,
+    header: {
+      tenantShortName: (ctx.tenantName.trim().split(/\s+/)[0] || "your team"),
+      newLeads: nl[0] ?? 0,
+      students: appsStage?.entered[0] ?? 0,
+      needsAction: attention.filter((a) => a.category === "needs_action").length,
+    },
+    briefing,
+    attention,
     window: ctx.windowInfo,
     branchId,
     branches: ctx.branches,
     people,
-    ...rollups(people),
+    groups,
+    team,
     funnel: {
       stages: funnel.stages.map(
         (s): PulseFunnelStage => ({
