@@ -4,7 +4,7 @@
 **Rule:** every decision below is rated 1–10. **Only decisions rated 9 or higher ship.** Anything lower is listed
 under "Rejected" with the reason, so it doesn't creep back in.
 
-Mockups (the visual spec): `mockups/pulse-v4-s1.png` (Pulse, no AI), `s2` (AI layer on), `s3` (person view + evidence
+Mockups (the visual spec): **`mockups/pulse-v5-s1.png` (the approved Pulse page, AI layer in Preview mode)**, `mockups/pulse-v4-s1.png` (Pulse, no AI), `s2` (AI layer on), `s3` (person view + evidence
 drawer), `s4` (tokens + components). Open `mockups/pulse-v4.html` in a browser for exact values.
 
 Inspiration: the Zaplar hotel OS references. We keep their *principles* (calm, list-first, action carries the value,
@@ -99,15 +99,25 @@ share the same rhythm.
 **Buttons.** Primary (ink, one per region) · Secondary (outline) · Ghost (text) · Link (accent, with "→"). Filter pills
 for categories, a segmented control for time windows.
 
-## 5. AI visual language (replaces the v2 gradient language, which read as AI slop)
-- **Mark:** a small violet sparkle plus a label ("Orca's read", "Suggested"). No gradients, glows or animated shimmer.
-- **AI prose:** a thin violet left rule and a byline with **provenance** ("9:00 AM · from 2,316 activity records").
-- **Confidence:** a 4-bar meter plus a word (Likely / Very likely), and the evidence that earned it.
-- **AI suggestions** use the normal attention row with a "Suggested" tag, so AI work sits in the same queue as human
-  work. "Approve all" appears only when every item is an AI suggestion.
-- **Ask Orca:** a right rail that docks and collapses, with steps shown ("Finished in 3 steps"), inline charts, and links
-  to records.
-- **AI off:** every AI element disappears. The data and rule-based items stay and work (Pulse slice 1 *is* this state).
+## 5. AI visual language
+Calm everywhere else, so AI can stand out with a **subtle** signature (Sadin's call, 2026-11-05, after reviewing v2/v4):
+- **AI surfaces** (the briefing card, the coaching card, the Orca rail):
+  - a soft blue→violet top-to-white wash (`#f4f8fe → #fbfbff → #fff`)
+  - a 2px blue→violet top line
+  - a gradient sparkle badge
+  - a faint violet shadow
+- **Inline AI** ("Suggested" tags, row notes): a soft gradient tint pill with a violet sparkle.
+- **The ask box:** a white field with a 1px blue→violet gradient border.
+- **Gradients appear ONLY on AI elements.** Plain data, tables and rule-only UI never use them, so the gradient keeps
+  meaning "Orca".
+- **Provenance on every AI surface:** "Orca · 9:00 AM · from 2,316 activity records". A confidence meter where a
+  judgement is made.
+- **Preview mode (until the LLM is switched on):** every AI slot is placed and filled from the real numbers by rules,
+  so it is true, clickable and drillable, with a small **"Preview"** tag (tooltip: "Written from your data by rules.
+  Full AI explanations switch on with Orca"). When the LLM activates, the same slots receive its text and the tag
+  disappears. Nothing is invented, and the product already looks and works like the end state.
+- **AI fully off** (tenant not consented): AI surfaces collapse to their plain rule versions with no gradient (the s3
+  state).
 
 ## 6. Decision log
 | # | Decision | Rating | Why |
@@ -122,7 +132,8 @@ for categories, a segmented control for time windows.
 | D8 | Metric strip: 4 tiles, change top-right, sparkline, caption with conversion | **9** | Dense but calm; conversion no longer overlaps numbers |
 | D9 | Scoreboard: one metric per column, groups, fixed delta slot, threshold rule, `0` vs `–`, subtotals | **9** | Fixed the "cramped" table: aligned, scannable, no blobs or chips |
 | D10 | Flags as coloured text in the person line, plus a 2px row edge | **9** | Visible without shouting; no chip clutter |
-| D11 | Quiet AI language (violet mark, byline + provenance, confidence meter), no gradients | **9.5** | Trustworthy and premium; fixes v2's AI slop |
+| D11 | AI signature = subtle blue→violet gradient on AI surfaces only, plus provenance and confidence | **9.5** | Eye goes to AI first (Sadin's ask) while the rest stays calm; gradient = "Orca", never decoration |
+| D15 | Preview mode: AI slots placed now and filled by rules from real data, tagged "Preview" until the LLM is on | **9.5** | The end-product feel today, with zero fake content; the LLM later just swaps the text |
 | D12 | AI suggestions live in the same attention queue, tagged "Suggested" | **9** | One place to act; AI is a teammate, not a separate inbox |
 | D13 | Docked Ask Orca rail with steps, inline charts and record links | **9** | Follow-ups without leaving context |
 | D14 | Hover = usual / last week; click = records, on every number | **9.5** | Every number is a door; no dead ends |
@@ -133,7 +144,8 @@ for categories, a segmented control for time windows.
 | Browser-style workspace tabs (Zaplar) | 7 | Heavy routing/state work; our users run one page at a time today |
 | Donut/ring charts for KPIs | 6 | Low information density; hard to compare |
 | A card per person instead of a table | 6 | Can't compare people side by side |
-| Gradient AI badges and glow (our own v2) | 5 | Reads as AI slop; the decoration carries no meaning |
+| Strong gradients/glow across the page (our own v2 used them on many surfaces) | 6 | Too loud; reduced to AI surfaces only and softened (see D11) |
+| Fake AI text (canned sentences) for the demo feel | 3 | Breaks trust; replaced by D15 Preview mode with real data |
 | Trend sparkline column inside the scoreboard | 8 | Pushed results off-screen; it lives in the person view instead |
 | Per-cell background magnitude bars | 6 | Turned into random tinted blobs; no readable meaning |
 | Change figures on every stage-move column | 8 | Noise; kept for intake, activity and results only |
