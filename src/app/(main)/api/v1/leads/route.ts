@@ -63,6 +63,7 @@ import { resolveLeadBranch, creationBranchForAssignee } from "@/lib/leads/branch
 import { getPipelineLandingStage } from "@/lib/leads/pipeline-stage";
 import { isAssigneePermittedForStage } from "@/industries/education-consultancy/lead-assignment-by-stage";
 import { processEmailForwardRules } from "@/lib/email/email-forward";
+import { dispatchNotificationEmail, newLeadEvent } from "@/lib/email/notify";
 import { processFormAutoresponder } from "@/lib/email/form-autoresponder";
 import { processFormSmsAutoresponder } from "@/lib/sms/form-autoresponder";
 import { assignDisplayIds } from "@/lib/leads/assign-display-ids";
@@ -1964,6 +1965,21 @@ async function handlePost(request: NextRequest) {
       lead: lead as Lead,
       newStageId: resolved.stageId,
     }).catch((err) => log.error({ err }, "Email rule on create failed"));
+
+    // Email every Owner/Admin that a new lead landed in the New Lead (intake) stage. This block only runs for a
+    // brand-new insert (update / merge / race-lost paths returned earlier); a lead created into another stage is
+    // skipped inside the event, and the ledger makes a repeat harmless. Never blocks lead creation.
+    void dispatchNotificationEmail(newLeadEvent, {
+      tenantId,
+      leadId: lead.id,
+      firstName: (lead as Lead).first_name,
+      lastName: (lead as Lead).last_name,
+      email: (lead as Lead).email,
+      phone: (lead as Lead).phone,
+      source: (formConfig as FormConfig | null)?.name || (lead as Lead).intake_source || (dashAuth ? "Manual" : "API"),
+      listId: (lead as Lead).list_id ?? null,
+      isFinal: true,
+    }).catch(() => {});
 
     if (formConfig) {
       void processFormAutoresponder(
