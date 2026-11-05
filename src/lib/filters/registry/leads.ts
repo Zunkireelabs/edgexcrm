@@ -178,6 +178,19 @@ function compileFollowUpNeeded(cond: FilterCondition, ctx: CompileCtx): string {
   );
 }
 
+// ── untouched_new: virtual — never touched AND older than 48h (Pulse "untouched new leads") ─
+// Same rule as education_intake_alarm / Pulse's `untouched` metric: no call/email/meeting and no note since it
+// arrived. Migration 250's trigger sets last_touched_at on exactly those events, so NULL == never touched. The 48h
+// is fixed (Pulse's alarm bucket), NOT tenant-configurable like follow_up_needed's stale days, and on-hold leads are
+// NOT excluded (a lead nobody has touched is untouched, hold or not).
+
+const UNTOUCHED_NEW_HOURS = 48;
+
+function compileUntouchedNew(_cond: FilterCondition, ctx: CompileCtx): string {
+  const cutoff = new Date(ctx.now.getTime() - UNTOUCHED_NEW_HOURS * 60 * 60 * 1000);
+  return and("last_touched_at.is.null", `created_at.lt.${pgVal(cutoff.toISOString())}`);
+}
+
 // ── callback_due: virtual — a pending callback window that has fully elapsed ─
 // (migration 250). "Due" = window elapsed, not merely a missed call: a lead
 // still inside its grace period has callback_due_at set but in the future —
@@ -480,6 +493,16 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       // Never-touched (NULL) must sort to the TOP on ascending — see
       // FieldDef.sortNullsFirst's doc comment in types.ts.
       sortNullsFirst: true,
+      industries: ["education_consultancy"],
+    },
+    {
+      key: "untouched_new",
+      label: "Untouched for 48h+",
+      type: "boolean",
+      source: { kind: "virtual", compile: compileUntouchedNew },
+      operators: ["is_true"],
+      group: "Basic",
+      filterable: true,
       industries: ["education_consultancy"],
     },
     {

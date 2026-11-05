@@ -22,3 +22,13 @@ export function leadsOfPersonHref(userId: string, listSlug?: string | null): str
   p.set("f", encodeFilterTree(assigneeFilterTree([userId])));
   return `/leads?${p.toString()}`;
 }
+
+/** `/leads` on the intake list, filtered to leads nobody has touched for 48h+ — exactly Pulse's "untouched" set. */
+export function untouchedLeadsHref(listSlug = "pre-qualified"): string {
+  const tree: FilterTree = {
+    conjunction: "and",
+    conditions: [{ id: "pulse:untouched", field: "untouched_new", op: "is_true" }],
+  };
+  const p = new URLSearchParams({ list: listSlug, f: encodeFilterTree(tree) });
+  return `/leads?${p.toString()}`;
+}
