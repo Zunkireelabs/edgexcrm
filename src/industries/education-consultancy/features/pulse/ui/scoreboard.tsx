@@ -6,10 +6,11 @@ import { pluralLabel } from "../lib/positions";
 import type { CellValues, EventsQuery, PersonRow, PulseGroup, PulseResponse, StageSeries } from "../lib/types";
 import { Caret, Spark } from "./icons";
 import { avatarColor, initials } from "./format";
+import { compareToUsual, formatChange } from "../lib/compare";
 import { evidenceLabels } from "./evidence";
 
 type Open = (title: string, crumbs: string[], q: EventsQuery) => void;
-type RowLike = Pick<PersonRow | PulseGroup, "current" | "previous" | "usual" | "forwardByStage">;
+type RowLike = Pick<PersonRow | PulseGroup, "current" | "previous" | "usual" | "forwardByStage" | "hasUsual" | "previousCovered">;
 
 interface Col {
   id: string;
@@ -50,23 +51,22 @@ const SORTS: Array<{ key: SortKey; label: string }> = [
   { key: "reached_applications", label: "Students" }, { key: "name", label: "Name" },
 ];
 
-/** The change vs usual: shown only when ≥25% off AND usual ≥5 (so the table stays quiet). */
-function change(v: CellValues, rise?: "bad" | "warn"): { text: string; cls: string } | null {
-  if (v.usual < 5) return null;
-  const pct = Math.round(((v.current - v.usual) / v.usual) * 100);
-  if (Math.abs(pct) < 25) return null;
-  const up = pct > 0;
-  const text = `${up ? "+" : "−"}${Math.abs(pct)}%`;
+/** The change vs usual: shown only through the one guard, and only when ≥25% off (so the table stays quiet). */
+function change(v: CellValues, hasUsual: boolean, rise?: "bad" | "warn"): { text: string; cls: string } | null {
+  const cmp = compareToUsual(v.current, v.usual, hasUsual);
+  if (!cmp || Math.abs(cmp.pct) < 25) return null;
+  const up = cmp.pct > 0;
+  const text = formatChange(cmp) ?? "";
   if (rise && up) return { text, cls: rise === "warn" ? "am" : "dn" };
   return { text, cls: up ? "up" : "dn" };
 }
 
 function Cell({
-  v, col, na, onOpen, plain, periodLabel,
-}: { v: CellValues; col: Col; na: boolean; onOpen?: () => void; plain?: boolean; periodLabel: string }) {
+  v, col, na, onOpen, plain, periodLabel, hasUsual, previousCovered, unit,
+}: { v: CellValues; col: Col; na: boolean; onOpen?: () => void; plain?: boolean; periodLabel: string; hasUsual: boolean; previousCovered: boolean; unit: string }) {
   const first = FIRST_OF_GROUP.has(col.id) ? "sp" : "";
   if (na) return <td className={first}><span className="z">–</span></td>;
-  const ch = change(v, col.rise);
+  const ch = change(v, hasUsual, col.rise);
   const num = v.current === 0 ? <span className="z">0</span> : <>{v.current.toLocaleString("en-US")}</>;
   return (
     <td className={first}>
@@ -80,8 +80,8 @@ function Cell({
         {col.group !== "Moved to" && <span className={`d ${ch?.cls ?? ""}`}>{ch?.text ?? ""}</span>}
         <span className="tip" role="tooltip">
           <div><span>{periodLabel}</span><b>{v.current}</b></div>
-          <div><span>Usual</span><b>{Math.round(v.usual * 10) / 10}</b></div>
-          <div><span>Last week</span><b>{v.previous}</b></div>
+          {hasUsual ? <div><span>Usual</span><b>{Math.round(v.usual * 10) / 10}</b></div> : <div className="nu">No usual yet · needs 2 earlier {unit} periods</div>}
+          {previousCovered && <div><span>Last period</span><b>{v.previous}</b></div>}
         </span>
       </span>
     </td>
@@ -97,6 +97,7 @@ export function Scoreboard({
   onOpen: Open;
   onPerson: (p: PersonRow) => void;
 }) {
+  const unit = data.window.key === "7d" ? "7-day" : data.window.key === "30d" ? "30-day" : data.window.key === "24h" ? "24-hour" : "equal-length";
   const [sort, setSort] = useState<SortKey>("moves");
   // Right-edge fade only when the table actually scrolls horizontally and there is more to the right.
   const tblRef = useRef<HTMLDivElement>(null);
@@ -148,7 +149,7 @@ export function Scoreboard({
       const e = fwd[id] ?? { current: 0, previous: 0, usual: 0 };
       fwd[id] = { current: e.current + v.current, previous: e.previous + v.previous, usual: e.usual + v.usual };
     }
-    return { current: mk("current"), previous: mk("previous"), usual: mk("usual"), forwardByStage: fwd };
+    return { current: mk("current"), previous: mk("previous"), usual: mk("usual"), forwardByStage: fwd, hasUsual: ps.every((p) => p.hasUsual !== false), previousCovered: ps.every((p) => p.previousCovered !== false) };
   };
 
   const open = (p: PersonRow, col: Col) => {
@@ -162,7 +163,7 @@ export function Scoreboard({
   const cells = (r: RowLike, roleKey: string | null, p?: PersonRow) =>
     COLS.map((col) => {
       const sid = col.stageSlug ? stageId[col.stageSlug] : undefined;
-      return <Cell key={col.id} col={col} v={col.value(r, sid)} na={roleKey !== null && col.naRoles.includes(roleKey)} plain={!p} periodLabel={periodLabel} onOpen={p ? () => open(p, col) : undefined} />;
+      return <Cell key={col.id} col={col} v={col.value(r, sid)} na={roleKey !== null && col.naRoles.includes(roleKey)} plain={!p} periodLabel={periodLabel} hasUsual={r.hasUsual !== false} previousCovered={r.previousCovered !== false} unit={unit} onOpen={p ? () => open(p, col) : undefined} />;
     });
 
   const personRow = (p: PersonRow) => {

@@ -1,4 +1,5 @@
 import type { PulseThresholds } from "./thresholds";
+import { MIN_OVER_CAPACITY_RATIO, MIN_USUAL, compareToUsual } from "./compare";
 import {
   activityOf,
   type BranchKpi,
@@ -35,7 +36,7 @@ export function activityDropSignals(people: PersonRow[], t: PulseThresholds): Si
   for (const p of people) {
     const usual = activityOf(p.usual);
     const current = activityOf(p.current);
-    if (usual >= t.activityDropMinUsual && current <= usual * t.activityDropRatio) {
+    if (p.hasUsual !== false && usual >= Math.max(t.activityDropMinUsual, MIN_USUAL) && current <= usual * t.activityDropRatio) {
       out.push({
         id: `activity_drop:${p.userId}`,
         kind: "activity_drop",
@@ -89,7 +90,8 @@ export function overCapacitySignals(people: PersonRow[], t: PulseThresholds): Si
   for (const p of people) {
     const received = p.current.received;
     const usual = p.usual.received;
-    if (received >= t.overCapacityMin && received >= usual * t.overCapacityRatio) {
+    const cmp = compareToUsual(received, usual, p.hasUsual);
+    if (cmp && received >= t.overCapacityMin && cmp.ratio >= Math.max(t.overCapacityRatio, MIN_OVER_CAPACITY_RATIO)) {
       out.push({
         id: `over_capacity:${p.userId}`,
         kind: "over_capacity",
@@ -142,6 +144,7 @@ export function topMoverSignal(people: PersonRow[]): Signal[] {
   for (const metric of ["reached_applications", "prospects"] as const) {
     for (const p of people) {
       const delta = p.current[metric] - p.usual[metric];
+      if (!compareToUsual(p.current[metric], p.usual[metric], p.hasUsual)) continue;
       if (delta > 0 && (!best || delta > best.delta)) best = { p, metric, delta };
     }
     if (best) break;
@@ -170,7 +173,7 @@ export function biggestDropSignal(kpis: BranchKpi[]): Signal[] {
   let worst: BranchKpi | null = null;
   let worstDelta = 0;
   for (const k of kpis) {
-    if (k.usual <= 0) continue;
+    if (k.hasUsual === false || k.usual < MIN_USUAL) continue;
     const delta = k.current - k.usual;
     if (delta < worstDelta) {
       worst = k;

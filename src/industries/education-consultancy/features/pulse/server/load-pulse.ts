@@ -1,5 +1,7 @@
 import { assemblePeople } from "../lib/assemble";
 import { quietSinceDay } from "../lib/quiet";
+import { coveredUsualIndices, previousCovered as prevCovered, MIN_COVERED_WINDOWS } from "../lib/coverage";
+import { loadCoverage } from "./coverage";
 import { normalizePosition } from "../lib/positions";
 import { rollups } from "../lib/rollup";
 import { buildAttention } from "../lib/attention";
@@ -22,6 +24,7 @@ import { loadUserNames, type PulseContext } from "./context";
 
 interface TenantUserRow {
   user_id: string;
+  created_at: string | null;
   role: string;
   branch_id: string | null;
   suspended_at: string | null;
@@ -33,7 +36,7 @@ export async function loadPeople(ctx: PulseContext, activeIds: Set<string>): Pro
   const { db, branchId, branches } = ctx;
   const { data } = await db
     .from("tenant_users")
-    .select("user_id, role, branch_id, suspended_at, positions(name, slug)");
+    .select("user_id, created_at, role, branch_id, suspended_at, positions(name, slug)");
   const names = await loadUserNames(db);
   const branchName = new Map(branches.map((b) => [b.id, b.name]));
   const out: PersonInfo[] = [];
@@ -55,6 +58,7 @@ export async function loadPeople(ctx: PulseContext, activeIds: Set<string>): Pro
       positionLabel: normalizePosition(pos?.slug, pos?.name).label,
       branchId: m.branch_id,
       branchName: m.branch_id ? (branchName.get(m.branch_id) ?? null) : null,
+      joinedAt: m.created_at,
     });
   }
   return out;
@@ -103,7 +107,11 @@ export async function loadPulse(ctx: PulseContext): Promise<PulseResponse> {
   const overview = overviewRes.data as { people: PersonBucketRow[]; funnel: FunnelJson };
   const bucketRows = overview.people ?? [];
   const funnel = overview.funnel;
-  const people = assemblePeople(await loadPeople(ctx, new Set(bucketRows.map((r) => r.user_id))), bucketRows);
+  const coverage = await loadCoverage(ctx);
+  const people = assemblePeople(await loadPeople(ctx, new Set(bucketRows.map((r) => r.user_id))), bucketRows, 4, coverage);
+  const teamFirst = coverage.tenantFirst;
+  const teamHasUsual = coveredUsualIndices(coverage, teamFirst).length >= MIN_COVERED_WINDOWS;
+  const baselineCovered = prevCovered(coverage, teamFirst);
 
   const stageFlows: StageFlow[] = funnel.stages
     .filter((s) => !s.is_archive)
@@ -120,10 +128,11 @@ export async function loadPulse(ctx: PulseContext): Promise<PulseResponse> {
     }));
 
   // Per-branch KPIs for the "biggest drop" rule.
-  const byBranch = new Map<string, { name: string; cur: Record<string, number>; usual: Record<string, number> }>();
+  const byBranch = new Map<string, { name: string; cur: Record<string, number>; usual: Record<string, number>; hasUsual: boolean }>();
   for (const p of people) {
     if (!p.branchId) continue;
-    const b = byBranch.get(p.branchId) ?? { name: p.branchName ?? "Branch", cur: {}, usual: {} };
+    const b = byBranch.get(p.branchId) ?? { name: p.branchName ?? "Branch", cur: {}, usual: {}, hasUsual: true };
+    if (p.hasUsual === false) b.hasUsual = false; // a branch only has a usual when every member does
     for (const m of ["reached_applications", "prospects"] as const) {
       b.cur[m] = (b.cur[m] ?? 0) + p.current[m];
       b.usual[m] = (b.usual[m] ?? 0) + p.usual[m];
@@ -133,7 +142,7 @@ export async function loadPulse(ctx: PulseContext): Promise<PulseResponse> {
   const branchKpis: BranchKpi[] = [];
   for (const [id, b] of byBranch) {
     for (const m of ["reached_applications", "prospects"] as const) {
-      branchKpis.push({ branchId: id, name: b.name, metric: m, current: b.cur[m] ?? 0, usual: b.usual[m] ?? 0 });
+      branchKpis.push({ branchId: id, name: b.name, metric: m, current: b.cur[m] ?? 0, usual: b.usual[m] ?? 0, hasUsual: b.hasUsual });
     }
   }
 
@@ -210,7 +219,7 @@ export async function loadPulse(ctx: PulseContext): Promise<PulseResponse> {
   const winDays = (new Date(ctx.windowInfo.to).getTime() - new Date(ctx.windowInfo.from).getTime()) / 86_400_000;
   const baselineLabel = Math.abs(winDays - 7) < 0.1 ? "last week" : Math.abs(winDays - 1) < 0.1 ? "yesterday" : "the period before";
   const nl0 = funnel.new_leads?.[0] ?? 0, nl1 = funnel.new_leads?.[1] ?? 0;
-  const briefing = buildBriefing({ people, team, stageFlows, leakReasons, untouched: { count: untouchedCount }, thresholds, baselineLabel, newLeads: { current: nl0, previous: nl1 } });
+  const briefing = buildBriefing({ people, team, stageFlows, leakReasons, untouched: { count: untouchedCount }, thresholds, baselineLabel, baselineCovered, newLeads: { current: nl0, previous: nl1 } });
   const appsStage = funnel.stages.find((s) => s.slug === "applications");
 
   const nl = funnel.new_leads ?? [];
@@ -228,6 +237,7 @@ export async function loadPulse(ctx: PulseContext): Promise<PulseResponse> {
     },
     briefing,
     attention,
+    coverage: { baselineCovered, hasUsual: teamHasUsual },
     window: ctx.windowInfo,
     branchId,
     branches: ctx.branches,
@@ -244,7 +254,7 @@ export async function loadPulse(ctx: PulseContext): Promise<PulseResponse> {
       newLeads: {
         current: nl[0] ?? 0,
         previous: nl[1] ?? 0,
-        usual: mean([nl[1] ?? 0, nl[2] ?? 0, nl[3] ?? 0, nl[4] ?? 0]),
+        usual: (() => { const idx = coveredUsualIndices(coverage, teamFirst); return idx.length >= MIN_COVERED_WINDOWS ? mean(idx.map((i) => nl[i + 1] ?? 0)) : 0; })(),
         daily: funnel.new_leads_daily ?? [],
       },
       importedExcluded: Number(funnel.imported_excluded ?? 0),

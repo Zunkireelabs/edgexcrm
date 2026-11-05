@@ -72,12 +72,15 @@ describe("untouched new leads", () => {
   });
 });
 
-describe("over capacity (>= 1.8x usual AND >= 20)", () => {
+describe("over capacity (>= 2.5x a real usual of 5+ AND >= 20)", () => {
   it("fires at the edge", () => {
-    expect(overCapacitySignals([person("a", { received: 36 }, { received: 20 })], T)).toHaveLength(1); // 1.8x exactly
+    expect(overCapacitySignals([person("a", { received: 50 }, { received: 20 })], T)).toHaveLength(1); // 2.5x exactly
   });
-  it("not below 1.8x or below 20", () => {
-    expect(overCapacitySignals([person("a", { received: 35 }, { received: 20 })], T)).toHaveLength(0);
+  it("not below 2.5x, below 20, or against a usual under 5", () => {
+    expect(overCapacitySignals([person("a", { received: 49 }, { received: 20 })], T)).toHaveLength(0);
+    expect(overCapacitySignals([person("a", { received: 35 }, { received: 0 })], T)).toHaveLength(0);
+    expect(overCapacitySignals([person("a", { received: 35 }, { received: 1 })], T)).toHaveLength(0);
+    expect(overCapacitySignals([person("a", { received: 35 }, { received: 4 })], T)).toHaveLength(0);
     expect(overCapacitySignals([person("a", { received: 19 }, { received: 5 })], T)).toHaveLength(0);
   });
   it("is amber, never red", () => {
@@ -106,18 +109,18 @@ describe("stage leak (out >= 2x previous AND >= 10)", () => {
 describe("top mover", () => {
   it("picks the largest positive delta on reached_applications", () => {
     const s = topMoverSignal([
-      person("a", { reached_applications: 5 }, { reached_applications: 3 }),
-      person("b", { reached_applications: 9 }, { reached_applications: 4 }),
+      person("a", { reached_applications: 8 }, { reached_applications: 5 }),
+      person("b", { reached_applications: 14 }, { reached_applications: 6 }),
     ]);
     expect(s).toHaveLength(1);
     expect(s[0].subject.id).toBe("b");
     expect(s[0].tone).toBe("good");
   });
   it("falls back to prospects only if nobody improved on applications", () => {
-    const s = topMoverSignal([person("a", { reached_applications: 1, prospects: 7 }, { reached_applications: 3, prospects: 2 })]);
+    const s = topMoverSignal([person("a", { reached_applications: 1, prospects: 12 }, { reached_applications: 5, prospects: 5 })]);
     expect(s[0].evidence.metric).toBe("prospects");
     const s2 = topMoverSignal([
-      person("a", { reached_applications: 2, prospects: 20 }, { reached_applications: 1, prospects: 1 }),
+      person("a", { reached_applications: 12, prospects: 20 }, { reached_applications: 5, prospects: 5 }),
     ]);
     expect(s2[0].evidence.metric).toBe("reached_applications");
   });
@@ -194,7 +197,7 @@ describe("Needs you is phrased as ACTIONS; Key changes stays observational (revi
 
 describe("row flags", () => {
   it("top mover gets a green flag; red > amber > green on the same person", () => {
-    const top = person("t", { reached_applications: 9 }, { reached_applications: 2 });
+    const top = person("t", { reached_applications: 12 }, { reached_applications: 5 });
     expect(computeSignals({ people: [top], stageFlows: [], untouched: { count: 0, byPerson: [] }, branchKpis: [], thresholds: T }).flags).toEqual({ t: "green" });
     const both = person("x", { received: 40, reached_applications: 9 }, { received: 10, reached_applications: 1 });
     expect(computeSignals({ people: [both], stageFlows: [], untouched: { count: 0, byPerson: [] }, branchKpis: [], thresholds: T }).flags).toEqual({ x: "amber" });

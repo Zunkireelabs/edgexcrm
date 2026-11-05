@@ -28,7 +28,10 @@ export function rollup(key: string, label: string, people: PersonRow[]): PulseGr
     people: people.length,
     current: sumCounts(people.map((p) => p.current)),
     previous: sumCounts(people.map((p) => p.previous)),
+    // A group's usual is only real when EVERY member has one (a partial sum would understate it).
     usual: sumCounts(people.map((p) => p.usual)),
+    hasUsual: people.length > 0 && people.every((p) => p.hasUsual !== false),
+    previousCovered: people.length > 0 && people.every((p) => p.previousCovered !== false),
     forwardByStage: sumSeries(people.map((p) => p.forwardByStage)),
     backByStage: sumSeries(people.map((p) => p.backByStage)),
   };

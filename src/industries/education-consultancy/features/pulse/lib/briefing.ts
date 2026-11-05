@@ -1,5 +1,6 @@
 import { activityOf, type Briefing, type BriefingItem, type LeakReason, type PersonRow, type StageFlow, type MetricCounts, type PulseGroup } from "./types";
 import type { PulseThresholds } from "./thresholds";
+import { compareToUsual } from "./compare";
 
 /**
  * "Preview mode": the briefing the LLM layer will later write, built TODAY from real numbers by deterministic
@@ -17,6 +18,8 @@ export interface BriefingInput {
   thresholds: PulseThresholds;
   /** What the previous window is called in the UI ("last week", "yesterday", "the period before"). Default "last week". */
   baselineLabel?: string;
+  /** false → the previous period starts before the data does: no trend claim is made from it. */
+  baselineCovered?: boolean;
   /** New leads this window vs the previous one (for the intake direction). */
   newLeads?: { current: number; previous: number };
 }
@@ -36,6 +39,7 @@ export function recordCountOf(c: MetricCounts): number {
 interface NegCtx { metricKey: (typeof METRICS)[number]["key"]; noun: string; fallPct: string; branchName: string | null; culpritName: string | null; culpritPct: string | null }
 
 function negativeMoveCtx(input: BriefingInput): { item: BriefingItem; ctx: NegCtx } | null {
+  if (input.baselineCovered === false) return null;
   let best: { m: (typeof METRICS)[number]; prev: number; cur: number; drop: number } | null = null;
   for (const m of METRICS) {
     const cur = input.team.current[m.key], prev = input.team.previous[m.key];
@@ -72,7 +76,7 @@ function negativeMoveCtx(input: BriefingInput): { item: BriefingItem; ctx: NegCt
   const clause = share >= 0.8 ? `${worst.name} accounts for nearly all of it` : share >= 0.5 ? `${worst.name} accounts for most of it` : `${worst.name} is the largest part of it`;
   // The person behind it: the largest activity drop vs usual in that branch (only if it is a real drop).
   const culprit = [...worst.people]
-    .filter((p) => activityOf(p.usual) >= input.thresholds.activityDropMinUsual && activityOf(p.current) < activityOf(p.usual) * 0.6)
+    .filter((p) => p.hasUsual !== false && activityOf(p.usual) >= input.thresholds.activityDropMinUsual && activityOf(p.current) < activityOf(p.usual) * 0.6)
     .sort((a, b) => activityOf(b.usual) - activityOf(b.current) - (activityOf(a.usual) - activityOf(a.current)))[0];
   const detail = culprit
     ? `${culprit.name}'s activity is at ${pct((activityOf(culprit.current) / activityOf(culprit.usual)) * 100)} of usual.`
@@ -103,7 +107,8 @@ function topWin(input: BriefingInput): BriefingItem | null {
     const top = ranked[0];
     if (!top) continue;
     const { p } = top;
-    const above = p.usual[m.key] > 0 ? `, ${pct(((p.current[m.key] - p.usual[m.key]) / p.usual[m.key]) * 100)} above their usual` : "";
+    const cmp = compareToUsual(p.current[m.key], p.usual[m.key], p.hasUsual);
+    const above = cmp && cmp.pct > 0 ? `, ${cmp.pct}% above their usual` : "";
     const peers = input.people.filter((x) => x.positionKey === p.positionKey);
     const avg = peers.length ? peers.reduce((a, x) => a + x.current[m.key], 0) / peers.length : 0;
     const total = input.team.current[m.key];
@@ -160,7 +165,7 @@ function composeRead(input: BriefingInput, neg: { ctx: NegCtx } | null, win: Bri
   // 1. strongest positive move (relative rise, needs a real base and a real change)
   const cands: Array<{ label: string; key: string; pct: number }> = [];
   const rise = (label: string, key: string, cur: number, prev: number) => {
-    if (prev > 0 && cur - prev >= 3 && cur > prev) cands.push({ label, key, pct: ((cur - prev) / prev) * 100 });
+    if (input.baselineCovered !== false && prev > 0 && cur - prev >= 3 && cur > prev) cands.push({ label, key, pct: ((cur - prev) / prev) * 100 });
   };
   if (input.newLeads) rise("Intake is up", "intake", input.newLeads.current, input.newLeads.previous);
   rise("Prospects are up", "prospects", input.team.current.prospects, input.team.previous.prospects);

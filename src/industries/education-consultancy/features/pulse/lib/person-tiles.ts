@@ -1,4 +1,5 @@
 import type { MetricKey, PersonRow } from "./types";
+import { compareToUsual } from "./compare";
 
 export interface PersonTile {
   key: string;
@@ -17,6 +18,6 @@ export function personTiles(p: PersonRow, untouched: number): PersonTile[] {
     : p.positionKey === "executive" ? { label: "To Prospects", metric: "prospects" }
     : p.positionKey === "app-executive" ? { label: "Filed", metric: "applications_filed" }
     : { label: "Moved", metric: "moves" };
-  const t = (key: string, label: string, metric: MetricKey): PersonTile => ({ key, label, metric, value: p.current[metric], usual: p.usual[metric] > 0 ? p.usual[metric] : null });
+  const t = (key: string, label: string, metric: MetricKey): PersonTile => ({ key, label, metric, value: p.current[metric], usual: compareToUsual(p.current[metric], p.usual[metric], p.hasUsual) ? p.usual[metric] : null });
   return [t("calls", "Calls", "calls"), t("notes", "Notes", "notes"), t("third", third.label, third.metric), { key: "untouched", label: "Untouched", metric: "untouched", value: untouched, usual: null }];
 }

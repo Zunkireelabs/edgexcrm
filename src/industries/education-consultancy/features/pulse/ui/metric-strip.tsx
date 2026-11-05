@@ -7,8 +7,9 @@ import { SparkLine } from "./spark-line";
 
 type Open = (title: string, crumbs: string[], q: EventsQuery) => void;
 
-function Chg({ cur, base }: { cur: number; base: number }) {
-  const d = deltaLabel(cur, base);
+function Chg({ cur, base, covered }: { cur: number; base: number; covered: boolean }) {
+  // No change figure when the previous period starts before the data does (an empty base is not a baseline).
+  const d = covered ? deltaLabel(cur, base) : null;
   if (!d) return <span className="chg flat" />;
   return <span className={`chg ${d.tone === "good" ? "up" : d.tone === "bad" ? "dn" : "flat"}`}>{d.text}</span>;
 }
@@ -41,9 +42,9 @@ export function MetricStrip({ data, prevLabel, onOpen }: { data: PulseResponse; 
     <div className="metrics">
       {tiles.map((t) => (
         <button type="button" key={t.label} className="m" onClick={() => onOpen(t.title, [t.label], t.q)}>
-          <div className="top"><span className="lbl">{t.label}</span><Chg cur={t.num} base={t.prev} /></div>
+          <div className="top"><span className="lbl">{t.label}</span><Chg cur={t.num} base={t.prev} covered={data.coverage?.baselineCovered !== false} /></div>
           <div className="v"><span className="num">{t.num.toLocaleString("en-US")}</span><SparkLine values={t.series} /></div>
-          <div className="def">{t.prev.toLocaleString("en-US")} {prevLabel}{t.extra && <> · <span style={{ color: "var(--muted)" }}>{t.extra}</span></>}</div>
+          <div className="def">{data.coverage?.baselineCovered === false ? "No earlier period yet" : <>{t.prev.toLocaleString("en-US")} {prevLabel}</>}{t.extra && <> · <span style={{ color: "var(--muted)" }}>{t.extra}</span></>}</div>
         </button>
       ))}
     </div>

@@ -1,5 +1,6 @@
 import { activityOf, type PersonRow } from "./types";
 import { weekdayShort } from "./quiet";
+import { compareToUsual } from "./compare";
 
 /**
  * At most ONE row note per person, from the rule signals (never guessed): activity drop → "check in first",
@@ -10,11 +11,11 @@ const clip = (t: string) => (t.length > ROW_NOTE_MAX ? `${t.slice(0, ROW_NOTE_MA
 
 export function rowNote(p: PersonRow): { kind: "red" | "amber" | "green"; text: string } | null {
   const usualAct = activityOf(p.usual);
-  if (p.flag === "red" && usualAct > 0) {
+  if (p.flag === "red" && usualAct > 0 && p.hasUsual !== false) {
     const text = p.quietSinceDay ? `Quiet since ${weekdayShort(p.quietSinceDay)} · check in first` : `Activity ${Math.round((activityOf(p.current) / usualAct) * 100)}% of usual`;
     return { kind: "red", text: clip(text) };
   }
-  if (p.flag === "amber" && p.usual.received > 0) {
+  if (p.flag === "amber" && compareToUsual(p.current.received, p.usual.received, p.hasUsual)) {
     return { kind: "amber", text: clip(`Over capacity · ${(Math.round((p.current.received / p.usual.received) * 10) / 10).toString()}× intake`) };
   }
   if (p.flag === "green") {
@@ -54,14 +55,12 @@ const ROLE_RESULT: Record<string, NoteMetric> = { counsellor: "reached_applicati
 export function coachingNote(p: PersonRow): string | null {
   const metrics: NoteMetric[] = ["calls", "notes", ROLE_RESULT[p.positionKey] ?? "moves"];
   const ranked = metrics
-    .filter((k) => p.usual[k] >= 3 && (p.usual[k] >= 5 || p.current[k] >= 5))
+    .filter((k) => compareToUsual(p.current[k], p.usual[k], p.hasUsual))
     .map((k) => ({ k, pct: Math.round(((p.current[k] - p.usual[k]) / p.usual[k]) * 100) }))
     .sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
   const lead = ranked[0];
   if (!lead) {
-    const any = ACTIVITY.some(({ key }) => p.current[key] >= 5) || p.current[ROLE_RESULT[p.positionKey] ?? "moves"] >= 5;
-    if (!any) return null;
-    return `${p.name} has no usual yet to compare against.`;
+    return null; // no real usual → nothing to compare against, so nothing is claimed
   }
   const head = rolePhrase(p, lead.k, p.current[lead.k]) +
     (lead.pct === 0 ? ", in line with usual" : `, ${Math.abs(lead.pct)}% ${lead.pct > 0 ? "above" : "below"} usual`);
