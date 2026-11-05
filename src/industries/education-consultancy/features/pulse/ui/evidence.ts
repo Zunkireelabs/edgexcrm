@@ -33,3 +33,22 @@ export const METRIC_TITLE: Record<string, string> = {
   new_leads: "new leads",
   untouched: "new leads untouched for over 48 hours",
 };
+
+/** Title + breadcrumb tail for a drawer, in the mockup's words ("9 students delivered to Applications" / "To Applications"). */
+export function evidenceLabels(metric: string, n: number, opts: { stage?: string } = {}): { title: string; crumb: string } {
+  const one = n === 1;
+  switch (metric) {
+    case "reached_applications": return { title: `${n} student${one ? "" : "s"} delivered to Applications`, crumb: "To Applications" };
+    case "prospects": return { title: `${n} lead${one ? "" : "s"} delivered to Prospects`, crumb: "To Prospects" };
+    case "applications_filed": return { title: `${n} application${one ? "" : "s"} filed`, crumb: "Filed" };
+    case "moves_forward": return { title: `${n} lead${one ? "" : "s"} moved to ${opts.stage ?? "the next stage"}`, crumb: opts.stage ? `To ${opts.stage}` : "Moved" };
+    case "moves": return { title: `${n} stage move${one ? "" : "s"}`, crumb: "Moved" };
+    case "back_archived": return { title: `${n} lead${one ? "" : "s"} moved back or archived`, crumb: "Back" };
+    case "received": return { title: `${n} new lead${one ? "" : "s"} received`, crumb: "Received" };
+    case "untouched": return { title: `${n} lead${one ? "" : "s"} untouched this period`, crumb: "Untouched" };
+    case "status_changes": return { title: `${n} status change${one ? "" : "s"}`, crumb: "Status" };
+    case "calls": return { title: `${n} call${one ? "" : "s"}`, crumb: "Calls" };
+    case "notes": return { title: `${n} note${one ? "" : "s"}`, crumb: "Notes" };
+    default: return { title: `${n} ${METRIC_TITLE[metric] ?? metric}`, crumb: metric };
+  }
+}

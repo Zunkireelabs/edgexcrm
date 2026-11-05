@@ -17,6 +17,8 @@ export interface BriefingInput {
   thresholds: PulseThresholds;
   /** What the previous window is called in the UI ("last week", "yesterday", "the period before"). Default "last week". */
   baselineLabel?: string;
+  /** New leads this window vs the previous one (for the intake direction). */
+  newLeads?: { current: number; previous: number };
 }
 
 const METRICS = [
@@ -144,32 +146,49 @@ function leak(input: BriefingInput): BriefingItem | null {
 const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
 
 /**
- * Orca's read: ONE synthesized paragraph, never a restatement of an item headline.
- * Shape: "{direction}. {metric} fell N% because {cause 1}, and {cause 2}. {what to fix}." Every clause comes from a
- * signal we hold; a clause whose signal is missing is skipped. Null with fewer than 2 meaningful signals.
+ * Orca's read: ONE synthesized paragraph that never restates an item headline.
+ *  1. Direction: the strongest positive KPI move against the strongest negative one (or the negative trend alone).
+ *  2. Facts with places and people: the fall, where it concentrated, who went quiet, what is waiting, what leaks.
+ *  3. What to fix.
+ * Every clause comes from a signal we hold; a clause whose signal is missing is skipped. Null with < 2 signals.
  */
 function composeRead(input: BriefingInput, neg: { ctx: NegCtx } | null, win: BriefingItem | null, lk: BriefingItem | null): string | null {
   const signals = [neg, input.untouched.count > 0, lk, win].filter(Boolean).length;
   if (signals < 2) return null;
-  const causes: string[] = [];
-  if (neg?.ctx.culpritName) causes.push(`${neg.ctx.culpritName}'s activity is at ${neg.ctx.culpritPct} of usual`);
-  else if (neg?.ctx.branchName) causes.push(`${neg.ctx.branchName} accounts for most of the drop`);
-  if (input.untouched.count > 0) causes.push(`${input.untouched.count} new lead${input.untouched.count === 1 ? " has" : "s have"} waited over 48 hours for a first touch`);
-  if (lk) {
-    const l = biggestLeak(input);
-    if (l) causes.push(`more leads are leaving ${l.flow.name} (${l.flow.out}, up from ${l.flow.previousOut})`);
-  }
-  const used = causes.slice(0, 2);
+  const base = input.baselineLabel ?? "last week";
+
+  // 1. strongest positive move (relative rise, needs a real base and a real change)
+  const cands: Array<{ label: string; key: string; pct: number }> = [];
+  const rise = (label: string, key: string, cur: number, prev: number) => {
+    if (prev > 0 && cur - prev >= 3 && cur > prev) cands.push({ label, key, pct: ((cur - prev) / prev) * 100 });
+  };
+  if (input.newLeads) rise("Intake is up", "intake", input.newLeads.current, input.newLeads.previous);
+  rise("Prospects are up", "prospects", input.team.current.prospects, input.team.previous.prospects);
+  rise("Applications are up", "reached_applications", input.team.current.reached_applications, input.team.previous.reached_applications);
+  const up = cands.filter((c) => c.key !== neg?.ctx.metricKey).sort((x, y) => y.pct - x.pct)[0];
+  const negPhrase = neg ? (neg.ctx.metricKey === "prospects" ? "fewer leads are moving forward" : "fewer students are reaching Applications") : null;
   const sentences: string[] = [];
-  const up = METRICS.find((m) => input.team.current[m.key] > input.team.previous[m.key] && m.key !== neg?.ctx.metricKey);
-  if (neg && up) {
-    sentences.push(neg.ctx.metricKey === "prospects" ? "Applications are up, but the pipeline behind them is thinning." : "Prospects are up, but fewer students are reaching Applications.");
-  } else if (!neg && up) {
-    sentences.push(`${up.key === "reached_applications" ? "Applications are" : "Prospects are"} up, from ${input.team.previous[up.key]} to ${input.team.current[up.key]}.`);
+  if (up && negPhrase) sentences.push(`${up.label}${up.pct >= 50 ? " sharply" : ""}, but ${negPhrase}.`);
+  else if (negPhrase) sentences.push(`${cap(negPhrase)} than ${base}.`);
+  else if (up) sentences.push(`${up.label}${up.pct >= 50 ? " sharply" : ""} on ${base}.`);
+
+  // 2. facts, worded differently from the item headlines
+  const facts: string[] = [];
+  if (neg) facts.push(`${neg.ctx.noun} fell ${neg.ctx.fallPct}${neg.ctx.branchName ? `, mostly in ${neg.ctx.branchName}` : ""}`);
+  const actions: string[] = [];
+  if (neg?.ctx.culpritName) actions.push(`${neg.ctx.culpritName} has gone quiet at ${neg.ctx.culpritPct} of the usual pace`);
+  if (input.untouched.count > 0) actions.push(`${input.untouched.count} new lead${input.untouched.count === 1 ? " has" : "s have"} waited over 48 hours for a first touch`);
+  const l = lk ? biggestLeak(input) : null;
+  if (l) actions.push(`${l.flow.out} leads left ${l.flow.name} backwards or to Archive, up from ${l.flow.previousOut}`);
+  const usedActions = actions.slice(0, neg ? 2 : 3);
+  facts.push(...usedActions);
+  if (facts.length) {
+    const joined = facts.length > 1 ? `${facts.slice(0, -1).join(", ")} and ${facts[facts.length - 1]}` : facts[0];
+    sentences.push(`${cap(joined)}.`);
   }
-  if (neg) sentences.push(used.length ? `${neg.ctx.noun} fell ${neg.ctx.fallPct} because ${used.join(", and ")}.` : `${neg.ctx.noun} fell ${neg.ctx.fallPct}.`);
-  else if (used.length) sentences.push(`${cap(used.join(", and "))}.`);
-  if (used.length) sentences.push(used.length >= 2 ? "Fix those two and next week's Applications should hold." : "Fix that first to protect next week's Applications.");
+
+  // 3. what to fix
+  if (usedActions.length) sentences.push(usedActions.length >= 2 ? "Fix those two and next week's Applications should hold." : "Fix that first to protect next week's Applications.");
   return sentences.length >= 2 ? sentences.join(" ") : null;
 }
 

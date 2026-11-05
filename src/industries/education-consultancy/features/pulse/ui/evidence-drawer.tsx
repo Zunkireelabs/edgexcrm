@@ -51,7 +51,7 @@ export function EvidenceDrawer({
             <SheetDescription className="dsub">
               {fmtRange(windowInfo.from, windowInfo.to, windowInfo.tz)}
               {credited && " · credited to whoever held the lead before the move"}
-              {q?.userId && " · one person"}{q?.branchId && " · one branch"}
+              {q?.branchId && !q.userId && " · one branch"}
             </SheetDescription>
           </div>
           <button type="button" className="xbtn" onClick={onClose} aria-label="Close"><XClose /></button>
@@ -63,7 +63,7 @@ export function EvidenceDrawer({
           {!error && rows.length === 0 && !loading && <p className="meta" style={{ padding: "24px 0" }}>No matching leads in this period.</p>}
           {rows.length > 0 && (
             <table className="etbl">
-              <thead><tr><th>Lead</th><th>What</th><th className="r">When</th></tr></thead>
+              <thead><tr><th>{credited ? "Student" : "Lead"}</th><th>{credited || q?.metric === "moves_forward" ? "Move" : "What"}</th><th className="r">When</th></tr></thead>
               <tbody>
                 {rows.map((r) => (
                   <tr key={`${r.leadId}-${r.at}`}>
@@ -73,7 +73,7 @@ export function EvidenceDrawer({
                     </td>
                     <td className="ew">
                       {r.fromLabel || r.toLabel ? <>{r.fromLabel ?? "—"} → {r.toLabel ?? "—"}</> : <>{r.detail ?? "—"}</>}
-                      {r.actorName && <div className="es">by {r.actorName}</div>}
+                      {r.actorName && !q?.userId && <div className="es">by {r.actorName}</div>}
                     </td>
                     <td className="r ew">{fmtWhen(r.at, windowInfo.tz)}</td>
                   </tr>

@@ -6,6 +6,7 @@ import { pluralLabel } from "../lib/positions";
 import type { CellValues, EventsQuery, PersonRow, PulseGroup, PulseResponse, StageSeries } from "../lib/types";
 import { Caret, Spark } from "./icons";
 import { avatarColor, initials } from "./format";
+import { evidenceLabels } from "./evidence";
 
 type Open = (title: string, crumbs: string[], q: EventsQuery) => void;
 type RowLike = Pick<PersonRow | PulseGroup, "current" | "previous" | "usual" | "forwardByStage">;
@@ -154,7 +155,8 @@ export function Scoreboard({
     const sid = col.stageSlug ? stageId[col.stageSlug] : undefined;
     const q = col.query(sid);
     const v = col.value(p, sid);
-    onOpen(`${v.current} ${col.group === "Moved to" && col.id !== "back" ? `moved to ${col.label}` : col.label.toLowerCase()} — ${p.name}`, [p.name, col.label], { ...q, userId: p.userId });
+    const { title, crumb } = evidenceLabels(q.metric, v.current, { stage: col.stageSlug ? col.label : undefined });
+    onOpen(title, [p.name, crumb], { ...q, userId: p.userId });
   };
 
   const cells = (r: RowLike, roleKey: string | null, p?: PersonRow) =>
