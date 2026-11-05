@@ -36,6 +36,8 @@ export interface PersonBucketRow {
   notes_edited: number;
   /** stage-move "Did" breakdown keyed by destination list id (or "other"). */
   moves_by_stage: Record<string, number>;
+  /** Back / archived moves keyed by destination list id (an earlier stage, or the archive list). */
+  back_by_stage: Record<string, number>;
   /** Stage moves excluded from "Did" because they were bulk. */
   bulk_moves: number;
 }
@@ -46,6 +48,9 @@ export interface PersonInfo {
   email: string | null;
   positionSlug: string | null;
   positionName: string | null;
+  /** Normalized role key / label (counselor ≡ counsellor, lead-executive ≡ executive) — group and filter on these. */
+  positionKey: string;
+  positionLabel: string;
   branchId: string | null;
   branchName: string | null;
 }
@@ -57,13 +62,25 @@ export interface PersonRow extends PersonInfo {
   usual: MetricCounts;
   notesNew: number;
   notesEdited: number;
+  /** Current-window FORWARD moves by destination stage id (kept for the existing table). */
   movesByStage: Record<string, number>;
+  /** Per destination stage id: current / previous window / usual — forward and back kept apart (hover cards, v4 table). */
+  forwardByStage: StageSeries;
+  backByStage: StageSeries;
   bulkMoves: number;
   /** Activity (calls+notes+moves) per window, oldest usual window first → current window last. For the row trend line. */
   trend: number[];
   /** red = activity drop, amber = over capacity, green = top mover (never violet: that is reserved for AI). */
   flag: "red" | "amber" | "green" | null;
 }
+
+/** One cell's three numbers: this window, the window before it, and the mean of the 4 before that. */
+export interface CellValues {
+  current: number;
+  previous: number;
+  usual: number;
+}
+export type StageSeries = Record<string, CellValues>;
 
 export function activityOf(c: Pick<MetricCounts, "calls" | "notes" | "moves">): number {
   return c.calls + c.notes + c.moves;
@@ -172,11 +189,26 @@ export interface PulseQuality {
   originNameShaped: { total: number; unmatched: number };
 }
 
+/** A role group (or the whole team): the sum of its people. Usual sums as the mean of sums = sum of means. */
+export interface PulseGroup {
+  key: string;
+  label: string;
+  people: number;
+  current: MetricCounts;
+  previous: MetricCounts;
+  usual: MetricCounts;
+  forwardByStage: StageSeries;
+  backByStage: StageSeries;
+}
+
 export interface PulseResponse {
   window: PulseWindowInfo;
   branchId: string | null;
   branches: Array<{ id: string; name: string }>;
   people: PersonRow[];
+  /** Role subtotals (normalized roles, in display order) and the team total row. */
+  groups: PulseGroup[];
+  team: PulseGroup;
   funnel: {
     stages: PulseFunnelStage[];
     newLeads: { current: number; previous: number; usual: number; daily: Array<{ day: string; n: number }> };
