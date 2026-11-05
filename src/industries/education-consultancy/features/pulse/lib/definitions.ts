@@ -70,20 +70,36 @@ export function resolveListRef(
 }
 
 export interface HolderInput {
-  /** changes.holder.new on the move's own audit row. */
+  /** The assignee changed in this very event (changes.assigned_to old ≠ new). */
+  assignChanged?: boolean;
+  /** changes.assigned_to.old — who held the lead before the hand-off. */
+  assignedOld?: string | null;
+  /** The person who made the move (audit_logs.user_id). */
+  actorId?: string | null;
+  /** changes.holder.new — when the assignee did NOT change this is the holder before AND after. */
   holderNew?: string | null;
-  /** changes.assigned_to.new on the same audit row. */
-  assignedToNew?: string | null;
   /** assignee reconstructed from the latest prior assigned_to audit change, if any. */
   priorAssignee?: string | null;
   /** leads.assigned_to now. */
   currentAssignee?: string | null;
 }
-export type HolderSource = "holder" | "assigned_to" | "prior_audit" | "current_fallback" | "none";
+export type HolderSource = "assigned_to" | "actor" | "holder" | "prior_audit" | "current_fallback" | "none";
 
+/**
+ * Who delivered the lead to the stage = the holder IMMEDIATELY BEFORE the move (review round 1).
+ *
+ * The relay re-assigns a lead in the same event that moves it forward (Counsellor → App Executive when it enters
+ * Applications), so the holder AFTER the move is the NEXT person in the chain. Crediting them would credit the
+ * receiver for the sender's work. Order:
+ *   1. assigned_to.old when the assignee changed in this event — if nobody held it, the actor delivered it;
+ *   2. otherwise the assignee did not change, so holder.new is the holder before (and after);
+ *   3. rows without holder: the latest prior assigned_to audit change, then the current assignee (a reported fallback).
+ */
 export function resolveHolder(i: HolderInput): { userId: string | null; source: HolderSource } {
+  if (i.assignChanged) {
+    return i.assignedOld ? { userId: i.assignedOld, source: "assigned_to" } : { userId: i.actorId ?? null, source: i.actorId ? "actor" : "none" };
+  }
   if (i.holderNew) return { userId: i.holderNew, source: "holder" };
-  if (i.assignedToNew) return { userId: i.assignedToNew, source: "assigned_to" };
   if (i.priorAssignee) return { userId: i.priorAssignee, source: "prior_audit" };
   if (i.currentAssignee) return { userId: i.currentAssignee, source: "current_fallback" };
   return { userId: null, source: "none" };
@@ -151,4 +167,15 @@ export function dedupeReceived(
     out.set(r.userId, (out.get(r.userId) ?? 0) + 1);
   }
   return out;
+}
+
+/**
+ * Stage-to-stage conversion: of the leads that were in stage N during the window (held at its start + entered in it),
+ * the share that moved FORWARD out of N in the window. By construction every lead that moved forward out of N is in
+ * the base, so this can never exceed 100% (the old "entered N+1 ÷ entered N" could: 12 ÷ 10 = 120%).
+ * null when there is nothing to divide by.
+ */
+export function stageConversion(forwardFromStage: number, base: number): number | null {
+  if (base <= 0) return null;
+  return Math.min(1, Math.max(0, forwardFromStage / base));
 }

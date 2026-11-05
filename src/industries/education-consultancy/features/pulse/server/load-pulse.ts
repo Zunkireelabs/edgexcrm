@@ -52,7 +52,7 @@ export async function loadPeople(ctx: PulseContext, activeIds: Set<string>): Pro
 
 type FunnelJson = {
   stages: Array<{
-    list_id: string; name: string; slug: string; sort_order: number; is_archive: boolean;
+    list_id: string; name: string; slug: string; sort_order: number; is_archive: boolean; base: number;
     entered: number[]; forward: number[]; out: number[]; daily: Array<{ day: string; n: number }>;
   }>;
   new_leads: number[];
@@ -91,6 +91,7 @@ export async function loadPulse(ctx: PulseContext): Promise<PulseResponse> {
       listId: s.list_id,
       name: s.name,
       sortOrder: s.sort_order,
+      base: Number(s.base ?? 0),
       entered: s.entered[0] ?? 0,
       forward: s.forward[0] ?? 0,
       out: s.out[0] ?? 0,
@@ -140,7 +141,7 @@ export async function loadPulse(ctx: PulseContext): Promise<PulseResponse> {
     funnel: {
       stages: funnel.stages.map(
         (s): PulseFunnelStage => ({
-          listId: s.list_id, name: s.name, slug: s.slug, sortOrder: s.sort_order, isArchive: s.is_archive,
+          listId: s.list_id, name: s.name, slug: s.slug, sortOrder: s.sort_order, isArchive: s.is_archive, base: Number(s.base ?? 0),
           entered: s.entered, forward: s.forward, out: s.out, daily: s.daily,
         }),
       ),

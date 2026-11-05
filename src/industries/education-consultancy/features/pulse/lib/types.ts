@@ -4,6 +4,7 @@ export const METRIC_KEYS = [
   "calls",
   "notes",
   "moves",
+  "back_archived",
   "status_changes",
   "received",
   "prospects",
@@ -18,6 +19,7 @@ export const ZERO_COUNTS: MetricCounts = {
   calls: 0,
   notes: 0,
   moves: 0,
+  back_archived: 0,
   status_changes: 0,
   received: 0,
   prospects: 0,
@@ -59,7 +61,8 @@ export interface PersonRow extends PersonInfo {
   bulkMoves: number;
   /** Activity (calls+notes+moves) per window, oldest usual window first → current window last. For the row trend line. */
   trend: number[];
-  flag: "red" | "amber" | null;
+  /** red = activity drop, amber = over capacity, green = top mover (never violet: that is reserved for AI). */
+  flag: "red" | "amber" | "green" | null;
 }
 
 export function activityOf(c: Pick<MetricCounts, "calls" | "notes" | "moves">): number {
@@ -77,7 +80,7 @@ export type SignalKind =
 
 /** Query params understood by GET /api/v1/pulse/events (also used as a drill target). */
 export interface EventsQuery {
-  metric: MetricKey | "untouched" | "stage_out" | "new_leads";
+  metric: MetricKey | "moves_forward" | "untouched" | "stage_out" | "new_leads";
   userId?: string | null;
   detail?: string | null;
   branchId?: string | null;
@@ -96,7 +99,9 @@ export interface Signal {
   /** Which slots this signal feeds. */
   surfaces: Array<"key_changes" | "needs_you">;
   /** Row flag on the scoreboard, if any. */
-  flag?: "red" | "amber";
+  flag?: "red" | "amber" | "green";
+  /** The same signal phrased as an ACTION for the "Needs you" slot (Key changes stays observational). */
+  needs?: { title: string; detail: string };
   /** Sort key within the same severity. */
   magnitude: number;
   /** "up" renders green, "down" red/neutral — Key changes bullet tone. */
@@ -107,6 +112,8 @@ export interface StageFlow {
   listId: string;
   name: string;
   sortOrder: number;
+  /** Leads that were in this stage during the window (held at window start + entered). */
+  base: number;
   entered: number;
   forward: number;
   out: number;
@@ -148,6 +155,8 @@ export interface PulseFunnelStage {
   slug: string;
   sortOrder: number;
   isArchive: boolean;
+  /** Leads that were in this stage during the current window: held at its start + entered in it. */
+  base: number;
   /** Per window bucket: 0 = current, 1 = previous, 1..4 = the "usual" windows. */
   entered: number[];
   forward: number[];
@@ -157,7 +166,7 @@ export interface PulseFunnelStage {
 
 export interface PulseQuality {
   total: number;
-  holderSource: { holder: number; assigned_to: number; prior_audit: number; current_fallback: number; none: number };
+  holderSource: { holder: number; assigned_to: number; actor: number; prior_audit: number; current_fallback: number; none: number };
   destination: { id: number; name: number; slug: number; unmatched: number };
   originSlugShaped: { total: number; unmatched: number };
   originNameShaped: { total: number; unmatched: number };

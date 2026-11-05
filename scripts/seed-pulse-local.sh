@@ -214,7 +214,9 @@ BEGIN
       ELSE
         PERFORM pg_temp.seed_move(lead, tc, at_, L_QUAL, ex, ids, hold, NULL, 'lead.updated');
       END IF;
-      PERFORM pg_temp.seed_status(lead, ex, at_ + interval '3 hours', 'contacted');
+      -- every position records status changes as the lead moves through the relay (new -> contacted -> qualified -> ...)
+      PERFORM pg_temp.seed_status(lead, tc, at_ + interval '1 hour', 'contacted');
+      PERFORM pg_temp.seed_status(lead, ex, at_ + interval '3 hours', 'qualified');
 
       -- stage leak: Qualified -> back / archived, much more often this week
       IF random() < (CASE WHEN at_ > v_now - interval '7 days' THEN 0.42 ELSE 0.07 END) AND at_ + interval '1 day' < v_now THEN
@@ -227,11 +229,13 @@ BEGIN
         IF at_ < v_now AND random() < (CASE WHEN at_ > v_now - interval '7 days' THEN 0.8 ELSE 0.55 END) THEN
           co := CASE WHEN br = br_kt THEN co1 WHEN br = br_lt THEN co2 ELSE (CASE WHEN random() < 0.5 THEN co1 ELSE co2 END) END;
           PERFORM pg_temp.seed_move(lead, ex, at_, L_PROS, co, ids, hold, NULL, 'lead.updated');
+          PERFORM pg_temp.seed_status(lead, co, at_ + interval '2 hours', 'interested');
           at_ := at_ + (1 + random() * 4) * interval '1 day';
           IF at_ < v_now AND random() < (CASE WHEN at_ > v_now - interval '7 days' THEN 0.85 ELSE 0.5 END) THEN
             ap := CASE WHEN at_ > v_now - interval '7 days' AND random() < 0.8 THEN ap1
                        WHEN br = br_lt THEN ap2 WHEN br = br_kt THEN ap1 ELSE (CASE WHEN random() < 0.5 THEN ap1 ELSE ap2 END) END;
             PERFORM pg_temp.seed_move(lead, co, at_, L_APPS, ap, ids, hold, NULL, CASE WHEN random() < 0.3 THEN 'lead.graduated' ELSE 'lead.updated' END);
+            PERFORM pg_temp.seed_status(lead, ap, at_ + interval '3 hours', 'enrolled');
             INSERT INTO applications (tenant_id, lead_id, assigned_to, university_name, program_name, stage_id, status, created_at, updated_at)
             VALUES (t, lead, ap, 'University of Seedland', 'BSc Pulse', '22222222-2222-2222-2222-000000000071', 'active', at_ + interval '2 hours', at_ + interval '2 hours');
             IF random() < 0.5 THEN   -- ~1.5 applications per student

@@ -9,6 +9,7 @@ import {
   noteCounts,
   resolveHolder,
   resolveListRef,
+  stageConversion,
   type ListRef,
   type MoveRow,
 } from "./definitions";
@@ -61,14 +62,38 @@ describe("resolveListRef", () => {
   });
 });
 
-describe("holder resolution order", () => {
-  it("holder > assigned_to > prior audit > current fallback", () => {
-    const all = { holderNew: "h", assignedToNew: "a", priorAssignee: "p", currentAssignee: "c" };
-    expect(resolveHolder(all)).toEqual({ userId: "h", source: "holder" });
-    expect(resolveHolder({ ...all, holderNew: null })).toEqual({ userId: "a", source: "assigned_to" });
-    expect(resolveHolder({ ...all, holderNew: null, assignedToNew: null })).toEqual({ userId: "p", source: "prior_audit" });
+describe("holder = who held the lead IMMEDIATELY BEFORE the move (review round 1)", () => {
+  it("a relay hand-off in the same event credits the SENDER, not the receiver", () => {
+    // Esha (counsellor) moves a lead into Applications and re-assigns it to Gita (app executive) in one event.
+    // Crediting Gita would credit the receiver for the sender's work.
+    expect(resolveHolder({ assignChanged: true, assignedOld: "esha", holderNew: "gita", actorId: "esha" })).toEqual({ userId: "esha", source: "assigned_to" });
+  });
+  it("assignee unchanged → holder.new IS the holder before", () => {
+    expect(resolveHolder({ assignChanged: false, holderNew: "esha", actorId: "esha" })).toEqual({ userId: "esha", source: "holder" });
+  });
+  it("assignee changed from nobody → the actor delivered it", () => {
+    expect(resolveHolder({ assignChanged: true, assignedOld: null, actorId: "esha" })).toEqual({ userId: "esha", source: "actor" });
+  });
+  it("rows without holder: latest prior assigned_to change, then the current assignee (reported fallback)", () => {
+    expect(resolveHolder({ priorAssignee: "p", currentAssignee: "c" })).toEqual({ userId: "p", source: "prior_audit" });
     expect(resolveHolder({ currentAssignee: "c" })).toEqual({ userId: "c", source: "current_fallback" });
     expect(resolveHolder({})).toEqual({ userId: null, source: "none" });
+  });
+  it("assigned_to.old beats holder.new when both exist (the receiver is in holder.new)", () => {
+    expect(resolveHolder({ assignChanged: true, assignedOld: "sender", holderNew: "receiver" }).userId).toBe("sender");
+  });
+});
+
+describe("stage conversion never exceeds 100%", () => {
+  it("is forward ÷ base", () => {
+    expect(stageConversion(12, 60)).toBeCloseTo(0.2);
+    expect(stageConversion(0, 60)).toBe(0);
+  });
+  it("12 forward out of a base of 10 is impossible by construction — and is clamped if data ever disagrees", () => {
+    expect(stageConversion(12, 10)).toBe(1);
+  });
+  it("is null when nothing was in the stage", () => {
+    expect(stageConversion(0, 0)).toBeNull();
   });
 });
 
