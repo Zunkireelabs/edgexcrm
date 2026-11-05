@@ -105,10 +105,9 @@ export function bulkMoveIds(rows: MoveRow[], minRows: number, bucketSeconds: num
   const bulk = new Set<string>();
   const buckets = new Map<string, string[]>();
   for (const r of rows) {
-    if (r.via === "bulk") {
-      bulk.add(r.id);
-      continue;
-    }
+    // Mirrors education_pulse_moves (SQL): tagged rows are bulk AND still count toward their actor's bucket, so an
+    // untagged straggler in the same 60s as a tagged batch is swept in too.
+    if (r.via === "bulk") bulk.add(r.id);
     const bucket = Math.floor(r.at.getTime() / 1000 / bucketSeconds);
     const key = `${r.actorId ?? "none"}:${bucket}`;
     const list = buckets.get(key);

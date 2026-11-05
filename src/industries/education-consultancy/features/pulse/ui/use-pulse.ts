@@ -41,7 +41,8 @@ export function usePulseFetch<T>(url: string | null, reloadKey = 0): State<T> & 
       })
       .then((j) => setState({ data: j.data as T, loading: false, error: false }))
       .catch((e) => {
-        if (e?.name !== "AbortError") setState((s) => ({ ...s, loading: false, error: true }));
+        // Drop the previous window's data on error: stale numbers under an error banner would read as current.
+        if (e?.name !== "AbortError") setState({ data: null, loading: false, error: true });
       });
     return () => ctl.abort();
   }, [url, reloadKey, tick]);

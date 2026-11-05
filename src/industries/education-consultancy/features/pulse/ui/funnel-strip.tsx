@@ -53,7 +53,7 @@ export function FunnelStrip({
         <Delta cur={cur} base={base} />
       </div>
       <div className="mt-1 text-sm text-gray-500">{fmtNum(base)} {prevLabel}</div>
-      <div className="mt-3"><Sparkline values={series} color={color} width={160} height={32} /></div>
+      <div className="mt-3 w-full max-w-[170px]"><Sparkline values={series} color={color} width={160} height={32} fluid /></div>
     </button>
   );
 

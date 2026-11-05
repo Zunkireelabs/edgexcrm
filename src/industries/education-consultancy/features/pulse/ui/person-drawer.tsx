@@ -15,7 +15,7 @@ function Kpi({ label, value, usual, onClick }: { label: string; value: number; u
       <div className="text-xs text-gray-500">{label}</div>
       <div className="mt-1 text-2xl font-semibold text-gray-900">{fmtNum(value)}</div>
       <div className={`text-xs font-semibold ${d?.tone === "bad" ? "text-red-600" : d?.tone === "good" ? "text-emerald-600" : "text-gray-500"}`}>
-        {d ? `${d.text} vs ${fmtNum(usual)} usual` : "no usual yet"}
+        {d ? `${d.text} vs ${Math.round(usual)} usual` : "no usual yet"}
       </div>
     </button>
   );
@@ -65,18 +65,29 @@ export function PersonDrawer({
             <>
               <div>
                 <h3 className="text-sm font-semibold text-gray-900">Daily activity <span className="font-normal text-gray-500">· dashed line = their usual</span></h3>
-                <div className="relative mt-3 flex h-28 items-end gap-2">
-                  <div className="pointer-events-none absolute inset-x-0 border-t border-dashed border-slate-300" style={{ bottom: `${(data.usualPerDay / maxDay) * 100}%` }} aria-hidden />
-                  {daily.map((d) => {
-                    const v = d.calls + d.notes + d.moves;
-                    const low = data.usualPerDay > 0 && v <= data.usualPerDay * 0.4;
-                    return (
-                      <div key={d.day} className="flex flex-1 flex-col items-center justify-end gap-1" title={`${d.day}: ${v}`}>
-                        <div className={`w-full rounded-sm ${low ? "bg-red-400" : "bg-blue-200"}`} style={{ height: `${Math.max((v / maxDay) * 100, 3)}%` }} />
-                        <span className="text-[10px] text-gray-500">{new Date(`${d.day}T00:00:00Z`).toLocaleDateString("en-GB", { weekday: "short", timeZone: "UTC" })}</span>
-                      </div>
-                    );
-                  })}
+                <div className="mt-3">
+                  {/* Plot area has an explicit height so the bars' percentage heights resolve. */}
+                  <div className="relative h-28">
+                    <div className="pointer-events-none absolute inset-x-0 border-t border-dashed border-slate-300" style={{ bottom: `${(data.usualPerDay / maxDay) * 100}%` }} aria-hidden />
+                    <div className="absolute inset-0 flex items-end gap-2">
+                      {daily.map((d) => {
+                        const v = d.calls + d.notes + d.moves;
+                        const low = data.usualPerDay > 0 && v <= data.usualPerDay * 0.4;
+                        return (
+                          <div key={d.day} title={`${d.day}: ${v}`}
+                            className={`flex-1 rounded-sm ${low ? "bg-red-400" : "bg-blue-200"}`}
+                            style={{ height: `${Math.max((v / maxDay) * 100, 3)}%` }} />
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className="mt-1 flex gap-2">
+                    {daily.map((d) => (
+                      <span key={d.day} className="flex-1 text-center text-[10px] text-gray-500">
+                        {new Date(`${d.day}T00:00:00Z`).toLocaleDateString("en-GB", { weekday: "short", timeZone: "UTC" })}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               </div>
               <div>
