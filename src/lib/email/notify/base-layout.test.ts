@@ -48,14 +48,14 @@ describe("renderEmailLayout", () => {
     expect(() => renderEmailLayout(base)).not.toThrow();
   });
 
-  it("falls back to the default colour when the tenant colour is not a plain hex value", () => {
-    const { html } = renderEmailLayout({ ...base, primaryColor: "red;background:url(x)" });
-    expect(html).toContain("#2272B4");
+  it("falls back to the default (EdgeX blue) when the accent colour is not a plain hex value", () => {
+    const { html } = renderEmailLayout({ ...base, eyebrow: "New lead", primaryColor: "red;background:url(x)" });
+    expect(html).toContain("#0A6CFF");
     expect(html).not.toContain("url(x)");
   });
 
-  it("uses a valid tenant colour", () => {
-    expect(renderEmailLayout({ ...base, primaryColor: "#112233" }).html).toContain("#112233");
+  it("uses a valid accent colour", () => {
+    expect(renderEmailLayout({ ...base, eyebrow: "New lead", primaryColor: "#112233" }).html).toContain("#112233");
   });
 
   it("row links: mailto: and tel: are allowed, javascript: / data: are not", () => {
@@ -74,9 +74,27 @@ describe("renderEmailLayout", () => {
     expect(html).not.toContain("data:text");
   });
 
-  it("uses the brand colour sparingly: only the top rule and the button", () => {
-    const { html } = renderEmailLayout({ ...base, primaryColor: "#112233", cta: { label: "Go", url: "https://x.test/y" } });
+  it("uses the accent colour sparingly: only the tag text and the button", () => {
+    const { html } = renderEmailLayout({ ...base, primaryColor: "#112233", eyebrow: "New lead", cta: { label: "Go", url: "https://x.test/y" } });
     expect(html.split("#112233").length - 1).toBe(2);
+  });
+
+  it("shows an https logo, escapes its alt text, and never emits an http or script-ish logo (text wordmark instead)", () => {
+    const ok = renderEmailLayout({ ...base, logo: { url: "https://cdn.example.com/l.png", alt: `Ed"ge` } }).html;
+    expect(ok).toContain('src="https://cdn.example.com/l.png"');
+    expect(ok).toContain('alt="Ed&quot;ge"');
+    for (const bad of ["http://cdn.example.com/l.png", "javascript:alert(1)", "data:image/png;base64,AAA"]) {
+      const html = renderEmailLayout({ ...base, logo: { url: bad, alt: "x" } }).html;
+      expect(html).not.toContain("<img");
+      expect(html).toContain("Admizz"); // tenant-name wordmark fallback
+    }
+  });
+
+  it("renders the lede sentence with bold pieces, escaped, and keeps it in the plain-text part", () => {
+    const { html, text } = renderEmailLayout({ ...base, lede: [{ text: "Came in through " }, { text: "<b>Form</b>", bold: true }, { text: "." }] });
+    expect(html).toContain("&lt;b&gt;Form&lt;/b&gt;");
+    expect(html).not.toContain("<b>Form</b>");
+    expect(text).toContain("Came in through <b>Form</b>.");
   });
 
   it("ships the phone refinements (full-width button, tighter padding) as a media query", () => {
@@ -87,5 +105,12 @@ describe("renderEmailLayout", () => {
     const { html, text } = renderEmailLayout({ ...base, cta: { label: "Open", url: "https://edgex.test/leads/1" } });
     expect(html.split("https://edgex.test/leads/1").length - 1).toBe(1); // only the button's href
     expect(text).toContain("Open: https://edgex.test/leads/1");
+  });
+
+  it("with a logo, the workspace name sits beside it at the top (and is not repeated as a wordmark)", () => {
+    const { html } = renderEmailLayout({ ...base, tenantName: "Admizz Education", logo: { url: "https://cdn.example.com/l.png", alt: "EdgeX" } });
+    expect(html).toContain("Admizz Education");
+    expect(html.split("Admizz Education").length - 1).toBe(1);
+    expect(html).toContain("<img");
   });
 });

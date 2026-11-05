@@ -1,10 +1,11 @@
 /**
  * One calm, corporate HTML email shell for every notification email, so new alerts don't re-paste markup.
- * Design: plain white; a small label ("eyebrow") above a single headline; a compact label/value list; hairline
- * dividers; 4px radii; quiet greys for everything secondary; and the tenant's brand colour used in exactly two
- * places (the thin top rule and the button). Inline styles for every client; one small <style> block adds the phone
- * refinements (tighter padding, full-width button) where the client supports it. EVERY interpolated value is
- * HTML-escaped: lead data is user input and must never inject markup into an admin's inbox.
+ *
+ * Anatomy (top to bottom): the product LOGO (or a text wordmark) · a small tinted TAG · a big bold HEADLINE ·
+ * ONE plain sentence (the "lede") · a soft grey DETAILS card · ONE button · a soft grey FOOTER panel.
+ * The accent colour is used only for the tag and the button. Inline styles for every client; one small
+ * <style> block adds the phone refinements (tighter padding, stacked details, full-width button) where supported.
+ * EVERY interpolated value is HTML-escaped: lead data is user input and must never inject markup into an inbox.
  */
 
 export function escapeHtml(value: string): string {
@@ -16,12 +17,20 @@ export function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
-const DEFAULT_COLOR = "#2272B4";
+const DEFAULT_COLOR = "#0A6CFF"; // EdgeX blue
 /** Only a plain hex colour may reach a style attribute — anything else falls back to the default. */
 function safeColor(color: string | null | undefined): string {
   return color && /^#[0-9a-fA-F]{3,8}$/.test(color) ? color : DEFAULT_COLOR;
 }
-/** Links must be http(s) (CTA) — anything else (javascript:, data:) is dropped. */
+/** "#2272B4" -> "rgba(34,114,180,0.1)" (a soft tint for the tag background). */
+function tint(hex: string, alpha: number): string {
+  let h = hex.replace("#", "");
+  if (h.length === 3 || h.length === 4) h = h.split("").map((c) => c + c).join("");
+  const n = parseInt(h.slice(0, 6), 16);
+  if (Number.isNaN(n) || h.length < 6) return `rgba(10,108,255,${alpha})`;
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
+}
+/** Links must be http(s) (CTA, logo) — anything else (javascript:, data:) is dropped. */
 function safeUrl(url: string): string | null {
   try {
     const u = new URL(url);
@@ -29,6 +38,12 @@ function safeUrl(url: string): string | null {
   } catch {
     return null;
   }
+}
+/** A logo must be https (mail clients block or warn on http images). */
+function safeLogoUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const u = safeUrl(url);
+  return u && u.startsWith("https://") ? u : null;
 }
 /** Row links additionally allow mailto: and tel: so an email / phone is one tap away. */
 function safeRowHref(href: string | null | undefined): string | null {
@@ -45,16 +60,27 @@ export interface EmailRow {
   href?: string | null;
 }
 
+/** One piece of the lede sentence; `bold` pieces are emphasised. */
+export interface LedeSegment {
+  text: string;
+  bold?: boolean;
+}
+
 export interface EmailLayoutInput {
   /** <title> and the inbox preview line. */
   title: string;
   preheader?: string;
   tenantName: string;
+  /** Header logo (https URL + alt text). Without one, the tenant name is shown as a plain wordmark. */
+  logo?: { url: string; alt: string } | null;
+  /** Accent colour (tag + button), plain hex; default EdgeX blue-ish. */
   primaryColor?: string | null;
-  /** Small label above the headline, e.g. "New lead · New Leads". */
+  /** Small tinted tag above the headline, e.g. "New lead". */
   eyebrow?: string;
   heading: string;
-  intro?: string;
+  /** The one plain sentence under the headline. */
+  lede?: LedeSegment[];
+  /** Details card rows (empty values are hidden). */
   rows?: EmailRow[];
   cta?: { label: string; url: string };
   /** Plain footer sentence, e.g. why the recipient got this. */
@@ -72,9 +98,22 @@ export function renderEmailLayout(input: EmailLayoutInput): RenderedEmail {
   const color = safeColor(input.primaryColor);
   const rows = (input.rows ?? []).filter((r) => r.value && r.value.trim());
   const ctaUrl = input.cta ? safeUrl(input.cta.url) : null;
+  const logoSrc = safeLogoUrl(input.logo?.url);
+  const lede = (input.lede ?? []).filter((seg) => seg.text);
+
+  const brandHtml = logoSrc
+    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+                <td align="left" valign="middle"><img src="${escapeHtml(logoSrc)}" alt="${escapeHtml(input.logo?.alt || input.tenantName)}" height="44" style="display: block; height: 44px; width: auto; max-width: 200px; border: 0;"></td>
+                <td align="right" valign="middle" style="padding-left: 16px; font-size: 13px; line-height: 18px; color: #6b7280;">${escapeHtml(input.tenantName)}</td>
+              </tr></table>`
+    : `<div style="font-size: 18px; font-weight: 700; letter-spacing: -0.01em; color: #111827;">${escapeHtml(input.tenantName)}</div>`;
+
+  const ledeHtml = lede
+    .map((seg) => (seg.bold ? `<strong style="color: #111827; font-weight: 600;">${escapeHtml(seg.text)}</strong>` : escapeHtml(seg.text)))
+    .join("");
 
   const rowsHtml = rows
-    .map((r) => {
+    .map((r, i) => {
       const href = safeRowHref(r.href);
       const value = escapeHtml((r.value as string).trim());
       const valueHtml = href
@@ -82,8 +121,8 @@ export function renderEmailLayout(input: EmailLayoutInput): RenderedEmail {
         : value;
       return `
                 <tr>
-                  <td class="kv-label" width="92" valign="top" style="padding: 9px 12px 9px 0; font-size: 13px; line-height: 20px; color: #6b7280;">${escapeHtml(r.label)}</td>
-                  <td class="kv-value" valign="top" style="padding: 9px 0; font-size: 14px; line-height: 20px; color: #111827; word-break: break-word;">${valueHtml}</td>
+                  <td class="kv-label" width="96" valign="top" style="padding: 11px 12px 11px 0; ${i > 0 ? "border-top: 1px solid #eceef1;" : ""} font-size: 14px; line-height: 22px; color: #6b7280;">${escapeHtml(r.label)}</td>
+                  <td class="kv-value" valign="top" style="padding: 11px 0; ${i > 0 ? "border-top: 1px solid #eceef1;" : ""} font-size: 15px; line-height: 22px; color: #111827; word-break: break-word;">${valueHtml}</td>
                 </tr>`;
     })
     .join("");
@@ -97,11 +136,12 @@ export function renderEmailLayout(input: EmailLayoutInput): RenderedEmail {
   <title>${escapeHtml(input.title)}</title>
   <style>
     @media only screen and (max-width: 480px) {
-      .wrap { padding: 20px 16px !important; }
+      .wrap { padding: 24px 20px !important; }
+      .title { font-size: 24px !important; line-height: 32px !important; }
       .kv-label, .kv-value { display: block !important; width: 100% !important; }
-      .kv-label { padding: 10px 0 0 0 !important; font-size: 12px !important; }
-      .kv-value { padding: 2px 0 10px 0 !important; }
-      .cta-link { display: block !important; text-align: center !important; padding: 14px 20px !important; }
+      .kv-label { padding: 12px 0 0 0 !important; border-top: 0 !important; font-size: 12px !important; line-height: 18px !important; }
+      .kv-value { padding: 2px 0 12px 0 !important; border-top: 0 !important; }
+      .cta-link { display: block !important; text-align: center !important; padding: 15px 20px !important; }
     }
   </style>
 </head>
@@ -110,25 +150,26 @@ export function renderEmailLayout(input: EmailLayoutInput): RenderedEmail {
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff;">
     <tr>
       <td align="center" class="wrap" style="padding: 40px 24px;">
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 540px;">
-          <tr><td style="height: 2px; line-height: 2px; font-size: 0; background-color: ${color};">&nbsp;</td></tr>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 560px;">
           <tr>
-            <td style="padding: 16px 0 0 0; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #6b7280;">${escapeHtml(input.tenantName)}</td>
+            <td style="padding: 0 0 40px 0;">${brandHtml}</td>
           </tr>
           <tr>
-            <td style="padding: 28px 0 0 0;">
-              ${input.eyebrow ? `<div style="font-size: 12px; line-height: 16px; letter-spacing: 0.04em; text-transform: uppercase; color: #6b7280;">${escapeHtml(input.eyebrow)}</div>` : ""}
-              <h1 style="margin: ${input.eyebrow ? "6px" : "0"} 0 0 0; font-size: 22px; line-height: 30px; font-weight: 600; letter-spacing: -0.01em; color: #111827;">${escapeHtml(input.heading)}</h1>
-              ${input.intro ? `<p style="margin: 8px 0 0 0; font-size: 14px; line-height: 22px; color: #4b5563;">${escapeHtml(input.intro)}</p>` : ""}
+            <td>
+              ${input.eyebrow ? `<span style="display: inline-block; padding: 4px 10px; border-radius: 999px; background-color: ${tint(color, 0.1)}; color: ${color}; font-size: 12px; font-weight: 600; line-height: 16px; letter-spacing: 0.04em; text-transform: uppercase;">${escapeHtml(input.eyebrow)}</span>` : ""}
+              <h1 class="title" style="margin: ${input.eyebrow ? "14px" : "0"} 0 0 0; font-size: 28px; line-height: 36px; font-weight: 700; letter-spacing: -0.02em; color: #111827; word-break: break-word;">${escapeHtml(input.heading)}</h1>
+              ${ledeHtml ? `<p style="margin: 12px 0 0 0; font-size: 16px; line-height: 26px; color: #4b5563;">${ledeHtml}</p>` : ""}
             </td>
           </tr>
           ${
             rows.length > 0
               ? `<tr>
-            <td style="padding: 22px 0 0 0;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top: 1px solid #e5e7eb; border-bottom: 1px solid #e5e7eb;">
-                <tr><td colspan="2" style="height: 6px; line-height: 6px; font-size: 0;">&nbsp;</td></tr>${rowsHtml}
-                <tr><td colspan="2" style="height: 6px; line-height: 6px; font-size: 0;">&nbsp;</td></tr>
+            <td style="padding: 28px 0 0 0;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #f7f8fa; border-radius: 12px;">
+                <tr><td style="padding: 6px 22px;">
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rowsHtml}
+                  </table>
+                </td></tr>
               </table>
             </td>
           </tr>`
@@ -137,15 +178,17 @@ export function renderEmailLayout(input: EmailLayoutInput): RenderedEmail {
           ${
             input.cta && ctaUrl
               ? `<tr>
-            <td style="padding: 24px 0 0 0;">
-              <a href="${escapeHtml(ctaUrl)}" class="cta-link" style="display: inline-block; padding: 11px 20px; background-color: ${color}; border-radius: 4px; font-size: 14px; font-weight: 600; line-height: 20px; color: #ffffff; text-decoration: none;">${escapeHtml(input.cta.label)}</a>
+            <td style="padding: 28px 0 0 0;">
+              <a href="${escapeHtml(ctaUrl)}" class="cta-link" style="display: inline-block; padding: 13px 24px; background-color: ${color}; border-radius: 8px; font-size: 15px; font-weight: 600; line-height: 20px; color: #ffffff; text-decoration: none;">${escapeHtml(input.cta.label)}</a>
             </td>
           </tr>`
               : ""
           }
           <tr>
-            <td style="padding: 32px 0 0 0;">
-              <div style="border-top: 1px solid #e5e7eb; padding-top: 16px; font-size: 12px; line-height: 18px; color: #9ca3af;">${input.footer ? `${escapeHtml(input.footer)}<br>` : ""}Sent automatically by EdgeX.</div>
+            <td style="padding: 40px 0 0 0;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #f7f8fa; border-radius: 12px;">
+                <tr><td style="padding: 18px 22px; font-size: 12px; line-height: 19px; color: #9ca3af;">${input.footer ? `${escapeHtml(input.footer)}<br>` : ""}Sent automatically by EdgeX.</td></tr>
+              </table>
             </td>
           </tr>
         </table>
@@ -155,10 +198,11 @@ export function renderEmailLayout(input: EmailLayoutInput): RenderedEmail {
 </body>
 </html>`;
 
+  const ledeText = lede.map((seg) => seg.text).join("");
   const textLines = [
     input.eyebrow ?? "",
     input.heading,
-    input.intro ?? "",
+    ledeText,
     ...rows.map((r) => `${r.label}: ${(r.value as string).trim()}`),
     input.cta && ctaUrl ? `\n${input.cta.label}: ${ctaUrl}` : "",
     input.footer ? `\n${input.footer}` : "",

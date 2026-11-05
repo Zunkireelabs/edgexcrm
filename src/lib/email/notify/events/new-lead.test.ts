@@ -65,7 +65,8 @@ describe("newLeadEvent.build", () => {
       recipient,
     });
     expect(m.text).toContain("3:17 pm"); // 09:32 UTC = 15:17 in Kathmandu (+5:45)
-    expect(m.text).toContain("GMT+5:45");
+    expect(m.text).toContain("Nepal Time"); // a friendly name, not "GMT+5:45"
+    expect(m.text).not.toContain("GMT+5:45");
   });
 
   it("falls back to UTC for a missing or invalid time zone instead of throwing", () => {
@@ -76,6 +77,7 @@ describe("newLeadEvent.build", () => {
       recipient,
     });
     expect(bad.text).toContain("9:32 am");
+    expect(bad.text).toContain("· UTC");
   });
 
   it("makes the email and phone tappable (mailto: / tel:), and leaves an unusable phone as plain text", () => {
@@ -87,12 +89,30 @@ describe("newLeadEvent.build", () => {
     expect(junk.html).toContain("n/a");
   });
 
-  it("never repeats itself: the label is 'New lead received' and the stage name lives in its own row, even when the stage is literally called 'New Leads'", () => {
+  it("says where the lead came from and landed in ONE plain sentence, and never repeats itself even when the stage is literally called 'New Leads'", () => {
     const m = newLeadEvent.build({ payload: base, context: { listName: "New Leads" }, tenant, recipient });
-    expect(m.text).toContain("New lead received");
-    expect(m.text).toContain("Stage: New Leads");
+    expect(m.text).toContain("Came in through Website enquiry and landed in New Leads.");
     expect(m.text).not.toMatch(/new lead\s*·\s*new leads/i);
     expect(m.html).not.toMatch(/new lead\s*·\s*new leads/i);
+    const noSource = newLeadEvent.build({ payload: { ...base, source: null }, context: { listName: "New Leads" }, tenant, recipient });
+    expect(noSource.text).toContain("Landed in New Leads.");
+  });
+
+  it("carries the EdgeX logo at the top and uses EdgeX blue (not the workspace colour) for the tag and button", () => {
+    const m = newLeadEvent.build({ payload: base, context: { listName: "New Leads" }, tenant, recipient });
+    expect(m.html).toContain("/email/edgex-logo.png");
+    expect(m.html).toContain('alt="EdgeX"');
+    expect(m.html).toContain("#0A6CFF");
+    expect(m.html).not.toContain(tenant.primaryColor);
+  });
+
+  it("the inbox preview line says who, how to reach them, and where they landed", () => {
+    const m = newLeadEvent.build({ payload: base, context: { listName: "New Leads" }, tenant, recipient });
+    expect(m.html).toContain("Subhan Ali · +977-9821995842 · New Leads");
+    // no phone -> falls back to the email; a lead known only by email doesn't repeat it
+    const emailOnly = newLeadEvent.build({ payload: { ...base, firstName: null, lastName: null, phone: null, email: "anon@example.com" }, context: { listName: "New Leads" }, tenant, recipient });
+    expect(emailOnly.html).toContain("anon@example.com · New Leads");
+    expect(emailOnly.html).not.toContain("anon@example.com · anon@example.com");
   });
 
   it("escapes a hostile name and copes with a lead that has no name/phone/source", () => {
