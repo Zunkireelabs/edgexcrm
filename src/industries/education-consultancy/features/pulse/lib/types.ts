@@ -242,7 +242,7 @@ export interface AttentionItem {
   /** Rule-generated suggestion → gradient "Suggested" tag. */
   suggested: boolean;
   /** The concrete action, carrying its value ("Reassign 12 to Anil KC"). */
-  action: { label: string; href: string; primary: boolean } | null;
+  action: { label: string; href: string; primary: boolean; drill?: EventsQuery } | null;
   /** Expanded: the why sentence (an AI paragraph block in Preview mode), a meta line and links. */
   why: string | null;
   meta: string | null;

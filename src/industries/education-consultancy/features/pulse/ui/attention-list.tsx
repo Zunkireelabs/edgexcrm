@@ -87,7 +87,8 @@ export function AttentionList({
                       {it.figure && (it.figure.textFirst
                         ? <span className="fig" title={`${it.figure.text} ${it.figure.strong ?? ""}`.trim()}>{it.figure.text} {it.figure.strong && <b>{it.figure.strong}</b>}</span>
                         : <span className="fig" title={`${it.figure.strong ?? ""}${it.figure.text}`}>{it.figure.strong && <b>{it.figure.strong}</b>}{it.figure.text}</span>)}
-                      {it.action && <Link href={it.action.href} title={it.action.label} className={`btn ${it.action.primary ? "pri" : ""}`}>{it.action.label}</Link>}
+                      {it.action && it.action.drill && <button type="button" title={it.action.label} className={`btn ${it.action.primary ? "pri" : ""}`} onClick={() => onDrill(`${it.subject} · ${it.what}`, [it.subject], it.action!.drill!)}>{it.action.label}</button>}
+                      {it.action && !it.action.drill && <Link href={it.action.href} title={it.action.label} className={`btn ${it.action.primary ? "pri" : ""}`}>{it.action.label}</Link>}
                     </div>
                     <span className="chev"><Chevron open={open} /></span>
                     {open && (

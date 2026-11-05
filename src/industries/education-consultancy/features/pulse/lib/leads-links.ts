@@ -32,6 +32,18 @@ export function untouchedHeldHref(): string {
   return `/leads?${new URLSearchParams({ f: encodeFilterTree(tree) }).toString()}`;
 }
 
+/** One person's held leads with no touch or move for 3+ days — exactly the "N leads untouched" a person row counts. */
+export function untouchedHeldOfPersonHref(userId: string): string {
+  const tree: FilterTree = {
+    conjunction: "and",
+    conditions: [
+      { id: "pulse:assignees", field: "assignees", op: "is_any_of", value: [userId] },
+      { id: "pulse:untouched-held", field: "untouched_held", op: "is_true" },
+    ],
+  };
+  return `/leads?${new URLSearchParams({ f: encodeFilterTree(tree) }).toString()}`;
+}
+
 /** `/leads` on the intake list, filtered to NEW leads nobody has touched for 48h+ — the intake alarm's set. */
 export function untouchedLeadsHref(listSlug = "pre-qualified"): string {
   const tree: FilterTree = {
