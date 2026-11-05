@@ -46,6 +46,10 @@ export function activityDropSignals(people: PersonRow[], t: PulseThresholds): Si
         subject: { type: "person", id: p.userId },
         drill: { metric: "moves", userId: p.userId },
         action: "reassign",
+        needs: {
+          title: `Check in with ${p.name}`,
+          detail: `${current} calls, notes and moves vs ${Math.round(usual)} usual. Cover their open leads if they are away.`,
+        },
         surfaces: ["key_changes", "needs_you"],
         flag: "red",
         magnitude: usual - current,
@@ -69,6 +73,10 @@ export function untouchedSignal(u: UntouchedSummary): Signal[] {
       subject: { type: "team", id: "all" },
       drill: { metric: "untouched" },
       action: "reassign",
+      needs: {
+        title: `Assign the ${u.count} untouched new lead${u.count === 1 ? "" : "s"}`,
+        detail: "No call or note in 48+ hours. Spread them across the people who have capacity.",
+      },
       surfaces: ["needs_you"],
       magnitude: u.count,
       tone: "bad",
@@ -91,8 +99,12 @@ export function overCapacitySignals(people: PersonRow[], t: PulseThresholds): Si
         evidence: { metric: "received", value: received, baseline: usual },
         subject: { type: "person", id: p.userId },
         drill: { metric: "received", userId: p.userId },
-        action: "open",
-        surfaces: ["key_changes"],
+        action: "reassign",
+        needs: {
+          title: `Spread ${p.name}'s ${received} new leads`,
+          detail: `Usual intake is ${Math.round(usual)}. Rebalance before follow-ups slip.`,
+        },
+        surfaces: ["key_changes", "needs_you"],
         flag: "amber",
         magnitude: received - usual,
         tone: "neutral",
@@ -147,6 +159,7 @@ export function topMoverSignal(people: PersonRow[]): Signal[] {
       subject: { type: "person", id: best.p.userId },
       drill: { metric: best.metric, userId: best.p.userId },
       surfaces: ["key_changes"],
+      flag: "green",
       magnitude: best.delta,
       tone: "good",
     },
@@ -195,7 +208,7 @@ export interface ComputedSignals {
   keyChanges: Signal[];
   needsYou: Signal[];
   /** userId → row flag. Red beats amber. */
-  flags: Record<string, "red" | "amber">;
+  flags: Record<string, "red" | "amber" | "green">;
 }
 
 export function computeSignals(input: SignalInput): ComputedSignals {
@@ -207,10 +220,12 @@ export function computeSignals(input: SignalInput): ComputedSignals {
     ...topMoverSignal(input.people),
     ...biggestDropSignal(input.branchKpis),
   ]);
-  const flags: Record<string, "red" | "amber"> = {};
+  const flags: Record<string, "red" | "amber" | "green"> = {};
+  const RANK = { red: 3, amber: 2, green: 1 } as const;
   for (const s of all) {
     if (!s.flag || s.subject.type !== "person") continue;
-    if (flags[s.subject.id] !== "red") flags[s.subject.id] = s.flag;
+    const cur = flags[s.subject.id];
+    if (!cur || RANK[s.flag] > RANK[cur]) flags[s.subject.id] = s.flag;
   }
   return {
     all,

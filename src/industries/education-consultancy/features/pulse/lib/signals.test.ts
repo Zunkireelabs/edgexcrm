@@ -79,13 +79,13 @@ describe("over capacity (>= 1.8x usual AND >= 20)", () => {
   it("is amber, never red", () => {
     const s = overCapacitySignals([person("a", { received: 40 }, { received: 10 })], T)[0];
     expect(s.flag).toBe("amber");
-    expect(s.surfaces).toEqual(["key_changes"]);
+    expect(s.surfaces).toEqual(["key_changes", "needs_you"]);
   });
 });
 
 describe("stage leak (out >= 2x previous AND >= 10)", () => {
   const flow = (out: number, previousOut: number): StageFlow => ({
-    listId: "s1", name: "Qualified", sortOrder: 2, entered: 0, forward: 0, out, previousOut, series: [],
+    listId: "s1", name: "Qualified", sortOrder: 2, base: 50, entered: 0, forward: 0, out, previousOut, series: [],
   });
   it("fires at the edge", () => {
     expect(stageLeakSignals([flow(10, 5)], T)).toHaveLength(1);
@@ -161,6 +161,39 @@ describe("ordering and caps", () => {
     const p = person("x", { received: 40 }, { received: 10, calls: 30 });
     const out = computeSignals({ people: [p], stageFlows: [], untouched: { count: 0, byPerson: [] }, branchKpis: [], thresholds: T });
     expect(out.flags).toEqual({ x: "red" });
+  });
+});
+
+describe("Needs you is phrased as ACTIONS; Key changes stays observational (review round 1)", () => {
+  it("an activity drop asks for a check-in, it does not restate the drop", () => {
+    const [s] = activityDropSignals([person("a", { calls: 2 }, { calls: 20 })], T);
+    expect(s.title).toContain("dropped");           // Key changes wording
+    expect(s.needs?.title).toBe("Check in with P-a");
+    expect(s.needs?.title).not.toBe(s.title);
+    expect(s.needs?.detail).not.toMatch(/\b(his|her|him)\b/); // never guess pronouns
+  });
+  it("over capacity asks to spread the leads, and now also reaches Needs you", () => {
+    const [s] = overCapacitySignals([person("b", { received: 104 }, { received: 28 })], T);
+    expect(s.needs?.title).toBe("Spread P-b's 104 new leads");
+    expect(s.surfaces).toContain("needs_you");
+  });
+  it("untouched asks to assign", () => {
+    expect(untouchedSignal({ count: 37, byPerson: [] })[0].needs?.title).toBe("Assign the 37 untouched new leads");
+  });
+  it("no Needs-you item repeats its Key-changes text word for word", () => {
+    const people = [person("a", { calls: 2 }, { calls: 20 }), person("b", { received: 104 }, { received: 28 })];
+    const out = computeSignals({ people, stageFlows: [], untouched: { count: 5, byPerson: [] }, branchKpis: [], thresholds: T });
+    for (const n of out.needsYou) expect(n.needs?.title).toBeDefined();
+    for (const n of out.needsYou) for (const k of out.keyChanges) expect(n.needs?.title).not.toBe(k.title);
+  });
+});
+
+describe("row flags", () => {
+  it("top mover gets a green flag; red > amber > green on the same person", () => {
+    const top = person("t", { reached_applications: 9 }, { reached_applications: 2 });
+    expect(computeSignals({ people: [top], stageFlows: [], untouched: { count: 0, byPerson: [] }, branchKpis: [], thresholds: T }).flags).toEqual({ t: "green" });
+    const both = person("x", { received: 40, reached_applications: 9 }, { received: 10, reached_applications: 1 });
+    expect(computeSignals({ people: [both], stageFlows: [], untouched: { count: 0, byPerson: [] }, branchKpis: [], thresholds: T }).flags).toEqual({ x: "amber" });
   });
 });
 

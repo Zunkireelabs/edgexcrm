@@ -5,7 +5,7 @@ import { loadPeople } from "./load-pulse";
 import type { PersonBucketRow, PulseEventRow, PulseEventsResponse, PulsePersonResponse } from "../lib/types";
 
 export const EVENT_METRICS = [
-  "calls", "notes", "moves", "status_changes", "received", "prospects", "reached_applications",
+  "calls", "notes", "moves", "moves_forward", "back_archived", "status_changes", "received", "prospects", "reached_applications",
   "applications_filed", "stage_out", "new_leads", "untouched",
 ] as const;
 export type EventMetric = (typeof EVENT_METRICS)[number];

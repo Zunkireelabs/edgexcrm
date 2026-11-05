@@ -29,7 +29,10 @@
 --                the window held by the person AT CREATION (initial assignment is NOT audited — lead.created has no
 --                assigned_to — so: the `old` of the lead's first later reassignment if there is one, else the
 --                current assignee). De-duplicated per (person, lead, bucket).
---   Prospects / Reached Applications (Owns)  moves into those lists, attributed to the HOLDER, once per lead.
+--   Prospects / Reached Applications (Owns)  moves into those lists, credited to the holder IMMEDIATELY BEFORE the move
+--                (= who delivered the lead: assigned_to.old when the assignee changed in the same event, else the holder;
+--                the relay re-assigns the lead as it enters the next stage, so the after-holder is the NEXT person), once per lead.
+--   Back / archived (Did)  non-bulk moves to an earlier stage or into the archive list. Moved-forward chips are forward-only.
 --   Applications filed (Owns)  applications.created_at in window, not deleted, by applications.assigned_to,
 --                falling back to the lead's assignee.
 --   Excluded lists  is_staging OR slug = 'migration-qc' OR access.mode <> 'all' (the admin-only/staging lists).
@@ -111,6 +114,9 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
            NULLIF(a.changes #>> '{list_ids,new}', '')::UUID AS new_id,
            NULLIF(a.changes #>> '{holder,new}', '')::UUID AS holder_new,
            NULLIF(a.changes #>> '{assigned_to,new}', '')::UUID AS assigned_new,
+           NULLIF(a.changes #>> '{assigned_to,old}', '')::UUID AS assigned_old,
+           (a.changes ? 'assigned_to'
+             AND (a.changes #>> '{assigned_to,old}') IS DISTINCT FROM (a.changes #>> '{assigned_to,new}')) AS assign_changed,
            a.changes #>> '{via,new}' AS via,
            lower(btrim(a.changes #>> '{list,new}')) AS new_key,
            lower(btrim(a.changes #>> '{list,old}')) AS old_key
@@ -145,18 +151,26 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   ),
   held AS (
     SELECT res.*,
-      COALESCE(res.holder_new, res.assigned_new, prior.u, l.assigned_to) AS holder_id,
-      CASE WHEN res.holder_new   IS NOT NULL THEN 'holder'
-           WHEN res.assigned_new IS NOT NULL THEN 'assigned_to'
-           WHEN prior.u          IS NOT NULL THEN 'prior_audit'
-           WHEN l.assigned_to    IS NOT NULL THEN 'current_fallback'
+      -- Holder IMMEDIATELY BEFORE the move = who delivered the lead to this stage (relay hand-offs re-assign the lead
+      -- in the same event, so crediting the AFTER-holder would credit the next person in the relay):
+      --   1. assigned_to.old, when the assignee changed in this very event (nobody held it -> the actor)
+      --   2. otherwise the assignee did not change, so holder.new IS the holder before
+      --   3. rows without holder: the latest PRIOR assigned_to audit change, then the current assignee (reported)
+      CASE WHEN res.assign_changed THEN COALESCE(res.assigned_old, res.actor_id)
+           WHEN res.holder_new IS NOT NULL THEN res.holder_new
+           ELSE COALESCE(prior.u, l.assigned_to) END AS holder_id,
+      CASE WHEN res.assign_changed AND res.assigned_old IS NOT NULL THEN 'assigned_to'
+           WHEN res.assign_changed THEN 'actor'
+           WHEN res.holder_new IS NOT NULL THEN 'holder'
+           WHEN prior.u        IS NOT NULL THEN 'prior_audit'
+           WHEN l.assigned_to  IS NOT NULL THEN 'current_fallback'
            ELSE 'none' END AS holder_source
     FROM res
     JOIN leads l ON l.id = res.lead_id AND l.tenant_id = p_tenant AND l.deleted_at IS NULL
     LEFT JOIN LATERAL (
       SELECT NULLIF(p.changes #>> '{assigned_to,new}', '')::UUID AS u
       FROM audit_logs p
-      WHERE res.holder_new IS NULL AND res.assigned_new IS NULL
+      WHERE NOT res.assign_changed AND res.holder_new IS NULL
         AND p.entity_type = 'lead' AND p.entity_id = res.lead_id
         AND p.changes ? 'assigned_to' AND p.created_at < res.at
       ORDER BY p.created_at DESC LIMIT 1
@@ -203,8 +217,15 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   stage_a AS (
     SELECT u, b, jsonb_object_agg(sk, n) AS m
     FROM (SELECT actor_id AS u, b, COALESCE(to_list_id::TEXT, 'other') AS sk, count(*) AS n FROM mv
-          WHERE NOT is_bulk AND NOT to_excluded AND actor_id IS NOT NULL GROUP BY actor_id, b, 3) x
+          WHERE NOT is_bulk AND NOT to_excluded AND actor_id IS NOT NULL
+            AND NOT to_is_archive AND (from_sort IS NULL OR to_sort > from_sort)   -- FORWARD destinations only
+          GROUP BY actor_id, b, 3) x
     GROUP BY u, b
+  ),
+  back_a AS (
+    SELECT actor_id AS u, b, count(*) AS n FROM mv
+    WHERE NOT is_bulk AND NOT to_excluded AND actor_id IS NOT NULL AND ((to_sort < from_sort) OR to_is_archive)
+    GROUP BY actor_id, b
   ),
   bulk_a AS (SELECT actor_id AS u, b, count(*) AS n FROM mv WHERE is_bulk AND actor_id IS NOT NULL GROUP BY actor_id, b),
   pros_a AS (
@@ -273,6 +294,7 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   agg AS (
     SELECT u, b, 'moves' AS k, n FROM moves_a
     UNION ALL SELECT u, b, 'bulk_moves', n FROM bulk_a
+    UNION ALL SELECT u, b, 'back_archived', n FROM back_a
     UNION ALL SELECT u, b, 'prospects', n FROM pros_a
     UNION ALL SELECT u, b, 'reached_applications', n FROM reach_a
     UNION ALL SELECT u, b, 'status_changes', n FROM status_a
@@ -288,6 +310,7 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
              'calls',                COALESCE(sum(g.n) FILTER (WHERE g.k = 'calls'), 0),
              'notes',                COALESCE(sum(g.n) FILTER (WHERE g.k IN ('notes_new', 'notes_edited')), 0),
              'moves',                COALESCE(sum(g.n) FILTER (WHERE g.k = 'moves'), 0),
+             'back_archived',        COALESCE(sum(g.n) FILTER (WHERE g.k = 'back_archived'), 0),
              'status_changes',       COALESCE(sum(g.n) FILTER (WHERE g.k = 'status_changes'), 0),
              'received',             COALESCE(sum(g.n) FILTER (WHERE g.k = 'received'), 0),
              'prospects',            COALESCE(sum(g.n) FILTER (WHERE g.k = 'prospects'), 0),
@@ -326,9 +349,29 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
     SELECT to_list_id AS id, ((at AT TIME ZONE p_tz)::DATE)::TEXT AS d, count(DISTINCT lead_id) AS n
     FROM fmv WHERE b = 0 AND to_list_id IS NOT NULL GROUP BY to_list_id, ((at AT TIME ZONE p_tz)::DATE)
   ),
+  -- "Was in stage N during the window" = held at the window's start + entered in the window. Leads currently in N
+  -- that have NO stage move in the window were there all window; leads WITH a move are counted by the moves
+  -- (a move out of N means it was in N; a move into N means it entered). The two sets are disjoint, and every lead
+  -- that moved forward out of N is in the base, so forward / base can never exceed 100%.
+  cur_a AS (
+    SELECT l.list_id AS id, count(*) AS n
+    FROM leads l
+    WHERE l.tenant_id = p_tenant AND l.deleted_at IS NULL AND l.list_id IS NOT NULL
+      AND (p_branch IS NULL OR l.branch_id = p_branch)
+      AND NOT EXISTS (SELECT 1 FROM fmv WHERE fmv.b = 0 AND fmv.lead_id = l.id)
+    GROUP BY l.list_id
+  ),
+  touch_a AS (
+    SELECT id, count(DISTINCT lead_id) AS n FROM (
+      SELECT from_list_id AS id, lead_id FROM fmv WHERE b = 0 AND from_list_id IS NOT NULL
+      UNION ALL
+      SELECT to_list_id, lead_id FROM fmv WHERE b = 0 AND to_list_id IS NOT NULL
+    ) t GROUP BY id
+  ),
   stages AS (
     SELECT jsonb_agg(jsonb_build_object(
       'list_id', l.id, 'name', l.name, 'slug', l.slug, 'sort_order', l.sort_order, 'is_archive', l.is_archive,
+      'base', COALESCE((SELECT n FROM cur_a WHERE cur_a.id = l.id), 0) + COALESCE((SELECT n FROM touch_a WHERE touch_a.id = l.id), 0),
       'entered', (SELECT jsonb_agg(COALESCE(e.n, 0) ORDER BY bk.b) FROM buckets bk LEFT JOIN ent  e ON e.id = l.id AND e.b = bk.b),
       'forward', (SELECT jsonb_agg(COALESCE(f.fwd, 0) ORDER BY bk.b) FROM buckets bk LEFT JOIN flow f ON f.id = l.id AND f.b = bk.b),
       'out',     (SELECT jsonb_agg(COALESCE(f.outn, 0) ORDER BY bk.b) FROM buckets bk LEFT JOIN flow f ON f.id = l.id AND f.b = bk.b),
@@ -365,6 +408,7 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
       'holder_source', jsonb_build_object(
         'holder',           count(*) FILTER (WHERE holder_source = 'holder'),
         'assigned_to',      count(*) FILTER (WHERE holder_source = 'assigned_to'),
+        'actor',            count(*) FILTER (WHERE holder_source = 'actor'),
         'prior_audit',      count(*) FILTER (WHERE holder_source = 'prior_audit'),
         'current_fallback', count(*) FILTER (WHERE holder_source = 'current_fallback'),
         'none',             count(*) FILTER (WHERE holder_source = 'none')),
@@ -451,6 +495,19 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
     WHERE p_metric = 'moves' AND NOT m.is_bulk AND NOT m.to_excluded
       AND (p_user_id IS NULL OR m.actor_id = p_user_id)
       AND (p_detail IS NULL OR m.to_list_id::TEXT = p_detail OR (p_detail = 'other' AND m.to_list_id IS NULL))
+    UNION ALL
+    SELECT m.lead_id, m.at, m.actor_id, m.holder_id, m.old_label, m.new_label, NULL
+    FROM mv m
+    WHERE p_metric = 'moves_forward' AND NOT m.is_bulk AND NOT m.to_excluded AND NOT m.to_is_archive
+      AND (m.from_sort IS NULL OR m.to_sort > m.from_sort)
+      AND (p_user_id IS NULL OR m.actor_id = p_user_id)
+      AND (p_detail IS NULL OR m.to_list_id::TEXT = p_detail OR (p_detail = 'other' AND m.to_list_id IS NULL))
+    UNION ALL
+    SELECT m.lead_id, m.at, m.actor_id, m.holder_id, m.old_label, m.new_label, NULL
+    FROM mv m
+    WHERE p_metric = 'back_archived' AND NOT m.is_bulk AND NOT m.to_excluded
+      AND ((m.to_sort < m.from_sort) OR m.to_is_archive)
+      AND (p_user_id IS NULL OR m.actor_id = p_user_id)
     UNION ALL
     SELECT m.lead_id, m.at, m.actor_id, m.holder_id, m.old_label, m.new_label, NULL
     FROM mv m

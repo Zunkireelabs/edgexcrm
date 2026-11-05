@@ -22,6 +22,8 @@ export const METRIC_TITLE: Record<string, string> = {
   calls: "calls",
   notes: "notes (new and edited)",
   moves: "stage moves",
+  moves_forward: "leads moved forward",
+  back_archived: "leads moved back or archived",
   status_changes: "status changes",
   received: "new leads received",
   prospects: "leads moved to Prospects",
