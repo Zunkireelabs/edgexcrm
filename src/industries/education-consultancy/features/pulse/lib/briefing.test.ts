@@ -111,6 +111,12 @@ describe("pickLightestLoad — the suggestion target", () => {
     const flagged = people.map((p) => (p.userId === "Dipa" ? { ...p, flag: "red" as const } : p));
     expect(pickLightestLoad(flagged, a)?.userId).toBe("Binod");
   });
+  it("skips people who are over capacity (amber): never hand work to someone already overloaded", () => {
+    const loaded = people.map((p) => (p.userId === "Dipa" ? { ...p, flag: "amber" as const } : p));
+    expect(pickLightestLoad(loaded, a)?.userId).toBe("Binod");
+    const allLoaded = people.map((p) => (p.userId === "Binod" || p.userId === "Dipa" ? { ...p, flag: "amber" as const } : p));
+    expect(pickLightestLoad(allLoaded, a)).toBeNull();
+  });
   it("is null when nobody else holds the role (so no target is ever invented)", () => {
     expect(pickLightestLoad([a], a)).toBeNull();
     expect(pickLightestLoad([a, people[3]], a)).toBeNull();
