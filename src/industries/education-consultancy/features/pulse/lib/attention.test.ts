@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { buildAttention, countByCategory, type AttentionInput } from "./attention";
+import { leadsOfPersonHref } from "./leads-links";
 import { computeSignals } from "./signals";
 import { DEFAULT_PULSE_THRESHOLDS as T } from "./thresholds";
 import { normalizePosition } from "./positions";
@@ -132,12 +133,38 @@ describe("the seeded 7d story (round 12)", () => {
   });
   it("Binod's over-capacity button shows the plan and its why", () => {
     const b = items.find((i) => i.subject === "Binod")!;
-    expect(b.action?.label).toBe("Review 76 leads");
+    expect(b.action?.label).toBe("Review 104 leads"); // the set it opens: everything he received this window
+    expect(b.why).toBe("76 more than usual this week. No TeleCaller has room to take them without their load rising over 50%.");
     expect(b.meta).toMatch(/no TeleCaller has spare capacity$/);
+    expect(b.action?.drill).toEqual({ metric: "received", userId: "b" });
   });
   it("the 48h row names a plan: split across same-role people when one can't take it", () => {
     const t = [...people, P("e", "Esha", {}, {})];
     const u = buildAttention(input({ people: t, untouched: { count: 63, byBranch: [], byRole: [{ key: "telecaller", label: "TeleCaller", count: 50 }] }, heldLoad: { a: 200, b: 100, d: 80, e: 80 } })).find((i) => i.id === "untouched_leads")!;
     expect(u.action?.label).toBe("Assign 63 · split across 2 TeleCallers"); // caps 40 + 40
+  });
+});
+
+describe("the number on a Needs-action button equals the leads its link opens (round 13)", () => {
+  const items = buildAttention(input()).filter((i) => i.category === "needs_action");
+  const n = (t: string) => Number(/\d+/.exec(t)![0]);
+  it("every row's button number equals its 'See the N leads' link", () => {
+    for (const i of items) {
+      const see = i.links.find((l) => /^See the \d+ leads/.test(l.label));
+      expect(see, i.subject).toBeDefined();
+      expect(n(i.action!.label), i.subject).toBe(n(see!.label));
+    }
+  });
+  it("the button opens the same set as that link", () => {
+    for (const i of items) {
+      const see = i.links.find((l) => /^See the \d+ leads/.test(l.label))!;
+      if (i.action!.drill) expect(i.action!.drill).toEqual(see.drill);
+      else expect(i.action!.href).toBe(see.href);
+    }
+  });
+  it("Asha's set is her untouched held leads, not all her leads", () => {
+    const a = items.find((i) => i.subject === "Asha")!;
+    expect(a.action!.href).toContain("f=");
+    expect(a.action!.href).not.toBe(leadsOfPersonHref("a"));
   });
 });
