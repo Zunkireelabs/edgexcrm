@@ -9,6 +9,8 @@
 --                                      are thin wrappers over it: one row per (user, window-bucket), and the funnel JSON
 --   education_pulse_events(...)        the rows behind any number (evidence drawer)
 --   education_pulse_person_daily / _timeline   the person drawer's daily chart and "What they did"
+--   education_pulse_first_activity(...)   each member's first activity record — the earliest their numbers can count toward a
+--                                      "usual" (coverage-aware usual: only windows the data covers are averaged)
 --
 -- WINDOWS. The caller passes the CURRENT window [p_from, p_to). Bucket 0 = that window, bucket 1 = the equal-length
 -- window immediately before it ("previous"), buckets 1..4 = the 4 windows "usual" is the mean of. One call covers
@@ -46,6 +48,7 @@
 --
 --   Expected before/after row counts: 0 rows touched (functions + indexes only).
 --   Rollback:
+--     DROP FUNCTION IF EXISTS education_pulse_first_activity(UUID);
 --     DROP FUNCTION IF EXISTS education_pulse_leak_reasons(UUID, TIMESTAMPTZ, TIMESTAMPTZ, UUID);
 --     DROP FUNCTION IF EXISTS education_pulse_person_timeline(UUID, TIMESTAMPTZ, TIMESTAMPTZ, UUID, INT, INT, INT);
 --     DROP FUNCTION IF EXISTS education_pulse_person_daily(UUID, TIMESTAMPTZ, TIMESTAMPTZ, TEXT, UUID, INT, INT);
@@ -714,6 +717,38 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   GROUP BY 1 ORDER BY 2 DESC, 1 LIMIT 5;
 $$;
 
+-- ── each member's first activity (coverage-aware "usual") ─────────────────────
+-- A person's "usual" may only average windows their data covers. Join dates lie (staff whose legacy activity was
+-- imported have accounts created AFTER their first activity), so the app takes the EARLIEST of this value and
+-- tenant_users.created_at, bounded by the tenant's own first record. One call, one row per member; each source is an
+-- ORDER BY created_at ASC LIMIT 1 probe per member.
+--
+-- INDEX USE (from the migrations as they stand; NOT yet measured, no index added here):
+--   lead_activities: single-column idx on tenant_id, user_id and created_at DESC (014). No composite, so the probe
+--                    (tenant_id, user_id) ORDER BY created_at LIMIT 1 is served by idx_lead_activities_user_id plus a
+--                    filter + sort of that user's rows, or by a backward scan of the created_at idx — not a one-row probe.
+--                    A composite (tenant_id, user_id, created_at) would make it one.
+--   lead_notes:      only idx_lead_notes_lead_id (001) and a partial ai_tool_call idx (175). NO index on user_id, and
+--                    the table has no tenant_id, so the probe joins leads (tenant) and filters user_id: unsupported.
+--                    A (user_id, created_at) index would serve it.
+--   audit_logs:      idx on tenant_id, (entity_type, entity_id), created_at DESC (002) and the partial
+--                    (tenant_id, created_at) WHERE entity_type='lead' AND action IN (...) above. NO user_id index, and
+--                    the partial one cannot serve this probe (its predicate is not implied). Unsupported:
+--                    (tenant_id, user_id, created_at) would serve it.
+CREATE OR REPLACE FUNCTION education_pulse_first_activity(p_tenant UUID)
+RETURNS TABLE (user_id UUID, first_at TIMESTAMPTZ)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT tu.user_id,
+         LEAST(
+           (SELECT x.created_at FROM lead_activities x WHERE x.tenant_id = p_tenant AND x.user_id = tu.user_id ORDER BY x.created_at ASC LIMIT 1),
+           (SELECT n.created_at FROM lead_notes n JOIN leads l ON l.id = n.lead_id AND l.tenant_id = p_tenant WHERE n.user_id = tu.user_id ORDER BY n.created_at ASC LIMIT 1),
+           (SELECT a.created_at FROM audit_logs a WHERE a.tenant_id = p_tenant AND a.user_id = tu.user_id ORDER BY a.created_at ASC LIMIT 1)
+         ) AS first_at
+  FROM tenant_users tu
+  WHERE tu.tenant_id = p_tenant;
+$$;
+
+REVOKE ALL ON FUNCTION education_pulse_first_activity(UUID) FROM PUBLIC;
 REVOKE ALL ON FUNCTION education_pulse_leak_reasons(UUID, TIMESTAMPTZ, TIMESTAMPTZ, UUID) FROM PUBLIC;
 REVOKE ALL ON FUNCTION education_pulse_person_daily(UUID, TIMESTAMPTZ, TIMESTAMPTZ, TEXT, UUID, INT, INT) FROM PUBLIC;
 REVOKE ALL ON FUNCTION education_pulse_person_timeline(UUID, TIMESTAMPTZ, TIMESTAMPTZ, UUID, INT, INT, INT) FROM PUBLIC;
@@ -722,6 +757,7 @@ REVOKE ALL ON FUNCTION education_pulse_overview(UUID, TIMESTAMPTZ, TIMESTAMPTZ, 
 REVOKE ALL ON FUNCTION education_pulse_person_stats(UUID, TIMESTAMPTZ, TIMESTAMPTZ, UUID, INT, INT) FROM PUBLIC;
 REVOKE ALL ON FUNCTION education_pulse_funnel(UUID, TIMESTAMPTZ, TIMESTAMPTZ, TEXT, UUID, INT, INT) FROM PUBLIC;
 REVOKE ALL ON FUNCTION education_pulse_events(UUID, TIMESTAMPTZ, TIMESTAMPTZ, TEXT, UUID, TEXT, UUID, INT, INT, INT, INT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION education_pulse_first_activity(UUID) TO service_role;
 GRANT EXECUTE ON FUNCTION education_pulse_moves(UUID, TIMESTAMPTZ, TIMESTAMPTZ, INT, INT) TO service_role;
 GRANT EXECUTE ON FUNCTION education_pulse_overview(UUID, TIMESTAMPTZ, TIMESTAMPTZ, TEXT, UUID, INT, INT) TO service_role;
 GRANT EXECUTE ON FUNCTION education_pulse_person_stats(UUID, TIMESTAMPTZ, TIMESTAMPTZ, UUID, INT, INT) TO service_role;
