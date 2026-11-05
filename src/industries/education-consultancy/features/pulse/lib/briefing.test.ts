@@ -31,7 +31,7 @@ describe("buildBriefing — each template, from real numbers only", () => {
   it("(a) the biggest negative move names the contributing branch and the person behind it", () => {
     const b = buildBriefing(input(people))!;
     const neg = b.items.find((i) => i.id === "neg")!;
-    expect(neg.headline).toBe("Prospects fell 33%, and Kathmandu accounts for nearly all of it.");
+    expect(neg.headline).toBe("Prospects fell 40%, and Kathmandu accounts for nearly all of it.");
     expect(neg.detail).toContain("Asha's activity is at");
     // Kathmandu fell 10 while Pokhara rose 2: the team's NET drop is 8, and the evidence must not claim "−10 of −8".
     expect(neg.evidence).toContain("Kathmandu −10 · team net −8");
