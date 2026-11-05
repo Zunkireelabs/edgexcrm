@@ -15,14 +15,17 @@ vi.mock("@/lib/supabase/scoped", () => {
   const rows: Record<string, unknown> = {
     tenants: { timezone: "America/Los_Angeles", config: null },
   };
+  // Any query-builder method chains; awaiting the chain resolves to the table's canned rows (empty for everything but
+  // tenants). Terminal helpers (single / maybeSingle / order) resolve too.
   const chain = (table: string) => {
-    const c: Record<string, unknown> = {};
-    const result = () => ({ data: table === "tenants" ? rows.tenants : [], error: null });
-    c.select = () => c;
-    c.eq = () => c;
-    c.order = () => Promise.resolve(result());
-    c.single = async () => result();
-    c.then = (res: (v: unknown) => unknown) => Promise.resolve(result()).then(res);
+    const result = () => ({ data: table === "tenants" ? rows.tenants : [], count: 0, error: null });
+    const c: Record<string, unknown> = new Proxy({}, {
+      get: (_t, name: string) => {
+        if (name === "then") return (res: (v: unknown) => unknown) => Promise.resolve(result()).then(res);
+        if (name === "single" || name === "maybeSingle") return async () => result();
+        return () => c;
+      },
+    });
     return c;
   };
   return {
@@ -36,6 +39,8 @@ vi.mock("@/lib/supabase/scoped", () => {
     })),
   };
 });
+
+vi.mock("@/lib/ai/flag", () => ({ isAssistantEnabledForTenant: async () => false }));
 
 import { GET as getPulse } from "./route";
 import { GET as getEvents } from "./events/route";
@@ -84,6 +89,9 @@ describe("owner / admin, education_consultancy", () => {
     const body = await res.json();
     expect(body.data.window.tz).toBe("America/Los_Angeles");
     expect(body.data.signals).toBeDefined();
+    expect(body.data.aiMode).toBe("preview");
+    expect(body.data.askEnabled).toBe(false);
+    expect(Array.isArray(body.data.attention)).toBe(true);
   });
 
   it("passes the tenant id from the session, never from the query string", async () => {

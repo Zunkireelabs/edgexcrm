@@ -83,14 +83,20 @@ export async function loadPulse(ctx: PulseContext): Promise<PulseResponse> {
 
   // One pass: the stage moves are resolved once for both the scoreboard and the funnel (migration 280).
   const cutoff48 = new Date(window.to.getTime() - 48 * 3600_000).toISOString();
+  // The intake list id(s): a plain lookup, NOT an embed (leads has two FKs to lead_lists → PGRST201 on an embed).
+  const { data: intakeLists } = await db.from("lead_lists").select("id").eq("is_intake", true);
+  const intakeIds = ((intakeLists ?? []) as unknown as Array<{ id: string }>).map((l) => l.id);
   const [overviewRes, untouchedRes, askEnabled] = await Promise.all([
     db.raw().rpc("education_pulse_overview", { p_tenant: auth.tenantId, p_from, p_to, p_tz: tz, p_branch: branchId, ...bulk }),
     // The untouched set = the leads link's filter (never touched, older than 48h, in the intake list) — one definition.
-    db.from("leads").select("assigned_to, branch_id, lead_lists!inner(is_intake)").is("deleted_at", null).is("last_touched_at", null)
-      .lt("created_at", cutoff48).eq("lead_lists.is_intake", true).limit(5000),
+    intakeIds.length === 0
+      ? Promise.resolve({ data: [], error: null })
+      : db.from("leads").select("assigned_to, branch_id").in("list_id", intakeIds).is("deleted_at", null).is("last_touched_at", null)
+          .lt("created_at", cutoff48).limit(5000),
     isAssistantEnabledForTenant(auth.tenantId).catch(() => false),
   ]);
   if (overviewRes.error) throw new Error(`education_pulse_overview: ${overviewRes.error.message}`);
+  if (untouchedRes.error) throw new Error(`untouched leads: ${untouchedRes.error.message}`);
 
   const overview = overviewRes.data as { people: PersonBucketRow[]; funnel: FunnelJson };
   const bucketRows = overview.people ?? [];
