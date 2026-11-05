@@ -139,7 +139,6 @@ export function renderEmailLayout(input: EmailLayoutInput): RenderedEmail {
               ? `<tr>
             <td style="padding: 24px 0 0 0;">
               <a href="${escapeHtml(ctaUrl)}" class="cta-link" style="display: inline-block; padding: 11px 20px; background-color: ${color}; border-radius: 4px; font-size: 14px; font-weight: 600; line-height: 20px; color: #ffffff; text-decoration: none;">${escapeHtml(input.cta.label)}</a>
-              <p style="margin: 14px 0 0 0; font-size: 12px; line-height: 18px; color: #9ca3af; word-break: break-all;">${escapeHtml(ctaUrl)}</p>
             </td>
           </tr>`
               : ""

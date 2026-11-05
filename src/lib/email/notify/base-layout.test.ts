@@ -82,4 +82,10 @@ describe("renderEmailLayout", () => {
   it("ships the phone refinements (full-width button, tighter padding) as a media query", () => {
     expect(renderEmailLayout(base).html).toContain("@media only screen and (max-width: 480px)");
   });
+
+  it("shows the CTA as a button only — no raw URL text that an email client would auto-link in its own colour (the plain-text part keeps the link)", () => {
+    const { html, text } = renderEmailLayout({ ...base, cta: { label: "Open", url: "https://edgex.test/leads/1" } });
+    expect(html.split("https://edgex.test/leads/1").length - 1).toBe(1); // only the button's href
+    expect(text).toContain("Open: https://edgex.test/leads/1");
+  });
 });
