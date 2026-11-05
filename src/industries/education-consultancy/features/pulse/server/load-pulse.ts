@@ -42,8 +42,8 @@ export async function loadPeople(ctx: PulseContext, activeIds: Set<string>): Pro
   // start for everyone (optimistic) rather than hiding every comparison.
   const firstRes = await db.raw().rpc("education_pulse_first_activity", { p_tenant: auth.tenantId });
   const firstBy = new Map<string, string | null>();
-  if (!firstRes.error) for (const r of (firstRes.data ?? []) as Array<{ user_id: string; first_at: string | null }>) firstBy.set(r.user_id, r.first_at);
-  const firstKnown = !firstRes.error;
+  const firstKnown = !firstRes.error && Array.isArray(firstRes.data);
+  if (firstKnown) for (const r of firstRes.data as Array<{ user_id: string; first_at: string | null }>) firstBy.set(r.user_id, r.first_at);
   const branchName = new Map(branches.map((b) => [b.id, b.name]));
   const out: PersonInfo[] = [];
   for (const m of (data ?? []) as unknown as TenantUserRow[]) {
