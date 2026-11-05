@@ -20,6 +20,8 @@ export interface NotifyTenant {
   id: string;
   name: string;
   primaryColor: string;
+  /** IANA zone (tenants.timezone). Times in emails are shown in it; falls back to UTC. */
+  timezone: string;
 }
 
 export interface NotifyMessage {

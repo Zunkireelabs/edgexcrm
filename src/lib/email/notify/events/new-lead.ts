@@ -37,10 +37,26 @@ interface NewLeadContext {
 
 const DEFAULT_LIST_NAME = "New Leads";
 
-function formatReceived(iso: string | null | undefined): string {
+/** tel: link from a free-typed phone number; null when it has no usable digits. */
+function telHref(phone: string | null | undefined): string | null {
+  const digits = (phone ?? "").replace(/[^\d+]/g, "");
+  return /^\+?\d{5,}$/.test(digits) ? `tel:${digits}` : null;
+}
+
+/** "5 Nov 2026, 3:17 pm GMT+5:45" — in the workspace's own time zone (UTC if it is missing/invalid). */
+function formatReceived(iso: string | null | undefined, timeZone: string): string {
   const d = iso ? new Date(iso) : new Date();
   const date = Number.isNaN(d.getTime()) ? new Date() : d;
-  return `${new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }).format(date)} UTC`;
+  const fmt = (tz: string) =>
+    new Intl.DateTimeFormat("en-GB", {
+      day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit", hour12: true,
+      timeZone: tz, timeZoneName: "short",
+    }).format(date);
+  try {
+    return fmt(timeZone || "UTC");
+  } catch {
+    return fmt("UTC");
+  }
 }
 
 export const newLeadEvent: NotificationEmailEvent<NewLeadAlertPayload, NewLeadContext> = {
@@ -67,24 +83,30 @@ export const newLeadEvent: NotificationEmailEvent<NewLeadAlertPayload, NewLeadCo
   },
 
   build({ payload, context, tenant }) {
-    const name = `${payload.firstName ?? ""} ${payload.lastName ?? ""}`.trim() || "A new lead";
+    const fullName = `${payload.firstName ?? ""} ${payload.lastName ?? ""}`.trim();
+    // The headline is who arrived: their name, else their email, else a neutral label.
+    const display = fullName || payload.email?.trim() || "New lead";
     const { html, text } = renderEmailLayout({
-      title: `New lead: ${name}`,
-      preheader: `${name} just landed in ${context.listName}`,
+      title: `New lead: ${display}`,
+      preheader: `${display} just landed in ${context.listName}`,
       tenantName: tenant.name,
       primaryColor: tenant.primaryColor,
-      heading: `New lead in ${context.listName}`,
-      intro: "A new lead just arrived.",
+      eyebrow: "New lead received",
+      heading: display,
       rows: [
-        { label: "Name", value: name === "A new lead" ? null : name },
-        { label: "Email", value: payload.email },
-        { label: "Phone", value: payload.phone },
+        { label: "Email", value: payload.email, href: payload.email ? `mailto:${payload.email.trim()}` : null },
+        { label: "Phone", value: payload.phone, href: telHref(payload.phone) },
+        { label: "Stage", value: context.listName },
         { label: "Source", value: payload.source },
-        { label: "Received", value: formatReceived(payload.createdAt) },
+        { label: "Received", value: formatReceived(payload.createdAt, tenant.timezone) },
       ],
       cta: { label: "Open lead in EdgeX", url: `${APP_URL}/leads/${payload.leadId}` },
       footer: `You're receiving this because you're an Owner or Admin of ${tenant.name}.`,
     });
-    return { subject: `New lead: ${name} — ${tenant.name}`, html, text };
+    return {
+      subject: display === "New lead" ? `New lead received — ${tenant.name}` : `New lead: ${display} — ${tenant.name}`,
+      html,
+      text,
+    };
   },
 };

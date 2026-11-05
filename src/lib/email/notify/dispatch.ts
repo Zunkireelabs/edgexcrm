@@ -74,12 +74,13 @@ export async function dispatchNotificationEmail<P, C>(
       return { ...summary, skipped: "email_not_configured" };
     }
 
-    const { data: t } = await db.from("tenants").select("id, name, primary_color").eq("id", tenantId).maybeSingle();
+    const { data: t } = await db.from("tenants").select("id, name, primary_color, timezone").eq("id", tenantId).maybeSingle();
     if (!t) return { ...summary, skipped: "no_tenant" };
     const tenant: NotifyTenant = {
       id: (t as { id: string }).id,
       name: (t as { name: string }).name,
       primaryColor: (t as { primary_color: string }).primary_color,
+      timezone: (t as { timezone: string | null }).timezone || "UTC",
     };
 
     const recipients = await resolveRecipients(db, tenantId, event.roles);

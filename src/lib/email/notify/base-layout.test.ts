@@ -57,4 +57,29 @@ describe("renderEmailLayout", () => {
   it("uses a valid tenant colour", () => {
     expect(renderEmailLayout({ ...base, primaryColor: "#112233" }).html).toContain("#112233");
   });
+
+  it("row links: mailto: and tel: are allowed, javascript: / data: are not", () => {
+    const { html } = renderEmailLayout({
+      ...base,
+      rows: [
+        { label: "Email", value: "a@b.com", href: "mailto:a@b.com" },
+        { label: "Phone", value: "+9771", href: "tel:+9771" },
+        { label: "Evil", value: "x", href: "javascript:alert(1)" },
+        { label: "Evil2", value: "y", href: "data:text/html,<b>" },
+      ],
+    });
+    expect(html).toContain('href="mailto:a@b.com"');
+    expect(html).toContain('href="tel:+9771"');
+    expect(html).not.toContain("javascript:");
+    expect(html).not.toContain("data:text");
+  });
+
+  it("uses the brand colour sparingly: only the top rule and the button", () => {
+    const { html } = renderEmailLayout({ ...base, primaryColor: "#112233", cta: { label: "Go", url: "https://x.test/y" } });
+    expect(html.split("#112233").length - 1).toBe(2);
+  });
+
+  it("ships the phone refinements (full-width button, tighter padding) as a media query", () => {
+    expect(renderEmailLayout(base).html).toContain("@media only screen and (max-width: 480px)");
+  });
 });
