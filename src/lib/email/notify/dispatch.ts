@@ -3,6 +3,7 @@ import { logger } from "@/lib/logger";
 import { getResendClient, EMAIL_FROM } from "../index";
 import { getEmailTransportMode, sendStubEmail } from "../outbound/transport";
 import { resolveRecipients } from "./recipients";
+import { claimLedgerRow, settleLedgerRow, type LedgerKey } from "./ledger";
 import type {
   DispatchSummary,
   NotificationEmailEvent,
@@ -50,8 +51,6 @@ function defaultSender(): SendFn | null {
     return { id: data?.id ?? null, error: error ? error.message : null };
   };
 }
-
-const UNIQUE_VIOLATION = "23505";
 
 export async function dispatchNotificationEmail<P, C>(
   event: NotificationEmailEvent<P, C>,
@@ -111,27 +110,16 @@ async function sendToRecipient<P, C>(a: {
   entityId: string;
 }): Promise<"sent" | "failed" | "duplicates"> {
   const { event, tenant, recipient, db, entityId } = a;
-  const key = { tenant_id: tenant.id, event: event.id, entity_id: entityId, recipient_email: recipient.email };
+  const key: LedgerKey = { tenant_id: tenant.id, event: event.id, entity_id: entityId, recipient_email: recipient.email };
   const logCtx = { event: event.id, tenantId: tenant.id, entityId, recipient: recipient.email };
 
-  // 1. Claim. UNIQUE (event, entity_id, recipient_email) makes this the exactly-once gate.
-  const { error: claimErr } = await db.from("notification_email_log").insert({ ...key, status: "pending" });
-  if (claimErr) {
-    if ((claimErr as { code?: string }).code === UNIQUE_VIOLATION) return "duplicates";
-    logger.error({ err: claimErr, ...logCtx }, "notify: could not write ledger row — NOT sending (fail closed)");
-    return "failed";
-  }
+  // 1. Claim. UNIQUE (event, entity_id, recipient_email) makes this the exactly-once gate (see ./ledger.ts).
+  const claim = await claimLedgerRow(db, key);
+  if (claim === "duplicate") return "duplicates";
+  if (claim === "error") return "failed";
 
-  const settle = async (patch: { status: "sent" | "failed"; error?: string | null; provider_message_id?: string | null }) => {
-    const { error } = await db
-      .from("notification_email_log")
-      .update({ ...patch, updated_at: new Date().toISOString() })
-      .eq("tenant_id", key.tenant_id)
-      .eq("event", key.event)
-      .eq("entity_id", key.entity_id)
-      .eq("recipient_email", key.recipient_email);
-    if (error) logger.error({ err: error, ...logCtx }, "notify: could not update ledger row");
-  };
+  const settle = (patch: { status: "sent" | "failed"; error?: string | null; provider_message_id?: string | null }) =>
+    settleLedgerRow(db, key, patch);
 
   // 2. Build + send. Only a provider-confirmed id becomes 'sent'.
   try {
