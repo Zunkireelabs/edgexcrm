@@ -2,6 +2,7 @@ import { loadUserNames, isUuid, type PulseContext } from "./context";
 import { assemblePeople } from "../lib/assemble";
 import { loadPeople } from "./load-pulse";
 import { loadCoverage } from "./coverage";
+import { loadBuckets } from "./buckets";
 import { statusChangeLabel, statusLabel } from "../lib/status-label";
 
 /** The tenant's status labels (pipeline stage name by slug — what the Leads page shows). */
@@ -85,17 +86,21 @@ export async function loadPerson(ctx: PulseContext, userId: string): Promise<Pul
   const p_to = window.to.toISOString();
   const bulk = { p_bulk_min: thresholds.bulkMinRows, p_bulk_seconds: thresholds.bulkBucketSeconds };
 
-  const [statsRes, dailyRes, timelineRes] = await Promise.all([
-    db.raw().rpc("education_pulse_person_stats", { p_tenant: auth.tenantId, p_from, p_to, p_branch: null, ...bulk }),
+  const [statsAll, dailyRes, timelineRes] = await Promise.all([
+    loadBuckets<PersonBucketRow[]>(
+      ctx,
+      (span) => db.raw().rpc("education_pulse_person_stats", { p_tenant: auth.tenantId, p_from: span.from.toISOString(), p_to: span.to.toISOString(), p_branch: null, ...bulk }),
+      (d) => (d ?? []) as PersonBucketRow[],
+    ),
     db.raw().rpc("education_pulse_person_daily", { p_tenant: auth.tenantId, p_from, p_to, p_tz: tz, p_user_id: userId, ...bulk }),
     db.raw().rpc("education_pulse_person_timeline", { p_tenant: auth.tenantId, p_from, p_to, p_user_id: userId, p_limit: 30, ...bulk }),
   ]);
-  for (const r of [statsRes, dailyRes, timelineRes]) if (r.error) throw new Error(r.error.message);
+  for (const r of [dailyRes, timelineRes]) if (r.error) throw new Error(r.error.message);
 
-  const rows = ((statsRes.data ?? []) as PersonBucketRow[]).filter((r) => r.user_id === userId);
+  const rows = statsAll.buckets.rows.filter((r) => r.user_id === userId);
   const infos = (await loadPeople(ctx, new Set([userId]))).filter((p) => p.userId === userId);
   if (infos.length === 0) return null;
-  const [person] = assemblePeople(infos, rows, 4, await loadCoverage(ctx));
+  const [person] = assemblePeople(infos, rows, 4, await loadCoverage(ctx), statsAll.buckets.usualBuckets);
 
   const usualActivity = activityOf(person.usual); // coverage-aware: only windows the data covers
   const days = Math.max((window.to.getTime() - window.from.getTime()) / 86_400_000, 1);

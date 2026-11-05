@@ -2,7 +2,7 @@ import { dayBoundsInTz } from "@/lib/filters/compile";
 
 /**
  * Pulse windows are half-open [from, to) and computed in the TENANT timezone.
- *  - 24h: rolling, [now-24h, now)
+ *  - today: from local midnight (tenant tz) to now. "24h" is accepted as an alias of "today" (one release).
  *  - 7d / 30d: from local midnight of (today - (n-1)) to now
  *  - custom: whole local days, [midnight(from), midnight(to + 1 day))
  * "Previous" is the equal-length window immediately before; "usual" is the 4 equal-length windows before the
@@ -10,8 +10,10 @@ import { dayBoundsInTz } from "@/lib/filters/compile";
  * size as the (possibly partial-day) current window — comparing a half-finished day to full days would make
  * every rule fire in the morning.
  */
-export type PulseWindowKey = "24h" | "7d" | "30d" | "custom";
-export const PULSE_WINDOW_KEYS: PulseWindowKey[] = ["24h", "7d", "30d", "custom"];
+export type PulseWindowKey = "today" | "7d" | "30d" | "custom";
+export const PULSE_WINDOW_KEYS: PulseWindowKey[] = ["today", "7d", "30d", "custom"];
+/** Keys the API accepts: the real ones plus the retired "24h" (an alias of "today"). */
+const ACCEPTED_KEYS = [...PULSE_WINDOW_KEYS, "24h"];
 export const USUAL_WINDOW_COUNT = 4;
 
 export interface PulseWindow {
@@ -21,7 +23,7 @@ export interface PulseWindow {
 }
 
 export function isPulseWindowKey(v: string): v is PulseWindowKey {
-  return (PULSE_WINDOW_KEYS as string[]).includes(v);
+  return ACCEPTED_KEYS.includes(v);
 }
 
 function localDateStr(d: Date, tz: string): string {
@@ -43,7 +45,11 @@ export function resolvePulseWindow(
   custom?: { from?: string | null; to?: string | null },
 ): PulseWindow | null {
   if (!isPulseWindowKey(key)) return null;
-  if (key === "24h") return { key, from: new Date(now.getTime() - 24 * 3600_000), to: now };
+  if (key === "today" || (key as string) === "24h") {
+    // Since 00:00 in the TENANT timezone. A floor of one minute keeps a window opened at exactly midnight non-empty.
+    const from = new Date(dayBoundsInTz(localDateStr(now, tz), tz).start);
+    return { key: "today", from, to: new Date(Math.max(now.getTime(), from.getTime() + 60_000)) };
+  }
   if (key === "7d" || key === "30d") {
     const n = key === "7d" ? 7 : 30;
     const startDay = addDays(localDateStr(now, tz), -(n - 1));
@@ -83,4 +89,33 @@ export function fullSpan(w: PulseWindow, count = USUAL_WINDOW_COUNT): { from: Da
 
 export function mean(values: number[]): number {
   return values.length === 0 ? 0 : values.reduce((a, b) => a + b, 0) / values.length;
+}
+
+export interface PeriodSpan { from: Date; to: Date }
+export interface PeriodSpans {
+  /** The comparison period ("last week", "yesterday by this time"). */
+  previous: PeriodSpan;
+  /** The 4 spans "usual" is the mean of, most recent first. For rolling windows these include `previous`. */
+  usual: PeriodSpan[];
+  /** true for Today: previous = yesterday over the same elapsed clock span, usual = the same span on the previous 4 same weekdays. */
+  aligned: boolean;
+}
+
+/**
+ * The periods a window is compared with. Rolling windows (7d / 30d / custom) compare with the equal-length windows
+ * before them. TODAY compares like with like: yesterday from 00:00 to the same elapsed time, and the same elapsed
+ * span on the previous 4 same weekdays (a Monday against Mondays, not a quiet Sunday). Spans are cut in the tenant
+ * timezone, from local midnights; the span length is the elapsed ms (so a DST-change day is off by at most an hour).
+ */
+export function periodSpans(w: PulseWindow, tz: string): PeriodSpans {
+  if (w.key !== "today") {
+    return { previous: previousWindow(w), usual: usualWindows(w), aligned: false };
+  }
+  const elapsed = windowLengthMs(w);
+  const today = localDateStr(w.from, tz);
+  const span = (daysBack: number): PeriodSpan => {
+    const from = new Date(dayBoundsInTz(addDays(today, -daysBack), tz).start);
+    return { from, to: new Date(from.getTime() + elapsed) };
+  };
+  return { previous: span(1), usual: [7, 14, 21, 28].map(span), aligned: true };
 }

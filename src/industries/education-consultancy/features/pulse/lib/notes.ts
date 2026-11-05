@@ -78,7 +78,7 @@ export function coachingNote(p: PersonRow): string | null {
 
 export function windowTitle(key: string, tenantShort: string, range: string): string {
   const at = tenantShort ? ` at ${tenantShort}` : "";
-  if (key === "24h") return `Today${at}`;
+  if (key === "today" || key === "24h") return `Today${at}`;
   if (key === "7d") return `This week${at}`;
   if (key === "30d") return `Last 30 days${at}`;
   return `${range}${at}`;

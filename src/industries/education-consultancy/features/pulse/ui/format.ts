@@ -41,9 +41,9 @@ export function fmtWhen(iso: string, tz: string): string {
   }).format(new Date(iso));
 }
 
-export const WINDOW_LABEL: Record<string, string> = { "24h": "24 hours", "7d": "7 days", "30d": "30 days", custom: "Custom" };
+export const WINDOW_LABEL: Record<string, string> = { today: "Today", "24h": "Today", "7d": "7 days", "30d": "30 days", custom: "Custom" };
 export const PREVIOUS_LABEL: Record<string, string> = {
-  "24h": "the 24 hours before", "7d": "the week before", "30d": "the 30 days before", custom: "the period before",
+  today: "yesterday by this time", "24h": "yesterday by this time", "7d": "the week before", "30d": "the 30 days before", custom: "the period before",
 };
 
 export function csvEscape(v: string | number): string {

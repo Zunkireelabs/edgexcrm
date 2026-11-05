@@ -53,3 +53,12 @@ describe("firstAtFor — earliest of first activity and join date, bounded by th
     expect(firstAtFor(null, ago(5).toISOString(), ago(9).toISOString())).toBeNull();
   });
 });
+
+describe("aligned (Today) coverage uses the explicit span starts", () => {
+  it("a weekday span before the data starts is not covered, even if the contiguous arithmetic would say so", () => {
+    const c = { windowFrom: ago(0), lenMs: 6 * 3600_000, tenantFirst: ago(16), usualFroms: [ago(7), ago(14), ago(21), ago(28)], previousFrom: ago(1) };
+    expect(coveredUsualIndices(c, ago(16))).toEqual([0, 1]);
+    expect(previousCovered(c, ago(16))).toBe(true);
+    expect(previousCovered({ ...c, previousFrom: ago(20) }, ago(16))).toBe(false);
+  });
+});

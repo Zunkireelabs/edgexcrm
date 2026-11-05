@@ -123,3 +123,13 @@ describe("assemblePeople — the seeded story at 7d keeps its signals (accounts 
     expect(people[0].usual.calls).toBe(0);
   });
 });
+
+describe("assemblePeople — Today's aligned buckets", () => {
+  it("usual = the same-weekday buckets (2..5), previous = bucket 1 (yesterday); bucket 1 is NOT part of the usual", () => {
+    const [p] = assemblePeople([info("a")], [row("a", 0, 10), row("a", 1, 100), row("a", 2, 8), row("a", 3, 12), row("a", 4, 10), row("a", 5, 10)], 4, undefined, [2, 3, 4, 5]);
+    expect(p.current.calls).toBe(10);
+    expect(p.previous.calls).toBe(100);
+    expect(p.usual.calls).toBe(10); // (8+12+10+10)/4 — yesterday's 100 is excluded
+    expect(p.trend).toEqual([10, 10, 12, 8, 10]);
+  });
+});

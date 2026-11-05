@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import type { PulseEventsResponse, PulsePersonResponse, PulseResponse } from "../lib/types";
 
 export interface WindowSelection {
-  key: "24h" | "7d" | "30d" | "custom";
+  key: "today" | "7d" | "30d" | "custom";
   from?: string;
   to?: string;
 }
