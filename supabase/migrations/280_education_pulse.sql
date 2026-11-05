@@ -158,7 +158,7 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
          CASE WHEN h.old_label ~ '^[a-z0-9]+(-[a-z0-9]+)*$' THEN 'slug' ELSE 'name' END,
          h.from_id, h.to_id, h.from_sort, h.to_sort, h.from_slug, h.to_slug, h.to_archive, h.to_excluded,
          h.from_via, h.to_via, h.holder_id, h.holder_source,
-         (h.via = 'bulk'
+         (COALESCE(h.via = 'bulk', false)
           OR count(*) OVER (PARTITION BY h.actor_id, floor(extract(epoch FROM h.at) / GREATEST(p_bulk_seconds, 1))) >= p_bulk_min)
   FROM held h;
 $$;
