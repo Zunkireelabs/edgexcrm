@@ -109,6 +109,15 @@ describe("uncovered baseline → no zero-baseline text anywhere", () => {
   });
 });
 
+describe("win % agrees with the usual printed beside it", () => {
+  it("raw usual 5.5 → 'usual 6' and 200% above (not 227%)", () => {
+    const ppl = [P("Esha", "counsellor", "K", { reached_applications: 18 }, {}, { reached_applications: 5.5 })];
+    const win = buildBriefing(input(ppl))!.items.find((i) => i.id === "win")!;
+    expect(win.evidence).toContain("Esha usual 6");
+    expect(win.headline).toContain("200% above their usual");
+  });
+});
+
 describe("Orca's read", () => {
   const people = [
     P("Asha", "telecaller", "Kathmandu", { calls: 18, prospects: 2 }, { prospects: 12 }, { calls: 82, notes: 20, prospects: 12 }),

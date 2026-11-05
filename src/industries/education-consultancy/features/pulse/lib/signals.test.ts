@@ -212,3 +212,15 @@ describe("thresholds config", () => {
     expect(r.overCapacityMin).toBe(T.overCapacityMin);
   });
 });
+
+describe("branch heads-up goes through the same guard (usual 5+, at least 25% off)", () => {
+  const k = (current: number, usual: number, hasUsual = true) => ({ branchId: "b", name: "Kathmandu", current, usual, metric: "prospects" as const, hasUsual });
+  it("a 5% change is noise: no signal", () => {
+    expect(biggestDropSignal([k(10, 10.5)])).toHaveLength(0);
+    expect(biggestDropSignal([k(10, 11)])).toHaveLength(0);
+  });
+  it("a 27% fall fires; an uncovered usual never does", () => {
+    expect(biggestDropSignal([k(8, 11)])).toHaveLength(1);
+    expect(biggestDropSignal([k(1, 20, false)])).toHaveLength(0);
+  });
+});

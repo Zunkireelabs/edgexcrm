@@ -42,7 +42,7 @@ export function activityDropSignals(people: PersonRow[], t: PulseThresholds): Si
         id: `activity_drop:${p.userId}`,
         kind: "activity_drop",
         severity: "high",
-        title: `${p.name}'s activity dropped to ${pct((current / usual) * 100)} of usual`,
+        title: `${p.name}'s activity dropped to ${pct((current / Math.round(usual)) * 100)} of usual`,
         detail: `${current} calls, notes and stage moves vs usual ${Math.round(usual)}. Their leads may be going cold.`,
         evidence: { metric: "activity", value: current, baseline: usual },
         subject: { type: "person", id: p.userId },
@@ -176,8 +176,11 @@ export function biggestDropSignal(kpis: BranchKpi[]): Signal[] {
   let worst: BranchKpi | null = null;
   let worstDelta = 0;
   for (const k of kpis) {
-    if (k.hasUsual === false || k.usual < MIN_USUAL) continue;
-    const delta = k.current - k.usual;
+    if (k.hasUsual === false) continue;
+    // Same guard and noise floor as the table: a real usual (5+) and at least a 25% fall.
+    const cmp = compareToUsual(k.current, k.usual, k.hasUsual);
+    if (!cmp || cmp.pct > -25) continue;
+    const delta = k.current - Math.round(k.usual);
     if (delta < worstDelta) {
       worst = k;
       worstDelta = delta;
@@ -190,7 +193,7 @@ export function biggestDropSignal(kpis: BranchKpi[]): Signal[] {
       id: `biggest_drop:${worst.branchId}:${worst.metric}`,
       kind: "biggest_drop",
       severity: "info",
-      title: `${worst.name}: ${what} down ${pct((-worstDelta / worst.usual) * 100)} vs usual`,
+      title: `${worst.name}: ${what} down ${pct((-worstDelta / Math.round(worst.usual)) * 100)} vs usual`,
       detail: `${worst.current} vs usual ${Math.round(worst.usual)}.`,
       evidence: { metric: worst.metric, value: worst.current, baseline: worst.usual },
       subject: { type: "branch", id: worst.branchId },
