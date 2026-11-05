@@ -9,16 +9,18 @@ import { buildAttention } from "../lib/attention";
 import { buildBriefing } from "../lib/briefing";
 import { isAssistantEnabledForTenant } from "@/lib/ai/flag";
 import { computeSignals } from "../lib/signals";
-import { mean } from "../lib/window";
+import { mean, resolvePulseWindow } from "../lib/window";
 import {
   activityOf,
   type BranchKpi,
   type LeakReason,
   type PersonInfo,
+  type PersonRow,
   type PulseFunnelStage,
   type PulseResponse,
   type StageFlow,
 } from "../lib/types";
+import { untouchedHeldCutoff } from "../lib/untouched";
 import { loadUserNames, type PulseContext } from "./context";
 
 interface TenantUserRow {
@@ -71,6 +73,56 @@ export async function loadPeople(ctx: PulseContext, activeIds: Set<string>): Pro
   return out;
 }
 
+/** Held, undeleted leads in active lists with no touch and no stage move since the cutoff (paged: PostgREST caps a page). */
+async function loadUntouchedHeld(ctx: PulseContext, activeIds: string[], cutoff: string): Promise<{ data: Array<{ assigned_to: string | null; branch_id: string | null }>; error: { message: string } | null }> {
+  if (activeIds.length === 0) return { data: [], error: null };
+  const rows: Array<{ assigned_to: string | null; branch_id: string | null }> = [];
+  const PAGE = 1000;
+  for (let from = 0; from < 50_000; from += PAGE) {
+    let q = ctx.db.from("leads").select("assigned_to, branch_id").in("list_id", activeIds).not("assigned_to", "is", null).is("deleted_at", null)
+      .or(`last_touched_at.is.null,last_touched_at.lt.${cutoff}`).lt("stage_changed_at", cutoff).order("id").range(from, from + PAGE - 1);
+    if (ctx.branchId) q = q.eq("branch_id", ctx.branchId);
+    const { data, error } = await q;
+    if (error) return { data: [], error };
+    const page = (data ?? []) as unknown as Array<{ assigned_to: string | null; branch_id: string | null }>;
+    rows.push(...page);
+    if (page.length < PAGE) break;
+  }
+  return { data: rows, error: null };
+}
+
+/**
+ * Row flags (red = activity drop, amber = over capacity) from the WEEKLY view, whatever window is on screen — a
+ * reassign target must be safe this week, not just today. The shown window is reused when it already is the 7d one.
+ */
+async function loadWeeklyFlags(ctx: PulseContext, shownFlags: Record<string, "red" | "amber" | "green">): Promise<Record<string, "red" | "amber" | "green">> {
+  if (ctx.window.key === "7d") return shownFlags;
+  const w = resolvePulseWindow("7d", new Date(), ctx.tz);
+  if (!w) return shownFlags;
+  const c7: PulseContext = { ...ctx, window: w };
+  const { db, auth, tz, branchId, thresholds } = c7;
+  const bulk = { p_bulk_min: thresholds.bulkMinRows, p_bulk_seconds: thresholds.bulkBucketSeconds };
+  const ov = await loadBuckets<OverviewJson>(
+    c7,
+    (span) => db.raw().rpc("education_pulse_overview", { p_tenant: auth.tenantId, p_from: span.from.toISOString(), p_to: span.to.toISOString(), p_tz: tz, p_branch: branchId, ...bulk }),
+    (d) => d?.people ?? [],
+  );
+  const cov = await loadCoverage(c7);
+  const ppl = assemblePeople(await loadPeople(c7, new Set(ov.buckets.rows.map((r) => r.user_id))), ov.buckets.rows, 4, cov, ov.buckets.usualBuckets);
+  return computeSignals({ people: ppl, stageFlows: [], untouched: { count: 0, byPerson: [] }, branchKpis: [], thresholds, baselineCovered: true }).flags;
+}
+
+/** Open leads each person holds now: active lists, not deleted. One head-count per person (a few dozen, in parallel). */
+async function loadHeldLoad(ctx: PulseContext, people: PersonRow[], activeIds: string[]): Promise<Record<string, number>> {
+  const out: Record<string, number> = {};
+  if (activeIds.length === 0) return out;
+  await Promise.all(people.map(async (p) => {
+    const { count, error } = await ctx.db.from("leads").select("id", { count: "exact", head: true }).eq("assigned_to", p.userId).is("deleted_at", null).in("list_id", activeIds);
+    if (!error && count !== null) out[p.userId] = count;
+  }));
+  return out;
+}
+
 export async function loadPulse(ctx: PulseContext): Promise<PulseResponse> {
   const { db, auth, window, tz, branchId, thresholds } = ctx;
   const p_from = window.from.toISOString();
@@ -78,21 +130,19 @@ export async function loadPulse(ctx: PulseContext): Promise<PulseResponse> {
   const bulk = { p_bulk_min: thresholds.bulkMinRows, p_bulk_seconds: thresholds.bulkBucketSeconds };
 
   // One pass: the stage moves are resolved once for both the scoreboard and the funnel (migration 280).
-  const cutoff48 = new Date(window.to.getTime() - 48 * 3600_000).toISOString();
-  // The intake list id(s): a plain lookup, NOT an embed (leads has two FKs to lead_lists → PGRST201 on an embed).
-  const { data: intakeLists } = await db.from("lead_lists").select("id").eq("is_intake", true);
-  const intakeIds = ((intakeLists ?? []) as unknown as Array<{ id: string }>).map((l) => l.id);
+  // Active (non-archive) lists: a plain lookup, NOT an embed (leads has two FKs to lead_lists → PGRST201 on an embed).
+  const { data: listRows } = await db.from("lead_lists").select("id, is_archive");
+  const activeIds = ((listRows ?? []) as unknown as Array<{ id: string; is_archive: boolean }>).filter((l) => !l.is_archive).map((l) => l.id);
+  const untouchedCutoff = untouchedHeldCutoff(new Date());
   const [overviewAll, untouchedRes, askEnabled] = await Promise.all([
     loadBuckets<OverviewJson>(
       ctx,
       (span) => db.raw().rpc("education_pulse_overview", { p_tenant: auth.tenantId, p_from: span.from.toISOString(), p_to: span.to.toISOString(), p_tz: tz, p_branch: branchId, ...bulk }),
       (d) => d?.people ?? [],
     ).catch((e: Error) => { throw new Error(`education_pulse_overview: ${e.message}`); }),
-    // The untouched set = the leads link's filter (never touched, older than 48h, in the intake list) — one definition.
-    intakeIds.length === 0
-      ? Promise.resolve({ data: [], error: null })
-      : db.from("leads").select("assigned_to, branch_id").in("list_id", intakeIds).is("deleted_at", null).is("last_touched_at", null)
-          .lt("created_at", cutoff48).limit(5000),
+    // The untouched set = the `untouched_held` filter behind "See the N leads": held in an active list, no touch and no
+    // stage move for 3+ days. Absolute — it does not depend on the Pulse window.
+    loadUntouchedHeld(ctx, activeIds, untouchedCutoff),
     isAssistantEnabledForTenant(auth.tenantId).catch(() => false),
   ]);
   if (untouchedRes.error) throw new Error(`untouched leads: ${untouchedRes.error.message}`);
@@ -169,6 +219,7 @@ export async function loadPulse(ctx: PulseContext): Promise<PulseResponse> {
     baselineCovered,
   });
   for (const p of people) p.flag = signals.flags[p.userId] ?? null;
+  const [heldLoad, flags7d] = await Promise.all([loadHeldLoad(ctx, people, activeIds), loadWeeklyFlags(ctx, signals.flags)]);
   // "Quiet since Thu": only for the few red-flagged people, from their daily series.
   await Promise.all(
     people.filter((p) => p.flag === "red").map(async (p) => {
@@ -183,13 +234,13 @@ export async function loadPulse(ctx: PulseContext): Promise<PulseResponse> {
 
   // Real numbers for the suggestion values: leads a flagged-red person still holds that nobody touched this period
   // (active lists only), and why leads left the stages that leaked.
-  const activeListIds = funnel.stages.filter((s) => !s.is_archive).map((s) => s.list_id);
+  const activeListIds = activeIds;
   const staleHeld: Record<string, number> = {};
   await Promise.all(
     signals.all.filter((s) => s.kind === "activity_drop").map(async (s) => {
       const { count } = await db.from("leads").select("id", { count: "exact", head: true })
         .eq("assigned_to", s.subject.id).is("deleted_at", null).in("list_id", activeListIds)
-        .or(`last_touched_at.is.null,last_touched_at.lt.${p_from}`);
+        .or(`last_touched_at.is.null,last_touched_at.lt.${untouchedCutoff}`).lt("stage_changed_at", untouchedCutoff);
       staleHeld[s.subject.id] = count ?? 0;
     }),
   );
@@ -206,7 +257,7 @@ export async function loadPulse(ctx: PulseContext): Promise<PulseResponse> {
   const win7 = Math.abs(winDays0 - 7) < 0.1, win1 = ctx.window.key === "today";
   const { groups, team } = rollups(people);
   const attention = buildAttention({
-    people, signals: signals.all, stageFlows, leakReasons, staleHeld,
+    people, signals: signals.all, stageFlows, leakReasons, staleHeld, heldLoad, flags7d,
     untouched: { count: untouchedCount, byBranch: byBranchCount, byRole },
     periodNoun: win7 ? "this week" : win1 ? "today" : "this period",
     baselineCovered,

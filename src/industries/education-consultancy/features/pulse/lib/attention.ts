@@ -1,5 +1,5 @@
 import { leadsOfPersonHref, untouchedLeadsHref } from "./leads-links";
-import { pickLightestLoad } from "./suggest";
+import { planReassign, type ReassignPlan } from "./suggest";
 import { pluralLabel } from "./positions";
 import { weekdayShort } from "./quiet";
 import { compareToUsual, usualShare } from "./compare";
@@ -18,34 +18,46 @@ export interface AttentionInput {
   untouched: { count: number; byBranch: Array<{ name: string; count: number }>; byRole: Array<{ key: string; label: string; count: number }> };
   /** Leads each person still holds that nobody touched this window (for the "Reassign N" value). */
   staleHeld: Record<string, number>;
+  /** Open leads each person holds RIGHT NOW (active lists, not deleted) — the load a reassign target is chosen by. */
+  heldLoad?: Record<string, number>;
+  /** Row flags from the WEEKLY view, whatever window is shown: anyone red/amber there is never a target. */
+  flags7d?: Record<string, "red" | "amber" | "green">;
   /** How the current window is named in sentences: "this week" | "today" | "this period". */
   periodNoun?: string;
   baselineCovered?: boolean;
 }
 
 const personOf = (people: PersonRow[], id: string) => people.find((p) => p.userId === id);
+/** "split across 2 TeleCallers" etc. — the label, meta and (when one person) the name for a plan. */
+function planText(plan: ReassignPlan, n: number, roleLabel: string, verb: "Reassign" | "Rebalance"): { label: string; meta: string; why: string; suggested: boolean } {
+  if (plan.kind === "one") return { label: `${verb} ${n} to ${plan.target.name}`, meta: `${plan.target.name} holds ${plan.held} open leads now`, why: ` ${plan.target.name} holds ${plan.held} open leads now, so ${n} more is within +50%.`, suggested: true };
+  if (plan.kind === "split") {
+    const k = plan.targets.length;
+    return { label: `${verb} ${n} · split across ${k} ${pluralLabel(roleLabel)}`, meta: plan.targets.map((t) => `${t.person.name} +${t.take}`).join(", "), why: ` No one ${roleLabel} can take all ${n} without their load rising over 50%, so it is split: ${plan.targets.map((t) => `${t.person.name} +${t.take}`).join(", ")}.`, suggested: true };
+  }
+  return { label: `Review ${n} leads`, meta: `no ${roleLabel} has spare capacity`, why: ` No ${roleLabel} can take them without their load rising over 50%, or they are already flagged this week.`, suggested: false };
+}
 const pctOf = (cur: number, base: number) => { const shown = Math.max(1, Math.round(base)); return Math.round(Math.abs((cur - shown) / shown) * 100); };
 
 export function buildAttention(input: AttentionInput): AttentionItem[] {
   const out: AttentionItem[] = [];
-  const period = input.periodNoun ?? "this week";
   for (const s of input.signals) {
     if (s.kind === "activity_drop") {
       const p = personOf(input.people, s.subject.id);
       if (!p) continue;
       const cur = activityOf(p.current), usual = activityOf(p.usual);
-      const target = pickLightestLoad(input.people, p);
       const stale = input.staleHeld[p.userId] ?? 0;
+      const plan = stale > 0 ? planReassign(input.people, p, stale, input.heldLoad ?? {}, input.flags7d ?? {}) : ({ kind: "none" } as ReassignPlan);
+      const pt = planText(plan, stale, p.positionLabel, "Reassign");
       out.push({
         id: s.id, category: "needs_action", tone: "bad", icon: "down", subject: p.name,
         what: p.quietSinceDay ? `activity down ${usualShare(cur, usual)?.down ?? pctOf(cur, usual)}% since ${weekdayShort(p.quietSinceDay)}` : `activity down ${usualShare(cur, usual)?.down ?? pctOf(cur, usual)}% against usual`,
         figure: stale > 0 ? { strong: String(stale), text: " leads untouched" } : { strong: String(cur), text: ` vs usual ${Math.round(usual)}` },
-        suggested: !!target && stale > 0,
-        action: target && stale > 0 ? { label: `Reassign ${stale} to ${target.name}`, href: leadsOfPersonHref(p.userId), primary: true } : { label: stale > 0 ? `Review ${stale} leads` : "Review leads", href: leadsOfPersonHref(p.userId), primary: true },
+        suggested: stale > 0 && pt.suggested,
+        action: { label: stale > 0 ? pt.label : "Review leads", href: leadsOfPersonHref(p.userId), primary: true },
         why: `Calls, notes and stage moves dropped together: ${cur} against a usual ${Math.round(usual)}.` +
-          (stale > 0 ? ` ${stale} of the leads ${p.name} holds have had no call or note this period.` : "") +
-          (target ? ` ${target.name} has the lightest ${p.positionLabel} load this period (${target.current.received} new leads).` : ""),
-        meta: [`${p.current.calls} calls vs usual ${Math.round(p.usual.calls)}`, `${p.notesNew + p.notesEdited} notes vs usual ${Math.round(p.usual.notes)}`, [p.positionLabel, p.branchName].filter(Boolean).join(", "), target ? `${target.name} has the lightest load ${period}` : `no ${p.positionLabel} has spare capacity ${period}`].join(" · "),
+          (stale > 0 ? ` ${stale} of the leads ${p.name} holds have had no touch or move in 3+ days.${pt.why}` : ""),
+        meta: [`${p.current.calls} calls vs usual ${Math.round(p.usual.calls)}`, `${p.notesNew + p.notesEdited} notes vs usual ${Math.round(p.usual.notes)}`, [p.positionLabel, p.branchName].filter(Boolean).join(", "), stale > 0 ? pt.meta : `no ${p.positionLabel} has spare capacity`].join(" · "),
         links: [{ label: stale > 0 ? `See the ${stale} leads →` : "See their leads →", href: leadsOfPersonHref(p.userId) }, { label: `${p.name}'s activity →`, personId: p.userId }],
         drill: s.drill,
       });
@@ -54,11 +66,11 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
       const topB = input.untouched.byBranch[0];
       const topR = input.untouched.byRole[0];
       out.push({
-        id: s.id, category: "needs_action", tone: "warn", icon: "clock", subject: `${n} new lead${n === 1 ? "" : "s"}`,
-        what: `untouched for over 48 hours${topB && topB.count < n ? `, ${topB.count} of them with ${topB.name}` : ""}`,
+        id: s.id, category: "needs_action", tone: "warn", icon: "clock", subject: `${n} held lead${n === 1 ? "" : "s"}`,
+        what: `untouched for 3+ days${topB && topB.count < n ? `, ${topB.count} of them with ${topB.name}` : ""}`,
         figure: null, suggested: !!topR,
         action: { label: topR ? `Spread across ${pluralLabel(topR.label)}` : "Review leads", href: untouchedLeadsHref(), primary: false },
-        why: `No call, email, meeting or note since they arrived.` + (topR ? ` ${topR.count} of them are held by ${pluralLabel(topR.label)}.` : ""),
+        why: `No call, email, meeting, note or stage move in 3+ days.` + (topR ? ` ${topR.count} of them are held by ${pluralLabel(topR.label)}.` : ""),
         meta: input.untouched.byBranch.slice(0, 3).map((b) => `${b.name} ${b.count}`).join(" · ") || null,
         links: [{ label: `See the ${n} leads →`, href: untouchedLeadsHref() }],
         drill: s.drill,
@@ -66,14 +78,16 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
     } else if (s.kind === "over_capacity") {
       const p = personOf(input.people, s.subject.id);
       if (!p || !compareToUsual(p.current.received, p.usual.received, p.hasUsual)) continue;
-      const target = pickLightestLoad(input.people, p);
+      const excess = Math.max(0, p.current.received - Math.round(p.usual.received));
+      const plan = planReassign(input.people, p, excess, input.heldLoad ?? {}, input.flags7d ?? {});
+      const pt = planText(plan, excess, p.positionLabel, "Rebalance");
       out.push({
         id: s.id, category: "needs_action", tone: "warn", icon: "alert", subject: p.name,
         what: `received ${p.current.received} new leads, usual is ${Math.round(p.usual.received)}`,
         figure: { text: `${(Math.round((p.current.received / Math.round(p.usual.received)) * 10) / 10).toString()}× usual` },
         suggested: false,
-        action: { label: target ? `Rebalance with ${target.name}` : "Rebalance", href: leadsOfPersonHref(p.userId), primary: false },
-        why: `${p.name} received ${p.current.received} new leads against a usual ${Math.round(p.usual.received)}.` + (target ? ` ${target.name} received ${target.current.received}.` : ""),
+        action: { label: plan.kind === "one" ? `Rebalance with ${plan.target.name}` : plan.kind === "split" ? pt.label : "Rebalance", href: leadsOfPersonHref(p.userId), primary: false },
+        why: `${p.name} received ${p.current.received} new leads against a usual ${Math.round(p.usual.received)}.` + (plan.kind !== "none" ? pt.why : ""),
         meta: [p.positionLabel, p.branchName].filter(Boolean).join(", ") || null,
         links: [{ label: "See the leads →", href: leadsOfPersonHref(p.userId) }, { label: `${p.name}'s activity →`, personId: p.userId }],
         drill: s.drill,

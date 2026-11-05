@@ -14,7 +14,7 @@ const P = (id: string, name: string, cur: Partial<MetricCounts>, usual: Partial<
 const people = [P("a", "Asha", { calls: 18, notes: 13 }, { calls: 82, notes: 54 }), P("b", "Binod", { received: 104, calls: 80 }, { received: 28, calls: 80 }), P("d", "Dipa", { received: 20, calls: 60 }, { received: 20, calls: 60 })];
 const signals = computeSignals({ people, stageFlows: [], untouched: { count: 63, byPerson: [] }, branchKpis: [], thresholds: T }).all;
 const input = (o: Partial<AttentionInput> = {}): AttentionInput => ({
-  people, signals, stageFlows: [], leakReasons: {}, staleHeld: { a: 34 },
+  people, signals, stageFlows: [], leakReasons: {}, staleHeld: { a: 34 }, heldLoad: { a: 200, b: 100, d: 100 }, flags7d: { b: "amber" },
   untouched: { count: 63, byBranch: [{ name: "Butwal", count: 41 }, { name: "Pokhara", count: 22 }], byRole: [{ key: "telecaller", label: "TeleCaller", count: 50 }] }, ...o,
 });
 
@@ -35,20 +35,20 @@ describe("buildAttention — the one list", () => {
     const a = items.find((i) => i.subject === "Asha")!;
     expect(a.action).toMatchObject({ label: "Reassign 34 to Dipa", primary: true });
     expect(a.suggested).toBe(true);
-    expect(a.meta).toMatch(/Dipa has the lightest load this week$/);
+    expect(a.meta).toMatch(/Dipa holds 100 open leads now$/);
     expect(a.figure).toEqual({ strong: "34", text: " leads untouched" });
   });
   it("never invents a target: with nobody else in the role there is no 'to <name>'", () => {
     const solo = buildAttention(input({ people: [people[0]] })).find((i) => i.subject === "Asha")!;
     expect(solo.action?.label).toBe("Review 34 leads");
-    expect(solo.meta).toMatch(/no TeleCaller has spare capacity this week$/);
+    expect(solo.meta).toMatch(/no TeleCaller has spare capacity$/);
     expect(solo.suggested).toBe(false);
   });
   it("untouched leads: branch share and a role target, both from the real tally", () => {
     const u = items.find((i) => i.id === "untouched_leads")!;
-    expect(u.what).toBe("untouched for over 48 hours, 41 of them with Butwal");
+    expect(u.what).toBe("untouched for 3+ days, 41 of them with Butwal");
     expect(u.action?.label).toBe("Spread across TeleCallers");
-    expect(u.action?.href).toContain("untouched_new".slice(0, 0) + "/leads?list=pre-qualified");
+    expect(u.action?.href).toMatch(/^\/leads\?f=/);
   });
   it("over capacity is a rule item without a Suggested tag", () => {
     const o = items.find((i) => i.subject === "Binod")!;
@@ -86,5 +86,34 @@ describe("the same fact reads the same on every surface", () => {
     const b = buildBriefing({ people: ppl, team: rollups(ppl).team, stageFlows: [], leakReasons: {}, untouched: { count: 5 }, thresholds: T })!;
     const at = Number(/at (\d+)% of usual/.exec(b.items[0].detail)![1]);
     expect(at + down).toBe(100);
+  });
+});
+
+describe("reassign target safety (round 11)", () => {
+  const row = (o: Partial<AttentionInput>) => buildAttention(input(o)).find((i) => i.subject === "Asha")!;
+  const team = [...people, P("e", "Esha", { received: 10 }, { received: 10 }), P("f", "Fan", { received: 10 }, { received: 10 })];
+  it("(a) picks by CURRENT held load, not window intake: Dipa received 20 but holds more than Esha", () => {
+    const a = row({ people: team, heldLoad: { a: 200, b: 90, d: 100, e: 80, f: 120 }, flags7d: { b: "amber" } });
+    expect(a.action?.label).toBe("Reassign 34 to Esha");
+  });
+  it("(b) never targets someone with an over-capacity or activity-drop signal in the 7d view, whatever the window", () => {
+    const a = row({ people: team, heldLoad: { a: 200, b: 1, d: 500, e: 500, f: 500 }, flags7d: { b: "amber", d: "red" } });
+    expect(a.action?.label).not.toContain("Binod");
+    expect(a.action?.label).not.toContain("Dipa");
+  });
+  it("(c) never raises a target's held load by more than 50%: a one-person move needs held ≥ 2×n", () => {
+    expect(row({ people: team, heldLoad: { a: 200, b: 0, d: 68, e: 0, f: 0 } }).action?.label).toBe("Reassign 34 to Dipa"); // exactly +50%
+    expect(row({ people: team, heldLoad: { a: 200, b: 0, d: 67, e: 0, f: 0 } }).action?.label).toBe("Review 34 leads"); // +50.7% → refused
+  });
+  it("(c) splits across same-role people when one cannot absorb it", () => {
+    const a = row({ people: team, staleHeld: { a: 60 }, heldLoad: { a: 200, b: 0, d: 80, e: 80, f: 0 } }); // caps 40 + 40
+    expect(a.action?.label).toBe("Reassign 60 · split across 2 TeleCallers");
+    expect(a.suggested).toBe(true);
+  });
+  it("(c) says Review with 'no TeleCaller has spare capacity' when nobody can take it", () => {
+    const a = row({ people: team, heldLoad: { a: 200, b: 0, d: 20, e: 20, f: 20 } }); // caps 10 each = 30 < 34
+    expect(a.action?.label).toBe("Review 34 leads");
+    expect(a.meta).toMatch(/no TeleCaller has spare capacity$/);
+    expect(a.suggested).toBe(false);
   });
 });

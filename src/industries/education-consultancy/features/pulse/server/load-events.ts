@@ -1,6 +1,8 @@
 import { loadUserNames, isUuid, type PulseContext } from "./context";
 import { assemblePeople } from "../lib/assemble";
 import { loadPeople } from "./load-pulse";
+import { untouchedLeadsHref } from "../lib/leads-links";
+import { untouchedHeldCutoff } from "../lib/untouched";
 import { loadCoverage } from "./coverage";
 import { loadBuckets } from "./buckets";
 import { statusChangeLabel, statusLabel } from "../lib/status-label";
@@ -29,7 +31,7 @@ export function leadsHrefFor(metric: EventMetric): string | null {
   switch (metric) {
     case "prospects": return "/leads?list=prospects";
     case "reached_applications": return "/leads?list=applications";
-    case "untouched": return "/leads?list=pre-qualified";
+    case "untouched": return untouchedLeadsHref();
     default: return null;
   }
 }
@@ -112,7 +114,7 @@ export async function loadPerson(ctx: PulseContext, userId: string): Promise<Pul
     : { count: 0 };
   const stale = activeListIds.length
     ? await db.from("leads").select("id", { count: "exact", head: true }).eq("assigned_to", userId).is("deleted_at", null).in("list_id", activeListIds)
-        .or(`last_touched_at.is.null,last_touched_at.lt.${p_from}`)
+        .or(`last_touched_at.is.null,last_touched_at.lt.${untouchedHeldCutoff()}`).lt("stage_changed_at", untouchedHeldCutoff())
     : { count: 0 };
 
   const statusLabels = await loadStatusLabels(db);
