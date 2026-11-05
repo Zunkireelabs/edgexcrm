@@ -20,6 +20,8 @@ export interface BriefingInput {
   baselineLabel?: string;
   /** false → the previous period starts before the data does: no trend claim is made from it. */
   baselineCovered?: boolean;
+  /** "next week's" | "next month's" | "tomorrow's" — follows the window. Default next week's. */
+  horizon?: string;
   /** New leads this window vs the previous one (for the intake direction). */
   newLeads?: { current: number; previous: number };
 }
@@ -117,7 +119,7 @@ function topWin(input: BriefingInput): BriefingItem | null {
       headline: `${p.name} delivered ${p.current[m.key]} of the ${total} ${m.key === "reached_applications" ? "students to Applications" : "leads to Prospects"}${above}.`,
       detail: "",
       evidenceLabel: "Evidence",
-      evidence: `${p.positionLabel} average ${(Math.round(avg * 10) / 10).toString()} · ${p.name} usual ${Math.round(p.usual[m.key])}`,
+      evidence: `${p.positionLabel} average ${(Math.round(avg * 10) / 10).toString()}` + (cmp ? ` · ${p.name} usual ${Math.round(p.usual[m.key])}` : ""),
       link: { label: `${p.current[m.key]} ${m.key === "reached_applications" ? "students" : "leads"}`, drill: { metric: m.key, userId: p.userId } },
     };
   }
@@ -125,20 +127,22 @@ function topWin(input: BriefingInput): BriefingItem | null {
 }
 
 /** (c) The biggest stage leak, with its top archive reason when the audit trail has one. */
-export function biggestLeak(input: BriefingInput): { flow: StageFlow; reasons: LeakReason[] } | null {
-  const flow = [...input.stageFlows].filter((f) => f.out >= Math.min(5, input.thresholds.stageLeakMin) && f.out > f.previousOut).sort((a, b) => b.out - a.out)[0];
-  return flow ? { flow, reasons: input.leakReasons[flow.listId] ?? [] } : null;
+export function biggestLeak(input: BriefingInput): { flow: StageFlow; reasons: LeakReason[]; rising: boolean } | null {
+  // When the previous period is not covered by data, "up from N" is false: report the biggest leak WITHOUT a comparison.
+  const rising = input.baselineCovered !== false;
+  const flow = [...input.stageFlows].filter((f) => f.out >= Math.min(5, input.thresholds.stageLeakMin) && (!rising || f.out > f.previousOut)).sort((a, b) => b.out - a.out)[0];
+  return flow ? { flow, reasons: input.leakReasons[flow.listId] ?? [], rising } : null;
 }
 
 function leak(input: BriefingInput): BriefingItem | null {
   const l = biggestLeak(input);
   if (!l) return null;
-  const { flow, reasons } = l;
+  const { flow, reasons, rising } = l;
   const top = reasons[0];
   const archived = reasons.reduce((a, r) => a + r.leads, 0);
   return {
     id: "leak", tone: "info", icon: "archive",
-    headline: `More leads are leaving ${flow.name}: ${flow.out} this period, up from ${flow.previousOut}.`,
+    headline: rising ? `More leads are leaving ${flow.name}: ${flow.out} this period, up from ${flow.previousOut}.` : `${flow.out} leads left ${flow.name} this period.`,
     detail: top ? `The top reason is "${top.reason}".` : "",
     evidenceLabel: "Pattern",
     evidence: top
@@ -183,13 +187,13 @@ function composeRead(input: BriefingInput, neg: { ctx: NegCtx } | null, win: Bri
   if (neg?.ctx.culpritName) causes.push(`${neg.ctx.culpritName} has gone quiet at ${neg.ctx.culpritPct} of the usual pace`);
   if (input.untouched.count > 0) causes.push(`${input.untouched.count} new lead${input.untouched.count === 1 ? " has" : "s have"} waited over 48 hours for a first touch`);
   const l = lk ? biggestLeak(input) : null;
-  if (l) causes.push(`${l.flow.out} leads left ${l.flow.name} backwards or to Archive, up from ${l.flow.previousOut}`);
+  if (l) causes.push(`${l.flow.out} leads left ${l.flow.name} backwards or to Archive${l.rising ? `, up from ${l.flow.previousOut}` : ""}`);
   const used = causes.slice(0, 2);
   if (used.length) sentences.push(`${cap(used.join(", and "))}.`);
 
   // 3. what to fix: the number word matches the causes named above
-  if (used.length >= 2) sentences.push("Fix those two and next week's Applications should hold.");
-  else if (used.length === 1) sentences.push("Fix that and next week's Applications should hold.");
+  if (used.length >= 2) sentences.push(`Fix those two and ${input.horizon ?? "next week's"} Applications should hold.`);
+  else if (used.length === 1) sentences.push(`Fix that and ${input.horizon ?? "next week's"} Applications should hold.`);
   return sentences.length >= 2 ? sentences.join(" ") : null;
 }
 

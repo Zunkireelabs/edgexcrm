@@ -20,6 +20,7 @@ export interface AttentionInput {
   staleHeld: Record<string, number>;
   /** How the current window is named in sentences: "this week" | "today" | "this period". */
   periodNoun?: string;
+  baselineCovered?: boolean;
 }
 
 const personOf = (people: PersonRow[], id: string) => people.find((p) => p.userId === id);
@@ -45,7 +46,7 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
           (stale > 0 ? ` ${stale} of the leads ${p.name} holds have had no call or note this period.` : "") +
           (target ? ` ${target.name} has the lightest ${p.positionLabel} load this period (${target.current.received} new leads).` : ""),
         meta: [`${p.current.calls} calls vs usual ${Math.round(p.usual.calls)}`, `${p.notesNew + p.notesEdited} notes vs usual ${Math.round(p.usual.notes)}`, [p.positionLabel, p.branchName].filter(Boolean).join(", "), target ? `${target.name} has the lightest load ${period}` : `no ${p.positionLabel} has spare capacity ${period}`].join(" · "),
-        links: [{ label: stale > 0 ? `See the ${stale} leads →` : "See their leads →", href: leadsOfPersonHref(p.userId) }, { label: `${p.name}'s week →`, personId: p.userId }],
+        links: [{ label: stale > 0 ? `See the ${stale} leads →` : "See their leads →", href: leadsOfPersonHref(p.userId) }, { label: `${p.name}'s activity →`, personId: p.userId }],
         drill: s.drill,
       });
     } else if (s.kind === "untouched_leads") {
@@ -74,7 +75,7 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
         action: { label: target ? `Rebalance with ${target.name}` : "Rebalance", href: leadsOfPersonHref(p.userId), primary: false },
         why: `${p.name} received ${p.current.received} new leads against a usual ${Math.round(p.usual.received)}.` + (target ? ` ${target.name} received ${target.current.received}.` : ""),
         meta: [p.positionLabel, p.branchName].filter(Boolean).join(", ") || null,
-        links: [{ label: "See the leads →", href: leadsOfPersonHref(p.userId) }, { label: `${p.name}'s week →`, personId: p.userId }],
+        links: [{ label: "See the leads →", href: leadsOfPersonHref(p.userId) }, { label: `${p.name}'s activity →`, personId: p.userId }],
         drill: s.drill,
       });
     } else if (s.kind === "stage_leak") {
@@ -83,7 +84,7 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
       const reasons = input.leakReasons[f.listId] ?? [];
       out.push({
         id: s.id, category: "heads_up", tone: "info", icon: "archive", subject: f.name,
-        what: `${f.out} leads moved back or archived, up from ${f.previousOut}`,
+        what: input.baselineCovered === false ? `${f.out} leads moved back or archived` : `${f.out} leads moved back or archived, up from ${f.previousOut}`,
         figure: reasons[0] ? { text: "Top reason", strong: reasons[0].reason, textFirst: true } : null,
         suggested: false, action: null,
         why: `${f.out} of the ${f.base} leads that were in ${f.name} left it backwards or to Archive.`,
@@ -108,7 +109,7 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
         what: `delivered ${s.evidence.value} ${s.evidence.metric === "reached_applications" ? "students to Applications" : "leads to Prospects"}${above}`,
         figure: { text: `Top ${p.positionLabel.toLowerCase()} this period` },
         suggested: false, action: null, why: s.detail, meta: null,
-        links: [{ label: "See the records →", drill: s.drill }, { label: `${p.name}'s week →`, personId: p.userId }], drill: s.drill,
+        links: [{ label: "See the records →", drill: s.drill }, { label: `${p.name}'s activity →`, personId: p.userId }], drill: s.drill,
       });
     }
   }

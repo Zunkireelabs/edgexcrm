@@ -23,6 +23,7 @@ export interface SignalInput {
   untouched: UntouchedSummary;
   branchKpis: BranchKpi[];
   thresholds: PulseThresholds;
+  baselineCovered?: boolean;
 }
 
 const SEVERITY_RANK = { high: 0, medium: 1, info: 2 } as const;
@@ -116,16 +117,18 @@ export function overCapacitySignals(people: PersonRow[], t: PulseThresholds): Si
   return out;
 }
 
-export function stageLeakSignals(flows: StageFlow[], t: PulseThresholds): Signal[] {
+export function stageLeakSignals(flows: StageFlow[], t: PulseThresholds, baselineCovered = true): Signal[] {
   const out: Signal[] = [];
-  for (const f of flows) {
-    if (f.out >= t.stageLeakMin && f.out >= f.previousOut * t.stageLeakRatio) {
+  // No covered previous period → no "rising" claim: report only the single biggest leak, without a comparison.
+  const pool = baselineCovered ? flows : [...flows].sort((a, b) => b.out - a.out).slice(0, 1);
+  for (const f of pool) {
+    if (f.out >= t.stageLeakMin && (!baselineCovered || f.out >= f.previousOut * t.stageLeakRatio)) {
       out.push({
         id: `stage_leak:${f.listId}`,
         kind: "stage_leak",
         severity: "medium",
-        title: `${f.out} leads left ${f.name} backwards or to Archive (previous ${f.previousOut})`,
-        detail: `Out-rate from ${f.name} is at least ${t.stageLeakRatio}× the previous period.`,
+        title: baselineCovered ? `${f.out} leads left ${f.name} backwards or to Archive (previous ${f.previousOut})` : `${f.out} leads left ${f.name} backwards or to Archive`,
+        detail: baselineCovered ? `Out-rate from ${f.name} is at least ${t.stageLeakRatio}× the previous period.` : `The biggest stage leak this period.`,
         evidence: { metric: "stage_out", value: f.out, baseline: f.previousOut },
         subject: { type: "stage", id: f.listId },
         drill: { metric: "stage_out", detail: f.listId },
@@ -219,7 +222,7 @@ export function computeSignals(input: SignalInput): ComputedSignals {
     ...activityDropSignals(input.people, input.thresholds),
     ...untouchedSignal(input.untouched),
     ...overCapacitySignals(input.people, input.thresholds),
-    ...stageLeakSignals(input.stageFlows, input.thresholds),
+    ...stageLeakSignals(input.stageFlows, input.thresholds, input.baselineCovered !== false),
     ...topMoverSignal(input.people),
     ...biggestDropSignal(input.branchKpis),
   ]);

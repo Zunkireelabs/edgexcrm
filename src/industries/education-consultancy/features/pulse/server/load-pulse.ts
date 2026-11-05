@@ -173,6 +173,7 @@ export async function loadPulse(ctx: PulseContext): Promise<PulseResponse> {
     untouched: { count: untouchedCount, byPerson: [] },
     branchKpis,
     thresholds,
+    baselineCovered,
   });
   for (const p of people) p.flag = signals.flags[p.userId] ?? null;
   // "Quiet since Thu": only for the few red-flagged people, from their daily series.
@@ -215,11 +216,13 @@ export async function loadPulse(ctx: PulseContext): Promise<PulseResponse> {
     people, signals: signals.all, stageFlows, leakReasons, staleHeld,
     untouched: { count: untouchedCount, byBranch: byBranchCount, byRole },
     periodNoun: win7 ? "this week" : win1 ? "today" : "this period",
+    baselineCovered,
   });
   const winDays = (new Date(ctx.windowInfo.to).getTime() - new Date(ctx.windowInfo.from).getTime()) / 86_400_000;
+  const horizon = winDays <= 1.1 ? "tomorrow's" : winDays >= 21 ? "next month's" : "next week's";
   const baselineLabel = Math.abs(winDays - 7) < 0.1 ? "last week" : Math.abs(winDays - 1) < 0.1 ? "yesterday" : "the period before";
   const nl0 = funnel.new_leads?.[0] ?? 0, nl1 = funnel.new_leads?.[1] ?? 0;
-  const briefing = buildBriefing({ people, team, stageFlows, leakReasons, untouched: { count: untouchedCount }, thresholds, baselineLabel, baselineCovered, newLeads: { current: nl0, previous: nl1 } });
+  const briefing = buildBriefing({ people, team, stageFlows, leakReasons, untouched: { count: untouchedCount }, thresholds, baselineLabel, baselineCovered, horizon, newLeads: { current: nl0, previous: nl1 } });
   const appsStage = funnel.stages.find((s) => s.slug === "applications");
 
   const nl = funnel.new_leads ?? [];
