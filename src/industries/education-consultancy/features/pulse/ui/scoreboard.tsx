@@ -62,8 +62,8 @@ function change(v: CellValues, hasUsual: boolean, rise?: "bad" | "warn"): { text
 }
 
 function Cell({
-  v, col, na, onOpen, plain, periodLabel, hasUsual, previousCovered, unit,
-}: { v: CellValues; col: Col; na: boolean; onOpen?: () => void; plain?: boolean; periodLabel: string; hasUsual: boolean; previousCovered: boolean; unit: string }) {
+  v, col, na, onOpen, plain, periodLabel, hasUsual, previousCovered, unit, slot,
+}: { slot: number; v: CellValues; col: Col; na: boolean; onOpen?: () => void; plain?: boolean; periodLabel: string; hasUsual: boolean; previousCovered: boolean; unit: string }) {
   const first = FIRST_OF_GROUP.has(col.id) ? "sp" : "";
   if (na) return <td className={first}><span className="z">–</span></td>;
   const ch = change(v, hasUsual, col.rise);
@@ -77,7 +77,8 @@ function Cell({
           <span className="v0">{num}</span>
         )}
         {/* Change figures are for Intake / Activity / Results only — stage-move columns stay quiet (design system §6). */}
-        {col.group !== "Moved to" && <span className={`d ${ch?.cls ?? ""}`}>{ch?.text ?? ""}</span>}
+        {/* The delta slot exists only in columns where some visible row shows a change, sized to the longest one. */}
+        {col.group !== "Moved to" && slot > 0 && <span className={`d ${ch?.cls ?? ""}`} style={{ width: `calc(${slot}ch + 4px)` }}>{ch?.text ?? ""}</span>}
         <span className="tip" role="tooltip">
           <div><span>{periodLabel}</span><b>{v.current}</b></div>
           {hasUsual ? <div><span>Usual</span><b>{Math.round(v.usual * 10) / 10}</b></div> : <div className="nu">No usual yet · needs 2 earlier {unit} periods</div>}
@@ -152,6 +153,26 @@ export function Scoreboard({
     return { current: mk("current"), previous: mk("previous"), usual: mk("usual"), forwardByStage: fwd, hasUsual: ps.every((p) => p.hasUsual !== false), previousCovered: ps.every((p) => p.previousCovered !== false) };
   };
 
+  // Per column: the length of the longest change text any visible row shows (0 → no slot at all).
+  const slotLen = useMemo(() => {
+    const rows: Array<{ r: RowLike; role: string | null }> = sorted.map((p) => ({ r: p, role: p.positionKey }));
+    if (view === "role") for (const g of groups) rows.push({ r: g.agg ?? aggFor(g.people), role: g.key });
+    rows.push({ r: data.team, role: null });
+    const out: Record<string, number> = {};
+    for (const col of COLS) {
+      if (col.group === "Moved to") continue;
+      const sid = col.stageSlug ? stageId[col.stageSlug] : undefined;
+      let max = 0;
+      for (const { r, role } of rows) {
+        if (role !== null && col.naRoles.includes(role)) continue;
+        const ch = change(col.value(r, sid), r.hasUsual !== false, col.rise);
+        if (ch) max = Math.max(max, ch.text.length);
+      }
+      out[col.id] = max;
+    }
+    return out;
+  }, [sorted, groups, view, data.team, stageId]);
+
   const open = (p: PersonRow, col: Col) => {
     const sid = col.stageSlug ? stageId[col.stageSlug] : undefined;
     const q = col.query(sid);
@@ -163,7 +184,7 @@ export function Scoreboard({
   const cells = (r: RowLike, roleKey: string | null, p?: PersonRow) =>
     COLS.map((col) => {
       const sid = col.stageSlug ? stageId[col.stageSlug] : undefined;
-      return <Cell key={col.id} col={col} v={col.value(r, sid)} na={roleKey !== null && col.naRoles.includes(roleKey)} plain={!p} periodLabel={periodLabel} hasUsual={r.hasUsual !== false} previousCovered={r.previousCovered !== false} unit={unit} onOpen={p ? () => open(p, col) : undefined} />;
+      return <Cell key={col.id} col={col} v={col.value(r, sid)} na={roleKey !== null && col.naRoles.includes(roleKey)} plain={!p} periodLabel={periodLabel} hasUsual={r.hasUsual !== false} previousCovered={r.previousCovered !== false} unit={unit} slot={slotLen[col.id] ?? 0} onOpen={p ? () => open(p, col) : undefined} />;
     });
 
   const personRow = (p: PersonRow) => {
@@ -192,7 +213,7 @@ export function Scoreboard({
       <div className="row" style={{ justifyContent: "space-between" }}>
         <div>
           <div className="h2">Team scoreboard</div>
-          <div className="meta" style={{ marginTop: 2 }}>Click a number for the exact leads. Hover for usual and last week.</div>
+          <div className="meta" style={{ marginTop: 2 }}>Click a number for the exact leads. Hover for usual and last period.</div>
         </div>
         <div className="row" style={{ gap: 8 }}>
           <div className="seg" role="tablist" aria-label="Group scoreboard">
@@ -252,7 +273,9 @@ export function Scoreboard({
             : `${data.bulk.moves} bulk stage move${data.bulk.moves === 1 ? "" : "s"} (${data.bulk.byPerson.map((b) => `${b.name} ${b.count}`).join(", ")}) count for leads and results, not for anyone's activity`}
         </span>
         <span>
-          <span className="d up" style={{ width: "auto" }}>+30%</span> / <span className="d dn" style={{ width: "auto" }}>−47%</span> vs usual, shown when 25%+ off · <span className="z">0</span> none · <span className="z">–</span> not this role
+          <span className="lg"><span className="d up">+30%</span> / <span className="d dn">−47%</span> vs usual, shown when 25%+ off</span>{" "}
+          <span className="lg"><span className="z">0</span> none</span>{" "}
+          <span className="lg"><span className="z">–</span> not this role</span>
         </span>
       </div>
     </div>

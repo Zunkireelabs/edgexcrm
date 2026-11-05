@@ -79,15 +79,15 @@ export function AttentionList({
                   <div key={it.id} className={`it ${open ? "open" : ""}`} onClick={() => setOpenId(open ? null : it.id)} role="button" tabIndex={0}
                     aria-expanded={open} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpenId(open ? null : it.id); } }}>
                     <span className={`ic ${it.tone}`}><ItemIcon icon={it.icon} /></span>
-                    <div className="ln">
+                    <div className="ln" title={`${it.subject} · ${it.what}`}>
                       <b>{it.subject}</b><span className="sep">·</span>{it.what}
                       {it.suggested && preview && <span className="sugg"><Spark className="i" />Suggested</span>}
                     </div>
                     <div className="row" onClick={(e) => e.stopPropagation()}>
                       {it.figure && (it.figure.textFirst
-                        ? <span className="fig">{it.figure.text} {it.figure.strong && <b>{it.figure.strong}</b>}</span>
-                        : <span className="fig">{it.figure.strong && <b>{it.figure.strong}</b>}{it.figure.text}</span>)}
-                      {it.action && <Link href={it.action.href} className={`btn ${it.action.primary ? "pri" : ""}`}>{it.action.label}</Link>}
+                        ? <span className="fig" title={`${it.figure.text} ${it.figure.strong ?? ""}`.trim()}>{it.figure.text} {it.figure.strong && <b>{it.figure.strong}</b>}</span>
+                        : <span className="fig" title={`${it.figure.strong ?? ""}${it.figure.text}`}>{it.figure.strong && <b>{it.figure.strong}</b>}{it.figure.text}</span>)}
+                      {it.action && <Link href={it.action.href} title={it.action.label} className={`btn ${it.action.primary ? "pri" : ""}`}>{it.action.label}</Link>}
                     </div>
                     <span className="chev"><Chevron open={open} /></span>
                     {open && (

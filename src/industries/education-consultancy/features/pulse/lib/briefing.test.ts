@@ -83,6 +83,32 @@ describe("no real usual / no covered baseline → no claims from them", () => {
   });
 });
 
+describe("uncovered baseline → no zero-baseline text anywhere", () => {
+  it("no rendered string matches /usual 0|from 0/ and the horizon follows the window", async () => {
+    const { buildAttention } = await import("./attention");
+    const { computeSignals } = await import("./signals");
+    const people = [
+      { ...P("Esha", "counsellor", "Kathmandu", { reached_applications: 32, prospects: 10, received: 35 }, {}, {}), hasUsual: false, previousCovered: false },
+      { ...P("Asha", "telecaller", "Kathmandu", { calls: 80, received: 40 }, {}, {}), hasUsual: false, previousCovered: false },
+    ];
+    const flows = [flow({ out: 27, previousOut: 0 })];
+    const inp = input(people, { baselineCovered: false, stageFlows: flows, untouched: { count: 12 }, leakReasons: { q: [{ reason: "Not reachable", leads: 9 }] }, horizon: "next month's" });
+    const b = buildBriefing(inp)!;
+    const sig = computeSignals({ people, stageFlows: flows, untouched: { count: 12, byPerson: [] }, branchKpis: [], thresholds: T, baselineCovered: false });
+    const att = buildAttention({ people, signals: sig.all, stageFlows: flows, leakReasons: inp.leakReasons, staleHeld: {}, untouched: { count: 12, byBranch: [], byRole: [] }, baselineCovered: false });
+    const all = JSON.stringify([b, att, sig.all]);
+    expect(all).not.toMatch(/usual 0|from 0\b|up from/);
+    expect(b.items.find((i) => i.id === "leak")?.headline).toBe("27 leads left Qualified this period.");
+    expect(att.find((i) => i.id.startsWith("stage_leak"))?.what).toBe("27 leads moved back or archived");
+    expect(b.read ?? "").not.toMatch(/next week/);
+  });
+  it("the horizon word: tomorrow's / next month's, default next week's", () => {
+    const ppl = [P("Asha", "telecaller", "K", { calls: 18, prospects: 2 }, { prospects: 12 }, { calls: 82, prospects: 12 }), P("Esha", "counsellor", "K", { reached_applications: 9 }, { reached_applications: 3 }, { reached_applications: 5 })];
+    expect(buildBriefing(input(ppl, { untouched: { count: 9 }, horizon: "tomorrow's" }))!.read).toContain("tomorrow's Applications");
+    expect(buildBriefing(input(ppl, { untouched: { count: 9 } }))!.read).toContain("next week's Applications");
+  });
+});
+
 describe("Orca's read", () => {
   const people = [
     P("Asha", "telecaller", "Kathmandu", { calls: 18, prospects: 2 }, { prospects: 12 }, { calls: 82, notes: 20, prospects: 12 }),
