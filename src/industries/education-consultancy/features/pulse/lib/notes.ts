@@ -25,9 +25,10 @@ export function coachingNote(p: PersonRow): string | null {
   const add = (label: string, cur: number, usual: number) => {
     if (usual >= 5 || cur >= 5) parts.push(`${label} ${cur} vs usual ${Math.round(usual)}`);
   };
-  add("calls", p.current.calls, p.usual.calls);
+  add("Calls", p.current.calls, p.usual.calls);
   add("notes", p.current.notes, p.usual.notes);
   add("stage moves", p.current.moves, p.usual.moves);
+  if (parts.length && !parts[0].startsWith("Calls")) parts[0] = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
   if (parts.length === 0) return null;
   const act = activityOf(p.current), usual = activityOf(p.usual);
   const lead = usual >= 10 && act <= usual * 0.6
@@ -35,7 +36,8 @@ export function coachingNote(p: PersonRow): string | null {
     : usual >= 10 && act >= usual * 1.25
       ? `${p.name}'s activity is ${Math.round((act / usual - 1) * 100)}% above usual.`
       : `${p.name}'s activity is in line with usual.`;
-  return `${lead} ${parts.join(" · ")}.`;
+  const list = parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}` : parts[0];
+  return `${lead} ${list}.`;
 }
 
 export function windowTitle(key: string, tenantShort: string, range: string): string {

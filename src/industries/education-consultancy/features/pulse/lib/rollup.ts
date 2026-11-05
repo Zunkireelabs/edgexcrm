@@ -34,7 +34,7 @@ export function rollup(key: string, label: string, people: PersonRow[]): PulseGr
   };
 }
 
-/** Role subtotals in display order (counsellor → executive → telecaller → …), plus the team total. */
+/** Role subtotals in display order (TeleCaller → Executive → Counsellor → App Executive → …), plus the team total. */
 export function rollups(people: PersonRow[]): { groups: PulseGroup[]; team: PulseGroup } {
   const byKey = new Map<string, PersonRow[]>();
   for (const p of people) {

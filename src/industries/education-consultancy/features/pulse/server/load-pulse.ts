@@ -191,7 +191,9 @@ export async function loadPulse(ctx: PulseContext): Promise<PulseResponse> {
     people, signals: signals.all, stageFlows, leakReasons, staleHeld,
     untouched: { count: untouchedCount, byBranch: byBranchCount, byRole },
   });
-  const briefing = buildBriefing({ people, team, stageFlows, leakReasons, untouched: { count: untouchedCount }, thresholds });
+  const winDays = (new Date(ctx.windowInfo.to).getTime() - new Date(ctx.windowInfo.from).getTime()) / 86_400_000;
+  const baselineLabel = Math.abs(winDays - 7) < 0.1 ? "last week" : Math.abs(winDays - 1) < 0.1 ? "yesterday" : "the period before";
+  const briefing = buildBriefing({ people, team, stageFlows, leakReasons, untouched: { count: untouchedCount }, thresholds, baselineLabel });
   const appsStage = funnel.stages.find((s) => s.slug === "applications");
 
   const nl = funnel.new_leads ?? [];

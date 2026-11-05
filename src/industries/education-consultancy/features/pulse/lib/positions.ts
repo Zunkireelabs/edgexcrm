@@ -22,8 +22,8 @@ const LABELS: Record<string, string> = {
   "branch-manager": "Branch Manager",
 };
 
-/** Display order of the groups: furthest down the relay first (matches the mockup). */
-export const POSITION_ORDER = ["counsellor", "executive", "telecaller", "app-executive", "branch-manager"];
+/** Fixed display order of the groups: the relay, front to back (TeleCallers → Executives → Counsellors → App Executives). */
+export const POSITION_ORDER = ["telecaller", "executive", "counsellor", "app-executive", "branch-manager"];
 
 export function normalizePosition(slug: string | null | undefined, name?: string | null): { key: string; label: string } {
   const raw = (slug ?? "").trim().toLowerCase();

@@ -39,7 +39,7 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
         why: `Calls, notes and stage moves dropped together: ${cur} against a usual ${Math.round(usual)}.` +
           (stale > 0 ? ` ${stale} of the leads ${p.name} holds have had no call or note this period.` : "") +
           (target ? ` ${target.name} has the lightest ${p.positionLabel} load this period (${target.current.received} new leads).` : ""),
-        meta: [`${p.current.calls} calls vs usual ${Math.round(p.usual.calls)}`, `${p.notesNew + p.notesEdited} notes vs usual ${Math.round(p.usual.notes)}`, [p.positionLabel, p.branchName].filter(Boolean).join(", ")].join(" · "),
+        meta: [`${p.current.calls} calls vs usual ${Math.round(p.usual.calls)}`, `${p.notesNew + p.notesEdited} notes vs usual ${Math.round(p.usual.notes)}`, [p.positionLabel, p.branchName].filter(Boolean).join(", "), ...(target ? [`${target.name} has the lightest load this period`] : [])].join(" · "),
         links: [{ label: stale > 0 ? `See the ${stale} leads →` : "See their leads →", href: leadsOfPersonHref(p.userId) }, { label: `${p.name}'s week →`, personId: p.userId }],
         drill: s.drill,
       });
@@ -79,7 +79,7 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
       out.push({
         id: s.id, category: "heads_up", tone: "info", icon: "archive", subject: f.name,
         what: `${f.out} leads moved back or archived, up from ${f.previousOut}`,
-        figure: reasons[0] ? { text: "Top reason ", strong: reasons[0].reason } : null,
+        figure: reasons[0] ? { text: "Top reason", strong: reasons[0].reason, textFirst: true } : null,
         suggested: false, action: null,
         why: `${f.out} of the ${f.base} leads that were in ${f.name} left it backwards or to Archive.`,
         meta: reasons.slice(0, 3).map((r) => `${r.reason} ${r.leads}`).join(" · ") || null,
@@ -89,7 +89,7 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
     } else if (s.kind === "biggest_drop") {
       out.push({
         id: s.id, category: "heads_up", tone: "info", icon: "down", subject: s.title.split(":")[0],
-        what: s.title.split(":").slice(1).join(":").trim().replace(/ vs usual$/, " against its usual"),
+        what: s.title.split(":").slice(1).join(":").trim().replace(/ vs usual$/, " (vs usual)"),
         figure: { strong: String(s.evidence.value), text: ` vs usual ${Math.round(s.evidence.baseline)}` },
         suggested: false, action: null, why: s.detail, meta: null,
         links: [{ label: "See the leads →", drill: s.drill }], drill: s.drill,

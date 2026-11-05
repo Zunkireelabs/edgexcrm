@@ -9,6 +9,7 @@ import type { TenantConfig } from "@/types/database";
 import { resolvePulseThresholds, type PulseThresholds } from "../lib/thresholds";
 import { previousWindow, resolvePulseWindow, windowLengthMs, type PulseWindow } from "../lib/window";
 import type { PulseWindowInfo } from "../lib/types";
+import { displayName } from "../lib/people";
 
 export type PulseDb = Awaited<ReturnType<typeof scopedClient>>;
 
@@ -96,8 +97,7 @@ export async function loadUserNames(db: PulseDb): Promise<Map<string, { name: st
   const out = new Map<string, { name: string; email: string | null }>();
   for (const u of data?.users ?? []) {
     const meta = u.user_metadata as Record<string, unknown> | undefined;
-    const name = (meta?.name ?? meta?.full_name ?? null) as string | null;
-    out.set(u.id, { name: name || u.email || "Unknown", email: u.email ?? null });
+    out.set(u.id, { name: displayName(meta?.name ?? meta?.full_name ?? null, u.email), email: u.email ?? null });
   }
   return out;
 }
