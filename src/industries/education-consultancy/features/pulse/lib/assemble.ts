@@ -1,5 +1,5 @@
 import { mean } from "./window";
-import { METRIC_KEYS, ZERO_COUNTS, type MetricCounts, type PersonBucketRow, type PersonInfo, type PersonRow } from "./types";
+import { METRIC_KEYS, ZERO_COUNTS, activityOf, type MetricCounts, type PersonBucketRow, type PersonInfo, type PersonRow } from "./types";
 
 function fill(c: Partial<MetricCounts> | undefined): MetricCounts {
   return { ...ZERO_COUNTS, ...(c ?? {}) };
@@ -33,6 +33,7 @@ export function assemblePeople(people: PersonInfo[], rows: PersonBucketRow[], us
       notesEdited: cur?.notes_edited ?? 0,
       movesByStage: cur?.moves_by_stage ?? {},
       bulkMoves: cur?.bulk_moves ?? 0,
+      trend: Array.from({ length: usualCount + 1 }, (_, i) => activityOf(fill(at(usualCount - i)?.counts))),
       flag: null,
     };
   });
