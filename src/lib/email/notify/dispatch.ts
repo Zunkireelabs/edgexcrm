@@ -83,7 +83,7 @@ export async function dispatchNotificationEmail<P, C>(
       timezone: (t as { timezone: string | null }).timezone || "UTC",
     };
 
-    const recipients = await resolveRecipients(db, tenantId, event.roles);
+    const recipients = event.recipients ? await event.recipients(payload, db) : await resolveRecipients(db, tenantId, event.roles);
     if (recipients.length === 0) return { ...summary, skipped: "no_recipients" };
 
     const outcomes = await Promise.allSettled(
