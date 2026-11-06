@@ -40,6 +40,8 @@ export function EvidenceDrawer({
 
   const total = data?.total ?? 0;
   const q = target?.query;
+  // Notes and calls are all the same kind of row (the title already says "6 notes"): a "What" column would be one word repeated.
+  const showWhat = q?.metric !== "notes" && q?.metric !== "calls";
   const credited = q?.metric === "prospects" || q?.metric === "reached_applications";
   return (
     <Sheet open={!!target} onOpenChange={(o) => !o && onClose()}>
@@ -63,18 +65,18 @@ export function EvidenceDrawer({
           {!error && rows.length === 0 && !loading && <p className="meta" style={{ padding: "24px 0" }}>No matching leads in this period.</p>}
           {rows.length > 0 && (
             <table className="etbl">
-              <thead><tr><th>{credited ? "Student" : "Lead"}</th><th>{credited || q?.metric === "moves_forward" ? "Move" : "What"}</th><th className="r">When</th></tr></thead>
+              <thead><tr><th>{credited ? "Student" : "Lead"}</th>{showWhat && <th>{credited || q?.metric === "moves_forward" ? "Move" : "What"}</th>}<th className="r">When</th></tr></thead>
               <tbody>
                 {rows.map((r) => (
                   <tr key={`${r.leadId}-${r.at}`}>
                     <td>
                       <Link href={`/leads/${r.leadId}`} className="en">{r.leadName || "Unnamed lead"}</Link>
-                      <div className="es">{[r.displayId ? `#${r.displayId}` : null, r.holderName ? `now with ${r.holderName}` : null].filter(Boolean).join(" · ")}</div>
+                      <div className="es">{[r.displayId ? `#${r.displayId}` : null, r.holderName ? `now with ${r.holderName}` : null, !showWhat && r.actorName && !q?.userId ? `by ${r.actorName}` : null].filter(Boolean).join(" · ")}</div>
                     </td>
-                    <td className="ew">
-                      {r.fromLabel || r.toLabel ? <>{r.fromLabel ?? "—"} → {r.toLabel ?? "—"}</> : q?.metric === "notes" ? <>Note</> : q?.metric === "calls" ? <>Call</> : <>{r.detail ?? "—"}</>}
+                    {showWhat && <td className="ew">
+                      {r.fromLabel || r.toLabel ? <>{r.fromLabel ?? "—"} → {r.toLabel ?? "—"}</> : <>{r.detail ?? "—"}</>}
                       {r.actorName && !q?.userId && <div className="es">by {r.actorName}</div>}
-                    </td>
+                    </td>}
                     <td className="r ew">{fmtWhen(r.at, windowInfo.tz)}</td>
                   </tr>
                 ))}

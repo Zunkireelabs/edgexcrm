@@ -1,6 +1,7 @@
 import { activityOf, type Briefing, type BriefingItem, type LeakReason, type PersonRow, type StageFlow, type MetricCounts, type PulseGroup } from "./types";
 import type { PulseThresholds } from "./thresholds";
-import { compareToUsual, usualShare } from "./compare";
+import { compareToUsual, MIN_USUAL, usualShare } from "./compare";
+import { activityWhat } from "./activity-text";
 import { untouchedHeldOfPersonHref } from "./leads-links";
 
 /**
@@ -31,6 +32,8 @@ export interface BriefingInput {
   headsUpBranchId?: string | null;
   /** false on the Today window: facts only, no "fix that and tomorrow holds" prediction. Default true. */
   closer?: boolean;
+  /** "today" | "this week" | "this period" — names the window in the quiet-person clause. */
+  periodNoun?: string;
 }
 
 const METRICS = [
@@ -133,9 +136,14 @@ function topWin(input: BriefingInput): BriefingItem | null {
     const peers = input.people.filter((x) => x.positionKey === p.positionKey);
     const avg = peers.length ? peers.reduce((a, x) => a + x.current[m.key], 0) / peers.length : 0;
     const total = input.team.current[m.key];
+    const n = p.current[m.key];
+    const noun = m.key === "reached_applications" ? "students to Applications" : "leads to Prospects";
+    const one = m.key === "reached_applications" ? "student to Applications" : "lead to Prospects";
+    // "delivered 3 of the 3" reads as a typo: when they delivered the whole team's, say so.
+    const share = n >= total ? (n === 1 ? `the only ${one}` : `all ${n} ${noun}`) : `${n} of the ${total} ${noun}`;
     return {
       id: "win", tone: "good", icon: "up",
-      headline: `${p.name} delivered ${p.current[m.key]} of the ${total} ${m.key === "reached_applications" ? "students to Applications" : "leads to Prospects"}${above}.`,
+      headline: `${p.name} delivered ${share}${above}.`,
       detail: "",
       evidenceLabel: "Evidence",
       evidence: `${p.positionLabel} average ${(Math.round(avg * 10) / 10).toString()}` + (cmp ? ` · ${p.name} usual ${Math.round(p.usual[m.key])}` : ""),
@@ -180,8 +188,19 @@ const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
  *  3. What to fix.
  * Every clause comes from a signal we hold; a clause whose signal is missing is skipped. Null with < 2 signals.
  */
+/** With no negative KPI cause, the quiet person is still a fact worth naming: the largest activity drop vs their own usual. */
+function quietPerson(input: BriefingInput): string | null {
+  const q = [...input.people]
+    .filter((p) => p.hasUsual !== false && activityOf(p.usual) >= Math.max(input.thresholds.activityDropMinUsual, MIN_USUAL) && activityOf(p.current) <= activityOf(p.usual) * input.thresholds.activityDropRatio)
+    .sort((a, b) => activityOf(b.usual) - activityOf(b.current) - (activityOf(a.usual) - activityOf(a.current)))[0];
+  if (!q) return null;
+  const what = activityWhat(q, activityOf(q.current), activityOf(q.usual), input.periodNoun ?? "this period");
+  return what.startsWith("activity") ? `${q.name}'s ${what}` : `${q.name} has ${what}`;
+}
+
 function composeRead(input: BriefingInput, neg: { ctx: NegCtx } | null, win: BriefingItem | null, lk: BriefingItem | null): string | null {
-  const signals = [neg, input.untouched.count > 0, lk, win].filter(Boolean).length;
+  const quiet = neg ? null : quietPerson(input);
+  const signals = [neg, input.untouched.count > 0, lk, win, quiet].filter(Boolean).length;
   if (signals < 2) return null;
   const base = input.baselineLabel ?? "last week";
 
@@ -205,6 +224,7 @@ function composeRead(input: BriefingInput, neg: { ctx: NegCtx } | null, win: Bri
   if (neg) causes.push(`${neg.ctx.noun} fell ${neg.ctx.fallPct}${neg.ctx.branchName ? `, mostly in ${neg.ctx.branchName}` : ""}`);
   if (neg?.ctx.culpritName) causes.push(`${neg.ctx.culpritName} has gone quiet at ${neg.ctx.culpritPct} of the usual pace`);
   if (input.untouched.count > 0) causes.push(`${input.untouched.count} new lead${input.untouched.count === 1 ? " has" : "s have"} waited over 48 hours for a first touch`);
+  if (quiet) causes.push(quiet);
   const l = lk ? biggestLeak(input) : null;
   if (l) causes.push(`${l.flow.out} leads left ${l.flow.name} backwards or to Archive${l.rising ? `, up from ${l.flow.previousOut}` : ""}`);
   const used = causes.slice(0, 2);
@@ -215,7 +235,8 @@ function composeRead(input: BriefingInput, neg: { ctx: NegCtx } | null, win: Bri
   if (input.closer === false) { /* no closer */ }
   else if (used.length >= 2) sentences.push(`Fix those two and ${input.horizon ?? "next week's"} Applications should hold.`);
   else if (used.length === 1) sentences.push(`Fix that and ${input.horizon ?? "next week's"} Applications should hold.`);
-  return sentences.length >= 2 ? sentences.join(" ") : null;
+  // With a closer the read needs 2 sentences; facts-only (Today) has no closer, so one fact sentence is enough.
+  return sentences.length >= (input.closer === false ? 1 : 2) ? sentences.join(" ") : null;
 }
 
 export function buildBriefing(input: BriefingInput): Briefing | null {
