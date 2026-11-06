@@ -81,6 +81,20 @@ export interface TenantConfig {
   // for defaults used when this key is absent. Per-stage dwell thresholds are
   // Phase 2 (not wired to any widget yet — stuck-rate is currently a plain
   // touched/pile ratio, not dwell-based).
+  // Pulse (EDGEX-82) rule thresholds — every key optional, code defaults in
+  // features/pulse/lib/thresholds.ts.
+  /** Pulse AI surfaces (briefing, Suggested tags…): shown in Preview mode unless this is explicitly false. */
+  pulse_ai_preview?: boolean;
+  pulse_thresholds?: {
+    activity_drop_ratio?: number;
+    activity_drop_min_usual?: number;
+    over_capacity_ratio?: number;
+    over_capacity_min?: number;
+    stage_leak_ratio?: number;
+    stage_leak_min?: number;
+    bulk_min_rows?: number;
+    bulk_bucket_seconds?: number;
+  };
   team_performance_thresholds?: {
     intake_alarm_buckets_hours?: [number, number];
     follow_up_stale_days?: number;

@@ -22,7 +22,7 @@ import { PERMISSION_DENIED_MESSAGE } from "@/lib/permission-denied";
 import { canActOnEnrollmentLead } from "@/lib/classes/enrollment-scope";
 import { canEnrollStudents } from "@/lib/api/class-attendance";
 import { getLeadMembership } from "@/lib/leads/branch-membership";
-import { holderChange } from "@/lib/leads/stage-move-audit";
+import { holderChange, listIdsChange } from "@/lib/leads/stage-move-audit";
 import { onLeadsEnteredStageSafe } from "@/industries/_shared/features/outreach/lib/stage-auto-enroll";
 
 export async function GET(request: NextRequest) {
@@ -284,7 +284,11 @@ async function autoMoveToQualified(
       action: "lead.updated",
       entityType: "lead",
       entityId: leadId,
-      changes: { list: { old: oldName, new: targetList.name }, holder: holderChange(assignedTo) },
+      changes: {
+        list: { old: oldName, new: targetList.name },
+        list_ids: listIdsChange(oldListId, targetList.id),
+        holder: holderChange(assignedTo),
+      },
       requestId,
     }),
     emitEvent({

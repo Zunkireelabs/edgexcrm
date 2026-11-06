@@ -45,6 +45,13 @@ export function isOutreachDraftEnabled(): boolean {
   return process.env.AI_OUTREACH_DRAFT_ENABLED === "true";
 }
 
+// Pulse AI layer (EDGEX-82): STUBBED OFF. Slice 1 of Pulse is rules-only (the "AI-off mode"); the briefing slot has a
+// `source: "rules" | "ai"` seam but nothing consumes this yet. When the AI layer is built it should follow the
+// two-key pattern below (env kill switch AND tenants.ai_enabled) — do not flip this to a bare env check.
+export function isPulseAiEnabled(): boolean {
+  return false;
+}
+
 // ADR-001 Decision 5: the env flags above are the environment-wide kill
 // switch; tenants.ai_enabled (migration 174) is the per-tenant grant a
 // signed client consent describes. Both must be true — neither alone is

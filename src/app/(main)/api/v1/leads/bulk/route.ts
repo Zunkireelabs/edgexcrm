@@ -24,7 +24,7 @@ import { createNotificationsExcept, NotificationTypes } from "@/lib/notification
 import { ASSIGN_CHAIN_POSITIONS, assignableTargetSlugs } from "@/industries/education-consultancy/lead-assignment-chain";
 import { sendBulkAssignedEmail } from "@/lib/email/send-lead-assigned";
 import { hasProspectQualification, canBypassProspectQualification } from "@/lib/leads/prospect-qualification";
-import { holderChange } from "@/lib/leads/stage-move-audit";
+import { BULK_VIA, holderChange, listIdsChange } from "@/lib/leads/stage-move-audit";
 import { checkApplicationsReadiness, applicationsGateMessage, applicationsGateApplies } from "@/lib/leads/applications-readiness";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -599,6 +599,8 @@ export async function PATCH(request: NextRequest) {
           // Who holds the lead after this move (the new assignee if this request sets one, else the current one) —
           // lets System Activity show it even when the assignee didn't change.
           changes.holder = holderChange(body.assigned_to !== undefined ? body.assigned_to : prev?.assigned_to);
+          changes.list_ids = listIdsChange(oldListId, newListId);
+          changes.via = { old: null, new: BULK_VIA };
           if (body.archive_reason) {
             changes.archive_reason = { old: null, new: body.archive_reason };
           }

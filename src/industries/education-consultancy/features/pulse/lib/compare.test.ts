@@ -1,0 +1,75 @@
+import { describe, it, expect } from "vitest";
+import { compareToUsual, formatChange, shownUsual, usualShare } from "./compare";
+
+describe("compareToUsual — the one guard", () => {
+  it("usual 0 / 1 / 4 → null (never '140×', never 'usual is 0')", () => {
+    for (const u of [0, 1, 4, 4.9]) expect(compareToUsual(35, u)).toBeNull();
+  });
+  it("uncovered usual → null even when the number looks fine", () => expect(compareToUsual(35, 20, false)).toBeNull());
+  it("normal case is unchanged", () => {
+    expect(compareToUsual(15, 10)).toEqual({ pct: 50, ratio: 1.5 });
+    expect(compareToUsual(2, 10)).toEqual({ pct: -80, ratio: 0.2 });
+    expect(compareToUsual(5, 5)).toEqual({ pct: 0, ratio: 1 });
+  });
+  it("non-finite input → null", () => {
+    expect(compareToUsual(NaN, 10)).toBeNull();
+    expect(compareToUsual(5, null)).toBeNull();
+  });
+});
+
+describe("the % always agrees with the printed (whole-number) usual", () => {
+  it("18 against a raw usual of 5.5 prints usual 6 and +200%, never +227%", () => {
+    expect(compareToUsual(18, 5.5)).toEqual({ pct: 200, ratio: 3 });
+    expect(shownUsual(5.5)).toBe(6);
+  });
+  it("for any current/usual, pct recomputed from the printed usual matches", () => {
+    for (const usual of [5, 5.4, 5.5, 6.6, 12.5, 28.4, 82.5]) for (const cur of [0, 3, 18, 104]) {
+      const c = compareToUsual(cur, usual)!;
+      expect(c.pct).toBe(Math.round(((cur - shownUsual(usual)) / shownUsual(usual)) * 100));
+    }
+  });
+});
+
+describe("usualShare — 'at Y%' and 'down X%' always sum to 100", () => {
+  it("34 vs 151: 22% / 78%, never 22% beside 77%", () => expect(usualShare(34, 151)).toEqual({ at: 23, down: 77 }));
+  it("sums to 100 for any pair", () => {
+    for (const usual of [5, 10, 37.5, 82, 151.4]) for (const cur of [0, 1, 18, 34, 60, 99]) {
+      const s = usualShare(cur, usual)!;
+      expect(s.at + s.down).toBe(100);
+    }
+  });
+  it("null without a real usual", () => expect(usualShare(5, 2)).toBeNull());
+});
+
+describe("formatChange — fits a 5-character slot", () => {
+  it("percentages below +300%", () => {
+    expect(formatChange({ pct: 50, ratio: 1.5 })).toBe("+50%");
+    expect(formatChange({ pct: -100, ratio: 0 })).toBe("−100%");
+    expect(formatChange({ pct: 0, ratio: 1 })).toBe("±0");
+    expect(formatChange({ pct: 299, ratio: 3.99 })).toBe("+299%");
+  });
+  it("from +300% a multiplier", () => {
+    expect(formatChange({ pct: 300, ratio: 4 })).toBe("4×");
+    expect(formatChange({ pct: 242, ratio: 3.42 })).toBe("+242%");
+    expect(formatChange({ pct: 340, ratio: 4.4 })).toBe("4.4×");
+    expect(formatChange({ pct: 1100, ratio: 12 })).toBe("12×");
+    expect(formatChange({ pct: 12700, ratio: 128 })).toBe("128×");
+  });
+  it("never longer than 5 characters", () => {
+    for (const [cur, usual] of [[1, 5], [500, 5], [10000, 5], [0, 5], [9999, 7]] as const) {
+      const t = formatChange(compareToUsual(cur, usual));
+      expect(t!.length).toBeLessThanOrEqual(5);
+    }
+  });
+  it("null in, null out", () => expect(formatChange(null)).toBeNull());
+});
+
+describe("metric strip previous-period chip (round 11): the >= 5 base guard", () => {
+  it("shows no % when the previous value is below 5 (0 vs 4, 3 vs 4)", () => {
+    expect(formatChange(compareToUsual(0, 4))).toBeNull();
+    expect(formatChange(compareToUsual(3, 4))).toBeNull();
+  });
+  it("shows the change from a real base", () => {
+    expect(formatChange(compareToUsual(2, 10))).toBe("−80%");
+  });
+});
