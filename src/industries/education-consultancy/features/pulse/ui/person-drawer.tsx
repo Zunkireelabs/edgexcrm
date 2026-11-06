@@ -4,7 +4,8 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/
 import type { EventsQuery, PersonRow, PulsePersonResponse } from "../lib/types";
 import { coachingNote } from "../lib/notes";
 import { personTiles } from "../lib/person-tiles";
-import { avatarColor, deltaLabel, fmtNum, fmtWhen, initials } from "./format";
+import { changeVsUsual, shownUsual } from "../lib/compare";
+import { avatarColor, fmtNum, fmtWhen, initials } from "./format";
 import { Spark, XClose } from "./icons";
 import { evidenceLabels } from "./evidence";
 import { usePulsePerson, type WindowSelection } from "./use-pulse";
@@ -60,12 +61,12 @@ export function PersonDrawer({
         {p && (
           <div className="strip">
             {tiles.map((t) => {
-              const d = t.usual != null ? deltaLabel(t.value, t.usual) : null;
+              const d = t.usual != null ? changeVsUsual(t.value, t.usual) : null;
               return (
                 <button key={t.key} type="button" className="tile" onClick={() => { const l = evidenceLabels(t.metric, t.value); onOpen(l.title, [p.name, l.crumb], { metric: t.metric, userId: p.userId }); }}>
                   <span className="tl">{t.label}</span>
                   <span className="tn">{fmtNum(t.value)}</span>
-                  <span className={`td ${d?.tone === "bad" ? "dn" : d?.tone === "good" ? "up" : ""}`}>{d && t.usual != null ? `${d.text} vs ${Math.round(t.usual)}` : ""}</span>
+                  <span className={`td ${d?.cls ?? ""}`}>{d && t.usual != null ? `${d.text} vs ${shownUsual(t.usual)}` : ""}</span>
                 </button>
               );
             })}

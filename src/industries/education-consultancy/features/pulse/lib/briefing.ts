@@ -1,6 +1,7 @@
 import { activityOf, type Briefing, type BriefingItem, type LeakReason, type PersonRow, type StageFlow, type MetricCounts, type PulseGroup } from "./types";
 import type { PulseThresholds } from "./thresholds";
 import { compareToUsual, usualShare } from "./compare";
+import { untouchedHeldOfPersonHref } from "./leads-links";
 
 /**
  * "Preview mode": the briefing the LLM layer will later write, built TODAY from real numbers by deterministic
@@ -24,6 +25,12 @@ export interface BriefingInput {
   horizon?: string;
   /** New leads this window vs the previous one (for the intake direction). */
   newLeads?: { current: number; previous: number };
+  /** Leads each person holds that nobody touched this window (the same numbers the attention buttons carry). */
+  staleHeld?: Record<string, number>;
+  /** The branch the Heads-up row blames (vs usual), if any. The briefing names a branch only when it is this one. */
+  headsUpBranchId?: string | null;
+  /** false on the Today window: facts only, no "fix that and tomorrow holds" prediction. Default true. */
+  closer?: boolean;
 }
 
 const METRICS = [
@@ -35,6 +42,16 @@ const pct = (n: number) => `${Math.round(Math.abs(n))}%`;
 
 export function recordCountOf(c: MetricCounts): number {
   return c.calls + c.notes + c.moves + c.back_archived + c.status_changes + c.received + c.applications_filed;
+}
+
+/** The door never opens an empty set: the person's untouched leads (same href + count as their attention button), else the metric itself. */
+function culpritDoor(p: PersonRow | undefined, staleHeld: Record<string, number> | undefined): BriefingItem["link"] {
+  const n = p ? staleHeld?.[p.userId] ?? 0 : 0;
+  return p && n > 0 ? { label: `${n} leads`, href: untouchedHeldOfPersonHref(p.userId) } : null;
+}
+function prospectsDoor(best: { m: (typeof METRICS)[number]; cur: number }): BriefingItem["link"] {
+  if (best.cur <= 0) return null; // never a door to zero records
+  return { label: `${best.cur} ${best.m.key === "prospects" ? "prospects" : "students"}`, drill: { metric: best.m.key } };
 }
 
 /** (a) The biggest negative KPI move vs the previous window, explained by its largest contributing branch + person. */
@@ -58,7 +75,9 @@ function negativeMoveCtx(input: BriefingInput): { item: BriefingItem; ctx: NegCt
     b.people.push(p);
     byBranch.set(p.branchId, b);
   }
-  const worst = [...byBranch.values()].filter((b) => b.delta < 0).sort((a, b) => a.delta - b.delta)[0];
+  const worstEntry = [...byBranch.entries()].filter(([, b]) => b.delta < 0).sort(([, a], [, b]) => a.delta - b.delta)[0];
+  // One story on the page: name the branch only when the Heads-up row (vs usual) blames the same one, or has no branch row.
+  const worst = worstEntry && (!input.headsUpBranchId || input.headsUpBranchId === worstEntry[0]) ? worstEntry[1] : undefined;
   const head = `${best.m.noun} fell ${pct(((best.cur - best.prev) / best.prev) * 100)}`;
   const fallPct = pct(((best.cur - best.prev) / best.prev) * 100);
   if (!worst) {
@@ -66,7 +85,7 @@ function negativeMoveCtx(input: BriefingInput): { item: BriefingItem; ctx: NegCt
       item: {
         id: "neg", tone: "bad", icon: "down", headline: `${head}.`, detail: `${best.cur} this period against ${best.prev} before.`,
         evidenceLabel: "Evidence", evidence: `${best.m.noun}: ${best.cur} vs ${best.prev} the period before`,
-        link: { label: `${best.cur} leads`, drill: { metric: best.m.key } },
+        link: prospectsDoor(best),
       },
       ctx: { metricKey: best.m.key, noun: best.m.noun, fallPct, branchName: null, culpritName: null, culpritPct: null },
     };
@@ -90,7 +109,7 @@ function negativeMoveCtx(input: BriefingInput): { item: BriefingItem; ctx: NegCt
       detail,
       evidenceLabel: "Evidence",
       evidence: `${worst.name} (vs ${input.baselineLabel ?? "last week"}) −${Math.abs(worst.delta)} · team net −${best.drop}` + (culprit ? ` · ${culprit.name} ${culprit.current.calls} calls vs usual ${Math.round(culprit.usual.calls)}` : ""),
-      link: culprit ? { label: `${culprit.current.calls} calls`, drill: { metric: "calls", userId: culprit.userId } } : { label: `${best.cur} leads`, drill: { metric: best.m.key } },
+      link: culpritDoor(culprit, input.staleHeld) ?? prospectsDoor(best),
     },
     ctx: {
       metricKey: best.m.key, noun: best.m.noun, fallPct, branchName: worst.name,
@@ -192,7 +211,9 @@ function composeRead(input: BriefingInput, neg: { ctx: NegCtx } | null, win: Bri
   if (used.length) sentences.push(`${cap(used.join(", and "))}.`);
 
   // 3. what to fix: the number word matches the causes named above
-  if (used.length >= 2) sentences.push(`Fix those two and ${input.horizon ?? "next week's"} Applications should hold.`);
+  // Today (closer === false): facts only, no prediction.
+  if (input.closer === false) { /* no closer */ }
+  else if (used.length >= 2) sentences.push(`Fix those two and ${input.horizon ?? "next week's"} Applications should hold.`);
   else if (used.length === 1) sentences.push(`Fix that and ${input.horizon ?? "next week's"} Applications should hold.`);
   return sentences.length >= 2 ? sentences.join(" ") : null;
 }

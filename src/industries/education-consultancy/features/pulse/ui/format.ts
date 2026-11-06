@@ -1,15 +1,3 @@
-import { formatChange } from "../lib/compare";
-
-export type Tone = "good" | "bad" | "flat";
-
-/** "+19%" / "−78%" / "±0" against a baseline; null when there is no baseline to compare with. */
-export function deltaLabel(current: number, baseline: number): { text: string; tone: Tone } | null {
-  if (baseline <= 0) return current > 0 ? { text: "new", tone: "flat" } : null;
-  const pct = Math.round(((current - baseline) / baseline) * 100);
-  if (pct === 0) return { text: "±0", tone: "flat" };
-  return { text: formatChange({ pct, ratio: current / baseline }) ?? "", tone: pct > 0 ? "good" : "bad" };
-}
-
 export function fmtNum(n: number): string {
   return Number.isInteger(n) ? String(n) : (Math.round(n * 10) / 10).toString();
 }

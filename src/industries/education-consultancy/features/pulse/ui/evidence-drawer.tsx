@@ -72,7 +72,7 @@ export function EvidenceDrawer({
                       <div className="es">{[r.displayId ? `#${r.displayId}` : null, r.holderName ? `now with ${r.holderName}` : null].filter(Boolean).join(" · ")}</div>
                     </td>
                     <td className="ew">
-                      {r.fromLabel || r.toLabel ? <>{r.fromLabel ?? "—"} → {r.toLabel ?? "—"}</> : <>{r.detail ?? "—"}</>}
+                      {r.fromLabel || r.toLabel ? <>{r.fromLabel ?? "—"} → {r.toLabel ?? "—"}</> : q?.metric === "notes" ? <>Note</> : q?.metric === "calls" ? <>Call</> : <>{r.detail ?? "—"}</>}
                       {r.actorName && !q?.userId && <div className="es">by {r.actorName}</div>}
                     </td>
                     <td className="r ew">{fmtWhen(r.at, windowInfo.tz)}</td>

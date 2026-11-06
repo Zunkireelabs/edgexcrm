@@ -45,3 +45,24 @@ export function usualShare(current: number, usual: number | null | undefined, ha
   const at = Math.round((current / Math.round(usual)) * 100);
   return { at, down: 100 - at };
 }
+
+/** A change shown in a table cell or a drawer tile is quiet below this size. */
+export const MIN_SHOWN_CHANGE_PCT = 25;
+
+/**
+ * THE one "show a change?" rule for cells and tiles: compareToUsual (real usual, printed-usual maths) AND at least
+ * MIN_SHOWN_CHANGE_PCT off. `rise` colours an increase (bad = red, warn = amber); otherwise up = green, down = red.
+ */
+export function changeVsUsual(
+  current: number,
+  usual: number | null | undefined,
+  hasUsual = true,
+  rise?: "bad" | "warn",
+): { text: string; cls: "up" | "dn" | "am"; pct: number } | null {
+  const cmp = compareToUsual(current, usual, hasUsual);
+  if (!cmp || Math.abs(cmp.pct) < MIN_SHOWN_CHANGE_PCT) return null;
+  const up = cmp.pct > 0;
+  const text = formatChange(cmp) ?? "";
+  if (rise && up) return { text, cls: rise === "warn" ? "am" : "dn", pct: cmp.pct };
+  return { text, cls: up ? "up" : "dn", pct: cmp.pct };
+}

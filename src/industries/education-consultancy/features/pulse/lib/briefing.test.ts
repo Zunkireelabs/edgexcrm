@@ -36,13 +36,14 @@ describe("buildBriefing — each template, from real numbers only", () => {
     // Kathmandu fell 10 while Pokhara rose 2: the team's NET drop is 8, and the evidence must not claim "−10 of −8".
     expect(neg.evidence).toContain("Kathmandu (vs last week) −10 · team net −8");
     expect(neg.evidence).toContain("Asha 18 calls vs usual 82");
-    expect(neg.link).toEqual({ label: "18 calls", drill: { metric: "calls", userId: "Asha" } });
+    // No untouched leads held by Asha → the door is the metric itself, never a door to nothing.
+    expect(neg.link).toEqual({ label: "12 prospects", drill: { metric: "prospects" } });
   });
   it("(b) the top win is the person furthest above their OWN usual, with a drill to their records", () => {
     const win = buildBriefing(input(people))!.items.find((i) => i.id === "win")!;
     expect(win.headline).toContain("Esha delivered 9 of the 12 students to Applications");
     expect(win.headline).toContain(", 80% above their usual");
-    expect(win.link.drill).toEqual({ metric: "reached_applications", userId: "Esha" });
+    expect(win.link?.drill).toEqual({ metric: "reached_applications", userId: "Esha" });
   });
   it("(c) the biggest stage leak carries its top archive reason; without reasons it prints a count instead", () => {
     const reasons: Record<string, LeakReason[]> = { q: [{ reason: "Not reachable", leads: 8 }, { reason: "Not interested", leads: 2 }] };
