@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { getCurrentUserTenant, getFormConfigsForTenant, getBranches, getLeadListsByTenant } from "@/lib/supabase/queries";
 import { getCachedUser } from "@/lib/supabase/server";
+import { navGroupsCookieName, parseGroupsCookie } from "@/components/dashboard/nav-groups";
 import { DashboardShell } from "@/components/dashboard/shell";
 import { RouteProgress } from "@/components/ui/route-progress";
 import { AIAssistantProvider } from "@/contexts/ai-assistant-context";
@@ -149,6 +150,7 @@ export default async function DashboardLayout({
             archiveLists={archiveLists}
             aiAssistantEnabled={aiAssistantEnabled}
             timeTrackingEnabled={timeTrackingEnabled}
+            initialNavGroups={parseGroupsCookie(cookieStore.get(navGroupsCookieName(tenantData.tenant.id))?.value)}
           >
             {children}
             {modal}

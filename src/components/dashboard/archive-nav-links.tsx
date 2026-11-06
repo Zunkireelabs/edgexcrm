@@ -1,16 +1,20 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { Archive, Trash2 } from "lucide-react";
 import type { LeadList } from "@/types/database";
-import { SidebarTip } from "@/components/dashboard/sidebar-tooltip";
+import { NavExpandable } from "@/components/dashboard/nav-primitives";
+import { ArchiveIcon } from "@/components/dashboard/shell-icons";
 
 interface ArchiveNavLinksProps {
-  /** Archive-type lists (Archived, Delete, …) rendered as top-level LEADS nav items. */
+  /** Archive-type lists (Archived, Delete, …). Rendered as one expandable "Archive" row in the sidebar footer. */
   lists: Pick<LeadList, "id" | "name" | "slug">[];
   onNavigate: () => void;
   collapsed?: boolean;
+}
+
+/** The `delete` list is the recycle bin; show it under that name (EDGEX-86 §4). */
+export function archiveLinkLabel(list: Pick<LeadList, "name" | "slug">): string {
+  return list.slug === "delete" ? "Recycle bin" : list.name;
 }
 
 export function ArchiveNavLinks({ lists, onNavigate, collapsed = false }: ArchiveNavLinksProps) {
@@ -18,31 +22,21 @@ export function ArchiveNavLinks({ lists, onNavigate, collapsed = false }: Archiv
   const searchParams = useSearchParams();
   const currentList = searchParams.get("list");
 
+  const links = lists.map((list) => ({
+    key: list.id,
+    href: `/leads?list=${list.slug}`,
+    label: archiveLinkLabel(list),
+    active: pathname === "/leads" && currentList === list.slug,
+  }));
+
   return (
-    <>
-      {lists.map((list) => {
-        const active = pathname === "/leads" && currentList === list.slug;
-        const Icon = list.slug === "delete" ? Trash2 : Archive;
-        return (
-          <SidebarTip key={list.id} label={list.name} enabled={collapsed}>
-          <Link
-            href={`/leads?list=${list.slug}`}
-            onClick={onNavigate}
-            aria-label={collapsed ? list.name : undefined}
-            className={`w-full flex items-center gap-3 rounded-md text-[13px] leading-5 font-medium transition-colors ${
-              collapsed ? "justify-center px-2 py-1.5" : "px-3 py-1.5"
-            } ${
-              active
-                ? "bg-[#ebebeb] text-gray-900"
-                : "text-[#666666] hover:bg-[#ebebeb] hover:text-gray-900"
-            }`}
-          >
-            <Icon className="w-[18px] h-[18px] shrink-0" />
-            {!collapsed && list.name}
-          </Link>
-          </SidebarTip>
-        );
-      })}
-    </>
+    <NavExpandable
+      icon={ArchiveIcon}
+      label="Archive"
+      collapsed={collapsed}
+      onNavigate={onNavigate}
+      hasActiveChild={links.some((l) => l.active)}
+      links={links}
+    />
   );
 }

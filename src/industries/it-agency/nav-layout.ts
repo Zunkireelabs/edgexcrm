@@ -21,7 +21,7 @@ import type { NavSection } from "../_types";
  *   (the manifest's `sidebar[]`, already permission-filtered by
  *   `getIndustrySidebarItems`).
  * - `slot:<name>` — a bespoke Suspense-wrapped slot the shell resolves with
- *   its own logic (lead lists, funnels, archive lists) — these can't be
+ *   its own logic (lead lists, funnels; archive lists moved to the shared footer in EDGEX-86) — these can't be
  *   reduced to a plain item.
  *
  * A union of string literals (not `string`) so a typo'd href is a compile
@@ -51,8 +51,7 @@ export type ItAgencyNavEntryKey =
   | "/resourcing"
   | "/resourcing/utilization"
   | "slot:leads-organise"
-  | "slot:leads-funnels"
-  | "slot:archive-lists";
+  | "slot:leads-funnels";
 
 interface ItAgencyNavSection extends NavSection {
   entries: readonly ItAgencyNavEntryKey[];
@@ -79,7 +78,6 @@ export const IT_AGENCY_NAV_LAYOUT: readonly ItAgencyNavSection[] = [
       "slot:leads-funnels",
       "/outreach",
       "/forms",
-      "slot:archive-lists",
       "universal:/pipeline",
     ],
   },

@@ -1,18 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { SidebarTip } from "@/components/dashboard/sidebar-tooltip";
-import { SidebarFlyout } from "@/components/dashboard/sidebar-flyout";
-import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { ChevronDown, Settings2, type LucideIcon } from "lucide-react";
 import type { LeadList } from "@/types/database";
 import { useSettingsModal } from "@/contexts/settings-modal-context";
+import { NavExpandable } from "@/components/dashboard/nav-primitives";
+import type { Icon } from "@/components/dashboard/shell-icons";
 
 interface LeadFunnelNavGroupProps {
   funnelKey: string;
   label: string;
-  icon: LucideIcon;
+  icon: Icon;
   lists: Pick<LeadList, "id" | "name" | "slug" | "sort_order">[];
   onNavigate: () => void;
   isAdmin?: boolean;
@@ -20,9 +17,9 @@ interface LeadFunnelNavGroupProps {
 }
 
 /** Sidebar group for one it_agency funnel (Lead Processing / Sales Leads) — same
- * collapsible chrome as `LeadListsNavGroup`, but the group header opens the whole
- * funnel (`?funnel=`) and nested rows show a live lead count per stage. */
-export function LeadFunnelNavGroup({ funnelKey, label, icon: Icon, lists, onNavigate, isAdmin = false, collapsed = false }: LeadFunnelNavGroupProps) {
+ * chrome as `LeadListsNavGroup`, but the group header opens the whole funnel
+ * (`?funnel=`). */
+export function LeadFunnelNavGroup({ funnelKey, label, icon, lists, onNavigate, isAdmin = false, collapsed = false }: LeadFunnelNavGroupProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { openSettings } = useSettingsModal();
@@ -33,129 +30,23 @@ export function LeadFunnelNavGroup({ funnelKey, label, icon: Icon, lists, onNavi
   const listSlugs = new Set(lists.map((l) => l.slug));
   const hasActiveChild = isOnLeads && currentList != null && listSlugs.has(currentList);
   const parentActive = isOnLeads && currentList == null && currentFunnel === funnelKey;
-  const [expanded, setExpanded] = useState(false);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (hasActiveChild) setExpanded(true);
-  }, [hasActiveChild]);
-
-  if (collapsed) {
-    const trigger = (
-      <Link
-        href={`/leads?funnel=${funnelKey}`}
-        onClick={onNavigate}
-        aria-label={label}
-        className={`w-full flex items-center justify-center px-2 py-1.5 rounded-md transition-colors ${
-          parentActive || hasActiveChild
-            ? "bg-[#ebebeb] text-gray-900"
-            : "text-[#666666] hover:bg-[#ebebeb] hover:text-gray-900"
-        }`}
-      >
-        <Icon className="w-[18px] h-[18px] shrink-0" />
-      </Link>
-    );
-    return (
-      <div>
-        {lists.length > 0 ? (
-          <SidebarFlyout header={label} trigger={trigger}>
-            {lists.map((list) => {
-              const active = isOnLeads && currentList === list.slug;
-              return (
-                <Link
-                  key={list.id}
-                  href={`/leads?list=${list.slug}`}
-                  onClick={onNavigate}
-                  className={`flex items-center gap-2 px-3 py-1.5 text-[13px] leading-5 transition-colors ${
-                    active
-                      ? "bg-[#ebebeb] text-gray-900 font-medium"
-                      : "text-[#666666] hover:bg-[#ebebeb] hover:text-gray-900"
-                  }`}
-                >
-                  <span className="truncate">{list.name}</span>
-                </Link>
-              );
-            })}
-          </SidebarFlyout>
-        ) : (
-          <SidebarTip label={label}>{trigger}</SidebarTip>
-        )}
-      </div>
-    );
-  }
 
   return (
-    <div>
-      <div className="flex items-center">
-        <Link
-          href={`/leads?funnel=${funnelKey}`}
-          onClick={onNavigate}
-          className={`flex-1 flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium transition-colors ${
-            parentActive
-              ? "bg-[#ebebeb] text-gray-900"
-              : "text-[#666666] hover:bg-[#ebebeb] hover:text-gray-900"
-          }`}
-        >
-          <Icon className="w-[18px] h-[18px] shrink-0" />
-          {label}
-        </Link>
-        {(lists.length > 0 || isAdmin) && (
-          <button
-            type="button"
-            aria-expanded={expanded}
-            onClick={() => setExpanded((v) => !v)}
-            className="px-1.5 py-2 text-gray-400 hover:text-gray-700"
-          >
-            <ChevronDown className={`w-4 h-4 transition-transform ${expanded ? "rotate-180" : ""}`} />
-          </button>
-        )}
-      </div>
-
-      {expanded && (lists.length > 0 || isAdmin) ? (
-        <div className="relative mt-1 ml-[20px] space-y-0.5">
-          {(() => {
-            const activeIndex = isOnLeads ? lists.findIndex((l) => currentList === l.slug) : -1;
-            return lists.map((list, idx) => {
-            const active = idx === activeIndex;
-            const isLast = idx === lists.length - 1 && !isAdmin;
-            const topDark = activeIndex !== -1 && idx <= activeIndex;
-            const bottomDark = activeIndex !== -1 && idx < activeIndex;
-            return (
-              <div key={list.id} className="relative pl-[18px]">
-                <span aria-hidden className={`absolute left-0 top-0 h-1/2 w-px ${topDark ? "bg-gray-400" : "bg-gray-200"}`} />
-                {!isLast && <span aria-hidden className={`absolute left-0 top-1/2 bottom-0 w-px ${bottomDark ? "bg-gray-400" : "bg-gray-200"}`} />}
-                <span aria-hidden className={`absolute left-0 top-1/2 -translate-y-1/2 w-[10px] h-px ${active ? "bg-gray-400" : "bg-gray-200"}`} />
-                <Link
-                  href={`/leads?list=${list.slug}`}
-                  onClick={onNavigate}
-                  className={`w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] leading-5 transition-colors ${
-                    active
-                      ? "bg-[#ebebeb] text-gray-900 font-medium"
-                      : "text-[#666666] hover:bg-[#ebebeb] hover:text-gray-900"
-                  }`}
-                >
-                  <span className="truncate">{list.name}</span>
-                </Link>
-              </div>
-            );
-            });
-          })()}
-          {isAdmin && (
-            <div className="relative pl-[18px]">
-              <span aria-hidden className="absolute left-0 top-0 h-1/2 w-px bg-gray-200" />
-              <span aria-hidden className="absolute left-0 top-1/2 -translate-y-1/2 w-[10px] h-px bg-gray-200" />
-              <button
-                type="button"
-                onClick={() => { onNavigate(); openSettings("lead-management"); }}
-                className="w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-gray-400 hover:text-gray-600 hover:bg-[#ebebeb] transition-colors"
-              >
-                <Settings2 className="w-3.5 h-3.5 shrink-0" />
-                Manage stages
-              </button>
-            </div>
-          )}
-        </div>
-      ) : null}
-    </div>
+    <NavExpandable
+      icon={icon}
+      label={label}
+      href={`/leads?funnel=${funnelKey}`}
+      collapsed={collapsed}
+      onNavigate={onNavigate}
+      parentActive={parentActive}
+      hasActiveChild={hasActiveChild}
+      links={lists.map((l) => ({
+        key: l.id,
+        href: `/leads?list=${l.slug}`,
+        label: l.name,
+        active: isOnLeads && currentList === l.slug,
+      }))}
+      action={isAdmin ? { label: "Manage stages", onClick: () => openSettings("lead-management") } : undefined}
+    />
   );
 }

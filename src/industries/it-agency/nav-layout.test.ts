@@ -17,7 +17,7 @@ const KNOWN_UNIVERSAL_HREFS = new Set([
   "/attendance",
 ]);
 
-const KNOWN_SLOTS = new Set(["slot:leads-organise", "slot:leads-funnels", "slot:archive-lists"]);
+const KNOWN_SLOTS = new Set(["slot:leads-organise", "slot:leads-funnels"]);
 
 const allEntryKeys = IT_AGENCY_NAV_LAYOUT.flatMap((s) => s.entries);
 const industryHrefKeys = allEntryKeys.filter(
@@ -68,6 +68,12 @@ describe("Resourcing/Utilization live in Delivery, not Organization", () => {
   });
 });
 
+describe("EDGEX-86: archive moved to the shared footer", () => {
+  it("the layout no longer carries an archive slot (no duplicate with the footer)", () => {
+    expect(allEntryKeys.some((k) => (k as string).includes("archive"))).toBe(false);
+  });
+});
+
 describe("parity: pure refactor plus one item move", () => {
   it("ordered entry keys match the brief's target layout exactly", () => {
     // docs/IT-AGENCY-PHASE5-DELIVERY-NAV-IA-BRIEF.md §1b — the spec table,
@@ -80,7 +86,6 @@ describe("parity: pure refactor plus one item move", () => {
       "slot:leads-funnels",
       "/outreach",
       "/forms",
-      "slot:archive-lists",
       "universal:/pipeline",
       "/proposals",
       "/deals",

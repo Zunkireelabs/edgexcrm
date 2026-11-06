@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Bell, CheckCheck, Settings, X } from "lucide-react";
+import { Bell as PhosphorBell } from "@phosphor-icons/react";
 import {
   NotificationList,
   NotificationEmptyState,
@@ -120,17 +121,16 @@ export function NotificationsDropdown() {
 
   return (
     <div className="relative">
-      {/* Bell Button */}
+      {/* Bell Button — 30px square; unread = a small ink dot, no number (EDGEX-86 §5) */}
       <button
+        type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="relative px-1.5 py-1 rounded-[8px] border border-gray-200 bg-white hover:bg-gray-100 transition-colors group"
+        aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
+        className="relative inline-grid h-[30px] w-[30px] place-items-center rounded-ds-sm border border-ds-border bg-ds-surface text-ds-muted outline-none transition-colors hover:bg-ds-hover hover:text-ds-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ds-accent"
       >
-        <Bell className="w-5 h-5 text-gray-600 group-hover:text-gray-900" />
-        {/* Notification Badge */}
+        <PhosphorBell size={18} weight="regular" aria-hidden />
         {unreadCount > 0 && (
-          <span className="absolute top-0.5 right-0.5 min-w-[18px] h-[18px] bg-red-500 rounded-full flex items-center justify-center text-[10px] font-medium text-white border-2 border-[#f7f7f7]">
-            {unreadCount > 9 ? "9+" : unreadCount}
-          </span>
+          <span className="absolute right-[6px] top-[6px] size-[7px] rounded-full border-[1.5px] border-ds-surface bg-ds-ink" />
         )}
       </button>
 

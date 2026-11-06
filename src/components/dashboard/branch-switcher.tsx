@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { MapPin } from "lucide-react";
+import { Buildings } from "@phosphor-icons/react";
+import { cn } from "@/lib/utils";
 import {
   Select,
   SelectContent,
@@ -17,6 +18,8 @@ interface BranchSwitcherProps {
   userBranchId: string | null;
   leadScope: "all" | "own" | "team";
   selectedBranchId: string | null;
+  /** Extra classes on the control (the header passes `max-md:hidden`; the mobile drawer shows its own copy). */
+  className?: string;
 }
 
 export function BranchSwitcher({
@@ -25,6 +28,7 @@ export function BranchSwitcher({
   userBranchId,
   leadScope,
   selectedBranchId,
+  className,
 }: BranchSwitcherProps) {
   const router = useRouter();
 
@@ -34,9 +38,12 @@ export function BranchSwitcher({
   if (leadScope !== "all" && userBranchId) {
     const branchName = branches.find((b) => b.id === userBranchId)?.name ?? "—";
     return (
-      <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[8px] bg-blue-50 border border-blue-200 text-xs font-medium text-blue-700 select-none">
-        <MapPin className="w-3 h-3 shrink-0" />
-        {branchName}
+      <div
+        title={branchName}
+        className={cn("inline-flex h-[30px] select-none items-center gap-1.5 rounded-ds-sm border border-ds-border bg-ds-surface px-2.5 text-[12.5px] font-medium text-ds-ink", className)}
+      >
+        <Buildings size={14} weight="regular" aria-hidden className="shrink-0 text-ds-muted" />
+        <span className="max-w-[150px] truncate">{branchName}</span>
       </div>
     );
   }
@@ -48,10 +55,15 @@ export function BranchSwitcher({
       router.refresh();
     }
 
+    const selectedName = selectedBranchId ? branches.find((b) => b.id === selectedBranchId)?.name : undefined;
     return (
       <Select value={selectedBranchId ?? "all"} onValueChange={handleChange}>
-        <SelectTrigger size="sm" className="w-auto gap-1.5 px-2.5 text-xs font-medium rounded-[8px] border-gray-200 bg-white text-gray-700">
-          <MapPin className="w-3.5 h-3.5 text-gray-500 shrink-0" />
+        <SelectTrigger
+          size="sm"
+          title={selectedName ?? "Overall"}
+          className={cn("h-[30px] data-[size=sm]:h-[30px] w-auto gap-1.5 rounded-ds-sm border-ds-border bg-ds-surface px-2.5 text-[12.5px] font-medium text-ds-ink shadow-none [&_[data-slot=select-value]]:max-w-[150px] [&_[data-slot=select-value]]:truncate", className)}
+        >
+          <Buildings size={14} weight="regular" aria-hidden className="shrink-0 text-ds-muted" />
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

@@ -1,38 +1,64 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { HoverCard as HoverCardPrimitive } from "radix-ui";
+import { useEffect, useState, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
+import { Popover as PopoverPrimitive } from "radix-ui";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface SidebarFlyoutProps {
-  /** Small uppercase heading shown at the top of the flyout (the group's name). */
-  header: string;
-  /** The collapsed icon link — must be a single element that accepts a ref + props (a `<Link>` or `<button>`). */
+  /** The item's name, shown as the card's title row. */
+  title: string;
+  /** The collapsed-rail icon button — a single element that accepts a ref + props. */
   trigger: ReactNode;
-  /** The flyout's links. */
+  /** Optional instant tooltip on the rail icon (needs the sidebar's TooltipProvider above). */
+  tip?: string;
+  /** The sub-links. Any link/button inside closes the flyout on click. */
   children: ReactNode;
 }
 
 /**
- * Hover flyout for a collapsed-sidebar group icon. Rendered through a portal on purpose: the nav list is a scroll
- * container (`overflow-y-auto overflow-x-hidden`), which clips anything absolutely positioned past the 68px sidebar —
- * a CSS `group-hover` flyout inside it got cut off at the sidebar edge. The portal escapes that clipping and sits above
- * the page content. Opens instantly, closes after a short grace so the pointer can travel from the icon to the flyout.
+ * Click flyout for a collapsed-rail item that has sub-pages (EDGEX-86 §9). A 200px card to the
+ * right of the rail: the item's name, then its sub-links. Closes on outside click, Escape and
+ * navigation. Rendered through a portal on purpose: the nav list is a scroll container
+ * (`overflow-x-hidden`) that would clip anything positioned past the 68px rail.
  */
-export function SidebarFlyout({ header, trigger, children }: SidebarFlyoutProps) {
+export function SidebarFlyout({ title, trigger, tip, children }: SidebarFlyoutProps) {
+  const [open, setOpen] = useState(false);
+  const pathname = usePathname();
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setOpen(false);
+  }, [pathname]);
+
   return (
-    <HoverCardPrimitive.Root openDelay={0} closeDelay={80}>
-      <HoverCardPrimitive.Trigger asChild>{trigger}</HoverCardPrimitive.Trigger>
-      <HoverCardPrimitive.Portal>
-        <HoverCardPrimitive.Content
+    <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
+      {tip ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <PopoverPrimitive.Trigger asChild>{trigger}</PopoverPrimitive.Trigger>
+          </TooltipTrigger>
+          <TooltipContent side="right" sideOffset={8} className="z-[100] !animate-none">
+            {tip}
+          </TooltipContent>
+        </Tooltip>
+      ) : (
+        <PopoverPrimitive.Trigger asChild>{trigger}</PopoverPrimitive.Trigger>
+      )}
+      <PopoverPrimitive.Portal>
+        <PopoverPrimitive.Content
           side="right"
           align="start"
-          sideOffset={4}
-          className="z-[100] min-w-[190px] bg-white rounded-lg shadow-lg border border-gray-200 py-1.5 outline-none"
+          sideOffset={8}
+          onClick={(e) => {
+            if ((e.target as HTMLElement).closest("a,button")) setOpen(false);
+          }}
+          className="z-[100] w-[200px] rounded-ds-md border border-ds-border bg-ds-surface p-1.5 shadow-[var(--ds-shadow-float)] outline-none"
         >
-          <p className="px-3 pb-1 text-[11px] font-medium text-gray-400 uppercase tracking-wider select-none">{header}</p>
-          {children}
-        </HoverCardPrimitive.Content>
-      </HoverCardPrimitive.Portal>
-    </HoverCardPrimitive.Root>
+          <p className="select-none px-2 pb-1.5 pt-1 text-xs font-medium text-ds-faint">{title}</p>
+          <div className="flex flex-col gap-px">{children}</div>
+        </PopoverPrimitive.Content>
+      </PopoverPrimitive.Portal>
+    </PopoverPrimitive.Root>
   );
 }

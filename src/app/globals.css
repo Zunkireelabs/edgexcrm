@@ -74,6 +74,7 @@
   --color-ds-ai: var(--ds-ai);
   --color-ds-ai-soft: var(--ds-ai-soft);
   --color-ds-ai-line: var(--ds-ai-line);
+  --color-ds-ai-arc: var(--ds-ai-arc);
   --radius-ds-xs: var(--ds-r-xs);
   --radius-ds-sm: var(--ds-r-sm);
   --radius-ds-md: var(--ds-r-md);
@@ -154,7 +155,7 @@
   --ds-ink:#141414; --ds-text:#3a3a38; --ds-muted:#73736f; --ds-faint:#a3a39e; --ds-ghost:#d6d6d2;
   --ds-accent:#2272B4; --ds-accent-soft:#eaf2fa;
   --ds-good:#127a4a; --ds-good-soft:#e9f6ef; --ds-bad:#b42318; --ds-bad-soft:#fdeeec; --ds-warn:#a15c07; --ds-warn-soft:#fdf3e3;
-  --ds-ai:#5b47d6; --ds-ai-soft:#f3f1fd; --ds-ai-line:#d9d3fa;
+  --ds-ai:#5b47d6; --ds-ai-soft:#f3f1fd; --ds-ai-line:#d9d3fa; --ds-ai-arc:#7c5cf0;
   /* Radius scale. Nested rule: an outer container = inner radius + its padding (e.g. segmented: calc(var(--ds-r-sm) + 2px)). */
   --ds-r-xs:6px; --ds-r-sm:8px; --ds-r-md:12px; --ds-r-lg:16px; --ds-r-full:9999px;
   /* Shadows: only on things that float, plus the segmented thumb. */

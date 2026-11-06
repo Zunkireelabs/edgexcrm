@@ -10,6 +10,9 @@ import { buttonV2Variants } from "./button"
 const AI_TOKEN_ALLOWLIST = [
   "src/app/globals.css",
   "src/components/ui/badge.tsx",
+  // EDGEX-86: the global shell — Ask Orca header button and the "your menu" AI credits card
+  "src/components/dashboard/shell.tsx",
+  "src/components/dashboard/user-menu.tsx",
   "src/industries/education-consultancy/features/pulse/ui/pulse.css",
   "src/industries/education-consultancy/features/pulse/ui/briefing-card.tsx",
   "src/industries/education-consultancy/features/pulse/ui/attention-list.tsx",
