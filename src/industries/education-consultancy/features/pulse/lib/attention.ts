@@ -39,6 +39,21 @@ function planText(plan: ReassignPlan, n: number, roleLabel: string, verb: "Reass
 }
 const pctOf = (cur: number, base: number) => { const shown = Math.max(1, Math.round(base)); return Math.round(Math.abs((cur - shown) / shown) * 100); };
 
+const firstName = (name: string) => name.trim().split(/\s+/)[0] || name;
+
+/** "activity down 60% since Mon" — and when there is NOTHING, say so in facts: never "down 100%". */
+export function activityWhat(p: PersonRow, cur: number, usual: number, period: string): string {
+  const share = usualShare(cur, usual);
+  const down = share?.down ?? pctOf(cur, usual);
+  if (cur === 0 || down >= 100) {
+    const u = Math.round(usual);
+    if (p.quietSinceDay) return `${cur === 0 ? "no activity" : "almost no activity"} since ${weekdayShort(p.quietSinceDay)} (usual ${u})`;
+    if (period === "today") return `${cur === 0 ? "no activity yet today" : "almost no activity yet today"} (usual ${u} by now)`;
+    return `${cur === 0 ? "no activity" : "almost no activity"} ${period} (usual ${u})`;
+  }
+  return p.quietSinceDay ? `activity down ${down}% since ${weekdayShort(p.quietSinceDay)}` : `activity down ${down}% against usual`;
+}
+
 export function buildAttention(input: AttentionInput): AttentionItem[] {
   const out: AttentionItem[] = [];
   const period = input.periodNoun ?? "this week";
@@ -52,10 +67,13 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
       const pt = planText(plan, stale, p.positionLabel, "Reassign");
       out.push({
         id: s.id, category: "needs_action", tone: "bad", icon: "down", subject: p.name,
-        what: p.quietSinceDay ? `activity down ${usualShare(cur, usual)?.down ?? pctOf(cur, usual)}% since ${weekdayShort(p.quietSinceDay)}` : `activity down ${usualShare(cur, usual)?.down ?? pctOf(cur, usual)}% against usual`,
+        what: activityWhat(p, cur, usual, period),
         figure: stale > 0 ? { strong: String(stale), text: " leads untouched" } : { strong: String(cur), text: ` vs usual ${Math.round(usual)}` },
         suggested: stale > 0 && pt.suggested,
-        action: { label: stale > 0 ? pt.label : "Review leads", href: stale > 0 ? untouchedHeldOfPersonHref(p.userId) : leadsOfPersonHref(p.userId), primary: true },
+        // No untouched leads → no lead set to name: the button opens the person's day instead.
+        action: stale > 0
+          ? { label: pt.label, href: untouchedHeldOfPersonHref(p.userId), primary: true }
+          : { label: `See ${firstName(p.name)}'s day`, href: "", personId: p.userId, primary: true },
         why: `Calls, notes and stage moves dropped together: ${cur} against a usual ${Math.round(usual)}.` +
           (stale > 0 ? ` ${stale} of the leads ${p.name} holds have had no touch or move in 3+ days.${pt.why}` : ""),
         meta: [`${p.current.calls} calls vs usual ${Math.round(p.usual.calls)}`, `${p.notesNew + p.notesEdited} notes vs usual ${Math.round(p.usual.notes)}`, [p.positionLabel, p.branchName].filter(Boolean).join(", "), stale > 0 ? pt.meta : `no ${p.positionLabel} has spare capacity`].join(" · "),

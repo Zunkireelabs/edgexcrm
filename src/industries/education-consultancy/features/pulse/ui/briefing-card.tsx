@@ -52,9 +52,10 @@ export function PulseBriefingCard({
             <p><b>{it.headline}</b>{it.detail ? ` ${it.detail}` : ""}</p>
             <div className="ev"><b>{it.evidenceLabel}</b>{it.evidence}</div>
           </div>
-          <button type="button" className="go" onClick={() => onOpen(it.headline, ["Briefing"], it.link.drill)}>
+          {it.link?.href && <Link href={it.link.href} className="go">{it.link.label}<Arrow /></Link>}
+          {it.link?.drill && <button type="button" className="go" onClick={() => onOpen(it.headline, ["Briefing"], it.link!.drill!)}>
             {it.link.label}<Arrow />
-          </button>
+          </button>}
         </div>
       ))}
 

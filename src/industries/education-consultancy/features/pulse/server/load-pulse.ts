@@ -253,7 +253,7 @@ export async function loadPulse(ctx: PulseContext): Promise<PulseResponse> {
   const horizon = ctx.window.key === "today" ? "tomorrow's" : winDays >= 21 ? "next month's" : "next week's";
   const baselineLabel = Math.abs(winDays - 7) < 0.1 ? "last week" : ctx.window.key === "today" ? "yesterday at this time" : "the period before";
   const nl0 = funnel.new_leads?.[0] ?? 0, nl1 = funnel.new_leads?.[1] ?? 0;
-  const briefing = buildBriefing({ people, team, stageFlows, leakReasons, untouched: { count: untouchedCount }, thresholds, baselineLabel, baselineCovered, horizon, newLeads: { current: nl0, previous: nl1 } });
+  const briefing = buildBriefing({ people, team, stageFlows, leakReasons, untouched: { count: untouchedCount }, thresholds, baselineLabel, baselineCovered, horizon, newLeads: { current: nl0, previous: nl1 }, staleHeld, closer: ctx.window.key !== "today", headsUpBranchId: signals.all.find((s) => s.kind === "biggest_drop")?.subject.id ?? null });
   const appsStage = funnel.stages.find((s) => s.slug === "applications");
 
   const nl = funnel.new_leads ?? [];

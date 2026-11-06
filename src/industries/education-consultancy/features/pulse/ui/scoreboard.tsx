@@ -6,7 +6,8 @@ import { pluralLabel } from "../lib/positions";
 import type { CellValues, EventsQuery, PersonRow, PulseGroup, PulseResponse, StageSeries } from "../lib/types";
 import { Caret, Spark } from "./icons";
 import { avatarColor, initials } from "./format";
-import { compareToUsual, formatChange } from "../lib/compare";
+import { changeVsUsual } from "../lib/compare";
+import { NA_ROLES, sumVisible } from "../lib/scoreboard-cols";
 import { evidenceLabels } from "./evidence";
 
 type Open = (title: string, crumbs: string[], q: EventsQuery) => void;
@@ -28,18 +29,18 @@ const metric = (k: keyof PersonRow["current"]) => (r: RowLike): CellValues => ({
 const stage = (r: RowLike, id?: string): CellValues => (id ? (r.forwardByStage[id] ?? { current: 0, previous: 0, usual: 0 }) : { current: 0, previous: 0, usual: 0 });
 
 const COLS: Col[] = [
-  { id: "received", label: "Received", group: "Intake", naRoles: [], value: metric("received"), query: () => ({ metric: "received" }), rise: "warn" },
-  { id: "s-pre", label: "Pre-qual.", group: "Moved to", naRoles: ["app-executive"], value: (r, id) => stage(r, id), query: (id) => ({ metric: "moves_forward", detail: id }), stageSlug: "pre-qualified" },
-  { id: "s-q", label: "Qualified", group: "Moved to", naRoles: ["app-executive"], value: (r, id) => stage(r, id), query: (id) => ({ metric: "moves_forward", detail: id }), stageSlug: "qualified" },
-  { id: "s-p", label: "Prospects", group: "Moved to", naRoles: ["app-executive"], value: (r, id) => stage(r, id), query: (id) => ({ metric: "moves_forward", detail: id }), stageSlug: "prospects" },
-  { id: "s-a", label: "Apps", group: "Moved to", naRoles: ["app-executive"], value: (r, id) => stage(r, id), query: (id) => ({ metric: "moves_forward", detail: id }), stageSlug: "applications" },
-  { id: "back", label: "Back", group: "Moved to", naRoles: [], value: metric("back_archived"), query: () => ({ metric: "back_archived" }), rise: "bad" },
-  { id: "status", label: "Status", group: "Activity", naRoles: [], value: metric("status_changes"), query: () => ({ metric: "status_changes" }) },
-  { id: "notes", label: "Notes", group: "Activity", naRoles: [], value: metric("notes"), query: () => ({ metric: "notes" }) },
-  { id: "calls", label: "Calls", group: "Activity", naRoles: [], value: metric("calls"), query: () => ({ metric: "calls" }) },
-  { id: "r-p", label: "Prospects", group: "Results · delivered", naRoles: ["telecaller", "executive", "app-executive"], value: metric("prospects"), query: () => ({ metric: "prospects" }) },
-  { id: "r-s", label: "Students", group: "Results · delivered", naRoles: ["telecaller", "executive", "app-executive"], value: metric("reached_applications"), query: () => ({ metric: "reached_applications" }) },
-  { id: "r-f", label: "Filed", group: "Results · delivered", naRoles: ["telecaller", "executive", "counsellor"], value: metric("applications_filed"), query: () => ({ metric: "applications_filed" }) },
+  { id: "received", label: "Received", group: "Intake", naRoles: NA_ROLES["received"], value: metric("received"), query: () => ({ metric: "received" }), rise: "warn" },
+  { id: "s-pre", label: "Pre-qual.", group: "Moved to", naRoles: NA_ROLES["s-pre"], value: (r, id) => stage(r, id), query: (id) => ({ metric: "moves_forward", detail: id }), stageSlug: "pre-qualified" },
+  { id: "s-q", label: "Qualified", group: "Moved to", naRoles: NA_ROLES["s-q"], value: (r, id) => stage(r, id), query: (id) => ({ metric: "moves_forward", detail: id }), stageSlug: "qualified" },
+  { id: "s-p", label: "Prospects", group: "Moved to", naRoles: NA_ROLES["s-p"], value: (r, id) => stage(r, id), query: (id) => ({ metric: "moves_forward", detail: id }), stageSlug: "prospects" },
+  { id: "s-a", label: "Apps", group: "Moved to", naRoles: NA_ROLES["s-a"], value: (r, id) => stage(r, id), query: (id) => ({ metric: "moves_forward", detail: id }), stageSlug: "applications" },
+  { id: "back", label: "Back", group: "Moved to", naRoles: NA_ROLES["back"], value: metric("back_archived"), query: () => ({ metric: "back_archived" }), rise: "bad" },
+  { id: "status", label: "Status", group: "Activity", naRoles: NA_ROLES["status"], value: metric("status_changes"), query: () => ({ metric: "status_changes" }) },
+  { id: "notes", label: "Notes", group: "Activity", naRoles: NA_ROLES["notes"], value: metric("notes"), query: () => ({ metric: "notes" }) },
+  { id: "calls", label: "Calls", group: "Activity", naRoles: NA_ROLES["calls"], value: metric("calls"), query: () => ({ metric: "calls" }) },
+  { id: "r-p", label: "Prospects", group: "Results · delivered", naRoles: NA_ROLES["r-p"], value: metric("prospects"), query: () => ({ metric: "prospects" }) },
+  { id: "r-s", label: "Students", group: "Results · delivered", naRoles: NA_ROLES["r-s"], value: metric("reached_applications"), query: () => ({ metric: "reached_applications" }) },
+  { id: "r-f", label: "Filed", group: "Results · delivered", naRoles: NA_ROLES["r-f"], value: metric("applications_filed"), query: () => ({ metric: "applications_filed" }) },
 ];
 const GROUPS = ["Intake", "Moved to", "Activity", "Results · delivered"] as const;
 const SPAN = (g: string) => COLS.filter((c) => c.group === g).length;
@@ -51,14 +52,17 @@ const SORTS: Array<{ key: SortKey; label: string }> = [
   { key: "reached_applications", label: "Students" }, { key: "name", label: "Name" },
 ];
 
-/** The change vs usual: shown only through the one guard, and only when ≥25% off (so the table stays quiet). */
+/**
+ * A cell's value. A role-less row (team total, branch group) is the sum of the VISIBLE person cells in that column, so
+ * a total can never show people the rows beneath it do not (the old "total 16, every row 0 or –").
+ */
+function cellValue(col: Col, r: RowLike, roleKey: string | null, ps: PersonRow[] | undefined, sid?: string): CellValues {
+  return roleKey === null && ps ? sumVisible(col.naRoles, ps, (p) => col.value(p, sid)) : col.value(r, sid);
+}
+
+/** The change vs usual: the one shared guard (lib/compare.ts), so the table and the drawer tiles agree. */
 function change(v: CellValues, hasUsual: boolean, rise?: "bad" | "warn"): { text: string; cls: string } | null {
-  const cmp = compareToUsual(v.current, v.usual, hasUsual);
-  if (!cmp || Math.abs(cmp.pct) < 25) return null;
-  const up = cmp.pct > 0;
-  const text = formatChange(cmp) ?? "";
-  if (rise && up) return { text, cls: rise === "warn" ? "am" : "dn" };
-  return { text, cls: up ? "up" : "dn" };
+  return changeVsUsual(v.current, v.usual, hasUsual, rise);
 }
 
 function Cell({
@@ -155,23 +159,24 @@ export function Scoreboard({
 
   // Per column: the length of the longest change text any visible row shows (0 → no slot at all).
   const slotLen = useMemo(() => {
-    const rows: Array<{ r: RowLike; role: string | null }> = sorted.map((p) => ({ r: p, role: p.positionKey }));
+    const rows: Array<{ r: RowLike; role: string | null; ps?: PersonRow[] }> = sorted.map((p) => ({ r: p, role: p.positionKey }));
     if (view === "role") for (const g of groups) rows.push({ r: g.agg ?? aggFor(g.people), role: g.key });
-    rows.push({ r: data.team, role: null });
+    else if (view === "branch") for (const g of groups) rows.push({ r: aggFor(g.people), role: null, ps: g.people });
+    rows.push({ r: data.team, role: null, ps: data.people });
     const out: Record<string, number> = {};
     for (const col of COLS) {
       if (col.group === "Moved to") continue;
       const sid = col.stageSlug ? stageId[col.stageSlug] : undefined;
       let max = 0;
-      for (const { r, role } of rows) {
+      for (const { r, role, ps } of rows) {
         if (role !== null && col.naRoles.includes(role)) continue;
-        const ch = change(col.value(r, sid), r.hasUsual !== false, col.rise);
+        const ch = change(cellValue(col, r, role, ps, sid), r.hasUsual !== false, col.rise);
         if (ch) max = Math.max(max, ch.text.length);
       }
       out[col.id] = max;
     }
     return out;
-  }, [sorted, groups, view, data.team, stageId]);
+  }, [sorted, groups, view, data.team, data.people, stageId]);
 
   const open = (p: PersonRow, col: Col) => {
     const sid = col.stageSlug ? stageId[col.stageSlug] : undefined;
@@ -181,10 +186,10 @@ export function Scoreboard({
     onOpen(title, [p.name, crumb], { ...q, userId: p.userId });
   };
 
-  const cells = (r: RowLike, roleKey: string | null, p?: PersonRow) =>
+  const cells = (r: RowLike, roleKey: string | null, p?: PersonRow, ps?: PersonRow[]) =>
     COLS.map((col) => {
       const sid = col.stageSlug ? stageId[col.stageSlug] : undefined;
-      return <Cell key={col.id} col={col} v={col.value(r, sid)} na={roleKey !== null && col.naRoles.includes(roleKey)} plain={!p} periodLabel={periodLabel} hasUsual={r.hasUsual !== false} previousCovered={r.previousCovered !== false} unit={unit} today={data.window.key === "today"} slot={slotLen[col.id] ?? 0} onOpen={p ? () => open(p, col) : undefined} />;
+      return <Cell key={col.id} col={col} v={cellValue(col, r, roleKey, ps, sid)} na={roleKey !== null && col.naRoles.includes(roleKey)} plain={!p} periodLabel={periodLabel} hasUsual={r.hasUsual !== false} previousCovered={r.previousCovered !== false} unit={unit} today={data.window.key === "today"} slot={slotLen[col.id] ?? 0} onOpen={p ? () => open(p, col) : undefined} />;
     });
 
   const personRow = (p: PersonRow) => {
@@ -250,7 +255,7 @@ export function Scoreboard({
               <Fragment key={g.key}>
                 <tr className="gr">
                   <td className="l">{view === "role" ? pluralLabel(g.label.replace(/s$/, "")) : g.label} <span style={{ color: "var(--faint)", fontWeight: 500 }}>{g.people.length}</span></td>
-                  {cells(g.agg ?? aggFor(g.people), view === "role" ? g.key : null)}
+                  {cells(g.agg ?? aggFor(g.people), view === "role" ? g.key : null, undefined, g.people)}
                 </tr>
                 {g.people.map(personRow)}
               </Fragment>
@@ -258,7 +263,7 @@ export function Scoreboard({
             {data.people.length === 0 && <tr><td className="l" colSpan={COLS.length + 1} style={{ textAlign: "center", color: "var(--muted)", height: 80 }}>No team members yet.</td></tr>}
             <tr className="tot">
               <td className="l">Team total · {data.people.length} {data.people.length === 1 ? "person" : "people"}</td>
-              {cells(data.team, null)}
+              {cells(data.team, null, undefined, data.people)}
             </tr>
           </tbody>
         </table>

@@ -242,7 +242,7 @@ export interface AttentionItem {
   /** Rule-generated suggestion → gradient "Suggested" tag. */
   suggested: boolean;
   /** The concrete action, carrying its value ("Reassign 12 to Anil KC"). */
-  action: { label: string; href: string; primary: boolean; drill?: EventsQuery } | null;
+  action: { label: string; href: string; primary: boolean; drill?: EventsQuery; /** Opens this person's drawer instead of a lead set. */ personId?: string } | null;
   /** Expanded: the why sentence (an AI paragraph block in Preview mode), a meta line and links. */
   why: string | null;
   meta: string | null;
@@ -261,7 +261,8 @@ export interface BriefingItem {
   detail: string;
   evidenceLabel: "Evidence" | "What works" | "Pattern";
   evidence: string;
-  link: { label: string; drill: EventsQuery };
+  /** The door to the records behind the item; null when it would open nothing. */
+  link: { label: string; drill?: EventsQuery; /** Or a leads-list href (an untouched-leads door). */ href?: string } | null;
 }
 
 export interface Briefing {

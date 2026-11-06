@@ -1,6 +1,6 @@
 import { activityOf, type PersonRow } from "./types";
 import { weekdayShort } from "./quiet";
-import { compareToUsual, usualShare } from "./compare";
+import { changeVsUsual, compareToUsual, shownUsual, usualShare } from "./compare";
 
 /**
  * At most ONE row note per person, from the rule signals (never guessed): activity drop → "check in first",
@@ -45,6 +45,10 @@ const NOTE_PHRASE: Record<NoteMetric, (n: string, v: number) => string> = {
   reached_applications: (n, v) => `${n} moved ${v} student${v === 1 ? "" : "s"} to Applications`,
   applications_filed: (n, v) => `${n} filed ${v} application${v === 1 ? "" : "s"}`,
 };
+const ZERO_PHRASE: Record<NoteMetric, string> = {
+  calls: "made no calls", notes: "wrote no notes", moves: "made no stage moves", prospects: "moved no leads to Prospects",
+  reached_applications: "moved no students to Applications", applications_filed: "filed no applications",
+};
 const ACTIVITY: Array<{ key: "calls" | "notes"; word: string }> = [{ key: "calls", word: "calls" }, { key: "notes", word: "notes" }];
 const ROLE_RESULT: Record<string, NoteMetric> = { counsellor: "reached_applications", executive: "prospects", "app-executive": "applications_filed", telecaller: "moves" };
 
@@ -56,16 +60,19 @@ export function coachingNote(p: PersonRow): string | null {
   const metrics: NoteMetric[] = ["calls", "notes", ROLE_RESULT[p.positionKey] ?? "moves"];
   const ranked = metrics
     .filter((k) => compareToUsual(p.current[k], p.usual[k], p.hasUsual))
-    .map((k) => ({ k, pct: Math.round(((p.current[k] - p.usual[k]) / p.usual[k]) * 100) }))
+    .map((k) => ({ k, pct: compareToUsual(p.current[k], p.usual[k], p.hasUsual)!.pct }))
     .sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
   const lead = ranked[0];
   if (!lead) {
     return null; // no real usual → nothing to compare against, so nothing is claimed
   }
-  const head = rolePhrase(p, lead.k, p.current[lead.k]) +
-    (lead.pct === 0 ? ", in line with usual" : `, ${Math.abs(lead.pct)}% ${lead.pct > 0 ? "above" : "below"} usual`);
+  // Nothing at all → "made no calls (usual 84)", never "0 calls, 100% below usual".
+  const head = p.current[lead.k] === 0
+    ? `${p.name} ${ZERO_PHRASE[lead.k]} (usual ${shownUsual(p.usual[lead.k])})`
+    : rolePhrase(p, lead.k, p.current[lead.k]) +
+      (lead.pct === 0 ? ", in line with usual" : `, ${Math.abs(lead.pct)}% ${lead.pct > 0 ? "above" : "below"} usual`);
   const rest = ACTIVITY.filter(({ key }) => key !== lead.k && (p.usual[key] >= 5 || p.current[key] >= 5));
-  const normal = rest.filter(({ key }) => p.usual[key] < 5 || Math.abs((p.current[key] - p.usual[key]) / p.usual[key]) < 0.25);
+  const normal = rest.filter(({ key }) => !changeVsUsual(p.current[key], p.usual[key], p.hasUsual));
   const off = rest.filter((r) => !normal.includes(r));
   const join = (xs: string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}` : xs[0]);
   let out = head + (normal.length ? `, with ${join(normal.map((n) => n.word))} at their normal level` : "") + ".";
