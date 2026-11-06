@@ -161,4 +161,14 @@ describe("dispatchNotificationEmail", () => {
     expect(r.skipped).toBe("email_not_configured");
     expect(ledger.size).toBe(0);
   });
+
+  it("when an event names its own recipients, emails only them and ignores roles", async () => {
+    const { db } = makeDb({});
+    const send = vi.fn(async () => ({ id: "msg-1", error: null })) as unknown as SendFn;
+    const direct = { ...event, recipients: async () => [{ userId: "u9", email: "only@x.com", name: null }] };
+    const r = await dispatchNotificationEmail(direct, { id: ENTITY }, { db, send });
+    expect(r).toEqual({ sent: 1, failed: 0, duplicates: 0 });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect((send as unknown as { mock: { calls: { to: string }[][] } }).mock.calls[0][0].to).toBe("only@x.com");
+  });
 });

@@ -6,6 +6,7 @@ import { createRequestLogger } from "@/lib/logger";
 import { emitEvent } from "@/lib/api/audit";
 import { generateConsentPdf } from "@/lib/consent/pdf";
 import { applySignerDetails, validateSignerDetails } from "@/lib/consent/merge";
+import { notifyConsentSigned } from "@/lib/consent/notify-signed";
 
 interface RouteContext {
   params: Promise<{ token: string }>;
@@ -14,7 +15,7 @@ interface RouteContext {
 async function lookupToken(supabase: Awaited<ReturnType<typeof createServiceClient>>, token: string) {
   const { data, error } = await supabase
     .from("lead_consents")
-    .select("id, tenant_id, lead_id, status, body_snapshot, template_version, signed_at, link_expires_at, method, missing_fields")
+    .select("id, tenant_id, lead_id, status, body_snapshot, template_version, signed_at, link_expires_at, method, missing_fields, created_by")
     .eq("token", token)
     .is("deleted_at", null)
     .single();
@@ -110,6 +111,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     signed_at: string | null;
     link_expires_at: string | null;
     missing_fields: string[] | null;
+    created_by: string | null;
   };
 
   if (row.status === "signed") {
@@ -194,6 +196,16 @@ export async function POST(request: NextRequest, context: RouteContext) {
     entityId: row.id,
     requestId,
     payload: { lead_id: row.lead_id, method: "esign" },
+  });
+
+  // Tell whoever sent the link (bell + email). Fire-and-forget: never blocks or fails the student's signing.
+  void notifyConsentSigned({
+    tenantId: row.tenant_id,
+    leadId: row.lead_id,
+    consentId: row.id,
+    senderUserId: row.created_by,
+    signerName,
+    signedAt,
   });
 
   // Best-effort: generate the permanent signed PDF (filled consent text +
