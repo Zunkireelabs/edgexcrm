@@ -87,7 +87,7 @@ describe("Badge v2", () => {
     out["defaults"] = badgeV2Variants()
     expect(out).toMatchInlineSnapshot(`
       {
-        "ai": "inline-flex items-center gap-1 h-5 px-[7px] rounded-ds-xs bg-[image:var(--ds-ai-tint)] text-ds-ai text-[11px] font-medium [&>svg]:size-[11px] [&>svg]:stroke-[2.2]",
+        "ai": "inline-flex items-center gap-1 h-5 px-[7px] rounded-ds-xs bg-[image:var(--ds-ai-tint)] text-ds-ai text-[11px] font-medium [&>svg]:size-[11px]",
         "count": "inline-grid place-items-center min-w-5 h-5 px-1.5 rounded-ds-full bg-ds-bad-soft text-ds-bad text-[11.5px] font-semibold",
         "defaults": "rounded-ds-sm border border-ds-border bg-ds-sunken text-ds-text text-xs px-[9px] py-0.5",
         "neutral": "rounded-ds-sm border border-ds-border bg-ds-sunken text-ds-text text-xs px-[9px] py-0.5",

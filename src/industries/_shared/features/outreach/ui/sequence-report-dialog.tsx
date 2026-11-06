@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { CircleNotchIcon } from "@phosphor-icons/react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { SequenceReport } from "../lib/sequence-report";
 
@@ -71,7 +71,7 @@ export function SequenceReportDialog({ sequence, onClose }: SequenceReportDialog
 
         {loading && (
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" /> Counting…
+            <CircleNotchIcon className="h-4 w-4 animate-spin" /> Counting…
           </p>
         )}
         {error && <p className="text-sm text-destructive">{error}</p>}

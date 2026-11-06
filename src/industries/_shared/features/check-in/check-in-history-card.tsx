@@ -2,7 +2,7 @@
 
 import { SECTION_TITLE_CLASS } from "@/components/dashboard/lead/section-title";
 import { useState, useEffect, useCallback } from "react";
-import { Clock, Loader2, ChevronRight } from "lucide-react";
+import { ClockIcon, CircleNotchIcon, CaretRightIcon } from "@phosphor-icons/react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
@@ -56,7 +56,7 @@ export function CheckInHistoryCard({ leadId, teamMemberNames, teamMemberEmails }
       <CardHeader className="pt-4 pb-3">
         <div className="flex items-center justify-between">
           <span className={`${SECTION_TITLE_CLASS} flex items-center gap-2`}>
-            <Clock className="h-3.5 w-3.5" />
+            <ClockIcon className="h-3.5 w-3.5" />
             Check-In History
             {!loading && (
               <Badge variant="secondary" className="h-5 px-1.5 text-xs normal-case">
@@ -70,7 +70,7 @@ export function CheckInHistoryCard({ leadId, teamMemberNames, teamMemberEmails }
       <CardContent className="pb-4">
         {loading ? (
           <div className="flex justify-center py-3">
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            <CircleNotchIcon className="h-4 w-4 animate-spin text-muted-foreground" />
           </div>
         ) : records.length === 0 ? (
           <p className="text-xs text-muted-foreground text-center py-2">No check-in visits recorded yet.</p>
@@ -103,7 +103,7 @@ export function CheckInHistoryCard({ leadId, teamMemberNames, teamMemberEmails }
                       className="flex w-full items-center justify-between gap-2 cursor-pointer text-left"
                     >
                       {header}
-                      <ChevronRight
+                      <CaretRightIcon
                         className={`h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform ${isExpanded ? "rotate-90" : ""}`}
                       />
                     </button>

@@ -1,7 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Check, X, Play, Send, Undo2, RotateCcw, Loader2 } from "lucide-react";
+import {
+  PlusIcon,
+  CheckIcon,
+  XIcon,
+  PlayIcon,
+  PaperPlaneTiltIcon,
+  ArrowUUpLeftIcon,
+  ArrowCounterClockwiseIcon,
+  CircleNotchIcon,
+} from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,14 +27,14 @@ const STATUS_CONFIG: Record<MilestoneStatus, { label: string; className: string 
 
 // Lifecycle moves shown per status (Accept/Reject are handled separately —
 // they stay wired to onAccept/onReject exactly as before).
-const LIFECYCLE_ACTIONS: Record<MilestoneStatus, Array<{ to: MilestoneStatus; label: string; icon: typeof Play }>> = {
+const LIFECYCLE_ACTIONS: Record<MilestoneStatus, Array<{ to: MilestoneStatus; label: string; icon: typeof PlayIcon }>> = {
   pending: [
-    { to: "in_progress", label: "Start", icon: Play },
-    { to: "submitted", label: "Submit", icon: Send },
+    { to: "in_progress", label: "Start", icon: PlayIcon },
+    { to: "submitted", label: "Submit", icon: PaperPlaneTiltIcon },
   ],
-  in_progress: [{ to: "submitted", label: "Submit", icon: Send }],
-  submitted: [{ to: "in_progress", label: "Pull back", icon: Undo2 }],
-  rejected: [{ to: "in_progress", label: "Reopen", icon: RotateCcw }],
+  in_progress: [{ to: "submitted", label: "Submit", icon: PaperPlaneTiltIcon }],
+  submitted: [{ to: "in_progress", label: "Pull back", icon: ArrowUUpLeftIcon }],
+  rejected: [{ to: "in_progress", label: "Reopen", icon: ArrowCounterClockwiseIcon }],
   accepted: [],
 };
 
@@ -79,7 +88,7 @@ export function MilestonesPanel({ milestones, loading, canManageProjects, curren
         <CardTitle className="text-sm">Milestones</CardTitle>
         {canManageProjects && (
           <Button variant="ghost" size="sm" onClick={() => setAdding((v) => !v)}>
-            <Plus className="h-3.5 w-3.5 mr-1.5" />
+            <PlusIcon className="h-3.5 w-3.5 mr-1.5" />
             Add
           </Button>
         )}
@@ -139,10 +148,10 @@ export function MilestonesPanel({ milestones, loading, canManageProjects, curren
                 {canManageProjects && m.status === "submitted" && (
                   <>
                     <Button variant="ghost" size="sm" onClick={() => onAccept(m.id)} disabled={isTransitioning} title="Accept">
-                      <Check className="h-3.5 w-3.5 text-green-600" />
+                      <CheckIcon className="h-3.5 w-3.5 text-green-600" />
                     </Button>
                     <Button variant="ghost" size="sm" onClick={() => onReject(m.id)} disabled={isTransitioning} title="Reject">
-                      <X className="h-3.5 w-3.5 text-red-600" />
+                      <XIcon className="h-3.5 w-3.5 text-red-600" />
                     </Button>
                   </>
                 )}
@@ -161,7 +170,7 @@ export function MilestonesPanel({ milestones, loading, canManageProjects, curren
                         title={action.label}
                       >
                         {isTransitioning ? (
-                          <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                          <CircleNotchIcon className="h-3.5 w-3.5 mr-1 animate-spin" />
                         ) : (
                           <Icon className="h-3.5 w-3.5 mr-1" />
                         )}

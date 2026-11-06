@@ -1,6 +1,6 @@
 "use client";
 
-import { Square, X, Timer as TimerIcon } from "lucide-react";
+import { SquareIcon, XIcon, TimerIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useActiveTimersContext, formatElapsed } from "../hooks/use-active-timers";
@@ -50,7 +50,7 @@ export function RunningTimersPanel({ onStopped }: RunningTimersPanelProps) {
                     disabled={pending}
                     onClick={() => handleStop(timer.id)}
                   >
-                    <Square className="h-3.5 w-3.5" />
+                    <SquareIcon className="h-3.5 w-3.5" />
                     Stop
                   </Button>
                   <Button
@@ -61,7 +61,7 @@ export function RunningTimersPanel({ onStopped }: RunningTimersPanelProps) {
                     onClick={() => discardTimer(timer.id)}
                     title="Discard timer (no time logged)"
                   >
-                    <X className="h-3.5 w-3.5" />
+                    <XIcon className="h-3.5 w-3.5" />
                   </Button>
                 </div>
               </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { CaretDownIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { PhoneInput } from "@/components/ui/phone-input";
@@ -42,7 +42,7 @@ export function SectionGroup({ title, children }: { title: string; children: Rea
             className="flex w-full items-center justify-between gap-2 text-left"
           >
             {title}
-            <ChevronDown
+            <CaretDownIcon
               aria-hidden="true"
               className={cn(
                 "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",

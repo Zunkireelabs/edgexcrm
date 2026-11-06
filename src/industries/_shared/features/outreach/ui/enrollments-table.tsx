@@ -1,7 +1,13 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Pause, Play, UserX, Loader2, Users } from "lucide-react";
+import {
+  PauseIcon,
+  PlayIcon,
+  UserMinusIcon,
+  CircleNotchIcon,
+  UsersIcon,
+} from "@phosphor-icons/react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -138,7 +144,7 @@ export function EnrollmentsTable({ isAdmin, currentUserId, channel }: Enrollment
       ) : enrollments.length === 0 ? (
         <Card className="shadow-none rounded-lg py-0">
           <CardContent className="p-8 text-center">
-            <Users className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+            <UsersIcon className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
             <p className="text-muted-foreground">No enrollments in this view.</p>
           </CardContent>
         </Card>
@@ -185,7 +191,7 @@ export function EnrollmentsTable({ isAdmin, currentUserId, channel }: Enrollment
                       {manageable && (enrollment.status === "active" || enrollment.status === "paused") && (
                         <div className="flex justify-end gap-1">
                           {busy ? (
-                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                            <CircleNotchIcon className="h-4 w-4 animate-spin text-muted-foreground" />
                           ) : (
                             <>
                               {enrollment.status === "active" ? (
@@ -197,7 +203,7 @@ export function EnrollmentsTable({ isAdmin, currentUserId, channel }: Enrollment
                                   title="Pause"
                                   onClick={() => runAction(enrollment, "pause")}
                                 >
-                                  <Pause className="h-3.5 w-3.5" />
+                                  <PauseIcon className="h-3.5 w-3.5" />
                                 </Button>
                               ) : (
                                 <Button
@@ -208,7 +214,7 @@ export function EnrollmentsTable({ isAdmin, currentUserId, channel }: Enrollment
                                   title="Resume"
                                   onClick={() => runAction(enrollment, "resume")}
                                 >
-                                  <Play className="h-3.5 w-3.5" />
+                                  <PlayIcon className="h-3.5 w-3.5" />
                                 </Button>
                               )}
                               <Button
@@ -219,7 +225,7 @@ export function EnrollmentsTable({ isAdmin, currentUserId, channel }: Enrollment
                                 title="Unenroll"
                                 onClick={() => setUnenrollTarget(enrollment)}
                               >
-                                <UserX className="h-3.5 w-3.5" />
+                                <UserMinusIcon className="h-3.5 w-3.5" />
                               </Button>
                             </>
                           )}

@@ -4,16 +4,16 @@ import { useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
-  Plus,
-  ExternalLink,
-  Pencil,
-  Copy,
-  Trash2,
-  FileText,
-  Loader2,
-  MoreHorizontal,
-  Power,
-} from "lucide-react";
+  PlusIcon,
+  ArrowSquareOutIcon,
+  PencilSimpleIcon,
+  CopyIcon,
+  TrashIcon,
+  FileTextIcon,
+  CircleNotchIcon,
+  DotsThreeIcon,
+  PowerIcon,
+} from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -107,14 +107,14 @@ export function FormList({ forms: initialForms, tenantSlug, submissionCounts = {
     <>
       {forms.length === 0 ? (
         <div className="border rounded-xl p-12 text-center bg-card">
-          <FileText className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
+          <FileTextIcon className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
           <h3 className="font-semibold text-lg mb-1">No forms yet</h3>
           <p className="text-muted-foreground text-sm mb-6">
             Create your first form to start collecting leads.
           </p>
           <Button asChild size="lg">
             <Link href="/forms/new">
-              <Plus className="h-4 w-4 mr-2" />
+              <PlusIcon className="h-4 w-4 mr-2" />
               Create Your First Form
             </Link>
           </Button>
@@ -141,7 +141,7 @@ export function FormList({ forms: initialForms, tenantSlug, submissionCounts = {
                   className="h-8 w-8 shrink-0 rounded-md flex items-center justify-center"
                   style={{ background: `${accentColor}1a` }}
                 >
-                  <FileText className="h-4 w-4" style={{ color: accentColor }} />
+                  <FileTextIcon className="h-4 w-4" style={{ color: accentColor }} />
                 </div>
 
                 <div className="min-w-0 flex-1">
@@ -178,7 +178,7 @@ export function FormList({ forms: initialForms, tenantSlug, submissionCounts = {
                 <div className="flex items-center gap-1 shrink-0">
                   <Button size="sm" variant="ghost" asChild>
                     <Link href={`/forms/${form.id}`} prefetch={false}>
-                      <Pencil className="h-3.5 w-3.5 mr-1.5" />
+                      <PencilSimpleIcon className="h-3.5 w-3.5 mr-1.5" />
                       Edit Form
                     </Link>
                   </Button>
@@ -187,7 +187,7 @@ export function FormList({ forms: initialForms, tenantSlug, submissionCounts = {
                     variant="ghost"
                     onClick={() => window.open(publicFormPreviewUrl(form.slug), "_blank")}
                   >
-                    <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
+                    <ArrowSquareOutIcon className="h-3.5 w-3.5 mr-1.5" />
                     Preview
                   </Button>
                   <DropdownMenu>
@@ -199,19 +199,19 @@ export function FormList({ forms: initialForms, tenantSlug, submissionCounts = {
                         disabled={loadingId === form.id || loadingId === `dup-${form.id}`}
                       >
                         {loadingId === form.id || loadingId === `dup-${form.id}` ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <CircleNotchIcon className="h-4 w-4 animate-spin" />
                         ) : (
-                          <MoreHorizontal className="h-4 w-4" />
+                          <DotsThreeIcon className="h-4 w-4" />
                         )}
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem onClick={() => handleToggleActive(form)}>
-                        <Power className="h-3.5 w-3.5 mr-2" />
+                        <PowerIcon className="h-3.5 w-3.5 mr-2" />
                         {form.is_active ? "Deactivate" : "Activate"}
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => handleDuplicate(form)}>
-                        <Copy className="h-3.5 w-3.5 mr-2" />
+                        <CopyIcon className="h-3.5 w-3.5 mr-2" />
                         Duplicate
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
@@ -219,7 +219,7 @@ export function FormList({ forms: initialForms, tenantSlug, submissionCounts = {
                         variant="destructive"
                         onClick={() => setDeleteDialog({ open: true, form })}
                       >
-                        <Trash2 className="h-3.5 w-3.5 mr-2" />
+                        <TrashIcon className="h-3.5 w-3.5 mr-2" />
                         Delete
                       </DropdownMenuItem>
                     </DropdownMenuContent>
@@ -257,7 +257,7 @@ export function FormList({ forms: initialForms, tenantSlug, submissionCounts = {
               onClick={() => deleteDialog.form && handleDelete(deleteDialog.form)}
             >
               {loadingId === `del-${deleteDialog.form?.id}` ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                <CircleNotchIcon className="h-4 w-4 animate-spin mr-2" />
               ) : null}
               Delete
             </Button>

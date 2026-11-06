@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { MessageSquare, Phone, User } from "lucide-react";
+import { ChatTextIcon, PhoneIcon, UserIcon } from "@phosphor-icons/react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -80,7 +80,7 @@ export function ConversationList({
       {/* Header */}
       <div className="p-3 border-b">
         <div className="flex items-center gap-2 mb-2">
-          <MessageSquare className="w-4 h-4 text-muted-foreground" />
+          <ChatTextIcon className="w-4 h-4 text-muted-foreground" />
           <h2 className="font-semibold text-sm">Inbox</h2>
           {filtered.length > 0 && (
             <Badge variant="secondary" className="ml-auto text-xs h-5 px-1.5">
@@ -159,7 +159,7 @@ export function ConversationList({
       <div className="flex-1 overflow-y-auto">
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-sm gap-1 py-8">
-            <MessageSquare className="w-6 h-6 opacity-30" />
+            <ChatTextIcon className="w-6 h-6 opacity-30" />
             <p>No conversations</p>
           </div>
         ) : (
@@ -183,7 +183,7 @@ export function ConversationList({
               >
                 {/* Avatar */}
                 <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0 mt-0.5">
-                  <User className="w-4 h-4 text-gray-400" />
+                  <UserIcon className="w-4 h-4 text-gray-400" />
                 </div>
 
                 <div className="flex-1 min-w-0">
@@ -207,7 +207,7 @@ export function ConversationList({
                     </span>
                     {isLinked && (
                       <span title="Linked to lead">
-                        <Phone className="w-3 h-3 text-green-600" />
+                        <PhoneIcon className="w-3 h-3 text-green-600" />
                       </span>
                     )}
                   </div>

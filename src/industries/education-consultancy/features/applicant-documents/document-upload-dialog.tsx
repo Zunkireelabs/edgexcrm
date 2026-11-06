@@ -2,7 +2,7 @@
 
 import { uploadApplicantDocument } from "./upload-document";
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { CircleNotchIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -184,7 +184,7 @@ export function DocumentUploadDialog({
             Cancel
           </Button>
           <Button onClick={handleUpload} disabled={uploading}>
-            {uploading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            {uploading && <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />}
             Upload
           </Button>
         </DialogFooter>

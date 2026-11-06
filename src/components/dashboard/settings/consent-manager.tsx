@@ -11,7 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { FileText, ToggleLeft, ToggleRight } from "lucide-react";
+import { FileTextIcon, ToggleLeftIcon, ToggleRightIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { DEFAULT_CONSENT_TEMPLATE } from "@/lib/consent/default-template";
 import { CONSENT_MERGE_FIELDS, findUnknownPlaceholders } from "@/lib/consent/merge";
@@ -125,7 +125,7 @@ export function ConsentManager() {
       <Card id="consent">
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
-            <FileText className="h-5 w-5" />
+            <FileTextIcon className="h-5 w-5" />
             Student Consent
           </CardTitle>
         </CardHeader>
@@ -141,7 +141,7 @@ export function ConsentManager() {
       <CardHeader className="flex flex-row items-start justify-between">
         <div>
           <CardTitle className="text-lg flex items-center gap-2">
-            <FileText className="h-5 w-5" />
+            <FileTextIcon className="h-5 w-5" />
             Student Consent
           </CardTitle>
           <CardDescription>
@@ -161,8 +161,8 @@ export function ConsentManager() {
             className="text-muted-foreground hover:text-foreground transition-colors"
           >
             {form.is_active
-              ? <ToggleRight className="h-6 w-6 text-green-600" />
-              : <ToggleLeft className="h-6 w-6" />
+              ? <ToggleRightIcon className="h-6 w-6 text-green-600" />
+              : <ToggleLeftIcon className="h-6 w-6" />
             }
           </button>
         </div>
@@ -258,8 +258,8 @@ export function ConsentManager() {
               title={form.require_drawn_signature ? "Disable drawn signature" : "Enable drawn signature"}
             >
               {form.require_drawn_signature
-                ? <ToggleRight className="h-6 w-6 text-green-600" />
-                : <ToggleLeft className="h-6 w-6" />
+                ? <ToggleRightIcon className="h-6 w-6 text-green-600" />
+                : <ToggleLeftIcon className="h-6 w-6" />
               }
             </button>
           </div>

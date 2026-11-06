@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { ConversationList } from "./ConversationList";
 import { MessageThread } from "./MessageThread";
 import { ContactPanel } from "./ContactPanel";
-import { MessageSquare } from "lucide-react";
+import { ChatTextIcon } from "@phosphor-icons/react";
 
 interface Channel {
   id: string;
@@ -226,7 +226,7 @@ export function InboxUI({
           />
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground gap-2">
-            <MessageSquare className="w-10 h-10 opacity-30" />
+            <ChatTextIcon className="w-10 h-10 opacity-30" />
             <p className="text-sm">Select a conversation to start messaging</p>
           </div>
         )}

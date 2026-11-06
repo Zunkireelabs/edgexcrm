@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ChevronDown } from "lucide-react";
+import { CaretDownIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { formatBillableDelta } from "@/lib/format-billable-delta";
 import { formatMoney } from "@/lib/currency";
@@ -96,7 +96,7 @@ export function AccountKeyInfoSection({
         <h3 className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
           Key Information
         </h3>
-        <ChevronDown
+        <CaretDownIcon
           className={cn(
             "h-4 w-4 text-muted-foreground transition-transform duration-200",
             isOpen && "rotate-180"

@@ -1,7 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { History, Plus, Trash2, Check, X } from "lucide-react";
+import {
+  ClockCounterClockwiseIcon,
+  PlusIcon,
+  TrashIcon,
+  CheckIcon,
+  XIcon,
+} from "@phosphor-icons/react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -57,7 +63,7 @@ export function HistoryMenu({ activeConversationId, onSelect, onNewChat }: Histo
           className="p-1.5 rounded-md hover:bg-white/60 text-gray-400 hover:text-gray-600 transition-colors"
           title="Chat history"
         >
-          <History className="h-4 w-4" />
+          <ClockCounterClockwiseIcon className="h-4 w-4" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">
@@ -68,7 +74,7 @@ export function HistoryMenu({ activeConversationId, onSelect, onNewChat }: Histo
           }}
           className="gap-2"
         >
-          <Plus className="h-3.5 w-3.5" /> New chat
+          <PlusIcon className="h-3.5 w-3.5" /> New chat
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         {loading && <DropdownMenuLabel className="text-xs text-gray-400 font-normal">Loading…</DropdownMenuLabel>}
@@ -97,7 +103,7 @@ export function HistoryMenu({ activeConversationId, onSelect, onNewChat }: Histo
                   title="Confirm delete"
                   onClick={() => void handleDelete(c.id)}
                 >
-                  <Check className="h-3.5 w-3.5" />
+                  <CheckIcon className="h-3.5 w-3.5" />
                 </button>
                 <button
                   type="button"
@@ -105,7 +111,7 @@ export function HistoryMenu({ activeConversationId, onSelect, onNewChat }: Histo
                   title="Cancel"
                   onClick={() => setConfirmingId(null)}
                 >
-                  <X className="h-3.5 w-3.5" />
+                  <XIcon className="h-3.5 w-3.5" />
                 </button>
               </>
             ) : (
@@ -115,7 +121,7 @@ export function HistoryMenu({ activeConversationId, onSelect, onNewChat }: Histo
                 title="Delete chat"
                 onClick={() => setConfirmingId(c.id)}
               >
-                <Trash2 className="h-3.5 w-3.5" />
+                <TrashIcon className="h-3.5 w-3.5" />
               </button>
             )}
           </div>

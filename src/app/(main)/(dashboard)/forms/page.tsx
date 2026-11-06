@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
-import { Link2, Plus } from "lucide-react";
+import { LinkSimpleIcon, PlusIcon } from "@phosphor-icons/react/dist/ssr";
 import { Button } from "@/components/ui/button";
 import { getCurrentUserTenant } from "@/lib/supabase/queries";
 import { createServiceClient } from "@/lib/supabase/server";
@@ -74,13 +74,13 @@ export default async function FormsPage() {
         <div className="flex items-center gap-2">
           <Link href="/forms/utm-builder">
             <Button variant="outline" size="sm">
-              <Link2 className="h-4 w-4 mr-2" />
+              <LinkSimpleIcon className="h-4 w-4 mr-2" />
               UTM Link Builder
             </Button>
           </Link>
           <Link href="/forms/new">
             <Button size="sm">
-              <Plus className="h-4 w-4 mr-2" />
+              <PlusIcon className="h-4 w-4 mr-2" />
               New Form
             </Button>
           </Link>

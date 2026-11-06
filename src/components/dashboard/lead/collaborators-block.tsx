@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { X, UserPlus } from "lucide-react";
+import { XIcon, UserPlusIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import {
   Select,
@@ -139,7 +139,7 @@ export function CollaboratorsBlock({ leadId, teamMembers = [], canManage = false
                       className="flex-shrink-0 rounded-full p-0.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-40"
                       aria-label={`Remove ${c.name}`}
                     >
-                      <X className="h-3 w-3" />
+                      <XIcon className="h-3 w-3" />
                     </button>
                   )}
                   <div className="flex items-center gap-1.5 min-w-0">
@@ -178,7 +178,7 @@ export function CollaboratorsBlock({ leadId, teamMembers = [], canManage = false
             disabled={!selectedUserId || adding}
             onClick={handleAdd}
           >
-            <UserPlus className="h-3.5 w-3.5" />
+            <UserPlusIcon className="h-3.5 w-3.5" />
           </Button>
         </div>
       )}

@@ -7,7 +7,20 @@ import { groupDocuments, type ApplicationNames } from "./group-documents";
 import { SECTION_TITLE_CLASS, SUBHEADING_CLASS } from "@/components/dashboard/lead/section-title";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { FileText, Upload, Trash2, Loader2, Download, Eye, RefreshCw, LayoutGrid, List as ListIcon, Image as ImageIcon, AlertCircle, Search } from "lucide-react";
+import {
+  FileTextIcon,
+  UploadIcon,
+  TrashIcon,
+  CircleNotchIcon,
+  DownloadIcon,
+  EyeIcon,
+  ArrowsClockwiseIcon,
+  SquaresFourIcon,
+  ListIcon,
+  ImageIcon,
+  WarningCircleIcon,
+  MagnifyingGlassIcon,
+} from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -239,7 +252,7 @@ export function ApplicantDocumentsCard({
                   onClick={() => setViewMode((m) => (m === "list" ? "grid" : "list"))}
                   title={viewMode === "list" ? "Switch to grid view" : "Switch to list view"}
                 >
-                  {viewMode === "list" ? <LayoutGrid className="h-3.5 w-3.5" /> : <ListIcon className="h-3.5 w-3.5" />}
+                  {viewMode === "list" ? <SquaresFourIcon className="h-3.5 w-3.5" /> : <ListIcon className="h-3.5 w-3.5" />}
                 </Button>
               )}
               {canManage && (
@@ -269,7 +282,7 @@ export function ApplicantDocumentsCard({
                     onClick={() => fileInputRef.current?.click()}
                     title="Upload documents"
                   >
-                    <Upload className="h-3.5 w-3.5" />
+                    <UploadIcon className="h-3.5 w-3.5" />
                   </Button>
                 </>
               )}
@@ -280,7 +293,7 @@ export function ApplicantDocumentsCard({
         <CardContent className="pb-4">
           {loading ? (
             <div className="flex justify-center py-3">
-              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              <CircleNotchIcon className="h-4 w-4 animate-spin text-muted-foreground" />
             </div>
           ) : docs.length === 0 ? (
             <p className="text-xs text-muted-foreground text-center py-2">
@@ -323,7 +336,7 @@ export function ApplicantDocumentsCard({
           ) : (
             <div className="space-y-4">
               <div className="relative max-w-sm">
-                <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -387,7 +400,7 @@ export function ApplicantDocumentsCard({
           </DialogHeader>
           <div className="min-h-[50vh] flex items-center justify-center">
             {viewerLoading ? (
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              <CircleNotchIcon className="h-6 w-6 animate-spin text-muted-foreground" />
             ) : viewerUrl && viewerDoc ? (
               viewerDoc.mime_type.startsWith("image/") ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -396,11 +409,11 @@ export function ApplicantDocumentsCard({
                 <iframe src={viewerUrl} title={viewerDoc.name} className="w-full h-[70vh] border rounded" />
               ) : (
                 <div className="text-center py-8">
-                  <FileText className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                  <FileTextIcon className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
                   <p className="text-sm text-muted-foreground mb-3">Preview not available for this file type.</p>
                   <a href={viewerUrl} target="_blank" rel="noopener noreferrer">
                     <Button size="sm" variant="outline">
-                      <Download className="h-3.5 w-3.5 mr-1.5" />
+                      <DownloadIcon className="h-3.5 w-3.5 mr-1.5" />
                       Download
                     </Button>
                   </a>
@@ -412,7 +425,7 @@ export function ApplicantDocumentsCard({
             <DialogFooter>
               <a href={viewerUrl} target="_blank" rel="noopener noreferrer">
                 <Button size="sm" variant="outline">
-                  <Download className="h-3.5 w-3.5 mr-1.5" />
+                  <DownloadIcon className="h-3.5 w-3.5 mr-1.5" />
                   Open / download
                 </Button>
               </a>
@@ -435,7 +448,7 @@ function DocumentStatusBadge({ status, processingError }: { status: string; proc
   if (status === "queued" || status === "processing") {
     return (
       <Badge variant="secondary" className="text-[10px] px-1.5 py-0 gap-1 bg-amber-50 text-amber-700 border-amber-200">
-        <Loader2 className="h-2.5 w-2.5 animate-spin" />
+        <CircleNotchIcon className="h-2.5 w-2.5 animate-spin" />
         Processing
       </Badge>
     );
@@ -447,7 +460,7 @@ function DocumentStatusBadge({ status, processingError }: { status: string; proc
         className="text-[10px] px-1.5 py-0 gap-1 bg-red-50 text-red-700 border-red-200"
         title={processingError ?? "Processing failed"}
       >
-        <AlertCircle className="h-2.5 w-2.5" />
+        <WarningCircleIcon className="h-2.5 w-2.5" />
         Failed
       </Badge>
     );
@@ -482,7 +495,7 @@ function DocumentActions({
   return (
     <div className={`flex shrink-0 items-center gap-0.5 ${className}`} role="group" aria-label={`Actions for ${doc.name}`}>
       <button type="button" onClick={onView} className={`${base} hover:text-blue-600`} title="View" aria-label={`View ${doc.name}`}>
-        <Eye className="h-4 w-4" />
+        <EyeIcon className="h-4 w-4" />
       </button>
       {canReplace && (
         <button
@@ -493,12 +506,12 @@ function DocumentActions({
           title="Replace"
           aria-label={`Replace ${doc.name}`}
         >
-          {replacing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          {replacing ? <CircleNotchIcon className="h-4 w-4 animate-spin" /> : <ArrowsClockwiseIcon className="h-4 w-4" />}
         </button>
       )}
       {canDelete && (
         <button type="button" onClick={onDelete} className={`${base} hover:text-red-600`} title="Delete" aria-label={`Delete ${doc.name}`}>
-          <Trash2 className="h-4 w-4" />
+          <TrashIcon className="h-4 w-4" />
         </button>
       )}
     </div>
@@ -524,7 +537,7 @@ function DocumentTile({
   onReplace: () => void;
   onDelete: () => void;
 }) {
-  const Icon = doc.mime_type.startsWith("image/") ? ImageIcon : FileText;
+  const Icon = doc.mime_type.startsWith("image/") ? ImageIcon : FileTextIcon;
   const actions = (className?: string) => (
     <DocumentActions
       doc={doc}

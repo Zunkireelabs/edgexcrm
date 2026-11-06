@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Check } from "lucide-react";
+import { CheckIcon } from "@phosphor-icons/react";
 import type { TaskPriority } from "@/types/database";
 
 export const PRIORITY_CONFIG: Record<TaskPriority, { label: string; cls: string }> = {
@@ -74,7 +74,7 @@ export function PriorityPill({ priority, onChange, readOnly }: PriorityPillProps
                 <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium border ${c}`}>
                   {lbl}
                 </span>
-                {p === priority && <Check className="h-3 w-3 text-blue-600 ml-auto shrink-0" />}
+                {p === priority && <CheckIcon className="h-3 w-3 text-blue-600 ml-auto shrink-0" />}
               </button>
             );
           })}

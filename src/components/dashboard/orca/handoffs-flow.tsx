@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight } from "lucide-react";
+import { ArrowRightIcon } from "@phosphor-icons/react";
 import type { Handoff, ViewMode } from "./types";
 
 interface HandoffsFlowProps {
@@ -47,7 +47,7 @@ export function HandoffsFlow({ handoffs, mode }: HandoffsFlowProps) {
 
               {/* Arrow with trigger */}
               <div className="flex flex-col items-center gap-1">
-                <ArrowRight className="w-5 h-5 text-gray-400" />
+                <ArrowRightIcon className="w-5 h-5 text-gray-400" />
                 <span className="text-xs text-gray-500 whitespace-nowrap">
                   {handoff.trigger}
                 </span>

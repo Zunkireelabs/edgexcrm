@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { ArrowUpIcon, ArrowDownIcon, ArrowsDownUpIcon } from "@phosphor-icons/react";
 import {
   Table,
   TableBody,
@@ -18,8 +18,8 @@ type SortKey = "name" | "account_name" | "owner" | "status" | "updated_at";
 type SortDir = "asc" | "desc";
 
 function SortIcon({ col, sortKey, dir }: { col: SortKey; sortKey: SortKey; dir: SortDir }) {
-  if (col !== sortKey) return <ArrowUpDown className="h-3 w-3 opacity-40" />;
-  return dir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />;
+  if (col !== sortKey) return <ArrowsDownUpIcon className="h-3 w-3 opacity-40" />;
+  return dir === "asc" ? <ArrowUpIcon className="h-3 w-3" /> : <ArrowDownIcon className="h-3 w-3" />;
 }
 
 interface TableViewProps {

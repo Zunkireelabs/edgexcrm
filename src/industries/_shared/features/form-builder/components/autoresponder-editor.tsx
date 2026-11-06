@@ -4,7 +4,7 @@ import { useRef } from "react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertTriangle } from "lucide-react";
+import { WarningIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import {
   HtmlSourceEditor,
@@ -177,7 +177,7 @@ export function AutoresponderEditor({
 
           {/* Warning */}
           <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-amber-500" />
+            <WarningIcon className="h-4 w-4 mt-0.5 shrink-0 text-amber-500" />
             <p>
               A stage-based welcome rule on the entry stage will also fire on submission — both
               emails may send.

@@ -2,7 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Star, Loader2 } from "lucide-react";
+import {
+  PlusIcon,
+  PencilSimpleIcon,
+  TrashIcon,
+  StarIcon,
+  CircleNotchIcon,
+} from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -147,13 +153,13 @@ export function LeadTypesManager() {
             </CardDescription>
           </div>
           <Button size="sm" onClick={openCreate} className="shrink-0">
-            <Plus className="h-4 w-4 mr-1" /> Add
+            <PlusIcon className="h-4 w-4 mr-1" /> Add
           </Button>
         </CardHeader>
         <CardContent>
           {loading ? (
             <div className="text-sm text-gray-500 flex items-center gap-2">
-              <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+              <CircleNotchIcon className="h-4 w-4 animate-spin" /> Loading…
             </div>
           ) : types.length === 0 ? (
             <p className="text-sm text-gray-500">No lead types yet.</p>
@@ -179,13 +185,13 @@ export function LeadTypesManager() {
                           t.is_default ? "text-amber-600" : "text-gray-400 hover:text-amber-600"
                         }`}
                       >
-                        <Star className={`h-3.5 w-3.5 ${t.is_default ? "fill-amber-400" : ""}`} />
+                        <StarIcon weight={t.is_default ? "fill" : "regular"} className={`h-3.5 w-3.5 ${t.is_default ? "text-amber-400" : ""}`} />
                         {t.is_default ? "Default" : "Set default"}
                       </button>
                     </TableCell>
                     <TableCell className="text-right">
                       <Button size="icon" variant="ghost" onClick={() => openEdit(t)}>
-                        <Pencil className="h-3.5 w-3.5" />
+                        <PencilSimpleIcon className="h-3.5 w-3.5" />
                       </Button>
                       <Button
                         size="icon"
@@ -194,9 +200,9 @@ export function LeadTypesManager() {
                         disabled={deletingId === t.id}
                       >
                         {deletingId === t.id ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          <CircleNotchIcon className="h-3.5 w-3.5 animate-spin" />
                         ) : (
-                          <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                          <TrashIcon className="h-3.5 w-3.5 text-red-500" />
                         )}
                       </Button>
                     </TableCell>
@@ -233,7 +239,7 @@ export function LeadTypesManager() {
               Cancel
             </Button>
             <Button onClick={handleSave} disabled={saving}>
-              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+              {saving ? <CircleNotchIcon className="h-4 w-4 animate-spin mr-1" /> : null}
               {editing ? "Save" : "Add"}
             </Button>
           </DialogFooter>

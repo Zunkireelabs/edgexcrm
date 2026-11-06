@@ -15,7 +15,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, Check, CornerUpRight } from "lucide-react";
+import { CaretDownIcon, CheckIcon, ArrowBendUpRightIcon } from "@phosphor-icons/react";
 import type { LeadList } from "@/types/database";
 
 const ARCHIVE_REASONS = [
@@ -113,7 +113,7 @@ export function MoveToListSelector({
           className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] border-[0.5px] border-blue-300 text-[10px] font-semibold whitespace-nowrap bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <span className="whitespace-nowrap">{label}</span>
-          <ChevronDown className="w-3 h-3 shrink-0" />
+          <CaretDownIcon className="w-3 h-3 shrink-0" />
         </button>
       </PopoverTrigger>
 
@@ -177,7 +177,7 @@ export function MoveToListSelector({
                 onClick={() => handleListClick(list)}
                 className="w-full text-left flex items-center gap-2 text-xs px-2 py-1.5 rounded hover:bg-gray-100 transition-colors"
               >
-                <Check
+                <CheckIcon
                   className={`w-3 h-3 shrink-0 ${
                     list.id === currentListId ? "text-blue-600" : "opacity-0"
                   }`}
@@ -203,7 +203,7 @@ export function MoveToListSelector({
       >
         <DialogHeader>
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-blue-600">
-            <CornerUpRight className="h-5 w-5" />
+            <ArrowBendUpRightIcon className="h-5 w-5" />
           </div>
           <DialogTitle className="pt-1">
             {confirmList ? moveConfirmMessage(confirmList) : ""}

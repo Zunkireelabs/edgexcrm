@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { PlusIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -94,7 +94,7 @@ export function CommitmentsPanel({ leadId, canManage }: { leadId: string; canMan
         </h3>
         {canManage && (
           <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setAddOpen(true)}>
-            <Plus className="h-3.5 w-3.5 mr-1" />
+            <PlusIcon className="h-3.5 w-3.5 mr-1" />
             Add
           </Button>
         )}

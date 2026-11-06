@@ -4,29 +4,29 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  GraduationCap,
-  BookOpen,
-  CalendarClock,
-  MessageSquare,
-  Plus,
-  Loader2,
-  Layers,
-} from "lucide-react";
+  GraduationCapIcon,
+  BookOpenIcon,
+  CalendarDotsIcon,
+  ChatTextIcon,
+  PlusIcon,
+  CircleNotchIcon,
+  StackIcon,
+} from "@phosphor-icons/react";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { getTemplatesForIndustry } from "../templates";
 import type { TemplateDefinition } from "../types";
 
 const ICON_MAP: Record<string, React.ElementType> = {
-  GraduationCap,
-  BookOpen,
-  CalendarClock,
-  MessageSquare,
-  Plus,
+  GraduationCap: GraduationCapIcon,
+  BookOpen: BookOpenIcon,
+  CalendarClock: CalendarDotsIcon,
+  MessageSquare: ChatTextIcon,
+  Plus: PlusIcon,
 };
 
 function TemplateIcon({ name }: { name: string }) {
-  const Icon = ICON_MAP[name] ?? Layers;
+  const Icon = ICON_MAP[name] ?? StackIcon;
   return <Icon className="h-6 w-6" />;
 }
 
@@ -110,7 +110,7 @@ export function TemplatePicker({ onSelect, selectedId, industryId }: TemplatePic
                     }`}
                   >
                     {isLoading ? (
-                      <Loader2 className="h-6 w-6 animate-spin" />
+                      <CircleNotchIcon className="h-6 w-6 animate-spin" />
                     ) : (
                       <TemplateIcon name={template.icon} />
                     )}

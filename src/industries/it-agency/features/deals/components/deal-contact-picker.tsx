@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { Loader2, Search } from "lucide-react";
+import { CircleNotchIcon, MagnifyingGlassIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -143,7 +143,7 @@ export function DealContactPicker({ dealId, accountId, open, onOpenChange, onSuc
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Search */}
           <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <MagnifyingGlassIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               className="pl-8"
               placeholder="Search contacts…"
@@ -171,7 +171,7 @@ export function DealContactPicker({ dealId, accountId, open, onOpenChange, onSuc
           <div className="border rounded-md max-h-48 overflow-y-auto">
             {loading ? (
               <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                <CircleNotchIcon className="h-4 w-4 animate-spin text-muted-foreground" />
               </div>
             ) : filteredContacts.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-6">
@@ -225,7 +225,7 @@ export function DealContactPicker({ dealId, accountId, open, onOpenChange, onSuc
               Cancel
             </Button>
             <Button type="submit" disabled={saving || !selectedContactId}>
-              {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {saving && <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />}
               Add
             </Button>
           </DialogFooter>

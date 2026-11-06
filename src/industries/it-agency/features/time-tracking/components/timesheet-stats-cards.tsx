@@ -2,7 +2,7 @@
 
 import type React from "react";
 import Link from "next/link";
-import { Clock, Users, AlertCircle, DollarSign } from "lucide-react";
+import { ClockIcon, UsersIcon, WarningCircleIcon, CurrencyDollarIcon } from "@phosphor-icons/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatMinutes } from "../hooks/use-time-entries";
 import { calculateBillableAmount, calculateMinutesBySource } from "../lib/totals";
@@ -34,32 +34,32 @@ export function TimesheetStatsCards({ entries, isAdmin }: TimesheetStatsCardsPro
       : undefined;
 
   const adminTiles: Tile[] = [
-    { label: "Total Hours", value: formatMinutes(totalMinutes), subline: totalHoursSubline, icon: Clock, color: "text-blue-600" },
-    { label: "Members", value: String(memberCount), icon: Users, color: "text-violet-600" },
+    { label: "Total Hours", value: formatMinutes(totalMinutes), subline: totalHoursSubline, icon: ClockIcon, color: "text-blue-600" },
+    { label: "Members", value: String(memberCount), icon: UsersIcon, color: "text-violet-600" },
     {
       label: "Billable",
       value: `$${billableAmount.toFixed(2)}`,
-      icon: DollarSign,
+      icon: CurrencyDollarIcon,
       color: "text-green-600",
     },
     {
       label: "Pending",
       value: String(pendingCount),
-      icon: AlertCircle,
+      icon: WarningCircleIcon,
       color: "text-amber-600",
       href: "/time-tracking/approvals",
     },
   ];
 
   const memberTiles: Tile[] = [
-    { label: "Total Hours", value: formatMinutes(totalMinutes), subline: totalHoursSubline, icon: Clock, color: "text-blue-600" },
+    { label: "Total Hours", value: formatMinutes(totalMinutes), subline: totalHoursSubline, icon: ClockIcon, color: "text-blue-600" },
     {
       label: "Billable",
       value: `$${billableAmount.toFixed(2)}`,
-      icon: DollarSign,
+      icon: CurrencyDollarIcon,
       color: "text-green-600",
     },
-    { label: "Pending", value: String(pendingCount), icon: AlertCircle, color: "text-amber-600" },
+    { label: "Pending", value: String(pendingCount), icon: WarningCircleIcon, color: "text-amber-600" },
   ];
 
   const tiles = isAdmin ? adminTiles : memberTiles;

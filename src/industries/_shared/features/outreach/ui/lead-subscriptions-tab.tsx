@@ -1,7 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Mail, MessageSquare, X, Zap } from "lucide-react";
+import {
+  CircleNotchIcon,
+  EnvelopeSimpleIcon,
+  ChatTextIcon,
+  XIcon,
+  LightningIcon,
+} from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -43,7 +49,7 @@ const PREVIEW_ROWS = 5;
 /** A clear "Email" / "SMS" tag (icon + word, its own colour) so the two channels can't be confused. */
 function ChannelTag({ channel }: { channel: OutreachChannel }) {
   const isSms = channel === "sms";
-  const Icon = isSms ? MessageSquare : Mail;
+  const Icon = isSms ? ChatTextIcon : EnvelopeSimpleIcon;
   return (
     <span
       className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
@@ -96,7 +102,7 @@ export function LeadSubscriptionsTab(props: LeadSubscriptionsTabProps) {
 
       {status === "loading" && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading subscriptions…
+          <CircleNotchIcon className="h-4 w-4 animate-spin" /> Loading subscriptions…
         </div>
       )}
       {status === "error" && (
@@ -208,7 +214,7 @@ function PastRow({ s }: { s: SubscribedSequence }) {
         <span className="truncate font-medium">{s.sequenceName}</span>
         {s.source === "stage_rule" && (
           <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
-            <Zap className="h-3 w-3" aria-hidden />
+            <LightningIcon className="h-3 w-3" aria-hidden />
             Auto-enrolled{s.triggerStageName ? ` · entered ${s.triggerStageName}` : ""}
           </span>
         )}
@@ -287,7 +293,7 @@ function QueueRow({
           <span className="font-medium">{queued.sequenceName}</span>
           <span className="text-xs text-muted-foreground">starts after {running.sequenceName}</span>
           <Button type="button" variant="ghost" size="sm" className="ml-auto" disabled={busy} onClick={remove}>
-            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5 mr-1" />}
+            {busy ? <CircleNotchIcon className="h-3.5 w-3.5 animate-spin" /> : <XIcon className="h-3.5 w-3.5 mr-1" />}
             Remove
           </Button>
         </>
@@ -308,7 +314,7 @@ function QueueRow({
             </SelectContent>
           </Select>
           <Button type="button" size="sm" disabled={!selected || busy} onClick={queue}>
-            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Queue next"}
+            {busy ? <CircleNotchIcon className="h-3.5 w-3.5 animate-spin" /> : "Queue next"}
           </Button>
         </>
       )}

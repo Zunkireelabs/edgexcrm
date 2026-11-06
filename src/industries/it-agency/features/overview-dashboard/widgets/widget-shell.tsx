@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Loader2 } from "lucide-react";
+import { CircleNotchIcon } from "@phosphor-icons/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 // Same shell as delivery-dashboard/sales-dashboard's widget-shell.tsx — kept
@@ -23,7 +23,7 @@ export function WidgetCard({ title, children }: { title: string; children: React
 export function WidgetLoading() {
   return (
     <div className="flex items-center justify-center h-32">
-      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      <CircleNotchIcon className="h-5 w-5 animate-spin text-muted-foreground" />
     </div>
   );
 }

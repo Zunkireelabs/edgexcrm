@@ -4,7 +4,13 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Bot, CheckCircle2, XCircle, Pencil, Inbox } from "lucide-react";
+import {
+  RobotIcon,
+  CheckCircleIcon,
+  XCircleIcon,
+  PencilSimpleIcon,
+  TrayIcon,
+} from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -147,7 +153,7 @@ function PageHeader() {
   return (
     <div className="flex items-center gap-3">
       <div className="p-2 bg-[#eb1600] rounded-lg">
-        <Inbox className="w-6 h-6 text-white" />
+        <TrayIcon className="w-6 h-6 text-white" />
       </div>
       <div>
         <h1 className="text-lg font-bold">Review Queue</h1>
@@ -297,7 +303,7 @@ export function ReviewContent({ items: initialItems, approvals }: ReviewContentP
 
         {items.length === 0 ? (
           <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-            <Inbox className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+            <TrayIcon className="w-12 h-12 text-gray-300 mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-gray-900 mb-2">No suggestions waiting for review</h3>
             <p className="text-sm text-gray-500">Agent drafts will show up here once they&apos;re proposed.</p>
           </div>
@@ -311,7 +317,7 @@ export function ReviewContent({ items: initialItems, approvals }: ReviewContentP
               <div className="flex items-start justify-between mb-3">
                 <div>
                   <div className="flex items-center gap-2">
-                    <Bot className="w-4 h-4 text-gray-400" />
+                    <RobotIcon className="w-4 h-4 text-gray-400" />
                     <span className="text-sm font-medium text-gray-900">{item.agentName}</span>
                     <span className="text-xs text-gray-400">·</span>
                     <span className="text-xs text-gray-500">{KIND_LABELS[item.kind] ?? item.kind}</span>
@@ -399,18 +405,18 @@ export function ReviewContent({ items: initialItems, approvals }: ReviewContentP
                 ) : (
                   <>
                     <Button size="sm" disabled={isPending} onClick={() => decide(item, "accept")}>
-                      <CheckCircle2 className="w-4 h-4" />
+                      <CheckCircleIcon className="w-4 h-4" />
                       {/* Defect A fix: this tier executes nothing on "accept" — never call it "Accept". decision:"accept" on the wire is unchanged (existing status vocabulary). */}
                       {isUnauthorizedWriteProposal(item) ? "Mark handled" : "Accept"}
                     </Button>
                     {EDITABLE_KINDS.has(item.kind) && (
                       <Button size="sm" variant="outline" disabled={isPending} onClick={() => openEdit(item)}>
-                        <Pencil className="w-4 h-4" />
+                        <PencilSimpleIcon className="w-4 h-4" />
                         Edit
                       </Button>
                     )}
                     <Button size="sm" variant="outline" disabled={isPending} onClick={() => decide(item, "dismiss")}>
-                      <XCircle className="w-4 h-4" />
+                      <XCircleIcon className="w-4 h-4" />
                       Dismiss
                     </Button>
                   </>

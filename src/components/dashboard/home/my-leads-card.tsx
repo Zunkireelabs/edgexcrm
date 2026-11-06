@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Users, ChevronRight } from "lucide-react";
+import { UsersIcon, CaretRightIcon } from "@phosphor-icons/react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatRelativeTime } from "@/lib/format-relative-time";
@@ -29,14 +29,14 @@ export function MyLeadsCard({ leads, unreadLeadIds }: MyLeadsCardProps) {
           <CardTitle className="text-sm font-semibold">My Leads</CardTitle>
           <Link href="/leads" className="inline-flex items-center gap-0.5 text-xs text-blue-600 hover:underline">
             View all
-            <ChevronRight className="h-3 w-3" />
+            <CaretRightIcon className="h-3 w-3" />
           </Link>
         </div>
       </CardHeader>
       <CardContent className="pt-0">
         {display.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-6 gap-2 text-center">
-            <Users className="h-8 w-8 text-muted-foreground/40" />
+            <UsersIcon className="h-8 w-8 text-muted-foreground/40" />
             <p className="text-sm text-muted-foreground">No leads assigned to you.</p>
           </div>
         ) : (

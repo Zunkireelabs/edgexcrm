@@ -2,7 +2,16 @@
 
 import { SECTION_TITLE_CLASS } from "@/components/dashboard/lead/section-title";
 import { forwardRef, useState } from "react";
-import { CheckSquare, Square, Plus, Trash2, FileDown, ExternalLink, AlarmClock, X } from "lucide-react";
+import {
+  CheckSquareIcon,
+  SquareIcon,
+  PlusIcon,
+  TrashIcon,
+  FileArrowDownIcon,
+  ArrowSquareOutIcon,
+  AlarmIcon,
+  XIcon,
+} from "@phosphor-icons/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -63,7 +72,7 @@ function ReminderButton({
           className="h-8 w-8 shrink-0"
           title={value ? `Reminder: ${formatRemind(value)}` : "Set reminder"}
         >
-          <AlarmClock className={`h-4 w-4 ${value ? "text-primary" : ""}`} />
+          <AlarmIcon className={`h-4 w-4 ${value ? "text-primary" : ""}`} />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
@@ -258,9 +267,9 @@ export const ChecklistCard = forwardRef<HTMLInputElement, ChecklistCardProps>(
                 onClick={() => handleToggle(item)}
               >
                 {item.is_completed ? (
-                  <CheckSquare className="h-4 w-4 text-green-600 shrink-0" />
+                  <CheckSquareIcon className="h-4 w-4 text-green-600 shrink-0" />
                 ) : (
-                  <Square className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <SquareIcon className="h-4 w-4 text-muted-foreground shrink-0" />
                 )}
                 <span
                   className={
@@ -278,7 +287,7 @@ export const ChecklistCard = forwardRef<HTMLInputElement, ChecklistCardProps>(
                     className="flex items-center gap-1 text-[11px] text-primary whitespace-nowrap"
                     title={`Reminder: ${formatRemind(item.remind_at)}`}
                   >
-                    <AlarmClock className="h-3 w-3" />
+                    <AlarmIcon className="h-3 w-3" />
                     {formatRemind(item.remind_at)}
                   </span>
                 )}
@@ -295,7 +304,7 @@ export const ChecklistCard = forwardRef<HTMLInputElement, ChecklistCardProps>(
                       className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0"
                       onClick={() => handleDelete(item.id)}
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <TrashIcon className="h-3.5 w-3.5" />
                     </Button>
                   </div>
                 )}
@@ -333,7 +342,7 @@ export const ChecklistCard = forwardRef<HTMLInputElement, ChecklistCardProps>(
                   onClick={handleAdd}
                   disabled={adding || !newTitle.trim()}
                 >
-                  <Plus className="h-4 w-4" />
+                  <PlusIcon className="h-4 w-4" />
                 </Button>
               </div>
               {showCustom && (
@@ -350,14 +359,14 @@ export const ChecklistCard = forwardRef<HTMLInputElement, ChecklistCardProps>(
               )}
               {remindAt && (
                 <div className="flex items-center gap-1 text-xs text-primary">
-                  <AlarmClock className="h-3 w-3" />
+                  <AlarmIcon className="h-3 w-3" />
                   Reminder: {formatRemind(remindAt)}
                   <button
                     type="button"
                     onClick={() => setRemindAt(null)}
                     className="ml-1 text-muted-foreground hover:text-destructive"
                   >
-                    <X className="h-3 w-3" />
+                    <XIcon className="h-3 w-3" />
                   </button>
                 </div>
               )}
@@ -376,7 +385,7 @@ function DocumentRow({ name, url }: { name: string; url: string }) {
   return (
     <div className="flex items-center justify-between py-1.5 group">
       <div className="flex items-center gap-2 min-w-0">
-        <FileDown className="h-4 w-4 text-muted-foreground shrink-0" />
+        <FileArrowDownIcon className="h-4 w-4 text-muted-foreground shrink-0" />
         <span className="text-sm capitalize truncate">{displayName}</span>
       </div>
       <div className="flex items-center gap-1 shrink-0">
@@ -387,7 +396,7 @@ function DocumentRow({ name, url }: { name: string; url: string }) {
           asChild
         >
           <a href={url} download target="_blank" rel="noopener noreferrer">
-            <FileDown className="h-3.5 w-3.5" />
+            <FileArrowDownIcon className="h-3.5 w-3.5" />
           </a>
         </Button>
         <Button
@@ -397,7 +406,7 @@ function DocumentRow({ name, url }: { name: string; url: string }) {
           asChild
         >
           <a href={url} target="_blank" rel="noopener noreferrer">
-            <ExternalLink className="h-3.5 w-3.5" />
+            <ArrowSquareOutIcon className="h-3.5 w-3.5" />
           </a>
         </Button>
       </div>

@@ -49,33 +49,32 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import {
-  Download,
-  Search,
-  Trash2,
-  Users2,
-  Globe,
-  Calendar,
-  ArrowUpDown,
-  X,
-  ChevronLeft,
-  ChevronRight,
-  Plus,
-  UserPlus,
-  Tag,
-  GitMerge,
-  Briefcase,
-  Columns3,
-  MoreHorizontal,
-  Pencil,
-  Eye,
-  Building2,
-  ArrowRightLeft,
-  Archive,
-  RotateCcw,
-  Columns4,
-  ArrowUpCircle,
-  GitBranch,
-} from "lucide-react";
+  DownloadIcon,
+  MagnifyingGlassIcon,
+  TrashIcon,
+  UsersIcon,
+  GlobeIcon,
+  CalendarIcon,
+  ArrowsDownUpIcon,
+  XIcon,
+  CaretLeftIcon,
+  CaretRightIcon,
+  PlusIcon,
+  UserPlusIcon,
+  TagIcon,
+  GitMergeIcon,
+  BriefcaseIcon,
+  ColumnsIcon,
+  DotsThreeIcon,
+  PencilSimpleIcon,
+  EyeIcon,
+  BuildingsIcon,
+  ArrowsLeftRightIcon,
+  ArchiveIcon,
+  ArrowCounterClockwiseIcon,
+  ArrowCircleUpIcon,
+  GitBranchIcon,
+} from "@phosphor-icons/react";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { BulkEnrollDialog } from "@/industries/_shared/features/outreach/ui/bulk-enroll-dialog";
@@ -322,7 +321,7 @@ function SortPopover({
     <Popover>
       <PopoverTrigger asChild>
         <button type="button" className={TOOLBAR_BTN}>
-          <ArrowUpDown className="h-3 w-3 shrink-0" />
+          <ArrowsDownUpIcon className="h-3 w-3 shrink-0" />
           Sort
         </button>
       </PopoverTrigger>
@@ -2265,7 +2264,7 @@ export function LeadsTable({
           {
             id: "source",
             label: "Source",
-            icon: <Globe className="h-3.5 w-3.5" />,
+            icon: <GlobeIcon className="h-3.5 w-3.5" />,
             multiple: true,
             value: sourceFilter,
             onChange: (val: string[]) => {
@@ -2284,7 +2283,7 @@ export function LeadsTable({
           {
             id: "counselor",
             label: "Assigned To",
-            icon: <Users2 className="h-3.5 w-3.5" />,
+            icon: <UsersIcon className="h-3.5 w-3.5" />,
             multiple: true,
             value: counselorFilter,
             onChange: (val: string[]) => {
@@ -2332,7 +2331,7 @@ export function LeadsTable({
           {
             id: "collaborator",
             label: "Collaborators",
-            icon: <UserPlus className="h-3.5 w-3.5" />,
+            icon: <UserPlusIcon className="h-3.5 w-3.5" />,
             multiple: true,
             value: collaboratorFilter,
             onChange: (val: string[]) => {
@@ -2361,7 +2360,7 @@ export function LeadsTable({
           {
             id: "tag",
             label: "Tag",
-            icon: <Tag className="h-3.5 w-3.5" />,
+            icon: <TagIcon className="h-3.5 w-3.5" />,
             value: tagFilter,
             onChange: (val: string) => {
               setTagFilter(val);
@@ -2378,7 +2377,7 @@ export function LeadsTable({
           {
             id: "industry",
             label: "Industry",
-            icon: <Briefcase className="h-3.5 w-3.5" />,
+            icon: <BriefcaseIcon className="h-3.5 w-3.5" />,
             value: prospectIndustryFilter,
             onChange: (val: string) => {
               setProspectIndustryFilter(val);
@@ -2398,7 +2397,7 @@ export function LeadsTable({
     {
       id: "created",
       label: "Date created",
-      icon: <Calendar className="h-3.5 w-3.5" />,
+      icon: <CalendarIcon className="h-3.5 w-3.5" />,
       searchable: false,
       value: createdFilter,
       onChange: (val: string) => {
@@ -2649,7 +2648,7 @@ export function LeadsTable({
           {/* Search — debounced 300ms, hits GET /api/v1/leads server-side (not a client
               array filter): searches every matching lead, not just the loaded page. */}
           <div className="relative w-60">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
+            <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
             <input
               type="text"
               placeholder="Search leads..."
@@ -2668,7 +2667,7 @@ export function LeadsTable({
             onClick={() => setColumnDialogOpen(true)}
             className={TOOLBAR_BTN}
           >
-            <Columns3 className="h-3 w-3 shrink-0" />
+            <ColumnsIcon className="h-3 w-3 shrink-0" />
             <span>Edit columns</span>
           </button>
 
@@ -2683,7 +2682,7 @@ export function LeadsTable({
               )}
               className={TOOLBAR_BTN}
             >
-              <Columns4 className="h-3 w-3 shrink-0" />
+              <ColumnsIcon className="h-3 w-3 shrink-0" />
               <span>Kanban view</span>
             </button>
           )}
@@ -2733,7 +2732,7 @@ export function LeadsTable({
               onClick={exportCSV}
               className={TOOLBAR_BTN}
             >
-              <Download className="h-3 w-3 shrink-0" />
+              <DownloadIcon className="h-3 w-3 shrink-0" />
               Export
             </button>
           )}
@@ -2745,7 +2744,7 @@ export function LeadsTable({
               onClick={() => setAddLeadOpen(true)}
               className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-[8px] transition-colors bg-[#0f0f10] text-white hover:bg-[#0f0f10]/90"
             >
-              <Plus className="h-3 w-3 shrink-0" />
+              <PlusIcon className="h-3 w-3 shrink-0" />
               Add Lead
             </button>
           )}
@@ -2805,7 +2804,7 @@ export function LeadsTable({
                     }
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-emerald-700 hover:bg-emerald-50 rounded transition-colors"
                   >
-                    <RotateCcw className="h-4 w-4" />
+                    <ArrowCounterClockwiseIcon className="h-4 w-4" />
                     Restore
                   </button>
                 )}
@@ -2814,7 +2813,7 @@ export function LeadsTable({
                     onClick={() => setDeleteDialogOpen(true)}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <TrashIcon className="h-4 w-4" />
                     Delete
                   </button>
                 )}
@@ -2824,7 +2823,7 @@ export function LeadsTable({
                   className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
                   aria-label="Deselect all"
                 >
-                  <X className="h-4 w-4" />
+                  <XIcon className="h-4 w-4" />
                 </button>
               </>
             ) : (
@@ -2834,7 +2833,7 @@ export function LeadsTable({
                 onClick={() => setBulkEnrollOpen(true)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
               >
-                <GitBranch className="h-4 w-4" />
+                <GitBranchIcon className="h-4 w-4" />
                 Enroll in sequence
               </button>
             )}
@@ -2843,7 +2842,7 @@ export function LeadsTable({
                 onClick={() => setAssignDialogOpen(true)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
               >
-                <UserPlus className="h-4 w-4" />
+                <UserPlusIcon className="h-4 w-4" />
                 Assign
               </button>
             )}
@@ -2852,7 +2851,7 @@ export function LeadsTable({
                 onClick={() => setBranchAssignDialogOpen(true)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
               >
-                <Building2 className="h-4 w-4" />
+                <BuildingsIcon className="h-4 w-4" />
                 Branch
               </button>
             )}
@@ -2867,7 +2866,7 @@ export function LeadsTable({
                 }}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
               >
-                <ArrowUpCircle className="h-4 w-4" />
+                <ArrowCircleUpIcon className="h-4 w-4" />
                 Graduate → Sales Leads
               </button>
             )}
@@ -2882,7 +2881,7 @@ export function LeadsTable({
                 }}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-amber-600 hover:bg-amber-50 rounded transition-colors"
               >
-                <Archive className="h-4 w-4" />
+                <ArchiveIcon className="h-4 w-4" />
                 Archive
               </button>
             )}
@@ -2891,7 +2890,7 @@ export function LeadsTable({
                 onClick={() => setMergeDialogOpen(true)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
               >
-                <GitMerge className="h-4 w-4" />
+                <GitMergeIcon className="h-4 w-4" />
                 Merge
               </button>
             )}
@@ -2900,7 +2899,7 @@ export function LeadsTable({
                 onClick={() => setDeleteDialogOpen(true)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
               >
-                <Trash2 className="h-4 w-4" />
+                <TrashIcon className="h-4 w-4" />
                 Delete
               </button>
             )}
@@ -2910,7 +2909,7 @@ export function LeadsTable({
               className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
               aria-label="Deselect all"
             >
-              <X className="h-4 w-4" />
+              <XIcon className="h-4 w-4" />
             </button>
             </>
             )}
@@ -3040,16 +3039,16 @@ export function LeadsTable({
                             aria-label="Row actions"
                             className="h-6 w-6 rounded flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100"
                           >
-                            <MoreHorizontal className="h-3.5 w-3.5" />
+                            <DotsThreeIcon className="h-3.5 w-3.5" />
                           </button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="start">
                           <DropdownMenuItem onClick={() => columnCtx.onPreviewToggle(lead.id)}>
-                            <Eye className="h-4 w-4 mr-2" />
+                            <EyeIcon className="h-4 w-4 mr-2" />
                             Preview
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => router.push(`/leads/${lead.id}?edit=1`)}>
-                            <Pencil className="h-4 w-4 mr-2" />
+                            <PencilSimpleIcon className="h-4 w-4 mr-2" />
                             Edit
                           </DropdownMenuItem>
                         </DropdownMenuContent>
@@ -3106,7 +3105,7 @@ export function LeadsTable({
                 onClick={() => setCurrentPage((p) => p - 1)}
                 className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               >
-                <ChevronLeft className="w-4 h-4" />
+                <CaretLeftIcon className="w-4 h-4" />
               </button>
               <span className="text-xs text-gray-600 px-2">
                 Page {currentPage} of {totalPages || 1}
@@ -3116,7 +3115,7 @@ export function LeadsTable({
                 onClick={() => setCurrentPage((p) => p + 1)}
                 className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               >
-                <ChevronRight className="w-4 h-4" />
+                <CaretRightIcon className="w-4 h-4" />
               </button>
             </div>
           </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Check, Plus, X } from "lucide-react";
+import { CheckIcon, PlusIcon, XIcon } from "@phosphor-icons/react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 const MAX_TAG_LEN = 50;
@@ -117,13 +117,13 @@ export function TagMultiPicker({
                   }}
                   className="hover:text-red-500 transition-colors cursor-pointer"
                 >
-                  <X className={size === "sm" ? "h-2.5 w-2.5" : "h-3 w-3"} />
+                  <XIcon className={size === "sm" ? "h-2.5 w-2.5" : "h-3 w-3"} />
                 </span>
               </span>
             ))
           ) : (
             <span className="flex items-center gap-0.5">
-              <Plus className={size === "sm" ? "h-2.5 w-2.5" : "h-3 w-3"} />
+              <PlusIcon className={size === "sm" ? "h-2.5 w-2.5" : "h-3 w-3"} />
               {placeholder}
             </span>
           )}
@@ -185,7 +185,7 @@ export function TagMultiPicker({
                       : "border-gray-300 bg-white",
                   ].join(" ")}
                 >
-                  {selected && <Check className="h-2.5 w-2.5" />}
+                  {selected && <CheckIcon className="h-2.5 w-2.5" />}
                 </span>
                 <span className="truncate text-gray-700">{tag}</span>
               </button>
@@ -199,7 +199,7 @@ export function TagMultiPicker({
               onClick={createTag}
               className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-50 text-left text-blue-600"
             >
-              <Plus className="h-3 w-3 shrink-0" />
+              <PlusIcon className="h-3 w-3 shrink-0" />
               Create &ldquo;{trimmedQuery}&rdquo;
             </button>
           )}

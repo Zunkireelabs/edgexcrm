@@ -23,22 +23,22 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import {
-  Search,
-  Loader2,
-  UserPlus,
-  UserCheck,
-  Calendar,
-  Clock,
-  Download,
-  ChevronRight,
-  X,
-  Mail,
-  Phone,
-  MapPin,
-  Globe,
-  FileText,
-  User,
-} from "lucide-react";
+  MagnifyingGlassIcon,
+  CircleNotchIcon,
+  UserPlusIcon,
+  UserCheckIcon,
+  CalendarIcon,
+  ClockIcon,
+  DownloadIcon,
+  CaretRightIcon,
+  XIcon,
+  EnvelopeSimpleIcon,
+  PhoneIcon,
+  MapPinIcon,
+  GlobeIcon,
+  FileTextIcon,
+  UserIcon,
+} from "@phosphor-icons/react";
 import { Textarea } from "@/components/ui/textarea";
 import type { PipelineStage, PipelineWithCounts } from "@/types/database";
 import type { TeamMember } from "@/lib/supabase/queries";
@@ -172,13 +172,13 @@ function LeadExtraDetails({ details }: { details: Record<string, unknown> }) {
     <div className="space-y-3 mb-6">
       {city && (
         <div className="flex items-center gap-3 text-sm">
-          <MapPin className="h-4 w-4 text-muted-foreground shrink-0" />
+          <MapPinIcon className="h-4 w-4 text-muted-foreground shrink-0" />
           <span>{city}{country ? `, ${country}` : ""}</span>
         </div>
       )}
       {country && !city && (
         <div className="flex items-center gap-3 text-sm">
-          <Globe className="h-4 w-4 text-muted-foreground shrink-0" />
+          <GlobeIcon className="h-4 w-4 text-muted-foreground shrink-0" />
           <span>{country}</span>
         </div>
       )}
@@ -811,7 +811,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
 
         {/* Search Input */}
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             ref={inputRef}
             value={query}
@@ -820,7 +820,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
             className="pl-10 h-10 text-sm"
           />
           {searching && (
-            <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+            <CircleNotchIcon className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
           )}
         </div>
 
@@ -864,7 +864,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                   </div>
                   <div className="shrink-0 flex items-center gap-2">
                     <span className="text-xs text-primary font-medium">View Details</span>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    <CaretRightIcon className="h-4 w-4 text-muted-foreground" />
                   </div>
                 </div>
               ))}
@@ -876,7 +876,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
         {searched && results.length === 0 && (
           <div className="mt-4">
             <div className="flex items-center gap-2 mb-3">
-              <UserPlus className="h-4 w-4 text-muted-foreground" />
+              <UserPlusIcon className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm text-muted-foreground">
                 No existing lead found. Add a new one:
               </span>
@@ -1071,7 +1071,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                     {industryId === "education_consultancy" && leadTag === "student" && (
                       <Collapsible open={academicsOpen} onOpenChange={setAcademicsOpen}>
                         <CollapsibleTrigger className="flex items-center gap-2 w-full py-2 text-xs font-medium text-gray-700 hover:text-gray-900">
-                          <ChevronRight
+                          <CaretRightIcon
                             className={`h-4 w-4 transition-transform ${
                               academicsOpen ? "rotate-90" : ""
                             }`}
@@ -1222,12 +1222,12 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                       <Button type="submit" className="flex-1 h-9" disabled={submitting}>
                         {submitting ? (
                           <>
-                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            <CircleNotchIcon className="h-4 w-4 animate-spin mr-2" />
                             Adding...
                           </>
                         ) : (
                           <>
-                            <UserPlus className="h-4 w-4 mr-2" />
+                            <UserPlusIcon className="h-4 w-4 mr-2" />
                             Add Lead & Check In
                           </>
                         )}
@@ -1246,7 +1246,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
         {/* Header row: title left, filter right */}
         <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
           <h2 className="text-lg font-semibold flex items-center gap-2">
-            <Clock className="h-4 w-4" />
+            <ClockIcon className="h-4 w-4" />
             Check-In History
             <Badge variant="secondary" className="text-xs ml-1">
               {visibleCheckIns.length}
@@ -1274,7 +1274,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
         {dateFilter === "custom" && (
           <div className="flex items-center gap-2 mb-3 shrink-0">
             <div className="flex items-center gap-1">
-              <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+              <CalendarIcon className="h-3.5 w-3.5 text-muted-foreground" />
               <Input
                 type="date"
                 value={customFrom}
@@ -1305,7 +1305,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                   onClick={handleExportCSV}
                   disabled={visibleCheckIns.length === 0}
                 >
-                  <Download className="h-3.5 w-3.5 mr-1" />
+                  <DownloadIcon className="h-3.5 w-3.5 mr-1" />
                   Export CSV
                 </Button>
               </div>
@@ -1313,7 +1313,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
 
             {loadingHistory ? (
               <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                <CircleNotchIcon className="h-5 w-5 animate-spin text-muted-foreground" />
               </div>
             ) : visibleCheckIns.length === 0 ? (
               <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
@@ -1469,7 +1469,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                       <div className="shrink-0 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                         {!record.checked_out_at ? (
                           <Button variant="outline" size="sm" className="h-7 text-xs px-2" disabled={checkingOutId === record.id} onClick={() => handleCheckOut(record)}>
-                            {checkingOutId === record.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Check Out"}
+                            {checkingOutId === record.id ? <CircleNotchIcon className="h-3 w-3 animate-spin" /> : "Check Out"}
                           </Button>
                         ) : (
                           <span className="text-[10px] text-green-600 font-medium whitespace-nowrap">Out {formatTime(record.checked_out_at)}</span>
@@ -1500,7 +1500,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                 onClick={handleCloseDetails}
                 className="p-1 rounded hover:bg-muted text-muted-foreground"
               >
-                <X className="h-4 w-4" />
+                <XIcon className="h-4 w-4" />
               </button>
             </div>
 
@@ -1530,37 +1530,37 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
             <div className="space-y-3 mb-6">
               {selectedLead.email && (
                 <div className="flex items-center gap-3 text-sm">
-                  <Mail className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <EnvelopeSimpleIcon className="h-4 w-4 text-muted-foreground shrink-0" />
                   <span className="truncate">{selectedLead.email}</span>
                 </div>
               )}
               {selectedLead.phone && (
                 <div className="flex items-center gap-3 text-sm">
-                  <Phone className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <PhoneIcon className="h-4 w-4 text-muted-foreground shrink-0" />
                   <span>{selectedLead.phone}</span>
                 </div>
               )}
               {industryId === "education_consultancy" ? (
                 <>
                   <div className="flex items-center gap-3 text-sm">
-                    <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <FileTextIcon className="h-4 w-4 text-muted-foreground shrink-0" />
                     <span>Stage: {selectedLead.list_name || "—"}</span>
                   </div>
                   <div className="flex items-center gap-3 text-sm">
-                    <User className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <UserIcon className="h-4 w-4 text-muted-foreground shrink-0" />
                     <span>Assigned To: {selectedLead.assigned_to_name || "Unassigned"}</span>
                   </div>
                 </>
               ) : (
                 selectedLead.pipeline_name && (
                   <div className="flex items-center gap-3 text-sm">
-                    <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <FileTextIcon className="h-4 w-4 text-muted-foreground shrink-0" />
                     <span>{selectedLead.pipeline_name}</span>
                   </div>
                 )
               )}
               <div className="flex items-center gap-3 text-sm">
-                <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
+                <CalendarIcon className="h-4 w-4 text-muted-foreground shrink-0" />
                 <span className="text-muted-foreground">
                   Created {new Date(selectedLead.created_at).toLocaleDateString("en-US", {
                     month: "short", day: "numeric", year: "numeric"
@@ -1572,7 +1572,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
             {/* Additional details from API */}
             {loadingDetails && (
               <div className="flex items-center justify-center py-4">
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                <CircleNotchIcon className="h-5 w-5 animate-spin text-muted-foreground" />
               </div>
             )}
 
@@ -1682,12 +1682,12 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
             >
               {checkingIn === selectedLead.id ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  <CircleNotchIcon className="h-4 w-4 animate-spin mr-2" />
                   Checking in...
                 </>
               ) : (
                 <>
-                  <UserCheck className="h-4 w-4 mr-2" />
+                  <UserCheckIcon className="h-4 w-4 mr-2" />
                   Check In
                 </>
               )}

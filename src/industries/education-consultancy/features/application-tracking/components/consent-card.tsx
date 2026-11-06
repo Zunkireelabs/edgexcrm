@@ -3,7 +3,18 @@
 import { CONSENT_FIELD_HINTS } from "@/lib/consent/field-hints";
 import { SECTION_TITLE_CLASS } from "@/components/dashboard/lead/section-title";
 import { useState, useEffect, useCallback, useRef } from "react";
-import { AlertTriangle, Clock, CheckCircle2, Loader2, Copy, RefreshCw, FileText, Upload, PenLine, ChevronDown } from "lucide-react";
+import {
+  WarningIcon,
+  ClockIcon,
+  CheckCircleIcon,
+  CircleNotchIcon,
+  CopyIcon,
+  ArrowsClockwiseIcon,
+  FileTextIcon,
+  UploadIcon,
+  PencilLineIcon,
+  CaretDownIcon,
+} from "@phosphor-icons/react";
 import { cardCompleteness } from "./consent-completeness";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -382,7 +393,7 @@ export function ConsentCard({
       <Card className="shadow-none rounded-lg py-0">
         <CardContent className="pt-4 pb-4">
           <div className="flex justify-center">
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            <CircleNotchIcon className="h-4 w-4 animate-spin text-muted-foreground" />
           </div>
         </CardContent>
       </Card>
@@ -435,7 +446,7 @@ export function ConsentCard({
                   title={L.requiredTitle}
                   className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700"
                 >
-                  <AlertTriangle className="h-3 w-3 shrink-0" />
+                  <WarningIcon className="h-3 w-3 shrink-0" />
                   Required
                 </span>
               )}
@@ -444,7 +455,7 @@ export function ConsentCard({
                   title={L.signedTitle}
                   className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700"
                 >
-                  <CheckCircle2 className="h-3 w-3 shrink-0" />
+                  <CheckCircleIcon className="h-3 w-3 shrink-0" />
                   Signed
                 </span>
               )}
@@ -453,12 +464,12 @@ export function ConsentCard({
                   title={`${L.signedTitle} · ${feeIsReported ? "processing fee reported, awaiting verification" : "processing fee pending"}`}
                   className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700"
                 >
-                  <AlertTriangle className="h-3 w-3 shrink-0" />
+                  <WarningIcon className="h-3 w-3 shrink-0" />
                   {feeIsReported ? "Fee reported" : "Fee pending"}
                 </span>
               )}
             </span>
-            <ChevronDown
+            <CaretDownIcon
               className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
             />
           </button>
@@ -470,7 +481,7 @@ export function ConsentCard({
           {preAppMissing.length > 0 && (
             <div role="alert" data-testid="pre-app-warning" className="rounded-md border border-red-200 bg-red-50 p-3">
               <p className="flex items-center gap-2 text-sm font-medium text-red-600">
-                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <WarningIcon className="h-4 w-4 shrink-0" />
                 Still needed before this lead can go to Applications
               </p>
               <ul className="mt-2 space-y-1">
@@ -490,12 +501,12 @@ export function ConsentCard({
               <p className="text-xs font-medium text-muted-foreground">Processing Fee</p>
               {completeness.feeDone ? (
                 <span className="inline-flex items-center gap-1 text-[11px] font-medium text-green-600">
-                  <CheckCircle2 className="h-3 w-3 shrink-0" />
+                  <CheckCircleIcon className="h-3 w-3 shrink-0" />
                   Done
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-600">
-                  <AlertTriangle className="h-3 w-3 shrink-0" />
+                  <WarningIcon className="h-3 w-3 shrink-0" />
                   {feeIsReported ? "Awaiting verification" : "Pending"}
                 </span>
               )}
@@ -641,7 +652,7 @@ export function ConsentCard({
           {consentStatus === "none" && (
             <>
               <div className="flex items-start gap-2 text-amber-600">
-                <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                <WarningIcon className="h-4 w-4 mt-0.5 shrink-0" />
                 <p className="text-sm font-medium">{L.requiredTitle}</p>
               </div>
               <p className="text-xs text-muted-foreground">
@@ -650,7 +661,7 @@ export function ConsentCard({
               {profileIncomplete && readiness && (
                 <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-amber-900">
                   <div className="flex items-start gap-2">
-                    <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                    <WarningIcon className="h-4 w-4 mt-0.5 shrink-0" />
                     <div className="space-y-0.5">
                       <p className="text-sm font-medium">Complete the student profile first</p>
                       <p className="text-xs">
@@ -688,7 +699,7 @@ export function ConsentCard({
                       onClick={onOpenStudentDetails}
                       className="h-7 border-amber-300 bg-white px-2 text-xs text-amber-900 hover:bg-amber-100"
                     >
-                      <FileText className="h-3 w-3 mr-1" />
+                      <FileTextIcon className="h-3 w-3 mr-1" />
                       Open Student Details
                     </Button>
                   )}
@@ -714,19 +725,19 @@ export function ConsentCard({
                   {showCopyLink && (
                     <Button size="sm" variant="outline" onClick={handleCreateAndCopyLink} disabled={creatingLink || actionsBlocked} className="h-7 px-2 text-xs">
                       {creatingLink ? (
-                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                        <CircleNotchIcon className="h-3 w-3 mr-1 animate-spin" />
                       ) : (
-                        <Copy className="h-3 w-3 mr-1" />
+                        <CopyIcon className="h-3 w-3 mr-1" />
                       )}
                       Copy consent link
                     </Button>
                   )}
                   <Button size="sm" variant="outline" disabled={actionsBlocked} onClick={() => setInPersonOpen(true)} className={`h-7 text-xs${showCopyLink ? " px-2" : ""}`}>
-                    <PenLine className="h-3 w-3 mr-1" />
+                    <PencilLineIcon className="h-3 w-3 mr-1" />
                     Sign here now
                   </Button>
                   <Button size="sm" variant={showCopyLink ? "outline" : "ghost"} disabled={actionsBlocked} onClick={() => openDialog("manual")} className={`h-7 text-xs${showCopyLink ? " px-2" : ""}`}>
-                    <Upload className="h-3 w-3 mr-1" />
+                    <UploadIcon className="h-3 w-3 mr-1" />
                     Record manually
                   </Button>
                 </BlockedHint>
@@ -737,7 +748,7 @@ export function ConsentCard({
           {(consentStatus === "sent" || consentStatus === "expired") && (
             <>
               <div className="flex items-start gap-2 text-blue-600">
-                <Clock className="h-4 w-4 mt-0.5 shrink-0" />
+                <ClockIcon className="h-4 w-4 mt-0.5 shrink-0" />
                 <p className="text-sm font-medium">
                   {consentStatus === "expired" ? "Consent link expired" : "Awaiting signature"}
                 </p>
@@ -751,20 +762,20 @@ export function ConsentCard({
                 <div className="flex gap-2 flex-wrap">
                   {consentStatus === "sent" && current?.link && (
                     <Button size="sm" variant="outline" onClick={handleCopyLink} className="h-7 text-xs">
-                      <Copy className="h-3 w-3 mr-1" />
+                      <CopyIcon className="h-3 w-3 mr-1" />
                       Copy link
                     </Button>
                   )}
                   <Button size="sm" variant="outline" onClick={handleResend} className="h-7 text-xs">
-                    <RefreshCw className="h-3 w-3 mr-1" />
+                    <ArrowsClockwiseIcon className="h-3 w-3 mr-1" />
                     {consentStatus === "expired" ? "Resend" : "Resend"}
                   </Button>
                   <Button size="sm" variant="outline" onClick={() => setInPersonOpen(true)} className="h-7 text-xs">
-                    <PenLine className="h-3 w-3 mr-1" />
+                    <PencilLineIcon className="h-3 w-3 mr-1" />
                     Sign here now
                   </Button>
                   <Button size="sm" variant="ghost" onClick={() => openDialog("manual")} className="h-7 text-xs">
-                    <Upload className="h-3 w-3 mr-1" />
+                    <UploadIcon className="h-3 w-3 mr-1" />
                     Record manually
                   </Button>
                 </div>
@@ -776,9 +787,9 @@ export function ConsentCard({
             <>
               <div className={`flex items-start gap-2 ${completeness.complete ? "text-green-600" : "text-amber-600"}`}>
                 {completeness.complete ? (
-                  <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
+                  <CheckCircleIcon className="h-4 w-4 mt-0.5 shrink-0" />
                 ) : (
-                  <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                  <WarningIcon className="h-4 w-4 mt-0.5 shrink-0" />
                 )}
                 <div>
                   <p className="text-sm font-medium">{L.signedTitle}</p>
@@ -804,7 +815,7 @@ export function ConsentCard({
                   className="h-7 text-xs"
                   onClick={() => setPreviewOpen(true)}
                 >
-                  <FileText className="h-3 w-3 mr-1" />
+                  <FileTextIcon className="h-3 w-3 mr-1" />
                   View document
                 </Button>
               )}

@@ -2,7 +2,7 @@
 
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { Inbox } from "lucide-react";
+import { TrayIcon } from "@phosphor-icons/react";
 import { formatMoney } from "@/lib/travel/currency";
 import { DealCard } from "./deal-card";
 import type { Deal, DealStage } from "@/types/database";
@@ -62,7 +62,7 @@ export function DealColumn({ stage, deals, canDrag }: DealColumnProps) {
           ) : (
             <div className="flex flex-col items-center justify-center h-32 text-center px-4">
               <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center mb-2">
-                <Inbox className="h-5 w-5 text-muted-foreground" />
+                <TrayIcon className="h-5 w-5 text-muted-foreground" />
               </div>
               <p className="text-sm text-muted-foreground font-medium">No deals</p>
               <p className="text-xs text-muted-foreground/70 mt-0.5">Drag deals here</p>

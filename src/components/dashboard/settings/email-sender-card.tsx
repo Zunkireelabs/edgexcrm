@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Mail } from "lucide-react";
+import { EnvelopeSimpleIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 interface EmailSenderSettings {
@@ -76,7 +76,7 @@ export function EmailSenderCard() {
   return (
     <div className="border rounded-lg p-6 space-y-4">
       <div className="flex items-center gap-2">
-        <Mail className="h-4 w-4 text-muted-foreground" />
+        <EnvelopeSimpleIcon className="h-4 w-4 text-muted-foreground" />
         <h2 className="font-semibold">Email Sender Identity</h2>
         {settings.domain_verified ? (
           <Badge variant="default" className="ml-auto bg-green-100 text-green-700 border-green-200">

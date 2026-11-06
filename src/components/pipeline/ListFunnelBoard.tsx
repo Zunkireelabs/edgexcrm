@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Mail, Phone, Clock, Filter } from "lucide-react";
+import { EnvelopeSimpleIcon, PhoneIcon, ClockIcon, FunnelIcon } from "@phosphor-icons/react";
 import {
   Popover,
   PopoverContent,
@@ -34,13 +34,13 @@ function LeadMiniCard({ lead, assigneeName }: { lead: Lead; assigneeName: string
       <div className="mt-1.5 space-y-1">
         {lead.email && (
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground truncate">
-            <Mail className="h-3 w-3 shrink-0" />
+            <EnvelopeSimpleIcon className="h-3 w-3 shrink-0" />
             <span className="truncate">{lead.email}</span>
           </div>
         )}
         {lead.phone && (
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground truncate">
-            <Phone className="h-3 w-3 shrink-0" />
+            <PhoneIcon className="h-3 w-3 shrink-0" />
             <span className="truncate">{lead.phone}</span>
           </div>
         )}
@@ -50,7 +50,7 @@ function LeadMiniCard({ lead, assigneeName }: { lead: Lead; assigneeName: string
           {assigneeName ?? "Unassigned"}
         </span>
         <span className="text-xs text-muted-foreground flex items-center gap-1 shrink-0">
-          <Clock className="h-3 w-3" />
+          <ClockIcon className="h-3 w-3" />
           {new Date(lead.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
         </span>
       </div>
@@ -95,7 +95,7 @@ export function ListFunnelBoard({ lists, leadsByListId, memberNames, listCounts,
                       }`}
                       title="Filter by status"
                     >
-                      <Filter className="h-3.5 w-3.5" />
+                      <FunnelIcon className="h-3.5 w-3.5" />
                     </button>
                   </PopoverTrigger>
                   <PopoverContent align="end" className="w-44 p-1">

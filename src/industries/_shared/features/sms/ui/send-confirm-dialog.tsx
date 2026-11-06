@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { AlertTriangle } from "lucide-react";
+import { WarningIcon } from "@phosphor-icons/react";
 
 interface SendConfirmDialogProps {
   open: boolean;
@@ -45,7 +45,7 @@ export function SendConfirmDialog({ open, onOpenChange, recipientCount, sandboxe
 
         {!sandboxed && (
           <div className="flex items-start gap-2 rounded-md border border-destructive bg-destructive/10 p-3 text-sm text-destructive font-medium">
-            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+            <WarningIcon className="h-4 w-4 shrink-0 mt-0.5" />
             <span>
               This will send real SMS to {recipientCount} real phone number{recipientCount === 1 ? "" : "s"}.
             </span>

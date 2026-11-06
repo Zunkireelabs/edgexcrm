@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Buildings } from "@phosphor-icons/react";
+import { BuildingsIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import {
   Select,
@@ -42,7 +42,7 @@ export function BranchSwitcher({
         title={branchName}
         className={cn("inline-flex h-[30px] select-none items-center gap-1.5 rounded-ds-sm border border-ds-border bg-ds-surface px-2.5 text-[12.5px] font-medium text-ds-ink", className)}
       >
-        <Buildings size={14} weight="regular" aria-hidden className="shrink-0 text-ds-muted" />
+        <BuildingsIcon size={14} weight="regular" aria-hidden className="shrink-0 text-ds-muted" />
         <span className="max-w-[150px] truncate">{branchName}</span>
       </div>
     );
@@ -63,7 +63,7 @@ export function BranchSwitcher({
           title={selectedName ?? "Overall"}
           className={cn("h-[30px] data-[size=sm]:h-[30px] w-auto gap-1.5 rounded-ds-sm border-ds-border bg-ds-surface px-2.5 text-[12.5px] font-medium text-ds-ink shadow-none [&_[data-slot=select-value]]:max-w-[150px] [&_[data-slot=select-value]]:truncate", className)}
         >
-          <Buildings size={14} weight="regular" aria-hidden className="shrink-0 text-ds-muted" />
+          <BuildingsIcon size={14} weight="regular" aria-hidden className="shrink-0 text-ds-muted" />
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

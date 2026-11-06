@@ -1,6 +1,6 @@
 "use client";
 
-import { Clock } from "lucide-react";
+import { ClockIcon } from "@phosphor-icons/react";
 import {
   Table,
   TableBody,
@@ -34,7 +34,7 @@ export function TimesheetTable({
   if (entries.length === 0) {
     return (
       <div className="border rounded-xl p-12 text-center bg-card">
-        <Clock className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
+        <ClockIcon className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
         <h3 className="font-semibold text-lg mb-1">No entries found</h3>
         <p className="text-muted-foreground text-sm">Adjust filters to see more results.</p>
       </div>

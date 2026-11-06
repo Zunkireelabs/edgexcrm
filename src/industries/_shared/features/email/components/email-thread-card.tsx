@@ -2,7 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronUp, Reply, ListPlus } from "lucide-react";
+import {
+  CaretDownIcon,
+  CaretUpIcon,
+  ArrowBendUpLeftIcon,
+  ListPlusIcon,
+} from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -217,7 +222,7 @@ export function EmailThreadCard({
             aria-label={expanded ? "Collapse thread" : "Expand thread"}
             tabIndex={-1}
           >
-            {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            {expanded ? <CaretUpIcon className="h-4 w-4" /> : <CaretDownIcon className="h-4 w-4" />}
           </button>
         </div>
 
@@ -260,7 +265,7 @@ export function EmailThreadCard({
                     setComposerOpen(true);
                   }}
                 >
-                  <ListPlus className="h-3.5 w-3.5 mr-1.5" />
+                  <ListPlusIcon className="h-3.5 w-3.5 mr-1.5" />
                   Create task
                 </Button>
               )}
@@ -272,7 +277,7 @@ export function EmailThreadCard({
                   handleReply();
                 }}
               >
-                <Reply className="h-3.5 w-3.5 mr-1.5" />
+                <ArrowBendUpLeftIcon className="h-3.5 w-3.5 mr-1.5" />
                 Reply
               </Button>
             </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { X } from "lucide-react";
+import { XIcon } from "@phosphor-icons/react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -164,7 +164,7 @@ export function StageAutoEnrollCard({ value, onChange, channel, sequenceId, auto
                     className="rounded-full p-0.5 hover:bg-indigo-100 dark:hover:bg-indigo-900"
                     onClick={() => set({ listIds: value.listIds.filter((x) => x !== id) })}
                   >
-                    <X className="h-3 w-3" />
+                    <XIcon className="h-3 w-3" />
                   </button>
                 </span>
               ))}

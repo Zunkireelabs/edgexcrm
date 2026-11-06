@@ -1,7 +1,14 @@
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
-import { Plus, LayoutGrid, List, Search, Download, ArrowUpDown } from "lucide-react";
+import {
+  PlusIcon,
+  SquaresFourIcon,
+  ListIcon,
+  MagnifyingGlassIcon,
+  DownloadIcon,
+  ArrowsDownUpIcon,
+} from "@phosphor-icons/react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { FilterDropdown } from "@/components/ui/filter-dropdown";
@@ -294,7 +301,7 @@ export function DealsWorkspace({
           />
           {isAdmin && (
             <Button size="sm" onClick={() => setAddOpen(true)}>
-              <Plus className="h-4 w-4 mr-1.5" />
+              <PlusIcon className="h-4 w-4 mr-1.5" />
               Add Deal
             </Button>
           )}
@@ -305,7 +312,7 @@ export function DealsWorkspace({
       <div className="flex flex-wrap items-center gap-2 shrink-0 px-3 py-2">
         {/* Search */}
         <div className="relative w-52">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+          <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
           <input
             type="text"
             value={search}
@@ -325,7 +332,7 @@ export function DealsWorkspace({
           value={sortValue}
           onChange={setSortValue}
           options={SORT_OPTIONS}
-          icon={<ArrowUpDown className="h-3 w-3" />}
+          icon={<ArrowsDownUpIcon className="h-3 w-3" />}
           searchable={false}
         />
 
@@ -336,7 +343,7 @@ export function DealsWorkspace({
           className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md border border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b] transition-colors"
           title="Export CSV"
         >
-          <Download className="h-3 w-3" />
+          <DownloadIcon className="h-3 w-3" />
           Export
         </button>
 
@@ -349,7 +356,7 @@ export function DealsWorkspace({
               view === "board" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted text-muted-foreground"
             }`}
           >
-            <LayoutGrid className="h-3.5 w-3.5" />
+            <SquaresFourIcon className="h-3.5 w-3.5" />
             Board
           </button>
           <button
@@ -359,7 +366,7 @@ export function DealsWorkspace({
               view === "list" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted text-muted-foreground"
             }`}
           >
-            <List className="h-3.5 w-3.5" />
+            <ListIcon className="h-3.5 w-3.5" />
             List
           </button>
         </div>

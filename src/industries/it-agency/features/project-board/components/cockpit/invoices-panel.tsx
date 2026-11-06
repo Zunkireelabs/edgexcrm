@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, FileText } from "lucide-react";
+import { PlusIcon, FileTextIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -60,7 +60,7 @@ export function InvoicesPanel({ projectId, currency }: InvoicesPanelProps) {
       <CardHeader className="flex-row items-center justify-between space-y-0">
         <CardTitle className="text-sm">Invoices</CardTitle>
         <Button variant="ghost" size="sm" onClick={() => setPicking((v) => !v)}>
-          <Plus className="h-3.5 w-3.5 mr-1.5" />
+          <PlusIcon className="h-3.5 w-3.5 mr-1.5" />
           Generate invoice
         </Button>
       </CardHeader>
@@ -108,7 +108,7 @@ export function InvoicesPanel({ projectId, currency }: InvoicesPanelProps) {
             className="w-full flex items-center justify-between gap-3 py-2 border-b border-border/50 last:border-0 text-left hover:bg-muted/40 rounded-sm px-1 -mx-1"
           >
             <div className="min-w-0 flex items-center gap-2">
-              <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <FileTextIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
               <span className="text-sm text-foreground truncate">{inv.invoice_number}</span>
               {inv.due_date && <span className="text-xs text-muted-foreground shrink-0">Due {inv.due_date}</span>}
             </div>

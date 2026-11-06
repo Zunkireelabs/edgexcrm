@@ -17,7 +17,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { GitBranch, Plus, Trash2, Pencil, Check, X } from "lucide-react";
+import {
+  GitBranchIcon,
+  PlusIcon,
+  TrashIcon,
+  PencilSimpleIcon,
+  CheckIcon,
+  XIcon,
+} from "@phosphor-icons/react";
 import { toast } from "sonner";
 import type { Branch } from "@/types/database";
 
@@ -161,7 +168,7 @@ export function BranchesManager({ maxBranches }: BranchesManagerProps) {
       <Card>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
-            <GitBranch className="h-5 w-5" />
+            <GitBranchIcon className="h-5 w-5" />
             Branches
           </CardTitle>
         </CardHeader>
@@ -176,7 +183,7 @@ export function BranchesManager({ maxBranches }: BranchesManagerProps) {
     <Card>
       <CardHeader>
         <CardTitle className="text-lg flex items-center gap-2">
-          <GitBranch className="h-5 w-5" />
+          <GitBranchIcon className="h-5 w-5" />
           Branches
         </CardTitle>
         <CardDescription>Manage office branches and their managers</CardDescription>
@@ -212,7 +219,7 @@ export function BranchesManager({ maxBranches }: BranchesManagerProps) {
                       onClick={() => renameBranch(branch.id)}
                       disabled={savingEdit}
                     >
-                      <Check className="h-3.5 w-3.5 text-green-600" />
+                      <CheckIcon className="h-3.5 w-3.5 text-green-600" />
                     </Button>
                     <Button
                       variant="ghost"
@@ -220,7 +227,7 @@ export function BranchesManager({ maxBranches }: BranchesManagerProps) {
                       className="h-7 w-7"
                       onClick={() => setEditingId(null)}
                     >
-                      <X className="h-3.5 w-3.5 text-muted-foreground" />
+                      <XIcon className="h-3.5 w-3.5 text-muted-foreground" />
                     </Button>
                   </div>
                 ) : (
@@ -254,7 +261,7 @@ export function BranchesManager({ maxBranches }: BranchesManagerProps) {
                       }}
                       title="Rename"
                     >
-                      <Pencil className="h-3 w-3 text-muted-foreground" />
+                      <PencilSimpleIcon className="h-3 w-3 text-muted-foreground" />
                     </Button>
                     <Button
                       variant="ghost"
@@ -264,7 +271,7 @@ export function BranchesManager({ maxBranches }: BranchesManagerProps) {
                       disabled={deletingId === branch.id}
                       title="Delete branch"
                     >
-                      <Trash2 className="h-3 w-3" />
+                      <TrashIcon className="h-3 w-3" />
                     </Button>
                   </>
                 )}
@@ -288,7 +295,7 @@ export function BranchesManager({ maxBranches }: BranchesManagerProps) {
             disabled={creating || !createName.trim()}
             size="sm"
           >
-            <Plus className="h-4 w-4 mr-1" />
+            <PlusIcon className="h-4 w-4 mr-1" />
             {creating ? "Creating…" : "Add Branch"}
           </Button>
         </div>

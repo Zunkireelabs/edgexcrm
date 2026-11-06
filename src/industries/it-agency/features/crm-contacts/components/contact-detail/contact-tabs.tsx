@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Pencil } from "lucide-react";
+import { PencilSimpleIcon } from "@phosphor-icons/react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -107,7 +107,7 @@ export function ContactTabs({ contact, onEditClick }: ContactTabsProps) {
                   className="h-7 w-7 p-0"
                   onClick={onEditClick}
                 >
-                  <Pencil className="h-3.5 w-3.5" />
+                  <PencilSimpleIcon className="h-3.5 w-3.5" />
                   <span className="sr-only">Edit contact</span>
                 </Button>
               </div>

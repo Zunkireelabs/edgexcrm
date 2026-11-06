@@ -1,6 +1,12 @@
 "use client";
 
-import { Loader2, Check, AlertTriangle, FileText, X } from "lucide-react";
+import {
+  CircleNotchIcon,
+  CheckIcon,
+  WarningIcon,
+  FileTextIcon,
+  XIcon,
+} from "@phosphor-icons/react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { isToolUIPart, isTextUIPart, getToolName, type ToolUIPart, type DynamicToolUIPart, type UITools } from "ai";
@@ -109,7 +115,7 @@ function ToolActivityLine({ part }: { part: AnyToolPart }) {
   if (part.state === "input-streaming" || part.state === "input-available") {
     return (
       <div className="flex items-center gap-1.5 text-xs text-gray-500 px-1">
-        <Loader2 className="w-3 h-3 animate-spin" />
+        <CircleNotchIcon className="w-3 h-3 animate-spin" />
         <span>{label}…</span>
       </div>
     );
@@ -118,7 +124,7 @@ function ToolActivityLine({ part }: { part: AnyToolPart }) {
   if (part.state === "output-error") {
     return (
       <div className="flex items-center gap-1.5 text-xs text-red-500 px-1">
-        <AlertTriangle className="w-3 h-3" />
+        <WarningIcon className="w-3 h-3" />
         <span>{label} failed</span>
       </div>
     );
@@ -127,7 +133,7 @@ function ToolActivityLine({ part }: { part: AnyToolPart }) {
   if (part.state === "output-denied") {
     return (
       <div className="flex items-center gap-1.5 text-xs text-gray-400 px-1">
-        <X className="w-3 h-3" />
+        <XIcon className="w-3 h-3" />
         <span>{label} — denied</span>
       </div>
     );
@@ -141,7 +147,7 @@ function ToolActivityLine({ part }: { part: AnyToolPart }) {
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center gap-1.5 text-xs text-gray-400 px-1">
-        <Check className="w-3 h-3" />
+        <CheckIcon className="w-3 h-3" />
         <span>{label}</span>
       </div>
       {citations.length > 0 && <CitationChips citations={citations} />}
@@ -158,7 +164,7 @@ function CitationChips({ citations }: { citations: KnowledgeCitation[] }) {
           href={`/knowledge-bases/${c.knowledgeBaseId}`}
           className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[11px] text-gray-600 hover:bg-gray-100"
         >
-          <FileText className="w-2.5 h-2.5 shrink-0" />
+          <FileTextIcon className="w-2.5 h-2.5 shrink-0" />
           <span className="max-w-[180px] truncate">
             {c.title}
             {c.page !== undefined ? ` · p.${c.page}` : ""}

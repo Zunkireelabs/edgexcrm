@@ -4,21 +4,21 @@ import { useState, useEffect } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
-  GripVertical,
-  Trash2,
-  Type,
-  Mail,
-  Phone,
-  Hash,
-  Calendar,
-  AlignLeft,
-  ChevronDown,
-  CheckSquare,
-  CircleDot,
-  Paperclip,
-  ListFilter,
-  ChevronRight,
-} from "lucide-react";
+  DotsSixVerticalIcon,
+  TrashIcon,
+  TextTIcon,
+  EnvelopeSimpleIcon,
+  PhoneIcon,
+  HashIcon,
+  CalendarIcon,
+  AlignLeftIcon,
+  CaretDownIcon,
+  CheckSquareIcon,
+  RadioButtonIcon,
+  PaperclipIcon,
+  FunnelSimpleIcon,
+  CaretRightIcon,
+} from "@phosphor-icons/react";
 import { Input } from "@/components/ui/input";
 import type { FormField } from "@/types/database";
 
@@ -34,20 +34,20 @@ interface FieldRowProps {
 }
 
 const FIELD_META: Record<string, { icon: React.ElementType; color: string; bg: string; label: string }> = {
-  text:          { icon: Type,        color: "text-blue-600",   bg: "bg-blue-50",    label: "Text" },
-  email:         { icon: Mail,        color: "text-purple-600", bg: "bg-purple-50",  label: "Email" },
-  tel:           { icon: Phone,       color: "text-green-600",  bg: "bg-green-50",   label: "Phone Number" },
-  number:        { icon: Hash,        color: "text-cyan-600",   bg: "bg-cyan-50",    label: "Number" },
-  date:          { icon: Calendar,    color: "text-teal-600",   bg: "bg-teal-50",    label: "Date" },
-  textarea:      { icon: AlignLeft,   color: "text-indigo-600", bg: "bg-indigo-50",  label: "Text Area" },
-  select:        { icon: ChevronDown, color: "text-orange-600", bg: "bg-orange-50",  label: "Dropdown" },
-  radio:         { icon: CircleDot,   color: "text-rose-600",   bg: "bg-rose-50",    label: "Radio" },
-  checkbox:      { icon: CheckSquare, color: "text-pink-600",   bg: "bg-pink-50",    label: "Checkbox" },
-  file:          { icon: Paperclip,   color: "text-amber-600",  bg: "bg-amber-50",   label: "File" },
-  entity_select: { icon: ListFilter,  color: "text-violet-600", bg: "bg-violet-50",  label: "Entity" },
+  text:          { icon: TextTIcon,        color: "text-blue-600",   bg: "bg-blue-50",    label: "Text" },
+  email:         { icon: EnvelopeSimpleIcon,        color: "text-purple-600", bg: "bg-purple-50",  label: "Email" },
+  tel:           { icon: PhoneIcon,       color: "text-green-600",  bg: "bg-green-50",   label: "Phone Number" },
+  number:        { icon: HashIcon,        color: "text-cyan-600",   bg: "bg-cyan-50",    label: "Number" },
+  date:          { icon: CalendarIcon,    color: "text-teal-600",   bg: "bg-teal-50",    label: "Date" },
+  textarea:      { icon: AlignLeftIcon,   color: "text-indigo-600", bg: "bg-indigo-50",  label: "Text Area" },
+  select:        { icon: CaretDownIcon, color: "text-orange-600", bg: "bg-orange-50",  label: "Dropdown" },
+  radio:         { icon: RadioButtonIcon,   color: "text-rose-600",   bg: "bg-rose-50",    label: "Radio" },
+  checkbox:      { icon: CheckSquareIcon, color: "text-pink-600",   bg: "bg-pink-50",    label: "Checkbox" },
+  file:          { icon: PaperclipIcon,   color: "text-amber-600",  bg: "bg-amber-50",   label: "File" },
+  entity_select: { icon: FunnelSimpleIcon,  color: "text-violet-600", bg: "bg-violet-50",  label: "Entity" },
 };
 
-const DEFAULT_META = { icon: Type, color: "text-gray-600", bg: "bg-gray-50", label: "Field" };
+const DEFAULT_META = { icon: TextTIcon, color: "text-gray-600", bg: "bg-gray-50", label: "Field" };
 
 export function FieldRow({
   field,
@@ -98,7 +98,7 @@ export function FieldRow({
         {...attributes}
         {...listeners}
       >
-        <GripVertical className="h-4 w-4" />
+        <DotsSixVerticalIcon className="h-4 w-4" />
       </button>
 
       {/* Field type icon with colored background */}
@@ -153,11 +153,11 @@ export function FieldRow({
         onClick={(e) => { e.stopPropagation(); onRemove(); }}
         aria-label="Remove field"
       >
-        <Trash2 className="h-3.5 w-3.5" />
+        <TrashIcon className="h-3.5 w-3.5" />
       </button>
 
       {/* Edit arrow */}
-      <ChevronRight className="h-4 w-4 text-gray-300 shrink-0" />
+      <CaretRightIcon className="h-4 w-4 text-gray-300 shrink-0" />
     </div>
   );
 }

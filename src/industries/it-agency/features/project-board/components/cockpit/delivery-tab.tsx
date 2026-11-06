@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { ClipboardList, Loader2, Plus } from "lucide-react";
+import { ClipboardTextIcon, CircleNotchIcon, PlusIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { useProjectIssues } from "../../hooks/use-project-issues";
 import { useProjectMilestones } from "../../hooks/use-project-milestones";
@@ -128,9 +128,9 @@ export function DeliveryTab({ projectId, canManageProjects, currency, onProjectC
   const commitPlanButton = canManageProjects && (
     <Button variant="outline" size="sm" onClick={handleCommitPlan} disabled={committingPlan}>
       {committingPlan ? (
-        <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+        <CircleNotchIcon className="h-3.5 w-3.5 mr-1.5 animate-spin" />
       ) : (
-        <ClipboardList className="h-3.5 w-3.5 mr-1.5" />
+        <ClipboardTextIcon className="h-3.5 w-3.5 mr-1.5" />
       )}
       Commit plan
     </Button>
@@ -146,7 +146,7 @@ export function DeliveryTab({ projectId, canManageProjects, currency, onProjectC
   if (anyLoading) {
     return (
       <div className="flex items-center justify-center h-40">
-        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        <CircleNotchIcon className="h-4 w-4 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -163,7 +163,7 @@ export function DeliveryTab({ projectId, canManageProjects, currency, onProjectC
             <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
               {(Object.keys(ADD_LABELS) as DeliveryKind[]).map((kind) => (
                 <Button key={kind} variant="outline" size="sm" onClick={() => requestAdd(kind)}>
-                  <Plus className="h-3.5 w-3.5 mr-1.5" />
+                  <PlusIcon className="h-3.5 w-3.5 mr-1.5" />
                   {ADD_LABELS[kind]}
                 </Button>
               ))}
@@ -188,7 +188,7 @@ export function DeliveryTab({ projectId, canManageProjects, currency, onProjectC
           {canManageProjects &&
             hiddenKinds.map((kind) => (
               <Button key={kind} variant="ghost" size="sm" onClick={() => requestAdd(kind)}>
-                <Plus className="h-3.5 w-3.5 mr-1.5" />
+                <PlusIcon className="h-3.5 w-3.5 mr-1.5" />
                 {ADD_LABELS[kind]}
               </Button>
             ))}

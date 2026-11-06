@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useSyncExternalStore } from "react";
-import { Loader2 } from "lucide-react";
+import { CircleNotchIcon } from "@phosphor-icons/react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import {
@@ -88,7 +88,7 @@ export function PageLoader({ className }: { className?: string }) {
         className,
       )}
     >
-      <Loader2
+      <CircleNotchIcon
         aria-hidden="true"
         className="h-8 w-8 text-muted-foreground motion-safe:animate-spin"
       />

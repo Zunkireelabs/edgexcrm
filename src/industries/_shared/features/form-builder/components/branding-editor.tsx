@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { CaretDownIcon, CaretUpIcon } from "@phosphor-icons/react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -86,7 +86,7 @@ export function BrandingEditor({ branding, redirectUrl, dispatch }: BrandingEdit
         className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground w-full justify-center py-2 transition-colors"
         onClick={() => setShowMore(!showMore)}
       >
-        {showMore ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+        {showMore ? <CaretUpIcon className="h-4 w-4" /> : <CaretDownIcon className="h-4 w-4" />}
         {showMore ? "Fewer options" : "More options"}
       </button>
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Pencil, Trash2, Users } from "lucide-react";
+import { PencilSimpleIcon, TrashIcon, UsersIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -141,7 +141,7 @@ export function AffiliatesPage() {
         </div>
       ) : affiliates.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-48 gap-2 text-muted-foreground">
-          <Users className="h-8 w-8 opacity-40" />
+          <UsersIcon className="h-8 w-8 opacity-40" />
           <p className="text-sm">No affiliates yet. Add your first affiliate to start tracking referrals.</p>
         </div>
       ) : (
@@ -205,7 +205,7 @@ export function AffiliatesPage() {
                             className="h-8 w-8"
                             onClick={() => openEdit(a)}
                           >
-                            <Pencil className="h-3.5 w-3.5" />
+                            <PencilSimpleIcon className="h-3.5 w-3.5" />
                           </Button>
                           <Button
                             size="icon"
@@ -213,7 +213,7 @@ export function AffiliatesPage() {
                             className="h-8 w-8 text-destructive hover:text-destructive"
                             onClick={() => setConfirmDeleteId(a.id)}
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
+                            <TrashIcon className="h-3.5 w-3.5" />
                           </Button>
                         </>
                       )}

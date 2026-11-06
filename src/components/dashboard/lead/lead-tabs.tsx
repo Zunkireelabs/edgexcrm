@@ -3,7 +3,7 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { GitMerge, X } from "lucide-react";
+import { GitMergeIcon, XIcon } from "@phosphor-icons/react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -451,7 +451,7 @@ function PossibleDuplicatesCard({ lead, onMerged }: { lead: Lead; onMerged?: () 
       <Card className="shadow-none rounded-lg py-0 border-amber-200 bg-amber-50/30">
         <CardHeader className="pt-4 pb-3">
           <CardTitle className="text-base flex items-center gap-2">
-            <GitMerge className="h-4 w-4 text-amber-600" />
+            <GitMergeIcon className="h-4 w-4 text-amber-600" />
             Possible duplicates
             <Badge variant="secondary" className="h-5 px-1.5 text-xs bg-amber-100 text-amber-700">
               {suggestions.length}
@@ -478,7 +478,7 @@ function PossibleDuplicatesCard({ lead, onMerged }: { lead: Lead; onMerged?: () 
                   className="h-7 px-2 text-xs"
                   onClick={() => handleMergeClick(s.other_lead)}
                 >
-                  <GitMerge className="h-3 w-3 mr-1" />
+                  <GitMergeIcon className="h-3 w-3 mr-1" />
                   Merge
                 </Button>
                 <Button
@@ -488,7 +488,7 @@ function PossibleDuplicatesCard({ lead, onMerged }: { lead: Lead; onMerged?: () 
                   disabled={dismissing === s.id}
                   onClick={() => handleDismiss(s.id)}
                 >
-                  <X className="h-3 w-3 mr-1" />
+                  <XIcon className="h-3 w-3 mr-1" />
                   Dismiss
                 </Button>
               </div>

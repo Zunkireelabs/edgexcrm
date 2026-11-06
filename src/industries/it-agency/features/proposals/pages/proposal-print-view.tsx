@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2 } from "lucide-react";
+import { CircleNotchIcon } from "@phosphor-icons/react";
 import { ProposalDocument } from "../components/proposal-document";
 import type { Proposal, ProposalLineItem } from "@/types/database";
 
@@ -29,7 +29,7 @@ export function ProposalPrintView({ proposalId }: ProposalPrintViewProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-48">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <CircleNotchIcon className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
   }

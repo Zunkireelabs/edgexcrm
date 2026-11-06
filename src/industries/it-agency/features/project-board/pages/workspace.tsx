@@ -2,7 +2,7 @@
 
 import { useMemo, useState, Suspense } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { CircleNotchIcon } from "@phosphor-icons/react";
 import { useProjects, type ProjectWithMetrics } from "../hooks/use-projects";
 import { useWorkspaceFilters } from "../hooks/use-workspace-filters";
 import { WorkspaceHeader } from "../components/workspace-header";
@@ -67,7 +67,7 @@ function WorkspaceInner({ tenantId: _tenantId, canManageProjects }: ProjectWorks
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        <CircleNotchIcon className="h-5 w-5 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -130,7 +130,7 @@ export function ProjectWorkspacePage(props: ProjectWorkspacePageProps) {
     <Suspense
       fallback={
         <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          <CircleNotchIcon className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
       }
     >

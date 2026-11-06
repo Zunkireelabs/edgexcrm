@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, Check } from "lucide-react";
+import { CircleNotchIcon, CheckIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -142,7 +142,7 @@ function DraftDialog({
             <Button onClick={generate} disabled={loading}>
               {loading ? (
                 <>
-                  <Loader2 className="size-4 mr-1.5 animate-spin" />
+                  <CircleNotchIcon className="size-4 mr-1.5 animate-spin" />
                   Generating…
                 </>
               ) : (
@@ -172,7 +172,7 @@ function DraftDialog({
           <Button variant="outline" disabled={!draft} onClick={copy}>
             {copied ? (
               <>
-                <Check className="size-4 mr-1.5 text-green-600" />
+                <CheckIcon className="size-4 mr-1.5 text-green-600" />
                 Copied!
               </>
             ) : (

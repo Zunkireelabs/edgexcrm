@@ -1,7 +1,14 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { ChevronDown, UserCircle, Building, Check, PauseCircle, PlayCircle } from "lucide-react";
+import {
+  CaretDownIcon,
+  UserCircleIcon,
+  BuildingIcon,
+  CheckIcon,
+  PauseCircleIcon,
+  PlayCircleIcon,
+} from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { prospectIndustryLabel, PROSPECT_INDUSTRIES } from "@/industries/it-agency/leads/prospect-industries";
 import { TRIP_TYPES, tripTypeLabel } from "@/industries/travel-agency/leads/trip-types";
@@ -247,7 +254,7 @@ export function KeyInfoSection({
         <h3 className={SECTION_TITLE_CLASS}>
           Key Information
         </h3>
-        <ChevronDown
+        <CaretDownIcon
           className={cn(
             "h-4 w-4 text-muted-foreground transition-transform duration-200",
             isOpen && "rotate-180"
@@ -407,7 +414,7 @@ export function KeyInfoSection({
                     ) : (
                       <span className="text-muted-foreground">Unassigned</span>
                     )}
-                    <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
+                    <CaretDownIcon className="h-4 w-4 opacity-50 shrink-0" />
                   </button>
                 </PopoverTrigger>
                 <PopoverContent className="w-64 p-0" align="start">
@@ -423,7 +430,7 @@ export function KeyInfoSection({
                             setAssignedToOpen(false);
                           }}
                         >
-                          <Check className={!assignedTo ? "" : "opacity-0"} />
+                          <CheckIcon className={!assignedTo ? "" : "opacity-0"} />
                           <span className="text-muted-foreground">Unassigned</span>
                         </CommandItem>
                         {resolvedAssignable.map((m) => (
@@ -435,7 +442,7 @@ export function KeyInfoSection({
                               setAssignedToOpen(false);
                             }}
                           >
-                            <Check className={m.user_id === assignedTo ? "" : "opacity-0"} />
+                            <CheckIcon className={m.user_id === assignedTo ? "" : "opacity-0"} />
                             <MemberAvatar userId={m.user_id} name={teamMemberLabel(m)} />
                             <span className="truncate">{teamMemberLabel(m)}</span>
                           </CommandItem>
@@ -454,7 +461,7 @@ export function KeyInfoSection({
                   </>
                 ) : (
                   <div className="flex items-center gap-2 text-muted-foreground">
-                    <UserCircle className="h-4 w-4" />
+                    <UserCircleIcon className="h-4 w-4" />
                     <span className="text-sm">Unassigned</span>
                   </div>
                 )}
@@ -676,7 +683,7 @@ export function KeyInfoSection({
                   <p className="text-xs text-muted-foreground mb-1.5">{entityLabel}</p>
                   <div className="flex items-center gap-2">
                     <div className="h-6 w-6 rounded-md bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
-                      <Building className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                      <BuildingIcon className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
                     </div>
                     <span className="text-sm font-medium">{entity.name}</span>
                   </div>
@@ -889,9 +896,9 @@ function OnHoldToggle({ lead, canEdit }: { lead: Lead; canEdit: boolean }) {
     <div className="flex items-center justify-between py-1">
       <div className="flex items-center gap-1.5">
         {onHold ? (
-          <PauseCircle className="h-4 w-4 text-amber-600" />
+          <PauseCircleIcon className="h-4 w-4 text-amber-600" />
         ) : (
-          <PlayCircle className="h-4 w-4 text-muted-foreground" />
+          <PlayCircleIcon className="h-4 w-4 text-muted-foreground" />
         )}
         <span className="text-sm">On hold</span>
         {onHold && (

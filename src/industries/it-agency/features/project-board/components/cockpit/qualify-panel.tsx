@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ShieldCheck, SlidersHorizontal } from "lucide-react";
+import { ShieldCheckIcon, SlidersHorizontalIcon } from "@phosphor-icons/react";
 import { formatMoney } from "@/lib/currency";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -58,7 +58,7 @@ export function QualifyPanel({ project, canManageProjects, onQualify }: QualifyP
       <Card>
         <CardHeader>
           <CardTitle className="text-sm flex items-center gap-2">
-            <ShieldCheck className="h-4 w-4 text-green-600" />
+            <ShieldCheckIcon className="h-4 w-4 text-green-600" />
             Qualified
           </CardTitle>
           <CardDescription>
@@ -136,7 +136,7 @@ export function QualifyPanel({ project, canManageProjects, onQualify }: QualifyP
             </p>
           </div>
           <Button variant="outline" size="sm" className="flex-shrink-0" onClick={() => setExpanded(true)}>
-            <SlidersHorizontal className="h-3.5 w-3.5 mr-1.5" />
+            <SlidersHorizontalIcon className="h-3.5 w-3.5 mr-1.5" />
             Set baseline
           </Button>
         </CardContent>

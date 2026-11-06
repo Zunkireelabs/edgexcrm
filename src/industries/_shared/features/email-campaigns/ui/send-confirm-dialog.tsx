@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle } from "lucide-react";
+import { WarningIcon } from "@phosphor-icons/react";
 import { EmailPreviewPane } from "./email-preview-pane";
 import type { EmailBlastPreviewResponse } from "../lib/types";
 
@@ -120,7 +120,7 @@ export function SendConfirmDialog({ open, onOpenChange, preview, sending, error,
 
                 {preview.cap.willThrottle && (
                   <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <WarningIcon className="mt-0.5 h-4 w-4 shrink-0" />
                     <span>
                       This audience ({preview.audience.sendable}) exceeds today&apos;s remaining send capacity (
                       {preview.cap.remaining} of {preview.cap.dailyCap}/day, {preview.cap.sentToday} already sent today).

@@ -5,7 +5,13 @@
 // caller keeps its plain textarea.
 
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
-import { ChevronDown, ChevronUp, FileUp, Search, X } from "lucide-react";
+import {
+  CaretDownIcon,
+  CaretUpIcon,
+  FileArrowUpIcon,
+  MagnifyingGlassIcon,
+  XIcon,
+} from "@phosphor-icons/react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -134,7 +140,7 @@ export function CodeEditorPane({ value, onChange, textareaRef, minHeight, placeh
     <div className="space-y-1.5">
       <div className="flex flex-wrap items-center gap-1.5 text-xs">
         <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={openFind} disabled={disabled}>
-          <Search className="h-3 w-3 mr-1" /> Find
+          <MagnifyingGlassIcon className="h-3 w-3 mr-1" /> Find
         </Button>
         <Button
           type="button"
@@ -144,7 +150,7 @@ export function CodeEditorPane({ value, onChange, textareaRef, minHeight, placeh
           onClick={() => fileInputRef.current?.click()}
           disabled={disabled}
         >
-          <FileUp className="h-3 w-3 mr-1" /> Upload .html
+          <FileArrowUpIcon className="h-3 w-3 mr-1" /> Upload .html
         </Button>
         <span className="text-muted-foreground">or drag a .html file onto the code</span>
         <input
@@ -182,10 +188,10 @@ export function CodeEditorPane({ value, onChange, textareaRef, minHeight, placeh
             {query ? (matches.length ? `${shownIdx + 1} of ${matches.length}` : "No matches") : ""}
           </span>
           <Button type="button" variant="ghost" size="icon" className="h-7 w-7" disabled={!matches.length} onClick={() => jumpToMatch(shownIdx - 1)} aria-label="Previous match">
-            <ChevronUp className="h-3.5 w-3.5" />
+            <CaretUpIcon className="h-3.5 w-3.5" />
           </Button>
           <Button type="button" variant="ghost" size="icon" className="h-7 w-7" disabled={!matches.length} onClick={() => jumpToMatch(shownIdx + 1)} aria-label="Next match">
-            <ChevronDown className="h-3.5 w-3.5" />
+            <CaretDownIcon className="h-3.5 w-3.5" />
           </Button>
           <Input
             type="number"
@@ -206,7 +212,7 @@ export function CodeEditorPane({ value, onChange, textareaRef, minHeight, placeh
           />
           <span className="text-xs text-muted-foreground">{total} lines</span>
           <Button type="button" variant="ghost" size="icon" className="ml-auto h-7 w-7" onClick={closeFind} aria-label="Close find">
-            <X className="h-3.5 w-3.5" />
+            <XIcon className="h-3.5 w-3.5" />
           </Button>
         </div>
       )}

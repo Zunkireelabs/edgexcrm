@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Play, Square } from "lucide-react";
+import { PlayIcon, SquareIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { notifyTimersChanged } from "@/lib/timers/timer-events";
 import { isTimerStopped } from "@/lib/timers/stop-result";
@@ -76,7 +76,7 @@ export function TaskTimerButton({ taskId, initialTimerId = null, className }: Ta
         className,
       )}
     >
-      {running ? <Square className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+      {running ? <SquareIcon className="h-4 w-4" /> : <PlayIcon className="h-4 w-4" />}
     </button>
   );
 }

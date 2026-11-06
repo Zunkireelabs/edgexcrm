@@ -2,7 +2,14 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Settings, Plus, ChevronDown, Search, Check, GitBranch } from "lucide-react";
+import {
+  GearIcon,
+  PlusIcon,
+  CaretDownIcon,
+  MagnifyingGlassIcon,
+  CheckIcon,
+  GitBranchIcon,
+} from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { ApplicationPipelineSettingsModal } from "./application-pipeline-settings-modal";
 import { CreateApplicationPipelineModal } from "./create-application-pipeline-modal";
@@ -139,16 +146,16 @@ export function ApplicationPipelineSelector({
               }
             `}
           >
-            <GitBranch className="h-3 w-3 shrink-0" />
+            <GitBranchIcon className="h-3 w-3 shrink-0" />
             <span className="truncate max-w-[140px]">{selectedPipeline?.name || "Select Pipeline"}</span>
-            <ChevronDown className={`h-3 w-3 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+            <CaretDownIcon className={`h-3 w-3 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`} />
           </button>
 
           {isOpen && (
             <div className="absolute top-full right-0 mt-1.5 w-72 bg-white rounded-lg shadow-lg border border-gray-200 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
               <div className="p-2 border-b border-gray-100">
                 <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                  <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
                   <input
                     ref={searchInputRef}
                     type="text"
@@ -174,7 +181,7 @@ export function ApplicationPipelineSelector({
                         className="w-full flex items-start gap-2.5 px-3 py-2 text-left transition-colors hover:bg-[#0000170b]"
                       >
                         <div className={`mt-0.5 w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center shrink-0 ${isSelected ? "border-[#0f0f10] bg-[#0f0f10]" : "border-gray-300"}`}>
-                          {isSelected && <Check className="w-2 h-2 text-white" />}
+                          {isSelected && <CheckIcon className="w-2 h-2 text-white" />}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5">
@@ -202,7 +209,7 @@ export function ApplicationPipelineSelector({
                       onClick={handleCreateClick}
                       className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
                     >
-                      <Plus className="h-3.5 w-3.5" />
+                      <PlusIcon className="h-3.5 w-3.5" />
                       Create New Pipeline
                     </button>
                   </div>
@@ -214,7 +221,7 @@ export function ApplicationPipelineSelector({
 
         {isAdmin && selectedPipeline && (
           <Button variant="ghost" size="icon-sm" onClick={() => setSettingsOpen(true)} title="Pipeline Settings">
-            <Settings className="h-4 w-4" />
+            <GearIcon className="h-4 w-4" />
           </Button>
         )}
       </div>

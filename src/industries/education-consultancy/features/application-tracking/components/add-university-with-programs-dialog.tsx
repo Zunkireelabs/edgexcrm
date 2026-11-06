@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X } from "lucide-react";
+import { XIcon } from "@phosphor-icons/react";
 import {
   Dialog,
   DialogContent,
@@ -212,7 +212,7 @@ export function AddUniversityWithProgramsDialog({
                       className="hover:text-destructive"
                       disabled={saving}
                     >
-                      <X className="h-3 w-3" />
+                      <XIcon className="h-3 w-3" />
                     </button>
                   </span>
                 ))}

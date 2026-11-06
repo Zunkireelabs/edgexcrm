@@ -1,6 +1,6 @@
 "use client";
 
-import { RefreshCw } from "lucide-react";
+import { ArrowsClockwiseIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import type { ReconciliationRollup, TaskReconciliation } from "../../hooks/use-project-reconciliation";
@@ -62,7 +62,7 @@ export function ReconciliationPanel({ tasks, rollup, loading, canManageProjects,
                     {canManageProjects && (
                       <td className="py-1.5">
                         <Button variant="ghost" size="sm" onClick={() => onReconcile(t.task_id)} title="Reconcile — record in timeline">
-                          <RefreshCw className="h-3.5 w-3.5" />
+                          <ArrowsClockwiseIcon className="h-3.5 w-3.5" />
                         </Button>
                       </td>
                     )}

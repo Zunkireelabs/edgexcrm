@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useLeadBackDestination } from "@/hooks/use-lead-back-destination";
-import { Loader2 } from "lucide-react";
+import { CircleNotchIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { moveErrorMessage, isApplicationsGateError, gateMissingItems, parseBasicInfoMissing } from "@/lib/leads/gate-error";
@@ -753,7 +753,7 @@ export function LeadDetailV2({
   if (leaving) {
     return (
       <div className="flex items-center justify-center py-32">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <CircleNotchIcon className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -1137,7 +1137,7 @@ export function LeadDetailV2({
             <Button onClick={handleQualifySubmit} disabled={qualifying}>
               {qualifying ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />
                   Qualifying…
                 </>
               ) : (

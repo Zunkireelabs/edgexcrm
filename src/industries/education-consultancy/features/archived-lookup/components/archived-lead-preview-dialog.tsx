@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Archive, Loader2, RotateCcw } from "lucide-react";
+import { ArchiveIcon, CircleNotchIcon, ArrowCounterClockwiseIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -74,7 +74,7 @@ export function ArchivedLeadPreviewDialog({
               <DialogTitle className="flex items-center gap-2">
                 <span className="truncate">{archivedLeadName(lead)}</span>
                 <Badge variant="secondary" className="shrink-0 gap-1">
-                  <Archive className="h-3 w-3" />
+                  <ArchiveIcon className="h-3 w-3" />
                   Archived
                 </Badge>
               </DialogTitle>
@@ -109,7 +109,7 @@ export function ArchivedLeadPreviewDialog({
               )}
               {lead.can_restore ? (
                 <Button onClick={restore} disabled={restoring}>
-                  {restoring ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RotateCcw className="mr-2 h-4 w-4" />}
+                  {restoring ? <CircleNotchIcon className="mr-2 h-4 w-4 animate-spin" /> : <ArrowCounterClockwiseIcon className="mr-2 h-4 w-4" />}
                   Move back to pipeline
                 </Button>
               ) : (

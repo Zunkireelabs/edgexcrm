@@ -1,6 +1,6 @@
 "use client";
 
-import { Info } from "lucide-react";
+import { InfoIcon } from "@phosphor-icons/react";
 import type { Lead } from "@/types/database";
 import { CardSection, FieldGrid, EditableField, type FieldDef } from "./form-primitives";
 import { AttachDocumentButton } from "./attach-document-button";
@@ -180,7 +180,7 @@ export function QualificationsSection({
   if (!tier) {
     return (
       <div className="rounded-lg border border-dashed bg-muted/40 p-4 flex items-start gap-3 text-sm">
-        <Info className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+        <InfoIcon className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
         <p className="text-muted-foreground">
           <span className="font-medium text-foreground">Set a Degree Level</span> in Study Interest above to see the relevant qualifications here.
         </p>

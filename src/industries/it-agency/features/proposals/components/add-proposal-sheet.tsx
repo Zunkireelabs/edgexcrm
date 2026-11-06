@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { CircleNotchIcon } from "@phosphor-icons/react";
 import {
   Sheet,
   SheetContent,
@@ -161,7 +161,7 @@ export function AddProposalSheet({
             Cancel
           </Button>
           <Button onClick={handleSubmit} disabled={submitting || !title.trim() || !dealId}>
-            {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            {submitting && <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />}
             Create Proposal
           </Button>
         </SheetFooter>

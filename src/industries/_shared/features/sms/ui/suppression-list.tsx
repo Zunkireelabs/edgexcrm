@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Trash2 } from "lucide-react";
+import { TrashIcon } from "@phosphor-icons/react";
 import { smsGet, smsSend, SmsApiError } from "../lib/api-client";
 import type { SmsSuppressionRow } from "../lib/types";
 
@@ -113,7 +113,7 @@ export function SuppressionList({ canManage }: SuppressionListProps) {
                     {canManage && (
                       <TableCell>
                         <Button variant="ghost" size="icon-sm" onClick={() => handleRemove(row.id)} aria-label="Remove suppression">
-                          <Trash2 className="h-3.5 w-3.5" />
+                          <TrashIcon className="h-3.5 w-3.5" />
                         </Button>
                       </TableCell>
                     )}

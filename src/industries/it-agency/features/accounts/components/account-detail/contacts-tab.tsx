@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { PlusIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { ContactStatusBadge } from "@/industries/it-agency/features/crm-contacts/components/contact-status-badge";
 import type { ContactStatus } from "@/types/database";
@@ -32,7 +32,7 @@ export function ContactsTab({ contacts, isAdmin, onCreateContact }: ContactsTabP
         <p className="text-sm text-muted-foreground">{contacts.length} contact{contacts.length !== 1 ? "s" : ""}</p>
         {isAdmin && (
           <Button size="sm" onClick={onCreateContact}>
-            <Plus className="h-3.5 w-3.5 mr-1.5" />
+            <PlusIcon className="h-3.5 w-3.5 mr-1.5" />
             Add contact
           </Button>
         )}

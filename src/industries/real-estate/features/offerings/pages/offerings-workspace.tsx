@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { Building2, Plus, TrendingUp, Users } from "lucide-react";
+import { BuildingsIcon, PlusIcon, TrendUpIcon, UsersIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CreateOfferingDialog } from "../components/create-offering-dialog";
@@ -68,11 +68,11 @@ function OfferingCard({ offering }: { offering: EnrichedOffering }) {
 
       <div className="mt-4 flex items-center gap-4 text-xs text-muted-foreground">
         <span className="flex items-center gap-1.5">
-          <Users className="h-3.5 w-3.5" />
+          <UsersIcon className="h-3.5 w-3.5" />
           {offering.investor_count} investor{offering.investor_count === 1 ? "" : "s"}
         </span>
         <span className="flex items-center gap-1.5">
-          <TrendingUp className="h-3.5 w-3.5" />
+          <TrendUpIcon className="h-3.5 w-3.5" />
           {offering.funded_count} funded
         </span>
         {offering.pref_return != null && <span>{offering.pref_return}% pref</span>}
@@ -112,7 +112,7 @@ export function OfferingsWorkspace({ canManage }: { canManage: boolean }) {
         </div>
         {canManage && (
           <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
+            <PlusIcon className="h-4 w-4 mr-2" />
             New Offering
           </Button>
         )}
@@ -126,7 +126,7 @@ export function OfferingsWorkspace({ canManage }: { canManage: boolean }) {
         </div>
       ) : offerings.length === 0 ? (
         <div className="border rounded-xl p-12 flex flex-col items-center justify-center text-center text-muted-foreground">
-          <Building2 className="h-8 w-8 mb-3 opacity-50" />
+          <BuildingsIcon className="h-8 w-8 mb-3 opacity-50" />
           <p className="font-medium">No offerings yet</p>
           <p className="text-sm mt-1">
             {canManage ? "Create your first capital-raise vehicle to get started." : "No offerings have been created yet."}

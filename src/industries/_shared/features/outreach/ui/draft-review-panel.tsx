@@ -1,7 +1,16 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Copy, Loader2, SkipForward, Send, Sparkles, BookmarkPlus, Mail, CalendarClock } from "lucide-react";
+import {
+  CopyIcon,
+  CircleNotchIcon,
+  SkipForwardIcon,
+  PaperPlaneTiltIcon,
+  SparkleIcon,
+  BookmarkSimpleIcon,
+  EnvelopeSimpleIcon,
+  CalendarDotsIcon,
+} from "@phosphor-icons/react";
 import {
   Sheet,
   SheetContent,
@@ -407,7 +416,7 @@ export function DraftReviewPanel({ draft, isAdmin, onOpenChange, onSent, onSkipp
           {draft.scheduled_send_at && (
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-blue-200 bg-blue-50 p-2.5 text-xs text-blue-900 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-200">
               <span>
-                <CalendarClock className="mr-1.5 inline h-3.5 w-3.5" />
+                <CalendarDotsIcon className="mr-1.5 inline h-3.5 w-3.5" />
                 EdgeX will send this on{" "}
                 <strong>{formatDateTime12(new Date(draft.scheduled_send_at))}</strong>{" "}
                 (within about a minute). You can still edit it until then.
@@ -464,24 +473,24 @@ export function DraftReviewPanel({ draft, isAdmin, onOpenChange, onSent, onSkipp
 
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="outline" size="sm" onClick={copySubject}>
-              <Copy className="h-3.5 w-3.5 mr-1.5" /> Copy subject
+              <CopyIcon className="h-3.5 w-3.5 mr-1.5" /> Copy subject
             </Button>
             <Button type="button" variant="outline" size="sm" onClick={copyBody}>
-              <Copy className="h-3.5 w-3.5 mr-1.5" /> Copy body
+              <CopyIcon className="h-3.5 w-3.5 mr-1.5" /> Copy body
             </Button>
             {aiDraftEnabled && (
               <Button type="button" variant="outline" size="sm" onClick={handleDraftWithAI} disabled={drafting}>
                 {drafting ? (
-                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                  <CircleNotchIcon className="h-3.5 w-3.5 mr-1.5 animate-spin" />
                 ) : (
-                  <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+                  <SparkleIcon className="h-3.5 w-3.5 mr-1.5" />
                 )}
                 Draft with AI
               </Button>
             )}
             {isAdmin && (
               <Button type="button" variant="outline" size="sm" onClick={openSaveAsTemplate}>
-                <BookmarkPlus className="h-3.5 w-3.5 mr-1.5" /> Save as template
+                <BookmarkSimpleIcon className="h-3.5 w-3.5 mr-1.5" /> Save as template
               </Button>
             )}
           </div>
@@ -489,11 +498,11 @@ export function DraftReviewPanel({ draft, isAdmin, onOpenChange, onSent, onSkipp
 
         <SheetFooter className="flex-row justify-end gap-2">
           <Button type="button" variant="outline" onClick={handleSkip} disabled={busy}>
-            {skipping ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <SkipForward className="h-4 w-4 mr-1.5" />}
+            {skipping ? <CircleNotchIcon className="h-4 w-4 mr-1.5 animate-spin" /> : <SkipForwardIcon className="h-4 w-4 mr-1.5" />}
             Skip
           </Button>
           <Button type="button" variant={sendCapability ? "outline" : "default"} onClick={handleMarkSent} disabled={busy}>
-            {sending ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Send className="h-4 w-4 mr-1.5" />}
+            {sending ? <CircleNotchIcon className="h-4 w-4 mr-1.5 animate-spin" /> : <PaperPlaneTiltIcon className="h-4 w-4 mr-1.5" />}
             Mark sent
           </Button>
           {sendCapability && (
@@ -504,7 +513,7 @@ export function DraftReviewPanel({ draft, isAdmin, onOpenChange, onSent, onSkipp
               disabled={busy || subjectMissing}
               title={subjectMissing ? "Add a subject before scheduling" : undefined}
             >
-              <CalendarClock className="h-4 w-4 mr-1.5" />
+              <CalendarDotsIcon className="h-4 w-4 mr-1.5" />
               {draft.scheduled_send_at ? "Reschedule" : "Schedule send"}
             </Button>
           )}
@@ -515,7 +524,7 @@ export function DraftReviewPanel({ draft, isAdmin, onOpenChange, onSent, onSkipp
               disabled={busy || subjectMissing}
               title={subjectMissing ? "Add a subject before sending" : undefined}
             >
-              <Mail className="h-4 w-4 mr-1.5" />
+              <EnvelopeSimpleIcon className="h-4 w-4 mr-1.5" />
               Send now
             </Button>
           )}
@@ -560,7 +569,7 @@ export function DraftReviewPanel({ draft, isAdmin, onOpenChange, onSent, onSkipp
               Cancel
             </Button>
             <Button type="button" onClick={handleSchedule} disabled={scheduling}>
-              {scheduling ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <CalendarClock className="h-4 w-4 mr-1.5" />}
+              {scheduling ? <CircleNotchIcon className="h-4 w-4 mr-1.5 animate-spin" /> : <CalendarDotsIcon className="h-4 w-4 mr-1.5" />}
               Schedule
             </Button>
           </DialogFooter>
@@ -603,7 +612,7 @@ export function DraftReviewPanel({ draft, isAdmin, onOpenChange, onSent, onSkipp
               Cancel
             </Button>
             <Button type="button" onClick={handleSendNow} disabled={sendingNow}>
-              {sendingNow ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Mail className="h-4 w-4 mr-1.5" />}
+              {sendingNow ? <CircleNotchIcon className="h-4 w-4 mr-1.5 animate-spin" /> : <EnvelopeSimpleIcon className="h-4 w-4 mr-1.5" />}
               Send email
             </Button>
           </DialogFooter>
@@ -650,7 +659,7 @@ export function DraftReviewPanel({ draft, isAdmin, onOpenChange, onSent, onSkipp
               Cancel
             </Button>
             <Button type="button" onClick={confirmSaveAsTemplate} disabled={savingTemplate}>
-              {savingTemplate && <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />}
+              {savingTemplate && <CircleNotchIcon className="h-4 w-4 mr-1.5 animate-spin" />}
               Save as step {draft.step_order} template
             </Button>
           </DialogFooter>

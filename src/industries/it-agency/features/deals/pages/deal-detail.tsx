@@ -3,7 +3,17 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Pencil, X, Check, Loader2, Trash2, Plus, Users, FolderKanban } from "lucide-react";
+import {
+  ArrowLeftIcon,
+  PencilSimpleIcon,
+  XIcon,
+  CheckIcon,
+  CircleNotchIcon,
+  TrashIcon,
+  PlusIcon,
+  UsersIcon,
+  FolderSimpleIcon,
+} from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -388,7 +398,7 @@ export function DealDetailPage({ dealId, role, currentUserId, projectBoardEnable
   if (loading) {
     return (
       <div className="flex items-center justify-center h-48">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <CircleNotchIcon className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -405,7 +415,7 @@ export function DealDetailPage({ dealId, role, currentUserId, projectBoardEnable
     <div className="max-w-3xl mx-auto space-y-6">
       {/* Back nav */}
       <Button variant="ghost" size="sm" className="-ml-2" onClick={() => router.back()}>
-        <ArrowLeft className="h-4 w-4 mr-1.5" />
+        <ArrowLeftIcon className="h-4 w-4 mr-1.5" />
         Deals
       </Button>
 
@@ -440,11 +450,11 @@ export function DealDetailPage({ dealId, role, currentUserId, projectBoardEnable
               {editing ? (
                 <>
                   <Button size="sm" variant="outline" onClick={cancelEdit} disabled={saving}>
-                    <X className="h-4 w-4 mr-1" />
+                    <XIcon className="h-4 w-4 mr-1" />
                     Cancel
                   </Button>
                   <Button size="sm" onClick={saveEdit} disabled={saving || !draftName.trim()}>
-                    {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Check className="h-4 w-4 mr-1" />}
+                    {saving ? <CircleNotchIcon className="h-4 w-4 mr-1 animate-spin" /> : <CheckIcon className="h-4 w-4 mr-1" />}
                     Save
                   </Button>
                 </>
@@ -453,22 +463,22 @@ export function DealDetailPage({ dealId, role, currentUserId, projectBoardEnable
                   {linkedProjectId ? (
                     <Button size="sm" variant="outline" asChild>
                       <Link href={`/projects/${linkedProjectId}`}>
-                        <FolderKanban className="h-4 w-4 mr-1" />
+                        <FolderSimpleIcon className="h-4 w-4 mr-1" />
                         View project
                       </Link>
                     </Button>
                   ) : (
                     <Button size="sm" variant="outline" onClick={openConvertDialog}>
-                      <FolderKanban className="h-4 w-4 mr-1" />
+                      <FolderSimpleIcon className="h-4 w-4 mr-1" />
                       Convert to Project
                     </Button>
                   )}
                   <Button size="sm" variant="outline" onClick={startEdit}>
-                    <Pencil className="h-4 w-4 mr-1" />
+                    <PencilSimpleIcon className="h-4 w-4 mr-1" />
                     Edit
                   </Button>
                   <Button size="sm" variant="ghost" onClick={() => setDeleteOpen(true)} className="text-destructive hover:text-destructive">
-                    <Trash2 className="h-4 w-4" />
+                    <TrashIcon className="h-4 w-4" />
                   </Button>
                 </>
               )}
@@ -727,12 +737,12 @@ export function DealDetailPage({ dealId, role, currentUserId, projectBoardEnable
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold flex items-center gap-2">
-            <Users className="h-4 w-4 text-muted-foreground" />
+            <UsersIcon className="h-4 w-4 text-muted-foreground" />
             Contacts
           </h2>
           {isAdmin && (
             <Button size="sm" onClick={() => setContactPickerOpen(true)}>
-              <Plus className="h-3.5 w-3.5 mr-1.5" />
+              <PlusIcon className="h-3.5 w-3.5 mr-1.5" />
               Add contact
             </Button>
           )}
@@ -791,7 +801,7 @@ export function DealDetailPage({ dealId, role, currentUserId, projectBoardEnable
                       {isAdmin && (
                         <div className="flex items-center gap-1 opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0">
                           {isChanging ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                            <CircleNotchIcon className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
                           ) : (
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
@@ -876,7 +886,7 @@ export function DealDetailPage({ dealId, role, currentUserId, projectBoardEnable
               Cancel
             </Button>
             <Button variant="destructive" disabled={removingContact} onClick={handleRemoveContact}>
-              {removingContact && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {removingContact && <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />}
               Remove
             </Button>
           </DialogFooter>
@@ -949,7 +959,7 @@ export function DealDetailPage({ dealId, role, currentUserId, projectBoardEnable
               onClick={handleConvert}
               disabled={converting || !convertName.trim() || !(deal.account_id || convertAccountId)}
             >
-              {converting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {converting && <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />}
               Create Project
             </Button>
           </DialogFooter>
@@ -970,7 +980,7 @@ export function DealDetailPage({ dealId, role, currentUserId, projectBoardEnable
               Cancel
             </Button>
             <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
-              {deleting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {deleting && <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />}
               Delete
             </Button>
           </DialogFooter>

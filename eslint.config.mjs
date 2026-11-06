@@ -13,6 +13,13 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  // Icons: Phosphor only (EDGEX-94). Re-stated in the AI block below because a later
+  // no-restricted-imports entry replaces this one for the files it matches.
+  {
+    rules: {
+      "no-restricted-imports": ["error", { paths: [{ name: "lucide-react", message: "Use @phosphor-icons/react (EDGEX-94)" }] }],
+    },
+  },
   // AI code touches tenant data only through scopedClient() — never the raw
   // service-role client, which bypasses RLS and every tenant_id filter.
   // Extended to industry AI packs (src/industries/*/ai/**) so they get the
@@ -24,6 +31,7 @@ const eslintConfig = defineConfig([
         "error",
         {
           paths: [
+            { name: "lucide-react", message: "Use @phosphor-icons/react (EDGEX-94)" },
             {
               name: "@/lib/supabase/server",
               importNames: ["createServiceClient"],

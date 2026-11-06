@@ -4,19 +4,19 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  Bot,
-  Plus,
-  Search,
-  Settings2,
-  Play,
-  Pause,
-  FileText,
-  CheckCircle2,
-  Clock,
-  Activity,
-  Target,
-  ShieldCheck,
-} from "lucide-react";
+  RobotIcon,
+  PlusIcon,
+  MagnifyingGlassIcon,
+  SlidersHorizontalIcon,
+  PlayIcon,
+  PauseIcon,
+  FileTextIcon,
+  CheckCircleIcon,
+  ClockIcon,
+  PulseIcon,
+  TargetIcon,
+  ShieldCheckIcon,
+} from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,12 +49,12 @@ interface AgentsContentProps {
   agentsActive: boolean;
 }
 
-const AGENT_ICONS: Record<string, typeof Bot> = {
-  "lead-triage": Target,
+const AGENT_ICONS: Record<string, typeof RobotIcon> = {
+  "lead-triage": TargetIcon,
 };
 
-function iconFor(agentKey: string): typeof Bot {
-  return AGENT_ICONS[agentKey] ?? Bot;
+function iconFor(agentKey: string): typeof RobotIcon {
+  return AGENT_ICONS[agentKey] ?? RobotIcon;
 }
 
 const STATUS_CONFIG: Record<AgentStatus, { label: string; text: string; dot: string; iconBg: string; iconText: string }> = {
@@ -169,7 +169,7 @@ export function AgentsContent({ agents, catalog, positions, agentsActive }: Agen
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-[#eb1600] rounded-lg">
-            <Bot className="w-6 h-6 text-white" />
+            <RobotIcon className="w-6 h-6 text-white" />
           </div>
           <div>
             <h1 className="text-lg font-bold">Agent Fleet</h1>
@@ -183,7 +183,7 @@ export function AgentsContent({ agents, catalog, positions, agentsActive }: Agen
           disabled={catalog.length === 0}
           className="inline-flex items-center gap-2 px-4 py-2 bg-[#eb1600] hover:bg-[#cc1300] disabled:opacity-50 disabled:hover:bg-[#eb1600] rounded-lg text-sm font-medium text-white transition-colors"
         >
-          <Plus className="w-4 h-4" />
+          <PlusIcon className="w-4 h-4" />
           Add Agent
         </button>
       </div>
@@ -208,14 +208,14 @@ export function AgentsContent({ agents, catalog, positions, agentsActive }: Agen
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm text-gray-500">Tasks Completed</span>
-            <Activity className="w-4 h-4 text-gray-400" />
+            <PulseIcon className="w-4 h-4 text-gray-400" />
           </div>
           <p className="text-3xl font-bold text-gray-900">{totalTasks.toLocaleString()}</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm text-gray-500">Avg Success Rate</span>
-            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+            <CheckCircleIcon className="w-4 h-4 text-emerald-500" />
           </div>
           <p className="text-3xl font-bold text-gray-900">
             {avgSuccessRate === null ? "—" : `${avgSuccessRate}%`}
@@ -226,7 +226,7 @@ export function AgentsContent({ agents, catalog, positions, agentsActive }: Agen
       {/* Search and Filters */}
       <div className="flex items-center gap-3">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
             placeholder="Search agents..."
@@ -296,9 +296,9 @@ export function AgentsContent({ agents, catalog, positions, agentsActive }: Agen
                   title={agent.status === "active" ? "Pause agent" : "Resume agent"}
                 >
                   {agent.status === "active" ? (
-                    <Pause className="w-4 h-4" />
+                    <PauseIcon className="w-4 h-4" />
                   ) : (
-                    <Play className="w-4 h-4" />
+                    <PlayIcon className="w-4 h-4" />
                   )}
                 </button>
               </div>
@@ -325,7 +325,7 @@ export function AgentsContent({ agents, catalog, positions, agentsActive }: Agen
                     className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600"
                     title={agent.capabilities.guarantee}
                   >
-                    <ShieldCheck className="w-3 h-3" />
+                    <ShieldCheckIcon className="w-3 h-3" />
                     {agent.capabilities.writes.length > 0 ? "Policy-gated writes" : "Draft-only"}
                   </span>
                 </div>
@@ -334,14 +334,14 @@ export function AgentsContent({ agents, catalog, positions, agentsActive }: Agen
               {/* Stats Row */}
               <div className="flex items-center gap-4 mb-4 text-xs">
                 <div className="flex items-center gap-1 text-gray-500">
-                  <CheckCircle2 className="w-3 h-3" />
+                  <CheckCircleIcon className="w-3 h-3" />
                   <span>{agent.tasksCompleted.toLocaleString()} tasks</span>
                 </div>
                 <div className="flex items-center gap-1 text-emerald-600">
                   <span>{agent.successRate === null ? "—" : `${agent.successRate}%`} success</span>
                 </div>
                 <div className="flex items-center gap-1 text-gray-400">
-                  <Clock className="w-3 h-3" />
+                  <ClockIcon className="w-3 h-3" />
                   <span>{formatAgentRelativeTime(agent.lastActive)}</span>
                 </div>
               </div>
@@ -357,14 +357,14 @@ export function AgentsContent({ agents, catalog, positions, agentsActive }: Agen
                     className="p-1.5 hover:bg-gray-100 rounded transition-colors"
                     title="Configure"
                   >
-                    <Settings2 className="w-4 h-4 text-gray-400" />
+                    <SlidersHorizontalIcon className="w-4 h-4 text-gray-400" />
                   </button>
                   <button
                     onClick={() => setDetailAgentId(agent.id)}
                     className="p-1.5 hover:bg-gray-100 rounded transition-colors"
                     title="View logs"
                   >
-                    <FileText className="w-4 h-4 text-gray-400" />
+                    <FileTextIcon className="w-4 h-4 text-gray-400" />
                   </button>
                 </div>
               </div>
@@ -376,7 +376,7 @@ export function AgentsContent({ agents, catalog, positions, agentsActive }: Agen
       {/* Empty State */}
       {filteredAgents.length === 0 && (
         <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-          <Bot className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+          <RobotIcon className="w-12 h-12 text-gray-300 mx-auto mb-4" />
           <h3 className="text-lg font-semibold text-gray-900 mb-2">
             No agents found
           </h3>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useEffect, useState } from "react";
-import { Search, ListTodo, Users, Plus } from "lucide-react";
+import { MagnifyingGlassIcon, ListChecksIcon, UsersIcon, PlusIcon } from "@phosphor-icons/react";
 import { TagMultiPicker } from "./tag-multi-picker";
 import { TaskCreateDialog } from "./task-create-dialog";
 import { Button } from "@/components/ui/button";
@@ -179,17 +179,17 @@ export function TasksWorkspaceHeader({
           >
             <TabsList>
               <TabsTrigger value="tasks" className="gap-1.5 text-xs">
-                <ListTodo className="h-3.5 w-3.5" />
+                <ListChecksIcon className="h-3.5 w-3.5" />
                 List
               </TabsTrigger>
               <TabsTrigger value="members" className="gap-1.5 text-xs">
-                <Users className="h-3.5 w-3.5" />
+                <UsersIcon className="h-3.5 w-3.5" />
                 By member
               </TabsTrigger>
             </TabsList>
           </Tabs>
           <Button size="sm" onClick={() => setCreateOpen(true)}>
-            <Plus className="h-3.5 w-3.5 mr-1.5" />
+            <PlusIcon className="h-3.5 w-3.5 mr-1.5" />
             New task
           </Button>
         </div>
@@ -208,7 +208,7 @@ export function TasksWorkspaceHeader({
       <div className="shrink-0">
         <div className="flex flex-wrap items-center gap-3 p-3">
           <div className="relative w-60">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <input
               ref={searchRef}
               type="text"

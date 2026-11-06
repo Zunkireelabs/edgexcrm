@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarDays } from "lucide-react";
+import { CalendarDotsIcon } from "@phosphor-icons/react";
 import { LookupTableManager } from "./lookup-table-manager";
 
 export function IntakeYearsManager() {
@@ -8,7 +8,7 @@ export function IntakeYearsManager() {
     <LookupTableManager
       id="intake-years"
       title="Intake Years"
-      icon={CalendarDays}
+      icon={CalendarDotsIcon}
       apiPath="/api/v1/intake-years"
       itemLabel="Year"
       description="Manage which years appear in the Intake Term picker on applications."

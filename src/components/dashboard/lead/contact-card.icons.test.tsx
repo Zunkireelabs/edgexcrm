@@ -2,7 +2,15 @@
 import { describe, it, expect, afterEach, beforeAll, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
+import { renderToStaticMarkup } from "react-dom/server";
+import { EnvelopeSimpleIcon, PhoneIcon, MapPinIcon, GlobeIcon } from "@phosphor-icons/react";
 import { ContactCard } from "./contact-card";
+
+/** Phosphor icons carry no per-icon class, so match on the glyph's path data. */
+function hasIcon(container: HTMLElement, Icon: React.ComponentType): boolean {
+  const d = renderToStaticMarkup(<Icon />).match(/<path d="([^"]+)"/)?.[1];
+  return !!d && Array.from(container.querySelectorAll("path")).some((p) => p.getAttribute("d") === d);
+}
 
 const toastSuccess = vi.fn();
 vi.mock("sonner", () => ({
@@ -52,9 +60,9 @@ afterEach(() => {
 describe("ContactCard contact-line icons", () => {
   it("shows a mail icon, a phone icon and a pin for the city", () => {
     const { container } = render(<ContactCard lead={lead() as never} />);
-    expect(container.querySelector("svg.lucide-mail")).toBeInTheDocument();
-    expect(container.querySelector("svg.lucide-phone")).toBeInTheDocument();
-    expect(container.querySelector("svg.lucide-map-pin")).toBeInTheDocument();
+    expect(hasIcon(container, EnvelopeSimpleIcon)).toBe(true);
+    expect(hasIcon(container, PhoneIcon)).toBe(true);
+    expect(hasIcon(container, MapPinIcon)).toBe(true);
   });
 
   describe("click to copy", () => {
@@ -102,12 +110,12 @@ describe("ContactCard contact-line icons", () => {
   it("uses a globe for nationality", () => {
     const { container } = render(<ContactCard lead={lead({ nationality: "Nepal" }) as never} />);
     expect(screen.getByTitle("Nationality")).toBeInTheDocument();
-    expect(container.querySelector("svg.lucide-globe")).toBeInTheDocument();
+    expect(hasIcon(container, GlobeIcon)).toBe(true);
   });
 
   it("omits icons for lines the lead does not have", () => {
     const { container } = render(<ContactCard lead={lead({ email: null, phone: null, city: null }) as never} />);
-    expect(container.querySelector("svg.lucide-mail")).toBeInTheDocument(); // the Email action button
+    expect(hasIcon(container, EnvelopeSimpleIcon)).toBe(true); // the Email action button
     expect(screen.queryByText("abdul@example.com")).not.toBeInTheDocument();
     expect(screen.queryByTitle("City")).not.toBeInTheDocument();
   });

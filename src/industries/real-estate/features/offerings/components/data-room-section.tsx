@@ -1,7 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FileText, Upload, Trash2, Loader2, Download } from "lucide-react";
+import {
+  FileTextIcon,
+  UploadIcon,
+  TrashIcon,
+  CircleNotchIcon,
+  DownloadIcon,
+} from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -201,9 +207,9 @@ export function DataRoomSection({
               onClick={() => fileInputRef.current?.click()}
             >
               {uploading ? (
-                <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                <CircleNotchIcon className="h-3.5 w-3.5 mr-1 animate-spin" />
               ) : (
-                <Upload className="h-3.5 w-3.5 mr-1" />
+                <UploadIcon className="h-3.5 w-3.5 mr-1" />
               )}
               Upload
             </Button>
@@ -222,7 +228,7 @@ export function DataRoomSection({
         <ul className="divide-y">
           {docs.map((doc) => (
             <li key={doc.id} className="flex items-center gap-3 py-2.5">
-              <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+              <FileTextIcon className="h-4 w-4 text-muted-foreground shrink-0" />
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium truncate">{doc.name}</p>
                 <p className="text-xs text-muted-foreground">
@@ -242,7 +248,7 @@ export function DataRoomSection({
                 className="shrink-0 text-muted-foreground hover:text-foreground"
                 title="View / download"
               >
-                <Download className="h-4 w-4" />
+                <DownloadIcon className="h-4 w-4" />
               </a>
               {canManage && (
                 <button
@@ -251,7 +257,7 @@ export function DataRoomSection({
                   className="shrink-0 text-muted-foreground hover:text-red-600"
                   title="Delete"
                 >
-                  <Trash2 className="h-4 w-4" />
+                  <TrashIcon className="h-4 w-4" />
                 </button>
               )}
             </li>

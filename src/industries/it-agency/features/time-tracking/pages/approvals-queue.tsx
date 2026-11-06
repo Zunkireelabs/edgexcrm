@@ -2,7 +2,13 @@
 
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { toast } from "sonner";
-import { CheckSquare, Loader2, Clock, ThumbsUp, ThumbsDown } from "lucide-react";
+import {
+  CheckSquareIcon,
+  CircleNotchIcon,
+  ClockIcon,
+  ThumbsUpIcon,
+  ThumbsDownIcon,
+} from "@phosphor-icons/react";
 import { useApproveReject } from "../hooks/use-approve-reject";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -129,7 +135,7 @@ function ApprovalEntryRow({
 
       {/* Time */}
       <div className="flex items-center gap-1.5 shrink-0 w-16 text-sm font-medium tabular-nums text-muted-foreground">
-        <Clock className="h-3.5 w-3.5" />
+        <ClockIcon className="h-3.5 w-3.5" />
         {formatMinutes(entry.minutes)}
       </div>
 
@@ -177,9 +183,9 @@ function ApprovalEntryRow({
           title="Approve"
         >
           {processing ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            <CircleNotchIcon className="h-3.5 w-3.5 animate-spin" />
           ) : (
-            <ThumbsUp className="h-3.5 w-3.5 text-emerald-600" />
+            <ThumbsUpIcon className="h-3.5 w-3.5 text-emerald-600" />
           )}
         </Button>
         <Button
@@ -190,7 +196,7 @@ function ApprovalEntryRow({
           disabled={processing}
           title="Reject"
         >
-          <ThumbsDown className="h-3.5 w-3.5 text-red-600" />
+          <ThumbsDownIcon className="h-3.5 w-3.5 text-red-600" />
         </Button>
       </div>
     </div>
@@ -385,7 +391,7 @@ export function ApprovalsQueuePage({ canApproveTime }: ApprovalsQueuePageProps) 
   if (!canApproveTime) {
     return (
       <div className="flex flex-col items-center justify-center min-h-64 text-center">
-        <CheckSquare className="h-10 w-10 text-muted-foreground mb-3" />
+        <CheckSquareIcon className="h-10 w-10 text-muted-foreground mb-3" />
         <p className="font-medium">You don&apos;t have permission to access approvals</p>
         <p className="text-sm text-muted-foreground mt-1">
           Ask an owner or admin to enable timesheet approvals on your position.
@@ -399,7 +405,7 @@ export function ApprovalsQueuePage({ canApproveTime }: ApprovalsQueuePageProps) 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-64">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <CircleNotchIcon className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -440,9 +446,9 @@ export function ApprovalsQueuePage({ canApproveTime }: ApprovalsQueuePageProps) 
             disabled={bulkApproving}
           >
             {bulkApproving ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+              <CircleNotchIcon className="h-3.5 w-3.5 animate-spin mr-1" />
             ) : (
-              <ThumbsUp className="h-3.5 w-3.5 mr-1" />
+              <ThumbsUpIcon className="h-3.5 w-3.5 mr-1" />
             )}
             Approve selected
           </Button>
@@ -456,7 +462,7 @@ export function ApprovalsQueuePage({ canApproveTime }: ApprovalsQueuePageProps) 
             }}
             disabled={bulkApproving}
           >
-            <ThumbsDown className="h-3.5 w-3.5 mr-1" />
+            <ThumbsDownIcon className="h-3.5 w-3.5 mr-1" />
             Reject selected
           </Button>
           <Button
@@ -473,7 +479,7 @@ export function ApprovalsQueuePage({ canApproveTime }: ApprovalsQueuePageProps) 
       {/* Empty state */}
       {entries.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground">
-          <CheckSquare className="h-12 w-12 mb-4 opacity-40" />
+          <CheckSquareIcon className="h-12 w-12 mb-4 opacity-40" />
           <p className="font-medium text-base">No pending entries — all caught up!</p>
           <p className="text-sm mt-1">All time entries from the last 4 weeks are reviewed.</p>
         </div>
@@ -604,7 +610,7 @@ export function ApprovalsQueuePage({ canApproveTime }: ApprovalsQueuePageProps) 
                 disabled={processingIds.has(rejectTarget ?? "") || !rejectReason.trim()}
               >
                 {processingIds.has(rejectTarget ?? "") && (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />
                 )}
                 Reject
               </Button>
@@ -651,7 +657,7 @@ export function ApprovalsQueuePage({ canApproveTime }: ApprovalsQueuePageProps) 
                 variant="destructive"
                 disabled={bulkRejecting || !bulkRejectReason.trim()}
               >
-                {bulkRejecting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                {bulkRejecting && <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />}
                 Reject all
               </Button>
             </DialogFooter>

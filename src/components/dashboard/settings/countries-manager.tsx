@@ -1,6 +1,6 @@
 "use client";
 
-import { Globe } from "lucide-react";
+import { GlobeIcon } from "@phosphor-icons/react";
 import { LookupTableManager } from "./lookup-table-manager";
 
 export function CountriesManager() {
@@ -8,7 +8,7 @@ export function CountriesManager() {
     <LookupTableManager
       id="countries"
       title="Destination Countries"
-      icon={Globe}
+      icon={GlobeIcon}
       apiPath="/api/v1/countries"
       itemLabel="Country"
       description="Manage destination countries that appear in lead forms."

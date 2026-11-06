@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeftIcon } from "@phosphor-icons/react/dist/ssr";
 import { getCurrentUserTenant, getLead } from "@/lib/supabase/queries";
 import { canSeeNav, leadQueryScope } from "@/lib/api/permissions";
 import { getFeatureAccess } from "@/industries/_loader";
@@ -36,7 +36,7 @@ export default async function LeadDocumentsPage({
         href={`/leads/${lead.id}`}
         className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
       >
-        <ArrowLeft className="h-4 w-4 mr-1.5" />
+        <ArrowLeftIcon className="h-4 w-4 mr-1.5" />
         Back to {name}
       </Link>
       <h1 className="text-lg font-semibold">Documents · {name}</h1>

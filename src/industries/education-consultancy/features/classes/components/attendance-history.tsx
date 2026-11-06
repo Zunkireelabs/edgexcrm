@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "sonner";
-import { Loader2, Check, X, Search } from "lucide-react";
+import { CircleNotchIcon, CheckIcon, XIcon, MagnifyingGlassIcon } from "@phosphor-icons/react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
@@ -92,7 +92,7 @@ export function AttendanceHistory({ classId, className }: { classId: string; cla
         <div className="space-y-1 flex-1 max-w-xs">
           <Label className="text-xs text-gray-600">Search</Label>
           <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -111,7 +111,7 @@ export function AttendanceHistory({ classId, className }: { classId: string; cla
       <div className="flex-1 min-w-0 overflow-auto">
         {loading ? (
           <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            <CircleNotchIcon className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
         ) : students.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-8">No students enrolled in this class.</p>
@@ -146,9 +146,9 @@ export function AttendanceHistory({ classId, className }: { classId: string; cla
                     return (
                       <td key={d} className="px-2 py-2 text-center border-b">
                         {status === "present" ? (
-                          <Check className="h-3.5 w-3.5 text-green-600 inline" />
+                          <CheckIcon className="h-3.5 w-3.5 text-green-600 inline" />
                         ) : status === "absent" ? (
-                          <X className="h-3.5 w-3.5 text-red-600 inline" />
+                          <XIcon className="h-3.5 w-3.5 text-red-600 inline" />
                         ) : (
                           <span className="text-muted-foreground">–</span>
                         )}

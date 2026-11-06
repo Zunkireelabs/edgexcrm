@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Check, UserCircle2, X } from "lucide-react";
+import { CheckIcon, UserCircleIcon, XIcon } from "@phosphor-icons/react";
 import { MemberAvatar } from "@/components/ui/member-avatar";
 import type { TeamMember } from "../hooks/use-projects";
 
@@ -39,7 +39,7 @@ export function AssigneePicker({ assigneeId, team, onChange, disabled, showName 
         <MemberAvatar userId={assignee.user_id} name={assignee.name} size={28} />
       </span>
     ) : (
-      <UserCircle2 className="h-5 w-5 text-muted-foreground/40" />
+      <UserCircleIcon className="h-5 w-5 text-muted-foreground/40" />
     );
   }
 
@@ -60,11 +60,11 @@ export function AssigneePicker({ assigneeId, team, onChange, disabled, showName 
           </>
         ) : showName ? (
           <>
-            <UserCircle2 className="h-5 w-5 text-muted-foreground/50" />
+            <UserCircleIcon className="h-5 w-5 text-muted-foreground/50" />
             <span className="text-sm text-gray-400">Unassigned</span>
           </>
         ) : (
-          <UserCircle2 className="h-4 w-4 text-muted-foreground/50" />
+          <UserCircleIcon className="h-4 w-4 text-muted-foreground/50" />
         )}
       </button>
 
@@ -80,7 +80,7 @@ export function AssigneePicker({ assigneeId, team, onChange, disabled, showName 
               >
                 <MemberAvatar userId={m.user_id} name={m.name} />
                 <span className="truncate text-gray-700">{m.name}</span>
-                {m.user_id === assigneeId && <Check className="h-3 w-3 text-violet-600 ml-auto shrink-0" />}
+                {m.user_id === assigneeId && <CheckIcon className="h-3 w-3 text-violet-600 ml-auto shrink-0" />}
               </button>
             ))}
           </div>
@@ -91,7 +91,7 @@ export function AssigneePicker({ assigneeId, team, onChange, disabled, showName 
                 onClick={() => handleSelect(null)}
                 className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-50 text-gray-500"
               >
-                <X className="h-3 w-3" />
+                <XIcon className="h-3 w-3" />
                 Clear assignee
               </button>
             </div>

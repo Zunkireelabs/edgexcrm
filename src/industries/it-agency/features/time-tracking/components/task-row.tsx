@@ -1,6 +1,6 @@
 "use client";
 
-import { Clock, Loader2, Play, Square } from "lucide-react";
+import { ClockIcon, CircleNotchIcon, PlayIcon, SquareIcon } from "@phosphor-icons/react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { TaskStatusBadge } from "./status-badge";
 import { AssigneePicker } from "../../project-board/components/assignee-picker";
@@ -53,7 +53,7 @@ export function TaskRow({ task, team = [], onOpenDetail }: TaskRowProps) {
             )}
             {estHours && (
               <span className="flex items-center gap-1 shrink-0">
-                <Clock className="h-3 w-3" />
+                <ClockIcon className="h-3 w-3" />
                 {estHours}
               </span>
             )}
@@ -74,11 +74,11 @@ export function TaskRow({ task, team = [], onOpenDetail }: TaskRowProps) {
                 aria-label={running ? "Stop timer" : "Start timer"}
               >
                 {timerPending ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <CircleNotchIcon className="h-3.5 w-3.5 animate-spin" />
                 ) : running ? (
-                  <Square className="h-3.5 w-3.5" />
+                  <SquareIcon className="h-3.5 w-3.5" />
                 ) : (
-                  <Play className="h-3.5 w-3.5" />
+                  <PlayIcon className="h-3.5 w-3.5" />
                 )}
                 {running && (
                   <span className="text-xs tabular-nums">

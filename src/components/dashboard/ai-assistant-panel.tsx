@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { X, Sparkles, Maximize2, Minimize2 } from "lucide-react";
+import { XIcon, SparkleIcon, ArrowsOutIcon, ArrowsInIcon } from "@phosphor-icons/react";
 import { useAIAssistant } from "@/contexts/ai-assistant-context";
 import { ChatInput } from "./ai-assistant/chat-input";
 import { MessageList } from "./ai-assistant/message-list";
@@ -66,7 +66,7 @@ export function AIAssistantPanel({ userFirstName }: AIAssistantPanelProps) {
           <div className="flex items-center justify-between px-4 py-3">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-                <Sparkles className="h-4 w-4 text-white" />
+                <SparkleIcon className="h-4 w-4 text-white" />
               </div>
               <div>
                 <h2 className="text-sm font-semibold text-gray-900">Orca</h2>
@@ -80,13 +80,13 @@ export function AIAssistantPanel({ userFirstName }: AIAssistantPanelProps) {
                 className="p-1.5 rounded-md hover:bg-white/60 text-gray-400 hover:text-gray-600 transition-colors"
                 title={isExpanded ? "Collapse" : "Expand"}
               >
-                {isExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                {isExpanded ? <ArrowsInIcon className="h-4 w-4" /> : <ArrowsOutIcon className="h-4 w-4" />}
               </button>
               <button
                 onClick={closeAssistant}
                 className="p-1.5 rounded-md hover:bg-white/60 text-gray-400 hover:text-gray-600 transition-colors"
               >
-                <X className="h-5 w-5" />
+                <XIcon className="h-5 w-5" />
               </button>
             </div>
           </div>

@@ -26,7 +26,12 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ChevronRight, Loader2, Plus, AlertCircle } from "lucide-react";
+import {
+  CaretRightIcon,
+  CircleNotchIcon,
+  PlusIcon,
+  WarningCircleIcon,
+} from "@phosphor-icons/react";
 import { toast } from "sonner";
 import type { Branch, LeadList, PipelineStage, TenantEntity, UserRole } from "@/types/database";
 import {
@@ -700,7 +705,7 @@ export function AddLeadSheet({
     <>
       <Collapsible open={sourceOpen} onOpenChange={setSourceOpen}>
         <CollapsibleTrigger className="flex items-center gap-2 w-full py-2 text-sm font-medium text-gray-700 hover:text-gray-900">
-          <ChevronRight
+          <CaretRightIcon
             className={`h-4 w-4 transition-transform ${
               sourceOpen ? "rotate-90" : ""
             }`}
@@ -777,7 +782,7 @@ export function AddLeadSheet({
 
       <Collapsible open={notesOpen} onOpenChange={setNotesOpen}>
         <CollapsibleTrigger className="flex items-center gap-2 w-full py-2 text-sm font-medium text-gray-700 hover:text-gray-900">
-          <ChevronRight
+          <CaretRightIcon
             className={`h-4 w-4 transition-transform ${
               notesOpen ? "rotate-90" : ""
             }`}
@@ -800,7 +805,7 @@ export function AddLeadSheet({
       {industryId === "education_consultancy" && (
         <Collapsible open={academicsOpen} onOpenChange={setAcademicsOpen}>
           <CollapsibleTrigger className="flex items-center gap-2 w-full py-2 text-sm font-medium text-gray-700 hover:text-gray-900">
-            <ChevronRight
+            <CaretRightIcon
               className={`h-4 w-4 transition-transform ${
                 academicsOpen ? "rotate-90" : ""
               }`}
@@ -1229,7 +1234,7 @@ export function AddLeadSheet({
       >
         <SheetHeader className="shrink-0 border-b pb-4">
           <SheetTitle className="flex items-center gap-2">
-            <Plus className="h-5 w-5" />
+            <PlusIcon className="h-5 w-5" />
             Add New Lead
           </SheetTitle>
           <SheetDescription>
@@ -1240,7 +1245,7 @@ export function AddLeadSheet({
         <div className="flex-1 overflow-y-auto py-6 px-4 space-y-6">
           {errors.general && (
             <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+              <WarningCircleIcon className="h-4 w-4 mt-0.5 shrink-0" />
               {errors.general}
             </div>
           )}
@@ -1265,7 +1270,7 @@ export function AddLeadSheet({
             >
               {isSubmitting ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />
                   Creating...
                 </>
               ) : (

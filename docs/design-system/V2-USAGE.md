@@ -49,3 +49,9 @@ untouched. Elements that already have `look` are skipped, so a second run change
 ## Showcase
 
 Dev only: `/design-system` (404 in production). Legacy and v2 side by side, including a wide table with the sticky column and edge fade.
+
+## Icons (EDGEX-94)
+
+Phosphor only (`@phosphor-icons/react`, `…Icon` names); `lucide-react` is removed and ESLint-banned. After adding a
+shadcn component (they ship with lucide imports), run `node scripts/codemods/lucide-to-phosphor.mjs --write <file>`
+(no flags = dry run). Server files import from `@phosphor-icons/react/dist/ssr`; the codemod picks the entry from `"use client"`.

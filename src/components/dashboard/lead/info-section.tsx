@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { CaretDownIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 
 interface InfoSectionProps {
@@ -36,7 +36,7 @@ export function InfoSection({ title, children, defaultOpen = true, className, he
             onClick={() => setIsOpen(!isOpenState)}
           >
             <h3 className={titleClasses}>{title}</h3>
-            <ChevronDown
+            <CaretDownIcon
               className={cn(
                 "h-4 w-4 text-muted-foreground transition-transform duration-200 ml-2 shrink-0",
                 isOpen && "rotate-180"

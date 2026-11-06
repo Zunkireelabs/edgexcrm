@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, CheckCircle2, ArrowUpRight } from "lucide-react";
+import { PlusIcon, CheckCircleIcon, ArrowUpRightIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -78,7 +78,7 @@ export function IssuesPanel({ issues, loading, canManageProjects, startExpanded,
         <CardTitle className="text-sm">Client queries &amp; issues</CardTitle>
         {canManageProjects && (
           <Button variant="ghost" size="sm" onClick={() => setAdding((v) => !v)}>
-            <Plus className="h-3.5 w-3.5 mr-1.5" />
+            <PlusIcon className="h-3.5 w-3.5 mr-1.5" />
             Raise
           </Button>
         )}
@@ -141,10 +141,10 @@ export function IssuesPanel({ issues, loading, canManageProjects, startExpanded,
             {canManageProjects && (
               <div className="flex items-center gap-1 flex-shrink-0">
                 <Button variant="ghost" size="sm" onClick={() => onPromoteToChangeRequest(issue)} title="Promote to change request">
-                  <ArrowUpRight className="h-3.5 w-3.5" />
+                  <ArrowUpRightIcon className="h-3.5 w-3.5" />
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => onResolve(issue.id)} title="Resolve">
-                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  <CheckCircleIcon className="h-3.5 w-3.5" />
                 </Button>
               </div>
             )}

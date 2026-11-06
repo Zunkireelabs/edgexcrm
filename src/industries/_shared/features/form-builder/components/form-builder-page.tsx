@@ -3,7 +3,16 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Save, Loader2, ExternalLink, ToggleLeft, ToggleRight, Eye, EyeOff } from "lucide-react";
+import {
+  ArrowLeftIcon,
+  FloppyDiskIcon,
+  CircleNotchIcon,
+  ArrowSquareOutIcon,
+  ToggleLeftIcon,
+  ToggleRightIcon,
+  EyeIcon,
+  EyeSlashIcon,
+} from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -215,7 +224,7 @@ export function FormBuilderPage({ formConfig, tenantSlug, industryId, smsEnabled
       {/* Top bar */}
       <div className="flex items-center gap-3 mb-6 flex-wrap">
         <Button variant="ghost" size="sm" onClick={() => router.back()}>
-          <ArrowLeft className="h-4 w-4 mr-1" />
+          <ArrowLeftIcon className="h-4 w-4 mr-1" />
           Forms
         </Button>
 
@@ -262,12 +271,12 @@ export function FormBuilderPage({ formConfig, tenantSlug, industryId, smsEnabled
           >
             {state.isActive ? (
               <>
-                <ToggleRight className="h-5 w-5 text-green-500" />
+                <ToggleRightIcon className="h-5 w-5 text-green-500" />
                 <Badge variant="default" className="text-xs">Active</Badge>
               </>
             ) : (
               <>
-                <ToggleLeft className="h-5 w-5 text-muted-foreground" />
+                <ToggleLeftIcon className="h-5 w-5 text-muted-foreground" />
                 <Badge variant="secondary" className="text-xs">Inactive</Badge>
               </>
             )}
@@ -279,7 +288,7 @@ export function FormBuilderPage({ formConfig, tenantSlug, industryId, smsEnabled
             size="sm"
             onClick={() => setShowPreview(!showPreview)}
           >
-            {showPreview ? <EyeOff className="h-4 w-4 mr-1" /> : <Eye className="h-4 w-4 mr-1" />}
+            {showPreview ? <EyeSlashIcon className="h-4 w-4 mr-1" /> : <EyeIcon className="h-4 w-4 mr-1" />}
             {showPreview ? "Hide Preview" : "Preview"}
           </Button>
 
@@ -289,7 +298,7 @@ export function FormBuilderPage({ formConfig, tenantSlug, industryId, smsEnabled
             size="sm"
             onClick={() => window.open(publicFormUrl, "_blank")}
           >
-            <ExternalLink className="h-4 w-4 mr-1" />
+            <ArrowSquareOutIcon className="h-4 w-4 mr-1" />
             Open Live
           </Button>
 
@@ -300,9 +309,9 @@ export function FormBuilderPage({ formConfig, tenantSlug, industryId, smsEnabled
             disabled={state.saving || !state.isDirty}
           >
             {state.saving ? (
-              <Loader2 className="h-4 w-4 animate-spin mr-1" />
+              <CircleNotchIcon className="h-4 w-4 animate-spin mr-1" />
             ) : (
-              <Save className="h-4 w-4 mr-1" />
+              <FloppyDiskIcon className="h-4 w-4 mr-1" />
             )}
             {state.isDirty ? "Save" : "Saved"}
           </Button>

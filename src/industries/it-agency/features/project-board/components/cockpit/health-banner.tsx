@@ -1,10 +1,10 @@
-import { AlertTriangle, CheckCircle2, AlertCircle } from "lucide-react";
+import { WarningIcon, CheckCircleIcon, WarningCircleIcon } from "@phosphor-icons/react/dist/ssr";
 import type { Project, ProjectHealth } from "@/types/database";
 
-const HEALTH_CONFIG: Record<ProjectHealth, { label: string; bg: string; text: string; bar: string; icon: typeof CheckCircle2 }> = {
-  green: { label: "On track", bg: "bg-green-50", text: "text-green-700", bar: "bg-green-500", icon: CheckCircle2 },
-  amber: { label: "At risk", bg: "bg-amber-50", text: "text-amber-700", bar: "bg-amber-500", icon: AlertTriangle },
-  red: { label: "Off track", bg: "bg-red-50", text: "text-red-700", bar: "bg-red-500", icon: AlertCircle },
+const HEALTH_CONFIG: Record<ProjectHealth, { label: string; bg: string; text: string; bar: string; icon: typeof CheckCircleIcon }> = {
+  green: { label: "On track", bg: "bg-green-50", text: "text-green-700", bar: "bg-green-500", icon: CheckCircleIcon },
+  amber: { label: "At risk", bg: "bg-amber-50", text: "text-amber-700", bar: "bg-amber-500", icon: WarningIcon },
+  red: { label: "Off track", bg: "bg-red-50", text: "text-red-700", bar: "bg-red-500", icon: WarningCircleIcon },
 };
 
 function formatHours(minutes: number): string {

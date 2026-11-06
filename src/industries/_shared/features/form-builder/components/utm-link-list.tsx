@@ -1,7 +1,7 @@
 "use client";
 
 import { forwardRef, useImperativeHandle, useState } from "react";
-import { Loader2, Trash2 } from "lucide-react";
+import { CircleNotchIcon, TrashIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -129,7 +129,7 @@ export const UtmLinkList = forwardRef<UtmLinkListHandle, UtmLinkListProps>(
                           onClick={() => setPendingDelete(link)}
                           aria-label="Delete link"
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
+                          <TrashIcon className="h-3.5 w-3.5" />
                         </Button>
                       </div>
                     </TableCell>
@@ -164,7 +164,7 @@ export const UtmLinkList = forwardRef<UtmLinkListHandle, UtmLinkListProps>(
                 onClick={handleConfirmDelete}
                 disabled={deleting}
               >
-                {deleting && <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />}
+                {deleting && <CircleNotchIcon className="h-4 w-4 mr-1.5 animate-spin" />}
                 Delete
               </Button>
             </DialogFooter>

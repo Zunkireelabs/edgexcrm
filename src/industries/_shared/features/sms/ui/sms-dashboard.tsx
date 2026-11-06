@@ -13,7 +13,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { MessageSquare, Plus, AlertTriangle } from "lucide-react";
+import { ChatTextIcon, PlusIcon, WarningIcon } from "@phosphor-icons/react";
 import { smsGet, smsSend, SmsApiError } from "../lib/api-client";
 import { CreditLedgerTable } from "./credit-ledger-table";
 import { SuppressionList } from "./suppression-list";
@@ -88,7 +88,7 @@ export function SmsDashboard({ canSendSms, isAdmin }: SmsDashboardProps) {
         </div>
         {canSendSms && (
           <Button onClick={handleNewBlast} disabled={creatingDraft}>
-            <Plus className="h-4 w-4" />
+            <PlusIcon className="h-4 w-4" />
             New blast
           </Button>
         )}
@@ -114,7 +114,7 @@ export function SmsDashboard({ canSendSms, isAdmin }: SmsDashboardProps) {
               </div>
               {lowBalance && (
                 <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 p-2.5 text-sm text-amber-800">
-                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  <WarningIcon className="h-4 w-4 shrink-0" />
                   Balance is at or below the low-credit threshold ({settings?.low_credit_threshold}).
                 </div>
               )}
@@ -136,7 +136,7 @@ export function SmsDashboard({ canSendSms, isAdmin }: SmsDashboardProps) {
             <div className="py-8 text-center text-sm text-muted-foreground">Loading blasts…</div>
           ) : blasts.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-48 gap-2 text-muted-foreground">
-              <MessageSquare className="h-8 w-8 opacity-40" />
+              <ChatTextIcon className="h-8 w-8 opacity-40" />
               <p className="text-sm">No blasts yet.</p>
             </div>
           ) : (

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronLeft, SlidersHorizontal, X } from "lucide-react";
+import { CaretLeftIcon, SlidersHorizontalIcon, XIcon } from "@phosphor-icons/react";
 import {
   Popover,
   PopoverContent,
@@ -77,7 +77,7 @@ export function ApplicationsFilterMenu({ fields, activeCount, onClearAll }: Appl
               : "border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b]"
           }`}
         >
-          <SlidersHorizontal className="h-3 w-3 shrink-0" />
+          <SlidersHorizontalIcon className="h-3 w-3 shrink-0" />
           Filters
           {activeCount > 0 && (
             <span className="inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-[#0f0f10] text-white text-[10px] leading-none">
@@ -122,7 +122,7 @@ export function ApplicationsFilterMenu({ fields, activeCount, onClearAll }: Appl
                   }}
                   className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs text-red-600 transition-colors hover:bg-red-50"
                 >
-                  <X className="h-3 w-3 shrink-0" />
+                  <XIcon className="h-3 w-3 shrink-0" />
                   Clear all filters
                 </button>
               </div>
@@ -135,7 +135,7 @@ export function ApplicationsFilterMenu({ fields, activeCount, onClearAll }: Appl
               onClick={() => setDrilledId(null)}
               className="w-full flex items-center gap-1.5 px-3 py-2 text-left text-xs font-medium text-[#0f0f10] border-b border-gray-100 hover:bg-[#0000170b]"
             >
-              <ChevronLeft className="h-3.5 w-3.5 shrink-0" />
+              <CaretLeftIcon className="h-3.5 w-3.5 shrink-0" />
               {drilled.label}
             </button>
             {drilled.multiple ? (
@@ -199,7 +199,7 @@ export function ApplicationsFilterChips({
             className="shrink-0 hover:opacity-70"
             aria-label={`Clear ${field.label} filter`}
           >
-            <X className="h-3 w-3" />
+            <XIcon className="h-3 w-3" />
           </button>
         </span>
       ))}

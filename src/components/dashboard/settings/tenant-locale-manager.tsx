@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Globe } from "lucide-react";
+import { GlobeIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 const TIMEZONE_OPTIONS = [
@@ -92,7 +92,7 @@ export function TenantLocaleManager({ timezone, weekendDays, defaultCurrency }: 
     <Card>
       <CardHeader>
         <CardTitle className="text-lg flex items-center gap-2">
-          <Globe className="h-5 w-5" />
+          <GlobeIcon className="h-5 w-5" />
           Locale
         </CardTitle>
         <CardDescription>

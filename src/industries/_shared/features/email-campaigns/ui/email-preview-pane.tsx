@@ -7,7 +7,7 @@
 // blast-content-preview-dialog.tsx (read-only "what did we send" view) can
 // reuse the exact same look without duplicating the iframe/pager logic.
 
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { CaretLeftIcon, CaretRightIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import type { EmailBlastPreviewResponse } from "../lib/types";
 
@@ -40,7 +40,7 @@ export function EmailPreviewPane({ preview, sampleIdx, onSampleIdxChange }: Emai
                 onClick={() => onSampleIdxChange(Math.max(0, clampedIdx - 1))}
                 aria-label="Previous sample"
               >
-                <ChevronLeft className="h-3.5 w-3.5" />
+                <CaretLeftIcon className="h-3.5 w-3.5" />
               </Button>
               <span className="tabular-nums text-muted-foreground">
                 Sample {clampedIdx + 1} of {samples.length}
@@ -54,7 +54,7 @@ export function EmailPreviewPane({ preview, sampleIdx, onSampleIdxChange }: Emai
                 onClick={() => onSampleIdxChange(Math.min(samples.length - 1, clampedIdx + 1))}
                 aria-label="Next sample"
               >
-                <ChevronRight className="h-3.5 w-3.5" />
+                <CaretRightIcon className="h-3.5 w-3.5" />
               </Button>
             </div>
           )}

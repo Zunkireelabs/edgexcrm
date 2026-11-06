@@ -1,7 +1,16 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Pause, Play, UserX, Loader2, GitBranch, Mail, MessageSquare, Zap } from "lucide-react";
+import {
+  PauseIcon,
+  PlayIcon,
+  UserMinusIcon,
+  CircleNotchIcon,
+  GitBranchIcon,
+  EnvelopeSimpleIcon,
+  ChatTextIcon,
+  LightningIcon,
+} from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -276,7 +285,7 @@ function ChannelCadenceStrip({
                 </SelectContent>
               </Select>
               <Button type="button" size="sm" disabled={!selectedSequenceId || busy} onClick={handleEnroll}>
-                {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Enroll"}
+                {busy ? <CircleNotchIcon className="h-3.5 w-3.5 animate-spin" /> : "Enroll"}
               </Button>
             </div>
           )}
@@ -296,7 +305,7 @@ function ChannelCadenceStrip({
     if (sequences.length === 0) {
       return (
         <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
-          <GitBranch className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <GitBranchIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
           <span className="text-sm text-muted-foreground">
             No sequences yet — create one in Outreach &rsaquo; Sequences.
           </span>
@@ -305,7 +314,7 @@ function ChannelCadenceStrip({
     }
     return (
       <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
-        <GitBranch className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+        <GitBranchIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
         <span className="text-sm text-muted-foreground shrink-0">{isSms ? "Not in an SMS sequence" : "Not in a sequence"}</span>
         <Select value={selectedSequenceId} onValueChange={setSelectedSequenceId}>
           <SelectTrigger className="h-8 w-56 ml-auto">
@@ -320,7 +329,7 @@ function ChannelCadenceStrip({
           </SelectContent>
         </Select>
         <Button type="button" size="sm" disabled={!selectedSequenceId || busy} onClick={handleEnroll}>
-          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Enroll"}
+          {busy ? <CircleNotchIcon className="h-3.5 w-3.5 animate-spin" /> : "Enroll"}
         </Button>
       </div>
     );
@@ -333,7 +342,7 @@ function ChannelCadenceStrip({
     <div className="space-y-2">
       <div className="rounded-lg border bg-muted/30 px-3 py-2 space-y-1.5">
         <div className="flex items-center gap-2 flex-wrap">
-          <GitBranch className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <GitBranchIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
           <span className="text-sm text-muted-foreground shrink-0">{isSms ? "In SMS sequence:" : "In sequence:"}</span>
           <span className="text-sm font-medium truncate min-w-0 max-w-full">{sequenceName}</span>
           <span className="text-sm text-muted-foreground whitespace-nowrap">
@@ -351,7 +360,7 @@ function ChannelCadenceStrip({
               className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
               title="Started automatically by a stage rule"
             >
-              <Zap className="h-3 w-3" aria-hidden />
+              <LightningIcon className="h-3 w-3" aria-hidden />
               Auto-enrolled{enrollment.triggerStageName ? ` · entered ${enrollment.triggerStageName}` : ""}
             </span>
           )}
@@ -364,16 +373,16 @@ function ChannelCadenceStrip({
           {canManage && (
             <div className="ml-auto flex items-center gap-1 shrink-0">
               {busy ? (
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                <CircleNotchIcon className="h-4 w-4 animate-spin text-muted-foreground" />
               ) : (
                 <>
                   {enrollment.status === "active" ? (
                     <Button type="button" variant="ghost" size="sm" onClick={() => runAction("pause")}>
-                      <Pause className="h-3.5 w-3.5 mr-1.5" /> Pause
+                      <PauseIcon className="h-3.5 w-3.5 mr-1.5" /> Pause
                     </Button>
                   ) : (
                     <Button type="button" variant="ghost" size="sm" onClick={() => runAction("resume")}>
-                      <Play className="h-3.5 w-3.5 mr-1.5" /> Resume
+                      <PlayIcon className="h-3.5 w-3.5 mr-1.5" /> Resume
                     </Button>
                   )}
                   <Button
@@ -383,7 +392,7 @@ function ChannelCadenceStrip({
                     className="text-destructive hover:text-destructive"
                     onClick={() => (enrollment.source === "stage_rule" ? setConfirmingUnenroll(true) : runAction("unenroll"))}
                   >
-                    <UserX className="h-3.5 w-3.5 mr-1.5" /> Unenroll
+                    <UserMinusIcon className="h-3.5 w-3.5 mr-1.5" /> Unenroll
                   </Button>
                 </>
               )}
@@ -445,7 +454,7 @@ function ChannelCadenceStrip({
 /** The titled box of one channel in the labelled layout. */
 function ChannelBox({ channel, children }: { channel: OutreachChannel; children: React.ReactNode }) {
   const isSms = channel === "sms";
-  const Icon = isSms ? MessageSquare : Mail;
+  const Icon = isSms ? ChatTextIcon : EnvelopeSimpleIcon;
   return (
     <section className="min-w-0 flex-1 space-y-2 rounded-lg border bg-card p-3" aria-label={isSms ? "SMS sequence" : "Email sequence"}>
       <h5 className="flex items-center gap-1.5 text-sm font-medium">

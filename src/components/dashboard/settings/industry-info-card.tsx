@@ -9,16 +9,16 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
-  Building2,
-  GraduationCap,
-  Code,
-  HardHat,
-  Home,
-  HeartPulse,
-  Briefcase,
-  Folder,
-  Plane,
-} from "lucide-react";
+  BuildingsIcon,
+  GraduationCapIcon,
+  CodeIcon,
+  HardHatIcon,
+  HouseIcon,
+  HeartbeatIcon,
+  BriefcaseIcon,
+  FolderIcon,
+  AirplaneIcon,
+} from "@phosphor-icons/react";
 import type { Industry, IndustryId } from "@/types/database";
 
 interface IndustryInfoCardProps {
@@ -26,14 +26,14 @@ interface IndustryInfoCardProps {
 }
 
 const industryIcons: Record<string, React.ElementType> = {
-  "graduation-cap": GraduationCap,
-  code: Code,
-  "hard-hat": HardHat,
-  building: Home,
-  "heart-pulse": HeartPulse,
-  briefcase: Briefcase,
-  folder: Folder,
-  Plane: Plane,
+  "graduation-cap": GraduationCapIcon,
+  code: CodeIcon,
+  "hard-hat": HardHatIcon,
+  building: HouseIcon,
+  "heart-pulse": HeartbeatIcon,
+  briefcase: BriefcaseIcon,
+  folder: FolderIcon,
+  Plane: AirplaneIcon,
 };
 
 const industryColors: Record<IndustryId, string> = {
@@ -54,7 +54,7 @@ export function IndustryInfoCard({ industry }: IndustryInfoCardProps) {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Building2 className="h-5 w-5" />
+            <BuildingsIcon className="h-5 w-5" />
             Industry
           </CardTitle>
           <CardDescription>
@@ -71,8 +71,8 @@ export function IndustryInfoCard({ industry }: IndustryInfoCardProps) {
   }
 
   const IconComponent = industry.icon
-    ? industryIcons[industry.icon] || Building2
-    : Building2;
+    ? industryIcons[industry.icon] || BuildingsIcon
+    : BuildingsIcon;
 
   return (
     <Card>

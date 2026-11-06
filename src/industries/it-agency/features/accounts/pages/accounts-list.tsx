@@ -4,9 +4,16 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
-  Plus, Building2, Loader2, Pencil, Trash2, Search,
-  ArrowUpDown, ChevronLeft, ChevronRight,
-} from "lucide-react";
+  PlusIcon,
+  BuildingsIcon,
+  CircleNotchIcon,
+  PencilSimpleIcon,
+  TrashIcon,
+  MagnifyingGlassIcon,
+  ArrowsDownUpIcon,
+  CaretLeftIcon,
+  CaretRightIcon,
+} from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { FilterMenu, FilterChips, type FilterDef } from "@/components/ui/filter-menu";
@@ -180,7 +187,7 @@ export function AccountsListPage({ role }: AccountsListPageProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-48">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <CircleNotchIcon className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -192,14 +199,14 @@ export function AccountsListPage({ role }: AccountsListPageProps) {
 
         {accounts.length === 0 ? (
           <div className="border rounded-xl p-12 text-center bg-card">
-            <Building2 className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
+            <BuildingsIcon className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
             <h3 className="font-semibold text-lg mb-1">No accounts yet</h3>
             <p className="text-muted-foreground text-sm mb-6">
               Add your first client account to start tracking projects and time.
             </p>
             {isAdmin && (
               <Button onClick={() => setCreateOpen(true)}>
-                <Plus className="h-4 w-4 mr-2" />
+                <PlusIcon className="h-4 w-4 mr-2" />
                 Create your first account
               </Button>
             )}
@@ -215,7 +222,7 @@ export function AccountsListPage({ role }: AccountsListPageProps) {
                 </div>
 
                 <div className="relative w-60">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
+                  <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
                   <input
                     type="text"
                     placeholder="Search by name or email…"
@@ -235,7 +242,7 @@ export function AccountsListPage({ role }: AccountsListPageProps) {
                       type="button"
                       className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md border transition-colors border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b]"
                     >
-                      <ArrowUpDown className="h-3 w-3 shrink-0" />
+                      <ArrowsDownUpIcon className="h-3 w-3 shrink-0" />
                       Sort
                     </button>
                   </PopoverTrigger>
@@ -291,7 +298,7 @@ export function AccountsListPage({ role }: AccountsListPageProps) {
                     onClick={() => setCreateOpen(true)}
                     className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md transition-colors bg-[#0f0f10] text-white hover:bg-[#0f0f10]/90"
                   >
-                    <Plus className="h-3 w-3 shrink-0" />
+                    <PlusIcon className="h-3 w-3 shrink-0" />
                     New Account
                   </button>
                 )}
@@ -366,7 +373,7 @@ export function AccountsListPage({ role }: AccountsListPageProps) {
                                 className="h-8 w-8 p-0"
                                 onClick={(e) => { e.preventDefault(); setEditTarget(account); }}
                               >
-                                <Pencil className="h-3.5 w-3.5" />
+                                <PencilSimpleIcon className="h-3.5 w-3.5" />
                               </Button>
                               <Button
                                 variant="ghost"
@@ -374,7 +381,7 @@ export function AccountsListPage({ role }: AccountsListPageProps) {
                                 className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
                                 onClick={(e) => { e.preventDefault(); setDeleteTarget(account); }}
                               >
-                                <Trash2 className="h-3.5 w-3.5" />
+                                <TrashIcon className="h-3.5 w-3.5" />
                               </Button>
                             </div>
                           </td>
@@ -417,7 +424,7 @@ export function AccountsListPage({ role }: AccountsListPageProps) {
                       onClick={() => setCurrentPage((p) => p - 1)}
                       className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                     >
-                      <ChevronLeft className="w-4 h-4" />
+                      <CaretLeftIcon className="w-4 h-4" />
                     </button>
                     <span className="text-xs text-gray-600 px-2">
                       Page {safePage} of {totalPages || 1}
@@ -427,7 +434,7 @@ export function AccountsListPage({ role }: AccountsListPageProps) {
                       onClick={() => setCurrentPage((p) => p + 1)}
                       className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                     >
-                      <ChevronRight className="w-4 h-4" />
+                      <CaretRightIcon className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
@@ -476,7 +483,7 @@ export function AccountsListPage({ role }: AccountsListPageProps) {
               disabled={deleting}
               onClick={() => deleteTarget && handleDelete(deleteTarget)}
             >
-              {deleting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {deleting && <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />}
               Delete
             </Button>
           </DialogFooter>

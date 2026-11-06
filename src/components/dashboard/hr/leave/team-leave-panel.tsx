@@ -2,7 +2,12 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
-import { Loader2, CheckSquare, ThumbsUp, ThumbsDown } from "lucide-react";
+import {
+  CircleNotchIcon,
+  CheckSquareIcon,
+  ThumbsUpIcon,
+  ThumbsDownIcon,
+} from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -87,11 +92,11 @@ export function TeamLeavePanel({ canManageHR }: TeamLeavePanelProps) {
 
       {loading ? (
         <div className="flex items-center justify-center min-h-32">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          <CircleNotchIcon className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
       ) : requests.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
-          <CheckSquare className="h-10 w-10 mb-3 opacity-40" />
+          <CheckSquareIcon className="h-10 w-10 mb-3 opacity-40" />
           <p className="font-medium">No pending leave requests</p>
         </div>
       ) : (
@@ -135,9 +140,9 @@ export function TeamLeavePanel({ canManageHR }: TeamLeavePanelProps) {
                       title="Approve"
                     >
                       {processingIds.has(r.id) ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        <CircleNotchIcon className="h-3.5 w-3.5 animate-spin" />
                       ) : (
-                        <ThumbsUp className="h-3.5 w-3.5 text-emerald-600" />
+                        <ThumbsUpIcon className="h-3.5 w-3.5 text-emerald-600" />
                       )}
                     </Button>
                     <Button
@@ -151,7 +156,7 @@ export function TeamLeavePanel({ canManageHR }: TeamLeavePanelProps) {
                       disabled={processingIds.has(r.id)}
                       title="Reject"
                     >
-                      <ThumbsDown className="h-3.5 w-3.5 text-red-600" />
+                      <ThumbsDownIcon className="h-3.5 w-3.5 text-red-600" />
                     </Button>
                   </div>
                 </TableCell>
@@ -195,7 +200,7 @@ export function TeamLeavePanel({ canManageHR }: TeamLeavePanelProps) {
                 variant="destructive"
                 disabled={processingIds.has(rejectTarget ?? "") || !rejectReason.trim()}
               >
-                {processingIds.has(rejectTarget ?? "") && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                {processingIds.has(rejectTarget ?? "") && <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />}
                 Reject
               </Button>
             </DialogFooter>

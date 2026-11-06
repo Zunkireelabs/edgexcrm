@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Copy } from "lucide-react";
+import { CheckIcon, CopyIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -42,9 +42,9 @@ export function CopyButton({ value, label, className }: CopyButtonProps) {
       onClick={handleCopy}
     >
       {copied ? (
-        <Check className="h-3.5 w-3.5 text-green-600" />
+        <CheckIcon className="h-3.5 w-3.5 text-green-600" />
       ) : (
-        <Copy className="h-3.5 w-3.5" />
+        <CopyIcon className="h-3.5 w-3.5" />
       )}
       <span className="sr-only">Copy {label || "to clipboard"}</span>
     </Button>

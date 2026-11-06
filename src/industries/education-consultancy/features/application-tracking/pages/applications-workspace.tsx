@@ -1,7 +1,14 @@
 "use client";
 
 import { useState, useMemo, useCallback, useEffect } from "react";
-import { Plus, LayoutGrid, List, Search, ArrowUpDown, Columns3 } from "lucide-react";
+import {
+  PlusIcon,
+  SquaresFourIcon,
+  ListIcon,
+  MagnifyingGlassIcon,
+  ArrowsDownUpIcon,
+  ColumnsIcon,
+} from "@phosphor-icons/react";
 import { useRouter } from "next/navigation";
 import { FilterDropdown } from "@/components/ui/filter-dropdown";
 import {
@@ -306,7 +313,7 @@ export function ApplicationsWorkspace({
               onClick={() => setAddOpen(true)}
               className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-[8px] transition-colors bg-[#0f0f10] text-white hover:bg-[#0f0f10]/90"
             >
-              <Plus className="h-3 w-3 shrink-0" />
+              <PlusIcon className="h-3 w-3 shrink-0" />
               Add Application
             </button>
           )}
@@ -321,7 +328,7 @@ export function ApplicationsWorkspace({
           </div>
 
           <div className="relative w-52">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
+            <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
             <input
               type="text"
               value={search}
@@ -333,7 +340,7 @@ export function ApplicationsWorkspace({
 
           {view === "list" && (
             <button type="button" onClick={() => setColumnDialogOpen(true)} className={TOOLBAR_BTN}>
-              <Columns3 className="h-3 w-3 shrink-0" />
+              <ColumnsIcon className="h-3 w-3 shrink-0" />
               Edit columns
             </button>
           )}
@@ -344,9 +351,9 @@ export function ApplicationsWorkspace({
             className={TOOLBAR_BTN}
           >
             {view === "board" ? (
-              <List className="h-3 w-3 shrink-0" />
+              <ListIcon className="h-3 w-3 shrink-0" />
             ) : (
-              <LayoutGrid className="h-3 w-3 shrink-0" />
+              <SquaresFourIcon className="h-3 w-3 shrink-0" />
             )}
             {view === "board" ? "List view" : "Board view"}
           </button>
@@ -364,7 +371,7 @@ export function ApplicationsWorkspace({
             value={sortValue}
             onChange={setSortValue}
             options={SORT_OPTIONS}
-            icon={<ArrowUpDown className="h-3 w-3" />}
+            icon={<ArrowsDownUpIcon className="h-3 w-3" />}
             searchable={false}
           />
         </div>

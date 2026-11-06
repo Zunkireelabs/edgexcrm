@@ -27,7 +27,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Loader2, Mail, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  CircleNotchIcon,
+  EnvelopeSimpleIcon,
+  DotsThreeIcon,
+  PencilSimpleIcon,
+  PlusIcon,
+  TrashIcon,
+} from "@phosphor-icons/react";
 import { emailBlastGet, emailBlastSend, EmailBlastApiError } from "../lib/api-client";
 import type { EmailBlastRow, EmailBlastStatus } from "../lib/types";
 
@@ -127,7 +134,7 @@ export function EmailCampaignsDashboard({ canSendEmail }: EmailCampaignsDashboar
         </div>
         {canSendEmail && (
           <Button onClick={handleNewBlast} disabled={creatingDraft}>
-            <Plus className="h-4 w-4" />
+            <PlusIcon className="h-4 w-4" />
             New blast
           </Button>
         )}
@@ -139,7 +146,7 @@ export function EmailCampaignsDashboard({ canSendEmail }: EmailCampaignsDashboar
         <div className="py-8 text-center text-sm text-muted-foreground">Loading blasts…</div>
       ) : blasts.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-48 gap-2 text-muted-foreground">
-          <Mail className="h-8 w-8 opacity-40" />
+          <EnvelopeSimpleIcon className="h-8 w-8 opacity-40" />
           <p className="text-sm">No blasts yet.</p>
         </div>
       ) : (
@@ -152,7 +159,7 @@ export function EmailCampaignsDashboard({ canSendEmail }: EmailCampaignsDashboar
                 className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors"
               >
                 <div className="h-8 w-8 shrink-0 rounded-md flex items-center justify-center bg-primary/10">
-                  <Mail className="h-4 w-4 text-primary" />
+                  <EnvelopeSimpleIcon className="h-4 w-4 text-primary" />
                 </div>
 
                 <div className="min-w-0 flex-1">
@@ -174,7 +181,7 @@ export function EmailCampaignsDashboard({ canSendEmail }: EmailCampaignsDashboar
                 <div className="flex items-center gap-1 shrink-0">
                   <Button size="sm" variant="ghost" asChild>
                     <Link href={`/email-campaigns/${b.id}`}>
-                      <Pencil className="h-3.5 w-3.5 mr-1.5" />
+                      <PencilSimpleIcon className="h-3.5 w-3.5 mr-1.5" />
                       Edit blast
                     </Link>
                   </Button>
@@ -182,9 +189,9 @@ export function EmailCampaignsDashboard({ canSendEmail }: EmailCampaignsDashboar
                     <DropdownMenuTrigger asChild>
                       <Button size="icon" variant="ghost" className="h-8 w-8" disabled={deletingId === b.id}>
                         {deletingId === b.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <CircleNotchIcon className="h-4 w-4 animate-spin" />
                         ) : (
-                          <MoreHorizontal className="h-4 w-4" />
+                          <DotsThreeIcon className="h-4 w-4" />
                         )}
                       </Button>
                     </DropdownMenuTrigger>
@@ -193,7 +200,7 @@ export function EmailCampaignsDashboard({ canSendEmail }: EmailCampaignsDashboar
                         <DropdownMenuItem
                           onClick={() => setRenameDialog({ open: true, blast: b, value: b.name })}
                         >
-                          <Pencil className="h-3.5 w-3.5 mr-2" />
+                          <PencilSimpleIcon className="h-3.5 w-3.5 mr-2" />
                           Rename
                         </DropdownMenuItem>
                       )}
@@ -201,7 +208,7 @@ export function EmailCampaignsDashboard({ canSendEmail }: EmailCampaignsDashboar
                         variant="destructive"
                         onClick={() => setDeleteDialog({ open: true, blast: b })}
                       >
-                        <Trash2 className="h-3.5 w-3.5 mr-2" />
+                        <TrashIcon className="h-3.5 w-3.5 mr-2" />
                         Delete
                       </DropdownMenuItem>
                     </DropdownMenuContent>
@@ -235,7 +242,7 @@ export function EmailCampaignsDashboard({ canSendEmail }: EmailCampaignsDashboar
               onClick={() => deleteDialog.blast && handleDelete(deleteDialog.blast)}
             >
               {deletingId === deleteDialog.blast?.id ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                <CircleNotchIcon className="h-4 w-4 animate-spin mr-2" />
               ) : null}
               Delete
             </Button>
@@ -270,7 +277,7 @@ export function EmailCampaignsDashboard({ canSendEmail }: EmailCampaignsDashboar
               onClick={() => renameDialog.blast && handleRename(renameDialog.blast, renameDialog.value)}
             >
               {renamingId === renameDialog.blast?.id ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                <CircleNotchIcon className="h-4 w-4 animate-spin mr-2" />
               ) : null}
               Save
             </Button>

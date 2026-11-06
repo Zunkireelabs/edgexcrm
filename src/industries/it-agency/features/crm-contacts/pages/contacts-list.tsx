@@ -3,7 +3,16 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Plus, Users, Loader2, Search, Building2, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  PlusIcon,
+  UsersIcon,
+  CircleNotchIcon,
+  MagnifyingGlassIcon,
+  BuildingsIcon,
+  ArrowsDownUpIcon,
+  CaretLeftIcon,
+  CaretRightIcon,
+} from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { FilterMenu, FilterChips, type FilterDef } from "@/components/ui/filter-menu";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
@@ -151,7 +160,7 @@ export function ContactsListPage({ role }: ContactsListPageProps) {
     {
       id: "account",
       label: "Account",
-      icon: <Building2 className="h-3.5 w-3.5" />,
+      icon: <BuildingsIcon className="h-3.5 w-3.5" />,
       multiple: false,
       searchable: true,
       defaultValue: "all",
@@ -198,7 +207,7 @@ export function ContactsListPage({ role }: ContactsListPageProps) {
 
             {/* Search */}
             <div className="relative w-60">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
+              <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
               <input
                 type="text"
                 placeholder="Search by name, email, title…"
@@ -219,7 +228,7 @@ export function ContactsListPage({ role }: ContactsListPageProps) {
                   type="button"
                   className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md border transition-colors border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b]"
                 >
-                  <ArrowUpDown className="h-3 w-3 shrink-0" />
+                  <ArrowsDownUpIcon className="h-3 w-3 shrink-0" />
                   Sort
                 </button>
               </PopoverTrigger>
@@ -274,7 +283,7 @@ export function ContactsListPage({ role }: ContactsListPageProps) {
                 onClick={() => setCreateOpen(true)}
                 className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md transition-colors bg-[#0f0f10] text-white hover:bg-[#0f0f10]/90"
               >
-                <Plus className="h-3 w-3 shrink-0" />
+                <PlusIcon className="h-3 w-3 shrink-0" />
                 Add Contact
               </button>
             )}
@@ -286,11 +295,11 @@ export function ContactsListPage({ role }: ContactsListPageProps) {
         {/* Content */}
         {loading ? (
           <div className="flex items-center justify-center h-48">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            <CircleNotchIcon className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : contacts.length === 0 ? (
           <div className="border rounded-xl p-12 text-center bg-card">
-            <Users className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
+            <UsersIcon className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
             <h3 className="font-semibold text-lg mb-1">No contacts found</h3>
             <p className="text-muted-foreground text-sm mb-6">
               {debouncedQ || filterAccountId !== "all"
@@ -299,7 +308,7 @@ export function ContactsListPage({ role }: ContactsListPageProps) {
             </p>
             {isAdmin && !debouncedQ && filterAccountId === "all" && (
               <Button onClick={() => setCreateOpen(true)}>
-                <Plus className="h-4 w-4 mr-2" />
+                <PlusIcon className="h-4 w-4 mr-2" />
                 Add your first contact
               </Button>
             )}
@@ -397,7 +406,7 @@ export function ContactsListPage({ role }: ContactsListPageProps) {
                     onClick={() => setCurrentPage((p) => p - 1)}
                     className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                   >
-                    <ChevronLeft className="w-4 h-4" />
+                    <CaretLeftIcon className="w-4 h-4" />
                   </button>
                   <span className="text-xs text-gray-600 px-2">
                     Page {safePage} of {totalPages || 1}
@@ -407,7 +416,7 @@ export function ContactsListPage({ role }: ContactsListPageProps) {
                     onClick={() => setCurrentPage((p) => p + 1)}
                     className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                   >
-                    <ChevronRight className="w-4 h-4" />
+                    <CaretRightIcon className="w-4 h-4" />
                   </button>
                 </div>
               </div>

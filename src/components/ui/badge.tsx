@@ -1,6 +1,6 @@
 import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
-import { Sparkles } from "lucide-react"
+import { SparkleIcon } from "@phosphor-icons/react/dist/ssr";
 import { Slot } from "radix-ui"
 
 import { cn } from "@/lib/utils"
@@ -37,7 +37,7 @@ const badgeV2Variants = cva("", {
         "rounded-ds-sm border border-ds-border bg-ds-sunken text-ds-text text-xs px-[9px] py-0.5",
       count:
         "inline-grid place-items-center min-w-5 h-5 px-1.5 rounded-ds-full bg-ds-bad-soft text-ds-bad text-[11.5px] font-semibold",
-      ai: "inline-flex items-center gap-1 h-5 px-[7px] rounded-ds-xs bg-[image:var(--ds-ai-tint)] text-ds-ai text-[11px] font-medium [&>svg]:size-[11px] [&>svg]:stroke-[2.2]",
+      ai: "inline-flex items-center gap-1 h-5 px-[7px] rounded-ds-xs bg-[image:var(--ds-ai-tint)] text-ds-ai text-[11px] font-medium [&>svg]:size-[11px]",
       preview:
         "inline-flex items-center h-5 px-[7px] rounded-ds-xs bg-ds-surface border border-ds-ai-line text-ds-ai text-[11px] font-medium",
     },
@@ -69,7 +69,7 @@ function Badge(props: BadgeProps) {
         className={cn(badgeV2Variants({ variant: kind }), className)}
         {...rest}
       >
-        {kind === "ai" && !asChild ? <Sparkles aria-hidden="true" /> : null}
+        {kind === "ai" && !asChild ? <SparkleIcon aria-hidden="true" /> : null}
         {children}
       </Comp>
     )

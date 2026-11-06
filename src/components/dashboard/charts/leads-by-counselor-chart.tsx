@@ -1,6 +1,6 @@
 "use client";
 
-import { UserX } from "lucide-react";
+import { UserMinusIcon } from "@phosphor-icons/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface LeadsByCounselorChartProps {
@@ -107,7 +107,7 @@ export function LeadsByCounselorChart({ assignedToCounts, memberMap, memberNames
           {/* Unassigned leads — highlighted summary */}
           <div className="flex items-center gap-3 rounded-lg bg-red-50 px-4 py-3">
             <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-red-100">
-              <UserX className="h-4 w-4 text-red-500" />
+              <UserMinusIcon className="h-4 w-4 text-red-500" />
             </div>
             <div className="flex flex-col">
               <span className="text-xl font-bold leading-tight text-red-600">

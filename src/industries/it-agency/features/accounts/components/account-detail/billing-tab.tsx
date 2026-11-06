@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Loader2, FileText } from "lucide-react";
+import { CircleNotchIcon, FileTextIcon } from "@phosphor-icons/react";
 import { formatMoney } from "@/lib/travel/currency";
 import { InvoiceDetailDrawer } from "@/industries/it-agency/features/invoicing/components/invoice-detail-drawer";
 import type { Invoice, InvoiceStatus } from "@/types/database";
@@ -49,7 +49,7 @@ export function BillingTab({ accountId, isAdmin }: BillingTabProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
-        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        <CircleNotchIcon className="h-4 w-4 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -70,7 +70,7 @@ export function BillingTab({ accountId, isAdmin }: BillingTabProps) {
           className="w-full flex items-center justify-between gap-3 p-3 border border-border rounded-lg hover:bg-muted/40 transition-colors text-left cursor-pointer"
         >
           <div className="flex items-center gap-2 min-w-0">
-            <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+            <FileTextIcon className="h-4 w-4 text-muted-foreground shrink-0" />
             <div className="min-w-0">
               <p className="text-sm font-medium truncate">{inv.invoice_number}</p>
               {inv.projects && (

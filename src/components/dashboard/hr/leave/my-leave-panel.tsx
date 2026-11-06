@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
-import { Loader2, Plus, X } from "lucide-react";
+import { CircleNotchIcon, PlusIcon, XIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -138,7 +138,7 @@ export function MyLeavePanel() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-48">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <CircleNotchIcon className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -148,7 +148,7 @@ export function MyLeavePanel() {
       <div className="flex items-center justify-between">
         <h2 className="text-base font-semibold">My Leave</h2>
         <Button size="sm" onClick={() => setSheetOpen(true)}>
-          <Plus className="h-4 w-4 mr-1" />
+          <PlusIcon className="h-4 w-4 mr-1" />
           Request leave
         </Button>
       </div>
@@ -218,7 +218,7 @@ export function MyLeavePanel() {
                         disabled={cancellingId === r.id}
                         title="Cancel"
                       >
-                        <X className="h-3.5 w-3.5 text-muted-foreground" />
+                        <XIcon className="h-3.5 w-3.5 text-muted-foreground" />
                       </Button>
                     )}
                   </TableCell>
@@ -306,7 +306,7 @@ export function MyLeavePanel() {
                 disabled={submitting || !leaveTypeId || !startDate || !endDate}
                 className="w-full"
               >
-                {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                {submitting && <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />}
                 Submit request
               </Button>
             </SheetFooter>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { TriangleAlert } from "lucide-react";
+import { WarningIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -27,7 +27,7 @@ export function BlockingNoticeDialog({
       <AlertDialogContent className="sm:max-w-xl">
         <AlertDialogHeader className="items-center text-center sm:items-start sm:text-left">
           <div className="mb-1 flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-600">
-            <TriangleAlert className="h-6 w-6" aria-hidden="true" />
+            <WarningIcon className="h-6 w-6" aria-hidden="true" />
           </div>
           <AlertDialogTitle className="text-xl">{notice?.title}</AlertDialogTitle>
           <AlertDialogDescription className="text-base">{notice?.message}</AlertDialogDescription>

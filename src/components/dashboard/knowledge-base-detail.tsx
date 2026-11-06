@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Link as LinkIcon, StickyNote, Upload, Library } from "lucide-react";
+import { ArrowLeftIcon, LinkIcon, NoteIcon, UploadIcon, BooksIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { KnowledgeBaseItemsTable } from "./knowledge-base-items-table";
@@ -190,7 +190,7 @@ export function KnowledgeBaseDetail({ id, role }: KnowledgeBaseDetailProps) {
           onClick={() => router.back()}
           className="mt-1 p-1.5 rounded-md hover:bg-gray-100 transition-colors text-muted-foreground"
         >
-          <ArrowLeft className="w-4 h-4" />
+          <ArrowLeftIcon className="w-4 h-4" />
         </button>
         <div className="flex-1 min-w-0">
           {isAdmin && editingName ? (
@@ -243,7 +243,7 @@ export function KnowledgeBaseDetail({ id, role }: KnowledgeBaseDetailProps) {
               Add Link
             </Button>
             <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setNoteOpen(true)}>
-              <StickyNote className="w-3.5 h-3.5" />
+              <NoteIcon className="w-3.5 h-3.5" />
               Add Note
             </Button>
           </div>
@@ -254,7 +254,7 @@ export function KnowledgeBaseDetail({ id, role }: KnowledgeBaseDetailProps) {
       {isAdmin && (
         <div>
           <h2 className="text-sm font-medium mb-2 flex items-center gap-2 text-muted-foreground">
-            <Upload className="w-4 h-4" />
+            <UploadIcon className="w-4 h-4" />
             Upload Files
           </h2>
           <KnowledgeBaseFileDropzone kbId={id} onUploaded={handleItemAdded} />
@@ -275,7 +275,7 @@ export function KnowledgeBaseDetail({ id, role }: KnowledgeBaseDetailProps) {
         </div>
       ) : (
         <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
-          <Library className="w-10 h-10 text-muted-foreground/30" />
+          <BooksIcon className="w-10 h-10 text-muted-foreground/30" />
           <p className="font-medium text-gray-700">No documents yet</p>
           <p className="text-sm text-muted-foreground">
             {isAdmin

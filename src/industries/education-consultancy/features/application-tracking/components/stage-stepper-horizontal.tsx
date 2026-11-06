@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useState } from "react";
-import { Check, Trophy, XCircle, Loader2 } from "lucide-react";
+import { CheckIcon, TrophyIcon, XCircleIcon, CircleNotchIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import type { ApplicationStage } from "@/types/database";
 
@@ -99,13 +99,13 @@ export function StageStepperHorizontal({
                     title={isClickable ? `Move to ${stage.name}` : stage.name}
                   >
                     {isLoading ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <CircleNotchIcon className="h-3.5 w-3.5 animate-spin" />
                     ) : isTerminalWon && isCurrent ? (
-                      <Trophy className="h-3.5 w-3.5" />
+                      <TrophyIcon className="h-3.5 w-3.5" />
                     ) : isTerminalLost && isCurrent ? (
-                      <XCircle className="h-3.5 w-3.5" />
+                      <XCircleIcon className="h-3.5 w-3.5" />
                     ) : isPast ? (
-                      <Check className="h-3.5 w-3.5" style={{ color: stage.color }} />
+                      <CheckIcon className="h-3.5 w-3.5" style={{ color: stage.color }} />
                     ) : isCurrent ? (
                       <span className="h-2 w-2 rounded-full bg-white" />
                     ) : null}

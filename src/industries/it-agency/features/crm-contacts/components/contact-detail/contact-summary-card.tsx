@@ -1,6 +1,13 @@
 "use client";
 
-import { Mail, Phone, MessageSquare, FolderPlus, MoreHorizontal, Loader2 } from "lucide-react";
+import {
+  EnvelopeSimpleIcon,
+  PhoneIcon,
+  ChatTextIcon,
+  FolderPlusIcon,
+  DotsThreeIcon,
+  CircleNotchIcon,
+} from "@phosphor-icons/react";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   DropdownMenu,
@@ -136,24 +143,24 @@ export function ContactSummaryCard({
         {/* Quick actions */}
         <div className="flex items-center justify-center gap-3 pt-4 border-t border-border">
           <QuickActionButton
-            icon={<MessageSquare className="h-4 w-4" />}
+            icon={<ChatTextIcon className="h-4 w-4" />}
             label="Note"
             onClick={onNoteClick}
           />
           <QuickActionButton
-            icon={<Mail className="h-4 w-4" />}
+            icon={<EnvelopeSimpleIcon className="h-4 w-4" />}
             label="Email"
             href={email ? `mailto:${email}` : undefined}
             disabled={!email}
           />
           <QuickActionButton
-            icon={<Phone className="h-4 w-4" />}
+            icon={<PhoneIcon className="h-4 w-4" />}
             label="Call"
             href={phone ? `tel:${phone}` : undefined}
             disabled={!phone}
           />
           <QuickActionButton
-            icon={<FolderPlus className="h-4 w-4" />}
+            icon={<FolderPlusIcon className="h-4 w-4" />}
             label="Add to Project"
             onClick={onAddToProject}
           />
@@ -164,7 +171,7 @@ export function ContactSummaryCard({
                 className="flex flex-col items-center gap-1 group"
               >
                 <span className="h-10 w-10 rounded-full border border-border flex items-center justify-center text-muted-foreground group-hover:border-foreground group-hover:text-foreground transition-colors">
-                  <MoreHorizontal className="h-4 w-4" />
+                  <DotsThreeIcon className="h-4 w-4" />
                 </span>
                 <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">More</span>
               </button>
@@ -175,7 +182,7 @@ export function ContactSummaryCard({
                   onClick={onSetPrimary}
                   disabled={settingPrimary}
                 >
-                  {settingPrimary && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  {settingPrimary && <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />}
                   Set as Primary Contact
                 </DropdownMenuItem>
               )}

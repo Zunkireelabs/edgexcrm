@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCheck, ChevronLeft, ChevronRight } from "lucide-react";
+import { ChecksIcon, CaretLeftIcon, CaretRightIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import type { NotificationCategoryKey } from "@/lib/notification-categories";
 import {
@@ -119,7 +119,7 @@ export function NotificationsPage() {
             disabled={markingAll}
             className="flex shrink-0 items-center gap-1.5 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 hover:text-gray-900 disabled:opacity-50"
           >
-            <CheckCheck className="h-4 w-4" />
+            <ChecksIcon className="h-4 w-4" />
             <span className="hidden sm:inline">Mark all as read</span>
             <span className="sm:hidden">Mark all</span>
           </button>
@@ -167,13 +167,13 @@ export function NotificationsPage() {
               disabled={page === 1 || loading}
               onClick={() => setPage((p) => p - 1)}
             >
-              <ChevronLeft className="mr-1 h-4 w-4" />
+              <CaretLeftIcon className="mr-1 h-4 w-4" />
               Previous
             </Button>
             <span className="text-xs text-gray-500">Page {page}</span>
             <Button variant="outline" size="sm" disabled={!hasNext || loading} onClick={() => setPage((p) => p + 1)}>
               Next
-              <ChevronRight className="ml-1 h-4 w-4" />
+              <CaretRightIcon className="ml-1 h-4 w-4" />
             </Button>
           </div>
         )}

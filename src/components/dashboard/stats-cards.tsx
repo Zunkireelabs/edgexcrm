@@ -1,8 +1,22 @@
 "use client";
 
 import { useLayoutEffect, useRef } from "react";
-import type { LucideIcon } from "lucide-react";
-import { Users, UserPlus, Activity, CheckCircle2, XCircle, GraduationCap, Phone, TrendingUp, TrendingDown, Minus, UserX, Globe, Users2, Percent } from "lucide-react";
+import type { Icon } from "@phosphor-icons/react";
+import {
+  UsersIcon,
+  UserPlusIcon,
+  PulseIcon,
+  CheckCircleIcon,
+  XCircleIcon,
+  GraduationCapIcon,
+  PhoneIcon,
+  TrendUpIcon,
+  TrendDownIcon,
+  MinusIcon,
+  UserMinusIcon,
+  GlobeIcon,
+  PercentIcon,
+} from "@phosphor-icons/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { PipelineStage } from "@/types/database";
 import type { LeadAggregates, WeekBucketCounts } from "@/lib/leads/aggregates";
@@ -67,7 +81,7 @@ interface StatCardProps {
   count: number;
   thisWeek: number;
   lastWeek: number;
-  Icon: LucideIcon;
+  Icon: Icon;
   iconDelayMs: number;
   highlighted: boolean;
   isActive: boolean;
@@ -101,9 +115,9 @@ export function StatCard({ label, count, thisWeek, lastWeek, Icon, iconDelayMs, 
         trend === "up" ? "text-emerald-600" : trend === "down" ? "text-red-600" : "text-muted-foreground"
       }`}
     >
-      {trend === "up" && <TrendingUp className="h-3 w-3" />}
-      {trend === "down" && <TrendingDown className="h-3 w-3" />}
-      {trend === "neutral" && <Minus className="h-3 w-3" />}
+      {trend === "up" && <TrendUpIcon className="h-3 w-3" />}
+      {trend === "down" && <TrendDownIcon className="h-3 w-3" />}
+      {trend === "neutral" && <MinusIcon className="h-3 w-3" />}
       {pctLabel}
     </span>
   );
@@ -116,7 +130,7 @@ export function StatCard({ label, count, thisWeek, lastWeek, Icon, iconDelayMs, 
       >
         <div className="flex items-center justify-between px-4">
           <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</span>
-          <Icon ref={iconRef} className="h-4 w-4 text-foreground/70" strokeWidth={1.75} />
+          <Icon ref={iconRef} className="h-4 w-4 text-foreground/70" />
         </div>
         <div className="flex flex-1 items-end justify-between px-4">
           <span className="text-2xl font-bold tracking-tight">
@@ -138,7 +152,7 @@ export function StatCard({ label, count, thisWeek, lastWeek, Icon, iconDelayMs, 
         <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
           {label}
         </CardTitle>
-        <Icon ref={iconRef} className="h-4 w-4 text-foreground/70" strokeWidth={1.75} />
+        <Icon ref={iconRef} className="h-4 w-4 text-foreground/70" />
       </CardHeader>
       <CardContent className={isLg ? "flex flex-1 flex-col justify-center" : undefined}>
         {isLg && <GaugeArc fillPct={count === 0 ? 0 : (thisWeek / count) * 100} />}
@@ -162,20 +176,20 @@ export function StatCard({ label, count, thisWeek, lastWeek, Icon, iconDelayMs, 
 
 // Legacy hardcoded stats (used when no stages are provided, e.g. education insights widget)
 const LEGACY_STATS = [
-  { key: "total", label: "TOTAL LEADS", Icon: Users },
-  { key: "new", label: "NEW", Icon: UserPlus },
-  { key: "contacted", label: "CONTACTED", Icon: Phone },
-  { key: "enrolled", label: "ENROLLED", Icon: GraduationCap },
-  { key: "rejected", label: "REJECTED", Icon: XCircle },
+  { key: "total", label: "TOTAL LEADS", Icon: UsersIcon },
+  { key: "new", label: "NEW", Icon: UserPlusIcon },
+  { key: "contacted", label: "CONTACTED", Icon: PhoneIcon },
+  { key: "enrolled", label: "ENROLLED", Icon: GraduationCapIcon },
+  { key: "rejected", label: "REJECTED", Icon: XCircleIcon },
 ];
 
 // Extra legacy-branch tiles that round out the grid to match the reference dashboard's
 // tall-tile + 8-tile-grid layout — see docs discussion on the dashboard-ui-refresh branch.
 const LEGACY_EXTRA_STATS = [
-  { key: "unassigned", label: "UNASSIGNED", Icon: UserX },
-  { key: "active-sources", label: "ACTIVE SOURCES", Icon: Globe },
-  { key: "team-members", label: "TEAM MEMBERS", Icon: Users2 },
-  { key: "conversion-rate", label: "CONVERSION RATE", Icon: Percent },
+  { key: "unassigned", label: "UNASSIGNED", Icon: UserMinusIcon },
+  { key: "active-sources", label: "ACTIVE SOURCES", Icon: GlobeIcon },
+  { key: "team-members", label: "TEAM MEMBERS", Icon: UsersIcon },
+  { key: "conversion-rate", label: "CONVERSION RATE", Icon: PercentIcon },
 ];
 
 function emptyBucket(): WeekBucketCounts {
@@ -192,7 +206,7 @@ function sumBuckets(list: WeekBucketCounts[]): WeekBucketCounts {
 export interface LegacyKpiTile {
   key: string;
   label: string;
-  Icon: LucideIcon;
+  Icon: Icon;
   suffix: string;
   count: number;
   thisWeek: number;
@@ -346,11 +360,11 @@ export function StatsCards({ aggregates, stages, onFilterClick, activeFilter, te
     const lostBucket = sumBuckets(lostStages.map(stageBucket));
 
     const cards = [
-      { key: "total", label: "TOTAL LEADS", bucket: totalBucket, Icon: Users },
-      { key: "new", label: "NEW", bucket: newBucket, Icon: UserPlus },
-      { key: "in-progress", label: "IN PROGRESS", bucket: inProgressBucket, Icon: Activity },
-      { key: "won", label: wonLabel.toUpperCase(), bucket: wonBucket, Icon: CheckCircle2 },
-      { key: "lost", label: lostLabel.toUpperCase(), bucket: lostBucket, Icon: XCircle },
+      { key: "total", label: "TOTAL LEADS", bucket: totalBucket, Icon: UsersIcon },
+      { key: "new", label: "NEW", bucket: newBucket, Icon: UserPlusIcon },
+      { key: "in-progress", label: "IN PROGRESS", bucket: inProgressBucket, Icon: PulseIcon },
+      { key: "won", label: wonLabel.toUpperCase(), bucket: wonBucket, Icon: CheckCircleIcon },
+      { key: "lost", label: lostLabel.toUpperCase(), bucket: lostBucket, Icon: XCircleIcon },
     ];
 
     return (

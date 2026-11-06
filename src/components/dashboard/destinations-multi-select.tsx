@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { CaretDownIcon } from "@phosphor-icons/react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { normalizeDestinations } from "@/lib/leads/destination-normalize";
@@ -64,7 +64,7 @@ export function DestinationsMultiSelect({
         <span className={cleanSelected.length === 0 ? "text-muted-foreground" : ""}>
           {cleanSelected.length === 0 ? "Select destinations" : cleanSelected.join(", ")}
         </span>
-        <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
+        <CaretDownIcon className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
         <div className="border border-input rounded-md p-2 grid grid-cols-2 gap-1.5 bg-background shadow-sm">

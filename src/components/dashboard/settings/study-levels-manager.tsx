@@ -1,6 +1,6 @@
 "use client";
 
-import { GraduationCap } from "lucide-react";
+import { GraduationCapIcon } from "@phosphor-icons/react";
 import { LookupTableManager } from "./lookup-table-manager";
 
 export function StudyLevelsManager() {
@@ -8,7 +8,7 @@ export function StudyLevelsManager() {
     <LookupTableManager
       id="study-levels"
       title="Interested Degree Level"
-      icon={GraduationCap}
+      icon={GraduationCapIcon}
       apiPath="/api/v1/study-levels"
       itemLabel="Degree Level"
       description="Manage the degree levels students can select on check-in and add-lead."

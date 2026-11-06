@@ -2,49 +2,49 @@
 
 import { useState } from "react";
 import {
-  FileText,
-  Sprout,
-  ShieldCheck,
-  ClipboardList,
-  GitPullRequestArrow,
-  CheckCircle2,
-  XCircle,
-  Scale,
-  Milestone,
-  AlertCircle,
-  Send,
-  Lightbulb,
-  Circle,
-  Plus,
-  Play,
-  ShieldAlert,
-  Flame,
-} from "lucide-react";
+  FileTextIcon,
+  PlantIcon,
+  ShieldCheckIcon,
+  ClipboardTextIcon,
+  GitPullRequestIcon,
+  CheckCircleIcon,
+  XCircleIcon,
+  ScalesIcon,
+  FlagBannerIcon,
+  WarningCircleIcon,
+  PaperPlaneTiltIcon,
+  LightbulbIcon,
+  CircleIcon,
+  PlusIcon,
+  PlayIcon,
+  ShieldWarningIcon,
+  FlameIcon,
+} from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import type { ProjectEvent } from "@/types/database";
 
-const EVENT_ICON: Record<string, typeof Circle> = {
-  brief_captured: FileText,
-  baseline_seeded_from_proposal: Sprout,
-  scope_baseline_set: ShieldCheck,
-  plan_committed: ClipboardList,
-  change_request_proposed: GitPullRequestArrow,
-  change_request_approved: CheckCircle2,
-  change_request_rejected: XCircle,
-  task_reconciled: Scale,
-  milestone_accepted: Milestone,
-  milestone_rejected: XCircle,
-  milestone_submitted: Send,
-  milestone_started: Play,
-  issue_raised: AlertCircle,
-  issue_resolved: CheckCircle2,
-  status_published: Send,
-  retro_lesson: Lightbulb,
-  risk_raised: ShieldAlert,
-  risk_closed: ShieldCheck,
-  risk_occurred: Flame,
+const EVENT_ICON: Record<string, typeof CircleIcon> = {
+  brief_captured: FileTextIcon,
+  baseline_seeded_from_proposal: PlantIcon,
+  scope_baseline_set: ShieldCheckIcon,
+  plan_committed: ClipboardTextIcon,
+  change_request_proposed: GitPullRequestIcon,
+  change_request_approved: CheckCircleIcon,
+  change_request_rejected: XCircleIcon,
+  task_reconciled: ScalesIcon,
+  milestone_accepted: FlagBannerIcon,
+  milestone_rejected: XCircleIcon,
+  milestone_submitted: PaperPlaneTiltIcon,
+  milestone_started: PlayIcon,
+  issue_raised: WarningCircleIcon,
+  issue_resolved: CheckCircleIcon,
+  status_published: PaperPlaneTiltIcon,
+  retro_lesson: LightbulbIcon,
+  risk_raised: ShieldWarningIcon,
+  risk_closed: ShieldCheckIcon,
+  risk_occurred: FlameIcon,
 };
 
 function relativeTime(iso: string): string {
@@ -89,7 +89,7 @@ export function TimelinePanel({ events, loading, canManageProjects, onAddRetroLe
         </div>
         {canManageProjects && (
           <Button variant="ghost" size="sm" onClick={() => setAdding((v) => !v)}>
-            <Plus className="h-3.5 w-3.5 mr-1.5" />
+            <PlusIcon className="h-3.5 w-3.5 mr-1.5" />
             Retro lesson
           </Button>
         )}
@@ -121,7 +121,7 @@ export function TimelinePanel({ events, loading, canManageProjects, onAddRetroLe
 
         <div className="space-y-3">
           {events.map((event) => {
-            const Icon = EVENT_ICON[event.event_type] ?? Circle;
+            const Icon = EVENT_ICON[event.event_type] ?? CircleIcon;
             return (
               <div key={event.id} className="flex items-start gap-3">
                 <div className="mt-0.5 h-6 w-6 rounded-full bg-muted flex items-center justify-center flex-shrink-0">

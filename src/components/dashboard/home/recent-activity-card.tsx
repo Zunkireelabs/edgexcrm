@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Bell } from "lucide-react";
+import { BellIcon } from "@phosphor-icons/react";
 import { Card, CardHeader, CardTitle, CardAction, CardContent } from "@/components/ui/card";
 import { formatRelativeTime } from "@/lib/format-relative-time";
 import type { RecentActivityItem } from "@/lib/supabase/queries";
@@ -31,7 +31,7 @@ export function RecentActivityCard({ notifications, onViewAll }: RecentActivityC
       <CardContent className="pt-0">
         {notifications.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-6 gap-2 text-center">
-            <Bell className="h-8 w-8 text-muted-foreground/40" />
+            <BellIcon className="h-8 w-8 text-muted-foreground/40" />
             <p className="text-sm text-muted-foreground">No recent activity.</p>
           </div>
         ) : (

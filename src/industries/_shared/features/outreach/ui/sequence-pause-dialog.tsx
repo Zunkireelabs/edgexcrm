@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { CircleNotchIcon } from "@phosphor-icons/react";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -116,7 +116,7 @@ export function SequencePauseDialog({ sequence, action, onClose }: SequencePause
         <AlertDialogFooter>
           <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
           <Button onClick={confirm} disabled={busy || loading || affected === 0} variant={action === "pause" ? "destructive" : "default"}>
-            {busy && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+            {busy && <CircleNotchIcon className="mr-1.5 h-4 w-4 animate-spin" />}
             {action === "pause" ? "Pause all" : "Resume all"}
           </Button>
         </AlertDialogFooter>

@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Plus, FileSignature, Loader2 } from "lucide-react";
+import { PlusIcon, SignatureIcon, CircleNotchIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { formatMoney } from "@/lib/travel/currency";
 import { AddProposalSheet } from "../components/add-proposal-sheet";
@@ -44,7 +44,7 @@ export function ProposalsListPage({ role }: ProposalsListPageProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-48">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <CircleNotchIcon className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -55,7 +55,7 @@ export function ProposalsListPage({ role }: ProposalsListPageProps) {
         <h1 className="text-lg font-bold">Proposals</h1>
         {isAdmin && (
           <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
+            <PlusIcon className="h-4 w-4 mr-2" />
             New Proposal
           </Button>
         )}
@@ -63,14 +63,14 @@ export function ProposalsListPage({ role }: ProposalsListPageProps) {
 
       {proposals.length === 0 ? (
         <div className="border rounded-xl p-12 text-center bg-card">
-          <FileSignature className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
+          <SignatureIcon className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
           <h3 className="font-semibold text-lg mb-1">No proposals yet</h3>
           <p className="text-muted-foreground text-sm mb-6">
             Create a proposal from a deal to send a priced quote.
           </p>
           {isAdmin && (
             <Button onClick={() => setCreateOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
+              <PlusIcon className="h-4 w-4 mr-2" />
               Create your first proposal
             </Button>
           )}

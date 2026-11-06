@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Check, ChevronDown, Search } from "lucide-react";
+import { CheckIcon, CaretDownIcon, MagnifyingGlassIcon } from "@phosphor-icons/react";
 
 export interface FilterOption {
   value: string;
@@ -70,7 +70,7 @@ export function FilterOptionList({
       {searchable && (
         <div className="p-2 border-b border-gray-100">
           <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+            <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
             <input
               ref={searchInputRef}
               type="text"
@@ -111,7 +111,7 @@ export function FilterOptionList({
                       isSelected ? "border-[#0f0f10] bg-[#0f0f10]" : "border-gray-400"
                     }`}
                   >
-                    {isSelected && <Check className="w-2.5 h-2.5 text-white" />}
+                    {isSelected && <CheckIcon className="w-2.5 h-2.5 text-white" />}
                   </div>
                 ) : (
                   <div
@@ -120,7 +120,7 @@ export function FilterOptionList({
                       ${isSelected ? "border-[#0f0f10] bg-[#0f0f10]" : "border-gray-300"}
                     `}
                   >
-                    {isSelected && <Check className="w-2 h-2 text-white" />}
+                    {isSelected && <CheckIcon className="w-2 h-2 text-white" />}
                   </div>
                 )}
 
@@ -269,7 +269,7 @@ export function FilterDropdown({
       >
         {icon && <span className="shrink-0">{icon}</span>}
         <span className="truncate max-w-[120px]">{displayLabel}</span>
-        <ChevronDown
+        <CaretDownIcon
           className={`h-3 w-3 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`}
         />
       </button>

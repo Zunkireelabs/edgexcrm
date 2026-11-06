@@ -9,7 +9,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Clock } from "lucide-react";
+import { ClockIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 interface Thresholds {
@@ -93,7 +93,7 @@ export function TeamPerformanceThresholdsSettingsCard({ isAdmin }: { isAdmin: bo
   return (
     <div className="border rounded-lg p-6 space-y-4">
       <div className="flex items-center gap-2">
-        <Clock className="h-4 w-4 text-muted-foreground" />
+        <ClockIcon className="h-4 w-4 text-muted-foreground" />
         <h2 className="font-semibold">Team & Lead Performance Thresholds</h2>
       </div>
 

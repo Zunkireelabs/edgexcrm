@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronRight, Info } from "lucide-react";
+import { CaretDownIcon, CaretRightIcon, InfoIcon } from "@phosphor-icons/react";
 import type { ImportSourceReconciliationRow } from "@/types/database";
 import {
   Tooltip,
@@ -58,7 +58,7 @@ export function ReconciliationPanel({ rows }: ReconciliationPanelProps) {
           className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-gray-800 hover:bg-gray-50 transition-colors"
         >
           <span className="flex items-center gap-2">
-            {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            {open ? <CaretDownIcon size={14} /> : <CaretRightIcon size={14} />}
             Import Reconciliation
             <span className="text-xs font-normal text-gray-500">({rows.length} source files)</span>
           </span>
@@ -96,7 +96,7 @@ export function ReconciliationPanel({ rows }: ReconciliationPanelProps) {
                                   {r.in_crm.toLocaleString()}
                                 </span>
                                 <span className="text-gray-400">({pct}%)</span>
-                                <Info size={10} className="text-gray-400 shrink-0" />
+                                <InfoIcon size={10} className="text-gray-400 shrink-0" />
                               </span>
                             </TooltipTrigger>
                             <TooltipContent side="left" className="max-w-[260px]">
@@ -113,7 +113,7 @@ export function ReconciliationPanel({ rows }: ReconciliationPanelProps) {
                                 ) : (
                                   <span className="text-gray-400">—</span>
                                 )}
-                                <Info size={10} className="text-gray-400 shrink-0" />
+                                <InfoIcon size={10} className="text-gray-400 shrink-0" />
                               </span>
                             </TooltipTrigger>
                             <TooltipContent side="left">
@@ -130,7 +130,7 @@ export function ReconciliationPanel({ rows }: ReconciliationPanelProps) {
                                 ) : (
                                   <span className="text-gray-700">{r.still_in_staging.toLocaleString()}</span>
                                 )}
-                                <Info size={10} className="text-gray-400 shrink-0" />
+                                <InfoIcon size={10} className="text-gray-400 shrink-0" />
                               </span>
                             </TooltipTrigger>
                             <TooltipContent side="left">

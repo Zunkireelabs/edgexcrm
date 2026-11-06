@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle } from "react";
 import { useRouter } from "next/navigation";
-import { ClipboardList } from "lucide-react";
+import { ClipboardTextIcon } from "@phosphor-icons/react";
 import { TaskRow, type TaskRowItem } from "./task-row";
 import { TaskComposer, type TaskComposerContext, type TaskComposerRef } from "./task-composer";
 import { toLocalDateString } from "@/lib/date";
@@ -104,7 +104,7 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(function TaskList
         <p className="text-sm text-muted-foreground py-2">Loading tasks…</p>
       ) : open.length === 0 && !showCompleted ? (
         <div className="flex flex-col items-center justify-center py-4 gap-1.5 text-center">
-          <ClipboardList className="h-6 w-6 text-muted-foreground/40" />
+          <ClipboardTextIcon className="h-6 w-6 text-muted-foreground/40" />
           <p className="text-sm text-muted-foreground">{emptyLabel}</p>
         </div>
       ) : (

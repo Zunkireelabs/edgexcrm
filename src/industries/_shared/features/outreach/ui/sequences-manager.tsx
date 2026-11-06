@@ -1,7 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Pencil, Archive, Layers, Pause, Play, UserPlus, BarChart3, Zap } from "lucide-react";
+import {
+  PlusIcon,
+  PencilSimpleIcon,
+  ArchiveIcon,
+  StackIcon,
+  PauseIcon,
+  PlayIcon,
+  UserPlusIcon,
+  ChartBarIcon,
+  LightningIcon,
+} from "@phosphor-icons/react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -72,7 +82,7 @@ export function SequencesManager({ isAdmin, industryId, channel = "email" }: Seq
       {isAdmin && (
         <div className="flex justify-end">
           <Button type="button" size="sm" onClick={openCreate}>
-            <Plus className="h-3.5 w-3.5 mr-1.5" /> New sequence
+            <PlusIcon className="h-3.5 w-3.5 mr-1.5" /> New sequence
           </Button>
         </div>
       )}
@@ -84,7 +94,7 @@ export function SequencesManager({ isAdmin, industryId, channel = "email" }: Seq
       ) : sequences.length === 0 ? (
         <Card className="shadow-none rounded-lg py-0">
           <CardContent className="p-8 text-center">
-            <Layers className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+            <StackIcon className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
             <p className="text-muted-foreground">
               {isAdmin ? "No sequences yet. Create one to start automating follow-ups." : "No sequences available."}
             </p>
@@ -125,7 +135,7 @@ export function SequencesManager({ isAdmin, industryId, channel = "email" }: Seq
                       className="shrink-0 inline-flex items-center gap-0.5 rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
                       title={autoEnrollTooltip(autoEnrollStageNames(sequence))}
                     >
-                      <Zap className="h-2.5 w-2.5" aria-hidden />
+                      <LightningIcon className="h-2.5 w-2.5" aria-hidden />
                       {autoEnrollPillText(autoEnrollStageNames(sequence))}
                     </span>
                   )}
@@ -149,7 +159,7 @@ export function SequencesManager({ isAdmin, industryId, channel = "email" }: Seq
                     setEnrollTarget(sequence);
                   }}
                 >
-                  <UserPlus className="h-3.5 w-3.5 mr-1.5" /> Enroll leads
+                  <UserPlusIcon className="h-3.5 w-3.5 mr-1.5" /> Enroll leads
                 </Button>
               </div>
               {isAdmin && (
@@ -163,7 +173,7 @@ export function SequencesManager({ isAdmin, industryId, channel = "email" }: Seq
                       setReportTarget(sequence);
                     }}
                   >
-                    <BarChart3 className="h-3.5 w-3.5 mr-1.5" /> Report
+                    <ChartBarIcon className="h-3.5 w-3.5 mr-1.5" /> Report
                   </Button>
                   <Button
                     type="button"
@@ -174,7 +184,7 @@ export function SequencesManager({ isAdmin, industryId, channel = "email" }: Seq
                       setPauseTarget({ sequence, action: "pause" });
                     }}
                   >
-                    <Pause className="h-3.5 w-3.5 mr-1.5" /> Pause all
+                    <PauseIcon className="h-3.5 w-3.5 mr-1.5" /> Pause all
                   </Button>
                   <Button
                     type="button"
@@ -185,7 +195,7 @@ export function SequencesManager({ isAdmin, industryId, channel = "email" }: Seq
                       setPauseTarget({ sequence, action: "resume" });
                     }}
                   >
-                    <Play className="h-3.5 w-3.5 mr-1.5" /> Resume all
+                    <PlayIcon className="h-3.5 w-3.5 mr-1.5" /> Resume all
                   </Button>
                   <Button
                     type="button"
@@ -196,7 +206,7 @@ export function SequencesManager({ isAdmin, industryId, channel = "email" }: Seq
                       openEdit(sequence);
                     }}
                   >
-                    <Pencil className="h-3.5 w-3.5 mr-1.5" /> Edit
+                    <PencilSimpleIcon className="h-3.5 w-3.5 mr-1.5" /> Edit
                   </Button>
                   <Button
                     type="button"
@@ -208,7 +218,7 @@ export function SequencesManager({ isAdmin, industryId, channel = "email" }: Seq
                       setArchiveTarget(sequence);
                     }}
                   >
-                    <Archive className="h-3.5 w-3.5 mr-1.5" /> Archive
+                    <ArchiveIcon className="h-3.5 w-3.5 mr-1.5" /> Archive
                   </Button>
                 </div>
               )}

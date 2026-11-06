@@ -1,18 +1,18 @@
 import type { lazy, ComponentType } from "react";
-import type { LucideIcon } from "lucide-react";
+import type { Icon } from "@phosphor-icons/react";
 import { requireOrcaAccess } from "@/lib/ai/orca-access";
 import {
-  Building2,
-  Bot,
-  Users,
-  Shield,
-  ListChecks,
-  GraduationCap,
-  MessageSquare,
-  Plug,
-  FileCheck,
-  CalendarClock,
-} from "lucide-react";
+  BuildingsIcon,
+  RobotIcon,
+  UsersIcon,
+  ShieldIcon,
+  ListChecksIcon,
+  GraduationCapIcon,
+  ChatTextIcon,
+  PlugIcon,
+  FileTextIcon,
+  CalendarDotsIcon,
+} from "@phosphor-icons/react/dist/ssr";
 
 export interface GatingContext {
   role: string;
@@ -53,7 +53,7 @@ export function makeGatingContext(input: {
 export interface SettingsCategory {
   key: string;
   label: string;
-  icon: LucideIcon;
+  icon: Icon;
   isVisible: (ctx: GatingContext) => boolean;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   panel: ReturnType<typeof lazy<ComponentType<any>>>;
@@ -66,61 +66,61 @@ export const SETTINGS_CATEGORIES = [
   {
     key: "general",
     label: "General",
-    icon: Building2,
+    icon: BuildingsIcon,
     isVisible: () => true,
   },
   {
     key: "ai-orca",
     label: "AI & Orca",
-    icon: Bot,
+    icon: RobotIcon,
     isVisible: (ctx: GatingContext) => ctx.isOrcaAvailable,
   },
   {
     key: "organization",
     label: "Organization",
-    icon: Building2,
+    icon: BuildingsIcon,
     isVisible: () => true,
   },
   {
     key: "team-roles",
     label: "Team & Roles",
-    icon: Shield,
+    icon: ShieldIcon,
     isVisible: () => true,
   },
   {
     key: "lead-management",
     label: "Lead Management",
-    icon: ListChecks,
+    icon: ListChecksIcon,
     isVisible: () => true,
   },
   {
     key: "leave",
     label: "Leave",
-    icon: CalendarClock,
+    icon: CalendarDotsIcon,
     isVisible: () => true,
   },
   {
     key: "academic-operations",
     label: "Academic Operations",
-    icon: GraduationCap,
+    icon: GraduationCapIcon,
     isVisible: (_ctx: GatingContext) => _ctx.isEducation,
   },
   {
     key: "communications",
     label: "Communications",
-    icon: MessageSquare,
+    icon: ChatTextIcon,
     isVisible: () => true,
   },
   {
     key: "integrations",
     label: "Integrations",
-    icon: Plug,
+    icon: PlugIcon,
     isVisible: () => true,
   },
   {
     key: "compliance",
     label: "Compliance",
-    icon: FileCheck,
+    icon: FileTextIcon,
     isVisible: (ctx: GatingContext) => ctx.isEducation,
   },
 ] as const satisfies readonly Omit<SettingsCategory, "panel">[];
@@ -129,4 +129,4 @@ export const SETTINGS_CATEGORIES = [
 export type SettingsCategoryKey = (typeof SETTINGS_CATEGORIES)[number]["key"];
 
 // Icon map for external references
-export { Building2, Users };
+export { BuildingsIcon as Building2, UsersIcon as Users };

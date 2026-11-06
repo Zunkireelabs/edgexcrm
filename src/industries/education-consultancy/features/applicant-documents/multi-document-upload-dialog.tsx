@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AlertCircle, CheckCircle2, FileText, Loader2, Paperclip, X } from "lucide-react";
+import {
+  WarningCircleIcon,
+  CheckCircleIcon,
+  FileTextIcon,
+  CircleNotchIcon,
+  PaperclipIcon,
+  XIcon,
+} from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -165,12 +172,12 @@ export function MultiDocumentUploadDialog({
           {items.map((item) => (
             <div key={item.id} className="rounded-md border p-3 space-y-2" data-status={item.status}>
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <FileText className="h-3.5 w-3.5 shrink-0" />
+                <FileTextIcon className="h-3.5 w-3.5 shrink-0" />
                 <span className="truncate">{item.file.name}</span>
                 <span className="shrink-0">· {formatBytes(item.file.size)}</span>
                 <span className="ml-auto flex shrink-0 items-center gap-1">
-                  {item.status === "uploading" && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-label="Uploading" />}
-                  {item.status === "failed" && <AlertCircle className="h-3.5 w-3.5 text-red-600" aria-label="Failed" />}
+                  {item.status === "uploading" && <CircleNotchIcon className="h-3.5 w-3.5 animate-spin" aria-label="Uploading" />}
+                  {item.status === "failed" && <WarningCircleIcon className="h-3.5 w-3.5 text-red-600" aria-label="Failed" />}
                   <button
                     type="button"
                     className="rounded p-0.5 hover:bg-muted disabled:opacity-40"
@@ -178,7 +185,7 @@ export function MultiDocumentUploadDialog({
                     disabled={uploading}
                     onClick={() => setItems((prev) => prev.filter((p) => p.id !== item.id))}
                   >
-                    <X className="h-3.5 w-3.5" />
+                    <XIcon className="h-3.5 w-3.5" />
                   </button>
                 </span>
               </div>
@@ -277,7 +284,7 @@ export function MultiDocumentUploadDialog({
               }}
             />
             <Button type="button" variant="ghost" size="sm" disabled={uploading || atLimit} onClick={() => addInputRef.current?.click()}>
-              <Paperclip className="h-3.5 w-3.5 mr-1" />
+              <PaperclipIcon className="h-3.5 w-3.5 mr-1" />
               Add more files
             </Button>
             <span className="text-xs text-muted-foreground">{items.length} of {MAX_FILES_PER_BATCH}</span>
@@ -285,7 +292,7 @@ export function MultiDocumentUploadDialog({
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={onClose} disabled={uploading}>Cancel</Button>
             <Button onClick={uploadAll} disabled={uploading || items.length === 0}>
-              {uploading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
+              {uploading ? <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircleIcon className="h-4 w-4 mr-2" />}
               {uploading ? "Uploading…" : `Upload ${items.length} file${items.length === 1 ? "" : "s"}`}
             </Button>
           </div>

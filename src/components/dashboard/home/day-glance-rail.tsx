@@ -1,7 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { CalendarDays, CheckCircle2, AlertCircle, Activity, MessageSquare, Lightbulb, Plus, Send, ListTodo } from "lucide-react";
+import {
+  CalendarDotsIcon,
+  CheckCircleIcon,
+  WarningCircleIcon,
+  PulseIcon,
+  ChatTextIcon,
+  LightbulbIcon,
+  PlusIcon,
+  PaperPlaneTiltIcon,
+  ListChecksIcon,
+} from "@phosphor-icons/react";
 import { CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -21,11 +31,11 @@ interface DayGlanceRailProps {
 }
 
 const STATS_CONFIG = [
-  { key: "meetings", icon: CalendarDays, label: "Meetings" },
-  { key: "tasksDueToday", icon: CheckCircle2, label: "Tasks due today" },
-  { key: "overdue", icon: AlertCircle, label: "Overdue" },
-  { key: "activities", icon: Activity, label: "Activities" },
-  { key: "unread", icon: MessageSquare, label: "Unread messages" },
+  { key: "meetings", icon: CalendarDotsIcon, label: "Meetings" },
+  { key: "tasksDueToday", icon: CheckCircleIcon, label: "Tasks due today" },
+  { key: "overdue", icon: WarningCircleIcon, label: "Overdue" },
+  { key: "activities", icon: PulseIcon, label: "Activities" },
+  { key: "unread", icon: ChatTextIcon, label: "Unread messages" },
 ] as const;
 
 export function DayGlanceRail({
@@ -98,25 +108,25 @@ export function DayGlanceRail({
           <div className="grid grid-cols-2 gap-2">
             <Button variant="outline" size="sm" className="w-full min-w-0 justify-start rounded-[8px]" asChild>
               <Link href="/leads">
-                <Plus className="h-3.5 w-3.5 shrink-0" />
+                <PlusIcon className="h-3.5 w-3.5 shrink-0" />
                 <span className="truncate">Add Lead</span>
               </Link>
             </Button>
             <Button variant="outline" size="sm" className="w-full min-w-0 justify-start rounded-[8px]" onClick={onNewTaskClick}>
-              <ListTodo className="h-3.5 w-3.5 shrink-0" />
+              <ListChecksIcon className="h-3.5 w-3.5 shrink-0" />
               <span className="truncate">New Task</span>
             </Button>
             {applicationTrackingEnabled && (
               <Button variant="outline" size="sm" className="w-full min-w-0 justify-start rounded-[8px]" asChild>
                 <Link href="/applications">
-                  <Plus className="h-3.5 w-3.5 shrink-0" />
+                  <PlusIcon className="h-3.5 w-3.5 shrink-0" />
                   <span className="truncate">Add Application</span>
                 </Link>
               </Button>
             )}
             <Button variant="outline" size="sm" className="w-full min-w-0 justify-start rounded-[8px]" asChild>
               <Link href="/inbox">
-                <Send className="h-3.5 w-3.5 shrink-0" />
+                <PaperPlaneTiltIcon className="h-3.5 w-3.5 shrink-0" />
                 <span className="truncate">Send Message</span>
               </Link>
             </Button>
@@ -134,7 +144,7 @@ function TipOfTheDaySection({ tip }: { tip: HomeTip }) {
   return (
     <div className="border-t border-border pt-6">
       <div className="rounded-lg p-4 flex items-start gap-3 bg-blue-50/60 dark:bg-blue-950/20">
-        <Lightbulb className="h-4 w-4 text-blue-600 mt-0.5 shrink-0" />
+        <LightbulbIcon className="h-4 w-4 text-blue-600 mt-0.5 shrink-0" />
         <div className="flex-1 min-w-0">
           <p className="text-xs font-medium text-foreground mb-1">Reminder</p>
           <p className="text-sm text-muted-foreground">{tip.text}</p>

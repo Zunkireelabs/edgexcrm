@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Bot, Undo2 } from "lucide-react";
+import { RobotIcon, ArrowUUpLeftIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -149,7 +149,7 @@ export function AgentDetailDrawer({ agentId, open, onOpenChange }: AgentDetailDr
       <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
-            <Bot className="w-4 h-4" />
+            <RobotIcon className="w-4 h-4" />
             {detail?.displayName ?? "Agent"}
           </SheetTitle>
           <SheetDescription>
@@ -305,7 +305,7 @@ export function AgentDetailDrawer({ agentId, open, onOpenChange }: AgentDetailDr
                                   disabled={undoingId === write.id}
                                   onClick={() => undoWrite(write)}
                                 >
-                                  <Undo2 className="w-3.5 h-3.5" />
+                                  <ArrowUUpLeftIcon className="w-3.5 h-3.5" />
                                   {undoingId === write.id ? "Undoing…" : "Undo"}
                                 </Button>
                               ))}

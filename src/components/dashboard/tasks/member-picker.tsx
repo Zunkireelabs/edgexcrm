@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Check, UserCircle2 } from "lucide-react";
+import { CheckIcon, UserCircleIcon } from "@phosphor-icons/react";
 import {
   Popover,
   PopoverContent,
@@ -80,7 +80,7 @@ export function MemberPicker({
             <MemberAvatar userId={selected.user_id} name={selected.name} size={20} />
           ) : (
             <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-violet-100 text-violet-700 shrink-0">
-              <UserCircle2 className="h-3.5 w-3.5" />
+              <UserCircleIcon className="h-3.5 w-3.5" />
             </span>
           )}
           <span className="truncate max-w-[8rem]">{label}</span>
@@ -103,7 +103,7 @@ export function MemberPicker({
                       value={m.name}
                       onSelect={() => handleSelect(m.user_id)}
                     >
-                      <Check className={m.user_id === value ? "" : "opacity-0"} />
+                      <CheckIcon className={m.user_id === value ? "" : "opacity-0"} />
                       <MemberAvatar userId={m.user_id} name={m.name} size={20} />
                       <span className="truncate text-gray-700">
                         {m.user_id === currentUserId ? "You" : m.name}

@@ -20,12 +20,12 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Mail,
-  Plus,
-  Pencil,
-  Trash2,
-  Send,
-} from "lucide-react";
+  EnvelopeSimpleIcon,
+  PlusIcon,
+  PencilSimpleIcon,
+  TrashIcon,
+  PaperPlaneTiltIcon,
+} from "@phosphor-icons/react";
 import { toast } from "sonner";
 import {
   HtmlSourceEditor,
@@ -255,7 +255,7 @@ export function EmailRulesManager({ }: { tenantId: string }) {
         <div className="flex items-center justify-between p-6 pb-4">
           <div>
             <h2 className="text-base font-semibold flex items-center gap-2">
-              <Mail className="h-5 w-5 text-muted-foreground" />
+              <EnvelopeSimpleIcon className="h-5 w-5 text-muted-foreground" />
               Email Auto-Forward Rules
             </h2>
             <p className="text-sm text-muted-foreground mt-1">
@@ -263,7 +263,7 @@ export function EmailRulesManager({ }: { tenantId: string }) {
             </p>
           </div>
           <Button size="sm" onClick={openAddDialog}>
-            <Plus className="h-4 w-4 mr-1" />
+            <PlusIcon className="h-4 w-4 mr-1" />
             Add Rule
           </Button>
         </div>
@@ -315,14 +315,14 @@ export function EmailRulesManager({ }: { tenantId: string }) {
                       size="icon-sm"
                       onClick={() => openEditDialog(rule)}
                     >
-                      <Pencil className="h-3.5 w-3.5" />
+                      <PencilSimpleIcon className="h-3.5 w-3.5" />
                     </Button>
                     <Button
                       variant="ghost"
                       size="icon-sm"
                       onClick={() => setDeleteConfirm(rule.id)}
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <TrashIcon className="h-3.5 w-3.5" />
                     </Button>
                   </div>
                 </div>
@@ -500,7 +500,7 @@ export function EmailRulesManager({ }: { tenantId: string }) {
                     onClick={handleTestEmail}
                     disabled={isTesting || !testEmail}
                   >
-                    <Send className="h-3.5 w-3.5 mr-1" />
+                    <PaperPlaneTiltIcon className="h-3.5 w-3.5 mr-1" />
                     {isTesting ? "Sending..." : "Test"}
                   </Button>
                 </div>

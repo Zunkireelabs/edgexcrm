@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Download } from "lucide-react";
+import { DownloadIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import type { EventsQuery, PersonRow } from "../lib/types";
@@ -99,7 +99,7 @@ export function PulsePage() {
                 <Caret />
               </span>
             )}
-            <Button look="v2" variant="ghost" onClick={exportCsv} disabled={!data}><Download className="i s" aria-hidden />Export</Button>
+            <Button look="v2" variant="ghost" onClick={exportCsv} disabled={!data}><DownloadIcon className="i s" aria-hidden />Export</Button>
           </div>
         </div>
 

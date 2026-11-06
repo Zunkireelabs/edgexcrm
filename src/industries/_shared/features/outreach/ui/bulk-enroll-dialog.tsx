@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, Download, AlertTriangle } from "lucide-react";
+import { CircleNotchIcon, DownloadIcon, WarningIcon } from "@phosphor-icons/react";
 import {
   Dialog,
   DialogContent,
@@ -323,7 +323,7 @@ export function BulkEnrollDialog({
 
             {previewLoading && (
               <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" /> Checking who can be enrolled…
+                <CircleNotchIcon className="h-4 w-4 animate-spin" /> Checking who can be enrolled…
               </p>
             )}
 
@@ -456,7 +456,7 @@ export function BulkEnrollDialog({
             {run && isFinal(run.status) && (run.skipped_count > 0 || run.failed_count > 0) && (
               <Button asChild variant="outline" size="sm">
                 <a href={`/api/v1/outreach/bulk-enroll/${runId}/skipped`}>
-                  <Download className="mr-1.5 h-3.5 w-3.5" /> Download skipped leads
+                  <DownloadIcon className="mr-1.5 h-3.5 w-3.5" /> Download skipped leads
                 </a>
               </Button>
             )}
@@ -470,7 +470,7 @@ export function BulkEnrollDialog({
                 Cancel
               </Button>
               <Button onClick={start} disabled={!canStart}>
-                {starting && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+                {starting && <CircleNotchIcon className="mr-1.5 h-4 w-4 animate-spin" />}
                 Start
               </Button>
             </>
@@ -608,7 +608,7 @@ function SmsCredits({ sms }: { sms: SmsPreview }) {
 function Warning({ children }: { children: React.ReactNode }) {
   return (
     <p className="flex items-start gap-1.5 rounded bg-amber-50 px-2 py-1.5 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+      <WarningIcon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
       <span>{children}</span>
     </p>
   );

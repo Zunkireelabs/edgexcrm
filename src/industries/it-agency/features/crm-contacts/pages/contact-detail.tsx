@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeftIcon, CircleNotchIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -226,7 +226,7 @@ export function ContactDetailPage({ role, contactId }: ContactDetailPageProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-48">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <CircleNotchIcon className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -241,7 +241,7 @@ export function ContactDetailPage({ role, contactId }: ContactDetailPageProps) {
       {/* Header */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={() => router.back()}>
-          <ArrowLeft className="h-4 w-4" />
+          <ArrowLeftIcon className="h-4 w-4" />
         </Button>
         <h1 className="text-2xl font-semibold" style={{ color: "#0f0f10" }}>
           {fullName}
@@ -398,7 +398,7 @@ export function ContactDetailPage({ role, contactId }: ContactDetailPageProps) {
               Cancel
             </Button>
             <Button variant="destructive" disabled={removing} onClick={handleRemoveLink}>
-              {removing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {removing && <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />}
               Remove
             </Button>
           </DialogFooter>
@@ -429,7 +429,7 @@ export function ContactDetailPage({ role, contactId }: ContactDetailPageProps) {
               Cancel
             </Button>
             <Button variant="destructive" disabled={deleting} onClick={handleDelete}>
-              {deleting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {deleting && <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />}
               Delete
             </Button>
           </DialogFooter>

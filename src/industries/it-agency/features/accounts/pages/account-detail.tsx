@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeftIcon, CircleNotchIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -189,7 +189,7 @@ export function AccountDetailPage({ role, accountId }: AccountDetailPageProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-48">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <CircleNotchIcon className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -213,7 +213,7 @@ export function AccountDetailPage({ role, accountId }: AccountDetailPageProps) {
     <div className="space-y-4">
       {/* Back nav */}
       <Button variant="ghost" size="sm" className="-ml-2" onClick={() => router.back()}>
-        <ArrowLeft className="h-4 w-4 mr-1.5" />
+        <ArrowLeftIcon className="h-4 w-4 mr-1.5" />
         Accounts
       </Button>
 
@@ -386,7 +386,7 @@ export function AccountDetailPage({ role, accountId }: AccountDetailPageProps) {
               onClick={handleDelete}
               disabled={deleting}
             >
-              {deleting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {deleting && <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />}
               Delete
             </Button>
           </DialogFooter>

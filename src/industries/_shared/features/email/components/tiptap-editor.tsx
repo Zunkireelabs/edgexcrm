@@ -4,7 +4,13 @@ import { useEffect, forwardRef, useImperativeHandle } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
-import { Bold, Italic, Link2, List, ListOrdered } from "lucide-react";
+import {
+  TextBIcon,
+  TextItalicIcon,
+  LinkSimpleIcon,
+  ListIcon,
+  ListNumbersIcon,
+} from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 
 interface TipTapEditorProps {
@@ -74,21 +80,21 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
           onClick={() => editor.chain().focus().toggleBold().run()}
           aria-label="Bold"
         >
-          <Bold className="h-3.5 w-3.5" />
+          <TextBIcon className="h-3.5 w-3.5" />
         </ToolbarButton>
         <ToolbarButton
           active={editor.isActive("italic")}
           onClick={() => editor.chain().focus().toggleItalic().run()}
           aria-label="Italic"
         >
-          <Italic className="h-3.5 w-3.5" />
+          <TextItalicIcon className="h-3.5 w-3.5" />
         </ToolbarButton>
         <ToolbarButton
           active={editor.isActive("link")}
           onClick={setLink}
           aria-label="Link"
         >
-          <Link2 className="h-3.5 w-3.5" />
+          <LinkSimpleIcon className="h-3.5 w-3.5" />
         </ToolbarButton>
         <div className="w-px h-4 bg-border mx-0.5" />
         <ToolbarButton
@@ -96,14 +102,14 @@ export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(fu
           onClick={() => editor.chain().focus().toggleBulletList().run()}
           aria-label="Bullet list"
         >
-          <List className="h-3.5 w-3.5" />
+          <ListIcon className="h-3.5 w-3.5" />
         </ToolbarButton>
         <ToolbarButton
           active={editor.isActive("orderedList")}
           onClick={() => editor.chain().focus().toggleOrderedList().run()}
           aria-label="Numbered list"
         >
-          <ListOrdered className="h-3.5 w-3.5" />
+          <ListNumbersIcon className="h-3.5 w-3.5" />
         </ToolbarButton>
       </div>
 

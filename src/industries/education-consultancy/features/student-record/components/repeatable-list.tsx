@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, Trash2 } from "lucide-react";
+import { PlusIcon, TrashIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -61,13 +61,13 @@ export function RepeatableList<T extends { id: string }>({
             className="absolute top-2 right-2 text-muted-foreground hover:text-destructive"
             aria-label="Remove entry"
           >
-            <Trash2 className="h-3.5 w-3.5" />
+            <TrashIcon className="h-3.5 w-3.5" />
           </button>
           {renderItem(item, (patch) => update(item.id, patch))}
         </div>
       ))}
       <Button type="button" variant="outline" size="sm" onClick={add}>
-        <Plus className="h-3.5 w-3.5 mr-1" />
+        <PlusIcon className="h-3.5 w-3.5 mr-1" />
         {addLabel}
       </Button>
     </div>

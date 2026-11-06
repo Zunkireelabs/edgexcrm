@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
-import { Loader2, LogIn, LogOut } from "lucide-react";
+import { CircleNotchIcon, SignInIcon, SignOutIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -86,7 +86,7 @@ export function MyAttendancePanel() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-48">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <CircleNotchIcon className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -121,12 +121,12 @@ export function MyAttendancePanel() {
           </div>
           {!clockedIn ? (
             <Button size="sm" onClick={handleClockIn} disabled={clocking}>
-              {clocking ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <LogIn className="h-4 w-4 mr-1.5" />}
+              {clocking ? <CircleNotchIcon className="h-4 w-4 mr-1.5 animate-spin" /> : <SignInIcon className="h-4 w-4 mr-1.5" />}
               Clock In
             </Button>
           ) : !clockedOut ? (
             <Button size="sm" variant="outline" onClick={handleClockOut} disabled={clocking}>
-              {clocking ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <LogOut className="h-4 w-4 mr-1.5" />}
+              {clocking ? <CircleNotchIcon className="h-4 w-4 mr-1.5 animate-spin" /> : <SignOutIcon className="h-4 w-4 mr-1.5" />}
               Clock Out
             </Button>
           ) : (

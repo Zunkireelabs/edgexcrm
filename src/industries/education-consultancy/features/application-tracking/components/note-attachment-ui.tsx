@@ -1,7 +1,14 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Check, FileText, Paperclip, Pencil, Trash2, X } from "lucide-react";
+import {
+  CheckIcon,
+  FileTextIcon,
+  PaperclipIcon,
+  PencilSimpleIcon,
+  TrashIcon,
+  XIcon,
+} from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -47,7 +54,7 @@ export function NoteAttachmentPicker({
         }}
       />
       <Button type="button" size="sm" variant="outline" disabled={disabled} onClick={() => inputRef.current?.click()}>
-        <Paperclip className="h-3.5 w-3.5 mr-1.5" />
+        <PaperclipIcon className="h-3.5 w-3.5 mr-1.5" />
         {label}
       </Button>
 
@@ -56,7 +63,7 @@ export function NoteAttachmentPicker({
           {items.map((item) => (
             <li key={item.id} className="rounded-md border bg-muted/30 p-2 space-y-2">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <FileText className="h-3.5 w-3.5 shrink-0" />
+                <FileTextIcon className="h-3.5 w-3.5 shrink-0" />
                 <span className="truncate">{item.file.name}</span>
                 <span className="shrink-0">· {formatFileSize(item.file.size)}</span>
                 <button
@@ -66,7 +73,7 @@ export function NoteAttachmentPicker({
                   disabled={disabled}
                   onClick={() => onRemove(item.id)}
                 >
-                  <X className="h-3.5 w-3.5" />
+                  <XIcon className="h-3.5 w-3.5" />
                 </button>
               </div>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -213,10 +220,10 @@ export function DocumentChip({
           autoFocus
         />
         <button type="button" onClick={saveName} disabled={busy || !name.trim()} aria-label="Save name" className="rounded p-1 hover:bg-muted disabled:opacity-40">
-          <Check className="h-3.5 w-3.5" />
+          <CheckIcon className="h-3.5 w-3.5" />
         </button>
         <button type="button" onClick={cancelRename} aria-label="Cancel rename" className="rounded p-1 hover:bg-muted">
-          <X className="h-3.5 w-3.5" />
+          <XIcon className="h-3.5 w-3.5" />
         </button>
       </div>
     );
@@ -230,18 +237,18 @@ export function DocumentChip({
         className="inline-flex min-w-0 items-center gap-1.5 rounded-l-md px-2 py-1 hover:bg-muted"
         title={`${doc.original_filename} · ${formatFileSize(doc.file_size)}`}
       >
-        <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <FileTextIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         <span className="truncate font-medium">{doc.name}</span>
         <span className="shrink-0 text-muted-foreground">· {documentTypeLabel(doc.document_type)}</span>
       </button>
       {canRename && (
         <button type="button" onClick={() => setRenaming(true)} disabled={busy} aria-label={`Rename ${doc.name}`} className="px-1.5 py-1 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40">
-          <Pencil className="h-3 w-3" />
+          <PencilSimpleIcon className="h-3 w-3" />
         </button>
       )}
       {canDelete && (
         <button type="button" onClick={remove} disabled={busy} aria-label={`Delete ${doc.name}`} className="rounded-r-md px-1.5 py-1 text-muted-foreground hover:bg-red-50 hover:text-red-600 disabled:opacity-40">
-          <Trash2 className="h-3 w-3" />
+          <TrashIcon className="h-3 w-3" />
         </button>
       )}
     </div>
@@ -329,7 +336,7 @@ export function NoteAddDocuments({
   if (!open) {
     return (
       <Button type="button" size="sm" variant="ghost" className="mt-1.5 h-7 px-2 text-xs" onClick={() => setOpen(true)}>
-        <Paperclip className="h-3 w-3 mr-1" />
+        <PaperclipIcon className="h-3 w-3 mr-1" />
         Add documents
       </Button>
     );

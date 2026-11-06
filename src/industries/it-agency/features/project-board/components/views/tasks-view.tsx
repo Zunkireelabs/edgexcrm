@@ -3,7 +3,18 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowUp, ArrowDown, ArrowUpDown, ChevronDown, ChevronRight, Timer, ListTodo, Play, Square, Loader2 } from "lucide-react";
+import {
+  ArrowUpIcon,
+  ArrowDownIcon,
+  ArrowsDownUpIcon,
+  CaretDownIcon,
+  CaretRightIcon,
+  TimerIcon,
+  ListChecksIcon,
+  PlayIcon,
+  SquareIcon,
+  CircleNotchIcon,
+} from "@phosphor-icons/react";
 import {
   TableBody,
   TableCell,
@@ -36,8 +47,8 @@ type SortKey = "title" | "project" | "status" | "assignee" | "priority" | "due_d
 type SortDir = "asc" | "desc";
 
 function SortIcon({ col, sortKey, dir }: { col: SortKey; sortKey: SortKey; dir: SortDir }) {
-  if (col !== sortKey) return <ArrowUpDown className="h-3 w-3 opacity-40" />;
-  return dir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />;
+  if (col !== sortKey) return <ArrowsDownUpIcon className="h-3 w-3 opacity-40" />;
+  return dir === "asc" ? <ArrowUpIcon className="h-3 w-3" /> : <ArrowDownIcon className="h-3 w-3" />;
 }
 
 function buildQuery(filters: WorkspaceFilters): string {
@@ -204,7 +215,7 @@ export function TasksView({ filters, team, teamMap, onClearFilters }: TasksViewP
   if (tasks.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 gap-2 text-center">
-        <ListTodo className="h-8 w-8 text-muted-foreground/40" />
+        <ListChecksIcon className="h-8 w-8 text-muted-foreground/40" />
         <p className="text-sm text-muted-foreground">
           No tasks match your filters. Use <span className="font-medium">New task</span> above to add one.
         </p>
@@ -295,9 +306,9 @@ export function TasksView({ filters, team, teamMap, onClearFilters }: TasksViewP
                         className="flex w-full items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 hover:text-gray-900"
                       >
                         {personalCollapsed ? (
-                          <ChevronRight className="h-3.5 w-3.5" />
+                          <CaretRightIcon className="h-3.5 w-3.5" />
                         ) : (
-                          <ChevronDown className="h-3.5 w-3.5" />
+                          <CaretDownIcon className="h-3.5 w-3.5" />
                         )}
                         Personal · {personalTasks.length}
                       </button>
@@ -376,11 +387,11 @@ function TaskRow({ task, team, onOpenDetail, onLogTime }: TaskRowProps) {
                     className="flex items-center gap-1 p-1 rounded hover:bg-gray-100"
                   >
                     {timerPending ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                      <CircleNotchIcon className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
                     ) : running ? (
-                      <Square className="h-3.5 w-3.5 text-red-600" />
+                      <SquareIcon className="h-3.5 w-3.5 text-red-600" />
                     ) : (
-                      <Play className="h-3.5 w-3.5 text-muted-foreground" />
+                      <PlayIcon className="h-3.5 w-3.5 text-muted-foreground" />
                     )}
                     {running && (
                       <span className="text-[11px] tabular-nums text-red-600">
@@ -403,7 +414,7 @@ function TaskRow({ task, team, onOpenDetail, onLogTime }: TaskRowProps) {
               aria-label="Log time for this task"
               className="p-1 rounded hover:bg-gray-100"
             >
-              <Timer className="h-3.5 w-3.5 text-muted-foreground" />
+              <TimerIcon className="h-3.5 w-3.5 text-muted-foreground" />
             </button>
           )}
         </div>

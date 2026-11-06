@@ -3,8 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Bell, CheckCheck, Settings, X } from "lucide-react";
-import { Bell as PhosphorBell } from "@phosphor-icons/react";
+import { BellIcon, ChecksIcon, GearIcon, XIcon } from "@phosphor-icons/react";
 import {
   NotificationList,
   NotificationEmptyState,
@@ -128,7 +127,7 @@ export function NotificationsDropdown() {
         aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
         className="relative inline-grid h-[30px] w-[30px] place-items-center rounded-ds-sm border border-ds-border bg-ds-surface text-ds-muted outline-none transition-colors hover:bg-ds-hover hover:text-ds-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ds-accent"
       >
-        <PhosphorBell size={18} weight="regular" aria-hidden />
+        <BellIcon size={18} weight="regular" aria-hidden />
         {unreadCount > 0 && (
           <span className="absolute right-[6px] top-[6px] size-[7px] rounded-full border-[1.5px] border-ds-surface bg-ds-ink" />
         )}
@@ -148,7 +147,7 @@ export function NotificationsDropdown() {
             {/* Header — title (left), settings gear + close (right) */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
               <div className="flex items-center gap-2.5">
-                <Bell className="w-[18px] h-[18px] text-gray-900" />
+                <BellIcon className="w-[18px] h-[18px] text-gray-900" />
                 <h3 className="text-[15px] font-semibold text-gray-900">Notifications</h3>
               </div>
               <div className="flex items-center gap-1">
@@ -157,7 +156,7 @@ export function NotificationsDropdown() {
                   title="Notification settings (coming soon)"
                   className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
                 >
-                  <Settings className="w-[18px] h-[18px]" />
+                  <GearIcon className="w-[18px] h-[18px]" />
                 </button>
                 <button
                   type="button"
@@ -166,7 +165,7 @@ export function NotificationsDropdown() {
                   onClick={() => setIsOpen(false)}
                   className="p-1.5 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors"
                 >
-                  <X className="w-5 h-5" />
+                  <XIcon className="w-5 h-5" />
                 </button>
               </div>
             </div>
@@ -195,7 +194,7 @@ export function NotificationsDropdown() {
                   disabled={markingAllRead}
                   className="mb-2 flex items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 disabled:opacity-50"
                 >
-                  <CheckCheck className="h-4 w-4" />
+                  <ChecksIcon className="h-4 w-4" />
                   Mark all as read
                 </button>
               )}

@@ -4,15 +4,15 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
-  CheckSquare,
-  Loader2,
-  ThumbsUp,
-  ThumbsDown,
-  ArrowRight,
-  Clock,
-  Flag,
-  FileEdit,
-} from "lucide-react";
+  CheckSquareIcon,
+  CircleNotchIcon,
+  ThumbsUpIcon,
+  ThumbsDownIcon,
+  ArrowRightIcon,
+  ClockIcon,
+  FlagIcon,
+  NotePencilIcon,
+} from "@phosphor-icons/react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -164,7 +164,7 @@ function RowActions({ row, processing, onApprove, onRejectClick }: ActionRowProp
         disabled={processing}
         title="Approve"
       >
-        {processing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ThumbsUp className="h-3.5 w-3.5 text-emerald-600" />}
+        {processing ? <CircleNotchIcon className="h-3.5 w-3.5 animate-spin" /> : <ThumbsUpIcon className="h-3.5 w-3.5 text-emerald-600" />}
       </Button>
       <Button
         variant="ghost"
@@ -174,7 +174,7 @@ function RowActions({ row, processing, onApprove, onRejectClick }: ActionRowProp
         disabled={processing}
         title="Reject"
       >
-        <ThumbsDown className="h-3.5 w-3.5 text-red-600" />
+        <ThumbsDownIcon className="h-3.5 w-3.5 text-red-600" />
       </Button>
     </div>
   );
@@ -344,7 +344,7 @@ export function ApprovalsInboxPage({ canApproveTime }: ApprovalsInboxPageProps) 
   if (!canApproveTime) {
     return (
       <div className="flex flex-col items-center justify-center min-h-64 text-center">
-        <CheckSquare className="h-10 w-10 text-muted-foreground mb-3" />
+        <CheckSquareIcon className="h-10 w-10 text-muted-foreground mb-3" />
         <p className="font-medium">You don&apos;t have permission to access approvals</p>
         <p className="text-sm text-muted-foreground mt-1">Ask an owner or admin to enable timesheet approvals on your position.</p>
       </div>
@@ -354,7 +354,7 @@ export function ApprovalsInboxPage({ canApproveTime }: ApprovalsInboxPageProps) 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-64">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <CircleNotchIcon className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -379,7 +379,7 @@ export function ApprovalsInboxPage({ canApproveTime }: ApprovalsInboxPageProps) 
 
       {data.counts.total === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground">
-          <CheckSquare className="h-12 w-12 mb-4 opacity-40" />
+          <CheckSquareIcon className="h-12 w-12 mb-4 opacity-40" />
           <p className="font-medium text-base">You&apos;re all caught up!</p>
           <p className="text-sm mt-1">Nothing is waiting on an approval decision.</p>
         </div>
@@ -388,7 +388,7 @@ export function ApprovalsInboxPage({ canApproveTime }: ApprovalsInboxPageProps) 
       {data.changeRequests.length > 0 && (
         <section className="space-y-1">
           <div className="flex items-center gap-2 px-1">
-            <FileEdit className="h-4 w-4 text-muted-foreground" />
+            <NotePencilIcon className="h-4 w-4 text-muted-foreground" />
             <h2 className="text-sm font-semibold">Change requests</h2>
             <Badge variant="outline" className="text-[10px] px-1.5 py-0">
               {data.changeRequests.length}
@@ -411,7 +411,7 @@ export function ApprovalsInboxPage({ canApproveTime }: ApprovalsInboxPageProps) 
       {data.milestones.length > 0 && (
         <section className="space-y-1">
           <div className="flex items-center gap-2 px-1">
-            <Flag className="h-4 w-4 text-muted-foreground" />
+            <FlagIcon className="h-4 w-4 text-muted-foreground" />
             <h2 className="text-sm font-semibold">Milestones</h2>
             <Badge variant="outline" className="text-[10px] px-1.5 py-0">
               {data.milestones.length}
@@ -434,7 +434,7 @@ export function ApprovalsInboxPage({ canApproveTime }: ApprovalsInboxPageProps) 
       {data.timeEntries.length > 0 && (
         <section className="space-y-1">
           <div className="flex items-center gap-2 px-1">
-            <Clock className="h-4 w-4 text-muted-foreground" />
+            <ClockIcon className="h-4 w-4 text-muted-foreground" />
             <h2 className="text-sm font-semibold">Time entries</h2>
             <Badge variant="outline" className="text-[10px] px-1.5 py-0">
               {data.timeEntries.length}
@@ -462,9 +462,9 @@ export function ApprovalsInboxPage({ canApproveTime }: ApprovalsInboxPageProps) 
                   disabled={bulkApprovingMember === group.userId}
                 >
                   {bulkApprovingMember === group.userId ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+                    <CircleNotchIcon className="h-3.5 w-3.5 animate-spin mr-1" />
                   ) : (
-                    <ThumbsUp className="h-3.5 w-3.5 mr-1" />
+                    <ThumbsUpIcon className="h-3.5 w-3.5 mr-1" />
                   )}
                   Approve all
                 </Button>
@@ -475,7 +475,7 @@ export function ApprovalsInboxPage({ canApproveTime }: ApprovalsInboxPageProps) 
             href="/approvals/time-entries"
             className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline px-1"
           >
-            Open full queue <ArrowRight className="h-3 w-3" />
+            Open full queue <ArrowRightIcon className="h-3 w-3" />
           </Link>
         </section>
       )}
@@ -521,7 +521,7 @@ export function ApprovalsInboxPage({ canApproveTime }: ApprovalsInboxPageProps) 
                 variant="destructive"
                 disabled={(!!rejectTarget && processingIds.has(rejectTarget.id)) || (reasonRequired && !rejectReason.trim())}
               >
-                {rejectTarget && processingIds.has(rejectTarget.id) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                {rejectTarget && processingIds.has(rejectTarget.id) && <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />}
                 Reject
               </Button>
             </DialogFooter>

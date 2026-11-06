@@ -1,7 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronsUpDown, Check, ExternalLink, Loader2, Save, Search } from "lucide-react";
+import {
+  CaretUpDownIcon,
+  CheckIcon,
+  ArrowSquareOutIcon,
+  CircleNotchIcon,
+  FloppyDiskIcon,
+  MagnifyingGlassIcon,
+} from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -107,7 +114,7 @@ export function UtmLinkBuilder({ tenantSlug, forms, onSaved }: UtmLinkBuilderPro
                 <span className={selectedForm ? "" : "text-muted-foreground"}>
                   {selectedForm ? selectedForm.name : "Select a form..."}
                 </span>
-                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                <CaretUpDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
               </Button>
             </PopoverTrigger>
             <PopoverContent
@@ -115,7 +122,7 @@ export function UtmLinkBuilder({ tenantSlug, forms, onSaved }: UtmLinkBuilderPro
               className="w-[var(--radix-popover-trigger-width)] p-0"
             >
               <div className="flex items-center border-b px-3">
-                <Search className="h-4 w-4 shrink-0 opacity-50 mr-2" />
+                <MagnifyingGlassIcon className="h-4 w-4 shrink-0 opacity-50 mr-2" />
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -139,7 +146,7 @@ export function UtmLinkBuilder({ tenantSlug, forms, onSaved }: UtmLinkBuilderPro
                         onClick={() => handleSelectForm(form)}
                         className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-accent hover:text-accent-foreground transition-colors"
                       >
-                        <Check
+                        <CheckIcon
                           className={`h-4 w-4 shrink-0 ${isSelected ? "opacity-100" : "opacity-0"}`}
                         />
                         <div className="flex-1 min-w-0">
@@ -232,7 +239,7 @@ export function UtmLinkBuilder({ tenantSlug, forms, onSaved }: UtmLinkBuilderPro
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
               >
-                <ExternalLink className="h-3 w-3" />
+                <ArrowSquareOutIcon className="h-3 w-3" />
                 Open in new tab
               </a>
             )}
@@ -245,9 +252,9 @@ export function UtmLinkBuilder({ tenantSlug, forms, onSaved }: UtmLinkBuilderPro
                 onClick={handleSave}
               >
                 {saving ? (
-                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                  <CircleNotchIcon className="h-3.5 w-3.5 mr-1.5 animate-spin" />
                 ) : (
-                  <Save className="h-3.5 w-3.5 mr-1.5" />
+                  <FloppyDiskIcon className="h-3.5 w-3.5 mr-1.5" />
                 )}
                 Save link
               </Button>

@@ -1,7 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, Circle, CheckCircle2, ClipboardList, X } from "lucide-react";
+import {
+  CaretDownIcon,
+  CaretRightIcon,
+  CircleIcon,
+  CheckCircleIcon,
+  ClipboardTextIcon,
+  XIcon,
+} from "@phosphor-icons/react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -83,9 +90,9 @@ function TaskRow({
         title={completed ? "Completed" : "Mark done"}
       >
         {completed ? (
-          <CheckCircle2 className="h-4 w-4 text-green-500" />
+          <CheckCircleIcon className="h-4 w-4 text-green-500" />
         ) : (
-          <Circle className="h-4 w-4" />
+          <CircleIcon className="h-4 w-4" />
         )}
       </button>
 
@@ -120,7 +127,7 @@ function TaskRow({
           className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 text-muted-foreground hover:text-red-500"
           title="Delete task"
         >
-          <X className="h-3.5 w-3.5" />
+          <XIcon className="h-3.5 w-3.5" />
         </button>
       )}
     </div>
@@ -168,9 +175,9 @@ function TaskGroup({
           {title} ({tasks.length})
         </span>
         {expanded ? (
-          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+          <CaretDownIcon className="h-4 w-4 text-muted-foreground" />
         ) : (
-          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          <CaretRightIcon className="h-4 w-4 text-muted-foreground" />
         )}
       </button>
       {expanded && (
@@ -251,7 +258,7 @@ export function TasksTabContent({
         <CardContent className="pt-0">
           {dueToday.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-6 gap-2 text-center">
-              <ClipboardList className="h-8 w-8 text-muted-foreground/40" />
+              <ClipboardTextIcon className="h-8 w-8 text-muted-foreground/40" />
               <p className="text-sm text-muted-foreground">No tasks due today.</p>
             </div>
           ) : (
@@ -299,7 +306,7 @@ export function TasksTabContent({
         <CardContent className="pt-0">
           {isEmpty ? (
             <div className="flex flex-col items-center justify-center py-6 gap-2 text-center">
-              <ClipboardList className="h-8 w-8 text-muted-foreground/40" />
+              <ClipboardTextIcon className="h-8 w-8 text-muted-foreground/40" />
               <p className="text-sm text-muted-foreground">
                 {filter === "completed" ? "No completed tasks." : "You have no open tasks."}
               </p>

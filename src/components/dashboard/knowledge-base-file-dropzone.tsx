@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { Upload, X, CheckCircle2, AlertCircle } from "lucide-react";
+import { UploadIcon, XIcon, CheckCircleIcon, WarningCircleIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { KB_MAX_FILE_BYTES, KB_ACCEPTED_TYPES } from "@/lib/knowledge-base/constants";
@@ -150,7 +150,7 @@ export function KnowledgeBaseFileDropzone({ kbId, onUploaded }: KnowledgeBaseFil
         onDrop={onDrop}
         onClick={() => inputRef.current?.click()}
       >
-        <Upload className="w-8 h-8 mx-auto mb-3 text-muted-foreground" />
+        <UploadIcon className="w-8 h-8 mx-auto mb-3 text-muted-foreground" />
         <p className="text-sm font-medium text-gray-700">
           Drop files here or <span className="text-primary">click to browse</span>
         </p>
@@ -177,8 +177,8 @@ export function KnowledgeBaseFileDropzone({ kbId, onUploaded }: KnowledgeBaseFil
               {u.status === "uploading" && (
                 <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin shrink-0" />
               )}
-              {u.status === "done" && <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />}
-              {u.status === "error" && <AlertCircle className="w-4 h-4 text-destructive shrink-0" />}
+              {u.status === "done" && <CheckCircleIcon className="w-4 h-4 text-green-500 shrink-0" />}
+              {u.status === "error" && <WarningCircleIcon className="w-4 h-4 text-destructive shrink-0" />}
               <div className="flex-1 min-w-0">
                 <p className="truncate font-medium text-gray-700">{u.name}</p>
                 {u.error && <p className="text-xs text-destructive">{u.error}</p>}
@@ -189,7 +189,7 @@ export function KnowledgeBaseFileDropzone({ kbId, onUploaded }: KnowledgeBaseFil
                   onClick={() => setUploads((prev) => prev.filter((x) => x.id !== u.id))}
                   className="p-0.5 hover:bg-gray-200 rounded"
                 >
-                  <X className="w-3 h-3" />
+                  <XIcon className="w-3 h-3" />
                 </button>
               )}
             </div>

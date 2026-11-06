@@ -2,7 +2,14 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { toast } from "sonner";
-import { Loader2, Users, Pencil, X, Plus, Camera } from "lucide-react";
+import {
+  CircleNotchIcon,
+  UsersIcon,
+  PencilSimpleIcon,
+  XIcon,
+  PlusIcon,
+  CameraIcon,
+} from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -146,7 +153,7 @@ export function PeopleDirectory({
   if (loading) {
     return (
       <div className="flex items-center justify-center h-48">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <CircleNotchIcon className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -157,14 +164,14 @@ export function PeopleDirectory({
         <h1 className="text-lg font-bold">People</h1>
         {canManageHR && (
           <Button size="sm" variant="outline" onClick={() => setDeptDialogOpen(true)}>
-            <Plus className="h-4 w-4 mr-1.5" /> New department
+            <PlusIcon className="h-4 w-4 mr-1.5" /> New department
           </Button>
         )}
       </div>
 
       {rows.length === 0 ? (
         <div className="border rounded-xl p-12 text-center bg-card">
-          <Users className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
+          <UsersIcon className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
           <h3 className="font-semibold text-lg mb-1">No one visible yet</h3>
           <p className="text-muted-foreground text-sm">
             {canManageHR ? "Team members will appear here once added." : "You'll see your own profile and any direct reports here."}
@@ -206,7 +213,7 @@ export function PeopleDirectory({
                   </TableCell>
                   <TableCell>
                     <Button size="icon" variant="ghost" onClick={() => setEditTarget(row)}>
-                      <Pencil className="h-4 w-4" />
+                      <PencilSimpleIcon className="h-4 w-4" />
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -432,7 +439,7 @@ function EmployeeEditSheet({
                 // eslint-disable-next-line @next/next/no-img-element -- signed URL, not a static asset
                 <img src={photoUrl} alt="" className="h-full w-full object-cover" />
               ) : (
-                <Users className="h-6 w-6 text-muted-foreground" />
+                <UsersIcon className="h-6 w-6 text-muted-foreground" />
               )}
             </div>
             {canEditAtAll && (
@@ -454,7 +461,7 @@ function EmployeeEditSheet({
                   disabled={uploadingPhoto}
                   onClick={() => fileInputRef.current?.click()}
                 >
-                  <Camera className="h-4 w-4 mr-1.5" />
+                  <CameraIcon className="h-4 w-4 mr-1.5" />
                   {uploadingPhoto ? "Uploading…" : "Change photo"}
                 </Button>
               </>
@@ -535,7 +542,7 @@ function EmployeeEditSheet({
                   {s.proficiency ? ` · ${s.proficiency}/5` : ""}
                   {canEditAtAll && (
                     <button type="button" onClick={() => detachSkill(s.skill_id)} aria-label="Remove skill">
-                      <X className="h-3 w-3" />
+                      <XIcon className="h-3 w-3" />
                     </button>
                   )}
                 </Badge>

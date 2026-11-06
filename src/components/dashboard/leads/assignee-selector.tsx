@@ -14,7 +14,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { Check } from "lucide-react";
+import { CheckIcon } from "@phosphor-icons/react";
 import { MemberAvatar } from "@/components/ui/member-avatar";
 
 interface AssignableMember {
@@ -104,7 +104,7 @@ export function AssigneeSelector({
                   value="unassign"
                   onSelect={() => handlePick(null)}
                 >
-                  <Check className="opacity-0" />
+                  <CheckIcon className="opacity-0" />
                   <span className="text-gray-500">Unassign</span>
                 </CommandItem>
               )}
@@ -114,7 +114,7 @@ export function AssigneeSelector({
                   value={memberLabel(member) + " " + member.email}
                   onSelect={() => handlePick(member.user_id)}
                 >
-                  <Check
+                  <CheckIcon
                     className={member.user_id === currentAssigneeId ? "" : "opacity-0"}
                   />
                   <MemberAvatar userId={member.user_id} name={memberLabel(member)} />

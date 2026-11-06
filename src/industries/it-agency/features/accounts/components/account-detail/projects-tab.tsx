@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Plus, ChevronRight } from "lucide-react";
+import { PlusIcon, CaretRightIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { ProjectStatusBadge, PROJECT_STATUS_MAP } from "@/industries/it-agency/features/time-tracking/components/status-badge";
 import type { Project, ProjectStatus } from "@/types/database";
@@ -48,7 +48,7 @@ export function ProjectsTab({ projects, isAdmin, onCreateProject }: ProjectsTabP
         </div>
         {isAdmin && (
           <Button size="sm" onClick={onCreateProject} className="shrink-0">
-            <Plus className="h-3.5 w-3.5 mr-1.5" />
+            <PlusIcon className="h-3.5 w-3.5 mr-1.5" />
             New project
           </Button>
         )}
@@ -84,7 +84,7 @@ export function ProjectsTab({ projects, isAdmin, onCreateProject }: ProjectsTabP
                 </p>
               </div>
               <ProjectStatusBadge status={project.status} />
-              <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+              <CaretRightIcon className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
             </Link>
           ))}
         </div>

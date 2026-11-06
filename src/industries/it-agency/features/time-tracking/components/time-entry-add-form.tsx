@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { Loader2, X } from "lucide-react";
+import { CircleNotchIcon, XIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -129,7 +129,7 @@ export function TimeEntryAddForm({
       <div className="flex items-center justify-between">
         <p className="font-medium text-sm">Log time</p>
         <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onCancel}>
-          <X className="h-4 w-4" />
+          <XIcon className="h-4 w-4" />
         </Button>
       </div>
 
@@ -239,7 +239,7 @@ export function TimeEntryAddForm({
           size="sm"
           disabled={saving || !projectId || !date || parsedMinutes <= 0}
         >
-          {saving && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+          {saving && <CircleNotchIcon className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
           Log time
         </Button>
       </div>

@@ -6,20 +6,20 @@ import { CSS } from "@dnd-kit/utilities";
 import Link from "next/link";
 import type { PipelineLead } from "@/types/database";
 import {
-  Clock,
-  MoreHorizontal,
-  Mail,
-  Phone,
-  ExternalLink,
-  User,
-  ArrowRightLeft,
-  CheckSquare,
-  ListTodo,
-  Paperclip,
-  Flame,
-  Sun,
-  Snowflake,
-} from "lucide-react";
+  ClockIcon,
+  DotsThreeIcon,
+  EnvelopeSimpleIcon,
+  PhoneIcon,
+  ArrowSquareOutIcon,
+  UserIcon,
+  ArrowsLeftRightIcon,
+  CheckSquareIcon,
+  ListChecksIcon,
+  PaperclipIcon,
+  FlameIcon,
+  SunIcon,
+  SnowflakeIcon,
+} from "@phosphor-icons/react";
 import { MoveToPipelineModal } from "./MoveToPipelineModal";
 import {
   DropdownMenu,
@@ -56,10 +56,10 @@ function colorFor(name: string): { bg: string; text: string } {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
-const PRIORITY_STYLES: Record<string, { label: string; icon: typeof Flame; bg: string; text: string }> = {
-  hot: { label: "Hot", icon: Flame, bg: "bg-red-100 dark:bg-red-900/30", text: "text-red-700 dark:text-red-400" },
-  warm: { label: "Warm", icon: Sun, bg: "bg-amber-100 dark:bg-amber-900/30", text: "text-amber-700 dark:text-amber-400" },
-  cold: { label: "Cold", icon: Snowflake, bg: "bg-sky-100 dark:bg-sky-900/30", text: "text-sky-700 dark:text-sky-400" },
+const PRIORITY_STYLES: Record<string, { label: string; icon: typeof FlameIcon; bg: string; text: string }> = {
+  hot: { label: "Hot", icon: FlameIcon, bg: "bg-red-100 dark:bg-red-900/30", text: "text-red-700 dark:text-red-400" },
+  warm: { label: "Warm", icon: SunIcon, bg: "bg-amber-100 dark:bg-amber-900/30", text: "text-amber-700 dark:text-amber-400" },
+  cold: { label: "Cold", icon: SnowflakeIcon, bg: "bg-sky-100 dark:bg-sky-900/30", text: "text-sky-700 dark:text-sky-400" },
 };
 
 function getDaysInStage(dateString: string): number {
@@ -159,13 +159,13 @@ export function LeadCard({ lead, disabled, pipelineId, onMovedToPipeline, assign
           </Link>
           {subtitleParts.length > 0 && (
             <p className="flex items-center gap-1.5 text-xs text-muted-foreground truncate mt-1.5">
-              <Phone className="h-3 w-3 flex-shrink-0" />
+              <PhoneIcon className="h-3 w-3 flex-shrink-0" />
               <span className="truncate">{subtitleParts.join(" · ")}</span>
             </p>
           )}
           {lead.email && (
             <p className="flex items-center gap-1.5 text-xs text-muted-foreground truncate mt-1">
-              <Mail className="h-3 w-3 flex-shrink-0" />
+              <EnvelopeSimpleIcon className="h-3 w-3 flex-shrink-0" />
               <span className="truncate">{lead.email}</span>
             </p>
           )}
@@ -180,45 +180,45 @@ export function LeadCard({ lead, disabled, pipelineId, onMovedToPipeline, assign
               onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => e.stopPropagation()}
             >
-              <MoreHorizontal className="h-4 w-4" />
+              <DotsThreeIcon className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-44">
             <DropdownMenuItem asChild>
               <Link href={`/leads/${lead.id}`} prefetch={false}>
-                <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                <ArrowSquareOutIcon className="mr-2 h-3.5 w-3.5" />
                 View Details
               </Link>
             </DropdownMenuItem>
             {pipelineId && onMovedToPipeline && (
               <DropdownMenuItem onClick={() => setMoveModalOpen(true)}>
-                <ArrowRightLeft className="mr-2 h-3.5 w-3.5" />
+                <ArrowsLeftRightIcon className="mr-2 h-3.5 w-3.5" />
                 Move to Pipeline
               </DropdownMenuItem>
             )}
             <DropdownMenuSeparator />
             {lead.phone && (
               <DropdownMenuItem onClick={handlePhoneClick}>
-                <Phone className="mr-2 h-3.5 w-3.5" />
+                <PhoneIcon className="mr-2 h-3.5 w-3.5" />
                 Call {lead.phone}
               </DropdownMenuItem>
             )}
             {lead.email && (
               <DropdownMenuItem onClick={handleEmailClick}>
-                <Mail className="mr-2 h-3.5 w-3.5" />
+                <EnvelopeSimpleIcon className="mr-2 h-3.5 w-3.5" />
                 Email {lead.email}
               </DropdownMenuItem>
             )}
             <DropdownMenuSeparator />
             {lead.email && (
               <DropdownMenuItem onClick={() => copyToClipboard(lead.email!, "Email")}>
-                <Mail className="mr-2 h-3.5 w-3.5" />
+                <EnvelopeSimpleIcon className="mr-2 h-3.5 w-3.5" />
                 Copy Email
               </DropdownMenuItem>
             )}
             {lead.phone && (
               <DropdownMenuItem onClick={() => copyToClipboard(lead.phone!, "Phone")}>
-                <Phone className="mr-2 h-3.5 w-3.5" />
+                <PhoneIcon className="mr-2 h-3.5 w-3.5" />
                 Copy Phone
               </DropdownMenuItem>
             )}
@@ -235,7 +235,7 @@ export function LeadCard({ lead, disabled, pipelineId, onMovedToPipeline, assign
             }`}
             title={assigneeName ?? (lead.assigned_to ? "Assigned" : "Unassigned")}
           >
-            {lead.assigned_to ? getInitials(lead.first_name, lead.last_name) : <User className="h-3 w-3 text-muted-foreground" />}
+            {lead.assigned_to ? getInitials(lead.first_name, lead.last_name) : <UserIcon className="h-3 w-3 text-muted-foreground" />}
           </div>
           <span className="text-xs text-muted-foreground truncate">
             {lead.assigned_to ? assigneeName ?? "Assigned" : "Unassigned"}
@@ -257,27 +257,27 @@ export function LeadCard({ lead, disabled, pipelineId, onMovedToPipeline, assign
       <div className="flex items-center justify-between text-[11px]">
         <div className="flex items-center gap-2 text-muted-foreground">
           <div className={`flex items-center gap-1 px-2 py-1 rounded-full font-medium ${urgencyStyles.bg} ${urgencyStyles.text}`}>
-            <Clock className="h-3 w-3" />
+            <ClockIcon className="h-3 w-3" />
             <span>{days === 0 ? "Today" : `${days}d`}</span>
           </div>
 
           {hasChecklist && (
             <div className="flex items-center gap-1">
-              <CheckSquare className="h-3 w-3" />
+              <CheckSquareIcon className="h-3 w-3" />
               <span>{lead.checklist_completed}/{lead.checklist_total}</span>
             </div>
           )}
 
           {hasTasks && (
             <div className="flex items-center gap-1">
-              <ListTodo className="h-3 w-3" />
+              <ListChecksIcon className="h-3 w-3" />
               <span>{lead.task_completed}/{lead.task_total}</span>
             </div>
           )}
 
           {attachmentCount > 0 && (
             <div className="flex items-center gap-1">
-              <Paperclip className="h-3 w-3" />
+              <PaperclipIcon className="h-3 w-3" />
               <span>{attachmentCount}</span>
             </div>
           )}
@@ -292,7 +292,7 @@ export function LeadCard({ lead, disabled, pipelineId, onMovedToPipeline, assign
               lead.assigned_to ? `${avatarColors.bg} ${avatarColors.text}` : "bg-muted border border-border"
             }`}
           >
-            {lead.assigned_to ? getInitials(lead.first_name, lead.last_name) : <User className="h-3 w-3 text-muted-foreground" />}
+            {lead.assigned_to ? getInitials(lead.first_name, lead.last_name) : <UserIcon className="h-3 w-3 text-muted-foreground" />}
           </div>
         </div>
       </div>

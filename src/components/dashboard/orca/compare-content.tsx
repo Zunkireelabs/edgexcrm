@@ -5,7 +5,7 @@
 // starting point for the real version, pending the real data model.
 
 import { useState } from "react";
-import { GitCompare, Info } from "lucide-react";
+import { GitDiffIcon, InfoIcon } from "@phosphor-icons/react";
 import { ModeToggle } from "./mode-toggle";
 import { TasksMatrix } from "./tasks-matrix";
 import { StatsCards } from "./stats-cards";
@@ -148,7 +148,7 @@ export function CompareContent() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-[#eb1600] rounded-lg">
-            <GitCompare className="w-6 h-6 text-white" />
+            <GitDiffIcon className="w-6 h-6 text-white" />
           </div>
           <div>
             <h1 className="text-lg font-bold">Compare: Transformation View</h1>
@@ -164,7 +164,7 @@ export function CompareContent() {
 
       {/* Info Banner */}
       <div className="flex items-start gap-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-        <Info className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
+        <InfoIcon className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
         <div>
           <p className="text-sm text-blue-800">
             <strong>Presentation Mode:</strong> Use this view to demonstrate the impact of AI orchestration

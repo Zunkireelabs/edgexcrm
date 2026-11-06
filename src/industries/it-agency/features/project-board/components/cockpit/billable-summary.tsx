@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
-import { DollarSign, Loader2 } from "lucide-react";
+import { CurrencyDollarIcon, CircleNotchIcon } from "@phosphor-icons/react";
 import {
   calculateBillableMinutes,
   calculateBillableAmount,
@@ -52,11 +52,11 @@ export function BillableSummary({ projectId, canManageBilling, currency }: Billa
   return (
     <div className="rounded-lg border bg-card p-4">
       <div className="flex items-center gap-2 mb-3">
-        <DollarSign className="h-4 w-4 text-muted-foreground" />
+        <CurrencyDollarIcon className="h-4 w-4 text-muted-foreground" />
         <h3 className="text-sm font-semibold">Hours &amp; margin</h3>
       </div>
       {loading ? (
-        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        <CircleNotchIcon className="h-4 w-4 animate-spin text-muted-foreground" />
       ) : (
         <div className="space-y-2 text-sm">
           <div className="flex items-center justify-between">

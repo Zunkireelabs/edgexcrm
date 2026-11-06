@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen } from "lucide-react";
+import { BookOpenIcon } from "@phosphor-icons/react";
 import { LookupTableManager } from "./lookup-table-manager";
 
 export function CoursesManager() {
@@ -8,7 +8,7 @@ export function CoursesManager() {
     <LookupTableManager
       id="courses"
       title="Fields of Study"
-      icon={BookOpen}
+      icon={BookOpenIcon}
       apiPath="/api/v1/courses"
       itemLabel="Course"
       description="Manage fields of study that appear in lead forms."

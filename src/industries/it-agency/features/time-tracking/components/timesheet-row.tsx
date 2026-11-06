@@ -2,7 +2,13 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { Pencil, Trash2, Loader2, ThumbsUp, ThumbsDown } from "lucide-react";
+import {
+  PencilSimpleIcon,
+  TrashIcon,
+  CircleNotchIcon,
+  ThumbsUpIcon,
+  ThumbsDownIcon,
+} from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -189,7 +195,7 @@ export function TimesheetRow({
                   onClick={handleEditOpen}
                   title="Edit entry"
                 >
-                  <Pencil className="h-3.5 w-3.5" />
+                  <PencilSimpleIcon className="h-3.5 w-3.5" />
                 </Button>
                 <Button
                   variant="ghost"
@@ -200,9 +206,9 @@ export function TimesheetRow({
                   title="Delete entry"
                 >
                   {deleteLoading ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <CircleNotchIcon className="h-3.5 w-3.5 animate-spin" />
                   ) : (
-                    <Trash2 className="h-3.5 w-3.5" />
+                    <TrashIcon className="h-3.5 w-3.5" />
                   )}
                 </Button>
               </>
@@ -218,9 +224,9 @@ export function TimesheetRow({
                   title="Approve"
                 >
                   {isProcessing ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <CircleNotchIcon className="h-3.5 w-3.5 animate-spin" />
                   ) : (
-                    <ThumbsUp className="h-3.5 w-3.5 text-emerald-600" />
+                    <ThumbsUpIcon className="h-3.5 w-3.5 text-emerald-600" />
                   )}
                 </Button>
                 <Button
@@ -231,7 +237,7 @@ export function TimesheetRow({
                   disabled={isProcessing}
                   title="Reject"
                 >
-                  <ThumbsDown className="h-3.5 w-3.5 text-red-600" />
+                  <ThumbsDownIcon className="h-3.5 w-3.5 text-red-600" />
                 </Button>
               </>
             )}
@@ -278,7 +284,7 @@ export function TimesheetRow({
                 Cancel
               </Button>
               <Button type="submit" disabled={saving || parsedMin <= 0}>
-                {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                {saving && <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />}
                 Save
               </Button>
             </DialogFooter>
@@ -324,7 +330,7 @@ export function TimesheetRow({
                 variant="destructive"
                 disabled={isProcessing || !rejectReason.trim()}
               >
-                {isProcessing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                {isProcessing && <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />}
                 Reject
               </Button>
             </DialogFooter>

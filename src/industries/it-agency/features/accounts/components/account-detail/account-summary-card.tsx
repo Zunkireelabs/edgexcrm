@@ -1,6 +1,15 @@
 "use client";
 
-import { Building2, FolderPlus, UserPlus, Mail, MoreHorizontal, Loader2, UserRound, X } from "lucide-react";
+import {
+  BuildingsIcon,
+  FolderPlusIcon,
+  UserPlusIcon,
+  EnvelopeSimpleIcon,
+  DotsThreeIcon,
+  CircleNotchIcon,
+  UserIcon,
+  XIcon,
+} from "@phosphor-icons/react";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -109,7 +118,7 @@ export function AccountSummaryCard({
         {/* Avatar and name */}
         <div className="flex flex-col items-center text-center mb-4">
           <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center mb-3">
-            <Building2 className="h-7 w-7 text-muted-foreground" />
+            <BuildingsIcon className="h-7 w-7 text-muted-foreground" />
           </div>
           <h2 className="text-xl font-semibold" style={{ color: "#0f0f10" }}>{name}</h2>
           <div className="mt-2">
@@ -127,7 +136,7 @@ export function AccountSummaryCard({
         <div className="space-y-2 mb-4">
           {/* Primary contact picker */}
           <div className="flex items-center gap-1.5">
-            <UserRound className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <UserIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
             {isAdmin ? (
               <Popover open={primaryPickerOpen} onOpenChange={onPrimaryPickerOpenChange}>
                 <PopoverTrigger asChild>
@@ -181,14 +190,14 @@ export function AccountSummaryCard({
                         disabled={settingPrimary}
                         className="w-full text-left px-2 py-1.5 rounded text-sm text-muted-foreground hover:text-destructive hover:bg-muted transition-colors flex items-center gap-1.5"
                       >
-                        <X className="h-3.5 w-3.5" />
+                        <XIcon className="h-3.5 w-3.5" />
                         Clear primary contact
                       </button>
                     </>
                   )}
                   {settingPrimary && (
                     <div className="flex justify-center py-1">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                      <CircleNotchIcon className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
                     </div>
                   )}
                 </PopoverContent>
@@ -211,7 +220,7 @@ export function AccountSummaryCard({
           {/* Owner */}
           {ownerEmail && (
             <div className="flex items-center gap-1.5">
-              <Mail className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <EnvelopeSimpleIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
               <span className="text-sm truncate" style={{ color: "#787871" }}>{ownerEmail}</span>
             </div>
           )}
@@ -220,19 +229,19 @@ export function AccountSummaryCard({
         {/* Quick actions */}
         <div className="flex items-center justify-center gap-3 pt-4 border-t border-border">
           <QuickActionButton
-            icon={<FolderPlus className="h-4 w-4" />}
+            icon={<FolderPlusIcon className="h-4 w-4" />}
             label="+ Project"
             onClick={onCreateProject}
             disabled={!isAdmin}
           />
           <QuickActionButton
-            icon={<UserPlus className="h-4 w-4" />}
+            icon={<UserPlusIcon className="h-4 w-4" />}
             label="+ Contact"
             onClick={onCreateContact}
             disabled={!isAdmin}
           />
           <QuickActionButton
-            icon={<Mail className="h-4 w-4" />}
+            icon={<EnvelopeSimpleIcon className="h-4 w-4" />}
             label="Email"
             href={primaryContactEmail ? `mailto:${primaryContactEmail}` : undefined}
             disabled={!primaryContactEmail}
@@ -244,7 +253,7 @@ export function AccountSummaryCard({
                 className="flex flex-col items-center gap-1 group"
               >
                 <span className="h-10 w-10 rounded-full border border-border flex items-center justify-center text-muted-foreground group-hover:border-foreground group-hover:text-foreground transition-colors">
-                  <MoreHorizontal className="h-4 w-4" />
+                  <DotsThreeIcon className="h-4 w-4" />
                 </span>
                 <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">More</span>
               </button>
@@ -254,7 +263,7 @@ export function AccountSummaryCard({
                 Edit
               </DropdownMenuItem>
               <DropdownMenuItem onClick={onToggleActive} disabled={!isAdmin || togglingActive}>
-                {togglingActive && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                {togglingActive && <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />}
                 {isActive ? "Deactivate" : "Activate"}
               </DropdownMenuItem>
               {isAdmin && (

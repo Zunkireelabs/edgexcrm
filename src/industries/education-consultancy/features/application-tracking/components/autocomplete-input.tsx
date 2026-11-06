@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronsUpDown, Check, Plus } from "lucide-react";
+import { CaretUpDownIcon, CheckIcon, PlusIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import {
@@ -66,7 +66,7 @@ export function AutocompleteInput({ value, onChange, suggestions, placeholder, i
             className="pr-8"
             autoComplete="off"
           />
-          <ChevronsUpDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <CaretUpDownIcon className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
         </div>
       </PopoverTrigger>
       {(filtered.length > 0 || showCreate) && (
@@ -81,7 +81,7 @@ export function AutocompleteInput({ value, onChange, suggestions, placeholder, i
               <CommandEmpty>No matches</CommandEmpty>
               {filtered.slice(0, 20).map((s) => (
                 <CommandItem key={s} value={s} onSelect={() => { onChange(s); setOpen(false); }}>
-                  <Check className={cn("mr-2 h-4 w-4", value === s ? "opacity-100" : "opacity-0")} />
+                  <CheckIcon className={cn("mr-2 h-4 w-4", value === s ? "opacity-100" : "opacity-0")} />
                   {s}
                 </CommandItem>
               ))}
@@ -99,7 +99,7 @@ export function AutocompleteInput({ value, onChange, suggestions, placeholder, i
                   }}
                   className="text-primary font-medium border-t mt-1"
                 >
-                  <Plus className="mr-2 h-4 w-4" />
+                  <PlusIcon className="mr-2 h-4 w-4" />
                   {`Create "${trimmed}"`}
                 </CommandItem>
               )}

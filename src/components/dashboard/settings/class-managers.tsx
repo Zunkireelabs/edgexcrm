@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
-import { UserCog } from "lucide-react";
+import { UserGearIcon } from "@phosphor-icons/react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -144,7 +144,7 @@ export function ClassManagers() {
       <Card id="class-managers">
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
-            <UserCog className="h-5 w-5" />
+            <UserGearIcon className="h-5 w-5" />
             Class Managers
           </CardTitle>
         </CardHeader>
@@ -159,7 +159,7 @@ export function ClassManagers() {
     <Card id="class-managers">
       <CardHeader>
         <CardTitle className="text-lg flex items-center gap-2">
-          <UserCog className="h-5 w-5" />
+          <UserGearIcon className="h-5 w-5" />
           Class Managers
         </CardTitle>
         <CardDescription>

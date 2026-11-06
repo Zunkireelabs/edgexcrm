@@ -28,12 +28,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  GripVertical,
-  Pencil,
-  Trash2,
-  Plus,
-  AlertTriangle,
-} from "lucide-react";
+  DotsSixVerticalIcon,
+  PencilSimpleIcon,
+  TrashIcon,
+  PlusIcon,
+  WarningIcon,
+} from "@phosphor-icons/react";
 import { toast } from "sonner";
 import type { PipelineWithCounts, PipelineStageWithCount } from "@/types/database";
 import { StageEditor } from "./StageEditor";
@@ -84,7 +84,7 @@ function SortableStageItem({ stage, onEdit, onDelete, stageWordLower }: Sortable
         {...attributes}
         {...listeners}
       >
-        <GripVertical className="h-4 w-4" />
+        <DotsSixVerticalIcon className="h-4 w-4" />
       </button>
 
       {/* Color Dot */}
@@ -128,7 +128,7 @@ function SortableStageItem({ stage, onEdit, onDelete, stageWordLower }: Sortable
           size="icon-xs"
           onClick={() => onEdit(stage)}
         >
-          <Pencil className="h-3 w-3" />
+          <PencilSimpleIcon className="h-3 w-3" />
         </Button>
         <Button
           type="button"
@@ -138,7 +138,7 @@ function SortableStageItem({ stage, onEdit, onDelete, stageWordLower }: Sortable
           disabled={stage.lead_count > 0}
           title={stage.lead_count > 0 ? `Cannot delete ${stageWordLower} with leads` : `Delete ${stageWordLower}`}
         >
-          <Trash2 className="h-3 w-3" />
+          <TrashIcon className="h-3 w-3" />
         </Button>
       </div>
     </div>
@@ -415,7 +415,7 @@ export function PipelineSettingsModal({
                       size="sm"
                       onClick={() => setIsAddingStage(true)}
                     >
-                      <Plus className="h-4 w-4 mr-1" />
+                      <PlusIcon className="h-4 w-4 mr-1" />
                       Add {stageWord}
                     </Button>
                   </div>
@@ -423,7 +423,7 @@ export function PipelineSettingsModal({
                   {/* Validation Warning — hidden in list-stage mode (won/lost not required) */}
                   {!listStageMode && !hasRequiredTerminals && (
                     <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
-                      <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                      <WarningIcon className="h-4 w-4 shrink-0 mt-0.5" />
                       <span>
                         Pipeline must have at least one &quot;Won&quot; and one &quot;Lost&quot; stage.
                       </span>

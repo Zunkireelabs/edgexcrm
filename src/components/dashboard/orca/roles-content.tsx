@@ -6,19 +6,19 @@
 
 import { useState } from "react";
 import {
-  Users,
-  Plus,
-  User,
-  Bot,
-  Search,
-  Filter,
-  MoreHorizontal,
-  Pencil,
-  Trash2,
-  UserPlus,
-  Settings2,
-  ListChecks,
-} from "lucide-react";
+  UsersIcon,
+  PlusIcon,
+  UserIcon,
+  RobotIcon,
+  MagnifyingGlassIcon,
+  FunnelIcon,
+  DotsThreeIcon,
+  PencilSimpleIcon,
+  TrashIcon,
+  UserPlusIcon,
+  SlidersHorizontalIcon,
+  ListChecksIcon,
+} from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 
 // Types
@@ -119,7 +119,7 @@ export function RolesContent() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-[#eb1600] rounded-lg">
-            <Users className="w-6 h-6 text-white" />
+            <UsersIcon className="w-6 h-6 text-white" />
           </div>
           <div>
             <h1 className="text-lg font-bold">Roles</h1>
@@ -129,7 +129,7 @@ export function RolesContent() {
           </div>
         </div>
         <button className="inline-flex items-center gap-2 px-4 py-2 bg-[#eb1600] hover:bg-[#cc1300] rounded-lg text-sm font-medium text-white transition-colors">
-          <Plus className="w-4 h-4" />
+          <PlusIcon className="w-4 h-4" />
           New Role
         </button>
       </div>
@@ -146,7 +146,7 @@ export function RolesContent() {
           )}
         >
           <div className="flex items-center gap-2 mb-1">
-            <User className="w-4 h-4 text-gray-500" />
+            <UserIcon className="w-4 h-4 text-gray-500" />
             <span className="text-xs font-medium text-gray-500">Human Roles</span>
           </div>
           <p className="text-2xl font-bold text-gray-900">{humanRoles}</p>
@@ -161,7 +161,7 @@ export function RolesContent() {
           )}
         >
           <div className="flex items-center gap-2 mb-1">
-            <Bot className="w-4 h-4 text-emerald-500" />
+            <RobotIcon className="w-4 h-4 text-emerald-500" />
             <span className="text-xs font-medium text-gray-500">Agent Roles</span>
           </div>
           <p className="text-2xl font-bold text-gray-900">{agentRoles}</p>
@@ -177,8 +177,8 @@ export function RolesContent() {
         >
           <div className="flex items-center gap-2 mb-1">
             <div className="flex">
-              <User className="w-3 h-3 text-amber-500" />
-              <Bot className="w-3 h-3 text-amber-500 -ml-1" />
+              <UserIcon className="w-3 h-3 text-amber-500" />
+              <RobotIcon className="w-3 h-3 text-amber-500 -ml-1" />
             </div>
             <span className="text-xs font-medium text-gray-500">Hybrid Roles</span>
           </div>
@@ -189,7 +189,7 @@ export function RolesContent() {
       {/* Search and Filters */}
       <div className="flex items-center gap-3">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
             placeholder="Search roles..."
@@ -229,14 +229,14 @@ export function RolesContent() {
                   )}
                 >
                   {role.type === "agent" ? (
-                    <Bot className="w-5 h-5 text-emerald-600" />
+                    <RobotIcon className="w-5 h-5 text-emerald-600" />
                   ) : role.type === "hybrid" ? (
                     <div className="flex items-center">
-                      <User className="w-4 h-4 text-amber-600" />
-                      <Bot className="w-4 h-4 text-amber-600 -ml-1" />
+                      <UserIcon className="w-4 h-4 text-amber-600" />
+                      <RobotIcon className="w-4 h-4 text-amber-600 -ml-1" />
                     </div>
                   ) : (
-                    <User className="w-5 h-5 text-gray-600" />
+                    <UserIcon className="w-5 h-5 text-gray-600" />
                   )}
                 </div>
 
@@ -262,11 +262,11 @@ export function RolesContent() {
                   {/* Meta */}
                   <div className="flex items-center gap-4 text-xs text-gray-500">
                     <span className="flex items-center gap-1">
-                      <Users className="w-3 h-3" />
+                      <UsersIcon className="w-3 h-3" />
                       {role.assignedCount} assigned
                     </span>
                     <span className="flex items-center gap-1">
-                      <ListChecks className="w-3 h-3" />
+                      <ListChecksIcon className="w-3 h-3" />
                       {role.taskCount} tasks ({role.automatedTaskCount} automated)
                     </span>
                     <span className="text-gray-400">
@@ -280,18 +280,18 @@ export function RolesContent() {
               <div className="flex items-center gap-1">
                 {role.type === "human" || role.type === "hybrid" ? (
                   <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors" title="Assign users">
-                    <UserPlus className="w-4 h-4 text-gray-500" />
+                    <UserPlusIcon className="w-4 h-4 text-gray-500" />
                   </button>
                 ) : (
                   <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors" title="Configure agent">
-                    <Settings2 className="w-4 h-4 text-gray-500" />
+                    <SlidersHorizontalIcon className="w-4 h-4 text-gray-500" />
                   </button>
                 )}
                 <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors" title="Edit">
-                  <Pencil className="w-4 h-4 text-gray-500" />
+                  <PencilSimpleIcon className="w-4 h-4 text-gray-500" />
                 </button>
                 <button className="p-2 hover:bg-red-100 rounded-lg transition-colors" title="Delete">
-                  <Trash2 className="w-4 h-4 text-red-500" />
+                  <TrashIcon className="w-4 h-4 text-red-500" />
                 </button>
               </div>
             </div>
@@ -302,7 +302,7 @@ export function RolesContent() {
       {/* Empty State */}
       {filteredRoles.length === 0 && (
         <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-          <Users className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+          <UsersIcon className="w-12 h-12 text-gray-300 mx-auto mb-4" />
           <h3 className="text-lg font-semibold text-gray-900 mb-2">
             No roles found
           </h3>
@@ -313,7 +313,7 @@ export function RolesContent() {
           </p>
           {!searchQuery && filterType === "all" && (
             <button className="inline-flex items-center gap-2 px-4 py-2 bg-[#eb1600] hover:bg-[#cc1300] rounded-lg text-sm font-medium text-white transition-colors">
-              <Plus className="w-4 h-4" />
+              <PlusIcon className="w-4 h-4" />
               Create Role
             </button>
           )}

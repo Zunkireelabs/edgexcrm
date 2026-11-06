@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CalendarClock, Loader2, Send, SkipForward } from "lucide-react";
+import {
+  CalendarDotsIcon,
+  CircleNotchIcon,
+  PaperPlaneTiltIcon,
+  SkipForwardIcon,
+} from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -178,7 +183,7 @@ export function SmsDraftReviewPanel({ draft, onOpenChange, onSent, onSkipped, on
                 Cancel
               </Button>
               <Button type="button" size="sm" onClick={handleSchedule} disabled={busy !== null || empty}>
-                {busy === "schedule" && <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />} Schedule
+                {busy === "schedule" && <CircleNotchIcon className="h-4 w-4 mr-1.5 animate-spin" />} Schedule
               </Button>
             </div>
           </div>
@@ -186,15 +191,15 @@ export function SmsDraftReviewPanel({ draft, onOpenChange, onSent, onSkipped, on
 
         <DialogFooter className="gap-2 sm:justify-between">
           <Button type="button" variant="ghost" onClick={handleSkip} disabled={busy !== null}>
-            {busy === "skip" ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <SkipForward className="h-4 w-4 mr-1.5" />}
+            {busy === "skip" ? <CircleNotchIcon className="h-4 w-4 mr-1.5 animate-spin" /> : <SkipForwardIcon className="h-4 w-4 mr-1.5" />}
             Skip step
           </Button>
           <div className="flex gap-2">
             <Button type="button" variant="outline" onClick={openSchedule} disabled={busy !== null || empty}>
-              <CalendarClock className="h-4 w-4 mr-1.5" /> {draft.scheduled_send_at ? "Reschedule" : "Schedule send"}
+              <CalendarDotsIcon className="h-4 w-4 mr-1.5" /> {draft.scheduled_send_at ? "Reschedule" : "Schedule send"}
             </Button>
             <Button type="button" onClick={handleSend} disabled={busy !== null || empty}>
-              {busy === "send" ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Send className="h-4 w-4 mr-1.5" />}
+              {busy === "send" ? <CircleNotchIcon className="h-4 w-4 mr-1.5 animate-spin" /> : <PaperPlaneTiltIcon className="h-4 w-4 mr-1.5" />}
               Send now
             </Button>
           </div>

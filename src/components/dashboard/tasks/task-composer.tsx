@@ -1,7 +1,7 @@
 "use client";
 
 import { forwardRef, useImperativeHandle, useState } from "react";
-import { Plus } from "lucide-react";
+import { PlusIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { toLocalDateString } from "@/lib/date";
 import { MemberPicker, type RosterMember } from "./member-picker";
@@ -118,7 +118,7 @@ export const TaskComposer = forwardRef<TaskComposerRef, TaskComposerProps>(funct
         onClick={() => setExpanded(true)}
         className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 py-1 transition-colors"
       >
-        <Plus className="h-4 w-4" />
+        <PlusIcon className="h-4 w-4" />
         {triggerLabel}
       </button>
     );

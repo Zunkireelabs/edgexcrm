@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, X } from "lucide-react";
+import { PlusIcon, XIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import type { PipelineLead } from "@/types/database";
 
@@ -300,7 +300,7 @@ export function MoveToPipelineModal({
                     setNewPipelineName("");
                   }}
                 >
-                  <X className="h-4 w-4" />
+                  <XIcon className="h-4 w-4" />
                 </Button>
               </div>
             ) : (
@@ -326,7 +326,7 @@ export function MoveToPipelineModal({
                   onClick={() => setShowCreatePipeline(true)}
                   className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 font-medium transition-colors"
                 >
-                  <Plus className="h-3.5 w-3.5" />
+                  <PlusIcon className="h-3.5 w-3.5" />
                   Create new pipeline
                 </button>
               </div>
@@ -371,7 +371,7 @@ export function MoveToPipelineModal({
                         setNewStageColor("#3b82f6");
                       }}
                     >
-                      <X className="h-4 w-4" />
+                      <XIcon className="h-4 w-4" />
                     </Button>
                   </div>
                   <div className="flex items-center gap-1.5">
@@ -421,7 +421,7 @@ export function MoveToPipelineModal({
                     onClick={() => setShowCreateStage(true)}
                     className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 font-medium transition-colors"
                   >
-                    <Plus className="h-3.5 w-3.5" />
+                    <PlusIcon className="h-3.5 w-3.5" />
                     Create new stage
                   </button>
                 </div>

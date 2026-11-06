@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { Suspense } from "react";
-import { X } from "lucide-react";
+import { XIcon } from "@phosphor-icons/react";
 import {
   Dialog,
   DialogContent,
@@ -82,7 +82,7 @@ export function SettingsModal({ isOpen, activeTab, onTabChange, onClose }: Setti
             className="absolute top-4 right-4 z-10 w-8 h-8 rounded-md flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
             aria-label="Close settings"
           >
-            <X className="w-4 h-4" />
+            <XIcon className="w-4 h-4" />
           </button>
 
           {/* Panel content — fills remaining space */}

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { MessageSquare, ChevronRight } from "lucide-react";
+import { ChatTextIcon, CaretRightIcon } from "@phosphor-icons/react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { formatRelativeTime } from "@/lib/format-relative-time";
 import type { InboxSnapshot } from "@/lib/supabase/queries";
@@ -27,14 +27,14 @@ export function InboxSnapshotCard({ snapshot }: InboxSnapshotCardProps) {
           </CardTitle>
           <Link href="/inbox" className="inline-flex items-center gap-0.5 text-xs text-blue-600 hover:underline">
             View inbox
-            <ChevronRight className="h-3 w-3" />
+            <CaretRightIcon className="h-3 w-3" />
           </Link>
         </div>
       </CardHeader>
       <CardContent className="pt-0">
         {items.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-6 gap-2 text-center">
-            <MessageSquare className="h-8 w-8 text-muted-foreground/40" />
+            <ChatTextIcon className="h-8 w-8 text-muted-foreground/40" />
             <p className="text-sm text-muted-foreground">No conversations assigned to you.</p>
           </div>
         ) : (

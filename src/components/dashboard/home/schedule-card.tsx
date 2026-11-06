@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Phone, CalendarDays, AlertCircle } from "lucide-react";
+import { PhoneIcon, CalendarDotsIcon, WarningCircleIcon } from "@phosphor-icons/react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { formatRelativeTime } from "@/lib/format-relative-time";
 import type { ScheduleActivity } from "@/lib/supabase/queries";
@@ -25,7 +25,7 @@ export function ScheduleCard({ schedule }: ScheduleCardProps) {
       <CardContent className="pt-0">
         {empty ? (
           <div className="flex flex-col items-center justify-center py-6 gap-2 text-center">
-            <CalendarDays className="h-8 w-8 text-muted-foreground/40" />
+            <CalendarDotsIcon className="h-8 w-8 text-muted-foreground/40" />
             <p className="text-sm text-muted-foreground">Nothing scheduled.</p>
           </div>
         ) : (
@@ -68,7 +68,7 @@ function ActivityRow({
   activity: ScheduleActivity;
   isOverdue: boolean;
 }) {
-  const Icon = activity.activity_type === "call" ? Phone : CalendarDays;
+  const Icon = activity.activity_type === "call" ? PhoneIcon : CalendarDotsIcon;
   const leadName = activity.leads
     ? [activity.leads.first_name, activity.leads.last_name].filter(Boolean).join(" ") || "Lead"
     : null;
@@ -88,7 +88,7 @@ function ActivityRow({
         <div className="flex items-center gap-2 mt-0.5">
           {isOverdue ? (
             <span className="inline-flex items-center gap-1 text-xs text-red-600 font-medium">
-              <AlertCircle className="h-3 w-3" />
+              <WarningCircleIcon className="h-3 w-3" />
               overdue
             </span>
           ) : (

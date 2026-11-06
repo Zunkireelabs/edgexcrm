@@ -1,41 +1,15 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { createElement, useEffect, useState, useCallback, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { toast } from "sonner";
 import { ArchivedLeadPreviewDialog } from "@/industries/education-consultancy/features/archived-lookup/components/archived-lead-preview-dialog";
 import type { ArchivedLeadPreview } from "@/industries/education-consultancy/features/archived-lookup/lib/types";
 import {
-  Bot,
-  Building2,
-  Contact,
-  FileText,
-  FolderKanban,
-  GitCompare,
-  GraduationCap,
-  Handshake,
-  House,
-  Kanban,
-  LayoutDashboard,
-  Library,
-  ListChecks,
-  MapPin,
-  MessageSquare,
-  Network,
-  Plane,
-  Search,
-  Settings,
-  Users,
-  UsersRound,
-  UserCheck,
-  ChartColumn,
-  Megaphone,
-  BookOpen,
-  Loader2,
-  ListPlus,
-  Archive,
-  type LucideIcon,
-} from "lucide-react";
+  CircleNotchIcon,
+  ListPlusIcon,
+  ArchiveIcon,
+} from "@phosphor-icons/react";
 import {
   CommandDialog,
   CommandEmpty,
@@ -45,6 +19,7 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command";
+import { shellIcon } from "../shell-icons";
 import { useSettingsModal } from "@/contexts/settings-modal-context";
 import type { NavResult } from "./build-nav-index";
 import { extractMention, matchMembers, parsePastedLines, type RosterMember } from "@/lib/tasks/quick-add-parse";
@@ -56,38 +31,9 @@ import { extractMention, matchMembers, parsePastedLines, type RosterMember } fro
 // personal task via POST /api/v1/my-tasks. Both are stamped self-assigned.
 const PROJECT_PATH_RE = /^\/projects\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
 
-// Resolve icon string name to Lucide component (mirrors shell.tsx INDUSTRY_ICONS)
-const ICON_MAP: Record<string, LucideIcon> = {
-  Bot,
-  BookOpen,
-  Building2,
-  ChartColumn,
-  Contact,
-  FileText,
-  FolderKanban,
-  GitCompare,
-  GraduationCap,
-  Handshake,
-  House,
-  Kanban,
-  LayoutDashboard,
-  Library,
-  ListChecks,
-  MapPin,
-  Megaphone,
-  MessageSquare,
-  Network,
-  Plane,
-  Search,
-  Settings,
-  Users,
-  UsersRound,
-  UserCheck,
-};
-
+// Resolve a nav icon string name through the shared shell registry (EDGEX-94).
 function NavIcon({ name, className }: { name: string; className?: string }) {
-  const Icon = ICON_MAP[name] ?? FileText;
-  return <Icon className={className} />;
+  return createElement(shellIcon(name), { className });
 }
 
 interface LeadResult {
@@ -441,16 +387,16 @@ export function GlobalSearchPalette({
                 className="flex items-center gap-2"
               >
                 {creatingBatch ? (
-                  <Loader2 className="w-4 h-4 text-gray-500 animate-spin" />
+                  <CircleNotchIcon className="w-4 h-4 text-gray-500 animate-spin" />
                 ) : (
-                  <ListPlus className="w-4 h-4 text-gray-500" />
+                  <ListPlusIcon className="w-4 h-4 text-gray-500" />
                 )}
                 <span>Create {pendingBatch.length} tasks</span>
               </CommandItem>
             )}
             {mentionToken !== null && rosterLoading && (
               <CommandItem value="batch-roster-loading" disabled className="flex items-center gap-2">
-                <Loader2 className="w-4 h-4 text-gray-500 animate-spin" />
+                <CircleNotchIcon className="w-4 h-4 text-gray-500 animate-spin" />
                 <span>Loading teammates…</span>
               </CommandItem>
             )}
@@ -470,9 +416,9 @@ export function GlobalSearchPalette({
                   className="flex items-center gap-2"
                 >
                   {creatingBatch ? (
-                    <Loader2 className="w-4 h-4 text-gray-500 animate-spin" />
+                    <CircleNotchIcon className="w-4 h-4 text-gray-500 animate-spin" />
                   ) : (
-                    <ListPlus className="w-4 h-4 text-gray-500" />
+                    <ListPlusIcon className="w-4 h-4 text-gray-500" />
                   )}
                   <span>
                     Create {pendingBatch.length} tasks for {m.name}
@@ -498,7 +444,7 @@ export function GlobalSearchPalette({
           <CommandGroup heading="Actions">
             {rosterLoading && (
               <CommandItem value="mention-roster-loading" disabled className="flex items-center gap-2">
-                <Loader2 className="w-4 h-4 text-gray-500 animate-spin" />
+                <CircleNotchIcon className="w-4 h-4 text-gray-500 animate-spin" />
                 <span>Loading teammates…</span>
               </CommandItem>
             )}
@@ -517,9 +463,9 @@ export function GlobalSearchPalette({
                   className="flex items-center gap-2"
                 >
                   {creatingTask ? (
-                    <Loader2 className="w-4 h-4 text-gray-500 animate-spin" />
+                    <CircleNotchIcon className="w-4 h-4 text-gray-500 animate-spin" />
                   ) : (
-                    <ListPlus className="w-4 h-4 text-gray-500" />
+                    <ListPlusIcon className="w-4 h-4 text-gray-500" />
                   )}
                   <span>
                     Create task &ldquo;{mentionTitle}&rdquo; for {m.name}
@@ -539,9 +485,9 @@ export function GlobalSearchPalette({
               className="flex items-center gap-2"
             >
               {creatingTask ? (
-                <Loader2 className="w-4 h-4 text-gray-500 animate-spin" />
+                <CircleNotchIcon className="w-4 h-4 text-gray-500 animate-spin" />
               ) : (
-                <ListPlus className="w-4 h-4 text-gray-500" />
+                <ListPlusIcon className="w-4 h-4 text-gray-500" />
               )}
               <span>
                 Create task &ldquo;{mentionTitle}&rdquo;
@@ -578,7 +524,7 @@ export function GlobalSearchPalette({
             <CommandGroup heading="Leads">
               {leadsLoading && (
                 <div className="flex items-center gap-2 px-2 py-3 text-sm text-gray-500">
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <CircleNotchIcon className="w-4 h-4 animate-spin" />
                   Searching leads…
                 </div>
               )}
@@ -619,7 +565,7 @@ export function GlobalSearchPalette({
                   <span className="flex w-full items-center gap-2 font-medium">
                     <span className="truncate">{leadDisplayName(lead)}</span>
                     <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
-                      <Archive className="h-3 w-3" />
+                      <ArchiveIcon className="h-3 w-3" />
                       Archived
                     </span>
                   </span>

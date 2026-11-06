@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
-import { Send } from "lucide-react";
+import { PaperPlaneTiltIcon } from "@phosphor-icons/react";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -265,7 +265,7 @@ export function ApplicationTabs({
                 onClick={handleAddNote}
                 disabled={saving || (savedNoteId ? pending.length === 0 : !noteContentFor(draft, pending))}
               >
-                <Send className="h-3.5 w-3.5 mr-1.5" />
+                <PaperPlaneTiltIcon className="h-3.5 w-3.5 mr-1.5" />
                 {saving ? "Saving…" : savedNoteId ? `Retry upload (${pending.length})` : "Add Note"}
               </Button>
             </div>

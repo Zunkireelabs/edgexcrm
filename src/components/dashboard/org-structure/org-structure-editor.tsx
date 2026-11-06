@@ -2,15 +2,15 @@
 
 import { useState } from "react";
 import {
-  Plus,
-  GripVertical,
-  ChevronDown,
-  ChevronUp,
-  Pencil,
-  Trash2,
-  Check,
-  X,
-} from "lucide-react";
+  PlusIcon,
+  DotsSixVerticalIcon,
+  CaretDownIcon,
+  CaretUpIcon,
+  PencilSimpleIcon,
+  TrashIcon,
+  CheckIcon,
+  XIcon,
+} from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { PositionCard } from "./position-card";
 import { UnassignedMembersTray } from "./unassigned-members-tray";
@@ -223,7 +223,7 @@ export function OrgStructureEditor({ layers, isAdmin, onRefetch, unassignedMembe
             {/* Layer header */}
             <div className="flex items-center justify-between px-5 py-3 bg-gray-50 border-b border-gray-200">
               <div className="flex items-center gap-3">
-                <GripVertical className="w-4 h-4 text-gray-400" />
+                <DotsSixVerticalIcon className="w-4 h-4 text-gray-400" />
                 {editState?.id === layer.id ? (
                   <div className="flex items-center gap-2">
                     <input
@@ -261,14 +261,14 @@ export function OrgStructureEditor({ layers, isAdmin, onRefetch, unassignedMembe
                       className="p-1.5 hover:bg-green-100 rounded"
                       title="Save"
                     >
-                      <Check className="w-4 h-4 text-green-600" />
+                      <CheckIcon className="w-4 h-4 text-green-600" />
                     </button>
                     <button
                       onClick={() => setEditState(null)}
                       className="p-1.5 hover:bg-gray-200 rounded"
                       title="Cancel"
                     >
-                      <X className="w-4 h-4 text-gray-500" />
+                      <XIcon className="w-4 h-4 text-gray-500" />
                     </button>
                   </>
                 ) : isAdmin ? (
@@ -278,20 +278,20 @@ export function OrgStructureEditor({ layers, isAdmin, onRefetch, unassignedMembe
                       disabled={layerIndex === 0 || loading}
                       className="p-1.5 hover:bg-gray-200 rounded disabled:opacity-30 disabled:cursor-not-allowed"
                     >
-                      <ChevronUp className="w-4 h-4 text-gray-500" />
+                      <CaretUpIcon className="w-4 h-4 text-gray-500" />
                     </button>
                     <button
                       onClick={() => handleMoveLayer(layerIndex, "down")}
                       disabled={layerIndex === realLayers.length - 1 || loading}
                       className="p-1.5 hover:bg-gray-200 rounded disabled:opacity-30 disabled:cursor-not-allowed"
                     >
-                      <ChevronDown className="w-4 h-4 text-gray-500" />
+                      <CaretDownIcon className="w-4 h-4 text-gray-500" />
                     </button>
                     <button
                       onClick={() => setEditState({ id: layer.id, name: layer.name, description: layer.description ?? "" })}
                       className="p-1.5 hover:bg-gray-200 rounded"
                     >
-                      <Pencil className="w-4 h-4 text-gray-500" />
+                      <PencilSimpleIcon className="w-4 h-4 text-gray-500" />
                     </button>
                     {deleteConfirm === layer.id ? (
                       <span className="flex items-center gap-1 text-xs text-red-600">
@@ -304,7 +304,7 @@ export function OrgStructureEditor({ layers, isAdmin, onRefetch, unassignedMembe
                         onClick={() => setDeleteConfirm(layer.id)}
                         className="p-1.5 hover:bg-red-100 rounded"
                       >
-                        <Trash2 className="w-4 h-4 text-red-500" />
+                        <TrashIcon className="w-4 h-4 text-red-500" />
                       </button>
                     )}
                   </>
@@ -381,7 +381,7 @@ export function OrgStructureEditor({ layers, isAdmin, onRefetch, unassignedMembe
                         onClick={() => { setAddRoleLayerId(layer.id); setNewRoleName(""); }}
                         className="flex flex-col items-center justify-center p-4 rounded-lg border-2 border-dashed border-gray-300 min-w-[140px] min-h-[100px] hover:border-[#eb1600] hover:bg-[#eb1600]/5 transition-colors group"
                       >
-                        <Plus className="w-5 h-5 text-gray-400 group-hover:text-[#eb1600]" />
+                        <PlusIcon className="w-5 h-5 text-gray-400 group-hover:text-[#eb1600]" />
                         <span className="mt-1 text-xs text-gray-500 group-hover:text-[#eb1600]">
                           Add Role
                         </span>
@@ -461,7 +461,7 @@ export function OrgStructureEditor({ layers, isAdmin, onRefetch, unassignedMembe
             "disabled:opacity-50 disabled:cursor-not-allowed"
           )}
         >
-          <Plus className="w-4 h-4" />
+          <PlusIcon className="w-4 h-4" />
           {realLayers.length === 0 ? "Add First Layer" : "Add Layer Below"}
         </button>
       )}

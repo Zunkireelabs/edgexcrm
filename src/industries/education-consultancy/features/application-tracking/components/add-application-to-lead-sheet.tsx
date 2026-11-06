@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2 } from "lucide-react";
+import { CircleNotchIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -390,7 +390,7 @@ export function AddApplicationToLeadSheet({
               disabled={submitting || !universityName.trim() || !programName.trim()}
               className="flex-1"
             >
-              {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {submitting && <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />}
               Add Application
             </Button>
           </div>

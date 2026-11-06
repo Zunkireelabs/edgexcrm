@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { Copy, Loader2, RefreshCw } from "lucide-react";
+import { CopyIcon, CircleNotchIcon, ArrowsClockwiseIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -64,11 +64,11 @@ export function BccAddressPanel() {
           {address}
         </code>
         <Button size="sm" variant="outline" onClick={handleCopy} disabled={!address}>
-          <Copy className="h-3.5 w-3.5" />
+          <CopyIcon className="h-3.5 w-3.5" />
           Copy
         </Button>
         <Button size="sm" variant="outline" onClick={() => setConfirmOpen(true)} disabled={!address}>
-          <RefreshCw className="h-3.5 w-3.5" />
+          <ArrowsClockwiseIcon className="h-3.5 w-3.5" />
           Regenerate
         </Button>
       </div>
@@ -85,7 +85,7 @@ export function BccAddressPanel() {
           <AlertDialogFooter>
             <AlertDialogCancel disabled={regenerating}>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleRegenerate} disabled={regenerating}>
-              {regenerating && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+              {regenerating && <CircleNotchIcon className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
               Regenerate
             </AlertDialogAction>
           </AlertDialogFooter>

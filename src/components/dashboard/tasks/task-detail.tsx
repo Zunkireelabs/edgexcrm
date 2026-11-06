@@ -3,14 +3,14 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { toast } from "sonner";
 import {
-  Loader2,
-  Trash2,
-  UserCircle2,
-  Check,
-  Link2,
-  ExternalLink,
-  MoreHorizontal,
-} from "lucide-react";
+  CircleNotchIcon,
+  TrashIcon,
+  UserCircleIcon,
+  CheckIcon,
+  LinkSimpleIcon,
+  ArrowSquareOutIcon,
+  DotsThreeIcon,
+} from "@phosphor-icons/react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -296,7 +296,7 @@ export function TaskDetailBody({
   if (loading) {
     return (
       <div className="flex items-center justify-center flex-1 py-12">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        <CircleNotchIcon className="h-5 w-5 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -372,7 +372,7 @@ export function TaskDetailBody({
             onClick={toggleComplete}
             className={isDone ? "bg-green-600 text-white hover:bg-green-600/90" : undefined}
           >
-            {completing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+            {completing ? <CircleNotchIcon className="h-3.5 w-3.5 animate-spin" /> : <CheckIcon className="h-3.5 w-3.5" />}
             {isDone ? "Completed" : "Mark complete"}
           </Button>
         ) : (
@@ -382,7 +382,7 @@ export function TaskDetailBody({
               isDone ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-600",
             )}
           >
-            {isDone && <Check className="h-3 w-3" />}
+            {isDone && <CheckIcon className="h-3 w-3" />}
             {isDone ? "Completed" : "Not completed"}
           </span>
         )}
@@ -392,7 +392,7 @@ export function TaskDetailBody({
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button variant="ghost" size="icon" aria-label="Copy link" onClick={copyLink}>
-                  <Link2 className="h-4 w-4" />
+                  <LinkSimpleIcon className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Copy link</TooltipContent>
@@ -402,7 +402,7 @@ export function TaskDetailBody({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button variant="ghost" size="icon" aria-label="Open in new tab" onClick={openInNewTab}>
-                    <ExternalLink className="h-4 w-4" />
+                    <ArrowSquareOutIcon className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>Open in new tab</TooltipContent>
@@ -413,12 +413,12 @@ export function TaskDetailBody({
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button ref={moreButtonRef} variant="ghost" size="icon" aria-label="More actions">
-                    <MoreHorizontal className="h-4 w-4" />
+                    <DotsThreeIcon className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem variant="destructive" onClick={() => setDeleteConfirmOpen(true)}>
-                    <Trash2 className="h-4 w-4" />
+                    <TrashIcon className="h-4 w-4" />
                     Delete task
                   </DropdownMenuItem>
                 </DropdownMenuContent>
@@ -497,7 +497,7 @@ export function TaskDetailBody({
               <AssigneePicker assigneeId={task.assignee_id} team={team} onChange={() => {}} disabled showName />
             ) : (
               <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                <UserCircle2 className="h-4 w-4" />
+                <UserCircleIcon className="h-4 w-4" />
                 Unassigned
               </div>
             )}

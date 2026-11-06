@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { CircleNotchIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -113,7 +113,7 @@ export function AccountForm({ account, open, onOpenChange, onSuccess }: AccountF
               Cancel
             </Button>
             <Button type="submit" disabled={saving || !name.trim()}>
-              {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {saving && <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />}
               {isEdit ? "Save changes" : "Create account"}
             </Button>
           </DialogFooter>

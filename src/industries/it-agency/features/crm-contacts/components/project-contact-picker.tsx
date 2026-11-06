@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { Loader2, Search } from "lucide-react";
+import { CircleNotchIcon, MagnifyingGlassIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -223,7 +223,7 @@ export function ProjectContactPicker(props: ProjectContactPickerProps) {
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Search */}
           <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <MagnifyingGlassIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               className="pl-8"
               placeholder={mode === "pick-project" ? "Search projects…" : "Search contacts…"}
@@ -258,7 +258,7 @@ export function ProjectContactPicker(props: ProjectContactPickerProps) {
           <div className="border rounded-md max-h-48 overflow-y-auto">
             {loading ? (
               <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                <CircleNotchIcon className="h-4 w-4 animate-spin text-muted-foreground" />
               </div>
             ) : mode === "pick-project" ? (
               filteredProjects.length === 0 ? (
@@ -336,7 +336,7 @@ export function ProjectContactPicker(props: ProjectContactPickerProps) {
               Cancel
             </Button>
             <Button type="submit" disabled={saving || !canSubmit}>
-              {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {saving && <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />}
               Add
             </Button>
           </DialogFooter>

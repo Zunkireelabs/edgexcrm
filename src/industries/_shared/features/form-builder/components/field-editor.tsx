@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, Trash2, ChevronRight } from "lucide-react";
+import { PlusIcon, TrashIcon, CaretRightIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -159,7 +159,7 @@ export function FieldEditor({ field, open, onClose, onSave }: FieldEditorProps) 
             className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
             onClick={() => setShowAdvanced(!showAdvanced)}
           >
-            <ChevronRight className={`h-3.5 w-3.5 transition-transform ${showAdvanced ? "rotate-90" : ""}`} />
+            <CaretRightIcon className={`h-3.5 w-3.5 transition-transform ${showAdvanced ? "rotate-90" : ""}`} />
             Advanced settings
           </button>
 
@@ -228,7 +228,7 @@ export function FieldEditor({ field, open, onClose, onSave }: FieldEditorProps) 
                   <Label>Options</Label>
                   {!RESERVED_FIELD_NAMES.has(draft.name) && (
                     <Button variant="outline" size="sm" onClick={addOption}>
-                      <Plus className="h-3.5 w-3.5 mr-1" /> Add
+                      <PlusIcon className="h-3.5 w-3.5 mr-1" /> Add
                     </Button>
                   )}
                 </div>
@@ -262,7 +262,7 @@ export function FieldEditor({ field, open, onClose, onSave }: FieldEditorProps) 
                           className="h-8 w-8 text-destructive shrink-0"
                           onClick={() => removeOption(i)}
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
+                          <TrashIcon className="h-3.5 w-3.5" />
                         </Button>
                       )}
                     </div>

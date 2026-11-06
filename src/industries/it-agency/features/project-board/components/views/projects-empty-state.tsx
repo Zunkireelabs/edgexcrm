@@ -1,6 +1,6 @@
 "use client";
 
-import { LayoutGrid, Plus } from "lucide-react";
+import { SquaresFourIcon, PlusIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 
 interface ProjectsEmptyStateProps {
@@ -21,7 +21,7 @@ export function ProjectsEmptyState({
     // Zero after filtering — never show a create CTA here.
     return (
       <div className="flex flex-col items-center justify-center py-16 gap-2 text-center">
-        <LayoutGrid className="h-8 w-8 text-muted-foreground/40" />
+        <SquaresFourIcon className="h-8 w-8 text-muted-foreground/40" />
         <p className="text-sm text-muted-foreground">No projects match these filters.</p>
         <button
           type="button"
@@ -36,13 +36,13 @@ export function ProjectsEmptyState({
 
   return (
     <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
-      <LayoutGrid className="h-8 w-8 text-muted-foreground/40" />
+      <SquaresFourIcon className="h-8 w-8 text-muted-foreground/40" />
       <p className="text-sm text-muted-foreground max-w-xs">
         No projects yet. Create your first project to start tracking delivery.
       </p>
       {canCreate ? (
         <Button size="sm" onClick={onNewProject}>
-          <Plus className="h-3.5 w-3.5 mr-1.5" />
+          <PlusIcon className="h-3.5 w-3.5 mr-1.5" />
           New project
         </Button>
       ) : (

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import type { LucideIcon } from "lucide-react";
+import type { Icon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,7 +21,13 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Pencil, Trash2, Plus, ToggleLeft, ToggleRight } from "lucide-react";
+import {
+  PencilSimpleIcon,
+  TrashIcon,
+  PlusIcon,
+  ToggleLeftIcon,
+  ToggleRightIcon,
+} from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 interface LookupRow {
@@ -45,7 +51,7 @@ export interface LookupTableManagerProps {
   id: string;
   /** Card title, e.g. "Destination Countries". */
   title: string;
-  icon: LucideIcon;
+  icon: Icon;
   /** e.g. "/api/v1/countries" — GET/POST at this path, PATCH/DELETE at `${apiPath}/${id}`. */
   apiPath: string;
   /** Singular item name, e.g. "Country" — used in "Add Country", dialog titles, delete confirm. */
@@ -200,7 +206,7 @@ export function LookupTableManager({
             </CardDescription>
           </div>
           <Button size="sm" onClick={openCreate}>
-            <Plus className="h-4 w-4 mr-1" />
+            <PlusIcon className="h-4 w-4 mr-1" />
             Add {itemLabel}
           </Button>
         </CardHeader>
@@ -233,8 +239,8 @@ export function LookupTableManager({
                     onClick={() => handleToggleActive(item)}
                   >
                     {item.is_active
-                      ? <ToggleRight className="h-4 w-4 text-green-600" />
-                      : <ToggleLeft className="h-4 w-4" />
+                      ? <ToggleRightIcon className="h-4 w-4 text-green-600" />
+                      : <ToggleLeftIcon className="h-4 w-4" />
                     }
                   </Button>
                   <Button
@@ -243,7 +249,7 @@ export function LookupTableManager({
                     className="h-8 w-8"
                     onClick={() => openEdit(item)}
                   >
-                    <Pencil className="h-3.5 w-3.5" />
+                    <PencilSimpleIcon className="h-3.5 w-3.5" />
                   </Button>
                   <Button
                     variant="ghost"
@@ -251,7 +257,7 @@ export function LookupTableManager({
                     className="h-8 w-8 text-muted-foreground hover:text-destructive"
                     onClick={() => handleDelete(item)}
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
+                    <TrashIcon className="h-3.5 w-3.5" />
                   </Button>
                 </div>
               </div>

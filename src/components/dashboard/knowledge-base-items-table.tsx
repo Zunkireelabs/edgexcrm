@@ -1,7 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { FileText, Link as LinkIcon, StickyNote, Download, MoreHorizontal, Pencil, Trash2, ExternalLink } from "lucide-react";
+import {
+  FileTextIcon,
+  LinkIcon,
+  NoteIcon,
+  DownloadIcon,
+  DotsThreeIcon,
+  PencilSimpleIcon,
+  TrashIcon,
+  ArrowSquareOutIcon,
+} from "@phosphor-icons/react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AiWrittenBadge } from "@/components/dashboard/ai-written-badge";
@@ -52,7 +61,7 @@ interface KnowledgeBaseItemsTableProps {
 function TypeBadge({ type }: { type: string }) {
   if (type === "file") return (
     <Badge variant="secondary" className="gap-1">
-      <FileText className="w-3 h-3" />
+      <FileTextIcon className="w-3 h-3" />
       File
     </Badge>
   );
@@ -64,7 +73,7 @@ function TypeBadge({ type }: { type: string }) {
   );
   return (
     <Badge variant="outline" className="gap-1">
-      <StickyNote className="w-3 h-3" />
+      <NoteIcon className="w-3 h-3" />
       Note
     </Badge>
   );
@@ -186,7 +195,7 @@ export function KnowledgeBaseItemsTable({
                         className="text-muted-foreground hover:text-primary transition-colors"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <ExternalLink className="w-3 h-3" />
+                        <ArrowSquareOutIcon className="w-3 h-3" />
                       </a>
                     )}
                   </div>
@@ -215,26 +224,26 @@ export function KnowledgeBaseItemsTable({
                         onClick={() => handleDownload(item)}
                         title="Download"
                       >
-                        <Download className="w-3.5 h-3.5" />
+                        <DownloadIcon className="w-3.5 h-3.5" />
                       </Button>
                     )}
                     {isAdmin && (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon" className="h-7 w-7">
-                            <MoreHorizontal className="w-3.5 h-3.5" />
+                            <DotsThreeIcon className="w-3.5 h-3.5" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={() => openEdit(item)}>
-                            <Pencil className="w-4 h-4 mr-2" />
+                            <PencilSimpleIcon className="w-4 h-4 mr-2" />
                             Edit
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             className="text-destructive focus:text-destructive"
                             onClick={() => handleDelete(item)}
                           >
-                            <Trash2 className="w-4 h-4 mr-2" />
+                            <TrashIcon className="w-4 h-4 mr-2" />
                             Delete
                           </DropdownMenuItem>
                         </DropdownMenuContent>

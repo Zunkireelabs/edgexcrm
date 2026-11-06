@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { CircleNotchIcon } from "@phosphor-icons/react";
 import { getToolName, type ToolUIPart, type DynamicToolUIPart, type UITools } from "ai";
 import { Button } from "@/components/ui/button";
 import {
@@ -135,7 +135,7 @@ export function ApprovalCard({ part, onApprove, onDeny }: ApprovalCardProps) {
         <div className="flex items-center gap-1.5 text-xs text-amber-700 pt-1">
           {approved ? (
             <>
-              <Loader2 className="w-3 h-3 animate-spin" />
+              <CircleNotchIcon className="w-3 h-3 animate-spin" />
               <span>Approved — running…</span>
             </>
           ) : (

@@ -14,7 +14,7 @@ import {
   useDraggable,
   closestCorners,
 } from "@dnd-kit/core";
-import { ExternalLink, Plus, X } from "lucide-react";
+import { ArrowSquareOutIcon, PlusIcon, XIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { AddInvestorDialog } from "./add-investor-dialog";
@@ -95,7 +95,7 @@ function CommitmentCard({
             className="text-muted-foreground hover:text-foreground"
             title="Open investor"
           >
-            <ExternalLink className="h-3.5 w-3.5" />
+            <ArrowSquareOutIcon className="h-3.5 w-3.5" />
           </Link>
           {canManage && (
             <button
@@ -105,7 +105,7 @@ function CommitmentCard({
               className="text-muted-foreground hover:text-destructive"
               title="Remove from raise"
             >
-              <X className="h-3.5 w-3.5" />
+              <XIcon className="h-3.5 w-3.5" />
             </button>
           )}
         </div>
@@ -289,7 +289,7 @@ export function RaiseFunnelBoard({ offeringId, commitments, currency, targetRais
         </div>
         {canManage && (
           <Button onClick={() => setAddOpen(true)} variant="outline">
-            <Plus className="h-4 w-4 mr-2" />
+            <PlusIcon className="h-4 w-4 mr-2" />
             Add Investor
           </Button>
         )}

@@ -2,7 +2,13 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Library, MoreHorizontal, FileText, Pencil, Trash2 } from "lucide-react";
+import {
+  BooksIcon,
+  DotsThreeIcon,
+  FileTextIcon,
+  PencilSimpleIcon,
+  TrashIcon,
+} from "@phosphor-icons/react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -93,7 +99,7 @@ export function KnowledgeBaseCard({ kb, isAdmin, onDeleted, onRenamed }: Knowled
       >
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
-            <Library className="w-4 h-4 text-muted-foreground shrink-0" />
+            <BooksIcon className="w-4 h-4 text-muted-foreground shrink-0" />
             <h3 className="font-medium text-sm truncate">{kb.name}</h3>
           </div>
           {isAdmin && (
@@ -103,7 +109,7 @@ export function KnowledgeBaseCard({ kb, isAdmin, onDeleted, onRenamed }: Knowled
                   className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-gray-100 transition-all"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
+                  <DotsThreeIcon className="w-4 h-4 text-muted-foreground" />
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
@@ -114,14 +120,14 @@ export function KnowledgeBaseCard({ kb, isAdmin, onDeleted, onRenamed }: Knowled
                     setRenameOpen(true);
                   }}
                 >
-                  <Pencil className="w-4 h-4 mr-2" />
+                  <PencilSimpleIcon className="w-4 h-4 mr-2" />
                   Rename
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   className="text-destructive focus:text-destructive"
                   onClick={() => setDeleteOpen(true)}
                 >
-                  <Trash2 className="w-4 h-4 mr-2" />
+                  <TrashIcon className="w-4 h-4 mr-2" />
                   Delete
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -133,7 +139,7 @@ export function KnowledgeBaseCard({ kb, isAdmin, onDeleted, onRenamed }: Knowled
         )}
         <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
           <span className="flex items-center gap-1">
-            <FileText className="w-3 h-3" />
+            <FileTextIcon className="w-3 h-3" />
             {kb.item_count} {kb.item_count === 1 ? "item" : "items"}
           </span>
           {kb.total_size_bytes > 0 && <span>{formatBytes(kb.total_size_bytes)}</span>}

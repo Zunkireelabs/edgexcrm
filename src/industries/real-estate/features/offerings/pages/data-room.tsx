@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { FolderOpen, ChevronRight } from "lucide-react";
+import { FolderOpenIcon, CaretRightIcon } from "@phosphor-icons/react";
 import { Badge } from "@/components/ui/badge";
 import { type Offering, type OfferingStatus } from "@/industries/real-estate/lib/commitments";
 
@@ -54,7 +54,7 @@ export function DataRoomWorkspace() {
         </div>
       ) : offerings.length === 0 ? (
         <div className="border rounded-xl p-12 flex flex-col items-center justify-center text-center text-muted-foreground">
-          <FolderOpen className="h-8 w-8 mb-3 opacity-50" />
+          <FolderOpenIcon className="h-8 w-8 mb-3 opacity-50" />
           <p className="font-medium">No offerings yet</p>
           <p className="text-sm mt-1">Create an offering to start building its data room.</p>
         </div>
@@ -67,7 +67,7 @@ export function DataRoomWorkspace() {
                 prefetch={false}
                 className="flex items-center gap-3 bg-card border rounded-xl p-4 hover:border-primary/40 hover:shadow-sm transition-colors"
               >
-                <FolderOpen className="h-5 w-5 text-muted-foreground shrink-0" />
+                <FolderOpenIcon className="h-5 w-5 text-muted-foreground shrink-0" />
                 <div className="min-w-0 flex-1">
                   <p className="font-medium truncate">{o.name}</p>
                   <p className="text-xs text-muted-foreground truncate">
@@ -75,7 +75,7 @@ export function DataRoomWorkspace() {
                   </p>
                 </div>
                 <Badge className={`shrink-0 capitalize ${STATUS_STYLES[o.status]}`}>{o.status}</Badge>
-                <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                <CaretRightIcon className="h-4 w-4 text-muted-foreground shrink-0" />
               </Link>
             </li>
           ))}

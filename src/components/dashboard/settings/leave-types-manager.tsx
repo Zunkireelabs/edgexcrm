@@ -11,7 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { CalendarClock, Plus, Trash2 } from "lucide-react";
+import { CalendarDotsIcon, PlusIcon, TrashIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 interface LeaveType {
@@ -112,7 +112,7 @@ export function LeaveTypesManager() {
       <Card>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
-            <CalendarClock className="h-5 w-5" />
+            <CalendarDotsIcon className="h-5 w-5" />
             Leave Types
           </CardTitle>
         </CardHeader>
@@ -127,7 +127,7 @@ export function LeaveTypesManager() {
     <Card>
       <CardHeader>
         <CardTitle className="text-lg flex items-center gap-2">
-          <CalendarClock className="h-5 w-5" />
+          <CalendarDotsIcon className="h-5 w-5" />
           Leave Types
         </CardTitle>
         <CardDescription>
@@ -188,7 +188,7 @@ export function LeaveTypesManager() {
                   onClick={() => deactivateType(t.id, t.name)}
                   title="Deactivate"
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
+                  <TrashIcon className="h-3.5 w-3.5" />
                 </Button>
               </div>
             ))}
@@ -210,7 +210,7 @@ export function LeaveTypesManager() {
             className="w-24"
           />
           <Button onClick={createType} disabled={creating || !createName.trim()} size="sm">
-            <Plus className="h-4 w-4 mr-1" />
+            <PlusIcon className="h-4 w-4 mr-1" />
             {creating ? "Adding…" : "Add"}
           </Button>
         </div>

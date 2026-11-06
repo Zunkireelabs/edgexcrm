@@ -5,7 +5,7 @@
 // This is popover CONTENT (rendered inside AddFilterButton's Popover), not a
 // second nested trigger — matches reference screenshot 1.
 
-import { ChevronRight } from "lucide-react";
+import { CaretRightIcon } from "@phosphor-icons/react";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import type { FieldDef } from "@/lib/filters/types";
@@ -78,7 +78,7 @@ export function FilterFieldPicker({ fields, onSelect, hierarchicalGroups, onSele
               {groups.orgLists.length > 0 && (
                 <Collapsible>
                   <CollapsibleTrigger className="flex w-full items-center gap-1 px-2 py-1 text-xs font-medium text-foreground [&[data-state=open]>svg]:rotate-90">
-                    <ChevronRight className="size-3 shrink-0 transition-transform" />
+                    <CaretRightIcon className="size-3 shrink-0 transition-transform" />
                     Leads Organize
                   </CollapsibleTrigger>
                   <CollapsibleContent className="pl-4">
@@ -98,7 +98,7 @@ export function FilterFieldPicker({ fields, onSelect, hierarchicalGroups, onSele
               {groups.stages.length > 0 && (
                 <Collapsible>
                   <CollapsibleTrigger className="flex w-full items-center gap-1 px-2 py-1 text-xs font-medium text-foreground [&[data-state=open]>svg]:rotate-90">
-                    <ChevronRight className="size-3 shrink-0 transition-transform" />
+                    <CaretRightIcon className="size-3 shrink-0 transition-transform" />
                     Stage
                   </CollapsibleTrigger>
                   <CollapsibleContent className="pl-4">
@@ -114,7 +114,7 @@ export function FilterFieldPicker({ fields, onSelect, hierarchicalGroups, onSele
                           </CommandItem>
                           {stage.statusOptions.length > 0 && (
                             <CollapsibleTrigger className="px-1 py-1 text-muted-foreground [&[data-state=open]>svg]:rotate-90">
-                              <ChevronRight className="size-3 transition-transform" />
+                              <CaretRightIcon className="size-3 transition-transform" />
                             </CollapsibleTrigger>
                           )}
                         </div>

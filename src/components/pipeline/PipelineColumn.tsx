@@ -8,7 +8,7 @@ import {
 } from "@dnd-kit/sortable";
 import type { PipelineLead, PipelineStage } from "@/types/database";
 import { LeadCard } from "./LeadCard";
-import { Inbox, Loader2 } from "lucide-react";
+import { TrayIcon, CircleNotchIcon } from "@phosphor-icons/react";
 
 interface PipelineColumnProps {
   stage: PipelineStage;
@@ -125,7 +125,7 @@ export function PipelineColumn({
             /* Empty State */
             <div className="flex flex-col items-center justify-center h-32 text-center px-4">
               <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center mb-2">
-                <Inbox className="h-5 w-5 text-muted-foreground" />
+                <TrayIcon className="h-5 w-5 text-muted-foreground" />
               </div>
               <p className="text-sm text-muted-foreground font-medium">No leads</p>
               <p className="text-xs text-muted-foreground/70 mt-0.5">
@@ -139,7 +139,7 @@ export function PipelineColumn({
           /* Visible loading row — distinct from the button's own inline spinner, so an
              auto-triggered (sentinel) load is visible even though no button was clicked. */
           <div className="flex items-center justify-center gap-1.5 h-10 rounded-lg border border-dashed border-gray-200 text-xs text-muted-foreground">
-            <Loader2 className="h-3 w-3 animate-spin" />
+            <CircleNotchIcon className="h-3 w-3 animate-spin" />
             Loading more…
           </div>
         )}

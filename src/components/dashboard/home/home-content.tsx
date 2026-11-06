@@ -12,7 +12,7 @@ import { MyLeadsCard } from "./my-leads-card";
 import { InboxSnapshotCard } from "./inbox-snapshot-card";
 import { RecentActivityCard } from "./recent-activity-card";
 import { DayGlanceRail } from "./day-glance-rail";
-import { LayoutGrid, Grip } from "lucide-react";
+import { SquaresFourIcon, DotsSixIcon } from "@phosphor-icons/react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -186,8 +186,8 @@ export function HomeContent({
                 className="group flex-none rounded-[8px] gap-1.5 hover:bg-muted data-[state=active]:bg-sidebar! data-[state=active]:shadow-none data-[state=active]:after:opacity-0!"
               >
                 <span className="relative inline-flex h-3.5 w-3.5 shrink-0">
-                  <LayoutGrid className="absolute inset-0 h-3.5 w-3.5 transition-opacity group-hover:opacity-0" />
-                  <Grip className="absolute inset-0 h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-100" />
+                  <SquaresFourIcon className="absolute inset-0 h-3.5 w-3.5 transition-opacity group-hover:opacity-0" />
+                  <DotsSixIcon className="absolute inset-0 h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-100" />
                 </span>
                 {label}
               </TabsTrigger>

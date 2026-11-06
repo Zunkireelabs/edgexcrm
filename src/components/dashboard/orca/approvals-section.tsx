@@ -4,7 +4,13 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Bot, CheckCircle2, XCircle, ShieldAlert, ArrowRight } from "lucide-react";
+import {
+  RobotIcon,
+  CheckCircleIcon,
+  XCircleIcon,
+  ShieldWarningIcon,
+  ArrowRightIcon,
+} from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { AgentApprovalItem } from "@/lib/ai/agents/queries";
@@ -61,7 +67,7 @@ function ApprovalCard({
       <div className="flex items-start justify-between gap-3 mb-3">
         <div>
           <div className="flex items-center gap-2">
-            <Bot className="w-4 h-4 text-gray-400" />
+            <RobotIcon className="w-4 h-4 text-gray-400" />
             <span className="text-sm font-medium text-gray-900">{item.agentName}</span>
           </div>
           <p className="mt-1 text-sm font-semibold text-gray-900">{approvalActionLabel(item.toolId)}</p>
@@ -109,11 +115,11 @@ function ApprovalCard({
 
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-3 border-t border-gray-100">
         <Button size="sm" className="w-full sm:w-auto" disabled={pending} onClick={() => onDecide("approve")}>
-          <CheckCircle2 className="w-4 h-4" />
+          <CheckCircleIcon className="w-4 h-4" />
           Approve
         </Button>
         <Button size="sm" variant="outline" className="w-full sm:w-auto" disabled={pending} onClick={() => onDecide("reject")}>
-          <XCircle className="w-4 h-4" />
+          <XCircleIcon className="w-4 h-4" />
           Reject
         </Button>
       </div>
@@ -202,7 +208,7 @@ export function ApprovalsSection({ items: initialItems }: ApprovalsSectionProps)
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-amber-500 rounded-lg">
-            <ShieldAlert className="w-5 h-5 text-white" />
+            <ShieldWarningIcon className="w-5 h-5 text-white" />
           </div>
           <div>
             <h2 className="text-base font-bold text-gray-900">Actions awaiting your approval</h2>
@@ -215,7 +221,7 @@ export function ApprovalsSection({ items: initialItems }: ApprovalsSectionProps)
           className="inline-flex items-center gap-1 text-xs text-[#eb1600] hover:underline whitespace-nowrap"
         >
           See actions already taken
-          <ArrowRight className="w-3 h-3" />
+          <ArrowRightIcon className="w-3 h-3" />
         </Link>
       </div>
       <div className="space-y-3">

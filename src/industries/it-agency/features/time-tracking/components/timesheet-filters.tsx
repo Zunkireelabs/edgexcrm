@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Download } from "lucide-react";
+import { DownloadIcon } from "@phosphor-icons/react";
 import { toLocalDateString } from "@/lib/date";
 
 export interface TimesheetFilterValues {
@@ -122,7 +122,7 @@ export function TimesheetFilters({
         </div>
         <div className="flex-1" />
         <button type="button" className={SECONDARY_BUTTON} onClick={onExport}>
-          <Download className="h-3.5 w-3.5 mr-1.5" />
+          <DownloadIcon className="h-3.5 w-3.5 mr-1.5" />
           Export CSV
         </button>
       </div>

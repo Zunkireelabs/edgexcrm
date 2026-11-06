@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertTriangle, Loader2 } from "lucide-react";
+import { WarningIcon, CircleNotchIcon } from "@phosphor-icons/react";
 import {
   Dialog,
   DialogContent,
@@ -212,7 +212,7 @@ export function BulkDraftDialog({
 
           {action !== "skip" && sandbox && (
             <p className="flex items-start gap-1.5 rounded bg-amber-50 px-2 py-1.5 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <WarningIcon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <span>Sandbox is on: these go to the configured test {isSms ? "number" : "address"}, not to the leads.</span>
             </p>
           )}
@@ -234,7 +234,7 @@ export function BulkDraftDialog({
 
           {running && action === "skip" && (
             <p className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" /> Skipped {progress.toLocaleString()} of{" "}
+              <CircleNotchIcon className="h-4 w-4 animate-spin" /> Skipped {progress.toLocaleString()} of{" "}
               {count.toLocaleString()}…
             </p>
           )}
@@ -250,7 +250,7 @@ export function BulkDraftDialog({
             disabled={running || !confirmed || (action === "schedule" && !sendAt)}
             variant={action === "skip" ? "destructive" : "default"}
           >
-            {running && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+            {running && <CircleNotchIcon className="mr-1.5 h-4 w-4 animate-spin" />}
             {action === "send" ? "Send now" : action === "schedule" ? "Schedule" : "Skip them"}
           </Button>
         </DialogFooter>

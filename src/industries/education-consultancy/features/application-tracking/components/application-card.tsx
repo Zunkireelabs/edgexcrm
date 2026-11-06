@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Calendar, Clock, MapPin, User } from "lucide-react";
+import { CalendarIcon, ClockIcon, MapPinIcon, UserIcon } from "@phosphor-icons/react";
 import type { Application } from "@/types/database";
 import { normalizeDestinations } from "@/lib/leads/destination-normalize";
 
@@ -128,7 +128,7 @@ export function ApplicationCard({ application, disabled, onOpenDetail, assigneeN
       {/* Application details */}
       <div className="space-y-1 mb-3">
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <User className="h-3 w-3 shrink-0" />
+          <UserIcon className="h-3 w-3 shrink-0" />
           <Link
             href={`/leads/${leadId}`}
             prefetch={false}
@@ -140,19 +140,19 @@ export function ApplicationCard({ application, disabled, onOpenDetail, assigneeN
         </div>
         {application.intake_term && (
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Calendar className="h-3 w-3 shrink-0" />
+            <CalendarIcon className="h-3 w-3 shrink-0" />
             <span className="truncate">{application.intake_term}</span>
           </div>
         )}
         {application.countries && application.countries.length > 0 && (
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <MapPin className="h-3 w-3 shrink-0" />
+            <MapPinIcon className="h-3 w-3 shrink-0" />
             <span className="truncate">{normalizeDestinations(application.countries).join(", ")}</span>
           </div>
         )}
         {application.application_deadline && (
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Calendar className="h-3 w-3 shrink-0" />
+            <CalendarIcon className="h-3 w-3 shrink-0" />
             <span>{formatDate(application.application_deadline)}</span>
           </div>
         )}
@@ -177,7 +177,7 @@ export function ApplicationCard({ application, disabled, onOpenDetail, assigneeN
           className={`flex items-center gap-1 px-2 py-1 rounded-full font-medium ${urgencyStyles.bg} ${urgencyStyles.text}`}
           title={`Stage changed ${new Date(application.stage_changed_at).toLocaleString()}`}
         >
-          <Clock className="h-3 w-3" />
+          <ClockIcon className="h-3 w-3" />
           <span>{days === 0 ? "Today" : `${days}d`}</span>
         </div>
 
@@ -193,7 +193,7 @@ export function ApplicationCard({ application, disabled, onOpenDetail, assigneeN
               application.assigned_to ? `${avatarColors.bg} ${avatarColors.text}` : "bg-muted border border-border"
             }`}
           >
-            {application.assigned_to ? getInitials(student.first, student.last) : <User className="h-3 w-3 text-muted-foreground" />}
+            {application.assigned_to ? getInitials(student.first, student.last) : <UserIcon className="h-3 w-3 text-muted-foreground" />}
           </div>
         </div>
       </div>

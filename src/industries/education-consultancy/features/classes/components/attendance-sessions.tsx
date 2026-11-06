@@ -2,7 +2,13 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "sonner";
-import { Loader2, ChevronDown, ChevronRight, Check, X } from "lucide-react";
+import {
+  CircleNotchIcon,
+  CaretDownIcon,
+  CaretRightIcon,
+  CheckIcon,
+  XIcon,
+} from "@phosphor-icons/react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
@@ -91,7 +97,7 @@ export function AttendanceSessions({ classId, className }: { classId: string; cl
       <div className="flex-1 min-w-0 overflow-y-auto">
         {loading ? (
           <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            <CircleNotchIcon className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
         ) : sortedDates.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-8">
@@ -110,7 +116,7 @@ export function AttendanceSessions({ classId, className }: { classId: string; cl
                     className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-muted/30 transition-colors"
                   >
                     <span className="flex items-center gap-2 text-sm font-medium">
-                      {isOpen ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
+                      {isOpen ? <CaretDownIcon className="h-3.5 w-3.5 text-muted-foreground" /> : <CaretRightIcon className="h-3.5 w-3.5 text-muted-foreground" />}
                       {longDate(d)}
                     </span>
                     <span className="text-xs text-muted-foreground">
@@ -127,7 +133,7 @@ export function AttendanceSessions({ classId, className }: { classId: string; cl
                           <ul className="space-y-1">
                             {present.map((name) => (
                               <li key={name} className="flex items-center gap-1.5 text-sm">
-                                <Check className="h-3 w-3 text-green-600 shrink-0" />
+                                <CheckIcon className="h-3 w-3 text-green-600 shrink-0" />
                                 {name}
                               </li>
                             ))}
@@ -142,7 +148,7 @@ export function AttendanceSessions({ classId, className }: { classId: string; cl
                           <ul className="space-y-1">
                             {absent.map((name) => (
                               <li key={name} className={cn("flex items-center gap-1.5 text-sm")}>
-                                <X className="h-3 w-3 text-red-600 shrink-0" />
+                                <XIcon className="h-3 w-3 text-red-600 shrink-0" />
                                 {name}
                               </li>
                             ))}

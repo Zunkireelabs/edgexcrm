@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus } from "lucide-react";
+import { PlusIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { DashboardBuilderDialog } from "../components/dashboard-builder-dialog";
 
@@ -35,7 +35,7 @@ export function DashboardsEmpty({
     <div className="flex flex-col items-center justify-center py-16 text-center">
       <p className="text-gray-500 mb-4">No dashboards yet — create one to get started.</p>
       <Button onClick={() => setDialogOpen(true)}>
-        <Plus className="h-4 w-4 mr-1.5" />
+        <PlusIcon className="h-4 w-4 mr-1.5" />
         New Dashboard
       </Button>
       <DashboardBuilderDialog

@@ -34,19 +34,19 @@ import {
 import { FilterMenu, FilterChips, type FilterDef } from "@/components/ui/filter-menu";
 import { TOOLBAR_BTN, TOOLBAR_PRIMARY_BTN, TOOLBAR_SEARCH_INPUT } from "@/components/dashboard/leads/toolbar-btn";
 import {
-  Search,
-  Users2,
-  Globe,
-  ArrowUpDown,
-  Download,
-  Calendar,
-  Plus,
-  Briefcase,
-  Tag,
-  UserPlus,
-  LayoutList,
-  Settings2,
-} from "lucide-react";
+  MagnifyingGlassIcon,
+  UsersIcon,
+  GlobeIcon,
+  ArrowsDownUpIcon,
+  DownloadIcon,
+  CalendarIcon,
+  PlusIcon,
+  BriefcaseIcon,
+  TagIcon,
+  UserPlusIcon,
+  RowsIcon,
+  SlidersHorizontalIcon,
+} from "@phosphor-icons/react";
 import { PROSPECT_INDUSTRIES } from "@/industries/it-agency/leads/prospect-industries";
 import {
   Popover,
@@ -593,7 +593,7 @@ export function KanbanBoard({
           {
             id: "source",
             label: "Source",
-            icon: <Globe className="h-3.5 w-3.5" />,
+            icon: <GlobeIcon className="h-3.5 w-3.5" />,
             multiple: true,
             value: sourceFilter,
             onChange: setSourceFilter,
@@ -610,7 +610,7 @@ export function KanbanBoard({
           {
             id: "counselor",
             label: "Assigned To",
-            icon: <Users2 className="h-3.5 w-3.5" />,
+            icon: <UsersIcon className="h-3.5 w-3.5" />,
             multiple: true,
             value: counselorFilter,
             onChange: setCounselorFilter,
@@ -639,7 +639,7 @@ export function KanbanBoard({
           {
             id: "collaborator",
             label: "Collaborators",
-            icon: <UserPlus className="h-3.5 w-3.5" />,
+            icon: <UserPlusIcon className="h-3.5 w-3.5" />,
             multiple: true,
             value: collaboratorFilter,
             onChange: setCollaboratorFilter,
@@ -668,7 +668,7 @@ export function KanbanBoard({
           {
             id: "tag",
             label: "Tag",
-            icon: <Tag className="h-3.5 w-3.5" />,
+            icon: <TagIcon className="h-3.5 w-3.5" />,
             value: tagFilter,
             onChange: setTagFilter,
             options: [
@@ -683,7 +683,7 @@ export function KanbanBoard({
           {
             id: "industry",
             label: "All Industries",
-            icon: <Briefcase className="h-3.5 w-3.5" />,
+            icon: <BriefcaseIcon className="h-3.5 w-3.5" />,
             multiple: false,
             defaultValue: "all",
             value: industryFilter,
@@ -703,7 +703,7 @@ export function KanbanBoard({
     {
       id: "created",
       label: "Date created",
-      icon: <Calendar className="h-3.5 w-3.5" />,
+      icon: <CalendarIcon className="h-3.5 w-3.5" />,
       searchable: false,
       value: createdFilter,
       onChange: setCreatedFilter,
@@ -755,7 +755,7 @@ export function KanbanBoard({
 
           {/* Search */}
           <div className="relative w-60">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
+            <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
             <input
               type="text"
               placeholder="Search leads..."
@@ -771,7 +771,7 @@ export function KanbanBoard({
               onClick={onManageStages}
               className={TOOLBAR_BTN}
             >
-              <Settings2 className="h-3 w-3 shrink-0" />
+              <SlidersHorizontalIcon className="h-3 w-3 shrink-0" />
               <span>{manageStagesLabel}</span>
             </button>
           )}
@@ -781,7 +781,7 @@ export function KanbanBoard({
               href={listViewHref}
               className={TOOLBAR_BTN}
             >
-              <LayoutList className="h-3 w-3 shrink-0" />
+              <RowsIcon className="h-3 w-3 shrink-0" />
               <span>List view</span>
             </a>
           )}
@@ -797,7 +797,7 @@ export function KanbanBoard({
                 type="button"
                 className={TOOLBAR_BTN}
               >
-                <ArrowUpDown className="h-3 w-3 shrink-0" />
+                <ArrowsDownUpIcon className="h-3 w-3 shrink-0" />
                 Sort
               </button>
             </PopoverTrigger>
@@ -855,7 +855,7 @@ export function KanbanBoard({
               className={TOOLBAR_BTN}
               title={exportIsPartial ? `Only the ${totalLoaded.toLocaleString()} currently-loaded leads will be exported, out of ${totalTrue.toLocaleString()} total` : undefined}
             >
-              <Download className="h-3 w-3 shrink-0" />
+              <DownloadIcon className="h-3 w-3 shrink-0" />
               {exportIsPartial
                 ? `Export (${totalLoaded.toLocaleString()} of ${totalTrue.toLocaleString()})`
                 : "Export"}
@@ -869,7 +869,7 @@ export function KanbanBoard({
               onClick={() => setAddLeadOpen(true)}
               className={TOOLBAR_PRIMARY_BTN}
             >
-              <Plus className="h-3 w-3 shrink-0" />
+              <PlusIcon className="h-3 w-3 shrink-0" />
               Add Lead
             </button>
           )}

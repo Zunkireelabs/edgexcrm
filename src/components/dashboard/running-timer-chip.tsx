@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Timer as TimerIcon, Square } from "lucide-react";
+import { TimerIcon, SquareIcon } from "@phosphor-icons/react";
 import { selectPrimaryTimer } from "@/lib/timers/select-timer";
 import { TIMERS_CHANGED_EVENT, notifyTimersChanged } from "@/lib/timers/timer-events";
 
@@ -116,7 +116,7 @@ export function RunningTimerChip() {
         onClick={handleStop}
         className="flex items-center justify-center h-8 w-8 shrink-0 rounded-[8px] border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 disabled:opacity-50 transition-colors"
       >
-        <Square className="w-3.5 h-3.5" />
+        <SquareIcon className="w-3.5 h-3.5" />
       </button>
     </div>
   );

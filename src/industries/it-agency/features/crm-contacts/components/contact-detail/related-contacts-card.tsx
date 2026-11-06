@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users } from "lucide-react";
+import { UsersIcon } from "@phosphor-icons/react";
 
 interface AccountSibling {
   id: string;
@@ -29,7 +29,7 @@ export function RelatedContactsCard({ siblings, accountId, accountName }: Relate
     <Card className="border border-border shadow-none rounded-lg">
       <CardHeader className="pb-2 pt-3 px-4">
         <CardTitle className="text-sm font-medium flex items-center gap-2">
-          <Users className="h-4 w-4 text-muted-foreground" />
+          <UsersIcon className="h-4 w-4 text-muted-foreground" />
           Related Contacts
         </CardTitle>
       </CardHeader>

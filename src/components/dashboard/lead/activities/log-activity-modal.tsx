@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2 } from "lucide-react";
+import { CircleNotchIcon } from "@phosphor-icons/react";
 import {
   Dialog,
   DialogContent,
@@ -223,7 +223,7 @@ export function LogActivityModal({
             Cancel
           </Button>
           <Button onClick={handleSubmit} disabled={isSubmitting}>
-            {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            {isSubmitting && <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />}
             Log Activity
           </Button>
         </div>

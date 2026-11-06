@@ -1,7 +1,12 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Inbox, Send, CalendarClock, SkipForward } from "lucide-react";
+import {
+  TrayIcon,
+  PaperPlaneTiltIcon,
+  CalendarDotsIcon,
+  SkipForwardIcon,
+} from "@phosphor-icons/react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -186,15 +191,15 @@ export function TodayWorklist({ isAdmin, channel }: TodayWorklistProps) {
               {(channel === "sms" ? capability.smsEnabled : capability.enabled) && (
                 <>
                   <Button type="button" size="sm" variant="outline" onClick={() => setBulkAction("send")}>
-                    <Send className="mr-1.5 h-3.5 w-3.5" /> Send now
+                    <PaperPlaneTiltIcon className="mr-1.5 h-3.5 w-3.5" /> Send now
                   </Button>
                   <Button type="button" size="sm" variant="outline" onClick={() => setBulkAction("schedule")}>
-                    <CalendarClock className="mr-1.5 h-3.5 w-3.5" /> Schedule…
+                    <CalendarDotsIcon className="mr-1.5 h-3.5 w-3.5" /> Schedule…
                   </Button>
                 </>
               )}
               <Button type="button" size="sm" variant="outline" onClick={() => setBulkAction("skip")}>
-                <SkipForward className="mr-1.5 h-3.5 w-3.5" /> Skip
+                <SkipForwardIcon className="mr-1.5 h-3.5 w-3.5" /> Skip
               </Button>
               <Button type="button" size="sm" variant="ghost" onClick={clearSelection}>
                 Clear
@@ -224,7 +229,7 @@ export function TodayWorklist({ isAdmin, channel }: TodayWorklistProps) {
       ) : drafts.length === 0 ? (
         <Card className="shadow-none rounded-lg py-0">
           <CardContent className="p-8 text-center">
-            <Inbox className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+            <TrayIcon className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
             <p className="text-muted-foreground">No drafts due. You&apos;re all caught up.</p>
           </CardContent>
         </Card>

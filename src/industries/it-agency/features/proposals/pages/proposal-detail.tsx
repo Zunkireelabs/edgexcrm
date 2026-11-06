@@ -4,7 +4,19 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeft, Loader2, Trash2, Plus, X, Printer, Share2, Copy, Check, GripVertical, Eye } from "lucide-react";
+import {
+  ArrowLeftIcon,
+  CircleNotchIcon,
+  TrashIcon,
+  PlusIcon,
+  XIcon,
+  PrinterIcon,
+  ShareNetworkIcon,
+  CopyIcon,
+  CheckIcon,
+  DotsSixVerticalIcon,
+  EyeIcon,
+} from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -137,7 +149,7 @@ function ShareDialog({
               <div className="flex items-center gap-2">
                 <code className="flex-1 truncate rounded bg-muted px-2 py-1.5 text-xs">{publicUrl}</code>
                 <Button size="icon" variant="outline" className="shrink-0 h-8 w-8" onClick={copyUrl}>
-                  {copied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+                  {copied ? <CheckIcon className="h-3.5 w-3.5 text-green-600" /> : <CopyIcon className="h-3.5 w-3.5" />}
                 </Button>
               </div>
             </div>
@@ -208,7 +220,7 @@ function SortableLineItem({
         {...listeners}
         aria-label="Drag to reorder"
       >
-        <GripVertical className="h-3.5 w-3.5" />
+        <DotsSixVerticalIcon className="h-3.5 w-3.5" />
       </button>
       <div className="min-w-0">
         <p className="font-medium truncate">{line.name}</p>
@@ -238,7 +250,7 @@ function SortableLineItem({
       />
       <p className="text-right font-medium tabular-nums">{formatMoney(line.line_total, currency)}</p>
       <Button variant="ghost" size="sm" className="h-8 w-8 p-0 justify-self-end" onClick={() => onRemove(line.id)}>
-        <X className="h-3.5 w-3.5" />
+        <XIcon className="h-3.5 w-3.5" />
       </Button>
     </div>
   );
@@ -554,7 +566,7 @@ export function ProposalDetailPage({ proposalId, role }: ProposalDetailPageProps
   if (loading) {
     return (
       <div className="flex items-center justify-center h-48">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <CircleNotchIcon className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -570,7 +582,7 @@ export function ProposalDetailPage({ proposalId, role }: ProposalDetailPageProps
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <Button variant="ghost" size="sm" className="-ml-2" onClick={() => router.back()}>
-        <ArrowLeft className="h-4 w-4 mr-1.5" />
+        <ArrowLeftIcon className="h-4 w-4 mr-1.5" />
         Proposals
       </Button>
 
@@ -586,7 +598,7 @@ export function ProposalDetailPage({ proposalId, role }: ProposalDetailPageProps
             </div>
             {isAdmin && viewStats && (
               <p className="text-xs text-muted-foreground flex items-center gap-1">
-                <Eye className="h-3 w-3" />
+                <EyeIcon className="h-3 w-3" />
                 {viewStats.count > 0
                   ? `Viewed ${viewStats.count}× · first ${new Date(viewStats.first_viewed_at!).toLocaleDateString()} · last ${new Date(viewStats.last_viewed_at!).toLocaleDateString()}`
                   : "Not viewed yet"}
@@ -612,29 +624,29 @@ export function ProposalDetailPage({ proposalId, role }: ProposalDetailPageProps
           <div className="flex items-center gap-2 shrink-0">
             {isAdmin && (
               <Button size="sm" variant="outline" onClick={() => setShareOpen(true)}>
-                <Share2 className="h-4 w-4 mr-1" />
+                <ShareNetworkIcon className="h-4 w-4 mr-1" />
                 Share
               </Button>
             )}
             {isAdmin && (
               <Button size="sm" variant="outline" onClick={handleDuplicate} disabled={duplicating}>
                 {duplicating ? (
-                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  <CircleNotchIcon className="h-4 w-4 mr-1 animate-spin" />
                 ) : (
-                  <Copy className="h-4 w-4 mr-1" />
+                  <CopyIcon className="h-4 w-4 mr-1" />
                 )}
                 Duplicate
               </Button>
             )}
             <Button size="sm" variant="outline" asChild>
               <Link href={`/proposals/${proposalId}/view`} target="_blank">
-                <Printer className="h-4 w-4 mr-1" />
+                <PrinterIcon className="h-4 w-4 mr-1" />
                 View / Print
               </Link>
             </Button>
             {isAdmin && (
               <Button size="sm" variant="ghost" onClick={() => setDeleteConfirmOpen(true)} className="text-destructive hover:text-destructive">
-                <Trash2 className="h-4 w-4" />
+                <TrashIcon className="h-4 w-4" />
               </Button>
             )}
           </div>
@@ -679,10 +691,10 @@ export function ProposalDetailPage({ proposalId, role }: ProposalDetailPageProps
                 value=""
                 onChange={(v) => v && addLineFromCatalog(v)}
                 options={serviceOptions}
-                icon={<Plus className="h-3 w-3" />}
+                icon={<PlusIcon className="h-3 w-3" />}
               />
               <Button size="sm" variant="outline" onClick={() => setAddCustomOpen(true)}>
-                <Plus className="h-4 w-4 mr-1" />
+                <PlusIcon className="h-4 w-4 mr-1" />
                 Add custom line
               </Button>
             </div>
@@ -826,7 +838,7 @@ export function ProposalDetailPage({ proposalId, role }: ProposalDetailPageProps
 
       {saving && (
         <div className="fixed bottom-4 right-4 flex items-center gap-2 text-xs text-muted-foreground bg-background border rounded-full px-3 py-1.5 shadow-sm">
-          <Loader2 className="h-3 w-3 animate-spin" />
+          <CircleNotchIcon className="h-3 w-3 animate-spin" />
           Saving…
         </div>
       )}
@@ -912,7 +924,7 @@ export function ProposalDetailPage({ proposalId, role }: ProposalDetailPageProps
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)} disabled={deleting}>Cancel</Button>
             <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
-              {deleting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {deleting && <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />}
               Delete
             </Button>
           </DialogFooter>

@@ -3,7 +3,7 @@
 import { SECTION_TITLE_CLASS } from "@/components/dashboard/lead/section-title";
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { Plus, Loader2, GripVertical } from "lucide-react";
+import { PlusIcon, CircleNotchIcon, DotsSixVerticalIcon } from "@phosphor-icons/react";
 import {
   DndContext,
   closestCenter,
@@ -124,7 +124,7 @@ function SortableApplicationRow({
         {...attributes}
         {...listeners}
       >
-        <GripVertical className="h-4 w-4" />
+        <DotsSixVerticalIcon className="h-4 w-4" />
       </button>
       <ApplicationBody app={app} stages={stages} leadId={leadId} />
     </div>
@@ -247,7 +247,7 @@ export function ApplicationsCard({ leadId, canManage, disabled = false }: Applic
                   aria-disabled={disabled || undefined}
                   disabled={checkingProfile}
                 >
-                  <Plus className="h-3.5 w-3.5" />
+                  <PlusIcon className="h-3.5 w-3.5" />
                 </Button>
               </span>
             )}
@@ -257,7 +257,7 @@ export function ApplicationsCard({ leadId, canManage, disabled = false }: Applic
         <CardContent className="pb-4">
           {loading ? (
             <div className="flex justify-center py-3">
-              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              <CircleNotchIcon className="h-4 w-4 animate-spin text-muted-foreground" />
             </div>
           ) : applications.length === 0 ? (
             <p className="text-xs text-muted-foreground text-center py-2">No applications yet.</p>

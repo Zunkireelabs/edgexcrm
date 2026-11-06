@@ -1,6 +1,6 @@
 "use client";
 
-import { ClipboardList } from "lucide-react";
+import { ClipboardTextIcon } from "@phosphor-icons/react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { NewTaskRow } from "./new-task-row";
 import { TaskRow } from "@/components/dashboard/tasks/task-row";
@@ -59,7 +59,7 @@ export function TasksCard({
       <CardContent className="pt-0 space-y-1">
         {visible.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-6 gap-2 text-center">
-            <ClipboardList className="h-8 w-8 text-muted-foreground/40" />
+            <ClipboardTextIcon className="h-8 w-8 text-muted-foreground/40" />
             <p className="text-sm text-muted-foreground">You have no open tasks.</p>
           </div>
         ) : (

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Mail, Loader2, AlertTriangle } from "lucide-react";
+import { EnvelopeSimpleIcon, CircleNotchIcon, WarningIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatRelativeTime } from "@/lib/format-relative-time";
@@ -92,14 +92,14 @@ export function InboxConnector() {
           disabled={connecting}
           className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg"
         >
-          {connecting && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+          {connecting && <CircleNotchIcon className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
           Connect a Gmail inbox
         </Button>
       </div>
 
       {loading ? (
         <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          <CircleNotchIcon className="h-3.5 w-3.5 animate-spin" />
           Loading…
         </div>
       ) : inboxes.length === 0 ? (
@@ -119,9 +119,9 @@ export function InboxConnector() {
               >
                 <div className="flex items-center gap-2 min-w-0">
                   {broken ? (
-                    <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+                    <WarningIcon className="h-4 w-4 text-amber-600 shrink-0" />
                   ) : (
-                    <Mail className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <EnvelopeSimpleIcon className="h-4 w-4 text-muted-foreground shrink-0" />
                   )}
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5">
@@ -171,7 +171,7 @@ export function InboxConnector() {
                     onClick={() => handleDisconnect(inbox.id)}
                   >
                     {disconnecting === inbox.id && (
-                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                      <CircleNotchIcon className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                     )}
                     Disconnect
                   </Button>

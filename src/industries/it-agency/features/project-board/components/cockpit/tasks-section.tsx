@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, Loader2, CheckSquare } from "lucide-react";
+import { PlusIcon, CircleNotchIcon, CheckSquareIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -101,7 +101,7 @@ export function TasksSection({ projectId }: TasksSectionProps) {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <h2 className="font-semibold flex items-center gap-2">
-          <CheckSquare className="h-4 w-4 text-muted-foreground" />
+          <CheckSquareIcon className="h-4 w-4 text-muted-foreground" />
           Tasks
           {!loading && (
             <span className="text-muted-foreground font-normal text-sm">
@@ -112,7 +112,7 @@ export function TasksSection({ projectId }: TasksSectionProps) {
         </h2>
         {!addingTask && (
           <Button size="sm" onClick={() => setAddingTask(true)}>
-            <Plus className="h-3.5 w-3.5 mr-1.5" />
+            <PlusIcon className="h-3.5 w-3.5 mr-1.5" />
             Add task
           </Button>
         )}
@@ -122,7 +122,7 @@ export function TasksSection({ projectId }: TasksSectionProps) {
         <CardContent className="p-0">
           {loading ? (
             <div className="p-8 flex items-center justify-center">
-              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              <CircleNotchIcon className="h-4 w-4 animate-spin text-muted-foreground" />
             </div>
           ) : tasks.length === 0 && !addingTask ? (
             <div className="p-8 text-center text-muted-foreground text-sm">
@@ -167,7 +167,7 @@ export function TasksSection({ projectId }: TasksSectionProps) {
                     />
                   </div>
                   <Button type="submit" size="sm" disabled={savingTask || !newTaskTitle.trim()}>
-                    {savingTask && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+                    {savingTask && <CircleNotchIcon className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
                     Add
                   </Button>
                   <Button

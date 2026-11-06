@@ -5,7 +5,7 @@
 // the advanced-filter field/operator pickers and multi-select value editors.
 
 import * as React from "react";
-import { Check, ChevronsUpDown } from "lucide-react";
+import { CheckIcon, CaretUpDownIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
@@ -100,7 +100,7 @@ export function Combobox(props: ComboboxProps) {
             )}
           >
             <span className="truncate">{selectedLabel}</span>
-            <ChevronsUpDown className="size-3.5 shrink-0 opacity-50" />
+            <CaretUpDownIcon className="size-3.5 shrink-0 opacity-50" />
           </button>
         )}
       </PopoverTrigger>
@@ -113,7 +113,7 @@ export function Combobox(props: ComboboxProps) {
               <CommandGroup key={group ?? "__ungrouped__"} heading={group}>
                 {opts.map((opt) => (
                   <CommandItem key={opt.value} value={`${opt.label} ${opt.value}`} onSelect={() => handleSelect(opt.value)}>
-                    <Check className={cn("size-3.5", isSelected(opt.value) ? "opacity-100" : "opacity-0")} />
+                    <CheckIcon className={cn("size-3.5", isSelected(opt.value) ? "opacity-100" : "opacity-0")} />
                     <span className="flex-1 truncate">{opt.label}</span>
                   </CommandItem>
                 ))}

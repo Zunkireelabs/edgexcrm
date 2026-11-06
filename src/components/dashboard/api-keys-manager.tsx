@@ -37,7 +37,17 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Plus, Copy, Check, Key, AlertTriangle, Shield, FlaskConical, Loader2, Globe } from "lucide-react";
+import {
+  PlusIcon,
+  CopyIcon,
+  CheckIcon,
+  KeyIcon,
+  WarningIcon,
+  ShieldIcon,
+  FlaskIcon,
+  CircleNotchIcon,
+  GlobeIcon,
+} from "@phosphor-icons/react";
 import { Textarea } from "@/components/ui/textarea";
 
 type ApiKeyScope = "read" | "write" | "admin";
@@ -259,7 +269,7 @@ export function ApiKeysManager({ initialKeys, category, forms }: ApiKeysManagerP
         <div className="flex items-center justify-between">
           <div>
             <CardTitle className="flex items-center gap-2">
-              <Key className="h-5 w-5" />
+              <KeyIcon className="h-5 w-5" />
               {category === "form" ? "Form API Keys" : "API Keys"}
             </CardTitle>
             <CardDescription>
@@ -279,7 +289,7 @@ export function ApiKeysManager({ initialKeys, category, forms }: ApiKeysManagerP
           }}>
             <DialogTrigger asChild>
               <Button size="sm">
-                <Plus className="h-4 w-4 mr-1" />
+                <PlusIcon className="h-4 w-4 mr-1" />
                 Create API Key
               </Button>
             </DialogTrigger>
@@ -366,7 +376,7 @@ export function ApiKeysManager({ initialKeys, category, forms }: ApiKeysManagerP
                       </div>
                     )}
                     <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950">
-                      <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                      <WarningIcon className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
                       <p className="text-sm text-amber-800 dark:text-amber-200">
                         This key will be shown <strong>only once</strong>. Store
                         it securely — it cannot be retrieved later.
@@ -392,7 +402,7 @@ export function ApiKeysManager({ initialKeys, category, forms }: ApiKeysManagerP
                 <>
                   <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
-                      <Shield className="h-5 w-5 text-green-600" />
+                      <ShieldIcon className="h-5 w-5 text-green-600" />
                       API Key Created
                     </DialogTitle>
                     <DialogDescription>
@@ -416,9 +426,9 @@ export function ApiKeysManager({ initialKeys, category, forms }: ApiKeysManagerP
                           className="shrink-0"
                         >
                           {copied ? (
-                            <Check className="h-4 w-4" />
+                            <CheckIcon className="h-4 w-4" />
                           ) : (
-                            <Copy className="h-4 w-4" />
+                            <CopyIcon className="h-4 w-4" />
                           )}
                         </Button>
                       </div>
@@ -484,7 +494,7 @@ export function ApiKeysManager({ initialKeys, category, forms }: ApiKeysManagerP
       <CardContent>
         {filteredKeys.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
-            <Key className="h-8 w-8 mx-auto mb-3 opacity-50" />
+            <KeyIcon className="h-8 w-8 mx-auto mb-3 opacity-50" />
             <p className="text-sm">No API keys yet</p>
             <p className="text-xs mt-1">
               Create a key to connect external services like Orca.
@@ -524,7 +534,7 @@ export function ApiKeysManager({ initialKeys, category, forms }: ApiKeysManagerP
                         )}
                         {key.allowed_origins && key.allowed_origins.length > 0 && (
                           <span className="ml-2 inline-flex items-center gap-0.5 text-xs text-muted-foreground" title={`Origin-restricted: ${key.allowed_origins.join(", ")}`}>
-                            <Globe className="h-3 w-3" />
+                            <GlobeIcon className="h-3 w-3" />
                             {key.allowed_origins.length === 1 ? "1 origin" : `${key.allowed_origins.length} origins`}
                           </span>
                         )}
@@ -564,9 +574,9 @@ export function ApiKeysManager({ initialKeys, category, forms }: ApiKeysManagerP
                               onClick={() => handleTest(key.id)}
                             >
                               {testingId === key.id ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+                                <CircleNotchIcon className="h-3.5 w-3.5 animate-spin mr-1" />
                               ) : (
-                                <FlaskConical className="h-3.5 w-3.5 mr-1" />
+                                <FlaskIcon className="h-3.5 w-3.5 mr-1" />
                               )}
                               Test
                             </Button>

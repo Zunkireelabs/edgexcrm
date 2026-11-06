@@ -6,7 +6,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { ChevronDown, Check } from "lucide-react";
+import { CaretDownIcon, CheckIcon } from "@phosphor-icons/react";
 import type { PipelineStage } from "@/types/database";
 
 interface StageSelectorProps {
@@ -60,7 +60,7 @@ export function StageSelector({
           }
         >
           <span className="whitespace-nowrap">{current?.name ?? "Set stage"}</span>
-          <ChevronDown className="w-3 h-3 shrink-0" />
+          <CaretDownIcon className="w-3 h-3 shrink-0" />
         </button>
       </PopoverTrigger>
 
@@ -75,7 +75,7 @@ export function StageSelector({
             onClick={() => handlePick(stage.id)}
             className="w-full text-left flex items-center gap-2 text-xs px-2 py-1.5 rounded hover:bg-gray-100 transition-colors"
           >
-            <Check
+            <CheckIcon
               className={`w-3 h-3 shrink-0 ${
                 stage.id === currentStageId ? "text-blue-600" : "opacity-0"
               }`}

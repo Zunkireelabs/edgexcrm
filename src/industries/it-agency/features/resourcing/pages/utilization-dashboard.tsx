@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "sonner";
-import { Loader2, Users } from "lucide-react";
+import { CircleNotchIcon, UsersIcon } from "@phosphor-icons/react";
 import { Badge } from "@/components/ui/badge";
 
 interface UtilizationRow {
@@ -58,7 +58,7 @@ export function UtilizationDashboard() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-48">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <CircleNotchIcon className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -69,7 +69,7 @@ export function UtilizationDashboard() {
 
       {rows.length === 0 ? (
         <div className="border rounded-xl p-12 text-center bg-card">
-          <Users className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
+          <UsersIcon className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
           <p className="text-muted-foreground text-sm">No approved billable time entries yet.</p>
         </div>
       ) : (

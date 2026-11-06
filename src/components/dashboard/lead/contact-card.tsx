@@ -3,24 +3,24 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
-  ArrowLeft,
-  Mail,
-  Phone,
-  MapPin,
-  Globe,
-  type LucideIcon,
-  MessageSquare,
-  CheckSquare,
-  MoreHorizontal,
-  MessageCircle,
-  ChevronDown,
-  Pencil,
-  Trash2,
-  UserCheck,
-  Check,
-  X,
-  Loader2,
-} from "lucide-react";
+  ArrowLeftIcon,
+  EnvelopeSimpleIcon,
+  PhoneIcon,
+  MapPinIcon,
+  GlobeIcon,
+  ChatTextIcon,
+  CheckSquareIcon,
+  DotsThreeIcon,
+  ChatCircleIcon,
+  CaretDownIcon,
+  PencilSimpleIcon,
+  TrashIcon,
+  UserCheckIcon,
+  CheckIcon,
+  XIcon,
+  CircleNotchIcon,
+} from "@phosphor-icons/react";
+import type { Icon } from "@phosphor-icons/react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -120,7 +120,7 @@ function LeadTypeBadge({
           className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border border-blue-300 bg-white text-blue-700 hover:bg-blue-50 transition-colors disabled:opacity-50 cursor-pointer"
         >
           {currentLabel}
-          <ChevronDown className="h-3 w-3 opacity-60" />
+          <CaretDownIcon className="h-3 w-3 opacity-60" />
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-40 p-1">
@@ -192,7 +192,7 @@ interface ContactCardProps {
 
 // Small leading icon for each contact line, so email / phone / place read at a glance.
 const CONTACT_ICON_CLASS = "h-3.5 w-3.5 shrink-0 text-muted-foreground";
-const LOCATION_ICONS: Record<string, LucideIcon> = { Nationality: Globe, City: MapPin };
+const LOCATION_ICONS: Record<string, Icon> = { Nationality: GlobeIcon, City: MapPinIcon };
 
 interface QuickActionButtonProps {
   icon: React.ReactNode;
@@ -290,7 +290,7 @@ export function ContactCard({
           <div className="flex items-start justify-between mb-3">
             {onBack ? (
               <Button variant="ghost" size="sm" className="-ml-2 h-8 px-2 gap-1.5" onClick={onBack}>
-                <ArrowLeft className="h-4 w-4" />
+                <ArrowLeftIcon className="h-4 w-4" />
                 {backLabel && <span className="text-xs">{backLabel}</span>}
               </Button>
             ) : <span />}
@@ -298,7 +298,7 @@ export function ContactCard({
                 Save/Cancel replace it (bottom of this card) while editing. */}
             {onEdit && !isEditing && (
               <Button variant="ghost" size="sm" className="-mr-2 h-8 px-2 gap-1.5 text-xs" onClick={onEdit}>
-                <Pencil className="h-3.5 w-3.5" />
+                <PencilSimpleIcon className="h-3.5 w-3.5" />
                 Edit
               </Button>
             )}
@@ -461,7 +461,7 @@ export function ContactCard({
         <div className="space-y-1 mb-3">
           {lead.email && (
             <div className="flex items-center gap-2 group">
-              <Mail className={CONTACT_ICON_CLASS} aria-hidden="true" />
+              <EnvelopeSimpleIcon className={CONTACT_ICON_CLASS} aria-hidden="true" />
               <button
                 type="button"
                 title="Click to copy"
@@ -476,7 +476,7 @@ export function ContactCard({
           {lead.phone && (
             <div className="flex items-center justify-between gap-2 group">
               <span className="flex min-w-0 items-center gap-2">
-                <Phone className={CONTACT_ICON_CLASS} aria-hidden="true" />
+                <PhoneIcon className={CONTACT_ICON_CLASS} aria-hidden="true" />
                 <button
                   type="button"
                   title="Click to copy"
@@ -490,7 +490,7 @@ export function ContactCard({
             </div>
           )}
           {getLeadLocationRows(lead).map((row) => {
-            const RowIcon = LOCATION_ICONS[row.label] ?? MapPin;
+            const RowIcon = LOCATION_ICONS[row.label] ?? MapPinIcon;
             return (
               <p key={row.label} className="flex items-center gap-2 text-sm">
                 <span title={row.label} className="flex shrink-0">
@@ -520,14 +520,14 @@ export function ContactCard({
         {isEditing ? (
           <div className="sticky bottom-0 z-10 -mx-4 -mb-4 flex items-center justify-end gap-2 border-t border-border bg-card px-4 py-3">
             <Button variant="ghost" size="sm" onClick={onCancelEdit} disabled={isSaving}>
-              <X className="h-4 w-4 mr-2" />
+              <XIcon className="h-4 w-4 mr-2" />
               Cancel
             </Button>
             <Button size="sm" onClick={onSave} disabled={isSaving || saveDisabled}>
               {isSaving ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />
               ) : (
-                <Check className="h-4 w-4 mr-2" />
+                <CheckIcon className="h-4 w-4 mr-2" />
               )}
               {isSaving ? "Saving..." : "Save"}
             </Button>
@@ -535,24 +535,24 @@ export function ContactCard({
         ) : (
         <div className="flex items-center justify-between gap-1 pt-4 border-t border-border">
           <QuickActionButton
-            icon={<MessageSquare className="h-4 w-4" />}
+            icon={<ChatTextIcon className="h-4 w-4" />}
             label="Note"
             onClick={onNoteClick}
           />
           <QuickActionButton
-            icon={<Mail className="h-4 w-4" />}
+            icon={<EnvelopeSimpleIcon className="h-4 w-4" />}
             label="Email"
             onClick={handleEmailClick}
             disabled={!lead.email}
           />
           <QuickActionButton
-            icon={<Phone className="h-4 w-4" />}
+            icon={<PhoneIcon className="h-4 w-4" />}
             label="Call"
             onClick={handleCallClick}
             disabled={!lead.phone}
           />
           <QuickActionButton
-            icon={<CheckSquare className="h-4 w-4" />}
+            icon={<CheckSquareIcon className="h-4 w-4" />}
             label="Task"
             onClick={onTaskClick}
           />
@@ -563,7 +563,7 @@ export function ContactCard({
                 className="flex flex-col items-center gap-1 group"
               >
                 <span className="h-9 w-9 rounded-full border border-border flex items-center justify-center text-muted-foreground group-hover:border-foreground group-hover:text-foreground transition-colors">
-                  <MoreHorizontal className="h-4 w-4" />
+                  <DotsThreeIcon className="h-4 w-4" />
                 </span>
                 <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">Action</span>
               </button>
@@ -574,7 +574,7 @@ export function ContactCard({
               </DropdownMenuItem>
               {lead.phone && (
                 <DropdownMenuItem onClick={handleWhatsAppClick}>
-                  <MessageCircle className="h-4 w-4 mr-2" />
+                  <ChatCircleIcon className="h-4 w-4 mr-2" />
                   WhatsApp
                 </DropdownMenuItem>
               )}
@@ -583,13 +583,13 @@ export function ContactCard({
                 convertedContactId ? (
                   <DropdownMenuItem asChild>
                     <Link href={`/contacts/${convertedContactId}`}>
-                      <UserCheck className="h-4 w-4 mr-2" />
+                      <UserCheckIcon className="h-4 w-4 mr-2" />
                       Converted to {convertedContactName ?? "Contact"}
                     </Link>
                   </DropdownMenuItem>
                 ) : (
                   <DropdownMenuItem onClick={onConvertClick}>
-                    <UserCheck className="h-4 w-4 mr-2" />
+                    <UserCheckIcon className="h-4 w-4 mr-2" />
                     Convert to Contact
                   </DropdownMenuItem>
                 )
@@ -600,7 +600,7 @@ export function ContactCard({
                   onClick={onDelete}
                   disabled={deleting}
                 >
-                  <Trash2 className="h-4 w-4 mr-2" />
+                  <TrashIcon className="h-4 w-4 mr-2" />
                   {deleting ? "Deleting..." : "Delete"}
                 </DropdownMenuItem>
               )}

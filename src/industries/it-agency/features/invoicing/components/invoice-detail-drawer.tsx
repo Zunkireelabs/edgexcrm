@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
-import { Loader2, Trash2 } from "lucide-react";
+import { CircleNotchIcon, TrashIcon } from "@phosphor-icons/react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -110,7 +110,7 @@ export function InvoiceDetailDrawer({ invoiceId, open, onOpenChange, onChanged }
       <SheetContent className="sm:max-w-md w-full flex flex-col">
         {loading || !invoice ? (
           <div className="flex items-center justify-center flex-1">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            <CircleNotchIcon className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
         ) : (
           <>
@@ -141,7 +141,7 @@ export function InvoiceDetailDrawer({ invoiceId, open, onOpenChange, onChanged }
                       <span className="text-sm tabular-nums">{formatMoney(line.line_total, invoice.currency)}</span>
                       {invoice.status === "draft" && (
                         <Button variant="ghost" size="sm" onClick={() => handleRemoveLine(line.id)} disabled={busy} title="Remove line">
-                          <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                          <TrashIcon className="h-3.5 w-3.5 text-muted-foreground" />
                         </Button>
                       )}
                     </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Mail } from "lucide-react";
+import { EnvelopeSimpleIcon } from "@phosphor-icons/react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { formatRelativeTime } from "@/lib/format-relative-time";
 import type { EmailSnapshot } from "@/lib/supabase/queries";
@@ -33,7 +33,7 @@ export function EmailSnapshotCard({ snapshot }: EmailSnapshotCardProps) {
       <CardContent className="pt-0">
         {items.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-6 gap-2 text-center">
-            <Mail className="h-8 w-8 text-muted-foreground/40" />
+            <EnvelopeSimpleIcon className="h-8 w-8 text-muted-foreground/40" />
             <p className="text-sm text-muted-foreground">Inbox is clear.</p>
           </div>
         ) : (

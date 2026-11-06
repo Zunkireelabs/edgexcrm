@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { Loader2, X } from "lucide-react";
+import { CircleNotchIcon, XIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -215,7 +215,7 @@ export function TaskCreateDialog({
                           aria-label={`Drop "${line}"`}
                           className="shrink-0 text-muted-foreground hover:text-foreground"
                         >
-                          <X className="h-3.5 w-3.5" />
+                          <XIcon className="h-3.5 w-3.5" />
                         </button>
                       </div>
                     ))
@@ -234,7 +234,7 @@ export function TaskCreateDialog({
                   disabled={!projectId || pasteLines.length === 0 || saving}
                   onClick={handleBulkCreate}
                 >
-                  {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  {saving && <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />}
                   Create {pasteLines.length} task{pasteLines.length === 1 ? "" : "s"}
                 </Button>
               </DialogFooter>
@@ -302,7 +302,7 @@ export function TaskCreateDialog({
                   Cancel
                 </Button>
                 <Button type="submit" disabled={!canSubmit}>
-                  {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  {saving && <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />}
                   Create task
                 </Button>
               </DialogFooter>

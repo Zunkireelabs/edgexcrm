@@ -24,20 +24,20 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  ArrowLeft,
-  Mail,
-  Phone,
-  MapPin,
-  FileDown,
-  Trash2,
-  Send,
-  UserCircle,
-  CheckSquare,
-  Square,
-  Plus,
-  Globe,
-  Megaphone,
-} from "lucide-react";
+  ArrowLeftIcon,
+  EnvelopeSimpleIcon,
+  PhoneIcon,
+  MapPinIcon,
+  FileArrowDownIcon,
+  TrashIcon,
+  PaperPlaneTiltIcon,
+  UserCircleIcon,
+  CheckSquareIcon,
+  SquareIcon,
+  PlusIcon,
+  GlobeIcon,
+  MegaphoneIcon,
+} from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 
@@ -262,7 +262,7 @@ export function LeadDetail({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" onClick={() => router.back()}>
-            <ArrowLeft className="h-4 w-4" />
+            <ArrowLeftIcon className="h-4 w-4" />
           </Button>
           <div>
             <h1 className="text-2xl font-bold">
@@ -281,7 +281,7 @@ export function LeadDetail({
             onClick={deleteLead}
             disabled={deleting}
           >
-            <Trash2 className="h-4 w-4 mr-2" />
+            <TrashIcon className="h-4 w-4 mr-2" />
             {deleting ? "Deleting..." : "Delete"}
           </Button>
         )}
@@ -296,7 +296,7 @@ export function LeadDetail({
           <CardContent className="space-y-3">
             {lead.email && (
               <div className="flex items-center gap-2">
-                <Mail className="h-4 w-4 text-muted-foreground" />
+                <EnvelopeSimpleIcon className="h-4 w-4 text-muted-foreground" />
                 <a
                   href={`mailto:${lead.email}`}
                   className="text-sm text-blue-600 hover:underline"
@@ -307,7 +307,7 @@ export function LeadDetail({
             )}
             {lead.phone && (
               <div className="flex items-center gap-2">
-                <Phone className="h-4 w-4 text-muted-foreground" />
+                <PhoneIcon className="h-4 w-4 text-muted-foreground" />
                 <a
                   href={`tel:${formatPhoneForTel(lead.phone)}`}
                   className="text-sm text-blue-600 hover:underline"
@@ -318,7 +318,7 @@ export function LeadDetail({
             )}
             {(lead.city || lead.country) && (
               <div className="flex items-center gap-2">
-                <MapPin className="h-4 w-4 text-muted-foreground" />
+                <MapPinIcon className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm">
                   {lead.city}
                   {lead.country ? `, ${lead.country}` : ""}
@@ -386,7 +386,7 @@ export function LeadDetail({
           <Card>
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
-                <UserCircle className="h-5 w-5" />
+                <UserCircleIcon className="h-5 w-5" />
                 Assigned To
               </CardTitle>
             </CardHeader>
@@ -433,7 +433,7 @@ export function LeadDetail({
                     rel="noopener noreferrer"
                     className="flex items-center gap-2 p-2 rounded-md hover:bg-muted transition-colors text-sm"
                   >
-                    <FileDown className="h-4 w-4 text-muted-foreground" />
+                    <FileArrowDownIcon className="h-4 w-4 text-muted-foreground" />
                     <span className="capitalize">{key.replace(/_/g, " ")}</span>
                   </a>
                 ))}
@@ -448,7 +448,7 @@ export function LeadDetail({
         <Card>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
-              <Megaphone className="h-5 w-5" />
+              <MegaphoneIcon className="h-5 w-5" />
               Intake Information
             </CardTitle>
           </CardHeader>
@@ -456,7 +456,7 @@ export function LeadDetail({
             <div className="grid sm:grid-cols-2 gap-3">
               {lead.intake_source && (
                 <div className="flex items-center gap-2 text-sm">
-                  <Globe className="h-4 w-4 text-muted-foreground" />
+                  <GlobeIcon className="h-4 w-4 text-muted-foreground" />
                   <span className="text-muted-foreground">Source:</span>
                   <span>{lead.intake_source}</span>
                 </div>
@@ -488,7 +488,7 @@ export function LeadDetail({
       <Card>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
-            <CheckSquare className="h-5 w-5" />
+            <CheckSquareIcon className="h-5 w-5" />
             Checklist
           </CardTitle>
           <CardDescription>
@@ -506,9 +506,9 @@ export function LeadDetail({
                 onClick={() => toggleChecklist(item)}
               >
                 {item.is_completed ? (
-                  <CheckSquare className="h-4 w-4 text-green-600 shrink-0" />
+                  <CheckSquareIcon className="h-4 w-4 text-green-600 shrink-0" />
                 ) : (
-                  <Square className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <SquareIcon className="h-4 w-4 text-muted-foreground shrink-0" />
                 )}
                 <span className={item.is_completed ? "line-through text-muted-foreground" : ""}>
                   {item.title}
@@ -521,7 +521,7 @@ export function LeadDetail({
                   className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
                   onClick={() => deleteChecklistItem(item.id)}
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
+                  <TrashIcon className="h-3.5 w-3.5" />
                 </Button>
               )}
             </div>
@@ -546,7 +546,7 @@ export function LeadDetail({
                 onClick={addChecklistItem}
                 disabled={addingChecklist || !newChecklistTitle.trim()}
               >
-                <Plus className="h-4 w-4" />
+                <PlusIcon className="h-4 w-4" />
               </Button>
             </div>
           )}
@@ -573,7 +573,7 @@ export function LeadDetail({
               size="icon"
               className="self-end"
             >
-              <Send className="h-4 w-4" />
+              <PaperPlaneTiltIcon className="h-4 w-4" />
             </Button>
           </div>
           {notes.length === 0 ? (

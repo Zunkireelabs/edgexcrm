@@ -1,6 +1,6 @@
 "use client";
 
-import { Phone, Mail, Calendar, Trash2 } from "lucide-react";
+import { PhoneIcon, EnvelopeSimpleIcon, CalendarIcon, TrashIcon } from "@phosphor-icons/react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import type { LeadActivityRecord, ActivityType } from "@/types/database";
@@ -12,9 +12,9 @@ interface ActivityCardProps {
 }
 
 const ACTIVITY_ICONS: Record<ActivityType, React.ReactNode> = {
-  call: <Phone className="h-4 w-4" />,
-  email: <Mail className="h-4 w-4" />,
-  meeting: <Calendar className="h-4 w-4" />,
+  call: <PhoneIcon className="h-4 w-4" />,
+  email: <EnvelopeSimpleIcon className="h-4 w-4" />,
+  meeting: <CalendarIcon className="h-4 w-4" />,
 };
 
 const ACTIVITY_COLORS: Record<ActivityType, string> = {
@@ -102,7 +102,7 @@ export function ActivityCard({ activity, onDelete, canDelete }: ActivityCardProp
                   className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
                   onClick={() => onDelete(activity.id)}
                 >
-                  <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
+                  <TrashIcon className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
                 </Button>
               )}
             </div>

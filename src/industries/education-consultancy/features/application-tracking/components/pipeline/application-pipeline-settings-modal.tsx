@@ -27,7 +27,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { GripVertical, Pencil, Trash2, Plus, AlertTriangle } from "lucide-react";
+import {
+  DotsSixVerticalIcon,
+  PencilSimpleIcon,
+  TrashIcon,
+  PlusIcon,
+  WarningIcon,
+} from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { ApplicationStageEditor } from "./application-stage-editor";
 import type { ApplicationPipelineWithCounts, ApplicationStageWithCount } from "@/types/database";
@@ -53,7 +59,7 @@ function SortableStageItem({
   return (
     <div ref={setNodeRef} style={style} className="flex items-center gap-2 p-2 bg-background border rounded-lg group">
       <button type="button" className="cursor-grab active:cursor-grabbing p-1 text-muted-foreground hover:text-foreground" {...attributes} {...listeners}>
-        <GripVertical className="h-4 w-4" />
+        <DotsSixVerticalIcon className="h-4 w-4" />
       </button>
       <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: stage.color }} />
       <span className="flex-1 text-sm font-medium">{stage.name}</span>
@@ -73,7 +79,7 @@ function SortableStageItem({
       </div>
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
         <Button type="button" variant="ghost" size="icon-xs" onClick={() => onEdit(stage)}>
-          <Pencil className="h-3 w-3" />
+          <PencilSimpleIcon className="h-3 w-3" />
         </Button>
         <Button
           type="button"
@@ -83,7 +89,7 @@ function SortableStageItem({
           disabled={stage.application_count > 0}
           title={stage.application_count > 0 ? "Cannot delete stage with applications" : "Delete stage"}
         >
-          <Trash2 className="h-3 w-3" />
+          <TrashIcon className="h-3 w-3" />
         </Button>
       </div>
     </div>
@@ -277,14 +283,14 @@ export function ApplicationPipelineSettingsModal({ open, onClose, pipeline }: Ap
                   <div className="flex items-center justify-between">
                     <Label>Stages</Label>
                     <Button type="button" variant="outline" size="sm" onClick={() => setIsAddingStage(true)}>
-                      <Plus className="h-4 w-4 mr-1" />
+                      <PlusIcon className="h-4 w-4 mr-1" />
                       Add Stage
                     </Button>
                   </div>
 
                   {!hasRequiredTerminals && (
                     <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
-                      <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                      <WarningIcon className="h-4 w-4 shrink-0 mt-0.5" />
                       <span>Pipeline must have at least one &quot;Won&quot; and one &quot;Lost&quot; stage.</span>
                     </div>
                   )}

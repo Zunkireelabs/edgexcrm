@@ -27,7 +27,14 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Shield, Lock, Pencil, Trash2, Plus, Users } from "lucide-react";
+import {
+  ShieldIcon,
+  LockIcon,
+  PencilSimpleIcon,
+  TrashIcon,
+  PlusIcon,
+  UsersIcon,
+} from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 interface NavItem {
@@ -314,7 +321,7 @@ export function PositionsManager({ navCatalog, widgetCatalog }: PositionsManager
       <Card>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
-            <Shield className="h-5 w-5" />
+            <ShieldIcon className="h-5 w-5" />
             Roles & Permissions
           </CardTitle>
         </CardHeader>
@@ -331,7 +338,7 @@ export function PositionsManager({ navCatalog, widgetCatalog }: PositionsManager
         <CardHeader className="flex flex-row items-start justify-between">
           <div>
             <CardTitle className="text-lg flex items-center gap-2">
-              <Shield className="h-5 w-5" />
+              <ShieldIcon className="h-5 w-5" />
               Roles & Permissions
             </CardTitle>
             <CardDescription>
@@ -339,7 +346,7 @@ export function PositionsManager({ navCatalog, widgetCatalog }: PositionsManager
             </CardDescription>
           </div>
           <Button size="sm" onClick={openCreate}>
-            <Plus className="h-4 w-4 mr-1" />
+            <PlusIcon className="h-4 w-4 mr-1" />
             New Role
           </Button>
         </CardHeader>
@@ -351,7 +358,7 @@ export function PositionsManager({ navCatalog, widgetCatalog }: PositionsManager
                 className="flex items-center justify-between py-2 border-b last:border-0"
               >
                 <div className="flex items-center gap-3">
-                  {pos.is_system && <Lock className="h-4 w-4 text-muted-foreground shrink-0" />}
+                  {pos.is_system && <LockIcon className="h-4 w-4 text-muted-foreground shrink-0" />}
                   <div>
                     <p className="text-sm font-medium flex items-center gap-2">
                       {pos.name}
@@ -361,7 +368,7 @@ export function PositionsManager({ navCatalog, widgetCatalog }: PositionsManager
                         {pos.base_tier}
                       </Badge>
                       <span className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Users className="h-3 w-3" />
+                        <UsersIcon className="h-3 w-3" />
                         {pos.member_count}
                       </span>
                     </div>
@@ -374,7 +381,7 @@ export function PositionsManager({ navCatalog, widgetCatalog }: PositionsManager
                     className="h-8 w-8"
                     onClick={() => openEdit(pos)}
                   >
-                    <Pencil className="h-3.5 w-3.5" />
+                    <PencilSimpleIcon className="h-3.5 w-3.5" />
                   </Button>
                   {!pos.is_system && (
                     <Button
@@ -383,7 +390,7 @@ export function PositionsManager({ navCatalog, widgetCatalog }: PositionsManager
                       className="h-8 w-8 text-muted-foreground hover:text-destructive"
                       onClick={() => handleDelete(pos)}
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <TrashIcon className="h-3.5 w-3.5" />
                     </Button>
                   )}
                 </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil } from "lucide-react";
+import { PencilSimpleIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,7 +32,7 @@ export function BriefEditor({ project, canManageProjects, onSave }: BriefEditorP
           <CardTitle className="text-sm">Brief</CardTitle>
           {canManageProjects && (
             <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
-              <Pencil className="h-3.5 w-3.5 mr-1.5" />
+              <PencilSimpleIcon className="h-3.5 w-3.5 mr-1.5" />
               {project.brief ? "Edit" : "Add brief"}
             </Button>
           )}

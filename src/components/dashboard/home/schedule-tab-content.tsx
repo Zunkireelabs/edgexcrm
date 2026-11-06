@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CalendarDays, Clock, Users } from "lucide-react";
+import { CalendarDotsIcon, ClockIcon, UsersIcon } from "@phosphor-icons/react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { toLocalDateString } from "@/lib/date";
@@ -32,7 +32,7 @@ function MeetingRow({ activity, index }: { activity: ScheduleActivity; index: nu
   const row = (
     <>
       <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-full", AVATAR_COLORS[index % AVATAR_COLORS.length])}>
-        <Users className="h-4 w-4" />
+        <UsersIcon className="h-4 w-4" />
       </span>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-foreground truncate">{activity.subject ?? "No subject"}</p>
@@ -40,11 +40,11 @@ function MeetingRow({ activity, index }: { activity: ScheduleActivity; index: nu
       </div>
       <div className="flex flex-col items-end gap-0.5 shrink-0 text-xs text-muted-foreground">
         <span className="inline-flex items-center gap-1">
-          <CalendarDays className="h-3 w-3" />
+          <CalendarDotsIcon className="h-3 w-3" />
           {dayStr}
         </span>
         <span className="inline-flex items-center gap-1">
-          <Clock className="h-3 w-3" />
+          <ClockIcon className="h-3 w-3" />
           {timeStr}
         </span>
       </div>
@@ -86,7 +86,7 @@ export function ScheduleTabContent({ schedule }: ScheduleTabContentProps) {
         <CardContent className="pt-0">
           {todaysMeetings.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-6 gap-2 text-center">
-              <CalendarDays className="h-8 w-8 text-muted-foreground/40" />
+              <CalendarDotsIcon className="h-8 w-8 text-muted-foreground/40" />
               <p className="text-sm text-muted-foreground">No meetings scheduled for today.</p>
             </div>
           ) : (
@@ -106,7 +106,7 @@ export function ScheduleTabContent({ schedule }: ScheduleTabContentProps) {
         <CardContent className="pt-0">
           {upcomingMeetings.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-6 gap-2 text-center">
-              <CalendarDays className="h-8 w-8 text-muted-foreground/40" />
+              <CalendarDotsIcon className="h-8 w-8 text-muted-foreground/40" />
               <p className="text-sm text-muted-foreground">No upcoming meetings.</p>
             </div>
           ) : (

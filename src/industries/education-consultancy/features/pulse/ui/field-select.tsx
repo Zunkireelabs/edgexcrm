@@ -1,4 +1,4 @@
-import { ChevronDown } from "lucide-react";
+import { CaretDownIcon } from "@phosphor-icons/react/dist/ssr";
 
 /** The mockup's ".dd" dropdown: bordered 10px pill + chevron. Native <select> (no Radix ids → no SSR hydration mismatch). */
 export function FieldSelect({
@@ -11,7 +11,7 @@ export function FieldSelect({
         className={`appearance-none bg-transparent py-[7px] pr-8 outline-none ${icon ? "pl-[34px]" : "pl-3"}`}>
         {children}
       </select>
-      <ChevronDown className="pointer-events-none absolute right-2.5 h-[15px] w-[15px]" aria-hidden />
+      <CaretDownIcon className="pointer-events-none absolute right-2.5 h-[15px] w-[15px]" aria-hidden />
     </span>
   );
 }

@@ -2,7 +2,13 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { Send, Sparkles, Share2, Copy, Check } from "lucide-react";
+import {
+  PaperPlaneTiltIcon,
+  SparkleIcon,
+  ShareNetworkIcon,
+  CopyIcon,
+  CheckIcon,
+} from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -179,7 +185,7 @@ function ShareDialog({
               <div className="flex items-center gap-2">
                 <code className="flex-1 truncate rounded bg-muted px-2 py-1.5 text-xs">{publicUrl}</code>
                 <Button size="icon" variant="outline" className="shrink-0 h-8 w-8" onClick={copyUrl}>
-                  {copied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+                  {copied ? <CheckIcon className="h-3.5 w-3.5 text-green-600" /> : <CopyIcon className="h-3.5 w-3.5" />}
                 </Button>
               </div>
             </div>
@@ -349,7 +355,7 @@ export function StatusReportsPanel({
           <div className="flex items-center gap-2 shrink-0">
             <PreviewPill />
             <Button variant="outline" size="sm" onClick={() => setAiPreviewOpen(true)}>
-              <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+              <SparkleIcon className="h-3.5 w-3.5 mr-1.5" />
               Draft with AI
             </Button>
           </div>
@@ -426,7 +432,7 @@ export function StatusReportsPanel({
               <span className="text-xs text-muted-foreground">Draft · {r.report_date}</span>
               {canManageProjects && (
                 <Button size="sm" onClick={() => onPublish(r.id)}>
-                  <Send className="h-3.5 w-3.5 mr-1.5" />
+                  <PaperPlaneTiltIcon className="h-3.5 w-3.5 mr-1.5" />
                   Publish
                 </Button>
               )}
@@ -447,7 +453,7 @@ export function StatusReportsPanel({
             </div>
             {canManageProjects && (
               <Button size="sm" variant="outline" className="shrink-0" onClick={() => setShareReportId(r.id)}>
-                <Share2 className="h-3.5 w-3.5 mr-1.5" />
+                <ShareNetworkIcon className="h-3.5 w-3.5 mr-1.5" />
                 Share
               </Button>
             )}

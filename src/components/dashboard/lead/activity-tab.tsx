@@ -2,16 +2,16 @@
 
 import { describeSubmission } from "./activities/lead-activity-labels";
 import {
-  GitBranch,
-  UserPlus,
-  FileText,
-  CheckSquare,
-  Plus,
-  Edit,
-  Trash2,
-  Clock,
-  ArrowUpCircle,
-} from "lucide-react";
+  GitBranchIcon,
+  UserPlusIcon,
+  FileTextIcon,
+  CheckSquareIcon,
+  PlusIcon,
+  PencilSimpleIcon,
+  TrashIcon,
+  ClockIcon,
+  ArrowCircleUpIcon,
+} from "@phosphor-icons/react";
 import { Card, CardContent } from "@/components/ui/card";
 import type { LeadActivity } from "@/lib/supabase/queries";
 
@@ -25,7 +25,7 @@ export function ActivityTab({ activities, teamMemberEmails }: ActivityTabProps) 
     return (
       <Card className="shadow-none rounded-lg py-0">
         <CardContent className="p-8 text-center">
-          <Clock className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+          <ClockIcon className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
           <p className="text-muted-foreground">No activity yet</p>
           <p className="text-sm text-muted-foreground mt-1">
             Actions like stage changes and assignments will appear here
@@ -159,7 +159,7 @@ function getActivityDisplay(
   if (changes.status || changes.stage_id) {
     const newStatus = changes.status?.new || changes.stage_id?.new;
     return {
-      icon: <GitBranch className="h-4 w-4" />,
+      icon: <GitBranchIcon className="h-4 w-4" />,
       color: "bg-blue-100 text-blue-600",
       description: `Stage changed to "${formatValue(newStatus)}"`,
     };
@@ -171,13 +171,13 @@ function getActivityDisplay(
     const assigneeEmail = newAssignee ? teamMemberEmails[String(newAssignee)] : null;
     if (newAssignee) {
       return {
-        icon: <UserPlus className="h-4 w-4" />,
+        icon: <UserPlusIcon className="h-4 w-4" />,
         color: "bg-purple-100 text-purple-600",
         description: `Assigned to ${assigneeEmail || "a team member"}`,
       };
     } else {
       return {
-        icon: <UserPlus className="h-4 w-4" />,
+        icon: <UserPlusIcon className="h-4 w-4" />,
         color: "bg-gray-100 text-gray-600",
         description: "Unassigned",
       };
@@ -188,7 +188,7 @@ function getActivityDisplay(
   if (action === "lead.graduated") {
     const newListName = changes.list?.new;
     return {
-      icon: <ArrowUpCircle className="h-4 w-4" />,
+      icon: <ArrowCircleUpIcon className="h-4 w-4" />,
       color: "bg-emerald-100 text-emerald-600",
       description: `Graduated to Sales Leads${newListName ? ` · ${formatValue(newListName)}` : ""}`,
     };
@@ -197,7 +197,7 @@ function getActivityDisplay(
   // Moved between stage-lists (bulk move-to-list, outside of graduation)
   if (changes.list) {
     return {
-      icon: <GitBranch className="h-4 w-4" />,
+      icon: <GitBranchIcon className="h-4 w-4" />,
       color: "bg-blue-100 text-blue-600",
       description: `Moved to ${formatValue(changes.list.new)}`,
     };
@@ -206,7 +206,7 @@ function getActivityDisplay(
   // Submission (dedup-aware: first = created, subsequent = resubmission)
   if (action === "lead.submission") {
     return {
-      icon: <FileText className="h-4 w-4" />,
+      icon: <FileTextIcon className="h-4 w-4" />,
       color: "bg-emerald-100 text-emerald-600",
       description: describeSubmission(changes),
     };
@@ -215,7 +215,7 @@ function getActivityDisplay(
   // Lead created
   if (action === "create" || action === "created") {
     return {
-      icon: <Plus className="h-4 w-4" />,
+      icon: <PlusIcon className="h-4 w-4" />,
       color: "bg-green-100 text-green-600",
       description: "Lead created",
     };
@@ -224,7 +224,7 @@ function getActivityDisplay(
   // Lead updated
   if (action === "update" || action === "updated") {
     return {
-      icon: <Edit className="h-4 w-4" />,
+      icon: <PencilSimpleIcon className="h-4 w-4" />,
       color: "bg-amber-100 text-amber-600",
       description: "Lead updated",
     };
@@ -233,7 +233,7 @@ function getActivityDisplay(
   // Lead deleted
   if (action === "delete" || action === "deleted") {
     return {
-      icon: <Trash2 className="h-4 w-4" />,
+      icon: <TrashIcon className="h-4 w-4" />,
       color: "bg-red-100 text-red-600",
       description: "Lead deleted",
     };
@@ -242,7 +242,7 @@ function getActivityDisplay(
   // Checklist related
   if (activity.entity_type === "checklist" || action.includes("checklist")) {
     return {
-      icon: <CheckSquare className="h-4 w-4" />,
+      icon: <CheckSquareIcon className="h-4 w-4" />,
       color: "bg-teal-100 text-teal-600",
       description: `Checklist ${action}`,
     };
@@ -251,7 +251,7 @@ function getActivityDisplay(
   // Note related
   if (activity.entity_type === "note" || action.includes("note")) {
     return {
-      icon: <FileText className="h-4 w-4" />,
+      icon: <FileTextIcon className="h-4 w-4" />,
       color: "bg-indigo-100 text-indigo-600",
       description: action === "lead.note_added" ? "Note added" : `Note ${action}`,
     };
@@ -259,7 +259,7 @@ function getActivityDisplay(
 
   // Default
   return {
-    icon: <Clock className="h-4 w-4" />,
+    icon: <ClockIcon className="h-4 w-4" />,
     color: "bg-gray-100 text-gray-600",
     description: `${activity.action} ${activity.entity_type}`,
   };

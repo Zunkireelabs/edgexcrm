@@ -36,7 +36,19 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { RefreshCw, AlertCircle, Lock, Trophy, Settings, Copy, Check, ChevronDown, ChevronRight, Pencil, AlertTriangle } from "lucide-react";
+import {
+  ArrowsClockwiseIcon,
+  WarningCircleIcon,
+  LockIcon,
+  TrophyIcon,
+  GearIcon,
+  CopyIcon,
+  CheckIcon,
+  CaretDownIcon,
+  CaretRightIcon,
+  PencilSimpleIcon,
+  WarningIcon,
+} from "@phosphor-icons/react";
 import type { LeaderboardEntry } from "../lib/scoring";
 import type { IntegrityFlag } from "../lib/integrity";
 import { buildAgentPrompt } from "../lib/agent-prompt";
@@ -332,7 +344,7 @@ function GearDialog({
                   {publicUrl}
                 </code>
                 <Button size="icon" variant="outline" className="shrink-0 h-8 w-8" onClick={copyUrl}>
-                  {copied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+                  {copied ? <CheckIcon className="h-3.5 w-3.5 text-green-600" /> : <CopyIcon className="h-3.5 w-3.5" />}
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
@@ -378,7 +390,7 @@ function GearDialog({
               className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
               onClick={() => setExampleOpen((v) => !v)}
             >
-              {exampleOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+              {exampleOpen ? <CaretDownIcon className="h-3 w-3" /> : <CaretRightIcon className="h-3 w-3" />}
               Example API response shape
             </button>
             {exampleOpen && (
@@ -395,7 +407,7 @@ function GearDialog({
                 className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
                 onClick={() => setAgentPromptOpen((v) => !v)}
               >
-                {agentPromptOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                {agentPromptOpen ? <CaretDownIcon className="h-3 w-3" /> : <CaretRightIcon className="h-3 w-3" />}
                 Agent prompt
               </button>
               {agentPromptOpen && (
@@ -416,7 +428,7 @@ function GearDialog({
                       });
                     }}
                   >
-                    {agentPromptCopied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+                    {agentPromptCopied ? <CheckIcon className="h-3.5 w-3.5 text-green-600" /> : <CopyIcon className="h-3.5 w-3.5" />}
                     {agentPromptCopied ? "Copied!" : "Copy prompt"}
                   </Button>
                 </div>
@@ -563,7 +575,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
   if (error) {
     return (
       <div className="flex items-center justify-center h-64 gap-2 text-destructive text-sm">
-        <AlertCircle className="h-4 w-4" />
+        <WarningCircleIcon className="h-4 w-4" />
         {error}
       </div>
     );
@@ -585,7 +597,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
       {/* Header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-3">
-          <Trophy className="h-5 w-5 text-muted-foreground" />
+          <TrophyIcon className="h-5 w-5 text-muted-foreground" />
           <div>
             <h1 className="text-xl font-semibold">{campaign.name}</h1>
             <p className="text-xs text-muted-foreground">
@@ -604,7 +616,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
             disabled={refreshing}
             className="gap-2"
           >
-            <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+            <ArrowsClockwiseIcon className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
             {refreshing ? "Refreshing…" : "Refresh results"}
           </Button>
           <Button
@@ -614,7 +626,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
             onClick={() => setGearOpen(true)}
             title="Public leaderboard settings"
           >
-            <Settings className="h-4 w-4" />
+            <GearIcon className="h-4 w-4" />
           </Button>
         </div>
       </div>
@@ -638,7 +650,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
       {/* Pending banner */}
       {pending_matches.length > 0 && (
         <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
-          <AlertCircle className="h-4 w-4 shrink-0" />
+          <WarningCircleIcon className="h-4 w-4 shrink-0" />
           <span>
             <strong>{pending_matches.length} match{pending_matches.length !== 1 ? "es" : ""} pending</strong>
             {" "}— standings are not final yet.
@@ -684,8 +696,8 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
                         <TableCell className="font-medium text-sm">
                           <span className="flex items-center gap-1.5">
                             {isMatchExpanded
-                              ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                              : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+                              ? <CaretDownIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                              : <CaretRightIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
                             {r.match_label || r.match_id}
                           </span>
                         </TableCell>
@@ -714,7 +726,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          {r.locked && <Lock className="h-3.5 w-3.5 text-muted-foreground" />}
+                          {r.locked && <LockIcon className="h-3.5 w-3.5 text-muted-foreground" />}
                         </TableCell>
                         <TableCell>
                           <Button
@@ -724,7 +736,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
                             title="Override result"
                             onClick={(e) => { e.stopPropagation(); setOverrideTarget(r); }}
                           >
-                            <Pencil className="h-3.5 w-3.5" />
+                            <PencilSimpleIcon className="h-3.5 w-3.5" />
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -749,7 +761,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
                                       <td colSpan={5} className="p-2">
                                         <div className="flex items-center gap-3 flex-wrap">
                                           <span className="flex items-center gap-1.5 font-medium shrink-0">
-                                            <Trophy className="h-3.5 w-3.5 text-yellow-500 shrink-0" />
+                                            <TrophyIcon className="h-3.5 w-3.5 text-yellow-500 shrink-0" />
                                             Winner:
                                             {r.winner ? (
                                               <span>{r.winner.name}</span>
@@ -788,7 +800,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
                                                     value="__none__"
                                                     onSelect={() => { handleSetWinner(r.match_id, null); setOpenWinnerFor(null); }}
                                                   >
-                                                    <Check className={cn("mr-2 h-4 w-4", !r.winner ? "opacity-100" : "opacity-0")} />
+                                                    <CheckIcon className={cn("mr-2 h-4 w-4", !r.winner ? "opacity-100" : "opacity-0")} />
                                                     <span className="text-muted-foreground">— No winner selected —</span>
                                                   </CommandItem>
                                                   {allApplicants
@@ -799,7 +811,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
                                                         value={p.email}
                                                         onSelect={() => { handleSetWinner(r.match_id, p.email); setOpenWinnerFor(null); }}
                                                       >
-                                                        <Check className={cn("mr-2 h-4 w-4", r.winner?.email === p.email ? "opacity-100" : "opacity-0")} />
+                                                        <CheckIcon className={cn("mr-2 h-4 w-4", r.winner?.email === p.email ? "opacity-100" : "opacity-0")} />
                                                         {p.name}
                                                       </CommandItem>
                                                     ))}
@@ -826,7 +838,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
                                             {predictor.name}
                                             {predictor.flags.length > 0 && (
                                               <span title={predictor.flags.map((f) => f.detail).join("; ")}>
-                                                <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                                                <WarningIcon className="h-3.5 w-3.5 text-amber-500 shrink-0" />
                                               </span>
                                             )}
                                           </span>
@@ -876,7 +888,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
 
         {flaggedCount > 0 && (
           <div className="flex items-center gap-2 mb-3 text-sm text-amber-700 dark:text-amber-400">
-            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <WarningIcon className="h-4 w-4 shrink-0" />
             <span>{flaggedCount} entrant{flaggedCount !== 1 ? "s" : ""} flagged for review (shared phone/name).</span>
           </div>
         )}
@@ -919,7 +931,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
                             {entry.name}
                             {entry.flags && entry.flags.length > 0 && (
                               <span title={entry.flags.map((f) => f.detail).join("; ")}>
-                                <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                                <WarningIcon className="h-3.5 w-3.5 text-amber-500 shrink-0" />
                               </span>
                             )}
                           </span>

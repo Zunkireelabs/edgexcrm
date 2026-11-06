@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeftIcon } from "@phosphor-icons/react";
 import { BlastComposer } from "./blast-composer";
 import { BlastDetail } from "./blast-detail";
 import { smsGet, SmsApiError } from "../lib/api-client";
@@ -36,7 +36,7 @@ export function BlastWorkspace({ blastId, canSendSms, sandboxed, isAdmin }: Blas
   return (
     <div className="flex flex-col gap-4">
       <Link href="/sms" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground w-fit">
-        <ArrowLeft className="h-3.5 w-3.5" />
+        <ArrowLeftIcon className="h-3.5 w-3.5" />
         All blasts
       </Link>
 

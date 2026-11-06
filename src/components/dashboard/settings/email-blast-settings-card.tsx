@@ -11,7 +11,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Send } from "lucide-react";
+import { PaperPlaneTiltIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 interface EmailBlastSettings {
@@ -127,7 +127,7 @@ export function EmailBlastSettingsCard({ isAdmin }: EmailBlastSettingsCardProps)
   return (
     <div className="border rounded-lg p-6 space-y-4">
       <div className="flex items-center gap-2">
-        <Send className="h-4 w-4 text-muted-foreground" />
+        <PaperPlaneTiltIcon className="h-4 w-4 text-muted-foreground" />
         <h2 className="font-semibold">Email Limits</h2>
       </div>
 

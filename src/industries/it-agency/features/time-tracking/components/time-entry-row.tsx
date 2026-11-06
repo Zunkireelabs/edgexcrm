@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { Pencil, Trash2, Loader2, Clock } from "lucide-react";
+import { PencilSimpleIcon, TrashIcon, CircleNotchIcon, ClockIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -97,7 +97,7 @@ export function TimeEntryRow({ entry, canEdit, onUpdate, onDelete }: TimeEntryRo
       <div className="flex items-center gap-3 py-2.5 px-4 hover:bg-muted/40 rounded-lg group">
         {/* Time chip */}
         <div className="flex items-center gap-1.5 shrink-0 w-16 text-sm font-medium tabular-nums">
-          <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+          <ClockIcon className="h-3.5 w-3.5 text-muted-foreground" />
           {formatMinutes(entry.minutes)}
         </div>
 
@@ -142,7 +142,7 @@ export function TimeEntryRow({ entry, canEdit, onUpdate, onDelete }: TimeEntryRo
               onClick={handleEditOpen}
               title="Edit entry"
             >
-              <Pencil className="h-3.5 w-3.5" />
+              <PencilSimpleIcon className="h-3.5 w-3.5" />
             </Button>
             <Button
               variant="ghost"
@@ -153,9 +153,9 @@ export function TimeEntryRow({ entry, canEdit, onUpdate, onDelete }: TimeEntryRo
               title="Delete entry"
             >
               {deleteLoading ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <CircleNotchIcon className="h-3.5 w-3.5 animate-spin" />
               ) : (
-                <Trash2 className="h-3.5 w-3.5" />
+                <TrashIcon className="h-3.5 w-3.5" />
               )}
             </Button>
           </div>
@@ -200,7 +200,7 @@ export function TimeEntryRow({ entry, canEdit, onUpdate, onDelete }: TimeEntryRo
                 Cancel
               </Button>
               <Button type="submit" disabled={saving || parsedMin <= 0}>
-                {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                {saving && <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />}
                 Save
               </Button>
             </DialogFooter>

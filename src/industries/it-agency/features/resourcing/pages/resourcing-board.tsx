@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "sonner";
-import { Loader2, Plus, Users, Trash2 } from "lucide-react";
+import { CircleNotchIcon, PlusIcon, UsersIcon, TrashIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -118,7 +118,7 @@ export function ResourcingBoard({ canManageHR }: { canManageHR: boolean }) {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-48">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <CircleNotchIcon className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -128,7 +128,7 @@ export function ResourcingBoard({ canManageHR }: { canManageHR: boolean }) {
       <div className="flex items-center justify-between shrink-0 mb-4">
         <h1 className="text-lg font-bold">Resourcing</h1>
         <Button size="sm" onClick={() => setCreateOpen(true)}>
-          <Plus className="h-4 w-4 mr-1.5" /> Allocate member
+          <PlusIcon className="h-4 w-4 mr-1.5" /> Allocate member
         </Button>
       </div>
 
@@ -166,7 +166,7 @@ export function ResourcingBoard({ canManageHR }: { canManageHR: boolean }) {
                       <TableCell>{a.hours_per_week}h</TableCell>
                       <TableCell>
                         <Button size="icon" variant="ghost" onClick={() => deleteAllocation(a.id)}>
-                          <Trash2 className="h-4 w-4" />
+                          <TrashIcon className="h-4 w-4" />
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -178,7 +178,7 @@ export function ResourcingBoard({ canManageHR }: { canManageHR: boolean }) {
 
           <div>
             <h2 className="text-sm font-semibold mb-2 flex items-center gap-2">
-              <Users className="h-4 w-4" /> Bench ({bench.length})
+              <UsersIcon className="h-4 w-4" /> Bench ({bench.length})
             </h2>
             {bench.length === 0 ? (
               <p className="text-sm text-muted-foreground">Everyone is allocated to at least one project.</p>
@@ -332,7 +332,7 @@ function SkillsMatrix() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-48">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <CircleNotchIcon className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
   }

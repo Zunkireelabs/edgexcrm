@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2 } from "lucide-react";
+import { CircleNotchIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { ActivityRow } from "./activity-row";
 import type { ActivityItem } from "./activity-row";
@@ -60,7 +60,7 @@ export function ActivityTab({ accountId, initialData }: ActivityTabProps) {
             disabled={loading}
             onClick={loadMore}
           >
-            {loading && <Loader2 className="h-3 w-3 animate-spin" />}
+            {loading && <CircleNotchIcon className="h-3 w-3 animate-spin" />}
             {loading ? "Loading…" : "Load more"}
           </button>
         </div>

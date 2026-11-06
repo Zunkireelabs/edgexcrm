@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil, X, Check, Loader2 } from "lucide-react";
+import { PencilSimpleIcon, XIcon, CheckIcon, CircleNotchIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { InfoSection } from "./info-section";
 import { Input } from "@/components/ui/input";
@@ -131,7 +131,7 @@ export function ProfessionalDetailsCard({
         onClick={cancelEditing}
         disabled={isSaving}
       >
-        <X className="h-3.5 w-3.5 mr-1" />
+        <XIcon className="h-3.5 w-3.5 mr-1" />
         Cancel
       </Button>
       <Button
@@ -141,9 +141,9 @@ export function ProfessionalDetailsCard({
         disabled={isSaving}
       >
         {isSaving ? (
-          <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+          <CircleNotchIcon className="h-3.5 w-3.5 mr-1 animate-spin" />
         ) : (
-          <Check className="h-3.5 w-3.5 mr-1" />
+          <CheckIcon className="h-3.5 w-3.5 mr-1" />
         )}
         Save
       </Button>
@@ -155,7 +155,7 @@ export function ProfessionalDetailsCard({
       className="h-7 px-2 text-muted-foreground hover:text-foreground"
       onClick={startEditing}
     >
-      <Pencil className="h-3.5 w-3.5 mr-1" />
+      <PencilSimpleIcon className="h-3.5 w-3.5 mr-1" />
       Edit
     </Button>
   ) : undefined;

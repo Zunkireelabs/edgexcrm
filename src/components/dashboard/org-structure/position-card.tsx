@@ -1,7 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { User, Trash2, ChevronDown, ChevronUp, X, UserPlus } from "lucide-react";
+import {
+  UserIcon,
+  TrashIcon,
+  CaretDownIcon,
+  CaretUpIcon,
+  XIcon,
+  UserPlusIcon,
+} from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { MemberAvatar } from "@/components/ui/member-avatar";
 import type { Position } from "@/types/database";
@@ -67,11 +74,11 @@ export function PositionCard({
           onClick={(e) => { e.stopPropagation(); onDelete?.(); }}
           className="absolute -top-2 -right-2 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
         >
-          <Trash2 className="w-3 h-3" />
+          <TrashIcon className="w-3 h-3" />
         </button>
       )}
 
-      <User className="w-5 h-5 text-gray-600 mb-2" />
+      <UserIcon className="w-5 h-5 text-gray-600 mb-2" />
       <p className="text-sm font-semibold text-gray-700 text-center">{position.name}</p>
       <span className={cn("mt-1 text-[10px] font-medium px-2 py-0.5 rounded-full", tierColor)}>
         {position.base_tier}
@@ -108,8 +115,8 @@ export function PositionCard({
               title={expanded ? "Collapse" : "Expand"}
             >
               {expanded
-                ? <ChevronUp className="w-3 h-3 text-gray-500" />
-                : <ChevronDown className="w-3 h-3 text-gray-500" />}
+                ? <CaretUpIcon className="w-3 h-3 text-gray-500" />
+                : <CaretDownIcon className="w-3 h-3 text-gray-500" />}
             </button>
           )}
         </div>
@@ -154,7 +161,7 @@ export function PositionCard({
                     className="p-0.5 hover:bg-red-100 rounded shrink-0"
                     title="Remove from team"
                   >
-                    <X className="w-3 h-3 text-red-500" />
+                    <XIcon className="w-3 h-3 text-red-500" />
                   </button>
                 </>
               )}
@@ -164,7 +171,7 @@ export function PositionCard({
           {/* Assign unassigned member into this position */}
           {isAdmin && unassignedMembers.length > 0 && (
             <div className="flex items-center gap-1.5 w-full pt-1 border-t border-gray-100">
-              <UserPlus className="w-3 h-3 text-gray-400 shrink-0" />
+              <UserPlusIcon className="w-3 h-3 text-gray-400 shrink-0" />
               <select
                 defaultValue=""
                 onChange={(e) => {

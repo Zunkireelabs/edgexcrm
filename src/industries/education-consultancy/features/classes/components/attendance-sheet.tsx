@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
-import { Loader2, Check, X } from "lucide-react";
+import { CircleNotchIcon, CheckIcon, XIcon } from "@phosphor-icons/react";
 import {
   Sheet,
   SheetContent,
@@ -120,7 +120,7 @@ export function AttendanceSheet({ open, onOpenChange, classId, className }: Atte
               className="h-8 text-xs"
               onClick={() => setStudents((prev) => prev.map((s) => ({ ...s, status: "present" })))}
             >
-              <Check className="h-3.5 w-3.5 mr-1" />
+              <CheckIcon className="h-3.5 w-3.5 mr-1" />
               Mark all present
             </Button>
           )}
@@ -129,7 +129,7 @@ export function AttendanceSheet({ open, onOpenChange, classId, className }: Atte
         <div className="flex-1 overflow-y-auto px-4 py-4">
           {loading ? (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              <CircleNotchIcon className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
           ) : students.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">No students enrolled in this class.</p>
@@ -149,7 +149,7 @@ export function AttendanceSheet({ open, onOpenChange, classId, className }: Atte
                           : "text-muted-foreground border-transparent hover:bg-muted"
                       )}
                     >
-                      <Check className="h-3.5 w-3.5" />
+                      <CheckIcon className="h-3.5 w-3.5" />
                       Present
                     </button>
                     <button
@@ -162,7 +162,7 @@ export function AttendanceSheet({ open, onOpenChange, classId, className }: Atte
                           : "text-muted-foreground border-transparent hover:bg-muted"
                       )}
                     >
-                      <X className="h-3.5 w-3.5" />
+                      <XIcon className="h-3.5 w-3.5" />
                       Absent
                     </button>
                   </div>
@@ -178,7 +178,7 @@ export function AttendanceSheet({ open, onOpenChange, classId, className }: Atte
               Cancel
             </Button>
             <Button className="flex-1" onClick={handleSave} disabled={submitting || loading || students.length === 0}>
-              {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {submitting && <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />}
               Save Attendance
             </Button>
           </div>

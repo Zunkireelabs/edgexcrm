@@ -32,7 +32,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, GripVertical, Loader2 } from "lucide-react";
+import {
+  PlusIcon,
+  PencilSimpleIcon,
+  TrashIcon,
+  DotsSixVerticalIcon,
+  CircleNotchIcon,
+} from "@phosphor-icons/react";
 import type { TenantEntity, Industry } from "@/types/database";
 
 interface IndustryEntitiesManagerProps {
@@ -208,7 +214,7 @@ export function IndustryEntitiesManager({
           }}>
             <DialogTrigger asChild>
               <Button size="sm">
-                <Plus className="h-4 w-4 mr-1" />
+                <PlusIcon className="h-4 w-4 mr-1" />
                 Add {industry.entity_type_singular}
               </Button>
             </DialogTrigger>
@@ -265,7 +271,7 @@ export function IndustryEntitiesManager({
                 <Button onClick={handleSave} disabled={saving || !name.trim()}>
                   {saving ? (
                     <>
-                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                      <CircleNotchIcon className="h-4 w-4 mr-1 animate-spin" />
                       Saving...
                     </>
                   ) : editEntity ? (
@@ -282,7 +288,7 @@ export function IndustryEntitiesManager({
       <CardContent>
         {entities.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
-            <GripVertical className="h-8 w-8 mx-auto mb-3 opacity-50" />
+            <DotsSixVerticalIcon className="h-8 w-8 mx-auto mb-3 opacity-50" />
             <p className="text-sm">No {industry.entity_type_label.toLowerCase()} yet</p>
             <p className="text-xs mt-1">
               Add your first {industry.entity_type_singular.toLowerCase()} to get started.
@@ -335,7 +341,7 @@ export function IndustryEntitiesManager({
                           size="icon"
                           onClick={() => handleOpenEdit(entity)}
                         >
-                          <Pencil className="h-4 w-4" />
+                          <PencilSimpleIcon className="h-4 w-4" />
                         </Button>
                         <Button
                           variant="ghost"
@@ -345,9 +351,9 @@ export function IndustryEntitiesManager({
                           onClick={() => handleDelete(entity)}
                         >
                           {deletingId === entity.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <CircleNotchIcon className="h-4 w-4 animate-spin" />
                           ) : (
-                            <Trash2 className="h-4 w-4" />
+                            <TrashIcon className="h-4 w-4" />
                           )}
                         </Button>
                       </div>

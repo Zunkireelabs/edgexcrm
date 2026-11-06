@@ -2,7 +2,7 @@
 
 import { SECTION_TITLE_CLASS } from "@/components/dashboard/lead/section-title";
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Loader2, MoreHorizontal, Check, X } from "lucide-react";
+import { PlusIcon, CircleNotchIcon, DotsThreeIcon, CheckIcon, XIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -196,7 +196,7 @@ export function ClassesCard({ leadId, canManage }: ClassesCardProps) {
                 onClick={() => setAddOpen(true)}
                 title="Add to Class"
               >
-                <Plus className="h-3.5 w-3.5" />
+                <PlusIcon className="h-3.5 w-3.5" />
               </Button>
             )}
           </div>
@@ -205,7 +205,7 @@ export function ClassesCard({ leadId, canManage }: ClassesCardProps) {
         <CardContent className="pb-4">
           {loading ? (
             <div className="flex justify-center py-3">
-              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              <CircleNotchIcon className="h-4 w-4 animate-spin text-muted-foreground" />
             </div>
           ) : loadError ? (
             <p className="text-xs text-destructive text-center py-2">Couldn&apos;t load classes — try refreshing.</p>
@@ -227,7 +227,7 @@ export function ClassesCard({ leadId, canManage }: ClassesCardProps) {
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0 -mt-0.5" disabled={isUpdating}>
-                              {isUpdating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <MoreHorizontal className="h-3.5 w-3.5" />}
+                              {isUpdating ? <CircleNotchIcon className="h-3.5 w-3.5 animate-spin" /> : <DotsThreeIcon className="h-3.5 w-3.5" />}
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
@@ -244,7 +244,7 @@ export function ClassesCard({ leadId, canManage }: ClassesCardProps) {
                                       s === "active" ? "bg-green-600" : s === "completed" ? "bg-blue-600" : "bg-muted-foreground"
                                     }`} />
                                     <span className="capitalize">{s}</span>
-                                    {s === enrollment.status && <Check className="h-3 w-3 ml-auto" />}
+                                    {s === enrollment.status && <CheckIcon className="h-3 w-3 ml-auto" />}
                                   </DropdownMenuItem>
                                 ))}
                               </DropdownMenuSubContent>
@@ -275,12 +275,12 @@ export function ClassesCard({ leadId, canManage }: ClassesCardProps) {
                       </Badge>
                       {enrollment.fee_paid ? (
                         <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-green-50 text-green-700 border-green-200">
-                          <Check className="h-2.5 w-2.5 mr-0.5" />
+                          <CheckIcon className="h-2.5 w-2.5 mr-0.5" />
                           Paid
                         </Badge>
                       ) : (
                         <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-muted-foreground">
-                          <X className="h-2.5 w-2.5 mr-0.5" />
+                          <XIcon className="h-2.5 w-2.5 mr-0.5" />
                           Unpaid
                         </Badge>
                       )}
@@ -333,7 +333,7 @@ export function ClassesCard({ leadId, canManage }: ClassesCardProps) {
               Cancel
             </Button>
             <Button onClick={handleConfirmMarkPaid} disabled={submitting}>
-              {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {submitting && <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />}
               Mark paid
             </Button>
           </DialogFooter>

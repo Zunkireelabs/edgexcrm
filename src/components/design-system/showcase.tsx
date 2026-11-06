@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { ArrowRight, Plus, X } from "lucide-react"
+import { ArrowRightIcon, PlusIcon, XIcon } from "@phosphor-icons/react";
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -85,10 +85,10 @@ export function Showcase() {
               <span className="ds-label w-24">{v}</span>
               <Button look="v2" variant={v}>{v}</Button>
               <Button look="v2" variant={v} size="sm">{v} sm</Button>
-              <Button look="v2" variant={v} size="icon" aria-label="Close"><X /></Button>
+              <Button look="v2" variant={v} size="icon" aria-label="Close"><XIcon /></Button>
               <Button look="v2" variant={v} disabled>disabled</Button>
-              <Button look="v2" variant={v}><Plus />With icon</Button>
-              {v === "link" && <Button look="v2" variant="link">Open <ArrowRight className="size-3.5" /></Button>}
+              <Button look="v2" variant={v}><PlusIcon />With icon</Button>
+              {v === "link" && <Button look="v2" variant="link">Open <ArrowRightIcon className="size-3.5" /></Button>}
             </div>
           ))}
           <div className="w-[200px] rounded-ds-sm border border-dashed border-ds-border p-2">

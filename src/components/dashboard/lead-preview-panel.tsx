@@ -6,19 +6,19 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Mail,
-  Phone,
-  MapPin,
-  ExternalLink,
-  Copy,
-  CheckSquare,
-  Square,
-  Globe,
-  Calendar,
-  User,
-  FileText,
-  X,
-} from "lucide-react";
+  EnvelopeSimpleIcon,
+  PhoneIcon,
+  MapPinIcon,
+  ArrowSquareOutIcon,
+  CopyIcon,
+  CheckSquareIcon,
+  SquareIcon,
+  GlobeIcon,
+  CalendarIcon,
+  UserIcon,
+  FileTextIcon,
+  XIcon,
+} from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { formatPhoneForTel } from "@/lib/phone-utils";
 import type { Lead, LeadNote, LeadChecklist, PipelineStage } from "@/types/database";
@@ -121,7 +121,7 @@ export function LeadPreviewPanel({
           onClick={onClose}
           className="p-1 rounded-md hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
         >
-          <X className="h-5 w-5" />
+          <XIcon className="h-5 w-5" />
         </button>
       </div>
 
@@ -132,7 +132,7 @@ export function LeadPreviewPanel({
           className="text-sm text-primary hover:underline flex items-center gap-1"
         >
           View record
-          <ExternalLink className="h-3 w-3" />
+          <ArrowSquareOutIcon className="h-3 w-3" />
         </Link>
       </div>
 
@@ -161,7 +161,7 @@ export function LeadPreviewPanel({
                     className="p-0.5 text-gray-400 hover:text-gray-600"
                     title="Copy email"
                   >
-                    <Copy className="h-3 w-3" />
+                    <CopyIcon className="h-3 w-3" />
                   </button>
                 </div>
               )}
@@ -178,7 +178,7 @@ export function LeadPreviewPanel({
                 asChild
               >
                 <a href={`tel:${lead.phone}`}>
-                  <Phone className="h-3.5 w-3.5" />
+                  <PhoneIcon className="h-3.5 w-3.5" />
                   Call
                 </a>
               </Button>
@@ -191,7 +191,7 @@ export function LeadPreviewPanel({
                 asChild
               >
                 <a href={`mailto:${lead.email}`}>
-                  <Mail className="h-3.5 w-3.5" />
+                  <EnvelopeSimpleIcon className="h-3.5 w-3.5" />
                   Email
                 </a>
               </Button>
@@ -222,7 +222,7 @@ export function LeadPreviewPanel({
             <div>
               <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Assigned</p>
               <div className="flex items-center gap-1.5 text-sm text-gray-700">
-                <User className="h-3.5 w-3.5 text-gray-400" />
+                <UserIcon className="h-3.5 w-3.5 text-gray-400" />
                 <span className="truncate">
                   {assignedEmail
                     ? (lead.assigned_to && memberNames[lead.assigned_to]) || assignedEmail.split("@")[0]
@@ -235,7 +235,7 @@ export function LeadPreviewPanel({
             <div>
               <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Source</p>
               <div className="flex items-center gap-1.5 text-sm text-gray-700">
-                <Globe className="h-3.5 w-3.5 text-gray-400" />
+                <GlobeIcon className="h-3.5 w-3.5 text-gray-400" />
                 <span>{lead.intake_source || "—"}</span>
               </div>
             </div>
@@ -244,7 +244,7 @@ export function LeadPreviewPanel({
             <div>
               <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Location</p>
               <div className="flex items-center gap-1.5 text-sm text-gray-700">
-                <MapPin className="h-3.5 w-3.5 text-gray-400" />
+                <MapPinIcon className="h-3.5 w-3.5 text-gray-400" />
                 <span className="truncate">
                   {lead.city || lead.country
                     ? `${lead.city || ""}${lead.city && lead.country ? ", " : ""}${lead.country || ""}`
@@ -257,7 +257,7 @@ export function LeadPreviewPanel({
             <div>
               <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Created</p>
               <div className="flex items-center gap-1.5 text-sm text-gray-700">
-                <Calendar className="h-3.5 w-3.5 text-gray-400" />
+                <CalendarIcon className="h-3.5 w-3.5 text-gray-400" />
                 <span>{new Date(lead.created_at).toLocaleDateString()}</span>
               </div>
             </div>
@@ -266,7 +266,7 @@ export function LeadPreviewPanel({
             <div>
               <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Phone</p>
               <div className="flex items-center gap-1.5 text-sm">
-                <Phone className="h-3.5 w-3.5 text-gray-400" />
+                <PhoneIcon className="h-3.5 w-3.5 text-gray-400" />
                 {lead.phone ? (
                   <a href={`tel:${formatPhoneForTel(lead.phone)}`} className="text-primary hover:underline truncate">
                     {lead.phone}
@@ -283,7 +283,7 @@ export function LeadPreviewPanel({
         <div className="px-4 py-3 border-t border-gray-100">
           <div className="flex items-center justify-between mb-2">
             <h4 className="text-sm font-medium text-gray-900 flex items-center gap-2">
-              <CheckSquare className="h-4 w-4 text-gray-500" />
+              <CheckSquareIcon className="h-4 w-4 text-gray-500" />
               Checklist
             </h4>
             {checklists.length > 0 && (
@@ -305,9 +305,9 @@ export function LeadPreviewPanel({
               {checklists.slice(0, 4).map((item) => (
                 <div key={item.id} className="flex items-center gap-2 text-sm">
                   {item.is_completed ? (
-                    <CheckSquare className="h-4 w-4 text-green-600 shrink-0" />
+                    <CheckSquareIcon className="h-4 w-4 text-green-600 shrink-0" />
                   ) : (
-                    <Square className="h-4 w-4 text-gray-400 shrink-0" />
+                    <SquareIcon className="h-4 w-4 text-gray-400 shrink-0" />
                   )}
                   <span className={item.is_completed ? "line-through text-gray-400" : "text-gray-700"}>
                     {item.title}
@@ -326,7 +326,7 @@ export function LeadPreviewPanel({
         {/* Latest Note Section */}
         <div className="px-4 py-3 border-t border-gray-100">
           <h4 className="text-sm font-medium text-gray-900 flex items-center gap-2 mb-2">
-            <FileText className="h-4 w-4 text-gray-500" />
+            <FileTextIcon className="h-4 w-4 text-gray-500" />
             Latest Note
           </h4>
 
@@ -349,7 +349,7 @@ export function LeadPreviewPanel({
       <div className="px-4 py-3 border-t border-gray-200 bg-gray-50">
         <Button variant="outline" size="sm" className="w-full h-9" asChild>
           <Link href={`/leads/${lead.id}`}>
-            <ExternalLink className="h-4 w-4 mr-2" />
+            <ArrowSquareOutIcon className="h-4 w-4 mr-2" />
             Open Full View
           </Link>
         </Button>

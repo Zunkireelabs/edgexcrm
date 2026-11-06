@@ -19,7 +19,14 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { MessageSquare, Plus, Trash2, Copy, Check, KeyRound } from "lucide-react";
+import {
+  ChatTextIcon,
+  PlusIcon,
+  TrashIcon,
+  CopyIcon,
+  CheckIcon,
+  KeyIcon,
+} from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 
@@ -58,7 +65,7 @@ function CopyBox({ label, value }: { label: string; value: string }) {
           {value}
         </code>
         <Button size="sm" variant="ghost" className="h-7 w-7 shrink-0 p-0" onClick={copy}>
-          {copied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+          {copied ? <CheckIcon className="h-3.5 w-3.5 text-green-600" /> : <CopyIcon className="h-3.5 w-3.5" />}
         </Button>
       </div>
     </div>
@@ -175,7 +182,7 @@ export function ChannelsCard() {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="flex items-center gap-2">
-                <MessageSquare className="h-5 w-5" />
+                <ChatTextIcon className="h-5 w-5" />
                 Messaging Channels
               </CardTitle>
               <CardDescription>
@@ -183,7 +190,7 @@ export function ChannelsCard() {
               </CardDescription>
             </div>
             <Button size="sm" onClick={() => setConnectOpen(true)}>
-              <Plus className="h-4 w-4 mr-1" />
+              <PlusIcon className="h-4 w-4 mr-1" />
               Connect WhatsApp
             </Button>
           </div>
@@ -231,7 +238,7 @@ export function ChannelsCard() {
                       title="Update token"
                       onClick={() => { setTokenTarget(ch); setNewToken(""); }}
                     >
-                      <KeyRound className="h-4 w-4" />
+                      <KeyIcon className="h-4 w-4" />
                     </Button>
                     <Button
                       size="sm"
@@ -239,7 +246,7 @@ export function ChannelsCard() {
                       className="h-8 w-8 p-0 text-destructive hover:text-destructive"
                       onClick={() => setDeleteTarget(ch)}
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <TrashIcon className="h-4 w-4" />
                     </Button>
                   </div>
                 </div>

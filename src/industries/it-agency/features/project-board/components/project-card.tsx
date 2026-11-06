@@ -2,7 +2,13 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Folder, MoreHorizontal, ExternalLink, Clock, User } from "lucide-react";
+import {
+  FolderIcon,
+  DotsThreeIcon,
+  ArrowSquareOutIcon,
+  ClockIcon,
+  UserIcon,
+} from "@phosphor-icons/react";
 import { useDraggable } from "@dnd-kit/core";
 import {
   DropdownMenu,
@@ -84,7 +90,7 @@ export function ProjectCard({ project, teamMap, hoursMap, isDragOverlay = false 
       {/* Section 1: Header — icon + name + dropdown */}
       <div className="flex items-start gap-3 mb-2">
         <div className="flex-shrink-0 h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
-          <Folder className="h-4 w-4 text-primary" />
+          <FolderIcon className="h-4 w-4 text-primary" />
         </div>
         <div className="flex-1 min-w-0">
           <Link
@@ -106,13 +112,13 @@ export function ProjectCard({ project, teamMap, hoursMap, isDragOverlay = false 
               onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => e.stopPropagation()}
             >
-              <MoreHorizontal className="h-4 w-4" />
+              <DotsThreeIcon className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-44">
             <DropdownMenuItem asChild>
               <Link href={`/projects/${project.id}`} prefetch={false}>
-                <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                <ArrowSquareOutIcon className="mr-2 h-3.5 w-3.5" />
                 View Details
               </Link>
             </DropdownMenuItem>
@@ -156,7 +162,7 @@ export function ProjectCard({ project, teamMap, hoursMap, isDragOverlay = false 
           <div
             className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium ${urgencyStyles.bg} ${urgencyStyles.text}`}
           >
-            <Clock className="h-3 w-3" />
+            <ClockIcon className="h-3 w-3" />
             <span>{days === 0 ? "Today" : `${days}d`}</span>
           </div>
           <HealthDot project={project} />
@@ -170,7 +176,7 @@ export function ProjectCard({ project, teamMap, hoursMap, isDragOverlay = false 
             title="Unassigned"
             className="h-6 w-6 rounded-full bg-muted border border-border flex items-center justify-center"
           >
-            <User className="h-3 w-3 text-muted-foreground" />
+            <UserIcon className="h-3 w-3 text-muted-foreground" />
           </div>
         )}
       </div>

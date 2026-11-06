@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, Loader2 } from "lucide-react";
+import { CheckCircleIcon, CircleNotchIcon } from "@phosphor-icons/react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -122,7 +122,7 @@ export function InPersonConsentDialog({
 
         {state === "loading" && (
           <div className="flex items-center justify-center py-16 gap-3">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            <CircleNotchIcon className="h-5 w-5 animate-spin text-muted-foreground" />
             <span className="text-sm text-muted-foreground">Preparing signing session…</span>
           </div>
         )}
@@ -153,7 +153,7 @@ export function InPersonConsentDialog({
         {state === "signed" && (
           <div className="flex flex-col items-center justify-center py-12 px-6 gap-4 text-center">
             <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center">
-              <CheckCircle2 className="h-7 w-7 text-green-600" />
+              <CheckCircleIcon className="h-7 w-7 text-green-600" />
             </div>
             <p className="text-base font-semibold text-gray-900">
               Consent signed — {signerName}

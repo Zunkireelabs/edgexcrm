@@ -1,7 +1,14 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { CheckCircle2, SkipForward, Clock, CalendarClock, Eye, Loader2 } from "lucide-react";
+import {
+  CheckCircleIcon,
+  SkipForwardIcon,
+  ClockIcon,
+  CalendarDotsIcon,
+  EyeIcon,
+  CircleNotchIcon,
+} from "@phosphor-icons/react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DraftReviewPanel } from "./draft-review-panel";
 import { SmsDraftReviewPanel } from "./sms-draft-review-panel";
@@ -54,12 +61,12 @@ function SentPreview({ leadId, activityId }: { leadId: string; activityId: strin
           aria-label="View sent email in timeline"
           onClick={(e) => e.stopPropagation()}
         >
-          <Eye className="h-3.5 w-3.5" /> View in timeline
+          <EyeIcon className="h-3.5 w-3.5" /> View in timeline
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-80 text-sm" align="end">
         {loading ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
+          <CircleNotchIcon className="h-4 w-4 animate-spin" />
         ) : activity ? (
           <div className="space-y-1.5">
             <p className="font-medium">{activity.email_subject || activity.subject || "Email"}</p>
@@ -177,10 +184,10 @@ export function CadenceTimeline({
         const rowInner = (
           <>
             <div className="shrink-0" aria-hidden>
-              {isSent && <CheckCircle2 className="h-4 w-4 text-green-600" />}
-              {isSkipped && <SkipForward className="h-4 w-4 text-muted-foreground" />}
-              {isDue && <Clock className="h-4 w-4 text-amber-600" />}
-              {(isScheduled || isProjected) && <CalendarClock className="h-4 w-4 text-muted-foreground" />}
+              {isSent && <CheckCircleIcon className="h-4 w-4 text-green-600" />}
+              {isSkipped && <SkipForwardIcon className="h-4 w-4 text-muted-foreground" />}
+              {isDue && <ClockIcon className="h-4 w-4 text-amber-600" />}
+              {(isScheduled || isProjected) && <CalendarDotsIcon className="h-4 w-4 text-muted-foreground" />}
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">

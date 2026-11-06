@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { X } from "lucide-react";
+import { XIcon } from "@phosphor-icons/react";
 import type { LeadUtmRow } from "@/lib/supabase/queries";
 import { UtmBarChart } from "./utm-bar-chart";
 import type { UtmField } from "../lib/aggregation";
@@ -75,7 +75,7 @@ export function UtmAnalyticsSection({ leads }: UtmAnalyticsSectionProps) {
               <span>
                 {FILTER_CHIP_LABELS[field]}: {selected[field]}
               </span>
-              <X className="h-3 w-3" />
+              <XIcon className="h-3 w-3" />
             </button>
           ))}
           <button

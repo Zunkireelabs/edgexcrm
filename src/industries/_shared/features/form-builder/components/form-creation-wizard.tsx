@@ -3,7 +3,13 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeft, ArrowRight, Rocket, Loader2, Check } from "lucide-react";
+import {
+  ArrowLeftIcon,
+  ArrowRightIcon,
+  RocketIcon,
+  CircleNotchIcon,
+  CheckIcon,
+} from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -95,7 +101,7 @@ export function FormCreationWizard({ tenantPrimaryColor, tenantSlug, industryId 
                     : "bg-muted text-muted-foreground"
                 }`}
               >
-                {step > num ? <Check className="h-3.5 w-3.5" /> : num}
+                {step > num ? <CheckIcon className="h-3.5 w-3.5" /> : num}
               </div>
               <span
                 className={`text-xs font-medium ${
@@ -174,10 +180,10 @@ export function FormCreationWizard({ tenantPrimaryColor, tenantSlug, industryId 
 
           <div className="flex justify-between">
             <Button variant="outline" onClick={() => setStep(1)}>
-              <ArrowLeft className="h-4 w-4 mr-1" /> Back
+              <ArrowLeftIcon className="h-4 w-4 mr-1" /> Back
             </Button>
             <Button onClick={() => setStep(3)} disabled={!formName.trim()}>
-              Next: Review <ArrowRight className="h-4 w-4 ml-1" />
+              Next: Review <ArrowRightIcon className="h-4 w-4 ml-1" />
             </Button>
           </div>
         </div>
@@ -237,16 +243,16 @@ export function FormCreationWizard({ tenantPrimaryColor, tenantSlug, industryId 
 
           <div className="flex justify-between">
             <Button variant="outline" onClick={() => setStep(2)}>
-              <ArrowLeft className="h-4 w-4 mr-1" /> Back
+              <ArrowLeftIcon className="h-4 w-4 mr-1" /> Back
             </Button>
             <Button onClick={handlePublish} disabled={creating}>
               {creating ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-1 animate-spin" /> Publishing...
+                  <CircleNotchIcon className="h-4 w-4 mr-1 animate-spin" /> Publishing...
                 </>
               ) : (
                 <>
-                  <Rocket className="h-4 w-4 mr-1" /> Publish Form
+                  <RocketIcon className="h-4 w-4 mr-1" /> Publish Form
                 </>
               )}
             </Button>

@@ -2,18 +2,18 @@
 
 import { useState, useEffect, useCallback } from "react";
 import {
-  RefreshCw,
-  TrendingUp,
-  Lightbulb,
-  MessageSquare,
-  Users,
-  AlertTriangle,
-  CheckCircle2,
-  Clock,
-  Phone,
-  Mail,
-  FileText,
-} from "lucide-react";
+  ArrowsClockwiseIcon,
+  TrendUpIcon,
+  LightbulbIcon,
+  ChatTextIcon,
+  UsersIcon,
+  WarningIcon,
+  CheckCircleIcon,
+  ClockIcon,
+  PhoneIcon,
+  EnvelopeSimpleIcon,
+  FileTextIcon,
+} from "@phosphor-icons/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -154,7 +154,7 @@ export function AIInsightsTab({ lead }: AIInsightsTabProps) {
           disabled={isRegenerating}
           className="gap-2"
         >
-          <RefreshCw className={`size-3.5 ${isRegenerating ? "animate-spin" : ""}`} />
+          <ArrowsClockwiseIcon className={`size-3.5 ${isRegenerating ? "animate-spin" : ""}`} />
           Regenerate
         </Button>
       </div>
@@ -164,7 +164,7 @@ export function AIInsightsTab({ lead }: AIInsightsTabProps) {
         <div className="rounded-[11px] bg-card p-4">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <TrendingUp className="size-4 text-purple-500" />
+              <TrendUpIcon className="size-4 text-purple-500" />
               <h3 className="font-semibold">Lead Score</h3>
             </div>
             <div className="flex items-center gap-2">
@@ -209,7 +209,7 @@ export function AIInsightsTab({ lead }: AIInsightsTabProps) {
       </div>
 
       {/* Quick Summary */}
-      <AISection icon={MessageSquare} title="Quick Summary">
+      <AISection icon={ChatTextIcon} title="Quick Summary">
         <p className="text-sm text-foreground leading-relaxed">
           {insights.summary}
         </p>
@@ -217,7 +217,7 @@ export function AIInsightsTab({ lead }: AIInsightsTabProps) {
 
       {/* Recommended Actions */}
       <AISection
-        icon={Lightbulb}
+        icon={LightbulbIcon}
         title="Recommended Actions"
         badge={`${insights.actions.length}`}
       >
@@ -258,27 +258,27 @@ export function AIInsightsTab({ lead }: AIInsightsTabProps) {
       </AISection>
 
       {/* Engagement Summary */}
-      <AISection icon={Users} title="Engagement Summary">
+      <AISection icon={UsersIcon} title="Engagement Summary">
         <div className="grid grid-cols-2 gap-4">
           <EngagementStat
             label="Total Interactions"
             value={String(insights.engagement.totalInteractions)}
-            icon={MessageSquare}
+            icon={ChatTextIcon}
           />
           <EngagementStat
             label="Last Contact"
             value={insights.engagement.lastInteraction}
-            icon={Clock}
+            icon={ClockIcon}
           />
           <EngagementStat
             label="Response Rate"
             value={insights.engagement.responseRate}
-            icon={CheckCircle2}
+            icon={CheckCircleIcon}
           />
           <EngagementStat
             label="Avg Response Time"
             value={insights.engagement.avgResponseTime}
-            icon={TrendingUp}
+            icon={TrendUpIcon}
           />
         </div>
       </AISection>
@@ -348,12 +348,12 @@ function EngagementStat({
 
 function ActionIcon({ type }: { type: string }) {
   const iconMap = {
-    call: Phone,
-    email: Mail,
-    task: CheckCircle2,
-    update: FileText,
+    call: PhoneIcon,
+    email: EnvelopeSimpleIcon,
+    task: CheckCircleIcon,
+    update: FileTextIcon,
   };
-  const Icon = iconMap[type as keyof typeof iconMap] || FileText;
+  const Icon = iconMap[type as keyof typeof iconMap] || FileTextIcon;
   return (
     <div className="size-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
       <Icon className="size-4 text-primary" />
@@ -411,7 +411,7 @@ function AIInsightsEmpty({ onGenerate, isLoading }: { onGenerate: () => void; is
       <Button onClick={onGenerate} className="mt-6 gap-2" disabled={isLoading}>
         {isLoading ? (
           <>
-            <RefreshCw className="size-4 animate-spin" />
+            <ArrowsClockwiseIcon className="size-4 animate-spin" />
             Generating...
           </>
         ) : (
@@ -430,14 +430,14 @@ function AIInsightsError({ error, onRetry }: { error: string; onRetry: () => voi
   return (
     <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
       <div className="size-12 rounded-full bg-amber-100 flex items-center justify-center">
-        <AlertTriangle className="size-6 text-amber-600" />
+        <WarningIcon className="size-6 text-amber-600" />
       </div>
       <h3 className="mt-4 text-lg font-semibold">Could not load insights</h3>
       <p className="mt-2 text-sm text-muted-foreground max-w-sm">
         {error || "We ran into an issue. This is usually temporary."}
       </p>
       <Button onClick={onRetry} variant="outline" className="mt-6 gap-2">
-        <RefreshCw className="size-4" />
+        <ArrowsClockwiseIcon className="size-4" />
         Try Again
       </Button>
     </div>

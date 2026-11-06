@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeftIcon } from "@phosphor-icons/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface SourceLead {
@@ -37,7 +37,7 @@ export function LeadProvenanceCard({ sourceLead }: LeadProvenanceCardProps) {
           href={`/leads/${sourceLead.id}`}
           className="text-sm font-medium hover:underline flex items-center gap-1"
         >
-          <ArrowLeft className="h-3.5 w-3.5 shrink-0" />
+          <ArrowLeftIcon className="h-3.5 w-3.5 shrink-0" />
           {leadName}
         </Link>
         <p className="text-xs text-muted-foreground">Lead created {createdDate}</p>

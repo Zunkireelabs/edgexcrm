@@ -1,7 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Trash2, ChevronUp, ChevronDown, Printer } from "lucide-react";
+import {
+  PlusIcon,
+  TrashIcon,
+  CaretUpIcon,
+  CaretDownIcon,
+  PrinterIcon,
+} from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -176,7 +182,7 @@ export function ItineraryBuilder({ lead, tenantName, tenantLogoUrl, onSave }: It
             className="gap-1.5"
             onClick={() => setShowProposal(true)}
           >
-            <Printer className="h-4 w-4" />
+            <PrinterIcon className="h-4 w-4" />
             View Proposal
           </Button>
           <Button size="sm" onClick={handleSave} disabled={saving}>
@@ -190,7 +196,7 @@ export function ItineraryBuilder({ lead, tenantName, tenantLogoUrl, onSave }: It
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold">Day-by-Day Itinerary</h3>
           <Button variant="outline" size="sm" className="gap-1.5" onClick={addDay}>
-            <Plus className="h-3.5 w-3.5" />
+            <PlusIcon className="h-3.5 w-3.5" />
             Add Day
           </Button>
         </div>
@@ -219,7 +225,7 @@ export function ItineraryBuilder({ lead, tenantName, tenantLogoUrl, onSave }: It
                       disabled={idx === 0}
                       className="p-1 rounded hover:bg-muted disabled:opacity-30"
                     >
-                      <ChevronUp className="h-3.5 w-3.5" />
+                      <CaretUpIcon className="h-3.5 w-3.5" />
                     </button>
                     <button
                       type="button"
@@ -227,14 +233,14 @@ export function ItineraryBuilder({ lead, tenantName, tenantLogoUrl, onSave }: It
                       disabled={idx === itinerary.days.length - 1}
                       className="p-1 rounded hover:bg-muted disabled:opacity-30"
                     >
-                      <ChevronDown className="h-3.5 w-3.5" />
+                      <CaretDownIcon className="h-3.5 w-3.5" />
                     </button>
                     <button
                       type="button"
                       onClick={() => removeDay(day.id)}
                       className="p-1 rounded hover:bg-muted text-destructive"
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <TrashIcon className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 </div>
@@ -255,7 +261,7 @@ export function ItineraryBuilder({ lead, tenantName, tenantLogoUrl, onSave }: It
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold">Pricing</h3>
           <Button variant="outline" size="sm" className="gap-1.5" onClick={addLineItem}>
-            <Plus className="h-3.5 w-3.5" />
+            <PlusIcon className="h-3.5 w-3.5" />
             Add Item
           </Button>
         </div>
@@ -325,7 +331,7 @@ export function ItineraryBuilder({ lead, tenantName, tenantLogoUrl, onSave }: It
                   onClick={() => removeLineItem(item.id)}
                   className="p-1 rounded hover:bg-muted text-destructive"
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
+                  <TrashIcon className="h-3.5 w-3.5" />
                 </button>
               </div>
             ))}
@@ -358,7 +364,7 @@ export function ItineraryBuilder({ lead, tenantName, tenantLogoUrl, onSave }: It
           className="gap-1.5"
           onClick={() => setShowProposal(true)}
         >
-          <Printer className="h-4 w-4" />
+          <PrinterIcon className="h-4 w-4" />
           View Proposal
         </Button>
         <Button onClick={handleSave} disabled={saving}>

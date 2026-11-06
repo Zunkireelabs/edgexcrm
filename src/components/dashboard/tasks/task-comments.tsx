@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
-import { Trash2 } from "lucide-react";
+import { TrashIcon } from "@phosphor-icons/react";
 import { MemberAvatar } from "@/components/ui/member-avatar";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -148,7 +148,7 @@ export function TaskComments({ taskId, currentUserId, isAdmin, team }: TaskComme
                       onClick={() => remove(c.id)}
                       className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-red-600 focus-visible:opacity-100"
                     >
-                      <Trash2 className="h-3 w-3" />
+                      <TrashIcon className="h-3 w-3" />
                     </button>
                   )}
                 </div>

@@ -1,7 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, Loader2, ClipboardCheck } from "lucide-react";
+import {
+  CaretDownIcon,
+  CaretRightIcon,
+  CircleNotchIcon,
+  ClipboardTextIcon,
+} from "@phosphor-icons/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -75,7 +80,7 @@ function ComplianceTableRow({ row, expectedMinutes }: ComplianceTableRowProps) {
                   type="button"
                   className="inline-flex items-center gap-1 text-red-600 font-medium tabular-nums hover:underline"
                 >
-                  {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                  {expanded ? <CaretDownIcon className="h-3.5 w-3.5" /> : <CaretRightIcon className="h-3.5 w-3.5" />}
                   {row.missingDays.length}
                 </button>
               </CollapsibleTrigger>
@@ -160,7 +165,7 @@ export function CompliancePage() {
       {/* Summary strip */}
       <Card>
         <CardHeader className="flex flex-row items-center gap-2 pb-2">
-          <ClipboardCheck className="h-4 w-4 text-muted-foreground" />
+          <ClipboardTextIcon className="h-4 w-4 text-muted-foreground" />
           <CardTitle className="text-sm font-medium text-muted-foreground">Summary</CardTitle>
         </CardHeader>
         <CardContent className="text-sm">
@@ -174,11 +179,11 @@ export function CompliancePage() {
       {/* Table */}
       {loading ? (
         <div className="flex items-center justify-center h-32">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          <CircleNotchIcon className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
       ) : rows.length === 0 ? (
         <div className="border rounded-xl p-12 text-center bg-card">
-          <ClipboardCheck className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
+          <ClipboardTextIcon className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
           <h3 className="font-semibold text-lg mb-1">No members found</h3>
           <p className="text-muted-foreground text-sm">There are no active team members for this tenant.</p>
         </div>

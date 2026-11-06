@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useEffect } from "react";
-import { Search, LayoutGrid, TableProperties, Plus } from "lucide-react";
+import { MagnifyingGlassIcon, SquaresFourIcon, TableIcon, PlusIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { type FilterOption } from "@/components/ui/filter-dropdown";
@@ -147,18 +147,18 @@ export function WorkspaceHeader({
           >
             <TabsList>
               <TabsTrigger value="board" className="gap-1.5 text-xs">
-                <LayoutGrid className="h-3.5 w-3.5" />
+                <SquaresFourIcon className="h-3.5 w-3.5" />
                 Board
               </TabsTrigger>
               <TabsTrigger value="table" className="gap-1.5 text-xs">
-                <TableProperties className="h-3.5 w-3.5" />
+                <TableIcon className="h-3.5 w-3.5" />
                 Table
               </TabsTrigger>
             </TabsList>
           </Tabs>
           {canCreate && (
             <Button size="sm" onClick={onNewProject}>
-              <Plus className="h-3.5 w-3.5 mr-1.5" />
+              <PlusIcon className="h-3.5 w-3.5 mr-1.5" />
               New project
             </Button>
           )}
@@ -173,7 +173,7 @@ export function WorkspaceHeader({
             {projectCount} {projectCount === 1 ? "Project" : "Projects"}
           </div>
           <div className="relative w-60">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <input
               ref={searchRef}
               type="text"

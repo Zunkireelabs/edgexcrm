@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Copy, Loader2, Upload } from "lucide-react";
+import { CopyIcon, CircleNotchIcon, UploadIcon } from "@phosphor-icons/react";
 import {
   Dialog,
   DialogContent,
@@ -220,12 +220,12 @@ export function SendConsentDialog({
                   Send the student a secure link to review and sign the consent document.
                 </p>
                 <Button onClick={() => handleSend("email")} disabled={sending} className="w-full">
-                  {sending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  {sending && <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />}
                   Send Consent Link
                 </Button>
                 {allowCopyOnly && (
                   <Button variant="outline" onClick={() => handleSend("none")} disabled={sending} className="w-full">
-                    <Copy className="h-4 w-4 mr-2" />
+                    <CopyIcon className="h-4 w-4 mr-2" />
                     Copy link instead
                   </Button>
                 )}
@@ -252,7 +252,7 @@ export function SendConsentDialog({
                     className="flex-1 px-3 py-2 text-xs border rounded-lg bg-muted font-mono truncate"
                   />
                   <Button size="sm" variant="outline" onClick={handleCopyLink}>
-                    <Copy className="h-3.5 w-3.5" />
+                    <CopyIcon className="h-3.5 w-3.5" />
                   </Button>
                 </div>
                 <Button variant="outline" className="w-full" onClick={onSuccess}>
@@ -303,10 +303,10 @@ export function SendConsentDialog({
               ) : (
                 <label className="flex items-center justify-center gap-2 border-2 border-dashed rounded-lg p-4 cursor-pointer hover:bg-muted/20 transition-colors">
                   {uploading ? (
-                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    <CircleNotchIcon className="h-4 w-4 animate-spin text-muted-foreground" />
                   ) : (
                     <>
-                      <Upload className="h-4 w-4 text-muted-foreground" />
+                      <UploadIcon className="h-4 w-4 text-muted-foreground" />
                       <span className="text-sm text-muted-foreground">Click to upload PDF or image</span>
                     </>
                   )}
@@ -333,7 +333,7 @@ export function SendConsentDialog({
                 disabled={saving || uploading || !signerName.trim() || !documentUrl}
                 className="flex-1"
               >
-                {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                {saving && <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />}
                 Record Consent
               </Button>
             </div>

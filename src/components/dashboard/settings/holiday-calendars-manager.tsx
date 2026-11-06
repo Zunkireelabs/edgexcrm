@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { CalendarDays, Plus, Trash2 } from "lucide-react";
+import { CalendarDotsIcon, PlusIcon, TrashIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import type { Branch } from "@/types/database";
 
@@ -119,7 +119,7 @@ export function HolidayCalendarsManager() {
     <Card>
       <CardHeader>
         <CardTitle className="text-lg flex items-center gap-2">
-          <CalendarDays className="h-5 w-5" />
+          <CalendarDotsIcon className="h-5 w-5" />
           Holiday Calendars
         </CardTitle>
         <CardDescription>
@@ -162,7 +162,7 @@ export function HolidayCalendarsManager() {
                   onClick={() => deleteHoliday(h.id, h.name)}
                   title="Remove"
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
+                  <TrashIcon className="h-3.5 w-3.5" />
                 </Button>
               </div>
             ))}
@@ -192,7 +192,7 @@ export function HolidayCalendarsManager() {
             className="w-40"
           />
           <Button onClick={createHoliday} disabled={creating || !createName.trim() || !createDate} size="sm">
-            <Plus className="h-4 w-4 mr-1" />
+            <PlusIcon className="h-4 w-4 mr-1" />
             {creating ? "Adding…" : "Add"}
           </Button>
         </div>

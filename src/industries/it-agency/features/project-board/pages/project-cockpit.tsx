@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeftIcon, CircleNotchIcon } from "@phosphor-icons/react";
 import { useProjectCockpit } from "../hooks/use-project-cockpit";
 import { HealthBanner } from "../components/cockpit/health-banner";
 import { BriefEditor } from "../components/cockpit/brief-editor";
@@ -57,7 +57,7 @@ export function ProjectCockpitPage({ projectId, role, currentUserId, tenantSlug,
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        <CircleNotchIcon className="h-5 w-5 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -80,7 +80,7 @@ export function ProjectCockpitPage({ projectId, role, currentUserId, tenantSlug,
           href="/projects"
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground mb-2"
         >
-          <ArrowLeft className="h-3.5 w-3.5" />
+          <ArrowLeftIcon className="h-3.5 w-3.5" />
           Projects
         </Link>
         <div className="flex items-center gap-3 flex-wrap">

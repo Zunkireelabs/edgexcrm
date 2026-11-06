@@ -24,7 +24,7 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Search, GripVertical, X, Lock } from "lucide-react";
+import { MagnifyingGlassIcon, DotsSixVerticalIcon, XIcon, LockIcon } from "@phosphor-icons/react";
 import type { LeadColumn } from "./columns-registry";
 
 interface ColumnManagerDialogProps {
@@ -70,7 +70,7 @@ function SortableItem({
         {...listeners}
         aria-label="Drag to reorder"
       >
-        <GripVertical size={14} />
+        <DotsSixVerticalIcon size={14} />
       </button>
       <span className="flex-1 truncate text-gray-700">{col.label}</span>
       <button
@@ -78,7 +78,7 @@ function SortableItem({
         className="shrink-0 text-gray-300 hover:text-red-500 transition-colors"
         aria-label={`Remove ${col.label}`}
       >
-        <X size={12} />
+        <XIcon size={12} />
       </button>
     </div>
   );
@@ -87,7 +87,7 @@ function SortableItem({
 function LockedItem({ label }: { label: string }) {
   return (
     <div className="flex items-center gap-1.5 px-2 py-1.5 bg-gray-50 border border-gray-200 rounded text-sm cursor-not-allowed">
-      <Lock size={12} className="text-gray-400 shrink-0" />
+      <LockIcon size={12} className="text-gray-400 shrink-0" />
       <span className="flex-1 truncate text-gray-500">{label}</span>
     </div>
   );
@@ -207,7 +207,7 @@ export function ColumnManagerDialog({
           <div className="flex-1 flex flex-col border-r overflow-hidden">
             <div className="p-3 border-b shrink-0">
               <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
                 <input
                   type="text"
                   placeholder="Search columns…"

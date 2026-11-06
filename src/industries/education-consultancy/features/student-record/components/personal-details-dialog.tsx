@@ -3,7 +3,7 @@
 import { GUARDIAN_SECTION_TITLE } from "@/lib/consent/guardian";
 import { useEffect, useMemo, useState, useRef } from "react";
 import { toast } from "sonner";
-import { Pencil, X, Check, Loader2 } from "lucide-react";
+import { PencilSimpleIcon, XIcon, CheckIcon, CircleNotchIcon } from "@phosphor-icons/react";
 import {
   Dialog,
   DialogContent,
@@ -666,17 +666,17 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
               {isEditing ? (
                 <>
                   <Button variant="ghost" onClick={requestCancel} disabled={isSaving}>
-                    <X className="h-3.5 w-3.5 mr-1" />
+                    <XIcon className="h-3.5 w-3.5 mr-1" />
                     Cancel
                   </Button>
                   <Button onClick={requestSave} disabled={isSaving}>
-                    {isSaving ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Check className="h-3.5 w-3.5 mr-1" />}
+                    {isSaving ? <CircleNotchIcon className="h-3.5 w-3.5 mr-1 animate-spin" /> : <CheckIcon className="h-3.5 w-3.5 mr-1" />}
                     Save
                   </Button>
                 </>
               ) : (
                 <Button onClick={startEditing}>
-                  <Pencil className="h-3.5 w-3.5 mr-1" />
+                  <PencilSimpleIcon className="h-3.5 w-3.5 mr-1" />
                   Edit
                 </Button>
               )}

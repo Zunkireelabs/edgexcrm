@@ -3,7 +3,7 @@
 // The operator + value screen — reached after a field is chosen (either fresh,
 // from FilterFieldPicker, or by clicking an existing chip to edit it in place).
 
-import { ChevronLeft } from "lucide-react";
+import { CaretLeftIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import type { FieldDef, FilterCondition, FilterOperator, FilterValue } from "@/lib/filters/types";
 import type { FilterOption } from "@/components/ui/filter-dropdown";
@@ -59,7 +59,7 @@ export function FilterConditionEditor({ field, condition, options, onChange, onA
           onClick={onBack}
           className="flex items-center gap-1 self-start px-1 text-xs font-medium text-muted-foreground hover:text-foreground"
         >
-          <ChevronLeft className="size-3.5" />
+          <CaretLeftIcon className="size-3.5" />
           {headingLabel}
         </button>
       ) : (

@@ -1,6 +1,6 @@
 "use client";
 
-import { User, Bot } from "lucide-react";
+import { UserIcon, RobotIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import type { OrgLayer, ViewMode } from "./types";
 
@@ -54,14 +54,14 @@ export function OrgHierarchy({ layers, mode }: OrgHierarchyProps) {
                       >
                         <div className="flex items-center justify-center gap-2 mb-1">
                           {displayType === "agent" ? (
-                            <Bot className="w-4 h-4 text-emerald-600" />
+                            <RobotIcon className="w-4 h-4 text-emerald-600" />
                           ) : displayType === "hybrid" ? (
                             <>
-                              <User className="w-4 h-4 text-amber-600" />
-                              <Bot className="w-4 h-4 text-amber-600" />
+                              <UserIcon className="w-4 h-4 text-amber-600" />
+                              <RobotIcon className="w-4 h-4 text-amber-600" />
                             </>
                           ) : (
-                            <User className="w-4 h-4 text-gray-600" />
+                            <UserIcon className="w-4 h-4 text-gray-600" />
                           )}
                         </div>
                         <p

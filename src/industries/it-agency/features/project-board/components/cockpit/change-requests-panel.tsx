@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Check, X } from "lucide-react";
+import { PlusIcon, CheckIcon, XIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -89,7 +89,7 @@ export function ChangeRequestsPanel({
         <CardTitle className="text-sm">Change requests</CardTitle>
         {canManageProjects && (
           <Button variant="ghost" size="sm" onClick={() => setAdding((v) => !v)}>
-            <Plus className="h-3.5 w-3.5 mr-1.5" />
+            <PlusIcon className="h-3.5 w-3.5 mr-1.5" />
             New
           </Button>
         )}
@@ -160,10 +160,10 @@ export function ChangeRequestsPanel({
                 {cr.status === "proposed" && canManageProjects && (
                   <>
                     <Button variant="ghost" size="sm" onClick={() => onApprove(cr.id, cr.client_approved)} title="Approve">
-                      <Check className="h-3.5 w-3.5 text-green-600" />
+                      <CheckIcon className="h-3.5 w-3.5 text-green-600" />
                     </Button>
                     <Button variant="ghost" size="sm" onClick={() => onReject(cr.id)} title="Reject">
-                      <X className="h-3.5 w-3.5 text-red-600" />
+                      <XIcon className="h-3.5 w-3.5 text-red-600" />
                     </Button>
                   </>
                 )}

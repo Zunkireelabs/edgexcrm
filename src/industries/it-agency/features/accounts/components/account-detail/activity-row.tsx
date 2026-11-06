@@ -1,20 +1,20 @@
 "use client";
 
 import {
-  Building2,
-  Edit,
-  ToggleLeft,
-  UserCheck,
-  FolderPlus,
-  FolderClock,
-  FolderMinus,
-  Clock,
-  CheckCircle,
-  XCircle,
-  UserPlus,
-  ArrowRightCircle,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+  BuildingsIcon,
+  PencilSimpleIcon,
+  ToggleLeftIcon,
+  UserCheckIcon,
+  FolderPlusIcon,
+  FolderIcon,
+  FolderMinusIcon,
+  ClockIcon,
+  CheckCircleIcon,
+  XCircleIcon,
+  UserPlusIcon,
+  ArrowCircleRightIcon,
+} from "@phosphor-icons/react";
+import type { Icon } from "@phosphor-icons/react";
 import { formatRelativeTime } from "@/lib/format-relative-time";
 import { PROJECT_STATUS_MAP } from "@/industries/it-agency/features/time-tracking/components/status-badge";
 import type { ProjectStatus } from "@/types/database";
@@ -26,29 +26,29 @@ export interface ActivityItem {
   created_at: string;
 }
 
-function getEventDisplay(item: ActivityItem): { icon: LucideIcon; text: string } {
+function getEventDisplay(item: ActivityItem): { icon: Icon; text: string } {
   const p = item.payload;
   const changedFields = Array.isArray(p.changed_fields) ? (p.changed_fields as string[]) : [];
 
   switch (item.type) {
     case "account.created":
-      return { icon: Building2, text: "Account created" };
+      return { icon: BuildingsIcon, text: "Account created" };
 
     case "account.updated": {
       if (changedFields.includes("is_active")) {
         const newVal = (p.new as Record<string, unknown>)?.is_active;
-        return { icon: ToggleLeft, text: newVal ? "Account marked Active" : "Account marked Inactive" };
+        return { icon: ToggleLeftIcon, text: newVal ? "Account marked Active" : "Account marked Inactive" };
       }
       if (changedFields.includes("primary_contact_id")) {
-        return { icon: UserCheck, text: "Primary contact changed" };
+        return { icon: UserCheckIcon, text: "Primary contact changed" };
       }
       const fieldList = changedFields.filter((f) => f !== "updated_at").join(", ");
-      return { icon: Edit, text: fieldList ? `Account updated — ${fieldList}` : "Account updated" };
+      return { icon: PencilSimpleIcon, text: fieldList ? `Account updated — ${fieldList}` : "Account updated" };
     }
 
     case "project.created": {
       const name = p.project_name as string | null;
-      return { icon: FolderPlus, text: name ? `Project «${name}» created` : "Project created" };
+      return { icon: FolderPlusIcon, text: name ? `Project «${name}» created` : "Project created" };
     }
 
     case "project.updated": {
@@ -56,14 +56,14 @@ function getEventDisplay(item: ActivityItem): { icon: LucideIcon; text: string }
       const name = p.project_name as string | null;
       if (newStatus) {
         const label = PROJECT_STATUS_MAP[newStatus as ProjectStatus]?.label ?? newStatus;
-        return { icon: FolderClock, text: name ? `Project «${name}» → ${label}` : `Project status → ${label}` };
+        return { icon: FolderIcon, text: name ? `Project «${name}» → ${label}` : `Project status → ${label}` };
       }
-      return { icon: Edit, text: name ? `Project «${name}» updated` : "Project updated" };
+      return { icon: PencilSimpleIcon, text: name ? `Project «${name}» updated` : "Project updated" };
     }
 
     case "project.deleted": {
       const name = p.project_name as string | null;
-      return { icon: FolderMinus, text: name ? `Project «${name}» deleted` : "Project deleted" };
+      return { icon: FolderMinusIcon, text: name ? `Project «${name}» deleted` : "Project deleted" };
     }
 
     case "time_entry.logged": {
@@ -71,7 +71,7 @@ function getEventDisplay(item: ActivityItem): { icon: LucideIcon; text: string }
       const name = email ? email.split("@")[0] : "Someone";
       const hrs = (((p.minutes_sum as number) ?? 0) / 60).toFixed(1);
       const proj = p.project_name as string | null;
-      return { icon: Clock, text: proj ? `${name} logged ${hrs}h on «${proj}»` : `${name} logged ${hrs}h` };
+      return { icon: ClockIcon, text: proj ? `${name} logged ${hrs}h on «${proj}»` : `${name} logged ${hrs}h` };
     }
 
     case "time_entry.approved": {
@@ -79,7 +79,7 @@ function getEventDisplay(item: ActivityItem): { icon: LucideIcon; text: string }
       const name = email ? email.split("@")[0] : "Someone";
       const hrs = (((p.minutes as number) ?? 0) / 60).toFixed(1);
       const proj = p.project_name as string | null;
-      return { icon: CheckCircle, text: proj ? `${name}'s ${hrs}h on «${proj}» approved` : `Time entry approved` };
+      return { icon: CheckCircleIcon, text: proj ? `${name}'s ${hrs}h on «${proj}» approved` : `Time entry approved` };
     }
 
     case "time_entry.rejected": {
@@ -87,26 +87,26 @@ function getEventDisplay(item: ActivityItem): { icon: LucideIcon; text: string }
       const name = email ? email.split("@")[0] : "Someone";
       const hrs = (((p.minutes as number) ?? 0) / 60).toFixed(1);
       const proj = p.project_name as string | null;
-      return { icon: XCircle, text: proj ? `${name}'s ${hrs}h on «${proj}» rejected` : `Time entry rejected` };
+      return { icon: XCircleIcon, text: proj ? `${name}'s ${hrs}h on «${proj}» rejected` : `Time entry rejected` };
     }
 
     case "contact.created": {
       const name = p.contact_name as string | null;
-      return { icon: UserPlus, text: name ? `Contact ${name} added` : "Contact added" };
+      return { icon: UserPlusIcon, text: name ? `Contact ${name} added` : "Contact added" };
     }
 
     case "lead.created": {
       const name = p.lead_name as string | null;
-      return { icon: UserPlus, text: name ? `Lead ${name} added` : "Lead added" };
+      return { icon: UserPlusIcon, text: name ? `Lead ${name} added` : "Lead added" };
     }
 
     case "lead.converted": {
       const name = p.lead_name as string | null;
-      return { icon: ArrowRightCircle, text: name ? `Lead ${name} converted to contact` : "Lead converted to contact" };
+      return { icon: ArrowCircleRightIcon, text: name ? `Lead ${name} converted to contact` : "Lead converted to contact" };
     }
 
     default:
-      return { icon: Building2, text: item.type.replace(/\./g, " ") };
+      return { icon: BuildingsIcon, text: item.type.replace(/\./g, " ") };
   }
 }
 

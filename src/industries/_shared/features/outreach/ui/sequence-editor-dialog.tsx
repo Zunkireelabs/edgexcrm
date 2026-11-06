@@ -1,7 +1,17 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Plus, Trash2, ChevronUp, ChevronDown, Loader2, Eye, Monitor, Smartphone, Send } from "lucide-react";
+import {
+  PlusIcon,
+  TrashIcon,
+  CaretUpIcon,
+  CaretDownIcon,
+  CircleNotchIcon,
+  EyeIcon,
+  MonitorIcon,
+  DeviceMobileIcon,
+  PaperPlaneTiltIcon,
+} from "@phosphor-icons/react";
 import {
   Dialog,
   DialogContent,
@@ -282,13 +292,13 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
         title={!steps[index].subject_template.trim() ? "Add a subject first" : "Email this step to yourself, with sample data"}
         onClick={() => sendTest(index)}
       >
-        {testingIndex === index ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Send className="h-3.5 w-3.5 mr-1.5" />} Send me a test
+        {testingIndex === index ? <CircleNotchIcon className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <PaperPlaneTiltIcon className="h-3.5 w-3.5 mr-1.5" />} Send me a test
       </Button>
     ) : null;
 
   const fullPreviewButton = (index: number) => (
     <Button type="button" variant="outline" size="sm" className="h-8 px-3 text-xs" onClick={() => setPreviewIndex(index)}>
-      <Eye className="h-3.5 w-3.5 mr-1.5" /> Full preview
+      <EyeIcon className="h-3.5 w-3.5 mr-1.5" /> Full preview
     </Button>
   );
 
@@ -590,10 +600,10 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
                     </div>
                     <div className="flex items-center gap-1">
                       <Button type="button" variant="ghost" size="icon" className="h-7 w-7" disabled={index === 0 || locked || index === lockedUpTo} onClick={() => moveStep(index, -1)}>
-                        <ChevronUp className="h-3.5 w-3.5" />
+                        <CaretUpIcon className="h-3.5 w-3.5" />
                       </Button>
                       <Button type="button" variant="ghost" size="icon" className="h-7 w-7" disabled={index === steps.length - 1 || locked} onClick={() => moveStep(index, 1)}>
-                        <ChevronDown className="h-3.5 w-3.5" />
+                        <CaretDownIcon className="h-3.5 w-3.5" />
                       </Button>
                       <Button
                         type="button"
@@ -603,7 +613,7 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
                         disabled={steps.length === 1 || locked}
                         onClick={() => removeStep(index)}
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <TrashIcon className="h-3.5 w-3.5" />
                       </Button>
                     </div>
                   </div>
@@ -763,7 +773,7 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
             })}
 
             <Button type="button" variant="outline" size="sm" onClick={addStep}>
-              <Plus className="h-3.5 w-3.5 mr-1.5" /> Add step
+              <PlusIcon className="h-3.5 w-3.5 mr-1.5" /> Add step
             </Button>
           </div>
         </div>
@@ -773,7 +783,7 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
             Cancel
           </Button>
           <Button type="button" onClick={handleSave} disabled={saving}>
-            {saving && <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />}
+            {saving && <CircleNotchIcon className="h-4 w-4 mr-1.5 animate-spin" />}
             {isEdit ? "Save changes" : "Create sequence"}
           </Button>
         </DialogFooter>
@@ -787,8 +797,8 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, in
               <div className="inline-flex rounded-md border p-0.5" role="group" aria-label="Preview width">
                 {(
                   [
-                    ["desktop", "Desktop", Monitor],
-                    ["mobile", "Mobile", Smartphone],
+                    ["desktop", "Desktop", MonitorIcon],
+                    ["mobile", "Mobile", DeviceMobileIcon],
                   ] as const
                 ).map(([key, label, Icon]) => (
                   <button

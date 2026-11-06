@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { toast } from "sonner";
-import { ChevronRight, ChevronDown, Users } from "lucide-react";
+import { CaretRightIcon, CaretDownIcon, UsersIcon } from "@phosphor-icons/react";
 import { StatusPill } from "../status-pill";
 import { PriorityPill } from "../priority-pill";
 import { MemberAvatar } from "@/components/ui/member-avatar";
@@ -160,7 +160,7 @@ export function MembersView({ filters, team, projects, accountMap, onClearFilter
   if (sections.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 gap-2 text-center">
-        <Users className="h-8 w-8 text-muted-foreground/40" />
+        <UsersIcon className="h-8 w-8 text-muted-foreground/40" />
         <p className="text-sm text-muted-foreground">
           No members have owned projects or assigned tasks yet.
         </p>
@@ -196,9 +196,9 @@ export function MembersView({ filters, team, projects, accountMap, onClearFilter
               className="w-full flex items-center gap-3 px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
             >
               {expanded ? (
-                <ChevronDown className="h-4 w-4 text-gray-400 shrink-0" />
+                <CaretDownIcon className="h-4 w-4 text-gray-400 shrink-0" />
               ) : (
-                <ChevronRight className="h-4 w-4 text-gray-400 shrink-0" />
+                <CaretRightIcon className="h-4 w-4 text-gray-400 shrink-0" />
               )}
               <MemberAvatar userId={member.user_id} name={member.name} size={32} />
               <span className="text-sm font-medium text-[#0f0f10] truncate flex-1">

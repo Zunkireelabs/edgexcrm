@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeftIcon } from "@phosphor-icons/react";
 import { BlastComposer } from "./blast-composer";
 import { BlastDetail } from "./blast-detail";
 import { emailBlastGet, EmailBlastApiError } from "../lib/api-client";
@@ -34,7 +34,7 @@ export function BlastWorkspace({ blastId, canSendEmail, isAdmin }: BlastWorkspac
   return (
     <div className="flex flex-col gap-4">
       <Link href="/email-campaigns" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground w-fit">
-        <ArrowLeft className="h-3.5 w-3.5" />
+        <ArrowLeftIcon className="h-3.5 w-3.5" />
         All blasts
       </Link>
 

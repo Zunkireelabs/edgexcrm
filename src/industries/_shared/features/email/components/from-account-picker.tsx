@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
+import { CircleNotchIcon } from "@phosphor-icons/react";
 import { useSettingsModal } from "@/contexts/settings-modal-context";
 import {
   Select,
@@ -26,7 +26,7 @@ export function FromAccountPicker({ value, onChange }: FromAccountPickerProps) {
       <div className="space-y-1.5">
         <Label className="text-xs text-muted-foreground">From</Label>
         <div className="flex items-center gap-2 text-xs text-muted-foreground h-9 px-3 border rounded-md">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          <CircleNotchIcon className="h-3.5 w-3.5 animate-spin" />
           Loading inboxes…
         </div>
       </div>

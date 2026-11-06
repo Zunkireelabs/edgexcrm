@@ -4,11 +4,25 @@ import { useState, useEffect, useMemo, useCallback, useRef, useImperativeHandle,
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
-  Phone, Mail, Calendar, Clock, FileText, CheckSquare, ChevronDown,
-  ArrowRight, Archive, CheckCircle2, Pencil, Users, UserMinus, UserPlus,
-  GitMerge, Check, Paperclip,
-  type LucideIcon,
-} from "lucide-react";
+  PhoneIcon,
+  EnvelopeSimpleIcon,
+  CalendarIcon,
+  ClockIcon,
+  FileTextIcon,
+  CheckSquareIcon,
+  CaretDownIcon,
+  ArrowRightIcon,
+  ArchiveIcon,
+  CheckCircleIcon,
+  PencilSimpleIcon,
+  UsersIcon,
+  UserMinusIcon,
+  UserPlusIcon,
+  GitMergeIcon,
+  CheckIcon,
+  PaperclipIcon,
+} from "@phosphor-icons/react";
+import type { Icon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -87,16 +101,16 @@ interface ActivitiesPanelProps {
 }
 
 const SUB_TABS: { id: SubTab; label: string; icon: React.ReactNode }[] = [
-  { id: "all", label: "Activity", icon: <Clock className="h-4 w-4" /> },
-  { id: "notes", label: "Notes", icon: <FileText className="h-4 w-4" /> },
-  { id: "emails", label: "Emails", icon: <Mail className="h-4 w-4" /> },
-  { id: "calls", label: "Calls", icon: <Phone className="h-4 w-4" /> },
-  { id: "tasks", label: "Tasks", icon: <CheckSquare className="h-4 w-4" /> },
-  { id: "meetings", label: "Meetings", icon: <Calendar className="h-4 w-4" /> },
+  { id: "all", label: "Activity", icon: <ClockIcon className="h-4 w-4" /> },
+  { id: "notes", label: "Notes", icon: <FileTextIcon className="h-4 w-4" /> },
+  { id: "emails", label: "Emails", icon: <EnvelopeSimpleIcon className="h-4 w-4" /> },
+  { id: "calls", label: "Calls", icon: <PhoneIcon className="h-4 w-4" /> },
+  { id: "tasks", label: "Tasks", icon: <CheckSquareIcon className="h-4 w-4" /> },
+  { id: "meetings", label: "Meetings", icon: <CalendarIcon className="h-4 w-4" /> },
   // Last in the row (client request, Oct 2026). Only shown where the tenant has the documents feature.
-  { id: "documents", label: "Documents", icon: <FileText className="h-4 w-4" /> },
+  { id: "documents", label: "Documents", icon: <FileTextIcon className="h-4 w-4" /> },
   // Everything the lead is subscribed to: outreach sequences (running / queued / past) and campaigns. Only where Outreach exists.
-  { id: "subscribed", label: "Subscribed", icon: <Mail className="h-4 w-4" /> },
+  { id: "subscribed", label: "Subscribed", icon: <EnvelopeSimpleIcon className="h-4 w-4" /> },
 ];
 
 export interface ActivitiesPanelRef {
@@ -637,7 +651,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
           ) : !hasEmailContent ? (
             <Card className="shadow-none rounded-lg py-0">
               <CardContent className="p-8 text-center">
-                <Mail className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                <EnvelopeSimpleIcon className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
                 <p className="text-muted-foreground">{getEmptyMessage()}</p>
               </CardContent>
             </Card>
@@ -700,7 +714,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
           ) : filteredActivities.length === 0 ? (
             <Card className="shadow-none rounded-lg py-0">
               <CardContent className="p-8 text-center">
-                <Clock className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                <ClockIcon className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
                 <p className="text-muted-foreground">{getEmptyMessage()}</p>
               </CardContent>
             </Card>
@@ -791,7 +805,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
             if (all.length === 0) return (
               <Card className="shadow-none rounded-lg py-0">
                 <CardContent className="p-8 text-center">
-                  <Clock className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                  <ClockIcon className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
                   <p className="text-muted-foreground">{getEmptyMessage()}</p>
                 </CardContent>
               </Card>
@@ -842,7 +856,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
                           <div key={item.id} className="flex gap-3">
                             <div className="flex flex-col items-center">
                               <div className="h-6 w-6 rounded-full border border-border bg-background flex items-center justify-center shrink-0">
-                                <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                                <FileTextIcon className="h-3.5 w-3.5 text-muted-foreground" />
                               </div>
                               {!isLast && <div className="w-px bg-border flex-1 mt-1" />}
                             </div>
@@ -866,7 +880,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
                       if (item.kind === "activity") {
                         const a = item.record;
                         const actor = resolveActorLabel(a.user_id, currentUserId, teamMemberNames, teamMemberEmails);
-                        const Icon = a.activity_type === "call" ? Phone : Calendar;
+                        const Icon = a.activity_type === "call" ? PhoneIcon : CalendarIcon;
                         const meetingMode = a.metadata?.meeting_mode as string | undefined;
                         const meetingModeLabel = meetingMode === "online" ? "Online" : meetingMode === "in_person" ? "In Person" : null;
                         const label = a.activity_type === "call"
@@ -900,7 +914,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
                           <div key={item.id} className="flex gap-3">
                             <div className="flex flex-col items-center">
                               <div className="h-6 w-6 rounded-full border border-border bg-background flex items-center justify-center shrink-0">
-                                <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                                <FileTextIcon className="h-3.5 w-3.5 text-muted-foreground" />
                               </div>
                               {!isLast && <div className="w-px bg-border flex-1 mt-1" />}
                             </div>
@@ -926,7 +940,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
                           <div key={item.id} className="flex gap-3">
                             <div className="flex flex-col items-center">
                               <div className="h-6 w-6 rounded-full border border-border bg-background flex items-center justify-center shrink-0">
-                                <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                                <FileTextIcon className="h-3.5 w-3.5 text-muted-foreground" />
                               </div>
                               {!isLast && <div className="w-px bg-border flex-1 mt-1" />}
                             </div>
@@ -956,7 +970,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
                           <div key={item.id} className="flex gap-3">
                             <div className="flex flex-col items-center">
                               <div className="h-6 w-6 rounded-full border border-border bg-background flex items-center justify-center shrink-0">
-                                <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
+                                <PaperclipIcon className="h-3.5 w-3.5 text-muted-foreground" />
                               </div>
                               {!isLast && <div className="w-px bg-border flex-1 mt-1" />}
                             </div>
@@ -1054,7 +1068,7 @@ function AppFeedFiles({ documents }: { documents: FeedDocument[] }) {
     <ul className="mt-1 space-y-0.5" data-testid="app-feed-files">
       {documents.map((d) => (
         <li key={d.id} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Paperclip className="h-3 w-3 shrink-0" />
+          <PaperclipIcon className="h-3 w-3 shrink-0" />
           <FeedFileLink documentId={d.id} label={feedDocumentLine(d)} />
         </li>
       ))}
@@ -1128,7 +1142,7 @@ function SystemActivityItem({
           <div className="min-w-0 pb-3 flex-1">
             <CollapsibleTrigger className="flex items-center gap-1 text-sm text-foreground hover:underline underline-offset-2 cursor-pointer text-left">
               <span className="min-w-0">{description}</span>
-              <ChevronDown
+              <CaretDownIcon
                 className={`h-3 w-3 text-muted-foreground transition-transform duration-150 shrink-0 ${open ? "rotate-180" : ""}`}
               />
             </CollapsibleTrigger>
@@ -1235,7 +1249,7 @@ function SubmissionDetail({ submission }: { submission: LeadSubmission }) {
           <span className="text-muted-foreground">Files:</span>
           {Object.keys(fileUrls).map((key) => (
             <div key={key} className="flex items-center gap-1 text-foreground">
-              <FileText className="h-3 w-3 shrink-0" />
+              <FileTextIcon className="h-3 w-3 shrink-0" />
               <span className="truncate">{key}</span>
             </div>
           ))}
@@ -1249,30 +1263,30 @@ function SubmissionDetail({ submission }: { submission: LeadSubmission }) {
   );
 }
 
-function getSystemActivityIcon(activity: LeadActivity): LucideIcon {
+function getSystemActivityIcon(activity: LeadActivity): Icon {
   const changes = activity.changes || {};
 
   if (activity.action === "lead.submission") {
     const isFirst = (changes as Record<string, { new?: unknown }>).is_first?.new === true;
-    return isFirst ? UserPlus : FileText;
+    return isFirst ? UserPlusIcon : FileTextIcon;
   }
-  if (activity.action === "lead.merged") return GitMerge;
-  if (activity.action === "lead.note_added") return FileText;
-  if (activity.action === "lead.note_edited") return Pencil;
-  if (activity.action === "lead.branch_revoked") return UserMinus;
-  if (activity.action === "lead.branch_shared" || activity.action === "lead.branch_assigned") return Users;
+  if (activity.action === "lead.merged") return GitMergeIcon;
+  if (activity.action === "lead.note_added") return FileTextIcon;
+  if (activity.action === "lead.note_edited") return PencilSimpleIcon;
+  if (activity.action === "lead.branch_revoked") return UserMinusIcon;
+  if (activity.action === "lead.branch_shared" || activity.action === "lead.branch_assigned") return UsersIcon;
 
   const ch = changes as Record<string, { old?: unknown; new?: unknown }>;
   if (ch.list) {
     const reason = ch.archive_reason?.new as string | null;
-    if (reason) return Archive;
+    if (reason) return ArchiveIcon;
     const to = ch.list.new as string | null;
-    if (to?.toLowerCase() === "qualified") return CheckCircle2;
-    return ArrowRight;
+    if (to?.toLowerCase() === "qualified") return CheckCircleIcon;
+    return ArrowRightIcon;
   }
-  if (ch.assigned_to) return Users;
-  if (activity.action === "lead.updated") return Pencil;
-  return Check;
+  if (ch.assigned_to) return UsersIcon;
+  if (activity.action === "lead.updated") return PencilSimpleIcon;
+  return CheckIcon;
 }
 
 function resolveActorLabel(

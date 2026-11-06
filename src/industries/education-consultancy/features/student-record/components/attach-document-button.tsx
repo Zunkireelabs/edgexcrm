@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Paperclip } from "lucide-react";
+import { PaperclipIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import type { DocumentType } from "@/lib/documents/constants";
@@ -63,7 +63,7 @@ export function AttachDocumentButton({
         className="h-7 px-2 text-muted-foreground hover:text-foreground"
         onClick={() => inputRef.current?.click()}
       >
-        <Paperclip className="h-3.5 w-3.5 mr-1" />
+        <PaperclipIcon className="h-3.5 w-3.5 mr-1" />
         {label}
       </Button>
       <MultiDocumentUploadDialog

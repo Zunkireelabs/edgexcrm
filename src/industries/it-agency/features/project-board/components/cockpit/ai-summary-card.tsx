@@ -1,4 +1,4 @@
-import { Sparkles } from "lucide-react";
+import { SparkleIcon } from "@phosphor-icons/react/dist/ssr";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { PreviewPill } from "./preview-pill";
@@ -21,7 +21,7 @@ export function AiSummaryCard() {
     <Card className="border-violet-200 bg-violet-50/30">
       <CardHeader className="flex-row items-center justify-between space-y-0">
         <CardTitle className="text-sm flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-violet-600" />
+          <SparkleIcon className="h-4 w-4 text-violet-600" />
           Project pulse
         </CardTitle>
         <PreviewPill />

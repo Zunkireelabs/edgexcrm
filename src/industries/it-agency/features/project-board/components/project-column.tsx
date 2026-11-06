@@ -1,7 +1,7 @@
 "use client";
 
 import { useDroppable } from "@dnd-kit/core";
-import { FolderOpen } from "lucide-react";
+import { FolderOpenIcon } from "@phosphor-icons/react";
 import type { ProjectStatus } from "@/types/database";
 import { ProjectCard, type ProjectWithAccount } from "./project-card";
 import type { TeamMember } from "../hooks/use-projects";
@@ -84,7 +84,7 @@ export function ProjectColumn({ status, projects, teamMap, hoursMap }: ProjectCo
         {projects.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-32 text-center px-4">
             <div className="h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center mb-2">
-              <FolderOpen className="h-5 w-5 text-[#787871]" />
+              <FolderOpenIcon className="h-5 w-5 text-[#787871]" />
             </div>
             <p className="text-sm text-[#0f0f10] font-medium">No projects</p>
             <p className="text-xs text-[#787871] mt-0.5">Drag projects here to update</p>

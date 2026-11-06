@@ -3,7 +3,13 @@
 import { mergeNewestFirst } from "./merge-timeline";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Clock, Send, Pencil, X, Check } from "lucide-react";
+import {
+  ClockIcon,
+  PaperPlaneTiltIcon,
+  PencilSimpleIcon,
+  XIcon,
+  CheckIcon,
+} from "@phosphor-icons/react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -278,7 +284,7 @@ export const NotesTab = forwardRef<NotesTabRef, NotesTabProps>(
                   onClick={handleAddNote}
                   disabled={adding || !newNote.trim()}
                 >
-                  <Send className="h-4 w-4 mr-2" />
+                  <PaperPlaneTiltIcon className="h-4 w-4 mr-2" />
                   {adding ? "Adding..." : "Add Note"}
                 </Button>
               </div>
@@ -405,7 +411,7 @@ function NoteCard({
                     className="text-muted-foreground hover:text-foreground"
                     aria-label="Edit note"
                   >
-                    <Pencil className="h-3 w-3" />
+                    <PencilSimpleIcon className="h-3 w-3" />
                   </button>
                 )}
               </div>
@@ -419,11 +425,11 @@ function NoteCard({
                   />
                   <div className="flex items-center gap-2 justify-end">
                     <Button variant="ghost" size="sm" onClick={cancelEdit} disabled={saving}>
-                      <X className="h-3.5 w-3.5 mr-1" />
+                      <XIcon className="h-3.5 w-3.5 mr-1" />
                       Cancel
                     </Button>
                     <Button size="sm" onClick={saveEdit} disabled={saving || !draft.trim()}>
-                      <Check className="h-3.5 w-3.5 mr-1" />
+                      <CheckIcon className="h-3.5 w-3.5 mr-1" />
                       {saving ? "Saving..." : "Save"}
                     </Button>
                   </div>
@@ -435,7 +441,7 @@ function NoteCard({
               )}
               {/* Exact date + time — always visible, aligned to the bubble side */}
               <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground/70 justify-start">
-                <Clock className="h-3 w-3 shrink-0" />
+                <ClockIcon className="h-3 w-3 shrink-0" />
                 <span>{formatExactStamp(note.created_at)}</span>
                 {note.edited_at && (
                   <span className="italic">· Edited</span>

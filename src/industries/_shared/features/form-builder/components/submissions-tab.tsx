@@ -2,7 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { AlertCircle, Download, Loader2, Search } from "lucide-react";
+import {
+  WarningCircleIcon,
+  DownloadIcon,
+  CircleNotchIcon,
+  MagnifyingGlassIcon,
+} from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -214,7 +219,7 @@ export function SubmissionsTab({ formConfigId, active, onTotalChange }: Submissi
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative w-64">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input
             placeholder="Search name, email, phone..."
             value={search}
@@ -250,9 +255,9 @@ export function SubmissionsTab({ formConfigId, active, onTotalChange }: Submissi
         <div className="flex-1" />
         <Button size="sm" variant="outline" onClick={handleExportCsv} disabled={exporting || total === 0}>
           {exporting ? (
-            <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+            <CircleNotchIcon className="h-3.5 w-3.5 mr-1.5 animate-spin" />
           ) : (
-            <Download className="h-3.5 w-3.5 mr-1.5" />
+            <DownloadIcon className="h-3.5 w-3.5 mr-1.5" />
           )}
           Export CSV
         </Button>
@@ -262,12 +267,12 @@ export function SubmissionsTab({ formConfigId, active, onTotalChange }: Submissi
       <div className="border rounded-lg overflow-hidden">
         {loading && rows.length === 0 ? (
           <div className="flex items-center justify-center py-12 text-muted-foreground text-sm">
-            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            <CircleNotchIcon className="h-4 w-4 animate-spin mr-2" />
             Loading submissions...
           </div>
         ) : loadError ? (
           <div className="flex flex-col items-center justify-center gap-2 py-12 text-sm">
-            <AlertCircle className="h-5 w-5 text-destructive" />
+            <WarningCircleIcon className="h-5 w-5 text-destructive" />
             <p className="text-destructive">Couldn&apos;t load submissions.</p>
             <Button size="sm" variant="outline" onClick={() => loadSubmissions()}>
               Retry

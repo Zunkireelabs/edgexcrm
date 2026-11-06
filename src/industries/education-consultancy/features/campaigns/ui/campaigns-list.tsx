@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Megaphone, Trophy } from "lucide-react";
+import { MegaphoneIcon, TrophyIcon } from "@phosphor-icons/react";
 
 interface Campaign {
   id: string;
@@ -57,7 +57,7 @@ export function CampaignsList() {
   if (campaigns.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-48 gap-2 text-muted-foreground">
-        <Megaphone className="h-8 w-8 opacity-40" />
+        <MegaphoneIcon className="h-8 w-8 opacity-40" />
         <p className="text-sm">No campaigns yet.</p>
       </div>
     );
@@ -73,7 +73,7 @@ export function CampaignsList() {
               <CardContent className="p-5 flex flex-col gap-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
-                    <Trophy className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <TrophyIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
                     <span className="font-medium text-sm leading-tight truncate">{c.name}</span>
                   </div>
                   <Badge variant={badge.variant} className="shrink-0 text-xs">

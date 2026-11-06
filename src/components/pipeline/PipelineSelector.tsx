@@ -2,7 +2,14 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Settings, Plus, ChevronDown, Search, Check, GitBranch } from "lucide-react";
+import {
+  GearIcon,
+  PlusIcon,
+  CaretDownIcon,
+  MagnifyingGlassIcon,
+  CheckIcon,
+  GitBranchIcon,
+} from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { PipelineSettingsModal } from "./PipelineSettingsModal";
 import { CreatePipelineModal } from "./CreatePipelineModal";
@@ -178,11 +185,11 @@ export function PipelineSelector({
               }
             `}
           >
-            <GitBranch className="h-3 w-3 shrink-0" />
+            <GitBranchIcon className="h-3 w-3 shrink-0" />
             <span className="truncate max-w-[140px]">
               {selectedPipeline?.name || "Select Pipeline"}
             </span>
-            <ChevronDown
+            <CaretDownIcon
               className={`h-3 w-3 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`}
             />
           </button>
@@ -193,7 +200,7 @@ export function PipelineSelector({
               {/* Search input */}
               <div className="p-2 border-b border-gray-100">
                 <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                  <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
                   <input
                     ref={searchInputRef}
                     type="text"
@@ -229,7 +236,7 @@ export function PipelineSelector({
                             ${isSelected ? "border-[#0f0f10] bg-[#0f0f10]" : "border-gray-300"}
                           `}
                         >
-                          {isSelected && <Check className="w-2 h-2 text-white" />}
+                          {isSelected && <CheckIcon className="w-2 h-2 text-white" />}
                         </div>
 
                         {/* Option content */}
@@ -266,7 +273,7 @@ export function PipelineSelector({
                       onClick={handleCreateClick}
                       className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
                     >
-                      <Plus className="h-3.5 w-3.5" />
+                      <PlusIcon className="h-3.5 w-3.5" />
                       Create New Pipeline
                     </button>
                   </div>
@@ -284,7 +291,7 @@ export function PipelineSelector({
             onClick={() => setSettingsOpen(true)}
             title="Pipeline Settings"
           >
-            <Settings className="h-4 w-4" />
+            <GearIcon className="h-4 w-4" />
           </Button>
         )}
       </div>

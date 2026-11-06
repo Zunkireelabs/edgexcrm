@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Calendar, Building2, User } from "lucide-react";
+import { CalendarIcon, BuildingsIcon, UserIcon } from "@phosphor-icons/react";
 import { formatMoney } from "@/lib/travel/currency";
 import type { Deal } from "@/types/database";
 
@@ -73,19 +73,19 @@ export function DealCard({ deal, disabled }: DealCardProps) {
       <div className="space-y-1">
         {accountName && (
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Building2 className="h-3 w-3 shrink-0" />
+            <BuildingsIcon className="h-3 w-3 shrink-0" />
             <span className="truncate">{accountName}</span>
           </div>
         )}
         {deal.close_date && (
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Calendar className="h-3 w-3 shrink-0" />
+            <CalendarIcon className="h-3 w-3 shrink-0" />
             <span>{formatDate(deal.close_date)}</span>
           </div>
         )}
         {contactName && (
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <User className="h-3 w-3 shrink-0" />
+            <UserIcon className="h-3 w-3 shrink-0" />
             <span className="truncate">{contactName}</span>
           </div>
         )}

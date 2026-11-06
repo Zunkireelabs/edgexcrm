@@ -21,7 +21,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Copy, ExternalLink, Check, X, Loader2 } from "lucide-react";
+import {
+  CopyIcon,
+  ArrowSquareOutIcon,
+  CheckIcon,
+  XIcon,
+  CircleNotchIcon,
+} from "@phosphor-icons/react";
 
 interface SettingsFormProps {
   tenant: Tenant;
@@ -223,13 +229,13 @@ export function SettingsForm({ tenant, formConfigs = [] }: SettingsFormProps) {
               />
               <div className="absolute right-3 top-1/2 -translate-y-1/2">
                 {slugStatus === "checking" && (
-                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  <CircleNotchIcon className="h-4 w-4 animate-spin text-muted-foreground" />
                 )}
                 {slugStatus === "available" && (
-                  <Check className="h-4 w-4 text-green-500" />
+                  <CheckIcon className="h-4 w-4 text-green-500" />
                 )}
                 {(slugStatus === "taken" || slugStatus === "invalid") && (
-                  <X className="h-4 w-4 text-red-500" />
+                  <XIcon className="h-4 w-4 text-red-500" />
                 )}
               </div>
             </div>
@@ -300,11 +306,11 @@ export function SettingsForm({ tenant, formConfigs = [] }: SettingsFormProps) {
                 size="icon"
                 onClick={() => copyToClipboard(formUrl, "Form URL")}
               >
-                <Copy className="h-4 w-4" />
+                <CopyIcon className="h-4 w-4" />
               </Button>
               <a href={formUrl} target="_blank" rel="noopener noreferrer">
                 <Button variant="outline" size="icon">
-                  <ExternalLink className="h-4 w-4" />
+                  <ArrowSquareOutIcon className="h-4 w-4" />
                 </Button>
               </a>
             </div>
@@ -318,7 +324,7 @@ export function SettingsForm({ tenant, formConfigs = [] }: SettingsFormProps) {
                 size="icon"
                 onClick={() => copyToClipboard(embedCode, "Embed code")}
               >
-                <Copy className="h-4 w-4" />
+                <CopyIcon className="h-4 w-4" />
               </Button>
             </div>
           </div>

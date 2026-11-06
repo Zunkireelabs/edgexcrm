@@ -43,7 +43,17 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { List, Lock, Pencil, Trash2, Plus, ChevronUp, ChevronDown, Archive, GripVertical } from "lucide-react";
+import {
+  ListIcon,
+  LockIcon,
+  PencilSimpleIcon,
+  TrashIcon,
+  PlusIcon,
+  CaretUpIcon,
+  CaretDownIcon,
+  ArchiveIcon,
+  DotsSixVerticalIcon,
+} from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { isOffFunnelLeadList } from "@/lib/leads/list-funnel";
 import { useSettingsModal } from "@/contexts/settings-modal-context";
@@ -103,7 +113,7 @@ function formFromList(list: LeadListRow): LeadListFormState {
 function LeadListInfo({ list }: { list: LeadListRow }) {
   return (
     <>
-      {list.is_system && <Lock className="h-4 w-4 text-muted-foreground shrink-0" />}
+      {list.is_system && <LockIcon className="h-4 w-4 text-muted-foreground shrink-0" />}
       {list.color && (
         <div
           className="h-3 w-3 rounded-full shrink-0"
@@ -120,7 +130,7 @@ function LeadListInfo({ list }: { list: LeadListRow }) {
           )}
           {list.is_archive && (
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-amber-600 border-amber-300 flex items-center gap-0.5">
-              <Archive className="h-2.5 w-2.5" />
+              <ArchiveIcon className="h-2.5 w-2.5" />
               Archive
             </Badge>
           )}
@@ -148,7 +158,7 @@ function LeadListRowActions({ onEdit, onDelete, isSystem }: LeadListRowActionsPr
         className="h-8 w-8"
         onClick={onEdit}
       >
-        <Pencil className="h-3.5 w-3.5" />
+        <PencilSimpleIcon className="h-3.5 w-3.5" />
       </Button>
       {!isSystem && (
         <Button
@@ -157,7 +167,7 @@ function LeadListRowActions({ onEdit, onDelete, isSystem }: LeadListRowActionsPr
           className="h-8 w-8 text-muted-foreground hover:text-destructive"
           onClick={onDelete}
         >
-          <Trash2 className="h-3.5 w-3.5" />
+          <TrashIcon className="h-3.5 w-3.5" />
         </Button>
       )}
     </>
@@ -202,7 +212,7 @@ function LeadListRow({ list, isFirst, isLast, onMoveUp, onMoveDown, onEdit, onDe
           {...attributes}
           {...listeners}
         >
-          <GripVertical className="h-4 w-4" />
+          <DotsSixVerticalIcon className="h-4 w-4" />
         </button>
         <LeadListInfo list={list} />
       </div>
@@ -215,7 +225,7 @@ function LeadListRow({ list, isFirst, isLast, onMoveUp, onMoveDown, onEdit, onDe
           disabled={isFirst}
           onClick={onMoveUp}
         >
-          <ChevronUp className="h-3.5 w-3.5" />
+          <CaretUpIcon className="h-3.5 w-3.5" />
         </Button>
         <Button
           variant="ghost"
@@ -224,7 +234,7 @@ function LeadListRow({ list, isFirst, isLast, onMoveUp, onMoveDown, onEdit, onDe
           disabled={isLast}
           onClick={onMoveDown}
         >
-          <ChevronDown className="h-3.5 w-3.5" />
+          <CaretDownIcon className="h-3.5 w-3.5" />
         </Button>
         <LeadListRowActions onEdit={onEdit} onDelete={onDelete} isSystem={list.is_system} />
       </div>
@@ -283,7 +293,7 @@ function FunnelSection({
           </p>
           {onAddStage && (
             <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={onAddStage}>
-              <Plus className="h-3 w-3 mr-1" />
+              <PlusIcon className="h-3 w-3 mr-1" />
               Add stage
             </Button>
           )}
@@ -531,7 +541,7 @@ export function LeadListsManager() {
       <Card id="lead-lists">
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
-            <List className="h-5 w-5" />
+            <ListIcon className="h-5 w-5" />
             Lead Lists
           </CardTitle>
         </CardHeader>
@@ -548,7 +558,7 @@ export function LeadListsManager() {
         <CardHeader className="flex flex-row items-start justify-between">
           <div>
             <CardTitle className="text-lg flex items-center gap-2">
-              <List className="h-5 w-5" />
+              <ListIcon className="h-5 w-5" />
               Lead Lists
             </CardTitle>
             <CardDescription>
@@ -556,7 +566,7 @@ export function LeadListsManager() {
             </CardDescription>
           </div>
           <Button size="sm" onClick={() => openCreate(isItAgency ? "lead_processing" : null)}>
-            <Plus className="h-4 w-4 mr-1" />
+            <PlusIcon className="h-4 w-4 mr-1" />
             Add List
           </Button>
         </CardHeader>

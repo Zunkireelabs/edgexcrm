@@ -6,15 +6,15 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  ArrowLeft,
-  Mail,
-  Phone,
-  MapPin,
-  Building2,
-  Calendar,
-  Clock,
-  User,
-} from "lucide-react";
+  ArrowLeftIcon,
+  EnvelopeSimpleIcon,
+  PhoneIcon,
+  MapPinIcon,
+  BuildingsIcon,
+  CalendarIcon,
+  ClockIcon,
+  UserIcon,
+} from "@phosphor-icons/react";
 import type { Lead } from "@/types/database";
 
 interface CheckInNote {
@@ -72,7 +72,7 @@ export function CheckInDetailPage({
       {/* Back button */}
       <div className="shrink-0">
         <Button variant="ghost" size="sm" className="gap-1.5 -ml-2" onClick={() => router.back()}>
-          <ArrowLeft className="h-4 w-4" />
+          <ArrowLeftIcon className="h-4 w-4" />
           Back to Check-In
         </Button>
       </div>
@@ -113,42 +113,42 @@ export function CheckInDetailPage({
               <div className="grid grid-cols-2 md:grid-cols-3 gap-x-8 gap-y-2.5">
                 {lead.email && (
                   <div className="flex items-center gap-2 text-sm">
-                    <Mail className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <EnvelopeSimpleIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                     <span className="truncate">{lead.email}</span>
                   </div>
                 )}
                 {lead.phone && (
                   <div className="flex items-center gap-2 text-sm">
-                    <Phone className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <PhoneIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                     <span>{lead.phone}</span>
                   </div>
                 )}
                 {(lead.city || lead.country) && (
                   <div className="flex items-center gap-2 text-sm">
-                    <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <MapPinIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                     <span>{[lead.city, lead.country].filter(Boolean).join(", ")}</span>
                   </div>
                 )}
                 {pipelineName && (
                   <div className="flex items-center gap-2 text-sm">
-                    <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <BuildingsIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                     <span>{pipelineName}</span>
                   </div>
                 )}
                 {assignedToEmail && (
                   <div className="flex items-center gap-2 text-sm">
-                    <User className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <UserIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                     <span className="truncate">{assignedToEmail}</span>
                   </div>
                 )}
                 {entityName && (
                   <div className="flex items-center gap-2 text-sm">
-                    <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <BuildingsIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                     <span>{entityName}</span>
                   </div>
                 )}
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Calendar className="h-3.5 w-3.5 shrink-0" />
+                  <CalendarIcon className="h-3.5 w-3.5 shrink-0" />
                   <span>Added {createdAt.date}</span>
                 </div>
               </div>
@@ -168,7 +168,7 @@ export function CheckInDetailPage({
       <div className="flex-1 flex flex-col min-h-0">
         <div className="flex items-center gap-2 mb-3 shrink-0">
           <h2 className="text-lg font-semibold flex items-center gap-2">
-            <Clock className="h-4 w-4" />
+            <ClockIcon className="h-4 w-4" />
             Visit History
           </h2>
           <Badge variant="secondary" className="text-xs">

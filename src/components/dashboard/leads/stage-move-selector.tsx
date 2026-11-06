@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CornerUpRight } from "lucide-react";
+import { ArrowBendUpRightIcon } from "@phosphor-icons/react";
 import {
   Select,
   SelectContent,
@@ -122,7 +122,7 @@ export function StageMoveSelector({
         >
           <DialogHeader>
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-blue-600">
-              <CornerUpRight className="h-5 w-5" />
+              <ArrowBendUpRightIcon className="h-5 w-5" />
             </div>
             <DialogTitle className="pt-1">
               {confirmList ? moveConfirmMessage(confirmList) : ""}

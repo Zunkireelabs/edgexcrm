@@ -27,7 +27,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { GraduationCap, Pencil, Trash2, Plus, ToggleLeft, ToggleRight } from "lucide-react";
+import {
+  GraduationCapIcon,
+  PencilSimpleIcon,
+  TrashIcon,
+  PlusIcon,
+  ToggleLeftIcon,
+  ToggleRightIcon,
+} from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 interface CollegeRow {
@@ -163,7 +170,7 @@ export function PartnerCollegesManager() {
       <Card id="partner-colleges">
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
-            <GraduationCap className="h-5 w-5" />
+            <GraduationCapIcon className="h-5 w-5" />
             Partner Colleges
           </CardTitle>
         </CardHeader>
@@ -180,7 +187,7 @@ export function PartnerCollegesManager() {
         <CardHeader className="flex flex-row items-start justify-between">
           <div>
             <CardTitle className="text-lg flex items-center gap-2">
-              <GraduationCap className="h-5 w-5" />
+              <GraduationCapIcon className="h-5 w-5" />
               Partner Colleges
             </CardTitle>
             <CardDescription>
@@ -189,7 +196,7 @@ export function PartnerCollegesManager() {
             </CardDescription>
           </div>
           <Button size="sm" onClick={openCreate}>
-            <Plus className="h-4 w-4 mr-1" />
+            <PlusIcon className="h-4 w-4 mr-1" />
             Add College
           </Button>
         </CardHeader>
@@ -231,8 +238,8 @@ export function PartnerCollegesManager() {
                     onClick={() => handleToggleActive(college)}
                   >
                     {college.is_active
-                      ? <ToggleRight className="h-4 w-4 text-green-600" />
-                      : <ToggleLeft className="h-4 w-4" />
+                      ? <ToggleRightIcon className="h-4 w-4 text-green-600" />
+                      : <ToggleLeftIcon className="h-4 w-4" />
                     }
                   </Button>
                   <Button
@@ -241,7 +248,7 @@ export function PartnerCollegesManager() {
                     className="h-8 w-8"
                     onClick={() => openEdit(college)}
                   >
-                    <Pencil className="h-3.5 w-3.5" />
+                    <PencilSimpleIcon className="h-3.5 w-3.5" />
                   </Button>
                   <Button
                     variant="ghost"
@@ -249,7 +256,7 @@ export function PartnerCollegesManager() {
                     className="h-8 w-8 text-muted-foreground hover:text-destructive"
                     onClick={() => handleDelete(college)}
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
+                    <TrashIcon className="h-3.5 w-3.5" />
                   </Button>
                 </div>
               </div>

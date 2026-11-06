@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Send } from "lucide-react";
+import { PaperPlaneTiltIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 
 interface ChatInputProps {
@@ -71,7 +71,7 @@ export function ChatInput({
           disabled={disabled || !message.trim()}
           className="absolute bottom-2.5 right-2.5 h-9 w-9 rounded-full shrink-0"
         >
-          <Send className="h-4 w-4" />
+          <PaperPlaneTiltIcon className="h-4 w-4" />
         </Button>
       </div>
     </div>

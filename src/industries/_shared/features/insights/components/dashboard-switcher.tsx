@@ -2,7 +2,15 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { LayoutDashboard, Plus, ChevronDown, Check, Settings, Trash2, MoreVertical } from "lucide-react";
+import {
+  SquaresFourIcon,
+  PlusIcon,
+  CaretDownIcon,
+  CheckIcon,
+  GearIcon,
+  TrashIcon,
+  DotsThreeVerticalIcon,
+} from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { DashboardBuilderDialog } from "./dashboard-builder-dialog";
 import type { Dashboard } from "@/types/database";
@@ -102,9 +110,9 @@ export function DashboardSwitcher({
             onClick={() => setIsOpen(!isOpen)}
             className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md border border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b] transition-colors"
           >
-            <LayoutDashboard className="h-3 w-3 shrink-0" />
+            <SquaresFourIcon className="h-3 w-3 shrink-0" />
             <span className="truncate max-w-[160px]">{currentDashboard.name}</span>
-            <ChevronDown className={`h-3 w-3 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+            <CaretDownIcon className={`h-3 w-3 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`} />
           </button>
 
           {isOpen && (
@@ -125,7 +133,7 @@ export function DashboardSwitcher({
                           isSelected ? "border-[#0f0f10] bg-[#0f0f10]" : "border-gray-300"
                         }`}
                       >
-                        {isSelected && <Check className="w-2 h-2 text-white" />}
+                        {isSelected && <CheckIcon className="w-2 h-2 text-white" />}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
@@ -156,7 +164,7 @@ export function DashboardSwitcher({
                       onClick={openCreate}
                       className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
                     >
-                      <Plus className="h-3.5 w-3.5" />
+                      <PlusIcon className="h-3.5 w-3.5" />
                       Create New Dashboard
                     </button>
                   </div>
@@ -176,7 +184,7 @@ export function DashboardSwitcher({
               aria-expanded={actionsOpen}
               aria-haspopup="true"
             >
-              <MoreVertical className="h-4 w-4" />
+              <DotsThreeVerticalIcon className="h-4 w-4" />
             </Button>
 
             {actionsOpen && (
@@ -187,7 +195,7 @@ export function DashboardSwitcher({
                     onClick={() => { openEdit(); setActionsOpen(false); }}
                     className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
                   >
-                    <Settings className="h-3.5 w-3.5" />
+                    <GearIcon className="h-3.5 w-3.5" />
                     Settings
                   </button>
                   <button
@@ -196,7 +204,7 @@ export function DashboardSwitcher({
                     disabled={deleting}
                     className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50 transition-colors"
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
+                    <TrashIcon className="h-3.5 w-3.5" />
                     Delete
                   </button>
                 </div>

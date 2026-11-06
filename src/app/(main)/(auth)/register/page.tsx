@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Eye, EyeOff } from 'lucide-react';
+import { EyeIcon, EyeSlashIcon } from "@phosphor-icons/react";
 
 type TokenStatus = 'loading' | 'valid' | 'invalid' | 'expired' | 'used' | 'error';
 
@@ -407,7 +407,7 @@ function RegisterPageContent() {
                     tabIndex={-1}
                     style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#6b7280', display: 'flex', alignItems: 'center' }}
                   >
-                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    {showPassword ? <EyeSlashIcon size={18} /> : <EyeIcon size={18} />}
                   </button>
                 </div>
               </div>
@@ -432,7 +432,7 @@ function RegisterPageContent() {
                     tabIndex={-1}
                     style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#6b7280', display: 'flex', alignItems: 'center' }}
                   >
-                    {showConfirm ? <EyeOff size={18} /> : <Eye size={18} />}
+                    {showConfirm ? <EyeSlashIcon size={18} /> : <EyeIcon size={18} />}
                   </button>
                 </div>
               </div>

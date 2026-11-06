@@ -2,15 +2,15 @@
 
 import { useState } from "react";
 import {
-  ListChecks,
-  Plus,
-  Search,
-  Pencil,
-  Trash2,
-  Bot,
-  User,
-  ChevronDown,
-} from "lucide-react";
+  ListChecksIcon,
+  PlusIcon,
+  MagnifyingGlassIcon,
+  PencilSimpleIcon,
+  TrashIcon,
+  RobotIcon,
+  UserIcon,
+  CaretDownIcon,
+} from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import type { AutomationMatrixRow } from "@/lib/ai/agents/queries";
 import type { AutomationLevel } from "@/lib/ai/agents/policy";
@@ -101,7 +101,7 @@ export function TasksContent({ tasks: matrixRows }: TasksContentProps) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-[#eb1600] rounded-lg">
-            <ListChecks className="w-6 h-6 text-white" />
+            <ListChecksIcon className="w-6 h-6 text-white" />
           </div>
           <div>
             <h1 className="text-lg font-bold">Tasks</h1>
@@ -111,7 +111,7 @@ export function TasksContent({ tasks: matrixRows }: TasksContentProps) {
           </div>
         </div>
         <button className="inline-flex items-center gap-2 px-4 py-2 bg-[#eb1600] hover:bg-[#cc1300] rounded-lg text-sm font-medium text-white transition-colors">
-          <Plus className="w-4 h-4" />
+          <PlusIcon className="w-4 h-4" />
           New Task
         </button>
       </div>
@@ -168,7 +168,7 @@ export function TasksContent({ tasks: matrixRows }: TasksContentProps) {
       {/* Search and Filters */}
       <div className="flex items-center gap-3">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
             placeholder="Search tasks..."
@@ -190,7 +190,7 @@ export function TasksContent({ tasks: matrixRows }: TasksContentProps) {
               <option key={role} value={role}>{role}</option>
             ))}
           </select>
-          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+          <CaretDownIcon className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
         </div>
 
         {(filterAutomation !== "all" || filterRole !== "all") && (
@@ -239,9 +239,9 @@ export function TasksContent({ tasks: matrixRows }: TasksContentProps) {
                   <div className="flex items-start gap-6">
                     <div className="flex items-center gap-2 text-xs text-gray-500">
                       {task.roleType === "agent" ? (
-                        <Bot className="w-3 h-3 text-emerald-500" />
+                        <RobotIcon className="w-3 h-3 text-emerald-500" />
                       ) : (
-                        <User className="w-3 h-3 text-gray-400" />
+                        <UserIcon className="w-3 h-3 text-gray-400" />
                       )}
                       <span>Role: {task.roleName}</span>
                     </div>
@@ -265,10 +265,10 @@ export function TasksContent({ tasks: matrixRows }: TasksContentProps) {
                 {/* Actions */}
                 <div className="flex items-center gap-1">
                   <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors" title="Edit">
-                    <Pencil className="w-4 h-4 text-gray-500" />
+                    <PencilSimpleIcon className="w-4 h-4 text-gray-500" />
                   </button>
                   <button className="p-2 hover:bg-red-100 rounded-lg transition-colors" title="Delete">
-                    <Trash2 className="w-4 h-4 text-red-500" />
+                    <TrashIcon className="w-4 h-4 text-red-500" />
                   </button>
                 </div>
               </div>
@@ -280,7 +280,7 @@ export function TasksContent({ tasks: matrixRows }: TasksContentProps) {
       {/* Empty State */}
       {filteredTasks.length === 0 && (
         <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-          <ListChecks className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+          <ListChecksIcon className="w-12 h-12 text-gray-300 mx-auto mb-4" />
           <h3 className="text-lg font-semibold text-gray-900 mb-2">
             {tasks.length === 0 ? "No automatable tasks yet" : "No tasks found"}
           </h3>

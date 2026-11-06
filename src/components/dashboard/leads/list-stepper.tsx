@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeft, ArrowRight, CornerUpRight } from "lucide-react";
+import { ArrowLeftIcon, ArrowRightIcon, ArrowBendUpRightIcon } from "@phosphor-icons/react";
 import {
   Tooltip,
   TooltipContent,
@@ -191,7 +191,7 @@ export function ListStepper({
                       : "bg-gray-50 text-gray-300 cursor-not-allowed"
                   )}
                 >
-                  <ArrowLeft className="w-3 h-3" />
+                  <ArrowLeftIcon className="w-3 h-3" />
                   Revert
                 </button>
               </TooltipTrigger>
@@ -229,7 +229,7 @@ export function ListStepper({
                   )}
                 >
                   Send to next
-                  <ArrowRight className="w-3 h-3" />
+                  <ArrowRightIcon className="w-3 h-3" />
                 </button>
               </TooltipTrigger>
               <TooltipContent>
@@ -253,7 +253,7 @@ export function ListStepper({
         >
           <DialogHeader>
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-blue-600">
-              <CornerUpRight className="h-5 w-5" />
+              <ArrowBendUpRightIcon className="h-5 w-5" />
             </div>
             <DialogTitle className="pt-1">
               {confirmList

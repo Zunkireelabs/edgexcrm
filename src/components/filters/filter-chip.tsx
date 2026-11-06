@@ -8,7 +8,7 @@
 // from e.g. "Stage" to "Leads Organize" no longer means delete-and-re-add.
 
 import { useEffect, useMemo, useState } from "react";
-import { X } from "lucide-react";
+import { XIcon } from "@phosphor-icons/react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { FieldDef, FilterCondition } from "@/lib/filters/types";
 import { FilterConditionEditor } from "./filter-condition-editor";
@@ -129,7 +129,7 @@ export function FilterChip({
           aria-label={`Remove ${field.label} filter`}
           className="rounded-sm p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
         >
-          <X className="size-3" />
+          <XIcon className="size-3" />
         </button>
       </div>
       <PopoverContent align="start" className="w-auto p-0">

@@ -7,7 +7,7 @@
 // Notion/Twenty: closing an unfinished "+ Add filter" adds nothing).
 
 import { useEffect, useState } from "react";
-import { Plus } from "lucide-react";
+import { PlusIcon } from "@phosphor-icons/react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { FieldDef, FilterCondition } from "@/lib/filters/types";
 import { FilterFieldPicker } from "./filter-field-picker";
@@ -79,7 +79,7 @@ export function AddFilterButton({ fields, getOptions, onAdd, onAddMany, disabled
           data-testid="add-filter-button"
           className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
         >
-          <Plus className="size-3.5" />
+          <PlusIcon className="size-3.5" />
           Add filter
         </button>
       </PopoverTrigger>

@@ -4,7 +4,7 @@
 // saved earlier; "Save current filter" stores whatever is on the filter bar right now. Private to the signed-in user.
 
 import { useState } from "react";
-import { Bookmark, Trash2 } from "lucide-react";
+import { BookmarkIcon, TrashIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
@@ -76,7 +76,7 @@ export function SavedFiltersMenu({ tree, registry, onApply, className }: SavedFi
     <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <button type="button" className={className}>
-          <Bookmark className="h-3 w-3 shrink-0" />
+          <BookmarkIcon className="h-3 w-3 shrink-0" />
           Saved filters
         </button>
       </PopoverTrigger>
@@ -119,7 +119,7 @@ export function SavedFiltersMenu({ tree, registry, onApply, className }: SavedFi
                       onClick={() => setConfirmDeleteId(f.id)}
                       className="shrink-0 rounded p-1.5 text-muted-foreground opacity-0 hover:bg-muted hover:text-destructive focus:opacity-100 group-hover:opacity-100"
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <TrashIcon className="h-3.5 w-3.5" />
                     </button>
                   </>
                 )}

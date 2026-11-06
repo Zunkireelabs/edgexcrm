@@ -18,7 +18,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { UserPlus, Trash2, Clock, Users, Copy, Pencil, Check, X, Ban, RotateCcw } from "lucide-react";
+import {
+  UserPlusIcon,
+  TrashIcon,
+  ClockIcon,
+  UsersIcon,
+  CopyIcon,
+  PencilSimpleIcon,
+  CheckIcon,
+  XIcon,
+  ProhibitIcon,
+  ArrowCounterClockwiseIcon,
+} from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { MemberAvatar } from "@/components/ui/member-avatar";
 import type { Branch } from "@/types/database";
@@ -380,7 +391,7 @@ export function TeamManagement({ role, userId, industryId, maxBranches = 1 }: Te
       <Card>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
-            <Users className="h-5 w-5" />
+            <UsersIcon className="h-5 w-5" />
             Team Members
           </CardTitle>
           <CardDescription>
@@ -439,7 +450,7 @@ export function TeamManagement({ role, userId, industryId, maxBranches = 1 }: Te
                           onClick={() => saveRate(member.user_id)}
                           disabled={savingRate}
                         >
-                          <Check className="h-3.5 w-3.5 text-green-600" />
+                          <CheckIcon className="h-3.5 w-3.5 text-green-600" />
                         </Button>
                         <Button
                           variant="ghost"
@@ -448,7 +459,7 @@ export function TeamManagement({ role, userId, industryId, maxBranches = 1 }: Te
                           onClick={() => setEditingRateFor(null)}
                           disabled={savingRate}
                         >
-                          <X className="h-3.5 w-3.5 text-muted-foreground" />
+                          <XIcon className="h-3.5 w-3.5 text-muted-foreground" />
                         </Button>
                       </div>
                     ) : (
@@ -466,7 +477,7 @@ export function TeamManagement({ role, userId, industryId, maxBranches = 1 }: Te
                             onClick={() => startEditingRate(member)}
                             title="Edit hourly rate"
                           >
-                            <Pencil className="h-3 w-3 text-muted-foreground" />
+                            <PencilSimpleIcon className="h-3 w-3 text-muted-foreground" />
                           </Button>
                         )}
                       </div>
@@ -500,7 +511,7 @@ export function TeamManagement({ role, userId, industryId, maxBranches = 1 }: Te
                           onClick={() => saveCostRate(member.user_id)}
                           disabled={savingCostRate}
                         >
-                          <Check className="h-3.5 w-3.5 text-green-600" />
+                          <CheckIcon className="h-3.5 w-3.5 text-green-600" />
                         </Button>
                         <Button
                           variant="ghost"
@@ -509,7 +520,7 @@ export function TeamManagement({ role, userId, industryId, maxBranches = 1 }: Te
                           onClick={() => setEditingCostRateFor(null)}
                           disabled={savingCostRate}
                         >
-                          <X className="h-3.5 w-3.5 text-muted-foreground" />
+                          <XIcon className="h-3.5 w-3.5 text-muted-foreground" />
                         </Button>
                       </div>
                     ) : (
@@ -526,7 +537,7 @@ export function TeamManagement({ role, userId, industryId, maxBranches = 1 }: Te
                           onClick={() => startEditingCostRate(member)}
                           title="Edit cost rate"
                         >
-                          <Pencil className="h-3 w-3 text-muted-foreground" />
+                          <PencilSimpleIcon className="h-3 w-3 text-muted-foreground" />
                         </Button>
                       </div>
                     )
@@ -558,7 +569,7 @@ export function TeamManagement({ role, userId, industryId, maxBranches = 1 }: Te
                         className="h-7 w-7"
                         onClick={() => setEditingPositionFor(null)}
                       >
-                        <X className="h-3.5 w-3.5 text-muted-foreground" />
+                        <XIcon className="h-3.5 w-3.5 text-muted-foreground" />
                       </Button>
                     </div>
                   ) : (
@@ -576,7 +587,7 @@ export function TeamManagement({ role, userId, industryId, maxBranches = 1 }: Te
                           onClick={() => setEditingPositionFor(member.user_id)}
                           title="Change role"
                         >
-                          <Pencil className="h-3 w-3 text-muted-foreground" />
+                          <PencilSimpleIcon className="h-3 w-3 text-muted-foreground" />
                         </Button>
                       )}
                     </div>
@@ -610,7 +621,7 @@ export function TeamManagement({ role, userId, industryId, maxBranches = 1 }: Te
                           className="h-7 w-7"
                           onClick={() => setEditingBranchFor(null)}
                         >
-                          <X className="h-3.5 w-3.5 text-muted-foreground" />
+                          <XIcon className="h-3.5 w-3.5 text-muted-foreground" />
                         </Button>
                       </div>
                     ) : (
@@ -625,7 +636,7 @@ export function TeamManagement({ role, userId, industryId, maxBranches = 1 }: Te
                           onClick={() => setEditingBranchFor(member.user_id)}
                           title="Change branch"
                         >
-                          <Pencil className="h-3 w-3 text-muted-foreground" />
+                          <PencilSimpleIcon className="h-3 w-3 text-muted-foreground" />
                         </Button>
                       </div>
                     )
@@ -640,7 +651,7 @@ export function TeamManagement({ role, userId, industryId, maxBranches = 1 }: Te
                       }
                       title={member.suspended_at ? "Unsuspend — restore login access" : "Suspend — block login, keep their name on leads"}
                     >
-                      {member.suspended_at ? <RotateCcw className="h-4 w-4" /> : <Ban className="h-4 w-4" />}
+                      {member.suspended_at ? <ArrowCounterClockwiseIcon className="h-4 w-4" /> : <ProhibitIcon className="h-4 w-4" />}
                     </Button>
                   )}
                   {isAdmin && member.user_id !== userId && member.role !== "owner" && (
@@ -650,7 +661,7 @@ export function TeamManagement({ role, userId, industryId, maxBranches = 1 }: Te
                       className="h-8 w-8 text-muted-foreground hover:text-destructive"
                       onClick={() => removeMember(member.user_id)}
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <TrashIcon className="h-4 w-4" />
                     </Button>
                   )}
                 </div>
@@ -665,7 +676,7 @@ export function TeamManagement({ role, userId, industryId, maxBranches = 1 }: Te
         <Card>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
-              <UserPlus className="h-5 w-5" />
+              <UserPlusIcon className="h-5 w-5" />
               Invite New Member
             </CardTitle>
             <CardDescription>
@@ -694,7 +705,7 @@ export function TeamManagement({ role, userId, industryId, maxBranches = 1 }: Te
                 </SelectContent>
               </Select>
               <Button onClick={handleInvite} disabled={inviting || !inviteEmail.trim() || !invitePositionId}>
-                <UserPlus className="h-4 w-4 mr-2" />
+                <UserPlusIcon className="h-4 w-4 mr-2" />
                 {inviting ? "Sending..." : "Invite"}
               </Button>
             </div>
@@ -707,7 +718,7 @@ export function TeamManagement({ role, userId, industryId, maxBranches = 1 }: Te
         <Card>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
-              <Clock className="h-5 w-5" />
+              <ClockIcon className="h-5 w-5" />
               Pending Invites
             </CardTitle>
             <CardDescription>
@@ -740,7 +751,7 @@ export function TeamManagement({ role, userId, industryId, maxBranches = 1 }: Te
                       onClick={() => copyInviteLink(invite.token)}
                       title="Copy invite link"
                     >
-                      <Copy className="h-4 w-4" />
+                      <CopyIcon className="h-4 w-4" />
                     </Button>
                     <Button
                       variant="ghost"
@@ -748,7 +759,7 @@ export function TeamManagement({ role, userId, industryId, maxBranches = 1 }: Te
                       className="h-8 w-8 text-muted-foreground hover:text-destructive"
                       onClick={() => revokeInvite(invite.id)}
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <TrashIcon className="h-4 w-4" />
                     </Button>
                   </div>
                 </div>

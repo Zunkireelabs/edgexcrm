@@ -1,7 +1,7 @@
 "use client";
 
 import { GUARDIAN_SECTION_TITLE } from "@/lib/consent/guardian";
-import { Pencil } from "lucide-react";
+import { PencilSimpleIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { InfoSection, InfoRow } from "@/components/dashboard/lead/info-section";
 import { CollapsibleGroups, SectionGroup, CardSection, FieldGrid, EditableField } from "./form-primitives";
@@ -97,7 +97,7 @@ export function StudentDetailsSummaryCard({ lead, onEdit, defaultOpen = true }: 
       headerAction={
         onEdit ? (
           <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs shrink-0" onClick={onEdit}>
-            <Pencil className="h-3 w-3 mr-1" />
+            <PencilSimpleIcon className="h-3 w-3 mr-1" />
             Edit
           </Button>
         ) : undefined

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2 } from "lucide-react";
+import { BuildingsIcon } from "@phosphor-icons/react";
 
 interface AccountCardProps {
   accountId: string;
@@ -18,7 +18,7 @@ export function AccountCard({ accountId, accountName, ownerEmail, projectCount, 
     <Card className="border border-border shadow-none rounded-lg">
       <CardHeader className="pb-2 pt-3 px-4">
         <CardTitle className="text-sm font-medium flex items-center gap-2">
-          <Building2 className="h-4 w-4 text-muted-foreground" />
+          <BuildingsIcon className="h-4 w-4 text-muted-foreground" />
           Account
         </CardTitle>
       </CardHeader>

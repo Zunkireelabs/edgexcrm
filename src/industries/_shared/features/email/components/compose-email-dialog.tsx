@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2 } from "lucide-react";
+import { CircleNotchIcon } from "@phosphor-icons/react";
 import {
   Dialog,
   DialogContent,
@@ -328,7 +328,7 @@ export function ComposeEmailDialog({
             Cancel
           </Button>
           <Button onClick={handleSend} disabled={!canSend || sending}>
-            {sending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            {sending && <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />}
             Send
           </Button>
         </div>

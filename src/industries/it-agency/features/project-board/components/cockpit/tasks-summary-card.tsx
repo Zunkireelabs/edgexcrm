@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { CheckSquare, Loader2, Plus } from "lucide-react";
+import { CheckSquareIcon, CircleNotchIcon, PlusIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { PriorityPill } from "../priority-pill";
 import { TaskCreateDialog } from "../task-create-dialog";
@@ -42,7 +42,7 @@ export function TasksSummaryCard({ projectId, projectName, currentUserId, onView
   if (loading) {
     return (
       <div className="rounded-lg border bg-card p-4 flex items-center justify-center h-24">
-        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        <CircleNotchIcon className="h-4 w-4 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -67,11 +67,11 @@ export function TasksSummaryCard({ projectId, projectName, currentUserId, onView
     <div className="rounded-lg border bg-card p-4">
       <div className="flex items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-2">
-          <CheckSquare className="h-4 w-4 text-muted-foreground" />
+          <CheckSquareIcon className="h-4 w-4 text-muted-foreground" />
           <h3 className="text-sm font-semibold">Tasks</h3>
         </div>
         <Button variant="outline" size="sm" onClick={() => setCreateOpen(true)}>
-          <Plus className="h-3.5 w-3.5 mr-1.5" />
+          <PlusIcon className="h-3.5 w-3.5 mr-1.5" />
           New task
         </Button>
       </div>

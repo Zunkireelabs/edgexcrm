@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { Loader2, Search } from "lucide-react";
+import { CircleNotchIcon, MagnifyingGlassIcon } from "@phosphor-icons/react";
 import {
   Sheet,
   SheetContent,
@@ -177,7 +177,7 @@ export function EnrollStudentSheet({
               </div>
             ) : (
               <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                 <Input
                   value={leadSearch}
                   onChange={(e) => setLeadSearch(e.target.value)}
@@ -188,7 +188,7 @@ export function EnrollStudentSheet({
                   <div className="absolute z-10 w-full mt-1 bg-card border rounded-md shadow-lg max-h-48 overflow-y-auto">
                     {leadSearching && (
                       <div className="flex items-center justify-center py-4">
-                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                        <CircleNotchIcon className="h-4 w-4 animate-spin text-muted-foreground" />
                       </div>
                     )}
                     {!leadSearching && leadOptions.length === 0 && (
@@ -293,7 +293,7 @@ export function EnrollStudentSheet({
               onClick={handleSubmit}
               disabled={submitting || !selectedLead || !classId}
             >
-              {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {submitting && <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />}
               Enroll Student
             </Button>
           </div>

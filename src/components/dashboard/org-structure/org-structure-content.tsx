@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Network, List, GitBranch, Users, Plus } from "lucide-react";
+import { NetworkIcon, ListIcon, GitBranchIcon, UsersIcon, PlusIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { OrgStructureEditor } from "./org-structure-editor";
 import { OrgStructureHierarchy } from "./org-structure-hierarchy";
@@ -64,7 +64,7 @@ export function OrgStructureContent({ role, tenantId, userId, industryId, maxBra
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-[#0f0f10] rounded-lg">
-            <Network className="w-6 h-6 text-white" />
+            <NetworkIcon className="w-6 h-6 text-white" />
           </div>
           <div>
             <h1 className="text-lg font-bold">Organisation Structure</h1>
@@ -78,9 +78,9 @@ export function OrgStructureContent({ role, tenantId, userId, industryId, maxBra
         <div className="flex items-center p-1 bg-gray-100 rounded-lg">
           {(["editor", "hierarchy", "manage"] as ViewMode[]).map((mode) => {
             const icons: Record<ViewMode, React.ReactNode> = {
-              editor: <List className="w-4 h-4" />,
-              hierarchy: <GitBranch className="w-4 h-4" />,
-              manage: <Users className="w-4 h-4" />,
+              editor: <ListIcon className="w-4 h-4" />,
+              hierarchy: <GitBranchIcon className="w-4 h-4" />,
+              manage: <UsersIcon className="w-4 h-4" />,
             };
             const labels: Record<ViewMode, string> = {
               editor: "Editor",
@@ -109,7 +109,7 @@ export function OrgStructureContent({ role, tenantId, userId, industryId, maxBra
       {/* Empty state (before migration is applied) */}
       {!loading && !error && realLayers.length === 0 && viewMode !== "manage" && (
         <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
-          <Network className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+          <NetworkIcon className="w-12 h-12 text-gray-300 mx-auto mb-4" />
           <h3 className="text-lg font-semibold text-gray-900 mb-2">No layers yet</h3>
           <p className="text-sm text-gray-500 mb-4">
             {isAdmin
@@ -130,7 +130,7 @@ export function OrgStructureContent({ role, tenantId, userId, industryId, maxBra
               }}
               className="inline-flex items-center gap-2 px-4 py-2 bg-[#0f0f10] hover:bg-[#0f0f10]/90 rounded-lg text-sm font-medium text-white transition-colors"
             >
-              <Plus className="w-4 h-4" />
+              <PlusIcon className="w-4 h-4" />
               Add First Layer
             </button>
           )}

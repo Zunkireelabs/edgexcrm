@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle } from "lucide-react";
+import { WarningIcon } from "@phosphor-icons/react";
 import {
   Dialog,
   DialogContent,
@@ -27,7 +27,7 @@ export function ApplicationsGateDialog({ missing, onClose, onEditProfile }: Appl
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-red-600">
-            <AlertTriangle className="h-5 w-5" />
+            <WarningIcon className="h-5 w-5" />
             Can&apos;t move to Applications yet
           </DialogTitle>
           <DialogDescription>Complete the following before moving this lead to Applications:</DialogDescription>

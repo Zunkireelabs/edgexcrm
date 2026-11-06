@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { X, CheckCircle2, Circle } from "lucide-react";
+import { XIcon, CheckCircleIcon, CircleIcon } from "@phosphor-icons/react";
 import { PRIORITY_CONFIG } from "@/industries/it-agency/features/project-board/components/priority-pill";
 import { TaskContextChip } from "./task-context-chip";
 import { TaskTimerButton } from "./task-timer-button";
@@ -74,9 +74,9 @@ export function TaskRow({
         title={completed ? "Completed" : "Mark done"}
       >
         {completed ? (
-          <CheckCircle2 className="h-4 w-4 text-green-500" />
+          <CheckCircleIcon className="h-4 w-4 text-green-500" />
         ) : (
-          <Circle className="h-4 w-4" />
+          <CircleIcon className="h-4 w-4" />
         )}
       </button>
 
@@ -126,7 +126,7 @@ export function TaskRow({
         className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 text-muted-foreground hover:text-red-500 mt-0.5"
         title="Delete task"
       >
-        <X className="h-3.5 w-3.5" />
+        <XIcon className="h-3.5 w-3.5" />
       </button>
     </div>
   );

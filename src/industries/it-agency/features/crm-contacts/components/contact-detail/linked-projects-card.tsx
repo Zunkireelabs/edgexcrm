@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Plus, Loader2, FileText } from "lucide-react";
+import { PlusIcon, CircleNotchIcon, FileTextIcon } from "@phosphor-icons/react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -63,7 +63,7 @@ export function LinkedProjectsCard({
       <CardHeader className="pb-2 pt-3 px-4">
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <FileText className="h-4 w-4 text-muted-foreground" />
+            <FileTextIcon className="h-4 w-4 text-muted-foreground" />
             Projects
           </CardTitle>
           {isAdmin && (
@@ -73,7 +73,7 @@ export function LinkedProjectsCard({
               className="h-7 text-xs"
               onClick={onAddToProject}
             >
-              <Plus className="h-3 w-3 mr-1" />
+              <PlusIcon className="h-3 w-3 mr-1" />
               Add
             </Button>
           )}
@@ -111,7 +111,7 @@ export function LinkedProjectsCard({
                   {isAdmin && (
                     <div className="flex items-center gap-1 opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0">
                       {isChanging ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                        <CircleNotchIcon className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
                       ) : (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>

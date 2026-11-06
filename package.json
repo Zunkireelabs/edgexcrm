@@ -36,7 +36,6 @@
     "inngest": "^4.13.0",
     "langfuse": "^3.38.20",
     "libphonenumber-js": "^1.13.9",
-    "lucide-react": "^0.575.0",
     "mcp-handler": "^1.1.0",
     "motion": "^13.1.1",
     "next": "16.1.6",

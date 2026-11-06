@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
-import { Loader2, Pencil } from "lucide-react";
+import { CircleNotchIcon, PencilSimpleIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -115,7 +115,7 @@ export function TeamAttendancePanel({ canManageHR }: TeamAttendancePanelProps) {
         </h3>
         {loadingToday ? (
           <div className="flex items-center justify-center min-h-24">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            <CircleNotchIcon className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
         ) : todayMembers.length === 0 ? (
           <p className="text-sm text-muted-foreground">No team members found.</p>
@@ -165,7 +165,7 @@ export function TeamAttendancePanel({ canManageHR }: TeamAttendancePanelProps) {
         </div>
         {loadingMonth ? (
           <div className="flex items-center justify-center min-h-24">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            <CircleNotchIcon className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
         ) : !selectedMember ? (
           <p className="text-sm text-muted-foreground">No team members found.</p>
@@ -197,7 +197,7 @@ export function TeamAttendancePanel({ canManageHR }: TeamAttendancePanelProps) {
                       onClick={() => setRegularizeTarget({ tenantUserId: selectedMember.tenant_user_id, date: d.date })}
                       title="Regularize"
                     >
-                      <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                      <PencilSimpleIcon className="h-3.5 w-3.5 text-muted-foreground" />
                     </Button>
                   </TableCell>
                 </TableRow>

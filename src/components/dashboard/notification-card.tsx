@@ -3,23 +3,23 @@
 import { Fragment } from "react";
 import { NOTIFICATION_CATEGORIES, type NotificationCategoryKey } from "@/lib/notification-categories";
 import {
-  AtSign,
-  Bell,
-  Check,
-  UserPlus,
-  UserMinus,
-  UserCheck,
-  Sparkles,
-  ArrowRightLeft,
-  Mail,
-  CalendarDays,
-  CircleCheck,
-  CircleX,
-  ListChecks,
-  MessageSquare,
-  Send,
-  type LucideIcon,
-} from "lucide-react";
+  AtIcon,
+  BellIcon,
+  CheckIcon,
+  UserPlusIcon,
+  UserMinusIcon,
+  UserCheckIcon,
+  SparkleIcon,
+  ArrowsLeftRightIcon,
+  EnvelopeSimpleIcon,
+  CalendarDotsIcon,
+  CheckCircleIcon,
+  XCircleIcon,
+  ListChecksIcon,
+  ChatTextIcon,
+  PaperPlaneTiltIcon,
+} from "@phosphor-icons/react";
+import type { Icon } from "@phosphor-icons/react";
 
 // Shared by the bell panel (notifications-dropdown.tsx) and the full /notifications page, so the
 // two always look the same.
@@ -65,27 +65,27 @@ export function formatRelativeTime(date: Date): string {
 }
 
 // Icon, tint and the label of the "open it" button for each notification type.
-const NOTIFICATION_META: Record<string, { Icon: LucideIcon; tint: string; action: string }> = {
-  "lead.assigned": { Icon: UserPlus, tint: "bg-blue-50 text-blue-600", action: "View lead" },
-  "lead.unassigned": { Icon: UserMinus, tint: "bg-amber-50 text-amber-600", action: "View lead" },
-  "lead.created": { Icon: Sparkles, tint: "bg-emerald-50 text-emerald-600", action: "View lead" },
-  "lead.stage_changed": { Icon: ArrowRightLeft, tint: "bg-purple-50 text-purple-600", action: "View lead" },
-  "invite.accepted": { Icon: UserCheck, tint: "bg-green-50 text-green-600", action: "View team" },
-  "team.member_joined": { Icon: UserCheck, tint: "bg-green-50 text-green-600", action: "View team" },
-  "email.received": { Icon: Mail, tint: "bg-sky-50 text-sky-600", action: "View email" },
-  "leave.requested": { Icon: CalendarDays, tint: "bg-amber-50 text-amber-600", action: "View request" },
-  "leave.approved": { Icon: CircleCheck, tint: "bg-green-50 text-green-600", action: "View request" },
-  "leave.rejected": { Icon: CircleX, tint: "bg-red-50 text-red-600", action: "View request" },
-  "task.reminder": { Icon: ListChecks, tint: "bg-indigo-50 text-indigo-600", action: "View task" },
-  "task.assigned": { Icon: ListChecks, tint: "bg-indigo-50 text-indigo-600", action: "View task" },
-  "task.completed": { Icon: ListChecks, tint: "bg-green-50 text-green-600", action: "View task" },
-  "task.commented": { Icon: MessageSquare, tint: "bg-indigo-50 text-indigo-600", action: "View task" },
-  "inbox.message_received": { Icon: MessageSquare, tint: "bg-sky-50 text-sky-600", action: "View message" },
-  "inbox.assigned": { Icon: MessageSquare, tint: "bg-blue-50 text-blue-600", action: "View message" },
-  "note.mention": { Icon: AtSign, tint: "bg-purple-50 text-purple-600", action: "View note" },
-  "outreach.draft_due": { Icon: Send, tint: "bg-sky-50 text-sky-600", action: "Open outreach" },
+const NOTIFICATION_META: Record<string, { Icon: Icon; tint: string; action: string }> = {
+  "lead.assigned": { Icon: UserPlusIcon, tint: "bg-blue-50 text-blue-600", action: "View lead" },
+  "lead.unassigned": { Icon: UserMinusIcon, tint: "bg-amber-50 text-amber-600", action: "View lead" },
+  "lead.created": { Icon: SparkleIcon, tint: "bg-emerald-50 text-emerald-600", action: "View lead" },
+  "lead.stage_changed": { Icon: ArrowsLeftRightIcon, tint: "bg-purple-50 text-purple-600", action: "View lead" },
+  "invite.accepted": { Icon: UserCheckIcon, tint: "bg-green-50 text-green-600", action: "View team" },
+  "team.member_joined": { Icon: UserCheckIcon, tint: "bg-green-50 text-green-600", action: "View team" },
+  "email.received": { Icon: EnvelopeSimpleIcon, tint: "bg-sky-50 text-sky-600", action: "View email" },
+  "leave.requested": { Icon: CalendarDotsIcon, tint: "bg-amber-50 text-amber-600", action: "View request" },
+  "leave.approved": { Icon: CheckCircleIcon, tint: "bg-green-50 text-green-600", action: "View request" },
+  "leave.rejected": { Icon: XCircleIcon, tint: "bg-red-50 text-red-600", action: "View request" },
+  "task.reminder": { Icon: ListChecksIcon, tint: "bg-indigo-50 text-indigo-600", action: "View task" },
+  "task.assigned": { Icon: ListChecksIcon, tint: "bg-indigo-50 text-indigo-600", action: "View task" },
+  "task.completed": { Icon: ListChecksIcon, tint: "bg-green-50 text-green-600", action: "View task" },
+  "task.commented": { Icon: ChatTextIcon, tint: "bg-indigo-50 text-indigo-600", action: "View task" },
+  "inbox.message_received": { Icon: ChatTextIcon, tint: "bg-sky-50 text-sky-600", action: "View message" },
+  "inbox.assigned": { Icon: ChatTextIcon, tint: "bg-blue-50 text-blue-600", action: "View message" },
+  "note.mention": { Icon: AtIcon, tint: "bg-purple-50 text-purple-600", action: "View note" },
+  "outreach.draft_due": { Icon: PaperPlaneTiltIcon, tint: "bg-sky-50 text-sky-600", action: "Open outreach" },
 };
-const DEFAULT_META = { Icon: Bell, tint: "bg-gray-100 text-gray-500", action: "View" };
+const DEFAULT_META = { Icon: BellIcon, tint: "bg-gray-100 text-gray-500", action: "View" };
 
 export function NotificationEmptyState({ unreadTab, filtered = false }: { unreadTab: boolean; filtered?: boolean }) {
   return (
@@ -206,7 +206,7 @@ export function NotificationList({
                   }}
                   className="absolute bottom-2 right-3 flex h-6 w-6 items-center justify-center rounded-full border border-gray-300 bg-white text-gray-500 opacity-0 transition-opacity hover:bg-gray-100 hover:text-gray-900 focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100 sm:right-4"
                 >
-                  <Check className="h-3 w-3" />
+                  <CheckIcon className="h-3 w-3" />
                 </button>
               )}
             </div>

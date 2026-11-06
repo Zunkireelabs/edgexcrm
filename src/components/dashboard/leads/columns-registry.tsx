@@ -2,7 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
-import { Eye, RotateCcw } from "lucide-react";
+import { EyeIcon, ArrowCounterClockwiseIcon } from "@phosphor-icons/react";
 import { TruncatedText } from "@/components/ui/truncated-text";
 import { prospectIndustryLabel } from "@/industries/it-agency/leads/prospect-industries";
 import { MoveToListSelector } from "@/components/dashboard/leads/move-to-list-selector";
@@ -214,7 +214,7 @@ const STATIC_COLUMNS: LeadColumn[] = [
               title="Preview"
               className="hidden md:@[110px]/name:inline-flex shrink-0 items-center justify-center h-6 w-6 rounded text-gray-500 opacity-0 group-hover/name:opacity-100 hover:bg-gray-100 hover:text-gray-700 transition-opacity"
             >
-              <Eye size={14} />
+              <EyeIcon size={14} />
             </button>
           </div>
           {/* Mobile: email + preview icon */}
@@ -229,7 +229,7 @@ const STATIC_COLUMNS: LeadColumn[] = [
               }}
               className="shrink-0 p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
             >
-              <Eye size={14} />
+              <EyeIcon size={14} />
             </button>
           </div>
         </td>
@@ -282,7 +282,7 @@ const STATIC_COLUMNS: LeadColumn[] = [
                 onClick={() => ctx.onRestore!(lead.id)}
                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] border border-emerald-300 text-[10px] font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors"
               >
-                <RotateCcw className="w-3 h-3" />
+                <ArrowCounterClockwiseIcon className="w-3 h-3" />
                 Restore
               </button>
             ) : (

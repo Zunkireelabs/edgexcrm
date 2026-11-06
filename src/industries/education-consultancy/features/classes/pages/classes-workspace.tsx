@@ -5,7 +5,18 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { PERMISSION_DENIED_MESSAGE, failureMessage } from "@/lib/permission-denied";
-import { Plus, Users, ClipboardCheck, Pencil, Loader2, Search, ArrowRight, TrendingUp, Wallet, CircleDollarSign } from "lucide-react";
+import {
+  PlusIcon,
+  UsersIcon,
+  ClipboardTextIcon,
+  PencilSimpleIcon,
+  CircleNotchIcon,
+  MagnifyingGlassIcon,
+  ArrowRightIcon,
+  TrendUpIcon,
+  WalletIcon,
+  CurrencyCircleDollarIcon,
+} from "@phosphor-icons/react";
 import { useSettingsModal } from "@/contexts/settings-modal-context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -309,7 +320,7 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
         </div>
         {canEnroll && (
           <Button size="sm" onClick={() => setEnrollOpen(true)}>
-            <Plus className="h-4 w-4 mr-1.5" />
+            <PlusIcon className="h-4 w-4 mr-1.5" />
             Enroll Student
           </Button>
         )}
@@ -324,13 +335,13 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
       >
         <div className="bg-card px-4 py-3">
           <div className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium mb-1 flex items-center gap-1.5">
-            <Users className="h-3 w-3" /> Active students
+            <UsersIcon className="h-3 w-3" /> Active students
           </div>
           <div className="text-xl font-semibold tabular-nums">{workspaceStats.activeStudents}</div>
         </div>
         <div className="bg-card px-4 py-3">
           <div className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium mb-1 flex items-center gap-1.5">
-            <TrendingUp className="h-3 w-3" /> Demo → Actual rate
+            <TrendUpIcon className="h-3 w-3" /> Demo → Actual rate
           </div>
           <div className="text-xl font-semibold tabular-nums">
             {workspaceStats.conversionRate == null ? "—" : `${workspaceStats.conversionRate}%`}
@@ -339,7 +350,7 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
         {canSeeFeesTotals && (
           <div className="bg-card px-4 py-3">
             <div className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium mb-1 flex items-center gap-1.5">
-              <Wallet className="h-3 w-3" /> Fees collected
+              <WalletIcon className="h-3 w-3" /> Fees collected
             </div>
             <div className="text-xl font-semibold tabular-nums">
               {(feesCollected ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
@@ -348,7 +359,7 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
         )}
         <div className="bg-card px-4 py-3">
           <div className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium mb-1 flex items-center gap-1.5">
-            <CircleDollarSign className="h-3 w-3" /> Unpaid (active)
+            <CurrencyCircleDollarIcon className="h-3 w-3" /> Unpaid (active)
           </div>
           <div className="text-xl font-semibold tabular-nums">{workspaceStats.unpaidActiveCount}</div>
         </div>
@@ -483,13 +494,13 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
                         setAttendanceOpen(true);
                       }}
                     >
-                      <ClipboardCheck className="h-3.5 w-3.5 mr-1" />
+                      <ClipboardTextIcon className="h-3.5 w-3.5 mr-1" />
                       Take attendance
                     </Button>
                   )}
                   {canEnroll && (
                     <Button size="sm" variant="outline" onClick={() => setEnrollOpen(true)}>
-                      <Plus className="h-3.5 w-3.5 mr-1" />
+                      <PlusIcon className="h-3.5 w-3.5 mr-1" />
                       Enroll
                     </Button>
                   )}
@@ -499,11 +510,11 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
               {detailTab === "roster" ? (
                 roster.length === 0 ? (
                   <div className="flex-1 flex flex-col items-center justify-center gap-2 text-muted-foreground">
-                    <Users className="h-8 w-8 opacity-30" />
+                    <UsersIcon className="h-8 w-8 opacity-30" />
                     <p className="text-sm">No students enrolled yet.</p>
                     {canEnroll && (
                       <Button size="sm" variant="outline" onClick={() => setEnrollOpen(true)}>
-                        <Plus className="h-3.5 w-3.5 mr-1" />
+                        <PlusIcon className="h-3.5 w-3.5 mr-1" />
                         Enroll first student
                       </Button>
                     )}
@@ -531,7 +542,7 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
                         ))}
                       </div>
                       <div className="relative">
-                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                        <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                         <Input
                           value={rosterSearch}
                           onChange={(e) => setRosterSearch(e.target.value)}
@@ -588,7 +599,7 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
                                   ) : (
                                     <span className="text-muted-foreground italic">No demo</span>
                                   )}
-                                  <ArrowRight className="h-3 w-3 text-muted-foreground/50 shrink-0" />
+                                  <ArrowRightIcon className="h-3 w-3 text-muted-foreground/50 shrink-0" />
                                   {actual ? (
                                     <span className="flex items-center gap-1 text-muted-foreground">
                                       <span className="h-1.5 w-1.5 rounded-full bg-green-600" />
@@ -602,7 +613,7 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
                                       disabled={convertingLeadId === row.leadId}
                                       onClick={() => handleConvertToActual(row)}
                                     >
-                                      {convertingLeadId === row.leadId && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+                                      {convertingLeadId === row.leadId && <CircleNotchIcon className="h-3 w-3 mr-1 animate-spin" />}
                                       Convert
                                     </Button>
                                   ) : (
@@ -669,7 +680,7 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
                                       className="text-muted-foreground hover:text-foreground transition-colors"
                                       title="Edit fee"
                                     >
-                                      <Pencil className="h-3 w-3" />
+                                      <PencilSimpleIcon className="h-3 w-3" />
                                     </button>
                                   )}
                                 </div>
@@ -769,7 +780,7 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
               Cancel
             </Button>
             <Button onClick={handleSaveFee} disabled={editFeeSubmitting}>
-              {editFeeSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {editFeeSubmitting && <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />}
               Save
             </Button>
           </DialogFooter>

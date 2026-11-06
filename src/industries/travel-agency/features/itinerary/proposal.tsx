@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Printer } from "lucide-react";
+import { ArrowLeftIcon, PrinterIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { formatMoney } from "@/lib/travel/currency";
 import { tripTypeLabel } from "@/industries/travel-agency/leads/trip-types";
@@ -64,7 +64,7 @@ export function ItineraryProposal({
       {/* Screen-only toolbar */}
       <div className="flex items-center gap-3 mb-6 print:hidden">
         <Button variant="outline" size="sm" className="gap-1.5" onClick={onBack}>
-          <ArrowLeft className="h-4 w-4" />
+          <ArrowLeftIcon className="h-4 w-4" />
           Back to Editor
         </Button>
         <Button
@@ -72,7 +72,7 @@ export function ItineraryProposal({
           className="gap-1.5"
           onClick={() => window.print()}
         >
-          <Printer className="h-4 w-4" />
+          <PrinterIcon className="h-4 w-4" />
           Print / Save as PDF
         </Button>
       </div>
