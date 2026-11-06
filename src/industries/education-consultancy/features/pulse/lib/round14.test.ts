@@ -150,3 +150,29 @@ describe("briefing: G6 doors, G8 closer, G9 one branch story", () => {
     expect(other.items.find((i) => i.id === "neg")!.headline).not.toContain("Kathmandu");
   });
 });
+
+describe("round 15", () => {
+  const quiet = P("t", "Asha Tamang", "telecaller", "K", {}, { calls: 20, notes: 9 });
+  const base = (extra: Partial<BriefingInput> = {}): BriefingInput => ({ people: [quiet], team: rollups([quiet]).team, stageFlows: [], leakReasons: {}, untouched: { count: 38 }, thresholds: T, closer: false, periodNoun: "today", ...extra });
+  it("R1: Today (facts only) keeps Orca's read: untouched + the quiet person, no prediction", () => {
+    const read = buildBriefing(base())?.read;
+    expect(read).toBe("38 new leads have waited over 48 hours for a first touch, and Asha Tamang has no activity yet today (usual 29 by now).");
+    expect(read).not.toMatch(/should hold|Fix /);
+  });
+  it("R1: with a closer (7d/30d) the read still needs two sentences", () => {
+    expect(buildBriefing(base({ closer: true, periodNoun: "this week" }))?.read).toMatch(/Fix those two/);
+  });
+  it("R2: delivering the whole team's total reads 'all N'", () => {
+    const e = P("e", "Esha Thapa", "counsellor", "K", { reached_applications: 3 }, { reached_applications: 1 });
+    const win = buildBriefing({ ...base(), people: [e], team: rollups([e]).team })!.items.find((i) => i.id === "win")!;
+    expect(win.headline).toMatch(/^Esha Thapa delivered all 3 students to Applications/);
+    expect(win.headline).not.toMatch(/of the 3/);
+  });
+  it("R3: the activity-drop signal never says 0% of usual", () => {
+    const zero = computeSignals({ people: [quiet], stageFlows: [], untouched: { count: 0, byPerson: [] }, branchKpis: [], thresholds: T, periodNoun: "today" }).all.find((s) => s.kind === "activity_drop")!;
+    expect(zero.title).toBe("Asha Tamang has no activity yet today (usual 29 by now)");
+    const some = computeSignals({ people: [P("s", "Sam", "telecaller", "K", { calls: 6 }, { calls: 20, notes: 9 })], stageFlows: [], untouched: { count: 0, byPerson: [] }, branchKpis: [], thresholds: T }).all.find((s) => s.kind === "activity_drop")!;
+    expect(some.title).toMatch(/dropped to \d+% of usual/);
+    expect(some.title).not.toMatch(/\b0%/);
+  });
+});

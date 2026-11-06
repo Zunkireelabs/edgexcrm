@@ -1,4 +1,5 @@
 import type { PulseThresholds } from "./thresholds";
+import { activityWhat } from "./activity-text";
 import { MIN_OVER_CAPACITY_RATIO, MIN_USUAL, compareToUsual, usualShare } from "./compare";
 import {
   activityOf,
@@ -24,6 +25,8 @@ export interface SignalInput {
   branchKpis: BranchKpi[];
   thresholds: PulseThresholds;
   baselineCovered?: boolean;
+  /** How the window is named in sentences: "today" | "this week" | "this period" (default). */
+  periodNoun?: string;
 }
 
 const SEVERITY_RANK = { high: 0, medium: 1, info: 2 } as const;
@@ -32,7 +35,13 @@ function pct(n: number): string {
   return `${Math.round(n)}%`;
 }
 
-export function activityDropSignals(people: PersonRow[], t: PulseThresholds): Signal[] {
+/** "Asha's activity dropped to 23% of usual"; when there is none (or it rounds to 0%) → "Asha has no activity yet today (usual 29 by now)". */
+function dropTitle(p: PersonRow, current: number, usual: number, period: string): string {
+  const at = usualShare(current, usual)?.at ?? Math.round((current / Math.round(usual)) * 100);
+  return at <= 0 ? `${p.name} has ${activityWhat(p, current, usual, period)}` : `${p.name}'s activity dropped to ${at}% of usual`;
+}
+
+export function activityDropSignals(people: PersonRow[], t: PulseThresholds, period = "this period"): Signal[] {
   const out: Signal[] = [];
   for (const p of people) {
     const usual = activityOf(p.usual);
@@ -42,7 +51,7 @@ export function activityDropSignals(people: PersonRow[], t: PulseThresholds): Si
         id: `activity_drop:${p.userId}`,
         kind: "activity_drop",
         severity: "high",
-        title: `${p.name}'s activity dropped to ${usualShare(current, usual)?.at ?? Math.round((current / Math.round(usual)) * 100)}% of usual`,
+        title: dropTitle(p, current, usual, period),
         detail: `${current} calls, notes and stage moves vs usual ${Math.round(usual)}. Their leads may be going cold.`,
         evidence: { metric: "activity", value: current, baseline: usual },
         subject: { type: "person", id: p.userId },
@@ -222,7 +231,7 @@ export interface ComputedSignals {
 
 export function computeSignals(input: SignalInput): ComputedSignals {
   const all = sortSignals([
-    ...activityDropSignals(input.people, input.thresholds),
+    ...activityDropSignals(input.people, input.thresholds, input.periodNoun),
     ...untouchedSignal(input.untouched),
     ...overCapacitySignals(input.people, input.thresholds),
     ...stageLeakSignals(input.stageFlows, input.thresholds, input.baselineCovered !== false),
