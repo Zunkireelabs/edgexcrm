@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { useBlockingNotice } from "@/components/dashboard/blocking-notice";
+import { uploadErrorMessage } from "./upload-error-message";
 
 interface SendConsentDialogProps {
   open: boolean;
@@ -114,11 +115,20 @@ export function SendConsentDialog({
           file_name: file.name,
           file_size: file.size,
           mime_type: file.type || "application/octet-stream",
-          field_name: "consent_document",
-          session_id: "consent",
+          // A UNIQUE, lead-scoped path for every upload (<slug>/<leadId>/consent-document-<uuid>.<ext>). The route builds
+          // the storage path from these two values and storage refuses to overwrite an existing object, so the old
+          // constants ("consent" / "consent_document") made every upload after the first one fail for the whole tenant.
+          // Never add `upsert` to "fix" that: it would silently replace another student's signed consent.
+          field_name: `consent-document-${crypto.randomUUID()}`,
+          session_id: leadId,
         }),
       });
-      if (!urlRes.ok) { toast.error("Failed to get upload URL"); return; }
+      if (!urlRes.ok) {
+        // Show the real reason (file too large, type not accepted, rate limited…) instead of a vague generic message.
+        const errBody = await urlRes.json().catch(() => null);
+        toast.error(uploadErrorMessage(errBody));
+        return;
+      }
       const urlJson = await urlRes.json();
       const { path, token, public_url } = urlJson.data as { path: string; token: string; public_url: string };
 
