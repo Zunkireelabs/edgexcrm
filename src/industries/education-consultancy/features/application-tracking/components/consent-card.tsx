@@ -246,6 +246,8 @@ export function ConsentCard({
   const [savedFeeStatus, setSavedFeeStatus] = useState<string>(initialFeeStatus ?? "");
   const [feeDirty, setFeeDirty] = useState(false);
   const [feeSaving, setFeeSaving] = useState(false);
+  // Once a fee is saved the box shows it read-only; "Edit" re-opens the form.
+  const [feeEditing, setFeeEditing] = useState(false);
 
   // Owner/admin records the fee; anyone else can only REPORT a received fee ("claimed"),
   // which an owner/admin verifies later. A reported fee is enough to move to Applications (admin verification is not awaited).
@@ -276,6 +278,7 @@ export function ConsentCard({
       setFeeStatus(statusToSave);
       setSavedFeeStatus(statusToSave);
       setFeeDirty(false);
+      setFeeEditing(false);
     } catch {
       toast.error("Failed to save application fee");
     } finally {
@@ -501,7 +504,40 @@ export function ConsentCard({
               )}
             </div>
 
-            {canManageFee ? (
+            {savedFeeStatus !== "" && !feeEditing && (canManageFee || canReportFee) ? (
+              <div className="space-y-2" data-testid="fee-readonly">
+                <div className="text-sm space-y-1">
+                  <p>
+                    <span className="text-xs text-muted-foreground">Fee Paid?: </span>
+                    {savedFeeStatus === "claimed" ? "Reported (verify)" : <span className="capitalize">{savedFeeStatus}</span>}
+                    {(savedFeeStatus === "paid" || savedFeeStatus === "claimed") && feeAmount !== "" && (
+                      <span className="text-muted-foreground"> · {feeAmount}</span>
+                    )}
+                  </p>
+                  {feeNotes && <p className="text-xs text-muted-foreground">{feeNotes}</p>}
+                </div>
+                {!canManageFee && feeIsReported && (
+                  <p className="text-xs text-muted-foreground">
+                    You reported this fee. The Account will verify it — you can keep working in the meantime.
+                  </p>
+                )}
+                <div className="flex gap-2">
+                  {canManageFee && feeIsReported && (
+                    <>
+                      <Button size="sm" onClick={() => saveFee("paid")} disabled={feeSaving} className="h-7 text-xs">
+                        Confirm fee received
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => saveFee("unpaid")} disabled={feeSaving} className="h-7 text-xs">
+                        Reject
+                      </Button>
+                    </>
+                  )}
+                  <Button size="sm" variant="outline" onClick={() => setFeeEditing(true)} className="h-7 text-xs">
+                    Edit
+                  </Button>
+                </div>
+              </div>
+            ) : canManageFee ? (
               <>
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Fee Paid?</Label>
