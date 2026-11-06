@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { XClose } from "./icons";
 import type { PulseEventRow } from "../lib/types";
@@ -45,7 +46,7 @@ export function EvidenceDrawer({
   const credited = q?.metric === "prospects" || q?.metric === "reached_applications";
   return (
     <Sheet open={!!target} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent side="right" showCloseButton={false} className="pulse pdr w-full overflow-y-auto sm:max-w-[620px]">
+      <SheetContent side="right" look="v2" size="lg" showCloseButton={false} className="pulse pdr overflow-y-auto">
         <header className="dh top">
           <div className="grow">
             <div className="crumb">{["Pulse", ...(target?.crumbs ?? [])].join(" › ")}</div>
@@ -56,7 +57,7 @@ export function EvidenceDrawer({
               {q?.branchId && !q.userId && " · one branch"}
             </SheetDescription>
           </div>
-          <button type="button" className="xbtn" onClick={onClose} aria-label="Close"><XClose /></button>
+          <Button look="v2" variant="secondary" size="icon" type="button" onClick={onClose} aria-label="Close"><XClose /></Button>
         </header>
 
         <div className="ebody">
@@ -88,9 +89,9 @@ export function EvidenceDrawer({
               <span>Showing {rows.length} of {total}</span>
               <span className="row" style={{ gap: 16 }}>
                 {rows.length < total && (
-                  <button type="button" disabled={loading} onClick={() => setOffset(rows.length)} className="lnk">{loading ? "Loading…" : `+ ${Math.min(PAGE, total - rows.length)} more`}</button>
+                  <Button look="v2" variant="link" type="button" disabled={loading} onClick={() => setOffset(rows.length)} className="disabled:opacity-100">{loading ? "Loading…" : `+ ${Math.min(PAGE, total - rows.length)} more`}</Button>
                 )}
-                {data?.openInLeadsHref && <Link href={data.openInLeadsHref} className="lnk">Open all {total} in Leads →</Link>}
+                {data?.openInLeadsHref && <Button look="v2" variant="link" asChild><Link href={data.openInLeadsHref}>Open all {total} in Leads →</Link></Button>}
               </span>
             </div>
           )}

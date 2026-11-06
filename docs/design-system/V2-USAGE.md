@@ -1,0 +1,51 @@
+# Design System v2 — usage (EDGEX-85)
+
+v2 is **opt-in**. A component used without `look="v2"` renders exactly as before (locked by
+`src/components/ui/legacy-look.test.tsx`). Light mode only.
+
+## Opting in
+
+```tsx
+<Button look="v2" variant="primary">Save</Button>      // primary | secondary | ghost | link | destructive; size default | sm | icon
+<Badge look="v2" variant="ai">Suggested</Badge>        // neutral | count | ai | preview (ai adds its Sparkles icon itself)
+<Table look="v2" stickyFirstColumn>…</Table>           // row props: tone, flag, interactive; cell props: numeric, divider
+<SheetContent look="v2" size="md">…</SheetContent>     // md 560px | lg 620px
+<SegmentedControl aria-label="…" value onValueChange items variant="segmented|pills" />
+```
+
+With `look="v2"` TypeScript only accepts v2 names (`variant="outline"` is a compile error).
+
+## Tokens
+
+All in `src/app/globals.css`, prefixed `ds-` (4 v2 names clash with shadcn tokens of a different meaning).
+
+- Colour: `ds-canvas surface sunken hover selected border divider ink text muted faint ghost accent accent-soft good(-soft) bad(-soft) warn(-soft) ai ai-soft ai-line` → `bg-ds-*`, `text-ds-*`, `border-ds-*`.
+- Radius: `rounded-ds-xs|sm|md|lg|full` (6/8/12/16/full). Nested rule: outer radius = inner radius + padding.
+- Type: `text-ds-title|section|lede|body|meta|metric` are **sizes**; `text-ds-ink` is a **colour**. `ds-label` is the small-caps label utility.
+- Shadows: only on things that float (`--ds-shadow-float`) plus the segmented thumb.
+
+## Gradient rule
+
+Gradient = Orca. Gradients exist only as AI tokens (`--ds-ai-grad|wash|tint|block`). `ai-gradient-guard.test.ts` enforces:
+non-AI v2 variants carry no gradient; `ds-ai-*` tokens appear only in the allowlist at the top of that test
+(adding AI to a page = add the file there deliberately); and a ratchet (`src/components/ui/__baselines__/gradients.json`)
+so the repo's gradient count never grows. If a count goes down, lower the baseline.
+
+## One primary per region
+
+One primary (ink) button per region. Everything else is secondary, ghost or link.
+
+## Codemod
+
+```bash
+node scripts/ds-v2-migrate.mjs <file-or-dir>...            # dry run: unified diff + report
+node scripts/ds-v2-migrate.mjs <file-or-dir>... --write    # apply
+```
+
+Touches only `Button`, `Badge`, `Table`, `SheetContent` imported from `@/components/ui/*`. It never guesses: dynamic
+variants, unknown names, spread props, `asChild` and `buttonVariants(...)` calls are reported ("needs a human") and left
+untouched. Elements that already have `look` are skipped, so a second run changes nothing.
+
+## Showcase
+
+Dev only: `/design-system` (404 in production). Legacy and v2 side by side, including a wide table with the sticky column and edge fade.

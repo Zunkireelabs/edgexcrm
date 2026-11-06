@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Badge } from "@/components/ui/badge";
 import type { Briefing, EventsQuery } from "../lib/types";
 import { Arrow, ItemIcon, Spark } from "./icons";
 
@@ -30,7 +31,7 @@ export function PulseBriefingCard({
         <div className="bt">
           {preview && <span className="badge"><Spark /></span>}
           {title}
-          {preview && <span className="prev" title={TIP}>Preview</span>}
+          {preview && <Badge look="v2" variant="preview" title={TIP}>Preview</Badge>}
         </div>
         {preview && <span className="meta">Orca · {time} · from {briefing.recordCount.toLocaleString("en-US")} activity records</span>}
       </div>
@@ -64,15 +65,15 @@ export function PulseBriefingCard({
           <Link href="/orca" className="ask" aria-label="Ask Orca about this period">
             <span className="ic2"><Spark /></span>
             <span className="grow">Ask about this period…</span>
-            <span className="chip">Why did the biggest drop happen?</span>
-            <span className="chip">Compare branches</span>
+            <Badge look="v2" variant="neutral" className="leading-[1.5]">Why did the biggest drop happen?</Badge>
+            <Badge look="v2" variant="neutral" className="leading-[1.5]">Compare branches</Badge>
           </Link>
         ) : (
           <div className="ask" aria-disabled="true" title="Orca answers switch on soon">
             <span className="ic2"><Spark /></span>
             <span className="grow">Ask about this period…</span>
-            <span className="chip">Why did the biggest drop happen?</span>
-            <span className="chip">Compare branches</span>
+            <Badge look="v2" variant="neutral" className="leading-[1.5]">Why did the biggest drop happen?</Badge>
+            <Badge look="v2" variant="neutral" className="leading-[1.5]">Compare branches</Badge>
           </div>
         )
       )}

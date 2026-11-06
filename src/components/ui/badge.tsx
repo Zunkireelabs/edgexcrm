@@ -1,5 +1,6 @@
 import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
+import { Sparkles } from "lucide-react"
 import { Slot } from "radix-ui"
 
 import { cn } from "@/lib/utils"
@@ -28,13 +29,54 @@ const badgeVariants = cva(
   }
 )
 
-function Badge({
-  className,
-  variant = "default",
-  asChild = false,
-  ...props
-}: React.ComponentProps<"span"> &
-  VariantProps<typeof badgeVariants> & { asChild?: boolean }) {
+/** Design System v2 (EDGEX-85). Exactly 4 kinds; good/bad/warn are plain coloured text in v2. */
+const badgeV2Variants = cva("", {
+  variants: {
+    variant: {
+      neutral:
+        "rounded-ds-sm border border-ds-border bg-ds-sunken text-ds-text text-xs px-[9px] py-0.5",
+      count:
+        "inline-grid place-items-center min-w-5 h-5 px-1.5 rounded-ds-full bg-ds-bad-soft text-ds-bad text-[11.5px] font-semibold",
+      ai: "inline-flex items-center gap-1 h-5 px-[7px] rounded-ds-xs bg-[image:var(--ds-ai-tint)] text-ds-ai text-[11px] font-medium [&>svg]:size-[11px] [&>svg]:stroke-[2.2]",
+      preview:
+        "inline-flex items-center h-5 px-[7px] rounded-ds-xs bg-ds-surface border border-ds-ai-line text-ds-ai text-[11px] font-medium",
+    },
+  },
+  defaultVariants: { variant: "neutral" },
+})
+
+const PREVIEW_TITLE =
+  "Written from your data by rules. Full AI explanations switch on with Orca"
+
+type BadgeBaseProps = React.ComponentProps<"span"> & { asChild?: boolean }
+
+type BadgeProps =
+  | (BadgeBaseProps & VariantProps<typeof badgeVariants> & { look?: "legacy" })
+  | (Omit<BadgeBaseProps, "variant"> & VariantProps<typeof badgeV2Variants> & { look: "v2" })
+
+function Badge(props: BadgeProps) {
+  if (props.look === "v2") {
+    const { className, variant, asChild = false, look: _look, children, title, ...rest } = props
+    void _look
+    const Comp = asChild ? Slot.Root : "span"
+    const kind = variant ?? "neutral"
+    return (
+      <Comp
+        data-slot="badge"
+        data-look="v2"
+        data-variant={kind}
+        title={kind === "preview" ? (title ?? PREVIEW_TITLE) : title}
+        className={cn(badgeV2Variants({ variant: kind }), className)}
+        {...rest}
+      >
+        {kind === "ai" && !asChild ? <Sparkles aria-hidden="true" /> : null}
+        {children}
+      </Comp>
+    )
+  }
+
+  const { className, variant = "default", asChild = false, look: _look, ...rest } = props
+  void _look
   const Comp = asChild ? Slot.Root : "span"
 
   return (
@@ -42,9 +84,9 @@ function Badge({
       data-slot="badge"
       data-variant={variant}
       className={cn(badgeVariants({ variant }), className)}
-      {...props}
+      {...rest}
     />
   )
 }
 
-export { Badge, badgeVariants }
+export { Badge, badgeVariants, badgeV2Variants }

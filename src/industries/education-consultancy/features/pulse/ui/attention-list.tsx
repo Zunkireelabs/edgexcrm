@@ -2,6 +2,9 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { countByCategory } from "../lib/attention";
 import type { AttentionCategory, AttentionItem, AttentionLink, EventsQuery } from "../lib/types";
 import { Chevron, ItemIcon, Spark } from "./icons";
@@ -45,25 +48,25 @@ export function AttentionList({
 
   const link = (l: AttentionLink, it: AttentionItem) =>
     l.href ? (
-      <Link key={l.label} href={l.href} className="lnk">{l.label}</Link>
+      <Button key={l.label} look="v2" variant="link" asChild><Link href={l.href}>{l.label}</Link></Button>
     ) : (
-      <button key={l.label} type="button" className="lnk"
+      <Button key={l.label} look="v2" variant="link" type="button"
         onClick={() => (l.personId ? onPerson(l.personId) : l.drill && onDrill(`${it.subject} · ${it.what}`, [it.subject], l.drill))}>
         {l.label}
-      </button>
+      </Button>
     );
 
   return (
     <div className="att">
       <div className="att-h">
-        <div className="row"><span className="h2">Needs your attention</span>{counts.needs_action > 0 && <span className="cnt">{counts.needs_action}</span>}</div>
-        <div className="row" style={{ gap: 6 }} role="tablist" aria-label="Filter attention">
-          {pills.map((p) => (
-            <button key={p.key} type="button" role="tab" aria-selected={filter === p.key} className={`pill ${filter === p.key ? "on" : ""}`} onClick={() => setFilter(p.key)}>
-              {p.label} <span className="n">{p.n}</span>
-            </button>
-          ))}
-        </div>
+        <div className="row"><span className="h2">Needs your attention</span>{counts.needs_action > 0 && <Badge look="v2" variant="count" className="ml-2">{counts.needs_action}</Badge>}</div>
+        <SegmentedControl
+          variant="pills"
+          aria-label="Filter attention"
+          value={filter}
+          onValueChange={(v) => setFilter(v as Filter)}
+          items={pills.map((p) => ({ value: p.key, label: p.label, count: p.n }))}
+        />
       </div>
       <div className="list">
         {shown.length === 0 && <div className="sec" style={{ padding: "22px 4px", color: "var(--muted)" }}>Nothing here right now.</div>}
@@ -81,15 +84,15 @@ export function AttentionList({
                     <span className={`ic ${it.tone}`}><ItemIcon icon={it.icon} /></span>
                     <div className="ln" title={`${it.subject} · ${it.what}`}>
                       <b>{it.subject}</b><span className="sep">·</span>{it.what}
-                      {it.suggested && preview && <span className="sugg"><Spark className="i" />Suggested</span>}
+                      {it.suggested && preview && <Badge look="v2" variant="ai" className="ml-2 align-[1px]">Suggested</Badge>}
                     </div>
                     <div className="row" onClick={(e) => e.stopPropagation()}>
                       {it.figure && (it.figure.textFirst
                         ? <span className="fig" title={`${it.figure.text} ${it.figure.strong ?? ""}`.trim()}>{it.figure.text} {it.figure.strong && <b>{it.figure.strong}</b>}</span>
                         : <span className="fig" title={`${it.figure.strong ?? ""}${it.figure.text}`}>{it.figure.strong && <b>{it.figure.strong}</b>}{it.figure.text}</span>)}
-                      {it.action && it.action.personId && <button type="button" title={it.action.label} className={`btn ${it.action.primary ? "pri" : ""}`} onClick={() => onPerson(it.action!.personId!)}>{it.action.label}</button>}
-                      {it.action && !it.action.personId && it.action.drill && <button type="button" title={it.action.label} className={`btn ${it.action.primary ? "pri" : ""}`} onClick={() => onDrill(`${it.subject} · ${it.what}`, [it.subject], it.action!.drill!)}>{it.action.label}</button>}
-                      {it.action && !it.action.personId && !it.action.drill && <Link href={it.action.href} title={it.action.label} className={`btn ${it.action.primary ? "pri" : ""}`}>{it.action.label}</Link>}
+                      {it.action && it.action.personId && <Button look="v2" variant={it.action.primary ? "primary" : "secondary"} type="button" title={it.action.label} className="pact" onClick={() => onPerson(it.action!.personId!)}>{it.action.label}</Button>}
+                      {it.action && !it.action.personId && it.action.drill && <Button look="v2" variant={it.action.primary ? "primary" : "secondary"} type="button" title={it.action.label} className="pact" onClick={() => onDrill(`${it.subject} · ${it.what}`, [it.subject], it.action!.drill!)}>{it.action.label}</Button>}
+                      {it.action && !it.action.personId && !it.action.drill && <Button look="v2" variant={it.action.primary ? "primary" : "secondary"} asChild className="pact"><Link href={it.action.href} title={it.action.label}>{it.action.label}</Link></Button>}
                     </div>
                     <span className="chev"><Chevron open={open} /></span>
                     {open && (
@@ -105,8 +108,8 @@ export function AttentionList({
                         {it.meta && <div className="meta">{it.meta}</div>}
                         <div className="links">
                           {it.links.map((l) => link(l, it))}
-                          <button type="button" className="btn ghost" style={{ marginLeft: "auto", height: 24 }}
-                            onClick={() => setDismissed((d) => ({ ...d, [`${windowKey}:${it.id}`]: true }))}>Dismiss</button>
+                          <Button look="v2" variant="ghost" size="sm" type="button" className="ml-auto px-3"
+                            onClick={() => setDismissed((d) => ({ ...d, [`${windowKey}:${it.id}`]: true }))}>Dismiss</Button>
                         </div>
                       </div>
                     )}

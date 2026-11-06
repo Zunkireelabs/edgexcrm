@@ -1,5 +1,6 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import type { EventsQuery, PersonRow, PulsePersonResponse } from "../lib/types";
 import { coachingNote } from "../lib/notes";
@@ -48,14 +49,14 @@ export function PersonDrawer({
 
   return (
     <Sheet open={!!person} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent side="right" showCloseButton={false} className="pulse pdr w-full overflow-y-auto sm:max-w-[560px]">
+      <SheetContent side="right" look="v2" size="md" showCloseButton={false} className="pulse pdr overflow-y-auto">
         <header className="dh">
           {p && <span className="av lg" style={{ background: avatarColor(p.userId) }}>{initials(p.name)}</span>}
           <div className="grow">
             <SheetTitle className="dt">{p?.name ?? ""}</SheetTitle>
             <SheetDescription className="dsub">{sub}</SheetDescription>
           </div>
-          <button type="button" className="xbtn" onClick={onClose} aria-label="Close"><XClose /></button>
+          <Button look="v2" variant="secondary" size="icon" type="button" onClick={onClose} aria-label="Close"><XClose /></Button>
         </header>
 
         {p && (

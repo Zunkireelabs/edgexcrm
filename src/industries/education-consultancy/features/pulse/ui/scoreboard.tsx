@@ -1,6 +1,8 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { rowNote } from "../lib/notes";
 import { pluralLabel } from "../lib/positions";
 import type { CellValues, EventsQuery, PersonRow, PulseGroup, PulseResponse, StageSeries } from "../lib/types";
@@ -68,12 +70,12 @@ function change(v: CellValues, hasUsual: boolean, rise?: "bad" | "warn"): { text
 function Cell({
   v, col, na, onOpen, plain, periodLabel, hasUsual, previousCovered, unit, slot, today,
 }: { slot: number; v: CellValues; col: Col; na: boolean; onOpen?: () => void; plain?: boolean; periodLabel: string; hasUsual: boolean; previousCovered: boolean; unit: string; today?: boolean }) {
-  const first = FIRST_OF_GROUP.has(col.id) ? "sp" : "";
-  if (na) return <td className={first}><span className="z">–</span></td>;
+  const first = FIRST_OF_GROUP.has(col.id);
+  if (na) return <TableCell numeric divider={first}><span className="z">–</span></TableCell>;
   const ch = change(v, hasUsual, col.rise);
   const num = v.current === 0 ? <span className="z">0</span> : <>{v.current.toLocaleString("en-US")}</>;
   return (
-    <td className={first}>
+    <TableCell numeric divider={first}>
       <span className="cell">
         {onOpen && v.current > 0 && !plain ? (
           <button type="button" onClick={onOpen} aria-label={`${v.current}`}><span className="v0">{num}</span></button>
@@ -89,8 +91,17 @@ function Cell({
           {previousCovered && <div><span>{today ? "Yesterday by this time" : "Last period"}</span><b>{v.previous}</b></div>}
         </span>
       </span>
-    </td>
+    </TableCell>
   );
+}
+
+export type PersonNoteData = NonNullable<ReturnType<typeof rowNote>>;
+
+/** The person-cell note: AI note (preview mode) or plain flag note. Full text lives in the markup; the ellipsis is CSS only. */
+export function PersonNote({ note, ai }: { note: PersonNoteData; ai: boolean }) {
+  return ai
+    ? <span className="rnote" title={note.text}><Spark className="i" /><span className="nt">{note.text}</span></span>
+    : <span className={`flag ${note.kind === "amber" ? "am" : note.kind === "green" ? "gd" : ""}`} title={note.text}><span className="nt">{note.text}</span></span>;
 }
 
 export function Scoreboard({
@@ -104,21 +115,6 @@ export function Scoreboard({
 }) {
   const unit = data.window.key === "7d" ? "7-day" : data.window.key === "30d" ? "30-day" : data.window.key === "today" ? "same-weekday" : "equal-length";
   const [sort, setSort] = useState<SortKey>("moves");
-  // Right-edge fade only when the table actually scrolls horizontally and there is more to the right.
-  const tblRef = useRef<HTMLDivElement>(null);
-  const [fade, setFade] = useState(false);
-  const measure = useCallback(() => {
-    const el = tblRef.current;
-    if (el) setFade(el.scrollWidth - el.clientWidth - el.scrollLeft > 2);
-  }, []);
-  useEffect(() => {
-    const el = tblRef.current;
-    if (!el) return;
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [measure, data.people.length]);
   const [view, setView] = useState<"role" | "branch" | "none">("role");
   const stageId = useMemo(() => {
     const m: Record<string, string> = {};
@@ -195,21 +191,19 @@ export function Scoreboard({
   const personRow = (p: PersonRow) => {
     const note = rowNote(p);
     return (
-      <tr key={p.userId} className={p.flag === "red" ? "rowflag" : p.flag === "amber" ? "rowflag-am" : ""}>
-        <td className="l">
+      <TableRow key={p.userId} flag={p.flag === "red" ? "bad" : p.flag === "amber" ? "warn" : undefined}>
+        <TableCell>
           <div className="who">
             <span className="av" style={{ background: avatarColor(p.userId) }}>{initials(p.name)}</span>
             <div className="two">
               <button type="button" className="nm" onClick={() => onPerson(p)}>{p.name}</button>
               <span className="sub">{p.branchName ?? "No branch"}</span>
-              {note && (mode === "preview"
-                ? <span className="rnote"><Spark className="i" />{note.text}</span>
-                : <span className={`flag ${note.kind === "amber" ? "am" : note.kind === "green" ? "gd" : ""}`}>{note.text}</span>)}
+              {note && <PersonNote note={note} ai={mode === "preview"} />}
             </div>
           </div>
-        </td>
+        </TableCell>
         {cells(p, p.positionKey, p)}
-      </tr>
+      </TableRow>
     );
   };
 
@@ -221,12 +215,12 @@ export function Scoreboard({
           <div className="meta" style={{ marginTop: 2 }}>Click a number for the exact leads. Hover for usual and last period.</div>
         </div>
         <div className="row" style={{ gap: 8 }}>
-          <div className="seg" role="tablist" aria-label="Group scoreboard">
-            {([["role", "By role"], ["branch", "By branch"], ["none", "Everyone"]] as const).map(([k, l]) => (
-              <button key={k} type="button" role="tab" aria-selected={view === k} className={view === k ? "on" : ""} onClick={() => setView(k)}
-                style={{ padding: "5px 11px", borderRadius: 8, color: view === k ? "var(--ink)" : "var(--muted)", fontWeight: 500, fontSize: 12.5, background: view === k ? "var(--surface)" : "transparent", boxShadow: view === k ? "0 1px 2px rgba(0,0,0,.06)" : "none" }}>{l}</button>
-            ))}
-          </div>
+          <SegmentedControl
+            aria-label="Group scoreboard"
+            value={view}
+            onValueChange={(k) => setView(k as "role" | "branch" | "none")}
+            items={[{ value: "role", label: "By role" }, { value: "branch", label: "By branch" }, { value: "none", label: "Everyone" }]}
+          />
           <span className="selwrap">
             <select aria-label="Sort scoreboard" value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
               {SORTS.map((s) => <option key={s.key} value={s.key}>Sort: {s.label}</option>)}
@@ -236,38 +230,36 @@ export function Scoreboard({
         </div>
       </div>
 
-      <div className={`tblwrap ${fade ? "fade" : ""}`}>
-      <div className="tbl" ref={tblRef} onScroll={measure}>
-        <table>
-          <thead>
-            <tr className="g">
-              <th className="l" />
-              {GROUPS.map((g) => <th key={g} className="l sp" colSpan={SPAN(g)}>{g}</th>)}
-            </tr>
-            <tr>
-              <th className="l">Person</th>
-              {COLS.map((c) => <th key={c.id} className={FIRST_OF_GROUP.has(c.id) ? "sp" : ""}>{c.label}</th>)}
-            </tr>
-          </thead>
-          <tbody>
+      <div className="sbwrap">
+        <Table look="v2" stickyFirstColumn className="min-w-[960px]">
+          <TableHeader>
+            <TableRow tone="colgroup">
+              <TableHead />
+              {GROUPS.map((g) => <TableHead key={g} divider colSpan={SPAN(g)}>{g}</TableHead>)}
+            </TableRow>
+            <TableRow>
+              <TableHead>Person</TableHead>
+              {COLS.map((c) => <TableHead key={c.id} numeric divider={FIRST_OF_GROUP.has(c.id)}>{c.label}</TableHead>)}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {view === "none" && sorted.map(personRow)}
             {groups.map((g) => (
               <Fragment key={g.key}>
-                <tr className="gr">
-                  <td className="l">{view === "role" ? pluralLabel(g.label.replace(/s$/, "")) : g.label} <span style={{ color: "var(--faint)", fontWeight: 500 }}>{g.people.length}</span></td>
+                <TableRow tone="group">
+                  <TableCell>{view === "role" ? pluralLabel(g.label.replace(/s$/, "")) : g.label} <span style={{ color: "var(--faint)", fontWeight: 500 }}>{g.people.length}</span></TableCell>
                   {cells(g.agg ?? aggFor(g.people), view === "role" ? g.key : null, undefined, g.people)}
-                </tr>
+                </TableRow>
                 {g.people.map(personRow)}
               </Fragment>
             ))}
-            {data.people.length === 0 && <tr><td className="l" colSpan={COLS.length + 1} style={{ textAlign: "center", color: "var(--muted)", height: 80 }}>No team members yet.</td></tr>}
-            <tr className="tot">
-              <td className="l">Team total · {data.people.length} {data.people.length === 1 ? "person" : "people"}</td>
+            {data.people.length === 0 && <TableRow><TableCell colSpan={COLS.length + 1} style={{ textAlign: "center", color: "var(--muted)", height: 80 }}>No team members yet.</TableCell></TableRow>}
+            <TableRow tone="total">
+              <TableCell>Team total · {data.people.length} {data.people.length === 1 ? "person" : "people"}</TableCell>
               {cells(data.team, null, undefined, data.people)}
-            </tr>
-          </tbody>
-        </table>
-      </div>
+            </TableRow>
+          </TableBody>
+        </Table>
       </div>
 
       <div className="foot">

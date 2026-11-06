@@ -49,6 +49,56 @@
   --radius-2xl: calc(var(--radius) + 8px);
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
+
+  /* Design System v2 (EDGEX-85) utilities. NOTE: text-ds-title is a font SIZE, text-ds-ink is a COLOUR. */
+  --color-ds-canvas: var(--ds-canvas);
+  --color-ds-surface: var(--ds-surface);
+  --color-ds-sunken: var(--ds-sunken);
+  --color-ds-hover: var(--ds-hover);
+  --color-ds-selected: var(--ds-selected);
+  --color-ds-border: var(--ds-border);
+  --color-ds-divider: var(--ds-divider);
+  --color-ds-ink: var(--ds-ink);
+  --color-ds-text: var(--ds-text);
+  --color-ds-muted: var(--ds-muted);
+  --color-ds-faint: var(--ds-faint);
+  --color-ds-ghost: var(--ds-ghost);
+  --color-ds-accent: var(--ds-accent);
+  --color-ds-accent-soft: var(--ds-accent-soft);
+  --color-ds-good: var(--ds-good);
+  --color-ds-good-soft: var(--ds-good-soft);
+  --color-ds-bad: var(--ds-bad);
+  --color-ds-bad-soft: var(--ds-bad-soft);
+  --color-ds-warn: var(--ds-warn);
+  --color-ds-warn-soft: var(--ds-warn-soft);
+  --color-ds-ai: var(--ds-ai);
+  --color-ds-ai-soft: var(--ds-ai-soft);
+  --color-ds-ai-line: var(--ds-ai-line);
+  --radius-ds-xs: var(--ds-r-xs);
+  --radius-ds-sm: var(--ds-r-sm);
+  --radius-ds-md: var(--ds-r-md);
+  --radius-ds-lg: var(--ds-r-lg);
+  --radius-ds-full: var(--ds-r-full);
+  --text-ds-title: 26px;
+  --text-ds-title--line-height: 1.25;
+  --text-ds-title--font-weight: 600;
+  --text-ds-title--letter-spacing: -0.02em;
+  --text-ds-section: 15px;
+  --text-ds-section--line-height: 1.4;
+  --text-ds-section--font-weight: 600;
+  --text-ds-lede: 14px;
+  --text-ds-lede--line-height: 1.5;
+  --text-ds-lede--font-weight: 400;
+  --text-ds-body: 13.5px;
+  --text-ds-body--line-height: 1.5;
+  --text-ds-body--font-weight: 400;
+  --text-ds-meta: 12.5px;
+  --text-ds-meta--line-height: 1.5;
+  --text-ds-meta--font-weight: 400;
+  --text-ds-metric: 30px;
+  --text-ds-metric--line-height: 1;
+  --text-ds-metric--font-weight: 600;
+  --text-ds-metric--letter-spacing: -0.02em;
 }
 
 :root {
@@ -97,6 +147,24 @@
   --sidebar-accent-foreground: #171717;
   --sidebar-border: #e5e7eb;
   --sidebar-ring: #2272B4;
+
+  /* Design System v2 (EDGEX-84/85). Prefix ds- because 4 v2 names clash with shadcn tokens of a different meaning. Light mode only. */
+  --ds-canvas:#f6f6f5; --ds-surface:#ffffff; --ds-sunken:#fafaf9; --ds-hover:#f4f4f3; --ds-selected:#efefee;
+  --ds-border:#e8e8e6; --ds-divider:#f0f0ee;
+  --ds-ink:#141414; --ds-text:#3a3a38; --ds-muted:#73736f; --ds-faint:#a3a39e; --ds-ghost:#d6d6d2;
+  --ds-accent:#2272B4; --ds-accent-soft:#eaf2fa;
+  --ds-good:#127a4a; --ds-good-soft:#e9f6ef; --ds-bad:#b42318; --ds-bad-soft:#fdeeec; --ds-warn:#a15c07; --ds-warn-soft:#fdf3e3;
+  --ds-ai:#5b47d6; --ds-ai-soft:#f3f1fd; --ds-ai-line:#d9d3fa;
+  /* Radius scale. Nested rule: an outer container = inner radius + its padding (e.g. segmented: calc(var(--ds-r-sm) + 2px)). */
+  --ds-r-xs:6px; --ds-r-sm:8px; --ds-r-md:12px; --ds-r-lg:16px; --ds-r-full:9999px;
+  /* Shadows: only on things that float, plus the segmented thumb. */
+  --ds-shadow-thumb:0 1px 2px rgba(0,0,0,.06);
+  --ds-shadow-float:0 10px 15px -3px rgb(0 0 0 / .1), 0 4px 6px -4px rgb(0 0 0 / .1);
+  /* Gradients exist ONLY as AI tokens. Gradient = "Orca". */
+  --ds-ai-grad:linear-gradient(135deg,#2272B4 0%,#7c5cf0 100%);
+  --ds-ai-wash:linear-gradient(180deg,#f4f8fe 0%,#fbfbff 45%,#fff 100%);
+  --ds-ai-tint:linear-gradient(135deg,rgba(34,114,180,.08),rgba(124,92,240,.12));
+  --ds-ai-block:linear-gradient(135deg,rgba(34,114,180,.06),rgba(124,92,240,.08));
 }
 
 .dark {
@@ -290,4 +358,13 @@ html::-webkit-scrollbar-button {
     animation: none;
     stroke-dashoffset: 0;
   }
+}
+
+/* Design System v2 (EDGEX-85): the small-caps section label. */
+@utility ds-label {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ds-faint);
 }

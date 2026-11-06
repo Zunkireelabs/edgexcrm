@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Download } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import type { EventsQuery, PersonRow } from "../lib/types";
 import { activityOf } from "../lib/types";
 import { windowTitle } from "../lib/notes";
@@ -75,14 +77,12 @@ export function PulsePage() {
             </div>
           </div>
           <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-            <div className="seg" role="tablist" aria-label="Time window">
-              {SEG.map((s) => (
-                <button key={s.key} type="button" role="tab" aria-selected={win.key === s.key} onClick={() => setWin(s.key === "custom" ? { key: "custom", from: win.from, to: win.to } : { key: s.key })}
-                  style={{ padding: "5px 11px", borderRadius: 8, fontWeight: 500, fontSize: 12.5, color: win.key === s.key ? "var(--ink)" : "var(--muted)", background: win.key === s.key ? "var(--surface)" : "transparent", boxShadow: win.key === s.key ? "0 1px 2px rgba(0,0,0,.06)" : "none" }}>
-                  {s.label}
-                </button>
-              ))}
-            </div>
+            <SegmentedControl
+              aria-label="Time window"
+              value={win.key}
+              items={SEG.map((s) => ({ value: s.key, label: s.label }))}
+              onValueChange={(k) => setWin(k === "custom" ? { key: "custom", from: win.from, to: win.to } : { key: k as WindowSelection["key"] })}
+            />
             {win.key === "custom" && (
               <div className="row" style={{ gap: 6 }}>
                 <input type="date" aria-label="From" value={win.from ?? ""} onChange={(e) => setWin({ ...win, from: e.target.value })} className="btn" />
@@ -99,7 +99,7 @@ export function PulsePage() {
                 <Caret />
               </span>
             )}
-            <button type="button" className="btn ghost" onClick={exportCsv} disabled={!data}><Download className="i s" aria-hidden />Export</button>
+            <Button look="v2" variant="ghost" onClick={exportCsv} disabled={!data}><Download className="i s" aria-hidden />Export</Button>
           </div>
         </div>
 
@@ -120,8 +120,8 @@ export function PulsePage() {
             <h2 className="h2" style={{ fontSize: 18 }}>Pulse starts as your team starts</h2>
             <p className="meta" style={{ margin: "8px auto 20px", maxWidth: 460 }}>Once your team moves leads, writes notes and makes calls, Pulse shows who did what, what changed and what needs you.</p>
             <div className="row" style={{ gap: 8, justifyContent: "center" }}>
-              <Link href="/team" className="btn">Invite your team</Link>
-              <Link href="/leads" className="btn">Import leads</Link>
+              <Button look="v2" variant="secondary" asChild><Link href="/team">Invite your team</Link></Button>
+              <Button look="v2" variant="secondary" asChild><Link href="/leads">Import leads</Link></Button>
             </div>
           </div>
         )}
