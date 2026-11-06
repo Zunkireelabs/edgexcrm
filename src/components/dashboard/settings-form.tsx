@@ -27,7 +27,7 @@ import {
   CheckIcon,
   XIcon,
   CircleNotchIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 
 interface SettingsFormProps {
   tenant: Tenant;

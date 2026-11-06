@@ -14,7 +14,7 @@ import {
   CalendarIcon,
   ClockIcon,
   UserIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import type { Lead } from "@/types/database";
 
 interface CheckInNote {

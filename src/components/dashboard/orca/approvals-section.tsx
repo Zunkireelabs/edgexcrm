@@ -10,7 +10,7 @@ import {
   XCircleIcon,
   ShieldWarningIcon,
   ArrowRightIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { AgentApprovalItem } from "@/lib/ai/agents/queries";

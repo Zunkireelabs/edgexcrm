@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { EnvelopeSimpleIcon, CircleNotchIcon, WarningIcon } from "@phosphor-icons/react";
+import { EnvelopeSimpleIcon, CircleNotchIcon, WarningIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatRelativeTime } from "@/lib/format-relative-time";

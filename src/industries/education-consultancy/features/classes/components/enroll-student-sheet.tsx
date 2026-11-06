@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { CircleNotchIcon, MagnifyingGlassIcon } from "@phosphor-icons/react";
+import { CircleNotchIcon, MagnifyingGlassIcon } from "@/components/icons";
 import {
   Sheet,
   SheetContent,

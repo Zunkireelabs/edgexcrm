@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { CircleNotchIcon } from "@phosphor-icons/react";
+import { CircleNotchIcon } from "@/components/icons";
 import { ProposalDocument } from "../components/proposal-document";
 import type { Proposal, ProposalLineItem } from "@/types/database";
 

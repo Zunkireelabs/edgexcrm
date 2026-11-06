@@ -26,7 +26,7 @@ import {
   CopyIcon,
   CheckIcon,
   KeyIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 

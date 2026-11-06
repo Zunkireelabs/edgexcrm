@@ -34,7 +34,7 @@ import {
   PencilSimpleIcon,
   PlusIcon,
   TrashIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { emailBlastGet, emailBlastSend, EmailBlastApiError } from "../lib/api-client";
 import type { EmailBlastRow, EmailBlastStatus } from "../lib/types";
 

@@ -2,7 +2,7 @@
 
 import { SECTION_TITLE_CLASS } from "@/components/dashboard/lead/section-title";
 import { useState, useEffect, useCallback } from "react";
-import { ClockIcon, CircleNotchIcon, CaretRightIcon } from "@phosphor-icons/react";
+import { ClockIcon, CircleNotchIcon, CaretRightIcon } from "@/components/icons";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { RobotIcon, ArrowUUpLeftIcon } from "@phosphor-icons/react";
+import { RobotIcon, ArrowUUpLeftIcon } from "@/components/icons";
 import { toast } from "sonner";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";

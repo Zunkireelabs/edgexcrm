@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { BuildingsIcon, PlusIcon, TrendUpIcon, UsersIcon } from "@phosphor-icons/react";
+import { BuildingsIcon, PlusIcon, TrendUpIcon, UsersIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CreateOfferingDialog } from "../components/create-offering-dialog";

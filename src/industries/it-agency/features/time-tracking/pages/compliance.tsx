@@ -6,7 +6,7 @@ import {
   CaretRightIcon,
   CircleNotchIcon,
   ClipboardTextIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";

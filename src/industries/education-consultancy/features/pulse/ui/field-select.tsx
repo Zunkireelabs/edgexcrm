@@ -1,4 +1,4 @@
-import { CaretDownIcon } from "@phosphor-icons/react/dist/ssr";
+import { CaretDownIcon } from "@/components/icons";
 
 /** The mockup's ".dd" dropdown: bordered 10px pill + chevron. Native <select> (no Radix ids → no SSR hydration mismatch). */
 export function FieldSelect({

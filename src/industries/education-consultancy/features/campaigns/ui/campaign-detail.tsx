@@ -48,7 +48,7 @@ import {
   CaretRightIcon,
   PencilSimpleIcon,
   WarningIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import type { LeaderboardEntry } from "../lib/scoring";
 import type { IntegrityFlag } from "../lib/integrity";
 import { buildAgentPrompt } from "../lib/agent-prompt";

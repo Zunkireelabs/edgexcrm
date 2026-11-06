@@ -1,6 +1,6 @@
 "use client";
 
-import { UserIcon, RobotIcon } from "@phosphor-icons/react";
+import { UserIcon, RobotIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import type { OrgLayer, ViewMode } from "./types";
 

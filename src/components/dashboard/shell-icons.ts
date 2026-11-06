@@ -43,8 +43,8 @@ import {
   UserGearIcon,
   UsersIcon,
   UsersThreeIcon,
-} from "@phosphor-icons/react/dist/ssr";
-import type { Icon } from "@phosphor-icons/react";
+} from "@/components/icons";
+import type { Icon } from "@/components/icons";
 
 /**
  * Phosphor icon registry for the app shell (EDGEX-86). Manifests reference icons by
@@ -153,5 +153,5 @@ export {
   SparkleIcon,
   SquaresFourIcon as OpsIcon,
   UserGearIcon as ProfileIcon,
-} from "@phosphor-icons/react/dist/ssr";
+} from "@/components/icons";
 export type { Icon };

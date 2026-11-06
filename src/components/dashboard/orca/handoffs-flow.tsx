@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRightIcon } from "@phosphor-icons/react";
+import { ArrowRightIcon } from "@/components/icons";
 import type { Handoff, ViewMode } from "./types";
 
 interface HandoffsFlowProps {

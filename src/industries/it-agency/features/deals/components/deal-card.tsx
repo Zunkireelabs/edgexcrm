@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { CalendarIcon, BuildingsIcon, UserIcon } from "@phosphor-icons/react";
+import { CalendarIcon, BuildingsIcon, UserIcon } from "@/components/icons";
 import { formatMoney } from "@/lib/travel/currency";
 import type { Deal } from "@/types/database";
 

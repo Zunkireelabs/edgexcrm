@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { WarningIcon } from "@phosphor-icons/react";
+import { WarningIcon } from "@/components/icons";
 
 interface SendConfirmDialogProps {
   open: boolean;

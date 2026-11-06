@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { CheckIcon, UserCircleIcon } from "@phosphor-icons/react";
+import { CheckIcon, UserCircleIcon } from "@/components/icons";
 import {
   Popover,
   PopoverContent,

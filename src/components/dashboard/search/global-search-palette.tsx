@@ -9,7 +9,7 @@ import {
   CircleNotchIcon,
   ListPlusIcon,
   ArchiveIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import {
   CommandDialog,
   CommandEmpty,

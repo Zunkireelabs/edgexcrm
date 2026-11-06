@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { XIcon, CheckCircleIcon, CircleIcon } from "@phosphor-icons/react";
+import { XIcon, CheckCircleIcon, CircleIcon } from "@/components/icons";
 import { PRIORITY_CONFIG } from "@/industries/it-agency/features/project-board/components/priority-pill";
 import { TaskContextChip } from "./task-context-chip";
 import { TaskTimerButton } from "./task-timer-button";

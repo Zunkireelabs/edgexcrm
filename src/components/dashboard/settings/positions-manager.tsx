@@ -34,7 +34,7 @@ import {
   TrashIcon,
   PlusIcon,
   UsersIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { toast } from "sonner";
 
 interface NavItem {

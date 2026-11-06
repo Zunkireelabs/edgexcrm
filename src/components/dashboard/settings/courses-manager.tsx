@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpenIcon } from "@phosphor-icons/react";
+import { BookOpenIcon } from "@/components/icons";
 import { LookupTableManager } from "./lookup-table-manager";
 
 export function CoursesManager() {

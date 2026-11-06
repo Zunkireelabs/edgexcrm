@@ -10,7 +10,7 @@ import {
   RobotIcon,
   UserIcon,
   CaretDownIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { cn } from "@/lib/utils";
 import type { AutomationMatrixRow } from "@/lib/ai/agents/queries";
 import type { AutomationLevel } from "@/lib/ai/agents/policy";

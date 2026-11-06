@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { TrashIcon } from "@phosphor-icons/react";
+import { TrashIcon } from "@/components/icons";
 import { smsGet, smsSend, SmsApiError } from "../lib/api-client";
 import type { SmsSuppressionRow } from "../lib/types";
 

@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import { PlusIcon, CircleNotchIcon, ClipboardTextIcon } from "@phosphor-icons/react";
+import { PlusIcon, CircleNotchIcon, ClipboardTextIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { TimesheetFilters, type TimesheetFilterValues } from "../components/timesheet-filters";
 import { TimesheetStatsCards } from "../components/timesheet-stats-cards";

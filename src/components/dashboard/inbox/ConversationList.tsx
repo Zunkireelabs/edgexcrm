@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { ChatTextIcon, PhoneIcon, UserIcon } from "@phosphor-icons/react";
+import { ChatTextIcon, PhoneIcon, UserIcon } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 

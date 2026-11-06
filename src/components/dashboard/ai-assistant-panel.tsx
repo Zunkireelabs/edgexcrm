@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { XIcon, SparkleIcon, ArrowsOutIcon, ArrowsInIcon } from "@phosphor-icons/react";
+import { XIcon, SparkleIcon, ArrowsOutIcon, ArrowsInIcon } from "@/components/icons";
 import { useAIAssistant } from "@/contexts/ai-assistant-context";
 import { ChatInput } from "./ai-assistant/chat-input";
 import { MessageList } from "./ai-assistant/message-list";

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeftIcon, PrinterIcon } from "@phosphor-icons/react";
+import { ArrowLeftIcon, PrinterIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { formatMoney } from "@/lib/travel/currency";
 import { tripTypeLabel } from "@/industries/travel-agency/leads/trip-types";

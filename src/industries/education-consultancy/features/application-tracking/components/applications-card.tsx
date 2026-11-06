@@ -3,7 +3,7 @@
 import { SECTION_TITLE_CLASS } from "@/components/dashboard/lead/section-title";
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { PlusIcon, CircleNotchIcon, DotsSixVerticalIcon } from "@phosphor-icons/react";
+import { PlusIcon, CircleNotchIcon, DotsSixVerticalIcon } from "@/components/icons";
 import {
   DndContext,
   closestCenter,

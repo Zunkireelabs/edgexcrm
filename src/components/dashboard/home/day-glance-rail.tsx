@@ -11,7 +11,7 @@ import {
   PlusIcon,
   PaperPlaneTiltIcon,
   ListChecksIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";

@@ -10,7 +10,7 @@ import {
   LinkSimpleIcon,
   ListIcon,
   ListNumbersIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { Button } from "@/components/ui/button";
 
 interface TipTapEditorProps {

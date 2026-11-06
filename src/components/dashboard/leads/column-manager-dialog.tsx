@@ -24,7 +24,7 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { MagnifyingGlassIcon, DotsSixVerticalIcon, XIcon, LockIcon } from "@phosphor-icons/react";
+import { MagnifyingGlassIcon, DotsSixVerticalIcon, XIcon, LockIcon } from "@/components/icons";
 import type { LeadColumn } from "./columns-registry";
 
 interface ColumnManagerDialogProps {

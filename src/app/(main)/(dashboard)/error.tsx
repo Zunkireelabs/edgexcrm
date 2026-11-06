@@ -1,6 +1,6 @@
 "use client";
 
-import { WarningCircleIcon } from "@phosphor-icons/react";
+import { WarningCircleIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 
 export default function DashboardError({

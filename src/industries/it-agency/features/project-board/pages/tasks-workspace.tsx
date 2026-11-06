@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense } from "react";
-import { CircleNotchIcon } from "@phosphor-icons/react";
+import { CircleNotchIcon } from "@/components/icons";
 import { useProjects } from "../hooks/use-projects";
 import { useWorkspaceFilters } from "../hooks/use-workspace-filters";
 import { useTaskTags } from "../hooks/use-task-tags";

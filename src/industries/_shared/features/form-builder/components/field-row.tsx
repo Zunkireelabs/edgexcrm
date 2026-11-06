@@ -18,7 +18,7 @@ import {
   PaperclipIcon,
   FunnelSimpleIcon,
   CaretRightIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { Input } from "@/components/ui/input";
 import type { FormField } from "@/types/database";
 

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { PlusIcon, CircleNotchIcon, FileTextIcon } from "@phosphor-icons/react";
+import { PlusIcon, CircleNotchIcon, FileTextIcon } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

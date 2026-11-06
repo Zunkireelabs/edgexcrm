@@ -3,7 +3,7 @@ import { describe, it, expect, afterEach, beforeAll, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { EnvelopeSimpleIcon, PhoneIcon, MapPinIcon, GlobeIcon } from "@phosphor-icons/react";
+import { EnvelopeSimpleIcon, PhoneIcon, MapPinIcon, GlobeIcon } from "@/components/icons";
 import { ContactCard } from "./contact-card";
 
 /** Phosphor icons carry no per-icon class, so match on the glyph's path data. */

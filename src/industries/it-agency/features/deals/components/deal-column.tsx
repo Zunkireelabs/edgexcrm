@@ -2,7 +2,7 @@
 
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { TrayIcon } from "@phosphor-icons/react";
+import { TrayIcon } from "@/components/icons";
 import { formatMoney } from "@/lib/travel/currency";
 import { DealCard } from "./deal-card";
 import type { Deal, DealStage } from "@/types/database";

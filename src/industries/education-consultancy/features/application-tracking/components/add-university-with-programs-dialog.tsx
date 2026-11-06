@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { XIcon } from "@phosphor-icons/react";
+import { XIcon } from "@/components/icons";
 import {
   Dialog,
   DialogContent,

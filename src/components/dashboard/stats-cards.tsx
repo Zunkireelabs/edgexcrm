@@ -1,7 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef } from "react";
-import type { Icon } from "@phosphor-icons/react";
+import type { Icon } from "@/components/icons";
 import {
   UsersIcon,
   UserPlusIcon,
@@ -16,7 +16,7 @@ import {
   UserMinusIcon,
   GlobeIcon,
   PercentIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { PipelineStage } from "@/types/database";
 import type { LeadAggregates, WeekBucketCounts } from "@/lib/leads/aggregates";

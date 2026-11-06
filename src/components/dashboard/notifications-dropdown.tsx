@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BellIcon, ChecksIcon, GearIcon, XIcon } from "@phosphor-icons/react";
+import { BellIcon, ChecksIcon, GearIcon, XIcon } from "@/components/icons";
 import {
   NotificationList,
   NotificationEmptyState,

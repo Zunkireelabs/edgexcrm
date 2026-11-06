@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import { useBlockingNotice } from "@/components/dashboard/blocking-notice";
 import { profileIncompleteNotice } from "@/lib/blocking-notice";
-import { CircleNotchIcon, MagnifyingGlassIcon } from "@phosphor-icons/react";
+import { CircleNotchIcon, MagnifyingGlassIcon } from "@/components/icons";
 import {
   Sheet,
   SheetContent,

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { PlusIcon, CaretRightIcon } from "@phosphor-icons/react";
+import { PlusIcon, CaretRightIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { ProjectStatusBadge, PROJECT_STATUS_MAP } from "@/industries/it-agency/features/time-tracking/components/status-badge";
 import type { Project, ProjectStatus } from "@/types/database";

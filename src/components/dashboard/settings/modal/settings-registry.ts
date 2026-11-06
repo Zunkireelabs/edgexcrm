@@ -1,5 +1,5 @@
 import type { lazy, ComponentType } from "react";
-import type { Icon } from "@phosphor-icons/react";
+import type { Icon } from "@/components/icons";
 import { requireOrcaAccess } from "@/lib/ai/orca-access";
 import {
   BuildingsIcon,
@@ -12,7 +12,7 @@ import {
   PlugIcon,
   FileTextIcon,
   CalendarDotsIcon,
-} from "@phosphor-icons/react/dist/ssr";
+} from "@/components/icons";
 
 export interface GatingContext {
   role: string;

@@ -2,7 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
-import { EyeIcon, ArrowCounterClockwiseIcon } from "@phosphor-icons/react";
+import { EyeIcon, ArrowCounterClockwiseIcon } from "@/components/icons";
 import { TruncatedText } from "@/components/ui/truncated-text";
 import { prospectIndustryLabel } from "@/industries/it-agency/leads/prospect-industries";
 import { MoveToListSelector } from "@/components/dashboard/leads/move-to-list-selector";

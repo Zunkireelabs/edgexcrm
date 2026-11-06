@@ -1,6 +1,6 @@
 "use client";
 
-import { InfoIcon } from "@phosphor-icons/react";
+import { InfoIcon } from "@/components/icons";
 import type { Lead } from "@/types/database";
 import { CardSection, FieldGrid, EditableField, type FieldDef } from "./form-primitives";
 import { AttachDocumentButton } from "./attach-document-button";

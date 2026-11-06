@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { UploadIcon, XIcon, CheckCircleIcon, WarningCircleIcon } from "@phosphor-icons/react";
+import { UploadIcon, XIcon, CheckCircleIcon, WarningCircleIcon } from "@/components/icons";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { KB_MAX_FILE_BYTES, KB_ACCEPTED_TYPES } from "@/lib/knowledge-base/constants";

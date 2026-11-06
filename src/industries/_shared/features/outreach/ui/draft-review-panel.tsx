@@ -10,7 +10,7 @@ import {
   BookmarkSimpleIcon,
   EnvelopeSimpleIcon,
   CalendarDotsIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import {
   Sheet,
   SheetContent,

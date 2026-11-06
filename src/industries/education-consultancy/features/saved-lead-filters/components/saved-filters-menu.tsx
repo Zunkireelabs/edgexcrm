@@ -4,7 +4,7 @@
 // saved earlier; "Save current filter" stores whatever is on the filter bar right now. Private to the signed-in user.
 
 import { useState } from "react";
-import { BookmarkIcon, TrashIcon } from "@phosphor-icons/react";
+import { BookmarkIcon, TrashIcon } from "@/components/icons";
 import { toast } from "sonner";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";

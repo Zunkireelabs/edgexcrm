@@ -1,7 +1,7 @@
 "use client";
 
 import { forwardRef, useImperativeHandle, useState } from "react";
-import { PlusIcon } from "@phosphor-icons/react";
+import { PlusIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { toLocalDateString } from "@/lib/date";
 import { MemberPicker, type RosterMember } from "./member-picker";

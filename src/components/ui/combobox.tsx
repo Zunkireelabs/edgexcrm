@@ -5,7 +5,7 @@
 // the advanced-filter field/operator pickers and multi-select value editors.
 
 import * as React from "react";
-import { CheckIcon, CaretUpDownIcon } from "@phosphor-icons/react";
+import { CheckIcon, CaretUpDownIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";

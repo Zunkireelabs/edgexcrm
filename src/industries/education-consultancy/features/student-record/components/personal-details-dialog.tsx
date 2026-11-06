@@ -3,7 +3,7 @@
 import { GUARDIAN_SECTION_TITLE } from "@/lib/consent/guardian";
 import { useEffect, useMemo, useState, useRef } from "react";
 import { toast } from "sonner";
-import { PencilSimpleIcon, XIcon, CheckIcon, CircleNotchIcon } from "@phosphor-icons/react";
+import { PencilSimpleIcon, XIcon, CheckIcon, CircleNotchIcon } from "@/components/icons";
 import {
   Dialog,
   DialogContent,

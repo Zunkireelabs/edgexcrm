@@ -1,7 +1,7 @@
 "use client";
 
 import { useDroppable } from "@dnd-kit/core";
-import { FolderOpenIcon } from "@phosphor-icons/react";
+import { FolderOpenIcon } from "@/components/icons";
 import type { ProjectStatus } from "@/types/database";
 import { ProjectCard, type ProjectWithAccount } from "./project-card";
 import type { TeamMember } from "../hooks/use-projects";

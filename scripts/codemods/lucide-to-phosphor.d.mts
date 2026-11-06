@@ -1,6 +1,7 @@
 export function transformSource(
   fileName: string,
   text: string,
+  opts?: { target?: "phosphor" | "local" },
 ): {
   text: string;
   changed: boolean;

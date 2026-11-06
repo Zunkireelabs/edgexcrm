@@ -11,7 +11,7 @@ import {
   TrashIcon,
   ClockIcon,
   ArrowCircleUpIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { Card, CardContent } from "@/components/ui/card";
 import type { LeadActivity } from "@/lib/supabase/queries";
 

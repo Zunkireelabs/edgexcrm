@@ -13,8 +13,8 @@ import {
   XCircleIcon,
   UserPlusIcon,
   ArrowCircleRightIcon,
-} from "@phosphor-icons/react";
-import type { Icon } from "@phosphor-icons/react";
+} from "@/components/icons";
+import type { Icon } from "@/components/icons";
 import { formatRelativeTime } from "@/lib/format-relative-time";
 import { PROJECT_STATUS_MAP } from "@/industries/it-agency/features/time-tracking/components/status-badge";
 import type { ProjectStatus } from "@/types/database";

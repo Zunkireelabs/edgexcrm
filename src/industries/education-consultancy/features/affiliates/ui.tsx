@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { PencilSimpleIcon, TrashIcon, UsersIcon } from "@phosphor-icons/react";
+import { PencilSimpleIcon, TrashIcon, UsersIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";

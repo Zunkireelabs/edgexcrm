@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { TimerIcon, SquareIcon } from "@phosphor-icons/react";
+import { TimerIcon, SquareIcon } from "@/components/icons";
 import { selectPrimaryTimer } from "@/lib/timers/select-timer";
 import { TIMERS_CHANGED_EVENT, notifyTimersChanged } from "@/lib/timers/timer-events";
 

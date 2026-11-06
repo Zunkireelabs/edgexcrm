@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { EnvelopeSimpleIcon, PhoneIcon, ClockIcon, FunnelIcon } from "@phosphor-icons/react";
+import { EnvelopeSimpleIcon, PhoneIcon, ClockIcon, FunnelIcon } from "@/components/icons";
 import {
   Popover,
   PopoverContent,

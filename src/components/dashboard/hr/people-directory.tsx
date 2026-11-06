@@ -9,7 +9,7 @@ import {
   XIcon,
   PlusIcon,
   CameraIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";

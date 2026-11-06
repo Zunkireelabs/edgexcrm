@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CaretUpDownIcon, CheckIcon, PlusIcon } from "@phosphor-icons/react";
+import { CaretUpDownIcon, CheckIcon, PlusIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import {

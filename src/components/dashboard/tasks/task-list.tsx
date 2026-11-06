@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle } from "react";
 import { useRouter } from "next/navigation";
-import { ClipboardTextIcon } from "@phosphor-icons/react";
+import { ClipboardTextIcon } from "@/components/icons";
 import { TaskRow, type TaskRowItem } from "./task-row";
 import { TaskComposer, type TaskComposerContext, type TaskComposerRef } from "./task-composer";
 import { toLocalDateString } from "@/lib/date";

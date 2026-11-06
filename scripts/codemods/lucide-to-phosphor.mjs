@@ -2,7 +2,7 @@
 /**
  * EDGEX-94 codemod: lucide-react -> @phosphor-icons/react.
  *
- *   node scripts/codemods/lucide-to-phosphor.mjs [--write] [dir-or-file ...]
+ *   node scripts/codemods/lucide-to-phosphor.mjs [--write] [--target=phosphor|local] [dir-or-file ...]
  *
  * DRY RUN by default: prints the report and changes nothing. `--write` applies.
  * Idempotent: files without a `lucide-react` import are untouched.
@@ -19,8 +19,11 @@ import ts from "typescript";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const MAP = JSON.parse(fs.readFileSync(path.join(HERE, "lucide-to-phosphor.map.json"), "utf8"));
 const TYPE_MAP = { LucideIcon: "Icon", LucideProps: "IconProps" };
-const CLIENT_ENTRY = "@phosphor-icons/react";
-const SSR_ENTRY = "@phosphor-icons/react/dist/ssr";
+const LOCAL_ENTRY = "@/components/icons";
+const PHOSPHOR_ENTRIES = new Set(["@phosphor-icons/react", "@phosphor-icons/react/dist/ssr"]);
+// --target=phosphor (default): lucide -> @phosphor-icons/react[/dist/ssr].
+// --target=local: same, but everything points at the generated @/components/icons (EDGEX-94b);
+// also rewrites existing @phosphor-icons/react imports to it.
 
 /** lucide import name -> Phosphor base name (or undefined if unmapped). */
 function resolveBase(name) {
@@ -80,12 +83,16 @@ function makeService(fileName, text) {
  * Transform one source string. Returns { text, changed, info } where info has
  * { aliases: string[], unmapped: string[], renames: [from,to][], props: string[], manual: string[] }.
  */
-export function transformSource(fileName, text) {
+export function transformSource(fileName, text, opts = {}) {
+  const local = opts.target === "local";
+  const CLIENT_ENTRY = local ? LOCAL_ENTRY : "@phosphor-icons/react";
+  const SSR_ENTRY = local ? LOCAL_ENTRY : "@phosphor-icons/react/dist/ssr";
+  const TYPE_ENTRY = local ? LOCAL_ENTRY : "@phosphor-icons/react";
   const info = { aliases: [], unmapped: [], renames: [], props: [], manual: [] };
   const kind = /\.tsx$/.test(fileName) ? ts.ScriptKind.TSX : /\.ts$/.test(fileName) ? ts.ScriptKind.TS : ts.ScriptKind.TSX;
   const sf = ts.createSourceFile(fileName, text, ts.ScriptTarget.ES2022, true, kind);
   const imports = sf.statements.filter((s) => ts.isImportDeclaration(s) && s.moduleSpecifier.text === "lucide-react");
-  if (!imports.length) return { text, changed: false, info };
+  if (!imports.length) return local ? retarget(fileName, text, sf, info) : { text, changed: false, info };
 
   const service = makeService(fileName, text);
   const edits = []; // { start, end, text }
@@ -189,7 +196,7 @@ export function transformSource(fileName, text) {
     }
     // Phosphor's ssr entry does not export the Icon/IconProps types: type imports always use the main entry
     // (erased at build, so no client-context code is pulled into server files).
-    if (typeSpecs.length) parts.push(fmt(typeSpecs, "type ", CLIENT_ENTRY));
+    if (typeSpecs.length) parts.push(fmt(typeSpecs, "type ", TYPE_ENTRY));
     newImports.push({ decl, text: parts.join("\n") });
   }
 
@@ -245,6 +252,20 @@ export function transformSource(fileName, text) {
   return { text: out, changed: out !== text, info };
 }
 
+/** --target=local: point existing Phosphor imports/re-exports at the generated local entry. */
+function retarget(fileName, text, sf, info) {
+  if (fileName.split(path.sep).join("/").includes("src/components/icons/")) return { text, changed: false, info };
+  const edits = [];
+  for (const st of sf.statements) {
+    if ((ts.isImportDeclaration(st) || ts.isExportDeclaration(st)) && st.moduleSpecifier && PHOSPHOR_ENTRIES.has(st.moduleSpecifier.text)) {
+      edits.push({ start: st.moduleSpecifier.getStart(sf), end: st.moduleSpecifier.getEnd(), text: `"${LOCAL_ENTRY}"` });
+    }
+  }
+  let out = text;
+  for (const e of edits.sort((a, b) => b.start - a.start)) out = out.slice(0, e.start) + e.text + out.slice(e.end);
+  return { text: out, changed: out !== text, info };
+}
+
 function walk(p, acc) {
   const st = fs.statSync(p);
   if (st.isDirectory()) {
@@ -259,6 +280,8 @@ function walk(p, acc) {
 function main() {
   const args = process.argv.slice(2);
   const write = args.includes("--write");
+  const target = args.find((a) => a.startsWith("--target="))?.split("=")[1] ?? "phosphor";
+  if (!["phosphor", "local"].includes(target)) throw new Error(`unknown --target=${target} (phosphor | local)`);
   const targets = args.filter((a) => !a.startsWith("--"));
   const files = (targets.length ? targets : ["src"]).flatMap((t) => walk(t, []));
   let changed = 0;
@@ -269,8 +292,8 @@ function main() {
   const renameCount = {};
   for (const f of files) {
     const text = fs.readFileSync(f, "utf8");
-    if (!text.includes("lucide-react")) continue;
-    const r = transformSource(f, text);
+    if (!text.includes("lucide-react") && !(target === "local" && text.includes("@phosphor-icons/react"))) continue;
+    const r = transformSource(f, text, { target });
     for (const u of r.info.unmapped) unmapped.push(`${f}: ${u}`);
     if (!r.changed) continue;
     changed++;

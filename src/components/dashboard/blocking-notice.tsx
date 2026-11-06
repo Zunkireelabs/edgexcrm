@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { WarningIcon } from "@phosphor-icons/react";
+import { WarningIcon } from "@/components/icons";
 import { toast } from "sonner";
 import {
   AlertDialog,

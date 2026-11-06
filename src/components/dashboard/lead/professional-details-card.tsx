@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { PencilSimpleIcon, XIcon, CheckIcon, CircleNotchIcon } from "@phosphor-icons/react";
+import { PencilSimpleIcon, XIcon, CheckIcon, CircleNotchIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { InfoSection } from "./info-section";
 import { Input } from "@/components/ui/input";

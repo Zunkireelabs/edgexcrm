@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeftIcon, CircleNotchIcon } from "@phosphor-icons/react";
+import { ArrowLeftIcon, CircleNotchIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,

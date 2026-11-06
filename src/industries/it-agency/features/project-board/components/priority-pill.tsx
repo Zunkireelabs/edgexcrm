@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { CheckIcon } from "@phosphor-icons/react";
+import { CheckIcon } from "@/components/icons";
 import type { TaskPriority } from "@/types/database";
 
 export const PRIORITY_CONFIG: Record<TaskPriority, { label: string; cls: string }> = {

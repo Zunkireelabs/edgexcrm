@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { UsersIcon, CaretRightIcon } from "@phosphor-icons/react";
+import { UsersIcon, CaretRightIcon } from "@/components/icons";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatRelativeTime } from "@/lib/format-relative-time";

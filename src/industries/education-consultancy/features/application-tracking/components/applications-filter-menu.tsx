@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CaretLeftIcon, SlidersHorizontalIcon, XIcon } from "@phosphor-icons/react";
+import { CaretLeftIcon, SlidersHorizontalIcon, XIcon } from "@/components/icons";
 import {
   Popover,
   PopoverContent,

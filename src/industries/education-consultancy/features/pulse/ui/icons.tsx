@@ -9,7 +9,7 @@ import {
   TrendDownIcon,
   TrendUpIcon,
   XIcon,
-} from "@phosphor-icons/react/dist/ssr";
+} from "@/components/icons";
 import type { AttentionIcon } from "../lib/types";
 
 /** Mockup icon sizing comes from `.pulse svg.i` (16px, 1.75 stroke) / `.s` (14px). */

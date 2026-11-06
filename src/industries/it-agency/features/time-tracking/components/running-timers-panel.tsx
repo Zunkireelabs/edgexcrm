@@ -1,6 +1,6 @@
 "use client";
 
-import { SquareIcon, XIcon, TimerIcon } from "@phosphor-icons/react";
+import { SquareIcon, XIcon, TimerIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useActiveTimersContext, formatElapsed } from "../hooks/use-active-timers";

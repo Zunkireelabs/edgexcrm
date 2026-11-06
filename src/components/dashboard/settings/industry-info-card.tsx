@@ -18,7 +18,7 @@ import {
   BriefcaseIcon,
   FolderIcon,
   AirplaneIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import type { Industry, IndustryId } from "@/types/database";
 
 interface IndustryInfoCardProps {

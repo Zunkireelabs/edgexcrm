@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useState } from "react";
-import { CheckIcon, TrophyIcon, XCircleIcon, CircleNotchIcon } from "@phosphor-icons/react";
+import { CheckIcon, TrophyIcon, XCircleIcon, CircleNotchIcon } from "@/components/icons";
 import { toast } from "sonner";
 import type { ApplicationStage } from "@/types/database";
 

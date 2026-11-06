@@ -47,7 +47,7 @@ import {
   FlaskIcon,
   CircleNotchIcon,
   GlobeIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { Textarea } from "@/components/ui/textarea";
 
 type ApiKeyScope = "read" | "write" | "admin";

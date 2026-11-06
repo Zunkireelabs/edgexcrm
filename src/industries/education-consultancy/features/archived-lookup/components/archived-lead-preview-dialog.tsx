@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArchiveIcon, CircleNotchIcon, ArrowCounterClockwiseIcon } from "@phosphor-icons/react";
+import { ArchiveIcon, CircleNotchIcon, ArrowCounterClockwiseIcon } from "@/components/icons";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

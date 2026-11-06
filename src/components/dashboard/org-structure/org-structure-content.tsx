@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { NetworkIcon, ListIcon, GitBranchIcon, UsersIcon, PlusIcon } from "@phosphor-icons/react";
+import { NetworkIcon, ListIcon, GitBranchIcon, UsersIcon, PlusIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { OrgStructureEditor } from "./org-structure-editor";
 import { OrgStructureHierarchy } from "./org-structure-hierarchy";

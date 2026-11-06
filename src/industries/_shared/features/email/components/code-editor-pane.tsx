@@ -11,7 +11,7 @@ import {
   FileArrowUpIcon,
   MagnifyingGlassIcon,
   XIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { toast } from "sonner";
 import {
   AlertDialog,

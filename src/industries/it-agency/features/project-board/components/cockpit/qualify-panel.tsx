@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ShieldCheckIcon, SlidersHorizontalIcon } from "@phosphor-icons/react";
+import { ShieldCheckIcon, SlidersHorizontalIcon } from "@/components/icons";
 import { formatMoney } from "@/lib/currency";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";

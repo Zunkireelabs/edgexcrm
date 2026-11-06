@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { ArrowLeftIcon } from "@phosphor-icons/react";
+import { ArrowLeftIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { TaskDetailBody } from "./task-detail";
 

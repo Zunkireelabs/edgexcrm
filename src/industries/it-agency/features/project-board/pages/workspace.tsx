@@ -2,7 +2,7 @@
 
 import { useMemo, useState, Suspense } from "react";
 import { useRouter } from "next/navigation";
-import { CircleNotchIcon } from "@phosphor-icons/react";
+import { CircleNotchIcon } from "@/components/icons";
 import { useProjects, type ProjectWithMetrics } from "../hooks/use-projects";
 import { useWorkspaceFilters } from "../hooks/use-workspace-filters";
 import { WorkspaceHeader } from "../components/workspace-header";

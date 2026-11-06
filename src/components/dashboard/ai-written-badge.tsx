@@ -1,4 +1,4 @@
-import { RobotIcon } from "@phosphor-icons/react/dist/ssr";
+import { RobotIcon } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 
 /** Phase 4C provenance marker — the humans reviewing this need to know an item wasn't human-authored more than the model does. */

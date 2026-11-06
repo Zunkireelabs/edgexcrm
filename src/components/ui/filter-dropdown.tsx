@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { CheckIcon, CaretDownIcon, MagnifyingGlassIcon } from "@phosphor-icons/react";
+import { CheckIcon, CaretDownIcon, MagnifyingGlassIcon } from "@/components/icons";
 
 export interface FilterOption {
   value: string;

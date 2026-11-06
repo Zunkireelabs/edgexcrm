@@ -1,6 +1,6 @@
 "use client";
 
-import { GlobeIcon } from "@phosphor-icons/react";
+import { GlobeIcon } from "@/components/icons";
 import { LookupTableManager } from "./lookup-table-manager";
 
 export function CountriesManager() {

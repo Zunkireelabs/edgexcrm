@@ -31,7 +31,7 @@ import {
   CircleNotchIcon,
   PlusIcon,
   WarningCircleIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { toast } from "sonner";
 import type { Branch, LeadList, PipelineStage, TenantEntity, UserRole } from "@/types/database";
 import {

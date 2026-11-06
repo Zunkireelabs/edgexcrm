@@ -8,7 +8,7 @@
 // from e.g. "Stage" to "Leads Organize" no longer means delete-and-re-add.
 
 import { useEffect, useMemo, useState } from "react";
-import { XIcon } from "@phosphor-icons/react";
+import { XIcon } from "@/components/icons";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { FieldDef, FilterCondition } from "@/lib/filters/types";
 import { FilterConditionEditor } from "./filter-condition-editor";

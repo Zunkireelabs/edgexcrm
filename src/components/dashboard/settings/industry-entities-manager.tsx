@@ -38,7 +38,7 @@ import {
   TrashIcon,
   DotsSixVerticalIcon,
   CircleNotchIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import type { TenantEntity, Industry } from "@/types/database";
 
 interface IndustryEntitiesManagerProps {

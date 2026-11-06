@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CalendarDotsIcon, ClockIcon, UsersIcon } from "@phosphor-icons/react";
+import { CalendarDotsIcon, ClockIcon, UsersIcon } from "@/components/icons";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { toLocalDateString } from "@/lib/date";

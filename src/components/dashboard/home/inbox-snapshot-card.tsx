@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ChatTextIcon, CaretRightIcon } from "@phosphor-icons/react";
+import { ChatTextIcon, CaretRightIcon } from "@/components/icons";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { formatRelativeTime } from "@/lib/format-relative-time";
 import type { InboxSnapshot } from "@/lib/supabase/queries";

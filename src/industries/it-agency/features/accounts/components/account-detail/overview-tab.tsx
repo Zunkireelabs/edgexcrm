@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { PencilSimpleIcon } from "@phosphor-icons/react";
+import { PencilSimpleIcon } from "@/components/icons";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ContactStatusBadge } from "@/industries/it-agency/features/crm-contacts/components/contact-status-badge";

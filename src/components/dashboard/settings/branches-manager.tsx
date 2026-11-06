@@ -24,7 +24,7 @@ import {
   PencilSimpleIcon,
   CheckIcon,
   XIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { toast } from "sonner";
 import type { Branch } from "@/types/database";
 

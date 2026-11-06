@@ -14,7 +14,7 @@ import {
   useDraggable,
   closestCorners,
 } from "@dnd-kit/core";
-import { ArrowSquareOutIcon, PlusIcon, XIcon } from "@phosphor-icons/react";
+import { ArrowSquareOutIcon, PlusIcon, XIcon } from "@/components/icons";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { AddInvestorDialog } from "./add-investor-dialog";

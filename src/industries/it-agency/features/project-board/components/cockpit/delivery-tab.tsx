@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { ClipboardTextIcon, CircleNotchIcon, PlusIcon } from "@phosphor-icons/react";
+import { ClipboardTextIcon, CircleNotchIcon, PlusIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { useProjectIssues } from "../../hooks/use-project-issues";
 import { useProjectMilestones } from "../../hooks/use-project-milestones";

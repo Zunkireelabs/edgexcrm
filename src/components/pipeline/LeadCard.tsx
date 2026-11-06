@@ -19,7 +19,7 @@ import {
   FlameIcon,
   SunIcon,
   SnowflakeIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { MoveToPipelineModal } from "./MoveToPipelineModal";
 import {
   DropdownMenu,

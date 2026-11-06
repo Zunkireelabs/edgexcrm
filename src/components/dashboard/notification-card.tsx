@@ -18,8 +18,8 @@ import {
   ListChecksIcon,
   ChatTextIcon,
   PaperPlaneTiltIcon,
-} from "@phosphor-icons/react";
-import type { Icon } from "@phosphor-icons/react";
+} from "@/components/icons";
+import type { Icon } from "@/components/icons";
 
 // Shared by the bell panel (notifications-dropdown.tsx) and the full /notifications page, so the
 // two always look the same.

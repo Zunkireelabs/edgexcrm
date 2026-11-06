@@ -8,7 +8,7 @@ import {
   CalendarDotsIcon,
   EyeIcon,
   CircleNotchIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DraftReviewPanel } from "./draft-review-panel";
 import { SmsDraftReviewPanel } from "./sms-draft-review-panel";

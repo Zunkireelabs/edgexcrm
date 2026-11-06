@@ -10,7 +10,7 @@ import {
   TrashIcon,
   CheckIcon,
   XIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { PositionCard } from "./position-card";
 import { UnassignedMembersTray } from "./unassigned-members-tray";

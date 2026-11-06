@@ -1,6 +1,6 @@
 "use client";
 
-import { ClockIcon } from "@phosphor-icons/react";
+import { ClockIcon } from "@/components/icons";
 import {
   Table,
   TableBody,

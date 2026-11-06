@@ -12,7 +12,7 @@ import {
   DownloadIcon,
   FileTextIcon,
   XIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";

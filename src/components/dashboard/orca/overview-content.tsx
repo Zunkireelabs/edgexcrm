@@ -11,7 +11,7 @@ import {
   CheckCircleIcon,
   WarningCircleIcon,
   ClockIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { formatRelativeTime } from "@/lib/ai/tools/universal/lib/approval-resolve";
 import type { OrcaOverviewStats } from "@/lib/ai/agents/queries";
 

@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { Suspense } from "react";
-import { XIcon } from "@phosphor-icons/react";
+import { XIcon } from "@/components/icons";
 import {
   Dialog,
   DialogContent,

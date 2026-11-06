@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { GlobeIcon } from "@phosphor-icons/react";
+import { GlobeIcon } from "@/components/icons";
 import { toast } from "sonner";
 
 const TIMEZONE_OPTIONS = [

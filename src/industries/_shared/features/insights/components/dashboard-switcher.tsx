@@ -10,7 +10,7 @@ import {
   GearIcon,
   TrashIcon,
   DotsThreeVerticalIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { DashboardBuilderDialog } from "./dashboard-builder-dialog";
 import type { Dashboard } from "@/types/database";

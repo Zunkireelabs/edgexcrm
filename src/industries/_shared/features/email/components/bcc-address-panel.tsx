@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { CopyIcon, CircleNotchIcon, ArrowsClockwiseIcon } from "@phosphor-icons/react";
+import { CopyIcon, CircleNotchIcon, ArrowsClockwiseIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,

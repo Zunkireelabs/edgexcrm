@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { BuildingsIcon } from "@phosphor-icons/react";
+import { BuildingsIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import {
   Select,

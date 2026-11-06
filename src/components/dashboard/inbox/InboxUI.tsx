@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { ConversationList } from "./ConversationList";
 import { MessageThread } from "./MessageThread";
 import { ContactPanel } from "./ContactPanel";
-import { ChatTextIcon } from "@phosphor-icons/react";
+import { ChatTextIcon } from "@/components/icons";
 
 interface Channel {
   id: string;

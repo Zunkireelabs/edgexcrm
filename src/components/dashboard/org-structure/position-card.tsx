@@ -8,7 +8,7 @@ import {
   CaretUpIcon,
   XIcon,
   UserPlusIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { MemberAvatar } from "@/components/ui/member-avatar";
 import type { Position } from "@/types/database";

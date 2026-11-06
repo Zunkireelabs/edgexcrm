@@ -53,7 +53,7 @@ import {
   CaretDownIcon,
   ArchiveIcon,
   DotsSixVerticalIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { toast } from "sonner";
 import { isOffFunnelLeadList } from "@/lib/leads/list-funnel";
 import { useSettingsModal } from "@/contexts/settings-modal-context";

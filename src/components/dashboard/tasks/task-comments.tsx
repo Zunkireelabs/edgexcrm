@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
-import { TrashIcon } from "@phosphor-icons/react";
+import { TrashIcon } from "@/components/icons";
 import { MemberAvatar } from "@/components/ui/member-avatar";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";

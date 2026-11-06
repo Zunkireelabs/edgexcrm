@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { CopyIcon, CircleNotchIcon, UploadIcon } from "@phosphor-icons/react";
+import { CopyIcon, CircleNotchIcon, UploadIcon } from "@/components/icons";
 import {
   Dialog,
   DialogContent,

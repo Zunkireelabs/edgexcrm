@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowBendUpRightIcon } from "@phosphor-icons/react";
+import { ArrowBendUpRightIcon } from "@/components/icons";
 import {
   Select,
   SelectContent,

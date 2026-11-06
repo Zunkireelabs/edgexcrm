@@ -8,7 +8,7 @@ import {
   MagnifyingGlassIcon,
   ArrowsDownUpIcon,
   ColumnsIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { useRouter } from "next/navigation";
 import { FilterDropdown } from "@/components/ui/filter-dropdown";
 import {

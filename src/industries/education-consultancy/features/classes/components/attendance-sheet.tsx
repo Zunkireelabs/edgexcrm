@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
-import { CircleNotchIcon, CheckIcon, XIcon } from "@phosphor-icons/react";
+import { CircleNotchIcon, CheckIcon, XIcon } from "@/components/icons";
 import {
   Sheet,
   SheetContent,

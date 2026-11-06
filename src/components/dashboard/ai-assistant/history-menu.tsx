@@ -7,7 +7,7 @@ import {
   TrashIcon,
   CheckIcon,
   XIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import {
   DropdownMenu,
   DropdownMenuContent,

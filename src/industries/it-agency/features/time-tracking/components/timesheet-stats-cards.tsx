@@ -2,7 +2,7 @@
 
 import type React from "react";
 import Link from "next/link";
-import { ClockIcon, UsersIcon, WarningCircleIcon, CurrencyDollarIcon } from "@phosphor-icons/react";
+import { ClockIcon, UsersIcon, WarningCircleIcon, CurrencyDollarIcon } from "@/components/icons";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatMinutes } from "../hooks/use-time-entries";
 import { calculateBillableAmount, calculateMinutesBySource } from "../lib/totals";

@@ -1,6 +1,6 @@
 "use client";
 
-import { PhoneIcon, EnvelopeSimpleIcon, CalendarIcon, TrashIcon } from "@phosphor-icons/react";
+import { PhoneIcon, EnvelopeSimpleIcon, CalendarIcon, TrashIcon } from "@/components/icons";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import type { LeadActivityRecord, ActivityType } from "@/types/database";

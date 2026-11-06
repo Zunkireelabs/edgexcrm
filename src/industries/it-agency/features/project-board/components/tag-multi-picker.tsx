@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { CheckIcon, PlusIcon, XIcon } from "@phosphor-icons/react";
+import { CheckIcon, PlusIcon, XIcon } from "@/components/icons";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 const MAX_TAG_LEN = 50;

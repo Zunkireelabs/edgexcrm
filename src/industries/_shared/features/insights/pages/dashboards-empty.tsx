@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { PlusIcon } from "@phosphor-icons/react";
+import { PlusIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { DashboardBuilderDialog } from "../components/dashboard-builder-dialog";
 

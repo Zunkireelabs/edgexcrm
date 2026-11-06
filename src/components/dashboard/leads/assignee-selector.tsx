@@ -14,7 +14,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { CheckIcon } from "@phosphor-icons/react";
+import { CheckIcon } from "@/components/icons";
 import { MemberAvatar } from "@/components/ui/member-avatar";
 
 interface AssignableMember {

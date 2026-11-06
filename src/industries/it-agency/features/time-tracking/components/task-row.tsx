@@ -1,6 +1,6 @@
 "use client";
 
-import { ClockIcon, CircleNotchIcon, PlayIcon, SquareIcon } from "@phosphor-icons/react";
+import { ClockIcon, CircleNotchIcon, PlayIcon, SquareIcon } from "@/components/icons";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { TaskStatusBadge } from "./status-badge";
 import { AssigneePicker } from "../../project-board/components/assignee-picker";

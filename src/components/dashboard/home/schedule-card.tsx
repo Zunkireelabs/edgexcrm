@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { PhoneIcon, CalendarDotsIcon, WarningCircleIcon } from "@phosphor-icons/react";
+import { PhoneIcon, CalendarDotsIcon, WarningCircleIcon } from "@/components/icons";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { formatRelativeTime } from "@/lib/format-relative-time";
 import type { ScheduleActivity } from "@/lib/supabase/queries";

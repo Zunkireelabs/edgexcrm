@@ -2,7 +2,7 @@
 
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { TrayIcon } from "@phosphor-icons/react";
+import { TrayIcon } from "@/components/icons";
 import { ApplicationCard } from "./application-card";
 import type { Application, ApplicationStage } from "@/types/database";
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { CircleNotchIcon } from "@phosphor-icons/react";
+import { CircleNotchIcon } from "@/components/icons";
 import { useSettingsModal } from "@/contexts/settings-modal-context";
 import {
   Select,

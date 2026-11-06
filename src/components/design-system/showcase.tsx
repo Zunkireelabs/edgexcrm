@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { ArrowRightIcon, PlusIcon, XIcon } from "@phosphor-icons/react";
+import { ArrowRightIcon, PlusIcon, XIcon } from "@/components/icons";
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"

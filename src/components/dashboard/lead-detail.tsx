@@ -37,7 +37,7 @@ import {
   PlusIcon,
   GlobeIcon,
   MegaphoneIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { toast } from "sonner";
 
 

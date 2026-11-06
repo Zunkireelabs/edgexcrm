@@ -29,7 +29,7 @@ import {
   XIcon,
   ProhibitIcon,
   ArrowCounterClockwiseIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { toast } from "sonner";
 import { MemberAvatar } from "@/components/ui/member-avatar";
 import type { Branch } from "@/types/database";

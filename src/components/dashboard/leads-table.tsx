@@ -74,7 +74,7 @@ import {
   ArrowCounterClockwiseIcon,
   ArrowCircleUpIcon,
   GitBranchIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { BulkEnrollDialog } from "@/industries/_shared/features/outreach/ui/bulk-enroll-dialog";

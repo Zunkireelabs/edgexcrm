@@ -8,7 +8,7 @@ import {
   CheckCircleIcon,
   ClipboardTextIcon,
   XIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";

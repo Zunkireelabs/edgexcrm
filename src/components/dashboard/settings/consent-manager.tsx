@@ -11,7 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { FileTextIcon, ToggleLeftIcon, ToggleRightIcon } from "@phosphor-icons/react";
+import { FileTextIcon, ToggleLeftIcon, ToggleRightIcon } from "@/components/icons";
 import { toast } from "sonner";
 import { DEFAULT_CONSENT_TEMPLATE } from "@/lib/consent/default-template";
 import { CONSENT_MERGE_FIELDS, findUnknownPlaceholders } from "@/lib/consent/merge";

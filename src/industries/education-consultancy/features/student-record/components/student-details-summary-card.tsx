@@ -1,7 +1,7 @@
 "use client";
 
 import { GUARDIAN_SECTION_TITLE } from "@/lib/consent/guardian";
-import { PencilSimpleIcon } from "@phosphor-icons/react";
+import { PencilSimpleIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { InfoSection, InfoRow } from "@/components/dashboard/lead/info-section";
 import { CollapsibleGroups, SectionGroup, CardSection, FieldGrid, EditableField } from "./form-primitives";

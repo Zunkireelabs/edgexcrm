@@ -26,7 +26,7 @@ import {
   PlusIcon,
   ToggleLeftIcon,
   ToggleRightIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { toast } from "sonner";
 
 interface ClassRow {

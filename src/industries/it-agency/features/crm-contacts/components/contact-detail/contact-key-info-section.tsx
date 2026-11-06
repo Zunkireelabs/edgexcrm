@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { CaretDownIcon } from "@phosphor-icons/react";
+import { CaretDownIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { ContactStatusBadge } from "../contact-status-badge";
 import type { ContactStatus } from "@/types/database";

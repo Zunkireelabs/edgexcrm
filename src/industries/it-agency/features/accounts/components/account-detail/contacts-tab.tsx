@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { PlusIcon } from "@phosphor-icons/react";
+import { PlusIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { ContactStatusBadge } from "@/industries/it-agency/features/crm-contacts/components/contact-status-badge";
 import type { ContactStatus } from "@/types/database";

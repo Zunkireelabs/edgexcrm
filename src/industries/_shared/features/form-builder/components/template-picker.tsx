@@ -11,7 +11,7 @@ import {
   PlusIcon,
   CircleNotchIcon,
   StackIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { getTemplatesForIndustry } from "../templates";

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { EnvelopeSimpleIcon } from "@phosphor-icons/react";
+import { EnvelopeSimpleIcon } from "@/components/icons";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { formatRelativeTime } from "@/lib/format-relative-time";
 import type { EmailSnapshot } from "@/lib/supabase/queries";

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useEffect, useState } from "react";
-import { MagnifyingGlassIcon, ListChecksIcon, UsersIcon, PlusIcon } from "@phosphor-icons/react";
+import { MagnifyingGlassIcon, ListChecksIcon, UsersIcon, PlusIcon } from "@/components/icons";
 import { TagMultiPicker } from "./tag-multi-picker";
 import { TaskCreateDialog } from "./task-create-dialog";
 import { Button } from "@/components/ui/button";

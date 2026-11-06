@@ -78,6 +78,21 @@ describe("lucide-to-phosphor codemod", () => {
   });
 });
 
+describe("--target=local", () => {
+  it("lucide imports go straight to @/components/icons", () => {
+    const r = transformSource("a.tsx", `import { Plus, type LucideIcon } from "lucide-react";\nexport const A = () => <Plus />;\nlet i: LucideIcon;\n`, { target: "local" });
+    expect(r.text).toContain('import { PlusIcon } from "@/components/icons";');
+    expect(r.text).toContain('import type { Icon } from "@/components/icons";');
+  });
+  it("rewrites existing phosphor imports and re-exports, and is idempotent", () => {
+    const src = `import { PlusIcon } from "@phosphor-icons/react/dist/ssr";\nimport type { Icon } from "@phosphor-icons/react";\nexport { XIcon } from "@phosphor-icons/react";\n`;
+    const r = transformSource("a.tsx", src, { target: "local" });
+    expect(r.text).not.toContain("@phosphor-icons");
+    expect(r.text.match(/@\/components\/icons/g)!.length).toBe(3);
+    expect(transformSource("a.tsx", r.text, { target: "local" }).changed).toBe(false);
+  });
+});
+
 describe("lucide-to-phosphor CLI modes", () => {
   const script = path.resolve(__dirname, "../../../scripts/codemods/lucide-to-phosphor.mjs");
   const src = `"use client";\nimport { Trash2 } from "lucide-react";\nexport const A = () => <Trash2 />;\n`;

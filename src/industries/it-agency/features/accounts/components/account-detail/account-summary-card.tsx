@@ -9,7 +9,7 @@ import {
   CircleNotchIcon,
   UserIcon,
   XIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import {

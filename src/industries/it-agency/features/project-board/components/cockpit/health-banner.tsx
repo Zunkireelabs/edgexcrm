@@ -1,4 +1,4 @@
-import { WarningIcon, CheckCircleIcon, WarningCircleIcon } from "@phosphor-icons/react/dist/ssr";
+import { WarningIcon, CheckCircleIcon, WarningCircleIcon } from "@/components/icons";
 import type { Project, ProjectHealth } from "@/types/database";
 
 const HEALTH_CONFIG: Record<ProjectHealth, { label: string; bg: string; text: string; bar: string; icon: typeof CheckCircleIcon }> = {

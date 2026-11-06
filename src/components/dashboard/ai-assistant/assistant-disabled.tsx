@@ -1,6 +1,6 @@
 "use client";
 
-import { SparkleIcon } from "@phosphor-icons/react";
+import { SparkleIcon } from "@/components/icons";
 
 /** Shown when the assistant flag is off — the same 404 shape as a missing conversation makes any other distinction unreliable, so we just say it plainly. */
 export function AssistantDisabled() {

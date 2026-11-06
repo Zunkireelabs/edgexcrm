@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CaretDownIcon, CaretRightIcon, InfoIcon } from "@phosphor-icons/react";
+import { CaretDownIcon, CaretRightIcon, InfoIcon } from "@/components/icons";
 import type { ImportSourceReconciliationRow } from "@/types/database";
 import {
   Tooltip,

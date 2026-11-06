@@ -9,7 +9,7 @@ import {
   MagnifyingGlassIcon,
   CheckIcon,
   GitBranchIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { ApplicationPipelineSettingsModal } from "./application-pipeline-settings-modal";
 import { CreateApplicationPipelineModal } from "./create-application-pipeline-modal";

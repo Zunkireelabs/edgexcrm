@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { PlayIcon, SquareIcon } from "@phosphor-icons/react";
+import { PlayIcon, SquareIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { notifyTimersChanged } from "@/lib/timers/timer-events";
 import { isTimerStopped } from "@/lib/timers/stop-result";

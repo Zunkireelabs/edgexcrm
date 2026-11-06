@@ -1,6 +1,6 @@
 "use client";
 
-import { UserMinusIcon } from "@phosphor-icons/react";
+import { UserMinusIcon } from "@/components/icons";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface LeadsByCounselorChartProps {

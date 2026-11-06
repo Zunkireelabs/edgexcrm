@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { FolderOpenIcon, CaretRightIcon } from "@phosphor-icons/react";
+import { FolderOpenIcon, CaretRightIcon } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { type Offering, type OfferingStatus } from "@/industries/real-estate/lib/commitments";
 

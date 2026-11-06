@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
-import { LinkSimpleIcon, PlusIcon } from "@phosphor-icons/react/dist/ssr";
+import { LinkSimpleIcon, PlusIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { getCurrentUserTenant } from "@/lib/supabase/queries";
 import { createServiceClient } from "@/lib/supabase/server";

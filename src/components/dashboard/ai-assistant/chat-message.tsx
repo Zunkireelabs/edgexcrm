@@ -6,7 +6,7 @@ import {
   WarningIcon,
   FileTextIcon,
   XIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { isToolUIPart, isTextUIPart, getToolName, type ToolUIPart, type DynamicToolUIPart, type UITools } from "ai";

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BellIcon } from "@phosphor-icons/react";
+import { BellIcon } from "@/components/icons";
 import { Card, CardHeader, CardTitle, CardAction, CardContent } from "@/components/ui/card";
 import { formatRelativeTime } from "@/lib/format-relative-time";
 import type { RecentActivityItem } from "@/lib/supabase/queries";

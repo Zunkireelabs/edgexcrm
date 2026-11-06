@@ -12,7 +12,7 @@ import { MyLeadsCard } from "./my-leads-card";
 import { InboxSnapshotCard } from "./inbox-snapshot-card";
 import { RecentActivityCard } from "./recent-activity-card";
 import { DayGlanceRail } from "./day-glance-rail";
-import { SquaresFourIcon, DotsSixIcon } from "@phosphor-icons/react";
+import { SquaresFourIcon, DotsSixIcon } from "@/components/icons";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";

@@ -6,7 +6,7 @@ import {
   CircleNotchIcon,
   PaperPlaneTiltIcon,
   SkipForwardIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";

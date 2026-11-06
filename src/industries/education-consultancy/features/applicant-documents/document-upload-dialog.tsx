@@ -2,7 +2,7 @@
 
 import { uploadApplicantDocument } from "./upload-document";
 import { useEffect, useState } from "react";
-import { CircleNotchIcon } from "@phosphor-icons/react";
+import { CircleNotchIcon } from "@/components/icons";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

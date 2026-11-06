@@ -3,7 +3,7 @@
 // The operator + value screen — reached after a field is chosen (either fresh,
 // from FilterFieldPicker, or by clicking an existing chip to edit it in place).
 
-import { CaretLeftIcon } from "@phosphor-icons/react";
+import { CaretLeftIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import type { FieldDef, FilterCondition, FilterOperator, FilterValue } from "@/lib/filters/types";
 import type { FilterOption } from "@/components/ui/filter-dropdown";

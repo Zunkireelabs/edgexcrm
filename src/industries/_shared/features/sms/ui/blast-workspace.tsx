@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeftIcon } from "@phosphor-icons/react";
+import { ArrowLeftIcon } from "@/components/icons";
 import { BlastComposer } from "./blast-composer";
 import { BlastDetail } from "./blast-detail";
 import { smsGet, SmsApiError } from "../lib/api-client";

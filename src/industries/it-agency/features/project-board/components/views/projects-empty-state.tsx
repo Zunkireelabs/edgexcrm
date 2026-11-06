@@ -1,6 +1,6 @@
 "use client";
 
-import { SquaresFourIcon, PlusIcon } from "@phosphor-icons/react";
+import { SquaresFourIcon, PlusIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 
 interface ProjectsEmptyStateProps {

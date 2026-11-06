@@ -18,7 +18,7 @@ import {
   UserIcon,
   FileTextIcon,
   XIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { toast } from "sonner";
 import { formatPhoneForTel } from "@/lib/phone-utils";
 import type { Lead, LeadNote, LeadChecklist, PipelineStage } from "@/types/database";

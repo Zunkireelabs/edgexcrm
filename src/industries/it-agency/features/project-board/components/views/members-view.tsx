@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { toast } from "sonner";
-import { CaretRightIcon, CaretDownIcon, UsersIcon } from "@phosphor-icons/react";
+import { CaretRightIcon, CaretDownIcon, UsersIcon } from "@/components/icons";
 import { StatusPill } from "../status-pill";
 import { PriorityPill } from "../priority-pill";
 import { MemberAvatar } from "@/components/ui/member-avatar";

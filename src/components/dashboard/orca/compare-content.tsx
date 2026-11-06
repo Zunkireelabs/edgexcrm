@@ -5,7 +5,7 @@
 // starting point for the real version, pending the real data model.
 
 import { useState } from "react";
-import { GitDiffIcon, InfoIcon } from "@phosphor-icons/react";
+import { GitDiffIcon, InfoIcon } from "@/components/icons";
 import { ModeToggle } from "./mode-toggle";
 import { TasksMatrix } from "./tasks-matrix";
 import { StatsCards } from "./stats-cards";

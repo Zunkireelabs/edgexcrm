@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { XIcon, UserPlusIcon } from "@phosphor-icons/react";
+import { XIcon, UserPlusIcon } from "@/components/icons";
 import { toast } from "sonner";
 import {
   Select,

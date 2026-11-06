@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { CalendarDotsIcon, PlusIcon, TrashIcon } from "@phosphor-icons/react";
+import { CalendarDotsIcon, PlusIcon, TrashIcon } from "@/components/icons";
 import { toast } from "sonner";
 import type { Branch } from "@/types/database";
 

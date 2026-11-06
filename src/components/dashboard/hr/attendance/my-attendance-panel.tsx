@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
-import { CircleNotchIcon, SignInIcon, SignOutIcon } from "@phosphor-icons/react";
+import { CircleNotchIcon, SignInIcon, SignOutIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

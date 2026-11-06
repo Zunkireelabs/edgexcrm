@@ -1,4 +1,4 @@
-import { SparkleIcon } from "@phosphor-icons/react/dist/ssr";
+import { SparkleIcon } from "@/components/icons";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { PreviewPill } from "./preview-pill";

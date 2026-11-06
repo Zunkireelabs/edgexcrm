@@ -8,7 +8,7 @@ import {
   ArrowSquareOutIcon,
   ClockIcon,
   UserIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { useDraggable } from "@dnd-kit/core";
 import {
   DropdownMenu,

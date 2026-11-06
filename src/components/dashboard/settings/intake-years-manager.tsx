@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarDotsIcon } from "@phosphor-icons/react";
+import { CalendarDotsIcon } from "@/components/icons";
 import { LookupTableManager } from "./lookup-table-manager";
 
 export function IntakeYearsManager() {

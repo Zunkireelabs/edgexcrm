@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeftIcon, LinkIcon, NoteIcon, UploadIcon, BooksIcon } from "@phosphor-icons/react";
+import { ArrowLeftIcon, LinkIcon, NoteIcon, UploadIcon, BooksIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { KnowledgeBaseItemsTable } from "./knowledge-base-items-table";

@@ -1,6 +1,6 @@
 "use client";
 
-import { GraduationCapIcon } from "@phosphor-icons/react";
+import { GraduationCapIcon } from "@/components/icons";
 import { LookupTableManager } from "./lookup-table-manager";
 
 export function StudyLevelsManager() {

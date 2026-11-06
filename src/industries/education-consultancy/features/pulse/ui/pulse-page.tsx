@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { DownloadIcon } from "@phosphor-icons/react";
+import { DownloadIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import type { EventsQuery, PersonRow } from "../lib/types";

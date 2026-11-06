@@ -38,7 +38,7 @@ import {
   GlobeIcon,
   FileTextIcon,
   UserIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { Textarea } from "@/components/ui/textarea";
 import type { PipelineStage, PipelineWithCounts } from "@/types/database";
 import type { TeamMember } from "@/lib/supabase/queries";

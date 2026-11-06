@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useLeadBackDestination } from "@/hooks/use-lead-back-destination";
-import { CircleNotchIcon } from "@phosphor-icons/react";
+import { CircleNotchIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { moveErrorMessage, isApplicationsGateError, gateMissingItems, parseBasicInfoMissing } from "@/lib/leads/gate-error";

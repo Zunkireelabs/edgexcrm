@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BuildingsIcon } from "@phosphor-icons/react";
+import { BuildingsIcon } from "@/components/icons";
 
 interface AccountCardProps {
   accountId: string;

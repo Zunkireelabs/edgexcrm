@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { XIcon } from "@phosphor-icons/react";
+import { XIcon } from "@/components/icons";
 import type { LeadUtmRow } from "@/lib/supabase/queries";
 import { UtmBarChart } from "./utm-bar-chart";
 import type { UtmField } from "../lib/aggregation";

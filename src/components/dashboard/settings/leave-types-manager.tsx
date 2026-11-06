@@ -11,7 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { CalendarDotsIcon, PlusIcon, TrashIcon } from "@phosphor-icons/react";
+import { CalendarDotsIcon, PlusIcon, TrashIcon } from "@/components/icons";
 import { toast } from "sonner";
 
 interface LeaveType {

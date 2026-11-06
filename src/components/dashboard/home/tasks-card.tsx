@@ -1,6 +1,6 @@
 "use client";
 
-import { ClipboardTextIcon } from "@phosphor-icons/react";
+import { ClipboardTextIcon } from "@/components/icons";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { NewTaskRow } from "./new-task-row";
 import { TaskRow } from "@/components/dashboard/tasks/task-row";

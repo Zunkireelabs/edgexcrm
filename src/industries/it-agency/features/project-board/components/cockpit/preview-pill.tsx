@@ -1,4 +1,4 @@
-import { SparkleIcon } from "@phosphor-icons/react/dist/ssr";
+import { SparkleIcon } from "@/components/icons";
 
 /** Shared visual marker for every AI-synth vision-preview surface (see
  * lib/ai-preview.ts). Keep this the ONE pill style so "Preview" always reads

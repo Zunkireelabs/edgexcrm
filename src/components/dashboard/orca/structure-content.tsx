@@ -13,7 +13,7 @@ import {
   CaretUpIcon,
   ListIcon,
   GitBranchIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { cn } from "@/lib/utils";
 
 // Types

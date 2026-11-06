@@ -15,7 +15,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { CaretDownIcon, CheckIcon, ArrowBendUpRightIcon } from "@phosphor-icons/react";
+import { CaretDownIcon, CheckIcon, ArrowBendUpRightIcon } from "@/components/icons";
 import type { LeadList } from "@/types/database";
 
 const ARCHIVE_REASONS = [

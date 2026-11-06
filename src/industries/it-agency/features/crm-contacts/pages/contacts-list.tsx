@@ -12,7 +12,7 @@ import {
   ArrowsDownUpIcon,
   CaretLeftIcon,
   CaretRightIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { FilterMenu, FilterChips, type FilterDef } from "@/components/ui/filter-menu";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";

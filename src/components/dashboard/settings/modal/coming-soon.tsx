@@ -1,6 +1,6 @@
 "use client";
 
-import { SparkleIcon } from "@phosphor-icons/react";
+import { SparkleIcon } from "@/components/icons";
 
 export function ComingSoon({ feature }: { feature: string }) {
   return (

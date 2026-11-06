@@ -8,7 +8,7 @@ import {
   ClockIcon,
   ThumbsUpIcon,
   ThumbsDownIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { useApproveReject } from "../hooks/use-approve-reject";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

@@ -7,7 +7,7 @@ import {
   FolderPlusIcon,
   DotsThreeIcon,
   CircleNotchIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   DropdownMenu,

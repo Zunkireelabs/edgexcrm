@@ -8,7 +8,7 @@ import {
   CircleNotchIcon,
   FloppyDiskIcon,
   MagnifyingGlassIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";

@@ -14,7 +14,7 @@ import {
   PlayIcon,
   SquareIcon,
   CircleNotchIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import {
   TableBody,
   TableCell,

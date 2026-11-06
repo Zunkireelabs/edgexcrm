@@ -46,7 +46,7 @@ import {
   UserPlusIcon,
   RowsIcon,
   SlidersHorizontalIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { PROSPECT_INDUSTRIES } from "@/industries/it-agency/leads/prospect-industries";
 import {
   Popover,

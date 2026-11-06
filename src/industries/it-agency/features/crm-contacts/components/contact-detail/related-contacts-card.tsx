@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { UsersIcon } from "@phosphor-icons/react";
+import { UsersIcon } from "@/components/icons";
 
 interface AccountSibling {
   id: string;

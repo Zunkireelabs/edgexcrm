@@ -7,7 +7,7 @@ import {
   CheckSquareIcon,
   ThumbsUpIcon,
   ThumbsDownIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";

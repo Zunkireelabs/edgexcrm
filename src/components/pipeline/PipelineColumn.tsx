@@ -8,7 +8,7 @@ import {
 } from "@dnd-kit/sortable";
 import type { PipelineLead, PipelineStage } from "@/types/database";
 import { LeadCard } from "./LeadCard";
-import { TrayIcon, CircleNotchIcon } from "@phosphor-icons/react";
+import { TrayIcon, CircleNotchIcon } from "@/components/icons";
 
 interface PipelineColumnProps {
   stage: PipelineStage;

@@ -7,7 +7,7 @@
 // Notion/Twenty: closing an unfinished "+ Add filter" adds nothing).
 
 import { useEffect, useState } from "react";
-import { PlusIcon } from "@phosphor-icons/react";
+import { PlusIcon } from "@/components/icons";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { FieldDef, FilterCondition } from "@/lib/filters/types";
 import { FilterFieldPicker } from "./filter-field-picker";

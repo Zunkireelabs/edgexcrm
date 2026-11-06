@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
-import { CurrencyDollarIcon, CircleNotchIcon } from "@phosphor-icons/react";
+import { CurrencyDollarIcon, CircleNotchIcon } from "@/components/icons";
 import {
   calculateBillableMinutes,
   calculateBillableAmount,

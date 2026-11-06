@@ -29,7 +29,7 @@ import {
   CaretRightIcon,
   CaretLeftIcon,
   CaretDownIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { toast } from "sonner";
 
 function toTitleCase(str: string): string {

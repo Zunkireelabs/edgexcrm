@@ -10,7 +10,7 @@ import {
   PencilSimpleIcon,
   TrashIcon,
   ArrowSquareOutIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AiWrittenBadge } from "@/components/dashboard/ai-written-badge";

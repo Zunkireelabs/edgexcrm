@@ -33,7 +33,7 @@ import {
   TrashIcon,
   PlusIcon,
   WarningIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { toast } from "sonner";
 import { ApplicationStageEditor } from "./application-stage-editor";
 import type { ApplicationPipelineWithCounts, ApplicationStageWithCount } from "@/types/database";

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { PaperclipIcon } from "@phosphor-icons/react";
+import { PaperclipIcon } from "@/components/icons";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import type { DocumentType } from "@/lib/documents/constants";

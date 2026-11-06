@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeftIcon, ArrowRightIcon, ArrowBendUpRightIcon } from "@phosphor-icons/react";
+import { ArrowLeftIcon, ArrowRightIcon, ArrowBendUpRightIcon } from "@/components/icons";
 import {
   Tooltip,
   TooltipContent,

@@ -7,7 +7,7 @@ import {
   CaretUpIcon,
   ArrowBendUpLeftIcon,
   ListPlusIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";

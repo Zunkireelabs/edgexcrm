@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { DownloadIcon } from "@phosphor-icons/react";
+import { DownloadIcon } from "@/components/icons";
 import { toLocalDateString } from "@/lib/date";
 
 export interface TimesheetFilterValues {

@@ -8,7 +8,7 @@ import {
   FileTextIcon,
   PencilSimpleIcon,
   TrashIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import {
   DropdownMenu,
   DropdownMenuContent,

@@ -4,7 +4,7 @@
 // operatorsForField(), never a hand-maintained list, so the UI can never
 // offer an operator the compiler would 422 (e.g. is_none_of on a relation).
 
-import { CheckIcon, CaretUpDownIcon } from "@phosphor-icons/react";
+import { CheckIcon, CaretUpDownIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandGroup, CommandItem, CommandList } from "@/components/ui/command";

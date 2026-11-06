@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { MegaphoneIcon, TrophyIcon } from "@phosphor-icons/react";
+import { MegaphoneIcon, TrophyIcon } from "@/components/icons";
 
 interface Campaign {
   id: string;

@@ -4,7 +4,7 @@ import { useRef } from "react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { WarningIcon } from "@phosphor-icons/react";
+import { WarningIcon } from "@/components/icons";
 import { toast } from "sonner";
 import {
   HtmlSourceEditor,

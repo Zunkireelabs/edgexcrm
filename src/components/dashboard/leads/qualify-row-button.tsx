@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CircleNotchIcon } from "@phosphor-icons/react";
+import { CircleNotchIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,

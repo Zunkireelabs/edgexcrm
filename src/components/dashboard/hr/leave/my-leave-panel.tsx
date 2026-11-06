@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
-import { CircleNotchIcon, PlusIcon, XIcon } from "@phosphor-icons/react";
+import { CircleNotchIcon, PlusIcon, XIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowsClockwiseIcon } from "@phosphor-icons/react";
+import { ArrowsClockwiseIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import type { ReconciliationRollup, TaskReconciliation } from "../../hooks/use-project-reconciliation";

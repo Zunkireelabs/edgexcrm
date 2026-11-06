@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useEffect } from "react";
-import { MagnifyingGlassIcon, SquaresFourIcon, TableIcon, PlusIcon } from "@phosphor-icons/react";
+import { MagnifyingGlassIcon, SquaresFourIcon, TableIcon, PlusIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { type FilterOption } from "@/components/ui/filter-dropdown";

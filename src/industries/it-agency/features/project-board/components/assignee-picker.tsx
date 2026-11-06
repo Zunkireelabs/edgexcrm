@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { CheckIcon, UserCircleIcon, XIcon } from "@phosphor-icons/react";
+import { CheckIcon, UserCircleIcon, XIcon } from "@/components/icons";
 import { MemberAvatar } from "@/components/ui/member-avatar";
 import type { TeamMember } from "../hooks/use-projects";
 

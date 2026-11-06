@@ -5,7 +5,7 @@
 // This is popover CONTENT (rendered inside AddFilterButton's Popover), not a
 // second nested trigger — matches reference screenshot 1.
 
-import { CaretRightIcon } from "@phosphor-icons/react";
+import { CaretRightIcon } from "@/components/icons";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import type { FieldDef } from "@/lib/filters/types";

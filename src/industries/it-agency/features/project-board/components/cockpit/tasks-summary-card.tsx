@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { CheckSquareIcon, CircleNotchIcon, PlusIcon } from "@phosphor-icons/react";
+import { CheckSquareIcon, CircleNotchIcon, PlusIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { PriorityPill } from "../priority-pill";
 import { TaskCreateDialog } from "../task-create-dialog";

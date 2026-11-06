@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { ArrowUpIcon, ArrowDownIcon, ArrowsDownUpIcon } from "@phosphor-icons/react";
+import { ArrowUpIcon, ArrowDownIcon, ArrowsDownUpIcon } from "@/components/icons";
 import {
   Table,
   TableBody,

@@ -10,7 +10,7 @@ import {
   LinkSimpleIcon,
   ArrowSquareOutIcon,
   DotsThreeIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

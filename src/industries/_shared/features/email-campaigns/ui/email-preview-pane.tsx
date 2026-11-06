@@ -7,7 +7,7 @@
 // blast-content-preview-dialog.tsx (read-only "what did we send" view) can
 // reuse the exact same look without duplicating the iframe/pager logic.
 
-import { CaretLeftIcon, CaretRightIcon } from "@phosphor-icons/react";
+import { CaretLeftIcon, CaretRightIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import type { EmailBlastPreviewResponse } from "../lib/types";
 

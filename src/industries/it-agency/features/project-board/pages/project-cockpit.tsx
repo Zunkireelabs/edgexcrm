@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeftIcon, CircleNotchIcon } from "@phosphor-icons/react";
+import { ArrowLeftIcon, CircleNotchIcon } from "@/components/icons";
 import { useProjectCockpit } from "../hooks/use-project-cockpit";
 import { HealthBanner } from "../components/cockpit/health-banner";
 import { BriefEditor } from "../components/cockpit/brief-editor";

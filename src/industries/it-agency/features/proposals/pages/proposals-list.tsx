@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { PlusIcon, SignatureIcon, CircleNotchIcon } from "@phosphor-icons/react";
+import { PlusIcon, SignatureIcon, CircleNotchIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { formatMoney } from "@/lib/travel/currency";
 import { AddProposalSheet } from "../components/add-proposal-sheet";

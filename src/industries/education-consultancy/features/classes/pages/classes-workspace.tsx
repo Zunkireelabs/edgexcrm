@@ -16,7 +16,7 @@ import {
   TrendUpIcon,
   WalletIcon,
   CurrencyCircleDollarIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { useSettingsModal } from "@/contexts/settings-modal-context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

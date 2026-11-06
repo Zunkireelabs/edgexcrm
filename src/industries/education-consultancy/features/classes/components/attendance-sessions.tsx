@@ -8,7 +8,7 @@ import {
   CaretRightIcon,
   CheckIcon,
   XIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";

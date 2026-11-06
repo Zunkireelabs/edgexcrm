@@ -2,7 +2,7 @@
 
 import { SECTION_TITLE_CLASS } from "@/components/dashboard/lead/section-title";
 import { useState, useEffect, useCallback } from "react";
-import { PlusIcon, CircleNotchIcon, DotsThreeIcon, CheckIcon, XIcon } from "@phosphor-icons/react";
+import { PlusIcon, CircleNotchIcon, DotsThreeIcon, CheckIcon, XIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";

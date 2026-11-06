@@ -1,7 +1,7 @@
 "use client";
 
 import { forwardRef, useImperativeHandle, useState } from "react";
-import { CircleNotchIcon, TrashIcon } from "@phosphor-icons/react";
+import { CircleNotchIcon, TrashIcon } from "@/components/icons";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { ChecksIcon, CaretLeftIcon, CaretRightIcon } from "@phosphor-icons/react";
+import { ChecksIcon, CaretLeftIcon, CaretRightIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import type { NotificationCategoryKey } from "@/lib/notification-categories";
 import {

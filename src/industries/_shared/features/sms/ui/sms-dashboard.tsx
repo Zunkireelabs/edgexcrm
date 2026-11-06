@@ -13,7 +13,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { ChatTextIcon, PlusIcon, WarningIcon } from "@phosphor-icons/react";
+import { ChatTextIcon, PlusIcon, WarningIcon } from "@/components/icons";
 import { smsGet, smsSend, SmsApiError } from "../lib/api-client";
 import { CreditLedgerTable } from "./credit-ledger-table";
 import { SuppressionList } from "./suppression-list";

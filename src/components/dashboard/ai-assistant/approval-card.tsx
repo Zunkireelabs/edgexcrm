@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CircleNotchIcon } from "@phosphor-icons/react";
+import { CircleNotchIcon } from "@/components/icons";
 import { getToolName, type ToolUIPart, type DynamicToolUIPart, type UITools } from "ai";
 import { Button } from "@/components/ui/button";
 import {

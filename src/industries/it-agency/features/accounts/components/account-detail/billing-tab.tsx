@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { CircleNotchIcon, FileTextIcon } from "@phosphor-icons/react";
+import { CircleNotchIcon, FileTextIcon } from "@/components/icons";
 import { formatMoney } from "@/lib/travel/currency";
 import { InvoiceDetailDrawer } from "@/industries/it-agency/features/invoicing/components/invoice-detail-drawer";
 import type { Invoice, InvoiceStatus } from "@/types/database";

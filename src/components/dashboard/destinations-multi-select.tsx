@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
-import { CaretDownIcon } from "@phosphor-icons/react";
+import { CaretDownIcon } from "@/components/icons";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { normalizeDestinations } from "@/lib/leads/destination-normalize";
