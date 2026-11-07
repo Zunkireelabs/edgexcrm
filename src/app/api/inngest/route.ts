@@ -17,6 +17,7 @@ import { smsBlastSend } from "@/lib/inngest/functions/sms-blast-send";
 import { smsDeliveryPoll, smsBlastPollReceipts } from "@/lib/inngest/functions/sms-delivery-poll";
 import { smsCreditReaper } from "@/lib/inngest/functions/sms-credit-reaper";
 import { smartAssignmentOnLead, smartAssignmentStats } from "@/lib/inngest/functions/smart-assignment";
+import { processSnapshots } from "@/lib/inngest/functions/process-snapshots";
 
 export const { GET, POST, PUT } = serve({
   client: inngest,
@@ -40,5 +41,6 @@ export const { GET, POST, PUT } = serve({
     smsCreditReaper,
     smartAssignmentOnLead,
     smartAssignmentStats,
+    processSnapshots,
   ],
 });

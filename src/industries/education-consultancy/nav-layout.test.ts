@@ -21,7 +21,7 @@ describe("EDUCATION_NAV_LAYOUT", () => {
       ["team", "Team"],
     ]);
     expect(keysOf("top")).toEqual(["universal:/home", "universal:/inbox"]);
-    expect(keysOf("insights")).toEqual(["/pulse", "/insights/dashboards", "universal:/knowledge-bases"]);
+    expect(keysOf("insights")).toEqual(["/pulse", "/processes", "/insights/dashboards", "universal:/knowledge-bases"]);
     expect(keysOf("leads")).toEqual(["slot:lead-lists", "universal:/pipeline", "slot:leads-organise", "universal:/contacts"]);
     expect(keysOf("students")).toEqual(["/applications", "/classes", "/check-in"]);
     expect(keysOf("grow")).toEqual(["/forms", "/campaigns", "/sms", "/email-campaigns", "/outreach"]);
@@ -64,6 +64,7 @@ describe("resolving with a counsellor-style navAllowed", () => {
   // industrySidebarItems; navAllowed drops the universal ones they lack.
   const hidden = new Set<EducationNavEntryKey>([
     "/pulse",
+    "/processes",
     "slot:leads-organise",
     "/campaigns",
     "/sms",

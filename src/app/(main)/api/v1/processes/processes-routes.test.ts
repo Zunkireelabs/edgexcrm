@@ -8,11 +8,13 @@ vi.mock("@/lib/supabase/scoped", () => ({ scopedClient: scoped }));
 
 import { GET as getList } from "./route";
 import { GET as getOne } from "./[key]/route";
+import { POST as approve } from "./[key]/versions/[versionId]/approve/route";
 
 const req = (path: string) => ({ nextUrl: new URL(`http://localhost${path}`) }) as unknown as Parameters<typeof getList>[0];
 const ROUTES: Array<[string, () => Promise<Response>]> = [
   ["GET /api/v1/processes", () => getList(req("/api/v1/processes"))],
   ["GET /api/v1/processes/[key]", () => getOne(req("/api/v1/processes/new_lead_first_call"), { params: Promise.resolve({ key: "new_lead_first_call" }) })],
+  ["POST …/versions/[versionId]/approve", () => approve(new Request("http://localhost", { method: "POST" }), { params: Promise.resolve({ key: "new_lead_first_call", versionId: "v1" }) })],
 ];
 
 beforeEach(() => {

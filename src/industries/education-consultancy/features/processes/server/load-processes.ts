@@ -4,6 +4,7 @@ import { DEFAULT_WINDOW_DAYS, PROCESS_KEYS, PROCESS_NAMES, WINDOW_DAYS, isProces
 import { readMetric, stepStatus, type MetricUnit, type RawMetrics, type StepStatus } from "../lib/metrics";
 import { safeParseProcessSpec, type ProcessSpec } from "../lib/spec";
 import type { ProcessRow } from "../lib/store";
+import { buildImprovements, type ImprovementEvent, type VersionEventRow } from "../lib/improvements";
 import { canApproveProcess, type ProcessesContext } from "./context";
 
 type Db = Awaited<ReturnType<typeof scopedClientForTenant>>;
@@ -147,3 +148,16 @@ export async function loadProcessVersions(db: Db, processId: string): Promise<Ar
 }
 
 export { isProcessKey };
+
+/** Real events only: baselines written and versions approved. */
+export async function loadImprovements(db: Db): Promise<ImprovementEvent[]> {
+  const { data } = await db.from("process_versions").select("version, source, created_at, approved_at, processes!inner(key)");
+  const rows = ((data ?? []) as unknown as Array<{ version: number; source: VersionEventRow["source"]; created_at: string; approved_at: string | null; processes: { key: ProcessKey } | Array<{ key: ProcessKey }> }>).map((r) => ({
+    key: (Array.isArray(r.processes) ? r.processes[0] : r.processes).key,
+    version: r.version,
+    source: r.source,
+    created_at: r.created_at,
+    approved_at: r.approved_at,
+  }));
+  return buildImprovements(rows);
+}

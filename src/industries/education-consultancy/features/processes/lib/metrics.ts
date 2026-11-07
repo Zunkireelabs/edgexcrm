@@ -50,7 +50,7 @@ export const METRIC_REGISTRY: Record<ProcessKey, Record<string, MetricDef>> = {
       unit: "percent",
       read: (r) => pct(num(r, "owner_within_5min"), num(r, "owner_assigned")),
       detail: (r) =>
-        `${n0(r, "owner_within_5min")} of ${n0(r, "owner_assigned")} within 5 minutes. Median wait ${formatMinutes(num(r, "owner_wait_median_min"))}, a quarter waited over ${formatMinutes(num(r, "owner_wait_p75_min"))}.`,
+        `${n0(r, "owner_within_5min")} of ${n0(r, "owner_assigned")} within 5 minutes (incl. leads created already assigned). Median wait ${formatMinutes(num(r, "owner_wait_median_min"))}, a quarter waited over ${formatMinutes(num(r, "owner_wait_p75_min"))}.`,
     },
     first_contact_1h_pct: {
       label: "Contacted within 1 hour",
