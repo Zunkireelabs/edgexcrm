@@ -64,3 +64,42 @@ describe("aiRequestProviderOptions()", () => {
     expect(aiRequestProviderOptions()).toBeUndefined();
   });
 });
+
+describe("model() resolves the right vendor and id (no network)", () => {
+  beforeEach(() => vi.resetModules());
+  afterEach(() => {
+    delete process.env.AI_PROVIDER;
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+    vi.resetModules();
+  });
+
+  it("AI_PROVIDER=anthropic: agent is Sonnet 5.5 and fast is Haiku 5.5, via the Anthropic provider", async () => {
+    process.env.AI_PROVIDER = "anthropic";
+    process.env.ANTHROPIC_API_KEY = "sk-ant-test";
+    const { model } = await import("./provider");
+    const agent = model("agent") as { modelId: string; provider: string };
+    const fast = model("fast") as { modelId: string; provider: string };
+    expect(agent.modelId).toBe("claude-sonnet-5-5");
+    expect(fast.modelId).toBe("claude-haiku-5-5");
+    expect(agent.provider).toMatch(/anthropic/);
+  });
+
+  it("AI_PROVIDER=openai (and unset): gpt-4o-mini via OpenAI", async () => {
+    process.env.OPENAI_API_KEY = "sk-test";
+    const { model } = await import("./provider");
+    const agent = model("agent") as { modelId: string; provider: string };
+    expect(agent.modelId).toBe("gpt-4o-mini");
+    expect(agent.provider).toMatch(/openai/);
+  });
+
+  it("request provider options: OpenAI turns storage off, Anthropic sends nothing extra", async () => {
+    process.env.AI_PROVIDER = "anthropic";
+    const a = await import("./provider");
+    expect(a.aiRequestProviderOptions()).toBeUndefined();
+    vi.resetModules();
+    process.env.AI_PROVIDER = "openai";
+    const o = await import("./provider");
+    expect(o.aiRequestProviderOptions()).toEqual({ openai: { store: false } });
+  });
+});

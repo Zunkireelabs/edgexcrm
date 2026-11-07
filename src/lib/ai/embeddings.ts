@@ -1,5 +1,8 @@
 // Embeddings client seam (docs/ai-native-efforts/working/BRIEF-PHASE-2A-STORAGE-SEAM-SCHEMA.md).
 //
+// Embeddings are OpenAI-only whichever AI_PROVIDER is active: Anthropic has no embeddings API, so AI_PROVIDER=anthropic still
+// needs OPENAI_API_KEY for knowledge ingestion and retrieval (and OpenAI then receives the chunk text being embedded).
+//
 // Vendor call is isolated in this one module — swapping to Voyage (or any
 // other embeddings provider) means changing only what's below this line.
 // `EMBEDDING_MODEL`/`EMBEDDING_DIM` also get stamped onto every

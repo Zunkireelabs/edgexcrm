@@ -169,9 +169,9 @@ export async function POST(request: NextRequest) {
     // lib/ai/tools/refine-input.ts.
     experimental_refineToolInput: buildRefineToolInput(toolset),
     stopWhen: stepCountIs(MAX_TOOL_STEPS),
-    // One retry before giving up — no cross-provider fallback this slice (only
-    // OPENAI_API_KEY is provisioned). provider.ts's model() seam is where a
-    // future fallback would plug in.
+    // One retry before giving up. No cross-provider fallback by design: the platform owner picks ONE provider
+    // (AI_PROVIDER = openai | anthropic, see lib/ai/models.ts) and a missing key fails loudly rather than silently
+    // sending customer data to the other vendor. provider.ts's model() is the only seam.
     maxRetries: 1,
     onFinish: async (event) => {
       try {
