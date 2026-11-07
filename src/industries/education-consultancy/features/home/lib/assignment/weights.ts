@@ -22,6 +22,15 @@ export const SPEED_FAST_MIN = 30;
 export const SPEED_SLOW_MIN = 24 * 60;
 /** A person's own speed needs at least this many first-contact samples; below it the team's median is used. */
 export const MIN_SPEED_SAMPLES = 5;
+/** The why-line cites a person's Fit only when it rests on at least this many of their leads. */
+export const MIN_FIT_SAMPLES = 5;
+/** ...and their Speed only when it rests on at least this many first-contact samples. */
+export const MIN_SPEED_EVIDENCE = 3;
+/** Hard filter "dormant": no lead activity and no human note by this person in this many days. */
+export const DORMANT_DAYS = 14;
+/** The first-touch positions are learned from who received new leads in this many days, covering at least this share. */
+export const LEARN_DAYS = 60;
+export const LEARN_COVERAGE = 0.8;
 /** Neutral Speed score (0..1) when neither the person nor the team has data. */
 export const SPEED_UNKNOWN = 0.5;
 /** Today's cap: a person's fair share of today's leads, plus this much. */

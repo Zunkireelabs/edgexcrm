@@ -5,10 +5,10 @@ import { dayBounds } from "../../lib/time";
 import { decideAssignment, type Candidate, type Decision } from "../../lib/assignment/score";
 import { deriveLeadSignals } from "../../lib/assignment/signals";
 import { attendanceMeaningful, buildTeam, personFromStats, type StatsRow } from "../../lib/assignment/stats";
-import { PRESENT_ACTIVITY_HOURS } from "../../lib/assignment/weights";
+import { DORMANT_DAYS, PRESENT_ACTIVITY_HOURS } from "../../lib/assignment/weights";
 import { loadWorkablePlan } from "../workable";
 import { applyWorkable } from "../../lib/workable";
-import { firstTouchKeys, loadAssignmentSettings, type TenantDb } from "./settings";
+import { firstTouchKeys, loadAssignmentSettings, resolveFirstTouchPositions, type TenantDb } from "./settings";
 
 interface MemberRow {
   user_id: string;
@@ -25,7 +25,7 @@ interface MemberRow {
  */
 export async function buildPool(db: TenantDb, tenantId: string, now: Date): Promise<{ pool: Candidate[]; team: ReturnType<typeof buildTeam>; tz: string }> {
   const settings = await loadAssignmentSettings(db);
-  const keys = firstTouchKeys(settings);
+  const keys = firstTouchKeys(await resolveFirstTouchPositions(db, settings, now));
   const { data: tenantRow } = await db.fromGlobal("tenants").select("timezone").eq("id", tenantId).maybeSingle();
   const tz = (tenantRow as unknown as { timezone: string | null } | null)?.timezone ?? "Asia/Kathmandu";
   const today = dayBounds(now, tz).start.toISOString();
@@ -40,6 +40,7 @@ export async function buildPool(db: TenantDb, tenantId: string, now: Date): Prom
   if (ids.length === 0) return { pool: [], team: buildTeam([], []), tz };
 
   const since2h = new Date(now.getTime() - PRESENT_ACTIVITY_HOURS * 3_600_000).toISOString();
+  const since14d = new Date(now.getTime() - DORMANT_DAYS * 86_400_000).toISOString();
   const since30d = new Date(now.getTime() - 30 * 86_400_000).toISOString().slice(0, 10);
   const [names, statsRes, workable, leaveRes, attRes, actRes, noteRes] = await Promise.all([
     resolveUserNames(ids),
@@ -59,15 +60,19 @@ export async function buildPool(db: TenantDb, tenantId: string, now: Date): Prom
 
   const counts = await Promise.all(
     poolMembers.map(async (m) => {
-      const [held, recvToday] = await Promise.all([
+      const [held, recvToday, acts14, notes14] = await Promise.all([
         // Workload = workable leads only (lib/workable.ts): a won / lost / walk-in / on-hold lead is not work they carry.
         workable.activeListIds.length
           ? applyWorkable(db.from("leads").select("id", { count: "exact", head: true }).eq("assigned_to", m.user_id), workable)
           : Promise.resolve({ count: 0 }),
         db.from("leads").select("id", { count: "exact", head: true }).eq("assigned_to", m.user_id).is("deleted_at", null)
           .or(`assigned_at.gte.${today},and(assigned_at.is.null,created_at.gte.${today})`),
+        // "Working" = any lead activity or human note in the last 14 days (the same union as lib/contact.ts). A shared mailbox or a
+        // left-but-not-removed account shows none, and must never be handed a lead.
+        db.from("lead_activities").select("id", { count: "exact", head: true }).eq("user_id", m.user_id).gte("created_at", since14d),
+        db.from("lead_notes").select("id", { count: "exact", head: true }).eq("user_id", m.user_id).is("ai_tool_call_id", null).gte("created_at", since14d),
       ]);
-      return { id: m.user_id, held: held.count ?? 0, today: recvToday.count ?? 0 };
+      return { id: m.user_id, held: held.count ?? 0, today: recvToday.count ?? 0, working: (acts14.count ?? 0) + (notes14.count ?? 0) > 0 };
     }),
   );
   const countBy = new Map(counts.map((c) => [c.id, c]));
@@ -82,6 +87,7 @@ export async function buildPool(db: TenantDb, tenantId: string, now: Date): Prom
       branchId: m.branch_id,
       active: !m.suspended_at,
       onLeave: onLeave.has(m.user_id),
+      dormant: !(countBy.get(m.user_id)?.working ?? false),
       flag7d: s.flag7d,
       heldOpen: countBy.get(m.user_id)?.held ?? 0,
       receivedToday: countBy.get(m.user_id)?.today ?? 0,

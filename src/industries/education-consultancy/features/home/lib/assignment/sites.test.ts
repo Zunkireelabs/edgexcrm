@@ -32,3 +32,30 @@ describe("who may request a smart assignment", () => {
     for (const f of callers) expect(f).not.toMatch(/import|bulk|etl|merge|backfill/i);
   });
 });
+
+// Multi-step website forms finalise in the UPDATE path of /api/v1/leads (lead_id + session_id, is_final flips to true). That path must
+// request an assignment exactly once per completion: on the lead that survives a dedup fold, and on the updated lead otherwise.
+describe("multi-step form finalisation requests a smart assignment", () => {
+  const root2 = path.resolve(__dirname, "../../../../../../..");
+  const src = fs.readFileSync(path.join(root2, "src/app/(main)/api/v1/leads/route.ts"), "utf8");
+  const update = src.slice(src.indexOf("// Update path: lead_id + session_id provided"), src.indexOf("// Staff-created leads (Add Lead"));
+  const calls = update.match(/requestSmartAssignment\(/g) ?? [];
+
+  it("the update path has exactly two call sites: the fold's survivor and the normal finalise", () => {
+    expect(update.length).toBeGreaterThan(1000);
+    expect(calls).toHaveLength(2);
+  });
+  it("each fires only when THIS update flipped is_final (the stored lead was not final yet)", () => {
+    for (const line of update.split("\n").filter((l) => l.includes("requestSmartAssignment("))) {
+      expect(line).toMatch(/!\((existingLead|draftLead) as Lead\)\.is_final/);
+    }
+  });
+  it("the fold requests it for the canonical (surviving) lead, never the soft-deleted draft", () => {
+    const fold = update.split("\n").find((l) => l.includes("requestSmartAssignment(") && l.includes("draftLead")) ?? "";
+    expect(fold).toContain("leadId: canonical.id");
+  });
+  it("the create path still requests it once, for new final leads", () => {
+    const create = src.slice(src.indexOf("// Staff-created leads (Add Lead"));
+    expect(create.match(/requestSmartAssignment\(/g)).toHaveLength(1);
+  });
+});

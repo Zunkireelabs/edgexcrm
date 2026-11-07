@@ -5,9 +5,10 @@
 --           (and delete this file's row from schema_migrations)
 --
 -- 1. lead_assignment_settings: per tenant, mode off (default) | shadow | auto, and which positions take first contact on new
---    leads (position SLUGS; default 'lead-caller' = the Admizz TeleCaller). Owner / admin edit it; the server writes it.
--- 2. lead_assignment_decisions: every pick, stored: mode, all candidates with each factor's value and score, the pick, the
---    why-line, whether it was a capacity fallback, and the human outcome (matched / overridden / undone). One decision per
+--    leads (position SLUGS). NULL until the owner confirms/changes it; until then the set is LEARNED (the positions of active members
+--    who received most new leads in the last 60 days, covering >= 80%). Owner / admin edit it; the server writes it.
+-- 2. lead_assignment_decisions: every pick, stored: mode, all candidates with each factor's value and score, the pick (NULL when nobody could take
+--    it), the why-line, how the lead's branch was treated, the lead's prior branch (for Undo), and the human outcome (matched / overridden / undone). One decision per
 --    lead (UNIQUE) so the Inngest function is idempotent.
 -- 3. lead_assignment_stats: the nightly refresh's results, one row per person per destination ('*' = overall), read by the scorer:
 --      received / progressed   leads the person holds that reached THEM in the last p_days (default 120, by
@@ -31,7 +32,7 @@ BEGIN;
 CREATE TABLE IF NOT EXISTS public.lead_assignment_settings (
   tenant_id            UUID PRIMARY KEY REFERENCES public.tenants(id) ON DELETE CASCADE,
   mode                 TEXT NOT NULL DEFAULT 'off' CHECK (mode IN ('off', 'shadow', 'auto')),
-  first_touch_positions TEXT[] NOT NULL DEFAULT ARRAY['lead-caller']::TEXT[],
+  first_touch_positions TEXT[], -- NULL = never saved: the positions are LEARNED from who received new leads in the last 60 days (home/lib/assignment/learn-positions.ts)
   updated_by           UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -52,7 +53,9 @@ CREATE TABLE IF NOT EXISTS public.lead_assignment_decisions (
   picked_user_id   UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   candidates       JSONB NOT NULL DEFAULT '[]'::JSONB,
   why              TEXT,
-  fallback         BOOLEAN NOT NULL DEFAULT false,
+  fallback         BOOLEAN NOT NULL DEFAULT false, -- legacy, always false: nobody passing the filters now means NO pick (picked_user_id NULL), never a fallback
+  branch_basis     TEXT CHECK (branch_basis IN ('none', 'staffed', 'unstaffed')), -- 'unstaffed' = the lead's branch had no active pool member, so it filtered no one
+  prior_branch_id  UUID REFERENCES public.branches(id) ON DELETE SET NULL, -- the lead's branch before smart assignment moved it; Undo restores it
   applied          BOOLEAN NOT NULL DEFAULT false,
   outcome          TEXT CHECK (outcome IN ('matched', 'overridden', 'undone')),
   outcome_at       TIMESTAMPTZ,

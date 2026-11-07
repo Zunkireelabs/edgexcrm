@@ -10,6 +10,7 @@ const cand = (id: string, o: Partial<Candidate> = {}): Candidate => ({
   branchId: "ktm",
   active: true,
   onLeave: false,
+  dormant: false,
   flag7d: "green",
   heldOpen: 20,
   receivedToday: 0,
@@ -109,13 +110,28 @@ describe("Present", () => {
 });
 
 describe("hard filters", () => {
-  it("excludes inactive, on leave, other branch and Pulse-flagged (red/amber) people", () => {
-    const pool = [cand("ok"), cand("susp", { active: false }), cand("leave", { onLeave: true }), cand("far", { branchId: "pkr" }), cand("red", { flag7d: "red" }), cand("amber", { flag7d: "amber" })];
+  it("excludes inactive, on leave, dormant, other branch and Pulse-flagged (red/amber) people", () => {
+    const pool = [cand("ok"), cand("susp", { active: false }), cand("leave", { onLeave: true }), cand("idle", { dormant: true }), cand("far", { branchId: "pkr" }), cand("red", { flag7d: "red" }), cand("amber", { flag7d: "amber" })];
     const d = decideAssignment(lead([], "ktm"), pool, team());
     expect(d.pickedUserId).toBe("ok");
-    expect(Object.fromEntries(d.candidates.map((c) => [c.userId, c.excluded]))).toEqual({ ok: null, susp: "inactive", leave: "on_leave", far: "other_branch", red: "flagged", amber: "flagged" });
+    expect(Object.fromEntries(d.candidates.map((c) => [c.userId, c.excluded]))).toEqual({ ok: null, susp: "inactive", leave: "on_leave", idle: "dormant", far: "other_branch", red: "flagged", amber: "flagged" });
+  });
+  it("a branch with nobody active in the pool is not a filter (Admizz 'Global'): anyone can take it, and the decision says so", () => {
+    const pool = [cand("ktm1", { branchId: "ktm" }), cand("pkr1", { branchId: "pkr" })];
+    const d = decideAssignment(lead([], "global"), pool, team());
+    expect(d.branch).toBe("unstaffed");
+    expect(d.candidates.every((c) => c.excluded === null)).toBe(true);
+  });
+  it("a staffed branch still filters; a suspended person does not make a branch staffed", () => {
+    const staffed = decideAssignment(lead([], "ktm"), [cand("a", { branchId: "ktm" }), cand("b", { branchId: "pkr" })], team());
+    expect(staffed.branch).toBe("staffed");
+    expect(staffed.pickedUserId).toBe("a");
+    const onlySuspended = decideAssignment(lead([], "ktm"), [cand("a", { branchId: "ktm", active: false }), cand("b", { branchId: "pkr" })], team());
+    expect(onlySuspended.branch).toBe("unstaffed");
+    expect(onlySuspended.pickedUserId).toBe("b");
   });
   it("a lead with no branch can go to anyone's branch", () => {
+    expect(decideAssignment(lead([], null), [cand("far", { branchId: "pkr" })], team()).branch).toBe("none");
     expect(decideAssignment(lead([], null), [cand("far", { branchId: "pkr" })], team()).pickedUserId).toBe("far");
   });
   it("the cap: over their fair share of today's leads +50% is out", () => {
@@ -125,12 +141,19 @@ describe("hard filters", () => {
     expect(d.candidates.find((c) => c.userId === "a")!.excluded).toBe("at_cap");
     expect(d.pickedUserId).not.toBe("a");
   });
-  it("nobody passes (all on leave): fall back to the best by Fit + Room and say they will be called when they start", () => {
+  it("nobody passes (all on leave): NO pick, the lead stays unassigned, and the why says who was out", () => {
     const pool = [cand("a", { onLeave: true, heldOpen: 5 }), cand("b", { onLeave: true, heldOpen: 40 })];
     const d = decideAssignment(lead(), pool, team());
-    expect(d.fallback).toBe(true);
-    expect(d.pickedUserId).toBe("a");
-    expect(d.why).toMatch(/will be called when they start$/);
+    expect(d.pickedUserId).toBeNull();
+    expect(d.why).toBe("No one can take it now (2 on leave), so it stays unassigned for a manager.");
+    expect(d.candidates).toHaveLength(2);
+    expect(d.candidates.every((c) => c.total === 0 && c.excluded === "on_leave")).toBe(true);
+    expect("fallback" in d).toBe(false);
+  });
+  it("a dormant person (shared mailbox, no activity in 14 days) is never picked, even when they are the only one", () => {
+    const d = decideAssignment(lead(), [cand("hello", { dormant: true })], team());
+    expect(d.pickedUserId).toBeNull();
+    expect(d.why).toContain("1 no activity in 14 days");
   });
   it("only suspended people, or an empty pool: no pick", () => {
     expect(decideAssignment(lead(), [cand("x", { active: false })], team()).pickedUserId).toBeNull();
@@ -166,5 +189,44 @@ describe("the why line", () => {
     const d = decideAssignment(lead(), [cand("a"), cand("b")], team());
     expect(d.candidates).toHaveLength(2);
     for (const c of d.candidates) expect(Object.keys(c)).toEqual(expect.arrayContaining(["fit", "room", "speed", "present", "total", "excluded"]));
+  });
+});
+
+describe("the why line cites only factors with evidence", () => {
+  const thin = { received: 2, progressed: 0, speedN: 1, medianFirstContactMin: 5 };
+  it("never prints '0% vs team 0%': a team rate of 0 drops Fit", () => {
+    const d = decideAssignment(lead(), [cand("asha")], team({ overall: { received: 0, progressed: 0 }, byDestination: {} }));
+    expect(d.why).not.toMatch(/0% vs team 0%/);
+    expect(d.why).not.toContain("record");
+  });
+  it("Fit needs the person's own sample of at least 5 leads", () => {
+    const few = decideAssignment(lead(), [cand("asha", { overall: thin })], team());
+    expect(few.why).not.toContain("record");
+    const enough = decideAssignment(lead(), [cand("asha", { overall: { ...thin, received: 5 } })], team());
+    expect(enough.why).toContain("record");
+  });
+  it("destination-aware Fit counts the destination sample, not the overall one", () => {
+    const d = decideAssignment(lead(["Australia"]), [cand("asha", { byDestination: { Australia: { received: 2, progressed: 1 } } })], team());
+    expect(d.why).not.toContain("Australia record");
+  });
+  it("Room needs a real team median of at least 1 (everyone at 0 open leads says nothing about room)", () => {
+    const d = decideAssignment(lead(), [cand("asha", { heldOpen: 0, overall: thin, present: false })], team());
+    expect(d.why).not.toContain("open leads");
+  });
+  it("Speed needs the person's own samples (>= 3), not the team's", () => {
+    const d = decideAssignment(lead(), [cand("asha", { overall: { received: 100, progressed: 30, speedN: 2, medianFirstContactMin: 5 } })], team());
+    expect(d.why).not.toContain("first contact");
+  });
+  it("no factor has evidence and the pick has strictly the most room: 'most room: N open leads (team median M)'", () => {
+    const noEv = { received: 1, progressed: 0, speedN: 0, medianFirstContactMin: null };
+    const c = (id: string, held: number) => cand(id, { heldOpen: held, overall: noEv, present: false });
+    const d = decideAssignment(lead(), [c("asha", 0), c("bina", 0), c("cara", 2)], team({ overall: { received: 0, progressed: 0 }, byDestination: {}, medianFirstContactMin: null }));
+    expect(d.pickedUserId).toBe("asha");
+    expect(d.why).toBe("Asha: most room: 0 open leads (team median 0)");
+  });
+  it("no factor has evidence and room does not decide it: 'fewest new leads today'", () => {
+    const noEv = { received: 1, progressed: 0, speedN: 0, medianFirstContactMin: null };
+    const d = decideAssignment(lead(), [cand("asha", { heldOpen: 0, overall: noEv, present: false, receivedToday: 0 }), cand("bina", { heldOpen: 0, overall: noEv, present: false, receivedToday: 1 })], team({ overall: { received: 0, progressed: 0 }, byDestination: {}, medianFirstContactMin: null }));
+    expect(d.why).toBe("Asha: fewest new leads today");
   });
 });

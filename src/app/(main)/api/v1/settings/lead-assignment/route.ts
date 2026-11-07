@@ -4,8 +4,9 @@ import { apiError, apiForbidden, apiSuccess, apiUnauthorized, apiValidationError
 import { scopedClient } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
+import { LEARN_DAYS } from "@/industries/education-consultancy/features/home/lib/assignment/weights";
 import { ASSIGNMENT_MODES, type AssignmentMode } from "@/industries/education-consultancy/features/home/lib/assignment/outcome";
-import { loadAssignmentSettings } from "@/industries/education-consultancy/features/home/server/assignment/settings";
+import { loadAssignmentSettings, loadLearnedPositions, resolveFirstTouchPositions } from "@/industries/education-consultancy/features/home/server/assignment/settings";
 
 // GET/PUT /api/v1/settings/lead-assignment — owner / admin of an education tenant. { mode, first_touch_positions }.
 // Default is "off". Shadow computes and stores picks but assigns nothing; auto assigns new leads as they arrive.
@@ -22,7 +23,15 @@ export async function GET() {
   if ("res" in g) return g.res;
   const db = await scopedClient(g.auth);
   const s = await loadAssignmentSettings(db);
-  return apiSuccess({ mode: s.mode, first_touch_positions: s.firstTouchPositions });
+  const learned = await loadLearnedPositions(db);
+  // Until the owner confirms, the positions in force are the learned ones, shown as a suggestion with the numbers behind it.
+  const inForce = s.positionsSaved ? s.firstTouchPositions : learned.chosen.length ? learned.chosen : s.firstTouchPositions;
+  return apiSuccess({
+    mode: s.mode,
+    first_touch_positions: inForce,
+    positions_saved: s.positionsSaved,
+    suggestion: { window_days: LEARN_DAYS, positions: learned.positions, chosen: learned.chosen, total: learned.total, covered: learned.covered },
+  });
 }
 
 export async function PUT(request: NextRequest) {
@@ -43,16 +52,18 @@ export async function PUT(request: NextRequest) {
   if (Object.keys(errors).length) return apiValidationError(errors);
 
   const db = await scopedClient(g.auth);
-  const current = await loadAssignmentSettings(db);
+  // Positions are written ONLY when the owner sends them (confirming or changing the suggestion). Saving just the mode leaves them
+  // as they were, so "never confirmed" stays distinguishable and the learned set keeps applying.
   const { error } = await db.from("lead_assignment_settings").upsert(
     {
       mode: body.mode,
-      first_touch_positions: (positions as string[] | undefined) ?? current.firstTouchPositions,
+      ...(positions !== undefined ? { first_touch_positions: positions as string[] } : {}),
       updated_by: g.auth.userId,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "tenant_id" },
   );
   if (error) return apiError("DB_ERROR", "Failed to save", 500);
-  return apiSuccess({ mode: body.mode, first_touch_positions: (positions as string[] | undefined) ?? current.firstTouchPositions });
+  const after = await loadAssignmentSettings(db);
+  return apiSuccess({ mode: body.mode, first_touch_positions: await resolveFirstTouchPositions(db, after), positions_saved: after.positionsSaved });
 }

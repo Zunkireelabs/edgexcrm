@@ -17,6 +17,8 @@ export interface DecisionLike {
  */
 export function classifyHumanAssignment(d: DecisionLike, assignedTo: string): "matched" | "overridden" | null {
   if (d.outcome !== null) return null;
+  // Nobody was picked (nobody could take it): there is nothing to agree or disagree with.
+  if (!d.pickedUserId) return null;
   if (d.mode === "shadow") return assignedTo === d.pickedUserId ? "matched" : "overridden";
   return assignedTo === d.pickedUserId ? null : "overridden";
 }
@@ -48,9 +50,19 @@ export function smartAssignmentNotification(leadName: string): { title: string; 
   return { title: "Lead assigned to you", message: `Smart assignment assigned you ${leadName}` };
 }
 
+/** What the person smart assignment had picked is told when the owner undoes it (not "reassigned to someone else"). */
+export function smartAssignmentUndoneNotification(leadName: string): { title: string; message: string } {
+  return { title: "Smart assignment undone", message: `Smart assignment's pick was undone: ${leadName} is back with the team` };
+}
+
 /** Undo only while the lead is still with the person smart assignment picked, and the decision is still open. */
 export function canUndo(d: DecisionLike, currentAssignee: string | null): boolean {
   return d.mode === "auto" && d.outcome === null && !!d.pickedUserId && currentAssignee === d.pickedUserId;
 }
 
 export const SMART_ASSIGNMENT_ACTOR = { key: "smart_assignment", label: "Smart assignment" } as const;
+
+/** Undo's lead patch: back to unassigned, and back to the branch it had before smart assignment moved it (only written when it differs). */
+export function undoPatch(priorBranchId: string | null, currentBranchId: string | null): Record<string, unknown> {
+  return priorBranchId === currentBranchId ? { assigned_to: null } : { assigned_to: null, branch_id: priorBranchId };
+}

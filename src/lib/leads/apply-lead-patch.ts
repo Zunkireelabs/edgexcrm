@@ -120,6 +120,8 @@ export interface ApplyLeadPatchOpts {
    * (permissions, chain-of-custody, list routing, collaborators of the NEW assignee) is identical to a human edit.
    */
   systemActor?: { key: string; label: string; decisionId: string };
+  /** Wording for the notification the PREVIOUS assignee gets when this patch takes the lead off them (default: "reassigned to someone else"). */
+  previousHolderNotice?: (leadName: string) => { title: string; message: string };
 }
 
 export type ApplyLeadPatchOutcome =
@@ -1277,8 +1279,7 @@ export async function applyLeadPatch(
         tenantId: auth.tenantId,
         userId: existingLead.assigned_to,
         type: NotificationTypes.LEAD_UNASSIGNED,
-        title: "Lead reassigned",
-        message: `${leadName} has been reassigned to someone else`,
+        ...(opts.previousHolderNotice?.(leadName) ?? { title: "Lead reassigned", message: `${leadName} has been reassigned to someone else` }),
         link: `/leads/${leadId}`,
       });
     }

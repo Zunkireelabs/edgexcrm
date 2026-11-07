@@ -5,7 +5,7 @@ import { applyLeadPatch } from "@/lib/leads/apply-lead-patch";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
-import { canUndo } from "@/industries/education-consultancy/features/home/lib/assignment/outcome";
+import { canUndo, smartAssignmentUndoneNotification, undoPatch } from "@/industries/education-consultancy/features/home/lib/assignment/outcome";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX = 100;
@@ -32,19 +32,26 @@ export async function POST(request: NextRequest) {
   }
 
   const db = await scopedClient(auth);
-  const { data: decisions } = await db.from("lead_assignment_decisions").select("id, lead_id, mode, picked_user_id, outcome").in("id", ids as string[]);
-  const rows = (decisions ?? []) as unknown as Array<{ id: string; lead_id: string; mode: "shadow" | "auto"; picked_user_id: string | null; outcome: "matched" | "overridden" | "undone" | null }>;
-  const { data: leads } = await db.from("leads").select("id, assigned_to").in("id", rows.map((r) => r.lead_id));
-  const assignee = new Map(((leads ?? []) as unknown as Array<{ id: string; assigned_to: string | null }>).map((l) => [l.id, l.assigned_to]));
+  const { data: decisions } = await db.from("lead_assignment_decisions").select("id, lead_id, mode, picked_user_id, outcome, prior_branch_id").in("id", ids as string[]);
+  const rows = (decisions ?? []) as unknown as Array<{ id: string; lead_id: string; mode: "shadow" | "auto"; picked_user_id: string | null; outcome: "matched" | "overridden" | "undone" | null; prior_branch_id: string | null }>;
+  const { data: leads } = await db.from("leads").select("id, assigned_to, branch_id").in("id", rows.map((r) => r.lead_id));
+  const leadRows = new Map(((leads ?? []) as unknown as Array<{ id: string; assigned_to: string | null; branch_id: string | null }>).map((l) => [l.id, l]));
 
   let undone = 0;
   let skipped = 0;
   for (const d of rows) {
-    if (!canUndo({ mode: d.mode, pickedUserId: d.picked_user_id, outcome: d.outcome }, assignee.get(d.lead_id) ?? null)) {
+    if (!canUndo({ mode: d.mode, pickedUserId: d.picked_user_id, outcome: d.outcome }, leadRows.get(d.lead_id)?.assigned_to ?? null)) {
       skipped += 1;
       continue;
     }
-    const outcome = await applyLeadPatch(auth, d.lead_id, { assigned_to: null }, { requestId: crypto.randomUUID(), ip: null, userAgent: "smart-assignment-undo" });
+    // Put everything back: unassigned AND the branch the lead had before smart assignment moved it.
+    const patch = undoPatch(d.prior_branch_id, leadRows.get(d.lead_id)?.branch_id ?? null);
+    const outcome = await applyLeadPatch(auth, d.lead_id, patch, {
+      requestId: crypto.randomUUID(),
+      ip: null,
+      userAgent: "smart-assignment-undo",
+      previousHolderNotice: smartAssignmentUndoneNotification,
+    });
     if (outcome.kind !== "ok") {
       skipped += 1;
       continue;

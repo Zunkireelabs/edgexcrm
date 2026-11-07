@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { agreement, canUndo, classifyHumanAssignment, pickSystemOwner, shouldRequestAssignment, smartAssignmentNotification } from "./outcome";
+import { agreement, canUndo, classifyHumanAssignment, pickSystemOwner, shouldRequestAssignment, smartAssignmentNotification, smartAssignmentUndoneNotification, undoPatch } from "./outcome";
 
 describe("classifyHumanAssignment (shadow-mode match recording)", () => {
   const shadow = { mode: "shadow" as const, pickedUserId: "asha", outcome: null };
@@ -63,5 +63,31 @@ describe("canUndo", () => {
     expect(canUndo(d, "bina")).toBe(false);
     expect(canUndo({ ...d, outcome: "undone" }, "asha")).toBe(false);
     expect(canUndo({ ...d, mode: "shadow" as never }, "asha")).toBe(false);
+  });
+});
+
+describe("a decision with no pick (nobody could take the lead)", () => {
+  it("a human assigning it later is neither a match nor an override", () => {
+    expect(classifyHumanAssignment({ mode: "shadow", pickedUserId: null, outcome: null }, "asha")).toBeNull();
+    expect(classifyHumanAssignment({ mode: "auto", pickedUserId: null, outcome: null }, "asha")).toBeNull();
+  });
+  it("and never counts in the shadow agreement", () => {
+    expect(agreement([{ mode: "shadow", outcome: null }])).toEqual({ matched: 0, total: 0, pct: null });
+  });
+});
+
+describe("Undo puts everything back", () => {
+  it("restores the branch smart assignment moved the lead out of", () => {
+    expect(undoPatch("global", "ktm")).toEqual({ assigned_to: null, branch_id: "global" });
+  });
+  it("a lead that had no branch gets none again", () => {
+    expect(undoPatch(null, "ktm")).toEqual({ assigned_to: null, branch_id: null });
+  });
+  it("branch unchanged: only unassigns", () => {
+    expect(undoPatch("ktm", "ktm")).toEqual({ assigned_to: null });
+  });
+  it("tells the person it was undone, not that it was reassigned to someone else", () => {
+    expect(smartAssignmentUndoneNotification("Asha Rai").message).toBe("Smart assignment's pick was undone: Asha Rai is back with the team");
+    expect(smartAssignmentUndoneNotification("Asha Rai").message).not.toContain("reassigned");
   });
 });

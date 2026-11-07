@@ -1477,6 +1477,8 @@ async function handlePost(request: NextRequest) {
         void touchLastActivity(supabase, { leadId: canonical.id, tenantId });
 
         log.info({ draftId: leadId, canonicalId: canonical.id }, "Draft folded into canonical lead");
+        // Smart assignment: the multi-step form just completed, so the lead that SURVIVES the fold is the one to place.
+        if (!(draftLead as Lead).is_final) void requestSmartAssignment({ tenantId, leadId: canonical.id, assignedTo: canonical.assigned_to });
         return apiSuccess({ ...canonical, id: canonical.id }, 200);
       }
     }
@@ -1564,6 +1566,9 @@ async function handlePost(request: NextRequest) {
     ]);
 
     if (leadPayload.is_final === true) {
+      // Smart assignment, exactly once: only when THIS update flipped is_final to true (a multi-step form completing),
+      // never on a repeat save of an already-final lead. requestSmartAssignment skips an assigned lead; the run is idempotent per lead.
+      if (!(existingLead as Lead).is_final) void requestSmartAssignment({ tenantId, leadId, assignedTo: (updated as Lead).assigned_to });
       void processEmailForwardRules({
         tenantId,
         lead: updated as Lead,

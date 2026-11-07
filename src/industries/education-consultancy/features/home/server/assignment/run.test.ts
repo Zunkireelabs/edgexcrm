@@ -21,7 +21,7 @@ vi.mock("./settings", () => ({ loadAssignmentSettings: async () => settingsRef.v
 vi.mock("./engine", () => ({ decideForLead: decideMock }));
 vi.mock("./assign", () => ({ assignAsSmartAssignment: assignMock }));
 
-const picked = { lead: { id: "l1", assigned_to: null }, decision: { pickedUserId: "asha", fallback: false, why: "Asha: ...", candidates: [{ userId: "asha" }] } };
+const picked = { lead: { id: "l1", assigned_to: null, branch_id: "global" }, decision: { pickedUserId: "asha", branch: "unstaffed", why: "Asha: ...", candidates: [{ userId: "asha" }] } };
 
 beforeEach(() => {
   settingsRef.value = { mode: "shadow", firstTouchPositions: ["lead-caller"] };
@@ -44,7 +44,7 @@ describe("runSmartAssignment", () => {
     const { runSmartAssignment } = await import("./run");
     const r = await runSmartAssignment("t", "l1");
     expect(r).toEqual({ status: "shadow", decisionId: "dec-1", pickedUserId: "asha" });
-    expect(insertMock).toHaveBeenCalledWith(expect.objectContaining({ lead_id: "l1", mode: "shadow", picked_user_id: "asha", why: "Asha: ...", fallback: false }));
+    expect(insertMock).toHaveBeenCalledWith(expect.objectContaining({ lead_id: "l1", mode: "shadow", picked_user_id: "asha", why: "Asha: ...", branch_basis: "unstaffed", prior_branch_id: "global" }));
     expect(assignMock).not.toHaveBeenCalled();
   });
 
@@ -81,10 +81,13 @@ describe("runSmartAssignment", () => {
     expect(updateMock).not.toHaveBeenCalled();
   });
 
-  it("no candidate → no decision row (so shadow agreement is never skewed by non-picks)", async () => {
-    decideMock.mockResolvedValue({ ...picked, decision: { pickedUserId: null, fallback: false, why: "none", candidates: [] } });
+  it("nobody could take it: the decision IS stored with no pick (why + each person's filter), nothing is assigned, the lead stays unassigned", async () => {
+    settingsRef.value.mode = "auto";
+    decideMock.mockResolvedValue({ ...picked, decision: { pickedUserId: null, branch: "unstaffed", why: "No one can take it now (2 suspended), so it stays unassigned for a manager.", candidates: [{ userId: "x", excluded: "inactive" }] } });
     const { runSmartAssignment } = await import("./run");
     expect(await runSmartAssignment("t", "l1")).toEqual({ status: "skipped", reason: "no_candidate" });
-    expect(insertMock).not.toHaveBeenCalled();
+    expect(insertMock).toHaveBeenCalledWith(expect.objectContaining({ lead_id: "l1", picked_user_id: null, branch_basis: "unstaffed", why: expect.stringContaining("stays unassigned") }));
+    expect(assignMock).not.toHaveBeenCalled();
+    expect(updateMock).not.toHaveBeenCalled();
   });
 });
