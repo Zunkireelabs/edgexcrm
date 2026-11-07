@@ -3,11 +3,12 @@ import { buildMeasures, comparePeriods, measureMetrics, WINDOWED_PROCESSES, type
 import { changeTitle } from "../lib/changes";
 import type { ChangeRecord } from "../lib/changes-flow";
 import { buildImprovementLog, thirtyDaysOn, type LogChange, type LogEvent, type LogVersion } from "../lib/improvements-log";
+import { canApproveProcess } from "./context";
 import { PROCESS_NAMES, type ProcessKey } from "../lib/keys";
 import type { RawMetrics } from "../lib/metrics";
-import { safeParseProcessSpec } from "../lib/spec";
+import { safeParseProcessSpec, type ProcessSpec } from "../lib/spec";
 import type { ProcessesContext } from "./context";
-import { must } from "./changes";
+import { must, positionNameMap } from "./changes";
 import { fetchProcessMetrics } from "./load-processes";
 import { localDay } from "./snapshots";
 
@@ -31,15 +32,28 @@ interface Ver {
   rejected_at: string | null;
   rejected_by: string | null;
   rejected_reason: string | null;
+  change_summary: string | null;
 }
-const VER_COLS = "id, process_id, version, status, source, spec, approved_by, approved_at, created_at, rejected_at, rejected_by, rejected_reason";
+const VER_COLS = "id, process_id, version, status, source, spec, approved_by, approved_at, created_at, rejected_at, rejected_by, rejected_reason, change_summary";
 const iso = (d: Date) => d.toISOString();
+
+/** One change of the compared version, for "What changed in vN". */
+export interface CompareChange {
+  id: string;
+  title: string;
+  status: ChangeRecord["status"];
+  authorName: string | null;
+  authorKind: "person" | "agent";
+  createdAt: string;
+}
 
 export interface CompareResult {
   process: { key: ProcessKey; name: string };
   previous: { versionId: string; version: number; period: { from: string; to: string } } | null;
   current: { versionId: string; version: number; status: string; approvedAt: string; approvedByName: string | null; period: { from: string; to: string }; daysLive: number };
   measures: Measure[];
+  /** The compared version's changes: taken ones first (in the order suggested), then not-taken. */
+  changes: CompareChange[];
 }
 
 /** The previous version = the highest earlier version that was ever approved. */
@@ -53,6 +67,24 @@ async function snapshotBefore(ctx: ProcessesContext, processId: string, day: str
     await ctx.db.from("process_metric_snapshots").select("metrics").eq("process_id", processId).lte("day", day).order("day", { ascending: false }).limit(1),
   ) as unknown as Array<{ metrics: RawMetrics }> | null;
   return rows?.[0]?.metrics ?? null;
+}
+
+/** A version's changes with readable titles and author names. Plain query, no embed. */
+async function loadVersionChanges(ctx: ProcessesContext, key: ProcessKey, versionId: string, spec: ProcessSpec | null, names: ReadonlyMap<string, { name: string }>): Promise<CompareChange[]> {
+  const rows =
+    (must("changes read", await ctx.db.from("process_changes").select("id, part, field, before, after, status, author_kind, author_user_id, created_at").eq("version_id", versionId).order("created_at", { ascending: true })) as unknown as
+      | Array<Pick<ChangeRecord, "id" | "part" | "field" | "before" | "after" | "status" | "author_kind" | "author_user_id" | "created_at">>
+      | null) ?? [];
+  const nameBySlug = await positionNameMap(ctx.db);
+  const out: CompareChange[] = rows.map((c) => ({
+    id: c.id,
+    title: changeTitle(c, spec, { processKey: key, nameBySlug }),
+    status: c.status,
+    authorName: c.author_kind === "agent" ? "Orca" : c.author_user_id ? (names.get(c.author_user_id)?.name ?? null) : null,
+    authorKind: c.author_kind,
+    createdAt: c.created_at,
+  }));
+  return [...out.filter((c) => c.status !== "not_taken"), ...out.filter((c) => c.status === "not_taken")];
 }
 
 /** Two SQL calls (windowed process) or one snapshot read + one live call (current-state processes). */
@@ -75,6 +107,7 @@ export async function compareVersion(ctx: ProcessesContext, proc: Proc, versions
       daysLive: periods.daysLive,
     },
     measures: [],
+    changes: await loadVersionChanges(ctx, proc.key, current.id, curSpec.ok ? curSpec.spec : null, names),
   };
   if (!prev || !curSpec.ok) return result;
 
@@ -111,15 +144,17 @@ export async function loadCompare(ctx: ProcessesContext, key: ProcessKey, versio
 }
 
 /** Real events, newest first. `processKey` filters to one process. "30 days on" carries the measures from the compare logic. */
-export async function loadImprovementLog(ctx: ProcessesContext, processKey: ProcessKey | null, now: Date = new Date()): Promise<LogEvent[]> {
+export async function loadImprovementLog(ctx: ProcessesContext, processKey: ProcessKey | null, now: Date = new Date(), opts: { measures?: boolean } = {}): Promise<LogEvent[]> {
+  const withMeasures = opts.measures !== false;
   const procs = ((must("processes read", await ctx.db.from("processes").select("id, key, name")) as unknown as Proc[] | null) ?? []).filter((p) => !processKey || p.key === processKey);
   if (procs.length === 0) return [];
   const ids = procs.map((p) => p.id);
   const vers = (must("versions read", await ctx.db.from("process_versions").select(VER_COLS).in("process_id", ids)) as unknown as Ver[] | null) ?? [];
-  const chg = (must("changes read", await ctx.db.from("process_changes").select("id, process_id, version_id, part, field, author_kind, author_user_id, created_at").in("process_id", ids)) as unknown as
-    | Array<Pick<ChangeRecord, "id" | "process_id" | "version_id" | "part" | "field" | "author_kind" | "author_user_id" | "created_at">>
+  const chg = (must("changes read", await ctx.db.from("process_changes").select("id, process_id, version_id, part, field, before, after, why, status, author_kind, author_user_id, created_at").in("process_id", ids)) as unknown as
+    | Array<Pick<ChangeRecord, "id" | "process_id" | "version_id" | "part" | "field" | "before" | "after" | "why" | "status" | "author_kind" | "author_user_id" | "created_at">>
     | null) ?? [];
   const names = await loadUserNames(ctx.db);
+  const nameBySlug = await positionNameMap(ctx.db);
   const procById = new Map(procs.map((p) => [p.id, p]));
   const specByVersion = new Map(vers.map((v) => [v.id, v.spec]));
 
@@ -139,11 +174,21 @@ export async function loadImprovementLog(ctx: ProcessesContext, processKey: Proc
   const logChanges: LogChange[] = chg.map((c) => {
     const key = procById.get(c.process_id)!.key;
     const parsed = safeParseProcessSpec(key, specByVersion.get(c.version_id));
-    return { id: c.id, processKey: key, versionId: c.version_id, title: changeTitle(c, parsed.ok ? parsed.spec : null), author_user_id: c.author_user_id, author_kind: c.author_kind, created_at: c.created_at };
+    return {
+      id: c.id,
+      processKey: key,
+      versionId: c.version_id,
+      title: changeTitle(c, parsed.ok ? parsed.spec : null, { processKey: key, nameBySlug }),
+      why: c.why,
+      status: c.status,
+      author_user_id: c.author_user_id,
+      author_kind: c.author_kind,
+      created_at: c.created_at,
+    };
   });
 
   const measuresByVersion = new Map<string, Measure[]>();
-  for (const t of thirtyDaysOn(logVersions, now)) {
+  for (const t of withMeasures ? thirtyDaysOn(logVersions, now) : []) {
     const cur = vers.find((v) => v.id === t.id)!;
     const proc = procById.get(cur.process_id)!;
     const res = await compareVersion(ctx, proc, vers.filter((v) => v.process_id === proc.id), cur, now, names);
@@ -155,5 +200,76 @@ export async function loadImprovementLog(ctx: ProcessesContext, processKey: Proc
     names: new Map([...names.entries()].map(([id, n]) => [id, n.name])),
     measuresByVersion,
     now,
+    skipThirtyDays: !withMeasures,
   });
+}
+
+export interface VersionListItem {
+  id: string;
+  version: number;
+  status: LogVersion["status"];
+  source: LogVersion["source"];
+  createdAt: string;
+  approvedAt: string | null;
+  approvedByName: string | null;
+  /** Who suggested its changes ("Manish", "Manish and 1 other"); null for a system baseline. */
+  suggestedBy: string | null;
+  changeCount: number;
+  takenCount: number;
+  summary: string | null;
+}
+
+export interface VersionsPage {
+  process: { key: ProcessKey; name: string; ownerName: string | null; canApprove: boolean };
+  versions: VersionListItem[];
+  /** The open draft on top of a live version (null when none, or when the only draft is the baseline). */
+  draft: { id: string; version: number; changeCount: number; suggestedBy: string | null } | null;
+  /** The compared version (`?version=`, default the live one) with its before -> after; null when the process has no live version. */
+  compare: CompareResult | null;
+}
+
+const joinNames = (xs: string[]) => (xs.length <= 1 ? (xs[0] ?? null) : xs.length === 2 ? `${xs[0]} and ${xs[1]}` : `${xs[0]} and ${xs.length - 1} others`);
+
+/** Everything the Before -> after page needs, in one call. */
+export async function loadVersionsPage(ctx: ProcessesContext, key: ProcessKey, versionId: string | null, now: Date = new Date()): Promise<VersionsPage | null> {
+  const found = await loadProcAndVersions(ctx, key);
+  if (!found) return null;
+  const { proc, versions } = found;
+  const names = await loadUserNames(ctx.db);
+  const ownerRow = must("owner read", await ctx.db.from("processes").select("owner_user_id").eq("id", proc.id).maybeSingle()) as unknown as { owner_user_id: string | null } | null;
+  const ownerId = ownerRow?.owner_user_id ?? null;
+  const rows =
+    (must("changes read", await ctx.db.from("process_changes").select("version_id, status, author_kind, author_user_id").eq("process_id", proc.id)) as unknown as
+      | Array<{ version_id: string; status: ChangeRecord["status"]; author_kind: "person" | "agent"; author_user_id: string | null }>
+      | null) ?? [];
+  const nameOf = (id: string | null) => (id ? (names.get(id)?.name ?? null) : null);
+  const authorsOf = (vid: string) => {
+    const seen: string[] = [];
+    for (const c of rows.filter((r) => r.version_id === vid)) {
+      const n = c.author_kind === "agent" ? "Orca" : nameOf(c.author_user_id);
+      if (n && !seen.includes(n)) seen.push(n);
+    }
+    return joinNames(seen);
+  };
+  const items: VersionListItem[] = versions
+    .map((v) => ({
+      id: v.id,
+      version: v.version,
+      status: v.status,
+      source: v.source,
+      createdAt: v.created_at,
+      approvedAt: v.approved_at,
+      approvedByName: nameOf(v.approved_by),
+      suggestedBy: authorsOf(v.id),
+      changeCount: rows.filter((r) => r.version_id === v.id).length,
+      takenCount: rows.filter((r) => r.version_id === v.id && r.status === "taken").length,
+      summary: v.change_summary,
+    }))
+    .sort((a, b) => a.version - b.version);
+  const open = items.find((v) => v.status === "draft");
+  const draft = open && proc.live_version_id ? { id: open.id, version: open.version, changeCount: open.changeCount, suggestedBy: open.suggestedBy } : null;
+
+  const current = versionId ? versions.find((v) => v.id === versionId) : versions.find((v) => v.id === proc.live_version_id);
+  const compare = current && current.approved_at ? await compareVersion(ctx, proc, versions, current, now, names) : null;
+  return { process: { key, name: proc.name || PROCESS_NAMES[key], ownerName: nameOf(ownerId), canApprove: canApproveProcess(ctx.auth, ownerId) }, versions: items, draft, compare };
 }

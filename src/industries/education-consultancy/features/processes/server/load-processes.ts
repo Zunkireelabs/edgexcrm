@@ -8,9 +8,6 @@ import { liveRules, pluralizeRole, resolvePositionName, stepOwners, type RuleRow
 import { METRIC_REGISTRY, fmtN, formatMinutes, readMetric, stepStatus, type MetricUnit, type RawMetrics, type StepStatus } from "../lib/metrics";
 import { safeParseProcessSpec, type ProcessSpec } from "../lib/spec";
 import type { ProcessRow } from "../lib/store";
-import { buildImprovements, type ImprovementEvent, type VersionEventRow } from "../lib/improvements";
-import { logger } from "@/lib/logger";
-import { PROCESS_EMBED } from "./approve";
 import { canApproveProcess, type ProcessesContext } from "./context";
 
 type Db = Awaited<ReturnType<typeof scopedClientForTenant>>;
@@ -86,6 +83,8 @@ export interface ProcessView {
   spec: ProcessSpec | null;
   specError: string | null;
   canApprove: boolean;
+  /** An open draft sitting on top of a live version (decision 3: at most one). Null for a baseline draft (that one is `shown`). */
+  draft: { id: string; version: number; changeCount: number } | null;
 }
 
 export const parseWindowDays = (raw: string | null): number => {
@@ -177,6 +176,14 @@ export async function loadProcessViews(ctx: ProcessesContext, windowDays: number
   if (verErr) throw new Error(`process_versions read: ${verErr.message}`);
   const versions = (vers ?? []) as unknown as VersionRow[];
   const names = await loadUserNames(db);
+  // How many changes each open draft holds: one plain query (process_changes is never embedded).
+  const draftIds = versions.filter((v) => v.status === "draft").map((v) => v.id);
+  const countByDraft = new Map<string, number>();
+  if (draftIds.length) {
+    const { data: chg, error: chgErr } = await db.from("process_changes").select("version_id").in("version_id", draftIds);
+    if (chgErr) throw new Error(`process_changes count: ${chgErr.message}`);
+    for (const c of (chg ?? []) as unknown as Array<{ version_id: string }>) countByDraft.set(c.version_id, (countByDraft.get(c.version_id) ?? 0) + 1);
+  }
   const [{ data: posRows }, settings] = await Promise.all([db.from("positions").select("slug, name"), loadAssignmentSettings(db)]);
   const nameBySlug = new Map(((posRows ?? []) as unknown as Array<{ slug: string; name: string }>).map((r) => [r.slug, r.name]));
   const to = new Date();
@@ -213,6 +220,10 @@ export async function loadProcessViews(ctx: ProcessesContext, windowDays: number
         spec,
         specError: parsed && !parsed.ok ? parsed.error : null,
         canApprove: canApproveProcess(auth, p.owner_user_id),
+        draft: (() => {
+          const open = versions.find((v) => v.process_id === p.id && v.status === "draft");
+          return open && p.live_version_id ? { id: open.id, version: open.version, changeCount: countByDraft.get(open.id) ?? 0 } : null;
+        })(),
       };
     }),
   );
@@ -236,20 +247,3 @@ export async function loadProcessVersions(db: Db, processId: string): Promise<Ar
 }
 
 export { isProcessKey };
-
-/** Real events only: baselines written and versions approved. */
-export async function loadImprovements(db: Db): Promise<ImprovementEvent[]> {
-  const { data, error } = await db.from("process_versions").select(`version, source, created_at, approved_at, ${PROCESS_EMBED}(key)`);
-  if (error) {
-    logger.error({ err: error, route: "processes" }, "Failed to load improvements");
-    throw new Error(`improvements read: ${error.message}`);
-  }
-  const rows = ((data ?? []) as unknown as Array<{ version: number; source: VersionEventRow["source"]; created_at: string; approved_at: string | null; processes: { key: ProcessKey } | Array<{ key: ProcessKey }> }>).map((r) => ({
-    key: (Array.isArray(r.processes) ? r.processes[0] : r.processes).key,
-    version: r.version,
-    source: r.source,
-    created_at: r.created_at,
-    approved_at: r.approved_at,
-  }));
-  return buildImprovements(rows);
-}

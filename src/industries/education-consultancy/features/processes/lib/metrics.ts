@@ -27,6 +27,8 @@ export interface MetricDef {
   listLabel?: (raw: RawMetrics) => string;
   /** Days a version must have been live before before -> after is trusted for this measure. Default 7 (DEFAULT_MIN_DAYS). */
   minDays?: number;
+  /** The row name on the Before -> after page ("Called within 1 working hour"). Falls back to `label`. */
+  compareLabel?: string;
 }
 
 /** Before -> after waits this long for a measure that sets no `minDays` of its own. */
@@ -89,6 +91,7 @@ export const METRIC_REGISTRY: Record<ProcessKey, Record<string, MetricDef>> = {
     },
     owner_wait_median_min: {
       label: "Median wait for an owner",
+      compareLabel: "Wait for an owner (median)",
       shortLabel: "median wait",
       unit: "min",
       read: (r) => num(r, "owner_wait_median_min"),
@@ -96,6 +99,7 @@ export const METRIC_REGISTRY: Record<ProcessKey, Record<string, MetricDef>> = {
     },
     first_contact_1h_pct: {
       label: "Contacted within 1 hour",
+      compareLabel: "Called within 1 hour",
       listLabel: () => "contacted within 1 hour",
       unit: "percent",
       read: (r) => pct(num(r, "within_1h"), num(r, "arrived")),
@@ -105,6 +109,7 @@ export const METRIC_REGISTRY: Record<ProcessKey, Record<string, MetricDef>> = {
     },
     first_contact_1wh_pct: {
       label: "Contacted within 1 working hour",
+      compareLabel: "Called within 1 working hour",
       listLabel: () => "contacted within 1 working hour",
       unit: "percent",
       // Needs `within_1wh` from migration 287; older snapshots don't have it and read as "no data".
@@ -115,6 +120,7 @@ export const METRIC_REGISTRY: Record<ProcessKey, Record<string, MetricDef>> = {
     },
     callbacks_kept_pct: {
       label: "Call-backs kept on the day",
+      compareLabel: "Call-backs kept on the day",
       unit: "percent",
       read: (r) => pct(num(r, "callbacks_kept"), num(r, "callbacks_booked")),
       fraction: (r) => frac(num(r, "callbacks_kept"), num(r, "callbacks_booked")),
@@ -122,6 +128,7 @@ export const METRIC_REGISTRY: Record<ProcessKey, Record<string, MetricDef>> = {
     },
     reached_qualified_pct: {
       label: "Reached Qualified or later",
+      compareLabel: "New leads that reached Qualified",
       fractionNoun: "Qualified+",
       minDays: 14,
       unit: "percent",
@@ -181,12 +188,16 @@ export interface TargetOption {
   label: string;
   /** The target in words for the map card ("within 1 working hour"). */
   phrase: string;
+  /** How a change that switches TO this option is titled: "First contact: count in working hours". */
+  countAs: string;
+  /** Shown under the target input when this option is picked. */
+  hint?: string;
 }
 export const TARGET_OPTIONS: Partial<Record<ProcessKey, Record<string, TargetOption[]>>> = {
   new_lead_first_call: {
     first_contact: [
-      { metric: "first_contact_1h_pct", label: "hour", phrase: "within 1 hour" },
-      { metric: "first_contact_1wh_pct", label: "working hour", phrase: "within 1 working hour" },
+      { metric: "first_contact_1h_pct", label: "hour", phrase: "within 1 hour", countAs: "count in hours" },
+      { metric: "first_contact_1wh_pct", label: "working hour", phrase: "within 1 working hour", countAs: "count in working hours", hint: "A lead that arrives outside office hours (9–6, every day) is timed from the next time the office opens." },
     ],
   },
 };

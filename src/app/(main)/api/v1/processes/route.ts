@@ -3,7 +3,9 @@ import { apiError, apiSuccess } from "@/lib/api/response";
 import { logger } from "@/lib/logger";
 import { resolveProcessesContext } from "@/industries/education-consultancy/features/processes/server/context";
 import { ensureTenantBaselines } from "@/industries/education-consultancy/features/processes/server/baseline-setup";
-import { loadImprovements, loadProcessViews, parseWindowDays } from "@/industries/education-consultancy/features/processes/server/load-processes";
+import { loadProcessViews, parseWindowDays } from "@/industries/education-consultancy/features/processes/server/load-processes";
+import { loadImprovementLog } from "@/industries/education-consultancy/features/processes/server/compare";
+import { groupLogEvents } from "@/industries/education-consultancy/features/processes/lib/improvements-log";
 
 // Processes (EDGEX-109 P1): the list with each process's key number against its target. The FIRST visit by an owner/admin creates the
 // 4 as-is baseline drafts (idempotent). Owner/admin, education_consultancy only.
@@ -14,7 +16,9 @@ export async function GET(request: NextRequest) {
     const { ctx } = gate;
     const created = await ensureTenantBaselines(ctx.db, ctx.auth.tenantId, ctx.tenantName);
     const windowDays = parseWindowDays(request.nextUrl.searchParams.get("days"));
-    return apiSuccess({ windowDays, baselinesCreated: created, processes: await loadProcessViews(ctx, windowDays), improvements: await loadImprovements(ctx.db) });
+    // The card shows the latest 4 real events; the cheap variant (no "30 days on", which needs the metrics SQL).
+    const events = await loadImprovementLog(ctx, null, new Date(), { measures: false });
+    return apiSuccess({ windowDays, baselinesCreated: created, processes: await loadProcessViews(ctx, windowDays), improvements: groupLogEvents(events, ctx.tz).slice(0, 4), tz: ctx.tz });
   } catch (err) {
     logger.error({ err, route: "processes" }, "Failed to load Processes");
     return apiError("DB_ERROR", "Failed to load Processes", 500);

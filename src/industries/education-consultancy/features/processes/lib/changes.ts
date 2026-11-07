@@ -170,17 +170,102 @@ export function describeDrives(change: Pick<ChangeLike, "field" | "after">, step
 
 const FIELD_WORD: Record<ChangeField, string> = { target: "target", wording: "wording", who: "who" };
 
-/** "First contact: target" / "Trigger: wording". Used for the review list and the version's change_summary. */
-export function changeTitle(change: Pick<ChangeLike, "part" | "field">, spec: ProcessSpec | null): string {
+const titleCase = (slug: string) =>
+  slug
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((w) => w[0].toUpperCase() + w.slice(1))
+    .join(" ");
+
+/** Position slugs -> names (the tenant's own where known; `branch-manager` reads "Manager"). */
+const slugNames = (slugs: unknown, nameBySlug: ReadonlyMap<string, string>): string[] =>
+  (Array.isArray(slugs) ? (slugs as unknown[]).filter((x): x is string => typeof x === "string") : []).map((s) => (s === "branch-manager" ? "Manager" : (nameBySlug.get(s) ?? titleCase(s))));
+
+export interface TitleOpts {
+  /** Lets a target change name the option it switches to ("count in working hours"). */
+  processKey?: ProcessKey;
+  nameBySlug?: ReadonlyMap<string, string>;
+}
+
+/** What a title needs of a change. `before` is the live value at suggestion time (stored on the row). */
+export interface TitleChange {
+  part: string;
+  field: ChangeField;
+  before?: unknown;
+  after?: unknown;
+}
+
+const partLabel = (part: ChangePart, spec: ProcessSpec | null): string =>
+  part.kind === "trigger" ? "Trigger" : part.kind === "done" ? "Done when" : part.kind === "exceptions" ? "Exceptions" : (spec?.steps.find((s) => s.key === part.key)?.title ?? part.key);
+
+/**
+ * The change's readable title (the mockup's S2/S3/S4 wording), generated from the change itself because the suggest form has no title field:
+ *  target + option switch -> "First contact: count in working hours"; value only -> "First contact: target 80% -> 75%";
+ *  both -> "First contact: count in working hours, target 75%"; wording -> "<Step>: new wording" ("Exceptions: updated");
+ *  who -> "<Step>: now Counselor, Lead Executive".
+ * Falls back to "<Part>: target|wording|who" when the value can't be read.
+ */
+export function changeTitle(change: TitleChange, spec: ProcessSpec | null, opts: TitleOpts = {}): string {
   let part: ChangePart;
   try {
     part = parsePart(change.part);
   } catch {
     return `${change.part}: ${FIELD_WORD[change.field]}`;
   }
-  const label =
-    part.kind === "trigger" ? "Trigger" : part.kind === "done" ? "Done when" : part.kind === "exceptions" ? "Exceptions" : (spec?.steps.find((s) => s.key === part.key)?.title ?? part.key);
-  return `${label}: ${FIELD_WORD[change.field]}`;
+  const label = partLabel(part, spec);
+  const generic = `${label}: ${FIELD_WORD[change.field]}`;
+
+  if (change.field === "who") {
+    const names = slugNames(change.after, opts.nameBySlug ?? new Map());
+    return Array.isArray(change.after) ? `${label}: now ${names.join(", ") || "nobody"}` : generic;
+  }
+  if (change.field === "wording") return part.kind === "exceptions" ? `${label}: updated` : `${label}: new wording`;
+
+  // target
+  const after = targetAfterSchema.safeParse(change.after);
+  if (!after.success || part.kind !== "step") return generic;
+  const before = targetAfterSchema.safeParse(change.before);
+  const step = spec?.steps.find((s) => s.key === part.key);
+  const reg = opts.processKey ? METRIC_REGISTRY[opts.processKey] : undefined;
+  const unitOf = (metric: string | undefined): MetricUnit => (metric && reg?.[metric]?.unit) || step?.target.unit || "percent";
+  const beforeMetric = before.success ? before.data.metric : step?.target.metric;
+  const switched = after.data.metric !== undefined && beforeMetric !== undefined && after.data.metric !== beforeMetric;
+  const valueChanged = before.success ? before.data.value !== after.data.value : true;
+  const option = switched && opts.processKey ? targetOptionsFor(opts.processKey, part.key).find((o) => o.metric === after.data.metric) : undefined;
+  const afterWords = fmtValue(after.data.value, unitOf(after.data.metric ?? beforeMetric));
+
+  const bits: string[] = [];
+  if (switched) bits.push(option?.countAs ?? "different measure");
+  if (valueChanged || bits.length === 0) {
+    bits.push(switched || !before.success ? `target ${afterWords}` : `target ${fmtValue(before.data.value, unitOf(beforeMetric))} → ${afterWords}`);
+  }
+  return `${label}: ${bits.join(", ")}`;
+}
+
+/**
+ * A change's value in words for the review cards (v1 now / proposed): a target reads "within 1 working hour · target 80%", who reads the
+ * position names, wording reads as written, exceptions as bullet lines. `fallback` (the change's `before`) supplies a target's metric when
+ * `after` omits it.
+ */
+export function describeValue(processKey: ProcessKey, spec: ProcessSpec | null, partRaw: string, field: ChangeField, value: unknown, fallback?: unknown, nameBySlug: ReadonlyMap<string, string> = new Map()): string {
+  if (field === "who") return slugNames(value, nameBySlug).join(", ") || "Nobody";
+  if (field === "wording") return Array.isArray(value) ? (value as unknown[]).map((v) => `• ${String(v)}`).join("\n") || "No exceptions" : typeof value === "string" ? value : "—";
+  const v = targetAfterSchema.safeParse(value);
+  if (!v.success) return "—";
+  let stepKey: string | null = null;
+  try {
+    const part = parsePart(partRaw);
+    stepKey = part.kind === "step" ? part.key : null;
+  } catch {
+    /* not a step */
+  }
+  const step = stepKey ? spec?.steps.find((s) => s.key === stepKey) : undefined;
+  const fb = targetAfterSchema.safeParse(fallback);
+  const metric = v.data.metric ?? (fb.success ? fb.data.metric : undefined) ?? step?.target.metric;
+  const unit = (metric && METRIC_REGISTRY[processKey]?.[metric]?.unit) || step?.target.unit || "percent";
+  const val = fmtValue(v.data.value, unit);
+  const phrase = (stepKey && metric ? targetOptionsFor(processKey, stepKey).find((o) => o.metric === metric)?.phrase : undefined) ?? (metric === step?.target.metric ? step?.targetText : undefined);
+  return phrase ? `${phrase} · target ${val}` : `${step?.target.op === "<=" ? "at most" : "at least"} ${val}`;
 }
 
 /** "now -> proposed" words for a target value, e.g. "at least 80%". */

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowSquareOutIcon, CaretRightIcon, TreeStructureIcon } from "@/components/icons";
+import { ArrowSquareOutIcon, PencilSimpleIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { DEFAULT_WINDOW_DAYS, WINDOW_DAYS } from "../lib/keys";
 import { fmtTarget, STATUS_TONE } from "../lib/format";
@@ -10,8 +10,10 @@ import type { StepStatus } from "../lib/metrics";
 import { fmtDay, lastReviewed, writtenFrom } from "../lib/view";
 import type { ProcessView, VersionRow } from "../server/load-processes";
 import { when } from "./processes-page";
+import { Crumb, PAGE, VChip } from "./parts";
 import { SopTable } from "./sop-table";
 import { StepBar } from "./step-bar";
+import { SuggestSheet } from "./suggest-sheet";
 import { UnderlineTabs } from "./underline-tabs";
 import { useProcessesFetch } from "./use-processes";
 
@@ -20,6 +22,7 @@ interface DetailResponse {
   windowDays: number;
   process: ProcessView;
   versions: VersionListRow[];
+  positions: Array<{ slug: string; name: string }>;
 }
 type Tab = "map" | "sop" | "versions";
 
@@ -30,9 +33,18 @@ export function ProcessDetail({ processKey, tenantName }: { processKey: string; 
   const [tab, setTab] = useState<Tab>("map");
   const [busy, setBusy] = useState(false);
   const [approveError, setApproveError] = useState<string | null>(null);
+  const [sheet, setSheet] = useState(false);
   const { data, loading, error, reload } = useProcessesFetch<DetailResponse>(`/api/v1/processes/${processKey}?days=${days}`);
 
+  // An evidence chip on the review page links to `#step-<key>`: the map renders after the fetch, so scroll once it is there.
+  useEffect(() => {
+    if (loading || !data || typeof window === "undefined" || !window.location.hash) return;
+    document.getElementById(window.location.hash.slice(1))?.scrollIntoView({ block: "center" });
+  }, [data, loading, tab]);
+
   const p = data?.process;
+  const canSuggest = p?.shown?.status === "live" && !!p.spec;
+  const nextVersion = Math.max(0, ...(data?.versions.map((v) => v.version) ?? [])) + 1;
   const approve = async () => {
     if (!p?.shown) return;
     setBusy(true);
@@ -49,17 +61,8 @@ export function ProcessDetail({ processKey, tenantName }: { processKey: string; 
   };
 
   return (
-    <div className="mx-auto max-w-[1100px] px-4 py-6 sm:px-6">
-      <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-[13px] text-ds-muted">
-        <TreeStructureIcon size={14} aria-hidden />
-        <Link href="/processes" className="hover:text-ds-ink">Processes</Link>
-        {p ? (
-          <>
-            <CaretRightIcon size={11} aria-hidden />
-            <span className="text-ds-ink">{p.name}</span>
-          </>
-        ) : null}
-      </nav>
+    <div className={PAGE}>
+      <Crumb items={p ? [{ label: "Processes", href: "/processes" }, { label: p.name }] : [{ label: "Processes", href: "/processes" }]} />
 
       {error ? (
         <div className="mt-4 rounded-ds-lg border border-ds-border bg-ds-surface p-4 text-[13px] text-ds-bad">
@@ -69,14 +72,14 @@ export function ProcessDetail({ processKey, tenantName }: { processKey: string; 
         <div className="mt-4 text-[13px] text-ds-muted">Loading…</div>
       ) : p ? (
         <>
-          <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
+          <div className="mt-3 flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
             <div>
               <div className="flex flex-wrap items-center gap-3">
                 <h1 className="text-[26px] font-semibold leading-tight tracking-[-0.02em] text-ds-ink">{p.name}</h1>
                 {p.shown ? (
-                  <span className={`rounded-ds-full px-2 py-0.5 text-[11.5px] font-medium ${p.shown.status === "draft" ? "bg-ds-warn-soft text-ds-warn" : "bg-ds-good-soft text-ds-good"}`}>
+                  <VChip tone={p.shown.status === "draft" ? "warn" : "live"}>
                     v{p.shown.version} {p.shown.status === "draft" ? "draft" : STATUS_LABEL[p.shown.status].toLowerCase()}
-                  </span>
+                  </VChip>
                 ) : null}
               </div>
               <p className="mt-1 text-[13.5px] text-ds-muted">
@@ -85,6 +88,17 @@ export function ProcessDetail({ processKey, tenantName }: { processKey: string; 
                   The numbers are from your last <DaysMenu days={days} onChange={setDays} /> days.
                 </strong>
               </p>
+            </div>
+            <div className="flex flex-col items-end gap-1">
+              <div className="flex gap-2">
+                <Button look="v2" variant="secondary" disabled={!canSuggest} onClick={() => setSheet(true)}>
+                  <PencilSimpleIcon size={14} aria-hidden /> Suggest a change
+                </Button>
+                <Button look="v2" variant="secondary" asChild>
+                  <Link href={`/processes/${p.key}/versions`}>Versions</Link>
+                </Button>
+              </div>
+              {!canSuggest ? <span className="text-[12px] text-ds-muted">Approve the baseline first</span> : null}
             </div>
           </div>
 
@@ -157,9 +171,23 @@ export function ProcessDetail({ processKey, tenantName }: { processKey: string; 
                   <span className="text-ds-muted">{v.source === "system" ? "Written by EdgeX from your data" : v.source === "agent" ? "Suggested by Orca" : "Written by a person"}</span>
                   <span className="ml-auto text-ds-faint">{v.approved_at ? `approved ${when(v.approved_at)}` : `created ${when(v.created_at)}`}</span>
                   {v.change_summary ? <p className="basis-full text-[12.5px] text-ds-text">{v.change_summary}</p> : null}
+                  {v.status === "draft" && p.draft?.id === v.id ? (
+                    <Link href={`/processes/${p.key}/draft`} className="basis-full text-[12.5px] font-medium text-ds-accent hover:underline">
+                      Review draft v{v.version} ({p.draft.changeCount} {p.draft.changeCount === 1 ? "change" : "changes"})
+                    </Link>
+                  ) : null}
+                  {v.approved_at && v.version >= 2 ? (
+                    <Link href={`/processes/${p.key}/versions?version=${v.id}`} className="basis-full text-[12.5px] font-medium text-ds-accent hover:underline">
+                      Before → after
+                    </Link>
+                  ) : null}
                 </li>
               ))}
             </ul>
+          ) : null}
+
+          {canSuggest && p.shown ? (
+            <SuggestSheet open={sheet} onOpenChange={setSheet} p={p} days={days} positions={data.positions} nextVersion={nextVersion} draftChanges={p.draft?.changeCount ?? 0} liveVersion={p.shown.version} onAdded={reload} />
           ) : null}
         </>
       ) : null}
@@ -214,7 +242,7 @@ function ProcessMap({ p, spec, days }: { p: ProcessView; spec: NonNullable<Proce
       className="mt-3.5 grid divide-y divide-ds-divider overflow-hidden rounded-[14px] border border-ds-border bg-ds-surface lg:divide-x lg:divide-y-0 lg:[grid-template-columns:repeat(var(--cols),minmax(0,1fr))]"
       style={{ "--cols": cols } as React.CSSProperties}
     >
-      <li className={`relative min-w-0 px-3.5 pb-3 pt-3.5 ${total > 1 ? ARROW : ""}`}>
+      <li id="step-trigger" className={`relative min-w-0 px-3.5 pb-3 pt-3.5 ${total > 1 ? ARROW : ""}`}>
         <div className="flex items-center gap-[7px]">
           <Circle n={1} />
           <Label>Trigger</Label>
@@ -247,7 +275,7 @@ function ProcessMap({ p, spec, days }: { p: ProcessView; spec: NonNullable<Proce
         const tone = STATUS_TONE[s.status];
         const last = i === p.steps.length - 1;
         return (
-          <li key={s.key} className={`relative min-w-0 px-3.5 pb-3 pt-3.5 ${last ? "" : ARROW}`}>
+          <li key={s.key} id={`step-${s.key}`} className={`relative min-w-0 px-3.5 pb-3 pt-3.5 ${last ? "" : ARROW}`}>
             <div className="flex items-center gap-[7px]">
               <Circle n={i + 2} status={s.status} />
               <Label>{s.kind === "done" ? "Done when" : "Step"}</Label>

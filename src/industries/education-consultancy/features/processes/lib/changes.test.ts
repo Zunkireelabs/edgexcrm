@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { applyChanges, changeTitle, currentValue, describeDrives, parsePart, changeInputSchema } from "./changes";
+import { applyChanges, changeTitle, describeValue, currentValue, describeDrives, parsePart, changeInputSchema } from "./changes";
 import { buildBaselineSpec } from "./baseline";
 import { ADMIZZ_SETUP } from "./fixtures";
 import { METRIC_REGISTRY, metricMinDays, targetOptionsFor } from "./metrics";
@@ -141,13 +141,56 @@ describe("describeDrives", () => {
   });
 });
 
-describe("changeTitle", () => {
-  it("names the part", () => {
+describe("changeTitle (readable, from the change itself)", () => {
+  const K = "new_lead_first_call" as const;
+  const names = new Map([["counselor", "Counselor"], ["lead-executive", "Lead Executive"]]);
+  it("target + option switch -> 'count in working hours'", () => {
+    const c = { part: "step:first_contact", field: "target" as const, before: { value: 80, metric: "first_contact_1h_pct" }, after: { value: 80, metric: "first_contact_1wh_pct" } };
+    expect(changeTitle(c, live(), { processKey: K })).toBe("First contact: count in working hours, target 80%".replace(", target 80%", ""));
+  });
+  it("target value only -> 'target 80% → 75%'", () => {
+    const c = { part: "step:first_contact", field: "target" as const, before: { value: 80, metric: "first_contact_1h_pct" }, after: { value: 75 } };
+    expect(changeTitle(c, live(), { processKey: K })).toBe("First contact: target 80% → 75%");
+  });
+  it("both -> 'count in working hours, target 75%'", () => {
+    const c = { part: "step:first_contact", field: "target" as const, before: { value: 80, metric: "first_contact_1h_pct" }, after: { value: 75, metric: "first_contact_1wh_pct" } };
+    expect(changeTitle(c, live(), { processKey: K })).toBe("First contact: count in working hours, target 75%");
+  });
+  it("switching back to the plain hour is titled too", () => {
+    const c = { part: "step:first_contact", field: "target" as const, before: { value: 80, metric: "first_contact_1wh_pct" }, after: { value: 80, metric: "first_contact_1h_pct" } };
+    expect(changeTitle(c, live(), { processKey: K })).toBe("First contact: count in hours");
+  });
+  it("an unreadable target value falls back to '<Step>: target'", () => {
+    expect(changeTitle({ part: "step:first_contact", field: "target", after: "x" }, live(), { processKey: K })).toBe("First contact: target");
+  });
+  it("wording / who / exceptions", () => {
     const s = live();
-    expect(changeTitle({ part: "step:first_contact", field: "target" }, s)).toBe("First contact: target");
-    expect(changeTitle({ part: "trigger", field: "wording" }, s)).toBe("Trigger: wording");
-    expect(changeTitle({ part: "done", field: "wording" }, null)).toBe("Done when: wording");
-    expect(changeTitle({ part: "step:zzz", field: "who" }, s)).toBe("zzz: who");
+    expect(changeTitle({ part: "step:first_contact", field: "wording", after: "x" }, s)).toBe("First contact: new wording");
+    expect(changeTitle({ part: "trigger", field: "wording", after: "x" }, s)).toBe("Trigger: new wording");
+    expect(changeTitle({ part: "exceptions", field: "wording", after: ["a"] }, s)).toBe("Exceptions: updated");
+    expect(changeTitle({ part: "step:first_contact", field: "who", after: ["counselor", "lead-executive"] }, s, { nameBySlug: names })).toBe("First contact: now Counselor, Lead Executive");
+    expect(changeTitle({ part: "step:first_contact", field: "who", after: ["branch-manager"] }, s)).toBe("First contact: now Manager");
+    expect(changeTitle({ part: "step:first_contact", field: "who", after: ["some-slug"] }, s)).toBe("First contact: now Some Slug");
+  });
+  it("unknown part / step still reads", () => {
+    expect(changeTitle({ part: "weird", field: "wording" }, live())).toBe("weird: wording");
+    expect(changeTitle({ part: "step:zzz", field: "wording", after: "x" }, live())).toBe("zzz: new wording");
+    expect(changeTitle({ part: "done", field: "wording", after: "x" }, null)).toBe("Done when: new wording");
+  });
+});
+
+describe("describeValue (the review cards' now / proposed words)", () => {
+  const K = "new_lead_first_call" as const;
+  it("a target with an option reads its phrase; without, the step's own words", () => {
+    expect(describeValue(K, live(), "step:first_contact", "target", { value: 75, metric: "first_contact_1wh_pct" })).toBe("within 1 working hour · target 75%");
+    expect(describeValue(K, live(), "step:first_contact", "target", { value: 75 }, { value: 80, metric: "first_contact_1h_pct" })).toBe("within 1 hour · target 75%");
+    expect(describeValue(K, live(), "step:assign", "target", { value: 90 })).toMatch(/target 90%$/);
+  });
+  it("who -> names; wording -> as written; exceptions -> bullets", () => {
+    expect(describeValue(K, live(), "step:first_contact", "who", ["counselor", "lead-executive"], undefined, new Map([["counselor", "Counselor"]]))).toBe("Counselor, Lead Executive");
+    expect(describeValue(K, live(), "trigger", "wording", "New text")).toBe("New text");
+    expect(describeValue(K, live(), "exceptions", "wording", ["a", "b"])).toBe("• a\n• b");
+    expect(describeValue(K, live(), "exceptions", "wording", [])).toBe("No exceptions");
   });
 });
 

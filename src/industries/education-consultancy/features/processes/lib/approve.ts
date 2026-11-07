@@ -1,5 +1,5 @@
 import { applyChanges, changeTitle } from "./changes";
-import { isProcessKey } from "./keys";
+import { isProcessKey, type ProcessKey } from "./keys";
 import { safeParseProcessSpec } from "./spec";
 
 /** A live version is due for review this many days after it was approved. */
@@ -20,6 +20,7 @@ export interface TakenChange {
   id: string;
   part: string;
   field: "target" | "wording" | "who";
+  before: unknown;
   after: unknown;
   taken: boolean;
 }
@@ -35,6 +36,8 @@ export interface ApproveStore {
   listChanges(versionId: string): Promise<TakenChange[]>;
   getSpec(versionId: string): Promise<unknown | null>;
   positionSlugs(): Promise<ReadonlySet<string>>;
+  /** Position slug -> name, for the change titles ("now Counselor"). Optional: titles fall back to title-cased slugs. */
+  positionNames?(): Promise<ReadonlyMap<string, string>>;
   /** Write the rebuilt spec + summary into the draft (only while it is still a draft). */
   setDraftSpec(versionId: string, spec: unknown, changeSummary: string): Promise<boolean>;
   /** Mark the ticked changes `taken` and the rest `not_taken`. */
@@ -73,7 +76,8 @@ export async function approveVersion(
     } catch (e) {
       return { kind: "invalid", error: e instanceof Error ? e.message : String(e) };
     }
-    const summary = taken.map((c) => changeTitle(c, base.spec)).join("; ");
+    const nameBySlug = (await store.positionNames?.()) ?? new Map<string, string>();
+    const summary = taken.map((c) => changeTitle(c, base.spec, { processKey: args.processKey as ProcessKey, nameBySlug })).join("; ");
     if (!(await store.setDraftSpec(v.id, rebuilt, summary))) return { kind: "not_a_draft", status: "changed" };
     await store.markChanges(
       taken.map((c) => c.id),

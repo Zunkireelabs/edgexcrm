@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { approveVersion, REVIEW_EVERY_DAYS, type ApproveStore } from "./approve";
 import { canApproveProcess } from "../server/context";
-import { buildImprovements } from "./improvements";
 
 function store(init: { versions: Array<{ id: string; status: string }>; owner?: string | null }) {
   const versions = init.versions.map((v) => ({ ...v, process_id: "p1" }));
@@ -64,18 +63,5 @@ describe("who can approve", () => {
     expect(canApproveProcess({ userId: "a", role: "admin" }, "a")).toBe(true);
     expect(canApproveProcess({ userId: "a", role: "admin" }, "b")).toBe(false);
     expect(canApproveProcess({ userId: "a", role: "admin" }, null)).toBe(false);
-  });
-});
-
-describe("buildImprovements (real events only)", () => {
-  it("is empty with no versions", () => expect(buildImprovements([])).toEqual([]));
-  it("groups the baselines and lists approvals, newest first", () => {
-    const rows = (["new_lead_first_call", "visa_to_enrolled"] as const).map((key, i) => ({
-      key, version: 1, source: "system" as const, created_at: `2026-11-07T10:0${i}:00Z`, approved_at: i === 0 ? "2026-11-08T09:00:00Z" : null,
-    }));
-    const ev = buildImprovements(rows);
-    expect(ev.map((e) => e.kind)).toEqual(["approved", "baseline"]);
-    expect(ev[1].text).toBe("2 processes written from your data (v1 as-is baseline)");
-    expect(ev[0].text).toContain("v1 approved");
   });
 });

@@ -18,7 +18,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const windowDays = parseWindowDays(request.nextUrl.searchParams.get("days"));
     const [view] = await loadProcessViews(ctx, windowDays, key);
     if (!view) return apiNotFound("Process");
-    return apiSuccess({ windowDays, process: view, versions: await loadProcessVersions(ctx.db, view.processId) });
+    const { data: positions } = await ctx.db.from("positions").select("slug, name");
+    return apiSuccess({ windowDays, process: view, versions: await loadProcessVersions(ctx.db, view.processId), positions: (positions ?? []) as unknown as Array<{ slug: string; name: string }> });
   } catch (err) {
     logger.error({ err, route: "processes/[key]" }, "Failed to load process");
     return apiError("DB_ERROR", "Failed to load process", 500);

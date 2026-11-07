@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { buildMeasures, changeValue, comparePeriods, measureMetrics, specMetrics, waitText } from "./compare";
 import { buildBaselineSpec } from "./baseline";
 import { ADMIZZ_NEW_LEAD_RAW, ADMIZZ_SETUP } from "./fixtures";
-import { buildImprovementLog, thirtyDaysOn, type LogChange, type LogVersion } from "./improvements-log";
+import { buildImprovementLog, dayKey, groupLogEvents, thirtyDaysOn, type LogChange, type LogVersion } from "./improvements-log";
 import { previousVersion } from "../server/compare";
 
 const DAY = 86_400_000;
@@ -21,6 +21,14 @@ describe("comparePeriods", () => {
   });
   it("approved 'now' = 0 days live", () => {
     expect(comparePeriods(approved, approved).daysLive).toBe(0);
+  });
+});
+
+describe("compare labels (the S3 wording) and direction", () => {
+  it("each measure uses its compareLabel, falling back to label, and knows which way is better", () => {
+    const ms = buildMeasures("new_lead_first_call", ["owner_wait_median_min", "first_contact_1wh_pct", "callbacks_kept_pct", "reached_qualified_pct", "arrived"], null, null, 30);
+    expect(ms.map((m) => m.label)).toEqual(["Wait for an owner (median)", "Called within 1 working hour", "Call-backs kept on the day", "New leads that reached Qualified", "Leads that arrived"]);
+    expect(ms.map((m) => m.better)).toEqual(["down", "up", "up", "up", "down"]);
   });
 });
 
@@ -108,7 +116,7 @@ describe("improvements log", () => {
     v({ id: "v2", version: 2, status: "live", created_at: "2026-10-05T00:00:00Z", approved_at: "2026-10-10T00:00:00Z", approved_by: "u1" }),
     v({ id: "v3", version: 3, status: "rejected", created_at: "2026-11-01T00:00:00Z", rejected_at: "2026-11-02T00:00:00Z", rejected_by: "u1", rejected_reason: "Not now" }),
   ];
-  const changes: LogChange[] = [{ id: "c1", processKey: "new_lead_first_call", versionId: "v2", title: "First contact: target", author_user_id: "u1", author_kind: "person", created_at: "2026-10-06T00:00:00Z" }];
+  const changes: LogChange[] = [{ id: "c1", processKey: "new_lead_first_call", versionId: "v2", title: "First contact: count in working hours", why: "Almost half our new leads arrive after 6 pm, so nobody can call them within an hour. Count the hour from 9 am instead.", status: "taken", author_user_id: "u1", author_kind: "person", created_at: "2026-10-06T00:00:00Z" }];
 
   it("derives baseline, suggested, approved, rejected and '30 days on', newest first", () => {
     const log = buildImprovementLog({ versions, changes, names, measuresByVersion: new Map([["v2", []]]), now: new Date("2026-11-20T00:00:00Z") });
@@ -116,7 +124,45 @@ describe("improvements log", () => {
     expect([...log].map((e) => e.at)).toEqual([...log].map((e) => e.at).sort().reverse());
     const rej = log.find((e) => e.kind === "rejected")!;
     expect(rej).toMatchObject({ actor: "Manish", reason: "Not now", text: "New lead → first call: draft v3 rejected" });
-    expect(log.find((e) => e.kind === "suggested")).toMatchObject({ actor: "Manish", text: "New lead → first call: First contact: target suggested" });
+    expect(log.find((e) => e.kind === "suggested")).toMatchObject({ actor: "Manish", text: "New lead → first call: change suggested" });
+  });
+  it("the mockup's meta lines: suggested, live (taken / not taken), rejected, 30 days on", () => {
+    const more: LogChange[] = [...changes, { ...changes[0], id: "c2", title: "Call-back kept: new wording", status: "not_taken", created_at: "2026-10-07T00:00:00Z" }];
+    const log = buildImprovementLog({ versions, changes: more, names, measuresByVersion: new Map(), now: new Date("2026-11-20T00:00:00Z") });
+    expect(log.find((e) => e.kind === "suggested")!.meta).toBe('Manish · Call-back kept: new wording · "Almost half our new leads arrive after 6 pm, so nobody can call them within an h…"');
+    expect(log.find((e) => e.kind === "approved" && e.version === 2)).toMatchObject({
+      text: "New lead → first call: v2 live",
+      meta: "1 change: First contact: count in working hours · suggested by Manish, approved by Manish · 1 change not taken",
+    });
+    expect(log.find((e) => e.kind === "rejected")!.meta).toBe('Rejected by Manish · "Not now"');
+    expect(log.find((e) => e.kind === "thirty_days")).toMatchObject({ text: "New lead → first call: v2, 30 days on" });
+    expect(log.find((e) => e.kind === "thirty_days")!.meta).toMatch(/^Same measures as v1, /);
+    expect(log.find((e) => e.kind === "approved" && e.version === 1)).toMatchObject({ text: "New lead → first call: baseline approved", meta: "v1 approved by Manish" });
+  });
+  it("skipThirtyDays leaves them out (the cheap list-card variant)", () => {
+    const log = buildImprovementLog({ versions, changes, names, measuresByVersion: new Map(), now: new Date("2026-11-20T00:00:00Z"), skipThirtyDays: true });
+    expect(log.some((e) => e.kind === "thirty_days")).toBe(false);
+  });
+  it("groups baselines written / approved the same day by the same person, leaves the rest", () => {
+    const keys = ["new_lead_first_call", "visa_to_enrolled", "dropping_a_student", "leaver_handover"] as const;
+    const vs: LogVersion[] = keys.map((k, i) => v({ id: `b${i}`, processKey: k, version: 1, source: "system", status: "live", created_at: `2026-11-07T10:0${i}:00Z`, approved_at: `2026-11-07T11:0${i}:00Z`, approved_by: "u1" }));
+    const log = groupLogEvents(buildImprovementLog({ versions: vs, changes: [], names, measuresByVersion: new Map(), now: new Date("2026-11-08T00:00:00Z") }), "UTC");
+    expect(log.map((e) => e.text)).toEqual(["4 baselines approved", "4 processes written from your data"]);
+    expect(log[0].processKeys).toEqual([...keys].reverse());
+    expect(log[0].meta).toBe("Manish approved v1 of When someone leaves the team, Dropping a student, Visa → Enrolled, New lead → first call");
+    expect(log[1].meta).toMatch(/^v1 as-is baseline of each, from /);
+  });
+  it("two baselines on different days stay two rows", () => {
+    const vs: LogVersion[] = [
+      v({ id: "a", version: 1, source: "system", created_at: "2026-11-07T10:00:00Z" }),
+      v({ id: "b", processKey: "visa_to_enrolled", version: 1, source: "system", created_at: "2026-11-09T10:00:00Z" }),
+    ];
+    const log = groupLogEvents(buildImprovementLog({ versions: vs, changes: [], names, measuresByVersion: new Map(), now: new Date("2026-11-10T00:00:00Z") }), "UTC");
+    expect(log).toHaveLength(2);
+  });
+  it("dayKey follows the tenant timezone", () => {
+    expect(dayKey("2026-11-07T20:00:00Z", "UTC")).toBe("2026-11-07");
+    expect(dayKey("2026-11-07T20:00:00Z", "Asia/Kathmandu")).toBe("2026-11-08");
   });
   it("before -> after button: approved v2+ and every '30 days on', not v1", () => {
     const log = buildImprovementLog({ versions, changes, names, measuresByVersion: new Map(), now: new Date("2026-11-20T00:00:00Z") });

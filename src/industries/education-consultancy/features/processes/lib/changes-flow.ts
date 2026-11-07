@@ -168,8 +168,12 @@ export const REJECT_REASON_MAX = 300;
 
 export interface RejectStore {
   getVersion(processKey: string, versionId: string): Promise<{ id: string; process_id: string; status: string; owner_user_id: string | null } | null>;
-  /** draft -> rejected, conditional on the version still being a draft. */
-  setRejected(versionId: string, by: { userId: string; at: string; reason: string }): Promise<boolean>;
+  /** The draft's change titles joined "; " (becomes the rejected version's change_summary), or null when it has none. */
+  changeSummary(processKey: string, versionId: string): Promise<string | null>;
+  /** draft -> rejected, conditional on the version still being a draft. `summary` (when given) replaces the placeholder change_summary. */
+  setRejected(versionId: string, by: { userId: string; at: string; reason: string; summary: string | null }): Promise<boolean>;
+  /** A rejected draft never leaves a change `open`: mark its still-open changes `not_taken`. */
+  closeChanges(versionId: string): Promise<void>;
 }
 
 export type RejectOutcome =
@@ -179,7 +183,7 @@ export type RejectOutcome =
   | { kind: "not_a_draft"; status: string }
   | { kind: "reason_required" };
 
-/** Reject a draft with a one-line reason (1-300 chars). The draft is kept as `rejected`; its changes stay as they were. */
+/** Reject a draft with a one-line reason (1-300 chars). The draft is kept as `rejected`; its open changes become `not_taken`. */
 export async function rejectDraft(
   store: RejectStore,
   args: { processKey: string; versionId: string; userId: string; canApprove: (ownerUserId: string | null) => boolean; reason: unknown; now: Date },
@@ -190,6 +194,9 @@ export async function rejectDraft(
   const reason = typeof args.reason === "string" ? args.reason.trim() : "";
   if (reason.length < 1 || reason.length > REJECT_REASON_MAX) return { kind: "reason_required" };
   if (v.status !== "draft") return { kind: "not_a_draft", status: v.status };
-  const ok = await store.setRejected(v.id, { userId: args.userId, at: args.now.toISOString(), reason });
-  return ok ? { kind: "ok", processId: v.process_id } : { kind: "not_a_draft", status: "changed" };
+  const summary = await store.changeSummary(args.processKey, v.id);
+  const ok = await store.setRejected(v.id, { userId: args.userId, at: args.now.toISOString(), reason, summary });
+  if (!ok) return { kind: "not_a_draft", status: "changed" };
+  await store.closeChanges(v.id);
+  return { kind: "ok", processId: v.process_id };
 }

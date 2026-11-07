@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { approveVersion, type ApproveStore, type TakenChange } from "./approve";
 import { buildBaselineSpec } from "./baseline";
+import { changeTitle } from "./changes";
 import { editChange, rejectDraft, suggestChange, type ChangeRecord, type EditStore, type RejectStore, type SuggestStore } from "./changes-flow";
 import { ADMIZZ_SETUP } from "./fixtures";
 import { canApproveProcess } from "../server/context";
@@ -53,7 +54,12 @@ function world(opts: { withLive?: boolean; owner?: string | null } = {}) {
   };
   const reject: RejectStore = {
     async getVersion(_k, id) { const v = versions.find((x) => x.id === id); return v ? { id: v.id, process_id: "p1", status: v.status, owner_user_id: proc.owner_user_id } : null; },
-    async setRejected(id, by) { const v = versions.find((x) => x.id === id); if (!v || v.status !== "draft") return false; v.status = "rejected"; v.rejected = { reason: by.reason, by: by.userId }; return true; },
+    async changeSummary(_k, id) {
+      const mine = changes.filter((c) => c.version_id === id);
+      return mine.length ? mine.map((c) => changeTitle(c, versions[0].spec, { processKey: KEY })).join("; ") : null;
+    },
+    async setRejected(id, by) { const v = versions.find((x) => x.id === id); if (!v || v.status !== "draft") return false; v.status = "rejected"; v.rejected = { reason: by.reason, by: by.userId }; if (by.summary) v.summary = by.summary; return true; },
+    async closeChanges(id) { for (const c of changes) if (c.version_id === id && c.status === "open") c.status = "not_taken"; },
   };
   const approve: ApproveStore = {
     async getVersion(_k, id) { const v = versions.find((x) => x.id === id); return v ? { id: v.id, process_id: "p1", status: v.status, owner_user_id: proc.owner_user_id } : null; },
@@ -213,7 +219,7 @@ describe("approve a draft with changes", () => {
     expect(w.changes.map((c) => c.status)).toEqual(["taken", "not_taken", "taken"]);
     expect(w.changes).toHaveLength(3); // kept
     expect(w.versions[0].status).toBe("retired");
-    expect(v2.summary).toBe("First contact: target; Call-back kept: who");
+    expect(v2.summary).toBe("First contact: target 80% → 85%; Call-back kept: now Branch Manager".replace("Branch Manager", "Manager"));
   });
   it("an edited value is what lands", async () => {
     const w = world();
@@ -274,8 +280,18 @@ describe("rejectDraft", () => {
     expect((await rejectDraft(w.reject, { processKey: KEY, versionId: "v2", reason: "  Not now  ", ...owner })).kind).toBe("ok");
     expect(w.versions[1]).toMatchObject({ status: "rejected", rejected: { reason: "Not now", by: "owner-1" } });
     expect(w.changes).toHaveLength(1);
+    expect(w.changes[0].status).toBe("not_taken"); // never left `open` on a closed draft
+    expect(w.versions[1].summary).toBe("First contact: target 80% → 85%"); // titles, not "Suggested changes"
     const again = await sug(w, WORDING);
     expect(again.kind === "ok" && again.createdDraft && again.draft.version).toBe(3);
+  });
+  it("a change already taken or not taken is left as it was; only `open` ones close", async () => {
+    const w = world();
+    await sug(w, TARGET);
+    await sug(w, WORDING);
+    w.changes[0].status = "taken";
+    await rejectDraft(w.reject, { processKey: KEY, versionId: "v2", reason: "No", ...owner });
+    expect(w.changes.map((c) => c.status)).toEqual(["taken", "not_taken"]);
   });
   it("only a draft; unknown version", async () => {
     const w = world();

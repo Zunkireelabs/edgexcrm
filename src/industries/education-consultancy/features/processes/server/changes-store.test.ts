@@ -32,7 +32,9 @@ describe("new stores: a PostgREST error is an error, never 'not found' or 'empty
     await expect(dbEditStore(bad).getChange("c1")).rejects.toThrow(/change read/);
     await expect(dbEditStore(bad).updateChange("c1", {})).rejects.toThrow(/change update/);
     await expect(dbRejectStore(bad).getVersion("new_lead_first_call", "v1")).rejects.toThrow(/version read/);
-    await expect(dbRejectStore(bad).setRejected("v1", { userId: "u", at: "x", reason: "r" })).rejects.toThrow(/draft reject/);
+    await expect(dbRejectStore(bad).setRejected("v1", { userId: "u", at: "x", reason: "r", summary: null })).rejects.toThrow(/draft reject/);
+    await expect(dbRejectStore(bad).changeSummary("new_lead_first_call", "v1")).rejects.toThrow(/changes read/);
+    await expect(dbRejectStore(bad).closeChanges("v1")).rejects.toThrow(/changes close/);
     await expect(dbApproveStore(bad).listChanges("v1")).rejects.toThrow(/changes read/);
     await expect(dbApproveStore(bad).setDraftSpec("v1", {}, "s")).rejects.toThrow(/draft spec write/);
     await expect(dbApproveStore(bad).markChanges(["c1"], [])).rejects.toThrow(/changes mark taken/);
@@ -47,6 +49,6 @@ describe("new stores: a PostgREST error is an error, never 'not found' or 'empty
   it("the draft write and the rejection are conditional on status = draft (a concurrent change makes them return false)", async () => {
     const none = fakeDb({ data: [], error: null }).db;
     expect(await dbApproveStore(none).setDraftSpec("v1", {}, "s")).toBe(false);
-    expect(await dbRejectStore(none).setRejected("v1", { userId: "u", at: "x", reason: "r" })).toBe(false);
+    expect(await dbRejectStore(none).setRejected("v1", { userId: "u", at: "x", reason: "r", summary: null })).toBe(false);
   });
 });

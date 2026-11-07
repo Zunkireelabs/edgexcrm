@@ -46,6 +46,8 @@ export interface Measure {
   metric: string;
   label: string;
   unit: MetricUnit;
+  /** Which way is an improvement: percent metrics up, times and counts down (every count here is a "how many are still stuck"). */
+  better: "up" | "down";
   before: number | null;
   after: number | null;
   /** Null until `ready`. */
@@ -90,8 +92,9 @@ export function buildMeasures(
     const after = ready || minDays <= DEFAULT_MIN_DAYS ? rawNow : null;
     out.push({
       metric,
-      label: def.label,
+      label: def.compareLabel ?? def.label,
       unit: def.unit,
+      better: def.unit === "percent" ? "up" : "down",
       before,
       after,
       change: ready ? changeValue(def.unit, before, after) : null,

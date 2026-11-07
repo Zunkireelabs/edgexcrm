@@ -1,9 +1,9 @@
 import { createAuditLog } from "@/lib/api/audit";
 import { logger } from "@/lib/logger";
 import { loadUserNames } from "../../pulse/server/context";
-import { describeDrives, changeTitle } from "../lib/changes";
+import { describeDrives, describeValue, changeTitle } from "../lib/changes";
 import { editChange, rejectDraft, suggestChange, type ChangeRecord, type EditStore, type ProcessRef, type RejectStore, type SuggestStore } from "../lib/changes-flow";
-import { PROCESS_NAMES, type ProcessKey } from "../lib/keys";
+import { isProcessKey, PROCESS_NAMES, type ProcessKey } from "../lib/keys";
 import { safeParseProcessSpec } from "../lib/spec";
 import { canApproveProcess, type ProcessesContext, type ProcessesDb } from "./context";
 
@@ -25,6 +25,11 @@ export function must<T>(op: string, res: { data: T | null; error: { message: str
 export const positionSlugSet = async (db: ProcessesDb): Promise<ReadonlySet<string>> => {
   const rows = must("positions read", await db.from("positions").select("slug")) as unknown as Array<{ slug: string }> | null;
   return new Set((rows ?? []).map((r) => r.slug));
+};
+
+export const positionNameMap = async (db: ProcessesDb): Promise<ReadonlyMap<string, string>> => {
+  const rows = must("positions read", await db.from("positions").select("slug, name")) as unknown as Array<{ slug: string; name: string }> | null;
+  return new Map((rows ?? []).map((r) => [r.slug, r.name]));
 };
 
 export const getVersionSpec = async (db: ProcessesDb, versionId: string): Promise<unknown | null> => {
@@ -86,15 +91,28 @@ export function dbRejectStore(db: ProcessesDb): RejectStore {
       const p = must("process read", await db.from("processes").select("key, owner_user_id").eq("id", v.process_id).maybeSingle()) as unknown as { key: string; owner_user_id: string | null } | null;
       return p && p.key === processKey ? { id: v.id, process_id: v.process_id, status: v.status, owner_user_id: p.owner_user_id } : null;
     },
+    async changeSummary(processKey, versionId) {
+      const rows = must("changes read", await db.from("process_changes").select("part, field, before, after").eq("version_id", versionId).order("created_at", { ascending: true })) as unknown as
+        | Array<Pick<ChangeRecord, "part" | "field" | "before" | "after">>
+        | null;
+      if (!rows || rows.length === 0) return null;
+      const parsed = safeParseProcessSpec(processKey as ProcessKey, await getVersionSpec(db, versionId));
+      const nameBySlug = await positionNameMap(db);
+      return rows.map((c) => changeTitle(c, parsed.ok ? parsed.spec : null, { processKey: isProcessKey(processKey) ? processKey : undefined, nameBySlug })).join("; ");
+    },
     async setRejected(versionId, by) {
       const res = await db
         .from("process_versions")
-        .update({ status: "rejected", rejected_reason: by.reason, rejected_by: by.userId, rejected_at: by.at })
+        .update({ status: "rejected", rejected_reason: by.reason, rejected_by: by.userId, rejected_at: by.at, ...(by.summary ? { change_summary: by.summary } : {}) })
         .eq("id", versionId)
         .eq("status", "draft")
         .select("id");
       if (res.error) throw new Error(`draft reject: ${res.error.message}`);
       return ((res.data as unknown[] | null)?.length ?? 0) > 0;
+    },
+    async closeChanges(versionId) {
+      const { error } = await db.from("process_changes").update({ status: "not_taken" }).eq("version_id", versionId).eq("status", "open");
+      if (error) throw new Error(`changes close: ${error.message}`);
     },
   };
 }
@@ -162,9 +180,15 @@ export interface ChangeView {
   id: string;
   part: string;
   field: ChangeRecord["field"];
+  /** Readable title from `changeTitle()` ("First contact: count in working hours"). */
   title: string;
+  /** The step the change is on (null for trigger / done / exceptions). */
+  stepKey: string | null;
   before: unknown;
   after: unknown;
+  /** Both values in words, for the v1 now / proposed boxes. */
+  beforeText: string;
+  afterText: string;
   why: string;
   evidence: ChangeRecord["evidence"];
   authorKind: "person" | "agent";
@@ -186,7 +210,11 @@ export interface DraftAuthor {
 }
 
 export interface DraftView {
-  process: { key: ProcessKey; name: string; processId: string; ownerUserId: string | null; canApprove: boolean };
+  process: { key: ProcessKey; name: string; processId: string; ownerUserId: string | null; ownerName: string | null; canApprove: boolean };
+  /** The viewer's own name, for "Approved by Manish". */
+  viewerName: string | null;
+  /** For the who editor. */
+  positions: Array<{ slug: string; name: string }>;
   live: { id: string; version: number; approvedAt: string | null } | null;
   draft: null | {
     id: string;
@@ -207,7 +235,9 @@ export async function loadDraft(ctx: ProcessesContext, key: ProcessKey): Promise
     | null;
   if (!proc) return null;
   const base: DraftView = {
-    process: { key, name: proc.name || PROCESS_NAMES[key], processId: proc.id, ownerUserId: proc.owner_user_id, canApprove: canApproveProcess(auth, proc.owner_user_id) },
+    process: { key, name: proc.name || PROCESS_NAMES[key], processId: proc.id, ownerUserId: proc.owner_user_id, ownerName: null, canApprove: canApproveProcess(auth, proc.owner_user_id) },
+    viewerName: null,
+    positions: [],
     live: null,
     draft: null,
   };
@@ -224,15 +254,18 @@ export async function loadDraft(ctx: ProcessesContext, key: ProcessKey): Promise
       liveSpec = live.spec;
     }
   }
+  const names = await loadUserNames(db);
+  const nameOf = (id: string | null) => (id ? (names.get(id)?.name ?? null) : null);
+  base.process.ownerName = nameOf(proc.owner_user_id);
+  base.viewerName = nameOf(auth.userId);
+  const positions = (must("positions read", await db.from("positions").select("slug, name")) as unknown as Array<{ slug: string; name: string }> | null) ?? [];
+  base.positions = positions;
   if (!draft) return base;
 
   const rows = (must("changes read", await db.from("process_changes").select(CHANGE_COLS).eq("version_id", draft.id).order("created_at", { ascending: true })) as unknown as ChangeRecord[] | null) ?? [];
-  const names = await loadUserNames(db);
-  const nameOf = (id: string | null) => (id ? (names.get(id)?.name ?? null) : null);
   const parsed = safeParseProcessSpec(key, liveSpec ?? draft.spec);
   const spec = parsed.ok ? parsed.spec : null;
-  const positions = must("positions read", await db.from("positions").select("slug, name")) as unknown as Array<{ slug: string; name: string }> | null;
-  const nameBySlug = new Map((positions ?? []).map((p) => [p.slug, p.name]));
+  const nameBySlug = new Map(positions.map((p) => [p.slug, p.name]));
 
   const changes: ChangeView[] = rows.map((c) => {
     const stepKey = c.part.startsWith("step:") ? c.part.slice(5) : null;
@@ -241,9 +274,12 @@ export async function loadDraft(ctx: ProcessesContext, key: ProcessKey): Promise
       id: c.id,
       part: c.part,
       field: c.field,
-      title: changeTitle(c, spec),
+      title: changeTitle(c, spec, { processKey: key, nameBySlug }),
+      stepKey,
       before: c.before,
       after: c.after,
+      beforeText: describeValue(key, spec, c.part, c.field, c.before, undefined, nameBySlug),
+      afterText: describeValue(key, spec, c.part, c.field, c.after, c.before, nameBySlug),
       why: c.why,
       evidence: c.evidence,
       authorKind: c.author_kind,

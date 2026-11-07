@@ -3,7 +3,7 @@ import { createAuditLog } from "@/lib/api/audit";
 import { logger } from "@/lib/logger";
 import { approveVersion, type ApproveStore, type TakenChange } from "../lib/approve";
 import { canApproveProcess, type ProcessesDb } from "./context";
-import { getVersionSpec, must, positionSlugSet } from "./changes";
+import { getVersionSpec, must, positionNameMap, positionSlugSet } from "./changes";
 
 /** `processes` and `process_versions` have TWO foreign keys between them (process_id, and processes.live_version_id), so an embed
  *  without the FK name is ambiguous (PGRST201). Every embed names the FK. A guard test enforces it. */
@@ -39,11 +39,12 @@ export function dbApproveStore(db: ProcessesDb): ApproveStore {
       if (error) throw new Error(`processes live_version_id/review_due_at: ${error.message}`);
     },
     async listChanges(versionId) {
-      const rows = must("changes read", await db.from("process_changes").select("id, part, field, after, taken").eq("version_id", versionId)) as unknown as TakenChange[] | null;
+      const rows = must("changes read", await db.from("process_changes").select("id, part, field, before, after, taken").eq("version_id", versionId)) as unknown as TakenChange[] | null;
       return rows ?? [];
     },
     getSpec: (versionId) => getVersionSpec(db, versionId),
     positionSlugs: () => positionSlugSet(db),
+    positionNames: () => positionNameMap(db),
     async setDraftSpec(versionId, spec, changeSummary) {
       const { data, error } = await db.from("process_versions").update({ spec, change_summary: changeSummary }).eq("id", versionId).eq("status", "draft").select("id");
       if (error) throw new Error(`draft spec write: ${error.message}`);

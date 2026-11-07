@@ -31,9 +31,9 @@ export function stepOwners(stepKey: string, who: string[], nameBySlug: ReadonlyM
   return `${base || "Manager"}${mode === "off" ? ", by hand" : ", smart assignment"}`;
 }
 
-/** The headline's status decides the filter chips. Needs you = a draft waiting for approval, or a red/amber headline. */
-export function needsYou(p: { shown: { status: string } | null; headline: { status: StepStatus } | null }): boolean {
-  return p.shown?.status === "draft" || p.headline?.status === "red" || p.headline?.status === "amber";
+/** The headline's status decides the filter chips. Needs you = a draft waiting for approval (a baseline, or changes on top of a live version), or a red/amber headline. */
+export function needsYou(p: { shown: { status: string } | null; headline: { status: StepStatus } | null; draft?: unknown }): boolean {
+  return p.shown?.status === "draft" || !!p.draft || p.headline?.status === "red" || p.headline?.status === "amber";
 }
 
 /** On track = live and the headline target is met. */

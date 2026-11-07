@@ -5,7 +5,7 @@ import { join } from "node:path";
 vi.mock("@/lib/logger", () => ({ logger: { error: vi.fn(), info: vi.fn(), warn: vi.fn() } }));
 
 import { dbApproveStore, PROCESS_EMBED } from "./approve";
-import { loadImprovements } from "./load-processes";
+import { loadImprovementLog } from "./compare";
 
 const ROOT = join(__dirname, "..");
 const API = join(__dirname, "../../../../../app/(main)/api/v1/processes");
@@ -66,11 +66,11 @@ describe("a PostgREST error is an error, never 'not found' or 'empty'", () => {
   it("approve store getLiveVersionId throws", async () => {
     await expect(dbApproveStore(fakeDb({ data: null, error: err })).getLiveVersionId("p1")).rejects.toThrow(/live read/);
   });
-  it("loadImprovements throws", async () => {
-    await expect(loadImprovements(fakeDb({ data: null, error: err }))).rejects.toThrow(/improvements read/);
+  it("loadImprovementLog throws", async () => {
+    await expect(loadImprovementLog({ db: fakeDb({ data: null, error: err }) } as never, null)).rejects.toThrow(/processes read/);
   });
   it("a real miss is still null / empty", async () => {
     expect(await dbApproveStore(fakeDb({ data: null, error: null })).getVersion("new_lead_first_call", "v1")).toBeNull();
-    expect(await loadImprovements(fakeDb({ data: [], error: null }))).toEqual([]);
+    expect(await loadImprovementLog({ db: fakeDb({ data: [], error: null }) } as never, null)).toEqual([]);
   });
 });

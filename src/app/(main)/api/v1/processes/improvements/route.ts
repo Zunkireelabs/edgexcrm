@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
   const key = request.nextUrl.searchParams.get("process");
   if (key !== null && !isProcessKey(key)) return apiNotFound("Process");
   try {
-    return apiSuccess({ events: await loadImprovementLog(gate.ctx, key) });
+    return apiSuccess({ events: await loadImprovementLog(gate.ctx, key), tz: gate.ctx.tz });
   } catch (err) {
     logger.error({ err, route: "processes/improvements" }, "Failed to load improvements");
     return apiError("DB_ERROR", "Failed to load improvements", 500);
