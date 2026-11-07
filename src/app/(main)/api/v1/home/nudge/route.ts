@@ -6,7 +6,8 @@ import { scopedClient } from "@/lib/supabase/scoped";
 import { createNotification, NotificationTypes } from "@/lib/notifications";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
-import { canNudge, nudgeMessage } from "@/industries/education-consultancy/features/home/lib/nudge";
+import { resolveUserNames } from "@/lib/supabase/queries";
+import { canNudge, managerDisplayName, nudgeMessage } from "@/industries/education-consultancy/features/home/lib/nudge";
 import { localDate } from "@/industries/education-consultancy/features/home/lib/time";
 import { untouchedHeldOfPersonHref } from "@/industries/education-consultancy/features/pulse/lib/leads-links";
 import { untouchedHeldCutoff } from "@/industries/education-consultancy/features/pulse/lib/untouched";
@@ -80,7 +81,7 @@ export async function POST(request: NextRequest) {
   const { error } = await db.from("lead_nudges").insert({ from_user_id: auth.userId, to_user_id: to, lead_ids: leadIds });
   if (error) return apiError("DB_ERROR", "Failed to record the nudge", 500);
 
-  const name = (auth.email ?? "Your manager").split("@")[0];
+  const name = managerDisplayName(await resolveUserNames([auth.userId]), auth.userId, auth.email);
   const msg = nudgeMessage(name, leadIds.length);
   await createNotification({
     tenantId: auth.tenantId,

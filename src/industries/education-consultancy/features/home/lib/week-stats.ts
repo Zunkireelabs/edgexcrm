@@ -17,7 +17,7 @@ export interface CountInput {
 }
 
 export interface FirstHourInput {
-  /** New leads assigned to me in the window, and how many I called within 60 minutes of assignment. */
+  /** New leads assigned to me in the window, and how many I contacted (a call, email, meeting or note: lib/contact.ts) within 60 minutes of assignment. */
   current: { called: number; total: number };
   /** Mean of the 4 earlier windows, same definition. Null when there isn't enough history. */
   usual: { called: number; total: number } | null;
@@ -47,7 +47,7 @@ export function firstHourMetric(f: FirstHourInput): WeekMetric {
   const value = `${called} of ${total}`;
   const u = f.usual;
   if (total === 0 || !u || u.total < MIN_FIRST_HOUR_USUAL_LEADS) {
-    return { key: "first_hour", label: "New leads called within 1 hour", value, note: null, tone: "neutral" };
+    return { key: "first_hour", label: "New leads contacted within 1 hour", value, note: null, tone: "neutral" };
   }
   const usualCalled = Math.round(u.called);
   const usualTotal = Math.round(u.total);
@@ -56,7 +56,7 @@ export function firstHourMetric(f: FirstHourInput): WeekMetric {
   const diff = rate - usualRate;
   const tone: Tone = diff >= 0.1 ? "good" : diff <= -0.1 ? "warn" : "neutral";
   const word = tone === "good" ? "better than your usual" : tone === "warn" ? "below your usual" : "about your usual";
-  return { key: "first_hour", label: "New leads called within 1 hour", value, note: `${word} ${usualCalled} of ${usualTotal}`, tone };
+  return { key: "first_hour", label: "New leads contacted within 1 hour", value, note: `${word} ${usualCalled} of ${usualTotal}`, tone };
 }
 
 /** "Friday", "Thu–Fri" or "12–13 Nov": the approved-leave days inside the window, for "you were on leave …". */
@@ -71,11 +71,13 @@ export function leaveText(days: string[]): string | null {
 
 /**
  * First-hour counts from raw rows. `leads`: when each lead reached me; `calls`: my call activity times, per lead.
- * A lead counts as "called within 1 hour" when one of my calls on it falls in [assigned, assigned + 60 min].
+ * A lead counts as "contacted within 1 hour" when one of MY contacts on it (lib/contact.ts: a call, email, meeting or note)
+ * falls in [assigned, assigned + 60 min].
  */
 export function firstHourCounts(
   leads: Array<{ id: string; assignedAt: number }>,
-  callsByLead: ReadonlyMap<string, number[]>,
+  /** My contact times per lead (ms). */
+  contactsByLead: ReadonlyMap<string, number[]>,
   from: number,
   to: number,
 ): { called: number; total: number } {
@@ -84,7 +86,7 @@ export function firstHourCounts(
   for (const l of leads) {
     if (l.assignedAt < from || l.assignedAt >= to) continue;
     total += 1;
-    const cs = callsByLead.get(l.id) ?? [];
+    const cs = contactsByLead.get(l.id) ?? [];
     if (cs.some((t) => t >= l.assignedAt && t <= l.assignedAt + 3_600_000)) called += 1;
   }
   return { called, total };

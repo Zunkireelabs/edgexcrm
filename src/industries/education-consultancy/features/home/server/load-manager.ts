@@ -14,6 +14,7 @@ import { impactRows, impactStatus, measuringSince, type ImpactRaw, type ImpactRo
 import { needsALook, type NeedsALook } from "../lib/needs-a-look";
 import {
   atRiskRow,
+  staleCallbacksRow,
   attentionRows,
   standaloneNudgeRow,
   unassignedRow,
@@ -24,6 +25,7 @@ import { deadlineDocsRule } from "../lib/rules/deadline-docs";
 import { localDate } from "../lib/time";
 import type { HomeScope } from "../lib/scope";
 import { loadApplications, type HomeDb } from "./load-home";
+import { countStaleCallbacks } from "./stale-callbacks";
 import type { HomeData } from "./load-page";
 import { loadHome } from "./load-page";
 import { buildHomePulseContext } from "./pulse-ctx";
@@ -92,12 +94,13 @@ export async function loadManagerHome(
   const flags7d: Record<string, "red" | "amber" | "green"> = {};
   for (const p of pulse.people) if (p.flag) flags7d[p.userId] = p.flag;
 
-  const [unassigned, nudges, atRisk, onLeave, impact] = await Promise.all([
+  const [unassigned, nudges, atRisk, onLeave, impact, staleCount] = await Promise.all([
     loadUnassigned(db, scope.branchId),
     loadNudgeStates(db, auth.userId, now, tz),
     loadAtRisk(db, scope.branchId, today, now, tz, pulse),
     loadOnLeaveToday(db, pulse.people.filter((p) => p.flag).map((p) => p.userId), today),
     loadImpact(db, auth.tenantId, launchedAt, scope.branchId, now, tz),
+    countStaleCallbacks(db, scope, now, tz),
   ]);
 
   const nudgeByPerson = new Map<string, NudgeState>(nudges.map((n) => [n.toUserId, n.state]));
@@ -126,6 +129,7 @@ export async function loadManagerHome(
     ...standalone,
     ...attention,
     atRiskRow(atRisk, "/applications"),
+    staleCallbacksRow(staleCount),
   ].filter((r): r is NeedsYouRow => r !== null);
 
   const shortName = ctx.tenantName.trim().split(/\s+/)[0] || "Your team";

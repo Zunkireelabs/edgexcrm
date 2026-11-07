@@ -18,7 +18,7 @@ describe("tenantLocalToIso", () => {
     const viaTenant = tenantLocalToIso("2026-11-11T09:08", "Asia/Kathmandu");
     expect(viaTenant).toBe("2026-11-11T03:23:00.000Z");
     // Only equal when the runner happens to be in the tenant zone: proves the old behaviour was zone-dependent.
-    if (process.env.TZ !== "Asia/Kathmandu") expect(naive).not.toBe(viaTenant);
+    if (new Date("2026-11-11T09:08").getTimezoneOffset() !== -345) expect(naive).not.toBe(viaTenant);
   });
   it("a foreign tenant zone with DST: New York in November is UTC-5, in July UTC-4", () => {
     expect(tenantLocalToIso("2026-11-11T09:08", "America/New_York")).toBe("2026-11-11T14:08:00.000Z");

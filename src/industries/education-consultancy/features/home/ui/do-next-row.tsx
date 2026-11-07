@@ -17,12 +17,14 @@ import {
   HourglassIcon,
   ListChecksIcon,
   PhoneIcon,
+  PhoneSlashIcon,
   PhoneXIcon,
   SnowflakeIcon,
   UserPlusIcon,
   WhatsappLogoIcon,
 } from "@/components/icons";
 import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { tenantLocalToIso } from "../lib/time";
 import {
@@ -45,6 +47,8 @@ export function KindIcon({ item }: { item: DoNextItem }) {
     case "task_due": return <ListChecksIcon {...c} />;
     case "going_quiet": return <SnowflakeIcon {...c} />;
     case "stuck_in_stage": return <HourglassIcon {...c} />;
+    case "missed_callbacks": return <PhoneXIcon {...c} />;
+    case "unreachable": return <PhoneSlashIcon {...c} />;
   }
 }
 
@@ -139,7 +143,7 @@ function CallLog({ item, nextStage, tz, onSaved }: { item: DoNextItem; nextStage
   );
 }
 
-function RowAction({ item, onCall, onDone, busy }: { item: DoNextItem; onCall: () => void; onDone: () => void; busy: boolean }) {
+function RowAction({ item, onCall, onDone, onSheet, busy }: { item: DoNextItem; onCall: () => void; onDone: () => void; onSheet: () => void; busy: boolean }) {
   const a = item.primaryAction;
   const lbl = (t: string) => <span className="eh-lbl">{t}</span>;
   switch (a.type) {
@@ -177,6 +181,12 @@ function RowAction({ item, onCall, onDone, busy }: { item: DoNextItem; onCall: (
           {lbl("Done")}
         </Button>
       );
+    case "sheet":
+      return (
+        <Button look="v2" variant="secondary" size="sm" onClick={onSheet}>
+          {a.label}
+        </Button>
+      );
     case "open":
       return (
         <Button look="v2" variant="secondary" size="sm" asChild>
@@ -193,6 +203,7 @@ export function useDoNextRows() {
   const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
   const [openLog, setOpenLog] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [sheetKey, setSheetKey] = useState<string | null>(null);
   const hide = (key: string) => setHidden((s) => new Set(s).add(key));
 
   const snooze = async (item: DoNextItem) => {
@@ -210,7 +221,7 @@ export function useDoNextRows() {
     hide(item.key);
     router.refresh();
   };
-  return { router, hidden, openLog, setOpenLog, busy, snooze, markDone };
+  return { router, hidden, openLog, setOpenLog, busy, snooze, markDone, sheetKey, setSheetKey };
 }
 export type DoNextRows = ReturnType<typeof useDoNextRows>;
 
@@ -227,7 +238,7 @@ export function DoNextRow({ item, nextStage, tz, rows }: { item: DoNextItem; nex
           <div className="eh-wh"><span className="eh-ph">{item.chip.text}{item.why ? " \u00B7 " : ""}</span>{item.why}</div>
         </div>
         <div className="eh-ac">
-          <RowAction item={item} busy={rows.busy === item.key} onCall={() => rows.setOpenLog(item.key)} onDone={() => rows.markDone(item)} />
+          <RowAction item={item} busy={rows.busy === item.key} onCall={() => rows.setOpenLog(item.key)} onDone={() => rows.markDone(item)} onSheet={() => rows.setSheetKey(item.key)} />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button look="v2" variant="ghost" size="icon" aria-label={`More actions for ${item.title}`}><DotsThreeIcon size={18} aria-hidden /></Button>
@@ -244,5 +255,32 @@ export function DoNextRow({ item, nextStage, tz, rows }: { item: DoNextItem; nex
         <CallLog item={item} nextStage={nextStage} tz={tz} onSaved={() => { rows.setOpenLog(null); rows.router.refresh(); }} />
       ) : null}
     </div>
+  );
+}
+
+/**
+ * "Call through them": the exact leads behind a grouped missed-call-backs row, as normal call rows (same row, same call
+ * log), so the count in the row and the list here are the same set by construction.
+ */
+export function MissedCallbacksSheet({ item, nextStageByLead, tz, rows }: { item: DoNextItem; nextStageByLead: Record<string, { id: string; name: string } | null>; tz: string; rows: DoNextRows }) {
+  const open = rows.sheetKey === item.key;
+  const children = (item.children ?? []).filter((c) => !rows.hidden.has(c.key));
+  return (
+    <Sheet open={open} onOpenChange={(o) => rows.setSheetKey(o ? item.key : null)}>
+      <SheetContent look="v2" size="md">
+        <SheetHeader>
+          <SheetTitle>{item.title}</SheetTitle>
+          <SheetDescription>{item.chip.text} \u00B7 newest first. Log each call and the reminder clears itself.</SheetDescription>
+        </SheetHeader>
+        <div className="eh" style={{ padding: "0 16px 24px", maxWidth: "none" }}>
+          <div className="eh-list">
+            {children.length === 0 ? <div className="eh-note" style={{ padding: "16px 14px" }}>All done.</div> : null}
+            {children.map((c) => (
+              <DoNextRow key={c.key} item={c} nextStage={c.primaryAction.type === "call" ? nextStageByLead[c.primaryAction.leadId] ?? null : null} tz={tz} rows={rows} />
+            ))}
+          </div>
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }

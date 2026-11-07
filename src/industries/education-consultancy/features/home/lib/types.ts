@@ -11,7 +11,9 @@ export type DoNextKind =
   | "deadline_docs"
   | "task_due"
   | "going_quiet"
-  | "stuck_in_stage";
+  | "stuck_in_stage"
+  | "missed_callbacks"
+  | "unreachable";
 
 /** The segmented filter above the list. */
 export type DoNextFilter = "all" | "calls" | "messages" | "documents" | "tasks";
@@ -21,6 +23,8 @@ export const KIND_FILTER: Record<DoNextKind, Exclude<DoNextFilter, "all">> = {
   callback_overdue: "calls",
   callback_today: "calls",
   going_quiet: "calls",
+  missed_callbacks: "calls",
+  unreachable: "calls",
   reply_waiting: "messages",
   deadline_docs: "documents",
   task_due: "tasks",
@@ -32,7 +36,9 @@ export type PrimaryAction =
   | { type: "reply"; href: string }
   | { type: "ask_docs"; href: string }
   | { type: "done_task"; taskId: string }
-  | { type: "open"; href: string; label: string };
+  | { type: "open"; href: string; label: string }
+  /** Opens a Home sheet listing `children` as normal call rows (the missed call-backs). */
+  | { type: "sheet"; label: string };
 
 export interface DoNextItem {
   /** Stable key (kind + subject id): what a snooze is stored against. */
@@ -55,6 +61,15 @@ export interface DoNextItem {
   canMarkDone?: boolean;
   /** reply_waiting only: the conversation's channel, for the row icon. */
   provider?: string;
+  /** missed_callbacks only: the exact leads behind the grouped row, as normal call rows. */
+  children?: DoNextItem[];
+}
+
+export interface ContactEvent {
+  type: "call" | "email" | "meeting" | "note";
+  /** call_outcome for calls. */
+  outcome: string | null;
+  at: string;
 }
 
 /** A lead assigned to the person, with the few columns the rules need. */
@@ -75,6 +90,11 @@ export interface HomeLead {
   context: string;
   /** Latest logged call outcome, when known (for the call-back line). */
   lastCallOutcome: string | null;
+  /**
+   * The lead's most recent contacts, newest first (call / email / meeting activities and human notes: see lib/contact.ts).
+   * Only loaded for leads with a call-back booked, which is every lead whose last contact was a no-answer / busy call.
+   */
+  recentContacts?: ContactEvent[];
 }
 
 export interface HomeConversation {

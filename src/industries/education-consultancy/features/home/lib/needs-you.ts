@@ -7,12 +7,14 @@ export type NeedsAction =
   | { type: "link"; label: string; href: string; primary?: boolean }
   | { type: "nudge"; label: string; userId: string; userName: string }
   | { type: "assign"; label: string; leadIds: string[]; assignments: Array<{ userId: string; name: string; take: number }>; primary?: boolean }
-  | { type: "note"; label: string };
+  | { type: "note"; label: string }
+  /** Clear the call-back reminders older than 2 weeks (confirm shows `count`). */
+  | { type: "clear_stale"; label: string; count: number };
 
 export interface NeedsYouRow {
   key: string;
   tone: Tone;
-  icon: "user-plus" | "trend-down" | "file-x" | "bell" | "list-checks" | "user-switch";
+  icon: "user-plus" | "trend-down" | "file-x" | "bell" | "list-checks" | "user-switch" | "phone-x";
   title: string;
   chip: { text: string; tone: Tone } | null;
   why: string;
@@ -158,5 +160,19 @@ export function atRiskRow(apps: AtRiskApp[], href: string): NeedsYouRow | null {
     chip: { text: "Close within 7 days", tone: "warn" },
     why: `${names.join(" · ")}${rest > 0 ? ` and ${rest} more` : ""} · documents missing${apps.length > 1 ? " on all" : ""}`,
     actions: [{ type: "link", label: `Open ${apps.length}`, href }],
+  };
+}
+
+/** Reminders nobody will ever act on (over 2 weeks old): one item for whoever sees the whole scope. */
+export function staleCallbacksRow(count: number): NeedsYouRow | null {
+  if (count <= 0) return null;
+  return {
+    key: "stale_callbacks",
+    tone: "neutral",
+    icon: "phone-x",
+    title: `${count} call-back ${count === 1 ? "reminder is" : "reminders are"} over 2 weeks old`,
+    chip: null,
+    why: "Left over from no-answer calls. They stay on nobody's list, so they only add noise.",
+    actions: [{ type: "clear_stale", label: "Clear them", count }],
   };
 }

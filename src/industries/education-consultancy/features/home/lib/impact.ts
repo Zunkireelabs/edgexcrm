@@ -69,7 +69,7 @@ export function impactRows(before: ImpactRaw, after: ImpactRaw): ImpactRow[] {
     tone: before.deadlines.total === 0 ? "neutral" : perWeekAfter < perWeekBefore ? "good" : perWeekAfter > perWeekBefore ? "warn" : "neutral",
   };
   return [
-    rateRow("first_hour", "New leads called within 1 hour", { n: after.first_hour.called, d: after.first_hour.total }, { n: before.first_hour.called, d: before.first_hour.total }),
+    rateRow("first_hour", "New leads contacted within 1 hour", { n: after.first_hour.called, d: after.first_hour.total }, { n: before.first_hour.called, d: before.first_hour.total }),
     rateRow("callbacks", "Call-backs done on the day booked", { n: after.callbacks.done, d: after.callbacks.total }, { n: before.callbacks.done, d: before.callbacks.total }),
     deadlines,
   ];

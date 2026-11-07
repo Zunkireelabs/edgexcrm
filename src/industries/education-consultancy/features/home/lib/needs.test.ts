@@ -59,7 +59,7 @@ describe("nudgeState", () => {
 
 const person = (o: Partial<PersonRow> = {}): PersonRow => ({
   userId: "u", name: "Asha Tamang", positionLabel: "TeleCaller", branchName: "Kathmandu", flag: null, hasUsual: true,
-  current: { calls: 21, received: 30 }, usual: { calls: 38.4, received: 10 }, ...o,
+  current: { calls: 21, notes: 0, moves: 0, received: 30 }, usual: { calls: 38.4, notes: 0, moves: 0, received: 10 }, ...o,
 }) as unknown as PersonRow;
 
 describe("needsALook", () => {
@@ -69,8 +69,14 @@ describe("needsALook", () => {
       new Set(),
       "me",
     );
-    expect(r.rows.map((x) => [x.name, x.tone, x.value])).toEqual([["Asha", "bad", "21 / 38 calls"], ["Bina", "warn", "30 new leads"]]);
+    // person(): calls 21 / usual 38.4, received 30 / usual 10; the drop is measured on activity (calls + notes + moves)
+    expect(r.rows.map((x) => [x.name, x.tone, x.value, x.unit])).toEqual([["Asha", "bad", "21 vs usual 38", "calls, notes and stage moves"], ["Bina", "warn", "30 vs usual 10", "new leads"]]);
     expect(r.others).toBe(2);
+  });
+  it("uses the SAME measure as Pulse's flag: a person flagged on activity (1 vs usual 31) is not shown as '0 / 0 calls'", () => {
+    const r = needsALook([person({ userId: "a", name: "Bijay Dahal", flag: "red", current: { calls: 0, notes: 1, moves: 0, received: 0 }, usual: { calls: 0, notes: 20, moves: 11, received: 0 } } as Partial<PersonRow>)], new Set(), "me");
+    expect(r.rows[0].value).toBe("1 vs usual 31");
+    expect(r.rows[0].unit).toBe("calls, notes and stage moves");
   });
   it("someone on approved leave is grey, 'On leave · expected', and sorts last", () => {
     const r = needsALook([person({ userId: "a", name: "Asha", flag: "red" }), person({ userId: "r", name: "Rita", flag: "red" })], new Set(["r"]), "me");
@@ -109,7 +115,7 @@ describe("atRiskRow", () => {
   it("none → null", () => expect(atRiskRow([], "/a")).toBeNull());
 });
 
-import { canNudge, nudgeMessage } from "./nudge";
+import { canNudge, managerDisplayName, nudgeMessage } from "./nudge";
 
 describe("canNudge", () => {
   const base = { restrictToSelf: false, selfId: "m", targetId: "t", branchPinned: false, branchMemberIds: [] as string[] };
@@ -125,5 +131,13 @@ describe("canNudge", () => {
   it("the message names the manager and the count", () => {
     expect(nudgeMessage("Sadin", 14).message).toBe("Sadin asked you to look at 14 leads that haven't had a touch yet.");
     expect(nudgeMessage("Sadin", 1).message).toContain("1 lead that");
+  });
+});
+
+describe("managerDisplayName", () => {
+  it("prefers the profile name, falls back to the email prefix, then a generic label", () => {
+    expect(managerDisplayName(new Map([["m", "Sadin Shrestha"]]), "m", "sadin@zunkireelabs.com")).toBe("Sadin Shrestha");
+    expect(managerDisplayName(new Map(), "m", "sadin@zunkireelabs.com")).toBe("sadin");
+    expect(managerDisplayName(new Map([["m", "  "]]), "m", null)).toBe("Your manager");
   });
 });

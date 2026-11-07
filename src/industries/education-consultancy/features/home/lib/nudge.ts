@@ -54,3 +54,8 @@ export function canNudge(a: { restrictToSelf: boolean; selfId: string; targetId:
   if (a.restrictToSelf || a.selfId === a.targetId) return false;
   return a.branchPinned ? a.branchMemberIds.includes(a.targetId) : true;
 }
+
+/** The manager's display name for the notification: their profile name, else the part of their email before the @. */
+export function managerDisplayName(names: ReadonlyMap<string, string>, userId: string, email: string | null | undefined): string {
+  return names.get(userId)?.trim() || (email ?? "").split("@")[0] || "Your manager";
+}

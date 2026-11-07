@@ -4,6 +4,7 @@ import { deadlineDocsRule } from "./rules/deadline-docs";
 import { goingQuietRule } from "./rules/going-quiet";
 import { newUncalledRule } from "./rules/new-uncalled";
 import { replyWaitingRule } from "./rules/reply-waiting";
+import { unreachableRule } from "./rules/unreachable";
 import { stuckInStageRule } from "./rules/stuck-in-stage";
 import { taskDueRule } from "./rules/task-due";
 import { rankItems } from "./rank";
@@ -39,16 +40,20 @@ export interface DoNextResult {
 }
 
 export function buildDoNext(input: HomeInputs, ctx: RuleCtx): DoNextResult {
+  // An unreachable lead (3 unanswered calls in a row) is said once, as such: never also as a call-back row.
+  const unreachable = unreachableRule(input.leads, ctx);
+  const unreachableIds = new Set(unreachable.flatMap((i) => (i.leadId ? [i.leadId] : [])));
   const loud: DoNextItem[] = [
     ...newUncalledRule(input.leads, ctx),
     ...replyWaitingRule(input.conversations, ctx),
-    ...callbackRules(input.leads, ctx),
+    ...callbackRules(input.leads, ctx, unreachableIds),
+    ...unreachable,
     ...deadlineDocsRule(input.applications, input.submitStageByPipeline, ctx),
     ...taskDueRule(input.tasks, ctx),
     ...stuckInStageRule(input.applications, input.medianDwellDays, ctx),
   ];
   // A lead already on the list for a louder reason is not also "going quiet".
-  const covered = new Set(loud.flatMap((i) => (i.leadId ? [i.leadId] : [])));
+  const covered = new Set(loud.flatMap((i) => [...(i.leadId ? [i.leadId] : []), ...(i.children ?? []).flatMap((c) => (c.leadId ? [c.leadId] : []))]));
   const all = [...loud, ...goingQuietRule(input.leads, ctx, input.userId, covered)];
   const items = rankItems(all.filter((i) => !input.snoozedKeys.has(i.key)));
 

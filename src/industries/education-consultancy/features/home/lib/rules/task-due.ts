@@ -26,7 +26,7 @@ export function taskDueRule(tasks: HomeTask[], ctx: RuleCtx): DoNextItem[] {
         : { text: "Task · due today", tone: "neutral" },
       tone: overdue ? "bad" : "neutral",
       primaryAction: { type: "done_task", taskId: t.id },
-      sortKey: { group: overdue ? 0 : 2, at: Date.parse(`${t.dueDate}T00:00:00Z`) },
+      sortKey: { group: overdue ? 0.5 : 2, at: Date.parse(`${t.dueDate}T00:00:00Z`) },
       evidenceHref: t.leadId ? `/leads/${t.leadId}` : "/tasks",
       canMarkDone: true,
     });

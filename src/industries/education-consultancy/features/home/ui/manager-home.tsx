@@ -9,6 +9,7 @@ import {
   BellIcon,
   CaretDownIcon,
   FileXIcon,
+  PhoneXIcon,
   ListChecksIcon,
   PulseIcon,
   TrendDownIcon,
@@ -18,10 +19,11 @@ import {
   UsersIcon,
 } from "@/components/icons";
 import { Button } from "@/components/ui/button";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { sliceAssignments, type NeedsAction, type NeedsYouRow } from "../lib/needs-you";
 import { rankItems } from "../lib/rank";
 import type { ManagerData } from "../server/load-manager";
-import { DoNextRow, useDoNextRows } from "./do-next-row";
+import { DoNextRow, MissedCallbacksSheet, useDoNextRows } from "./do-next-row";
 
 const ICONS = {
   "user-plus": UserPlusIcon,
@@ -30,6 +32,7 @@ const ICONS = {
   bell: BellIcon,
   "list-checks": ListChecksIcon,
   "user-switch": UserSwitchIcon,
+  "phone-x": PhoneXIcon,
 } as const;
 
 async function postJson(url: string, method: string, body?: unknown): Promise<{ ok: boolean; message?: string }> {
@@ -75,6 +78,7 @@ function NeedsAction({ action, primary, onDone }: { action: NeedsAction; primary
       </Button>
     );
   }
+  if (action.type === "clear_stale") return <ClearStale action={action} onDone={onDone} />;
   return (
     <Button
       look="v2"
@@ -103,6 +107,57 @@ function NeedsAction({ action, primary, onDone }: { action: NeedsAction; primary
   );
 }
 
+/** "Clear them": confirm the count, then the server recomputes the set and clears it through the audited patch path. */
+function ClearStale({ action, onDone }: { action: Extract<NeedsAction, { type: "clear_stale" }>; onDone: (key?: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [count, setCount] = useState(action.count);
+  const [busy, setBusy] = useState(false);
+  const [changed, setChanged] = useState(false);
+
+  const run = async () => {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/v1/home/clear-stale-callbacks", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ expected_count: count }) });
+      const j = (await res.json().catch(() => null)) as { data?: { cleared: number; failed: number; remaining: number }; error?: { details?: { count?: number }; message?: string } } | null;
+      if (res.status === 409 && typeof j?.error?.details?.count === "number") {
+        setCount(j.error.details.count);
+        setChanged(true);
+        return;
+      }
+      if (!res.ok || !j?.data) return toast.error(j?.error?.message ?? "Couldn't clear them");
+      const { cleared, failed, remaining } = j.data;
+      toast.success(`Cleared ${cleared} ${cleared === 1 ? "reminder" : "reminders"}${failed ? ` (${failed} failed)` : ""}${remaining ? `, ${remaining} left` : ""}`);
+      setOpen(false);
+      onDone(remaining === 0 ? "stale_callbacks" : undefined);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <Button look="v2" variant="secondary" size="sm" onClick={() => { setChanged(false); setOpen(true); }}>{action.label}</Button>
+      <AlertDialog open={open} onOpenChange={setOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear {count} call-back {count === 1 ? "reminder" : "reminders"}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {changed ? `The number changed while you were looking: it is now ${count}. ` : ""}
+              These are reminders over 2 weeks old. Only the reminder is removed (each change is recorded on the lead); calls and notes stay.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction disabled={busy || count === 0} onClick={(e) => { e.preventDefault(); void run(); }}>
+              {busy ? "Clearing" : `Clear ${count}`}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+}
+
 export function ManagerHome({ data }: { data: ManagerData }) {
   const router = useRouter();
   const rows = useDoNextRows();
@@ -119,6 +174,9 @@ export function ManagerHome({ data }: { data: ManagerData }) {
 
   return (
     <div className="eh">
+      {ownItems.filter((i) => i.kind === "missed_callbacks").map((i) => (
+        <MissedCallbacksSheet key={i.key} item={i} nextStageByLead={data.own.nextStageByLead} tz={data.tz} rows={rows} />
+      ))}
       <h1 className="eh-h1">{data.greeting}</h1>
       <p className="eh-lede">{data.lede}</p>
       <div className="eh-cols">
@@ -205,7 +263,7 @@ export function ManagerHome({ data }: { data: ManagerData }) {
               <div key={p.userId} className="eh-pp">
                 <span className={`eh-av ${p.tone}`} aria-hidden>{p.initials}</span>
                 <div className="x">{p.name}<span>{p.sub}</span></div>
-                <span className="v"><span className={`eh-fl ${p.tone}`} />{p.value}</span>
+                <span className="v" title={p.unit} style={{ flexDirection: "column", alignItems: "flex-end" }}><span><span className={`eh-fl ${p.tone}`} />{p.value}</span><span style={{ color: "var(--ds-muted)", fontSize: 11 }}>{p.unit}</span></span>
               </div>
             ))}
             <div className="eh-note"><span className="eh-fl good" />{data.needsALook.others} {data.needsALook.others === 1 ? "other" : "others"} on track</div>

@@ -30,7 +30,7 @@ export function newUncalledRule(leads: HomeLead[], ctx: RuleCtx): DoNextItem[] {
       tier: "now",
       leadId: l.id,
       title: l.name,
-      why: l.context ? `${l.context} · not called yet` : "not called yet",
+      why: l.context ? `${l.context} · no contact yet` : "no contact yet",
       chip: { text: `New · ${when}`, tone: "new" },
       tone: "new",
       primaryAction: { type: "call", leadId: l.id, phone: l.phone, leadName: l.name },

@@ -10,7 +10,7 @@ import { filterItems } from "../lib/build";
 import { VISIBLE_LIMIT } from "../lib/rank";
 import type { DoNextFilter, DoNextTier } from "../lib/types";
 import type { HomeData } from "../server/load-page";
-import { DoNextRow, useDoNextRows } from "./do-next-row";
+import { DoNextRow, MissedCallbacksSheet, useDoNextRows } from "./do-next-row";
 
 const TIERS: Array<{ tier: DoNextTier; title: string; desc: string }> = [
   { tier: "now", title: "Now", desc: "new leads, replies waiting, anything overdue" },
@@ -49,6 +49,9 @@ export function EducationHome({ data }: { data: HomeData }) {
 
   return (
     <div className="eh">
+      {visibleAll.filter((i) => i.kind === "missed_callbacks").map((i) => (
+        <MissedCallbacksSheet key={i.key} item={i} nextStageByLead={data.nextStageByLead} tz={data.tz} rows={rows} />
+      ))}
       <h1 className="eh-h1">{data.greeting}</h1>
       <p className="eh-lede">
         {data.lede}

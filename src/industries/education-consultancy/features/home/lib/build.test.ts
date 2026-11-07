@@ -20,7 +20,7 @@ const base = (o: Partial<HomeInputs> = {}): HomeInputs => ({
 });
 
 describe("ranking", () => {
-  it("now: overdue call-backs and overdue tasks, then replies, then new leads; oldest first inside each", () => {
+  it("now: overdue call-backs (newest first), overdue tasks, then replies, then new leads; oldest first inside the rest", () => {
     const r = buildDoNext(
       base({
         leads: [
@@ -33,7 +33,7 @@ describe("ranking", () => {
       }),
       ctx,
     );
-    expect(r.items.map((i) => i.title)).toEqual(["Overdue task", "Anjali", "Early", "Late", "Older", "Newer"]);
+    expect(r.items.map((i) => i.title)).toEqual(["Anjali", "Overdue task", "Early", "Late", "Older", "Newer"]);
   });
   it("tier order now → today → week, and today: timed call-backs, deadlines by days left, then tasks", () => {
     const r = buildDoNext(

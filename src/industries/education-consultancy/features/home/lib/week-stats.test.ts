@@ -16,7 +16,7 @@ describe("countMetric (Pulse's compareToUsual)", () => {
 });
 
 describe("first hour", () => {
-  it("counts leads called within 60 minutes of assignment, inside the window only", () => {
+  it("counts leads contacted (call, email, meeting or note) within 60 minutes of assignment, inside the window only", () => {
     const T = 1_000_000_000_000;
     const r = firstHourCounts(
       [{ id: "a", assignedAt: T }, { id: "b", assignedAt: T }, { id: "c", assignedAt: T - 99_999_999 }],

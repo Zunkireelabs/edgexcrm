@@ -21,7 +21,7 @@ describe("new_uncalled", () => {
     expect(i.kind).toBe("new_uncalled");
     expect(i.tier).toBe("now");
     expect(i.chip.text).toBe("New · 15 min");
-    expect(i.why).toContain("not called yet");
+    expect(i.why).toContain("no contact yet");
   });
   it("clears when any touch lands at or after assignment", () => {
     expect(newUncalledRule([lead({ lastTouchedAt: "2026-11-09T04:05:00.000Z" })], KTM)).toEqual([]);
@@ -190,5 +190,96 @@ describe("one time format", () => {
     // 15:23 UTC = 21:08 in Kathmandu
     const [i] = callbackRules([lead({ callbackDueAt: "2026-11-09T15:23:00.000Z", lastTouchedAt: "2026-11-09T01:00:00.000Z" })], KTM);
     expect(i.chip.text).toBe("Call back 9:08 pm");
+  });
+});
+
+import { isStaleCallback } from "./rules/callbacks";
+import { unreachableRule, unansweredStreak } from "./rules/unreachable";
+import { buildDoNext } from "./build";
+
+// Now = Mon 9 Nov 2026 10:00 Kathmandu. A call-back due at 10:15 Kathmandu on a given earlier day is "N days overdue".
+const dueDaysAgo = (n: number) => new Date(now.getTime() - n * 86_400_000 - 15 * 60_000 + 15 * 60_000 - 60_000).toISOString();
+
+describe("call-back reminders by age (tenant-local days)", () => {
+  const L = (id: string, name: string, days: number) => lead({ id, name, lastTouchedAt: "2026-11-09T01:00:00.000Z", assignedAt: "2026-09-01T00:00:00.000Z", callbackDueAt: dueDaysAgo(days) });
+
+  it("0-2 days overdue are 'now' rows, NEWEST first", () => {
+    const items = callbackRules([L("a", "Two days", 2), L("b", "Yesterday", 1), L("c", "Today early", 0.2)], KTM);
+    expect(items.every((i) => i.kind === "callback_overdue" && i.tier === "now")).toBe(true);
+    const ordered = [...items].sort((x, y) => x.sortKey.at - y.sortKey.at).map((i) => i.title);
+    expect(ordered).toEqual(["Today early", "Yesterday", "Two days"]);
+  });
+
+  it("the 2-day boundary is by tenant-local calendar day, not 48 hours", () => {
+    // 2026-11-07 00:30 Kathmandu = 2026-11-06T18:45Z: calendar day diff 2 → still a 'now' row even though 57+ hours ago.
+    const twoDays = callbackRules([lead({ lastTouchedAt: "2026-11-09T01:00:00.000Z", callbackDueAt: "2026-11-06T18:45:00.000Z" })], KTM);
+    expect(twoDays[0].kind).toBe("callback_overdue");
+    // 2026-11-06 23:30 Kathmandu = 17:45Z on the 6th: calendar day diff 3 → grouped, although only ~58 h ago.
+    const threeDays = callbackRules([lead({ lastTouchedAt: "2026-11-09T01:00:00.000Z", callbackDueAt: "2026-11-06T17:45:00.000Z" })], KTM);
+    expect(threeDays.map((i) => i.kind)).toEqual(["missed_callbacks"]);
+    // The same instant judged in UTC is the 6th, three days back: the zone decides which side it lands on.
+    expect(callbackRules([lead({ lastTouchedAt: "2026-11-09T01:00:00.000Z", callbackDueAt: "2026-11-06T18:45:00.000Z" })], UTC)[0].kind).toBe("missed_callbacks");
+  });
+
+  it("3-14 days are ONE grouped 'N missed call-backs' row in this week, carrying exactly those leads", () => {
+    const items = callbackRules([L("a", "Three", 3), L("b", "Ten", 10), L("c", "Fourteen", 14), L("d", "Recent", 1)], KTM);
+    const g = items.find((i) => i.kind === "missed_callbacks")!;
+    expect(g.tier).toBe("week");
+    expect(g.title).toBe("3 missed call-backs");
+    expect(g.chip.text).toBe("3–14 days old");
+    expect(g.primaryAction).toEqual({ type: "sheet", label: "Call through them" });
+    expect(g.children!.map((c) => c.title)).toEqual(["Three", "Ten", "Fourteen"]);
+    expect(g.children!.every((c) => c.primaryAction.type === "call")).toBe(true);
+    expect(items.filter((i) => i.kind === "callback_overdue").map((i) => i.title)).toEqual(["Recent"]);
+  });
+
+  it("over 14 days never reaches a personal list (day 15 is stale, day 14 is not)", () => {
+    expect(callbackRules([L("a", "Old", 15), L("b", "Older", 40)], KTM)).toEqual([]);
+    expect(isStaleCallback(dueDaysAgo(15), KTM)).toBe(true);
+    expect(isStaleCallback(dueDaysAgo(14), KTM)).toBe(false);
+    expect(isStaleCallback(null, KTM)).toBe(false);
+    expect(isStaleCallback("2026-11-10T00:00:00.000Z", KTM)).toBe(false); // not yet due
+  });
+
+  it("the group's children are newest first, like the rows", () => {
+    const g = callbackRules([L("a", "Older", 9), L("b", "Newer", 4)], KTM)[0];
+    expect(g.children!.map((c) => c.title)).toEqual(["Newer", "Older"]);
+  });
+});
+
+describe("unreachable", () => {
+  const calls = (...o: Array<string | "note" | "email">) =>
+    o.map((x, i) => ({ type: (x === "note" ? "note" : x === "email" ? "email" : "call") as "call" | "note" | "email", outcome: x === "note" || x === "email" ? null : x, at: new Date(now.getTime() - (i + 1) * 3_600_000).toISOString() }));
+  const U = (recent: ReturnType<typeof calls>, o = {}) => lead({ id: "u1", name: "Unreachable", lastTouchedAt: "2026-11-09T01:00:00.000Z", callbackDueAt: "2026-11-08T01:00:00.000Z", recentContacts: recent, ...o });
+
+  it("fires when the last 3 contacts are all unanswered calls", () => {
+    const [i] = unreachableRule([U(calls("no_answer", "busy", "no_answer"))], KTM);
+    expect(i.kind).toBe("unreachable");
+    expect(i.tier).toBe("today");
+    expect(i.chip.text).toBe("3 calls unanswered");
+    expect(i.primaryAction).toEqual({ type: "open", href: "/leads/u1", label: "Open lead" });
+  });
+  it("counts the whole streak", () => {
+    expect(unreachableRule([U(calls("no_answer", "busy", "no_answer", "busy"))], KTM)[0].chip.text).toBe("4 calls unanswered");
+  });
+  it("a note, email or connected call in between breaks it", () => {
+    expect(unreachableRule([U(calls("no_answer", "note", "no_answer", "no_answer"))], KTM)).toEqual([]);
+    expect(unreachableRule([U(calls("no_answer", "no_answer", "email", "no_answer"))], KTM)).toEqual([]);
+    expect(unreachableRule([U(calls("no_answer", "no_answer", "connected", "no_answer"))], KTM)).toEqual([]);
+    expect(unansweredStreak({ recentContacts: calls("no_answer", "no_answer", "connected") })).toBe(2);
+  });
+  it("fewer than 3 does not fire", () => {
+    expect(unreachableRule([U(calls("no_answer", "busy"))], KTM)).toEqual([]);
+    expect(unreachableRule([lead()], KTM)).toEqual([]);
+  });
+  it("an unreachable lead is NOT also a call-back row or a going-quiet row, whatever the call-back's age", () => {
+    const l = U(calls("no_answer", "busy", "no_answer"), { callbackDueAt: "2026-11-08T05:00:00.000Z", lastTouchedAt: "2026-10-01T00:00:00.000Z", assignedAt: "2026-09-01T00:00:00.000Z" });
+    const r = buildDoNext({ userId: "me", leads: [l], conversations: [], tasks: [], applications: [], submitStageByPipeline: new Map(), medianDwellDays: new Map(), snoozedKeys: new Set() }, KTM);
+    expect(r.items.map((i) => i.kind)).toEqual(["unreachable"]);
+  });
+  it("snoozing the unreachable row hides it without resurrecting the call-back", () => {
+    const l = U(calls("no_answer", "busy", "no_answer"), { callbackDueAt: "2026-11-08T05:00:00.000Z", assignedAt: "2026-10-20T00:00:00.000Z", lastTouchedAt: "2026-11-09T01:00:00.000Z" });
+    const r = buildDoNext({ userId: "me", leads: [l], conversations: [], tasks: [], applications: [], submitStageByPipeline: new Map(), medianDwellDays: new Map(), snoozedKeys: new Set(["unreachable:u1"]) }, KTM);
+    expect(r.items).toEqual([]);
   });
 });

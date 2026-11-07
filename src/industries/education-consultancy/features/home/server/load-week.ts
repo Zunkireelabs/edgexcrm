@@ -54,7 +54,7 @@ export async function loadMyWeek(
   return [
     countMetric("calls", "Calls made", { current: me?.current.calls ?? 0, usual: me?.usual.calls ?? 0, hasUsual }, why),
     firstHourMetric(firstHour),
-    countMetric("moves", "Moved to the next stage", { current: me?.current.moves ?? 0, usual: me?.usual.moves ?? 0, hasUsual }, why),
+    countMetric("moves", "Moved forward", { current: me?.current.moves ?? 0, usual: me?.usual.moves ?? 0, hasUsual }, why),
   ];
 }
 
@@ -77,12 +77,12 @@ async function loadLeaveDays(db: HomeDb, userId: string, from: Date, to: Date, t
   return [...days];
 }
 
-/** "New leads called within 1 hour": this week against the mean of the 4 weeks before it. */
+/** "New leads contacted within 1 hour" (a call, email, meeting or note by me: lib/contact.ts): this week vs the mean of the 4 weeks before. */
 async function loadFirstHour(db: HomeDb, userId: string, now: Date) {
   const t1 = now.getTime();
   const earliest = t1 - 35 * DAY;
   const iso = new Date(earliest).toISOString();
-  const [leadsRes, callsRes] = await Promise.all([
+  const [leadsRes, callsRes, notesRes] = await Promise.all([
     db
       .from("leads")
       .select("id, assigned_at, created_at")
@@ -90,20 +90,21 @@ async function loadFirstHour(db: HomeDb, userId: string, now: Date) {
       .is("deleted_at", null)
       .or(`assigned_at.gte.${iso},and(assigned_at.is.null,created_at.gte.${iso})`)
       .limit(3000),
-    db.from("lead_activities").select("lead_id, created_at").eq("activity_type", "call").eq("user_id", userId).gte("created_at", iso).limit(10000),
+    db.from("lead_activities").select("lead_id, created_at").eq("user_id", userId).gte("created_at", iso).limit(10000),
+    db.from("lead_notes").select("lead_id, created_at").eq("user_id", userId).is("ai_tool_call_id", null).gte("created_at", iso).limit(10000),
   ]);
   const leads = ((leadsRes.data ?? []) as unknown as Array<{ id: string; assigned_at: string | null; created_at: string }>).map((l) => ({
     id: l.id,
     assignedAt: Date.parse(l.assigned_at ?? l.created_at),
   }));
-  const callsByLead = new Map<string, number[]>();
-  for (const c of (callsRes.data ?? []) as unknown as Array<{ lead_id: string; created_at: string }>) {
-    const list = callsByLead.get(c.lead_id) ?? [];
+  const contactsByLead = new Map<string, number[]>();
+  for (const c of [...((callsRes.data ?? []) as unknown as Array<{ lead_id: string; created_at: string }>), ...((notesRes.data ?? []) as unknown as Array<{ lead_id: string; created_at: string }>)]) {
+    const list = contactsByLead.get(c.lead_id) ?? [];
     list.push(Date.parse(c.created_at));
-    callsByLead.set(c.lead_id, list);
+    contactsByLead.set(c.lead_id, list);
   }
-  const current = firstHourCounts(leads, callsByLead, t1 - 7 * DAY, t1);
-  const prior = [1, 2, 3, 4].map((i) => firstHourCounts(leads, callsByLead, t1 - (i + 1) * 7 * DAY, t1 - i * 7 * DAY));
+  const current = firstHourCounts(leads, contactsByLead, t1 - 7 * DAY, t1);
+  const prior = [1, 2, 3, 4].map((i) => firstHourCounts(leads, contactsByLead, t1 - (i + 1) * 7 * DAY, t1 - i * 7 * DAY));
   const total = prior.reduce((s, p) => s + p.total, 0);
   const usual = total === 0 ? null : { called: prior.reduce((s, p) => s + p.called, 0) / 4, total: total / 4 };
   return { current, usual };

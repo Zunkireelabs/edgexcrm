@@ -5,7 +5,8 @@ import type { DocumentType } from "@/lib/documents/constants";
 import { DOCUMENT_TYPE_LABELS } from "../../applicant-documents/labels";
 import { addDaysStr } from "../lib/time";
 import { DEADLINE_WINDOW_DAYS } from "../lib/rules/deadline-docs";
-import type { HomeApplication, HomeConversation, HomeLead, HomeTask } from "../lib/types";
+import { CONTACT_ACTIVITY_TYPES } from "../lib/contact";
+import type { ContactEvent, HomeApplication, HomeConversation, HomeLead, HomeTask } from "../lib/types";
 
 export type HomeDb = Awaited<ReturnType<typeof scopedClient>>;
 
@@ -65,21 +66,28 @@ export async function loadMyLeads(db: HomeDb, userId: string): Promise<LoadedLea
   const listById = new Map(lists.map((l) => [l.id, l]));
   const ordered = lists.filter((l) => !l.is_archive && !l.is_staging);
 
-  // Latest logged call outcome per lead that has a call-back booked, for the "last call: no answer" line.
+  // Leads with a call-back booked are exactly the leads whose last contact was a no-answer / busy call (the migration-250
+  // trigger sets it and any later touch clears it). For those, load the newest contacts (calls / emails / meetings AND
+  // human notes: lib/contact.ts) so Home can say "last call: no answer" and spot an unreachable lead (3 unanswered in a row).
   const withCallback = ((rows ?? []) as unknown as LeadRow[]).filter((r) => r.callback_due_at).map((r) => r.id);
-  const lastOutcome = new Map<string, string>();
-  for (const ids of chunk(withCallback)) {
-    const { data } = await db
-      .from("lead_activities")
-      .select("lead_id, call_outcome, created_at")
-      .eq("activity_type", "call")
-      .in("lead_id", ids)
-      .order("created_at", { ascending: false })
-      .limit(ids.length * 3);
-    for (const a of (data ?? []) as unknown as Array<{ lead_id: string; call_outcome: string | null }>) {
-      if (!lastOutcome.has(a.lead_id) && a.call_outcome) lastOutcome.set(a.lead_id, a.call_outcome);
+  const contacts = new Map<string, ContactEvent[]>();
+  for (const ids of chunk(withCallback, 50)) {
+    const [acts, notes] = await Promise.all([
+      db.from("lead_activities").select("lead_id, activity_type, call_outcome, created_at").in("lead_id", ids).in("activity_type", [...CONTACT_ACTIVITY_TYPES]).order("created_at", { ascending: false }).limit(ids.length * 8),
+      db.from("lead_notes").select("lead_id, created_at").in("lead_id", ids).is("ai_tool_call_id", null).order("created_at", { ascending: false }).limit(ids.length * 8),
+    ]);
+    for (const a of (acts.data ?? []) as unknown as Array<{ lead_id: string; activity_type: ContactEvent["type"]; call_outcome: string | null; created_at: string }>) {
+      const l = contacts.get(a.lead_id) ?? [];
+      l.push({ type: a.activity_type, outcome: a.call_outcome, at: a.created_at });
+      contacts.set(a.lead_id, l);
+    }
+    for (const n of (notes.data ?? []) as unknown as Array<{ lead_id: string; created_at: string }>) {
+      const l = contacts.get(n.lead_id) ?? [];
+      l.push({ type: "note", outcome: null, at: n.created_at });
+      contacts.set(n.lead_id, l);
     }
   }
+  for (const [id, list] of contacts) contacts.set(id, list.sort((x, y) => Date.parse(y.at) - Date.parse(x.at)).slice(0, 6));
 
   const nextStageByLead: LoadedLeads["nextStageByLead"] = {};
   const leads: HomeLead[] = ((rows ?? []) as unknown as LeadRow[]).map((r) => {
@@ -106,7 +114,8 @@ export async function loadMyLeads(db: HomeDb, userId: string): Promise<LoadedLea
       isActive: !list || (!list.is_archive && !list.is_staging),
       stageName: list?.name ?? null,
       context,
-      lastCallOutcome: lastOutcome.get(r.id) ?? null,
+      lastCallOutcome: contacts.get(r.id)?.find((e) => e.type === "call")?.outcome ?? null,
+      recentContacts: contacts.get(r.id),
     };
   });
   return { leads, nextStageByLead };
