@@ -18,6 +18,7 @@ import { outreachMeta } from "../_shared/features/outreach/meta";
 import { studentRecordMeta } from "./features/student-record/meta";
 import { teamPerformanceMeta } from "./features/team-performance/meta";
 import { pulseMeta } from "./features/pulse/meta";
+import { processesMeta } from "./features/processes/meta";
 import { eduHomeMeta } from "./features/home/meta";
 import { savedLeadFiltersMeta } from "./features/saved-lead-filters/meta";
 import { aiConfig } from "./ai/agent";
@@ -36,6 +37,7 @@ export const manifest: IndustryManifest = {
     { meta: classesMeta },
     { meta: teamPerformanceMeta },
     { meta: pulseMeta },
+    { meta: processesMeta },
     { meta: eduHomeMeta },
     { meta: affiliatesMeta },
     { meta: applicantDocumentsMeta },
