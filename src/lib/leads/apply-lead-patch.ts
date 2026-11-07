@@ -33,6 +33,7 @@ import {
 import { PERSONAL_DETAIL_COLUMNS, coercePersonalDetailsPayload } from "@/lib/leads/personal-details";
 import { STUDENT_RECORD_COLUMNS, coerceStudentRecordPayload } from "@/lib/leads/student-record-columns";
 import { coerceCallbackDue } from "@/lib/leads/callback-due";
+import { recordHumanAssignment } from "@/industries/education-consultancy/features/home/server/assignment/outcome-record";
 import { normalizeDestinations, normalizeFieldOfStudy, normalizeDegreeLevel } from "@/lib/leads/destination-normalize";
 import type { Lead } from "@/types/database";
 
@@ -111,6 +112,14 @@ export interface ApplyLeadPatchOpts {
   requestId: string;
   ip: string | null;
   userAgent: string | null;
+  /**
+   * A non-human actor writing THROUGH a real user's AuthContext (smart assignment runs as the tenant owner: there is no
+   * session-less lead writer). When set, and ONLY then: the audit row is stamped `via` + `decision_id` (the lead timeline
+   * shows the actor's label instead of the user's name), the assignee's notification and email name the actor instead of
+   * the user, and the user's self-suppression is dropped so they can be the assignee too. Every other behaviour
+   * (permissions, chain-of-custody, list routing, collaborators of the NEW assignee) is identical to a human edit.
+   */
+  systemActor?: { key: string; label: string; decisionId: string };
 }
 
 export type ApplyLeadPatchOutcome =
@@ -144,7 +153,7 @@ export async function applyLeadPatch(
   rawBody: Record<string, unknown>,
   opts: ApplyLeadPatchOpts,
 ): Promise<ApplyLeadPatchOutcome> {
-  const { requestId, ip, userAgent } = opts;
+  const { requestId, ip, userAgent, systemActor } = opts;
   const body: Record<string, unknown> = { ...rawBody };
 
   // Country-aware phone format check — education_consultancy only, format-only
@@ -1119,7 +1128,8 @@ export async function applyLeadPatch(
           action: "lead.updated",
           entityType: "lead",
           entityId: leadId,
-          changes,
+          // `via` / `decision_id` are added to the AUDIT row only (not to `changes`, which feeds undo's previousValues).
+          changes: systemActor ? { ...changes, via: { old: null, new: systemActor.key }, decision_id: { old: null, new: systemActor.decisionId } } : changes,
           ipAddress: ip,
           userAgent,
           requestId,
@@ -1214,6 +1224,11 @@ export async function applyLeadPatch(
 
   const leadName = `${updated.first_name || ""} ${updated.last_name || ""}`.trim() || "A lead";
 
+  // Smart assignment (shadow mode): remember whether a human agreed with its pick. Best-effort, never blocks or alters the edit.
+  if (assignedChanged && updated.assigned_to && !systemActor) {
+    void recordHumanAssignment({ tenantId: auth.tenantId, leadId, assignedTo: updated.assigned_to as string, actorId: auth.userId });
+  }
+
   // Create notifications for assignment changes (self-suppressed)
   if (assignedChanged) {
     const assignNotifications = [];
@@ -1224,7 +1239,7 @@ export async function applyLeadPatch(
         userId: updated.assigned_to,
         type: NotificationTypes.LEAD_ASSIGNED,
         title: "Lead assigned to you",
-        message: `${leadName} has been assigned to you`,
+        message: systemActor ? `${systemActor.label} assigned you ${leadName}` : `${leadName} has been assigned to you`,
         link: `/leads/${leadId}`,
       });
 
@@ -1241,7 +1256,7 @@ export async function applyLeadPatch(
           if (assignee?.user?.email && tenant) {
             sendLeadAssignedEmail({
               to: assignee.user.email,
-              assignerEmail: auth.email || "admin",
+              assignerEmail: systemActor ? systemActor.label : auth.email || "admin",
               tenantName: tenant.name,
               leadId,
               leadName,
@@ -1268,7 +1283,7 @@ export async function applyLeadPatch(
       });
     }
 
-    createNotificationsExcept(auth.userId, assignNotifications);
+    createNotificationsExcept(systemActor ? "" : auth.userId, assignNotifications);
   }
 
   // Notify on stage change (assignee + admins on terminal stages)

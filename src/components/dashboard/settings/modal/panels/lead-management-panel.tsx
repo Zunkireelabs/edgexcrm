@@ -7,9 +7,10 @@ import { useSettingsModal } from "@/contexts/settings-modal-context";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { LeadTypesManager } from "@/industries/education-consultancy/features/lead-types/manager";
+import { SmartAssignmentCard } from "@/industries/education-consultancy/features/home/ui/smart-assignment-card";
 
 export function LeadManagementPanel() {
-  const { industryId } = useSettingsModal();
+  const { industryId, role } = useSettingsModal();
   const hasLeadLists = getFeatureAccess(industryId, FEATURES.LEAD_LISTS);
   const isEducation = industryId === "education_consultancy";
 
@@ -23,6 +24,11 @@ export function LeadManagementPanel() {
       {isEducation && (
         <PanelSection>
           <LeadTypesManager />
+        </PanelSection>
+      )}
+      {isEducation && (role === "owner" || role === "admin") && (
+        <PanelSection>
+          <SmartAssignmentCard />
         </PanelSection>
       )}
       <PanelSection>

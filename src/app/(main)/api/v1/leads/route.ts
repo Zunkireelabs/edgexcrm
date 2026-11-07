@@ -22,6 +22,7 @@ import { PROSPECT_INDUSTRY_VALUES } from "@/industries/it-agency/leads/prospect-
 import { SALUTATION_VALUES } from "@/industries/it-agency/leads/salutations";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { checkRateLimit, FORM_SUBMIT_LIMIT } from "@/lib/api/rate-limit";
+import { requestSmartAssignment } from "@/industries/education-consultancy/features/home/server/assignment/request";
 import { createRequestLogger } from "@/lib/logger";
 import {
   upsertThreadNotification,
@@ -1913,6 +1914,9 @@ async function handlePost(request: NextRequest) {
       });
     })().catch(() => { /* non-fatal */ });
   }
+
+  // Smart assignment (only when the tenant turned it on, only for a lead created unassigned). Non-blocking.
+  if ((lead as Lead).is_final !== false) void requestSmartAssignment({ tenantId, leadId: lead.id, assignedTo: (lead as Lead).assigned_to });
 
   Promise.all([
     // lead.created audit suppressed when lead.submission was recorded (A4: combined display)

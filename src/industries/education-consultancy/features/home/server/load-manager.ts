@@ -26,6 +26,8 @@ import { deadlineDocsRule } from "../lib/rules/deadline-docs";
 import { localDate } from "../lib/time";
 import type { HomeScope } from "../lib/scope";
 import { loadApplications, type HomeDb } from "./load-home";
+import { autoAssignedRow, shadowCard, type AutoDecision, type ShadowCard } from "../lib/assignment/summary";
+import { loadAssignmentSettings } from "./assignment/settings";
 import { makeLeadScope } from "./lead-scope";
 import { loadQuietOverTwoWeeks } from "./quiet-leads";
 import { countStaleCallbacks } from "./stale-callbacks";
@@ -58,6 +60,8 @@ export interface ManagerData {
   own: HomeData;
   leaveWaiting: number;
   branchName: string | null;
+  /** Shadow mode: how often smart assignment agreed with the managers (owner/admin only). */
+  shadow: ShadowCard | null;
 }
 
 function chunk<T>(xs: T[], n = CHUNK): T[][] {
@@ -123,7 +127,9 @@ export async function loadManagerHome(
     });
 
   const scopeLabel = scope.branchId ? (branches.find((b) => b.id === scope.branchId)?.name ?? "this branch") : "all branches";
+  const assignment = isAdmin ? await loadAssignmentCards(db, now, nameOf) : { shadow: null, auto: null };
   const needsYou = [
+    assignment.auto,
     unassignedRow({
       count: unassigned.count,
       oldestAt: unassigned.oldestAt,
@@ -154,6 +160,7 @@ export async function loadManagerHome(
     own,
     leaveWaiting: leaveSummary.pendingLeaveApprovals,
     branchName,
+    shadow: assignment.shadow,
   };
 }
 
@@ -274,4 +281,38 @@ async function loadImpact(db: HomeDb, tenantId: string, launchedAt: string | nul
 async function loadActiveListIds(db: HomeDb): Promise<string[]> {
   const { data } = await db.from("lead_lists").select("id, is_archive, is_staging");
   return ((data ?? []) as unknown as Array<{ id: string; is_archive: boolean; is_staging: boolean | null }>).filter((l) => !l.is_archive && !l.is_staging).map((l) => l.id);
+}
+
+/** Owner / admin only: the shadow-mode agreement card, or the auto-mode "assigned automatically" FYI row. Off = nothing. */
+async function loadAssignmentCards(db: HomeDb, now: Date, names: ReadonlyMap<string, string>): Promise<{ shadow: ShadowCard | null; auto: NeedsYouRow | null }> {
+  const settings = await loadAssignmentSettings(db);
+  if (settings.mode === "off") return { shadow: null, auto: null };
+  if (settings.mode === "shadow") {
+    const { data } = await db.from("lead_assignment_decisions").select("mode, outcome").eq("mode", "shadow").limit(5000);
+    return { shadow: shadowCard((data ?? []) as unknown as Array<{ mode: "shadow" | "auto"; outcome: "matched" | "overridden" | "undone" | null }>), auto: null };
+  }
+  const since = new Date(now.getTime() - 24 * 3_600_000).toISOString();
+  const { data } = await db
+    .from("lead_assignment_decisions")
+    .select("id, lead_id, picked_user_id, created_at")
+    .eq("mode", "auto")
+    .eq("applied", true)
+    .is("outcome", null)
+    .gte("created_at", since)
+    .order("created_at", { ascending: false })
+    .limit(200);
+  const rows = ((data ?? []) as unknown as Array<{ id: string; lead_id: string; picked_user_id: string | null; created_at: string }>).filter((r) => r.picked_user_id);
+  if (rows.length === 0) return { shadow: null, auto: null };
+  // "Already contacted": a touch on the lead since smart assignment gave it away (lib/contact.ts: last_touched_at).
+  const touchedAfter = new Map(rows.map((r) => [r.lead_id, r.created_at]));
+  let contacted = 0;
+  for (const ids of chunk([...touchedAfter.keys()])) {
+    const { data: ls } = await db.from("leads").select("id, last_touched_at").in("id", ids);
+    for (const l of (ls ?? []) as unknown as Array<{ id: string; last_touched_at: string | null }>) {
+      const at = touchedAfter.get(l.id);
+      if (l.last_touched_at && at && Date.parse(l.last_touched_at) >= Date.parse(at)) contacted += 1;
+    }
+  }
+  const decisions: AutoDecision[] = rows.map((r) => ({ id: r.id, leadId: r.lead_id, pickedUserId: r.picked_user_id as string }));
+  return { shadow: null, auto: autoAssignedRow(decisions, names, contacted) };
 }

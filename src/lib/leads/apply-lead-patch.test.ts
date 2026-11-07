@@ -1135,3 +1135,60 @@ describe("applyLeadPatch — callback_due_at (EDGEX-87 call-back booking)", () =
     expect(written(db)).toHaveLength(0);
   });
 });
+
+describe("applyLeadPatch — systemActor (smart assignment runs as the owner but must not look like the owner)", () => {
+  const LEAD = { id: "lead-1", pipeline_id: "pipe-1", assigned_to: null, branch_id: null, list_id: null, first_name: "Sujan", last_name: "Rai", email: null };
+  const ownerAuth = () => fixtureAuth({ userId: "owner-1", email: "owner@x.com", role: "owner", permissions: { baseTier: "owner", leadScope: "all", canAssignLeads: true } as ResolvedPermissions });
+  const actor = { key: "smart_assignment", label: "Smart assignment", decisionId: "dec-9" };
+  const ASHA = { asha: { user_id: "asha", branch_id: null, role: "staff", positions: { slug: "lead-caller" } } };
+
+  beforeEach(() => {
+    createAuditLogMock.mockClear();
+    createNotificationsExceptMock.mockClear();
+    addLeadCollaboratorMock.mockClear();
+  });
+
+  it("stamps via + decision_id on the AUDIT row (so the timeline can say 'Smart assignment'), not on the returned changes", async () => {
+    await setFakeDb({ leads: LEAD, tenantUsers: ASHA });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(ownerAuth(), "lead-1", { assigned_to: "asha" }, { ...OPTS, systemActor: actor });
+    expect(outcome.kind).toBe("ok");
+    await new Promise((r) => setTimeout(r, 0));
+    const audit = createAuditLogMock.mock.calls.map((c) => (c as unknown[])[0] as unknown as { changes: Record<string, { old: unknown; new: unknown }> }).find((a) => a.changes.assigned_to);
+    expect(audit?.changes.via).toEqual({ old: null, new: "smart_assignment" });
+    expect(audit?.changes.decision_id).toEqual({ old: null, new: "dec-9" });
+    if (outcome.kind === "ok") {
+      expect(outcome.changes.via).toBeUndefined();
+      expect(outcome.previousValues.via).toBeUndefined();
+    }
+  });
+
+  it("the assignee's notification reads 'Smart assignment assigned you <lead>' and the owner is not suppressed from it", async () => {
+    await setFakeDb({ leads: LEAD, tenantUsers: ASHA });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    await applyLeadPatch(ownerAuth(), "lead-1", { assigned_to: "asha" }, { ...OPTS, systemActor: actor });
+    await new Promise((r) => setTimeout(r, 0));
+    const [except, notes] = createNotificationsExceptMock.mock.calls[0] as unknown as [string, Array<{ userId: string; message: string }>];
+    expect(except).toBe("");
+    expect(notes[0]).toMatchObject({ userId: "asha", message: "Smart assignment assigned you Sujan Rai" });
+  });
+
+  it("the owner is NOT added as a collaborator (only the new assignee is)", async () => {
+    await setFakeDb({ leads: LEAD, tenantUsers: ASHA });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    await applyLeadPatch(ownerAuth(), "lead-1", { assigned_to: "asha" }, { ...OPTS, systemActor: actor });
+    const added = addLeadCollaboratorMock.mock.calls.map((c) => (c as unknown[])[3]);
+    expect(added).toContain("asha");
+    expect(added).not.toContain("owner-1");
+  });
+
+  it("a normal human edit is unchanged: no via stamp, the actor is suppressed from their own notification", async () => {
+    await setFakeDb({ leads: LEAD, tenantUsers: ASHA });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    await applyLeadPatch(ownerAuth(), "lead-1", { assigned_to: "asha" }, OPTS);
+    await new Promise((r) => setTimeout(r, 0));
+    const audit = createAuditLogMock.mock.calls.map((c) => (c as unknown[])[0] as unknown as { changes: Record<string, unknown> }).find((a) => a.changes.assigned_to);
+    expect(audit?.changes.via).toBeUndefined();
+    expect((createNotificationsExceptMock.mock.calls[0] as unknown[])[0]).toBe("owner-1");
+  });
+});

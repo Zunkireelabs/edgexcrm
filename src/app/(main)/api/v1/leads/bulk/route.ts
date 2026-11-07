@@ -20,6 +20,7 @@ import {
 } from "@/lib/api/response";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { createRequestLogger } from "@/lib/logger";
+import { recordHumanAssignment } from "@/industries/education-consultancy/features/home/server/assignment/outcome-record";
 import { createNotificationsExcept, NotificationTypes } from "@/lib/notifications";
 import { ASSIGN_CHAIN_POSITIONS, assignableTargetSlugs } from "@/industries/education-consultancy/lead-assignment-chain";
 import { sendBulkAssignedEmail } from "@/lib/email/send-lead-assigned";
@@ -506,6 +507,15 @@ export async function PATCH(request: NextRequest) {
       await addLeadCollaborators(supabase, auth.tenantId, idsToUpdate, body.assigned_to);
     } catch (err) {
       log.error({ err }, "addLeadCollaborators on bulk assign failed");
+    }
+  }
+
+  // Smart assignment (shadow mode): remember whether a human agreed with its pick for each lead that really changed hands.
+  if (body.assigned_to) {
+    for (const id of idsToUpdate) {
+      if ((existingMap.get(id)?.assigned_to as string | null | undefined) !== body.assigned_to) {
+        void recordHumanAssignment({ tenantId: auth.tenantId, leadId: id, assignedTo: body.assigned_to, actorId: auth.userId });
+      }
     }
   }
 

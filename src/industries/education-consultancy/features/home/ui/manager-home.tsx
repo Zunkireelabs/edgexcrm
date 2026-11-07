@@ -81,6 +81,7 @@ function NeedsAction({ action, primary, onDone }: { action: NeedsAction; primary
     );
   }
   if (action.type === "clear_stale") return <ClearStale action={action} onDone={onDone} />;
+  if (action.type === "undo_assignment") return <UndoAssignment action={action} onDone={onDone} />;
   return (
     <Button
       look="v2"
@@ -102,6 +103,29 @@ function NeedsAction({ action, primary, onDone }: { action: NeedsAction; primary
         setBusy(false);
         toast.success(`Assigned ${action.leadIds.length} ${action.leadIds.length === 1 ? "lead" : "leads"}`);
         onDone("unassigned");
+      }}
+    >
+      {action.label}
+    </Button>
+  );
+}
+
+/** "Undo" on the auto-assignment FYI: the leads go back to unassigned (each is audited and counts against the pick). */
+function UndoAssignment({ action, onDone }: { action: Extract<NeedsAction, { type: "undo_assignment" }>; onDone: (key?: string) => void }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <Button
+      look="v2"
+      variant="secondary"
+      size="sm"
+      disabled={busy}
+      onClick={async () => {
+        setBusy(true);
+        const r = await postJson("/api/v1/home/assignment/undo", "POST", { decision_ids: action.decisionIds.slice(0, 100) });
+        setBusy(false);
+        if (!r.ok) return toast.error(r.message ?? "Couldn't undo");
+        toast.success("Put back to unassigned");
+        onDone("auto_assigned");
       }}
     >
       {action.label}
@@ -270,6 +294,20 @@ export function ManagerHome({ data }: { data: ManagerData }) {
             ))}
             <div className="eh-note"><span className="eh-fl good" />{data.needsALook.others} {data.needsALook.others === 1 ? "other" : "others"} on track</div>
           </div>
+
+          {data.shadow ? (
+            <div className="eh-card">
+              <div className="eh-ch"><UserSwitchIcon size={16} aria-hidden /><h3>Smart assignment</h3></div>
+              <div className="eh-note">
+                {data.shadow.total === 0
+                  ? "Learning: it picks someone for each new lead but assigns nothing. Once your managers assign leads, you will see how often they agree."
+                  : <>Agreed with your managers <b style={{ color: "var(--ds-ink)" }}>{data.shadow.matched} of {data.shadow.total}</b> times ({data.shadow.pct}%).</>}
+                <div style={{ marginTop: 8 }}>
+                  <Button look="v2" variant="secondary" size="sm" asChild><Link href="/settings">Turn on</Link></Button>
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           <div className="eh-card">
             <div className="eh-ch"><TrendUpIcon size={16} aria-hidden /><h3>Is the new Home helping?</h3></div>

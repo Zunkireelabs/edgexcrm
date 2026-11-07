@@ -9,7 +9,9 @@ export type NeedsAction =
   | { type: "assign"; label: string; leadIds: string[]; assignments: Array<{ userId: string; name: string; take: number }>; primary?: boolean }
   | { type: "note"; label: string }
   /** Clear the call-back reminders older than 2 weeks (confirm shows `count`). */
-  | { type: "clear_stale"; label: string; count: number };
+  | { type: "clear_stale"; label: string; count: number }
+  /** Auto-assignment FYI: put these decisions' leads back to unassigned. */
+  | { type: "undo_assignment"; label: string; decisionIds: string[] };
 
 export interface NeedsYouRow {
   key: string;
