@@ -31,6 +31,7 @@ export async function loadHome(
   tenant: { timezone: string | null; config: TenantConfig | null },
   firstName: string,
   now: Date = new Date(),
+  opts: { withWeek?: boolean } = {},
 ): Promise<HomeData> {
   const tz = tenant.timezone ?? "Asia/Kathmandu";
   const db = await scopedClient(auth);
@@ -42,7 +43,7 @@ export async function loadHome(
     loadMyApplications(db, auth.userId, today),
     loadSnoozedKeys(db, auth.userId, now),
     getMySchedule(auth.tenantId, auth.userId),
-    loadMyWeek(auth, db, tz, tenant.config, now).catch(() => [] as WeekMetric[]),
+    opts.withWeek === false ? Promise.resolve([] as WeekMetric[]) : loadMyWeek(auth, db, tz, tenant.config, now).catch(() => [] as WeekMetric[]),
   ]);
   const leadNames = new Map(leads.map((l) => [l.id, l.name]));
   const conversations = await loadMyConversations(db, auth.userId, leadNames);

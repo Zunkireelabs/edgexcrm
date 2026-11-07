@@ -109,6 +109,8 @@ export interface SubmitStage {
 export interface HomeApplication {
   id: string;
   leadId: string;
+  /** applications.assigned_to (who owns it). */
+  assigneeId: string | null;
   leadName: string;
   university: string;
   program: string;

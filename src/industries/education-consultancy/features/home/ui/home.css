@@ -91,3 +91,23 @@
 .eh-seg button { flex-shrink: 0; white-space: nowrap; }
 .eh-ag { grid-template-columns: 64px minmax(0, 1fr); }
 @media (max-width: 767px) { .eh-seg { margin-left: 0; width: 100%; } }
+/* manager Home (A2): Needs you, Needs a look, Is the new Home helping? */
+.eh-pp { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 7px 0; border-top: 1px solid var(--ds-divider); }
+.eh-pp:first-of-type { border-top: 0; }
+.eh-pp .x { font-size: 13px; color: var(--ds-ink); font-weight: 500; min-width: 0; }
+.eh-pp .x span { display: block; font-weight: 400; color: var(--ds-muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.eh-pp .v { font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--ds-text); text-align: right; display: inline-flex; align-items: center; }
+.eh-av { width: 22px; height: 22px; border-radius: var(--ds-r-full); display: grid; place-items: center; color: var(--ds-surface); font-size: 9.5px; font-weight: 600; }
+.eh-av.bad { background: var(--ds-bad); }
+.eh-av.warn { background: var(--ds-warn); }
+.eh-av.muted { background: var(--ds-faint); }
+.eh-fl { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; }
+.eh-fl.bad { background: var(--ds-bad); }
+.eh-fl.warn { background: var(--ds-warn); }
+.eh-fl.muted { background: var(--ds-ghost); }
+.eh-fl.good { background: var(--ds-good); }
+.eh-sub { color: var(--ds-muted); font-size: 12px; margin: -4px 0 4px; }
+.eh-note { color: var(--ds-muted); font-size: 12.5px; padding: 4px 0 8px; }
+.eh-nudged { color: var(--ds-muted); font-size: 12.5px; padding: 0 6px; white-space: nowrap; }
+.eh-linkbtn { color: var(--ds-accent); font-weight: 500; font-size: 12.5px; }
+@media (max-width: 767px) { .eh-ac { flex-wrap: wrap; justify-content: flex-end; } }

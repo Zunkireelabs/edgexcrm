@@ -1,12 +1,10 @@
 import type { AuthContext } from "@/lib/api/auth";
 import type { TenantConfig } from "@/types/database";
 import { assemblePeople } from "../../pulse/lib/assemble";
-import { resolvePulseThresholds } from "../../pulse/lib/thresholds";
-import { periodSpans, resolvePulseWindow, windowLengthMs } from "../../pulse/lib/window";
 import type { PersonBucketRow } from "../../pulse/lib/types";
 import { loadBuckets } from "../../pulse/server/buckets";
 import { loadCoverage } from "../../pulse/server/coverage";
-import type { PulseContext } from "../../pulse/server/context";
+import { buildHomePulseContext } from "./pulse-ctx";
 import { loadPeople } from "../../pulse/server/load-pulse";
 import { addDaysStr, localDate } from "../lib/time";
 import {
@@ -32,30 +30,9 @@ export async function loadMyWeek(
   config: TenantConfig | null | undefined,
   now: Date,
 ): Promise<WeekMetric[]> {
-  const window = resolvePulseWindow("7d", now, tz);
-  if (!window) return [];
-  const prev = periodSpans(window, tz).previous;
-  const thresholds = resolvePulseThresholds(config);
-  const ctx: PulseContext = {
-    auth,
-    db,
-    tz,
-    window,
-    windowInfo: {
-      key: window.key,
-      from: window.from.toISOString(),
-      to: window.to.toISOString(),
-      tz,
-      previousFrom: prev.from.toISOString(),
-      previousTo: prev.to.toISOString(),
-      days: windowLengthMs(window) / DAY,
-    },
-    branchId: null,
-    branches: [],
-    thresholds,
-    tenantName: "",
-    aiMode: "off",
-  };
+  const ctx = buildHomePulseContext(auth, db, tz, config, now, null, []);
+  if (!ctx) return [];
+  const { window, thresholds } = ctx;
   const bulk = { p_bulk_min: thresholds.bulkMinRows, p_bulk_seconds: thresholds.bulkBucketSeconds };
 
   const [statsAll, coverage, leave, firstHour] = await Promise.all([

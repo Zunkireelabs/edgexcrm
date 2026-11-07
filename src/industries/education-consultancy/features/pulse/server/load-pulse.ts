@@ -95,7 +95,7 @@ async function loadWeeklyFlags(ctx: PulseContext, shownFlags: Record<string, "re
 }
 
 /** Open leads each person holds now: active lists, not deleted. One head-count per person (a few dozen, in parallel). */
-async function loadHeldLoad(ctx: PulseContext, people: PersonRow[], activeIds: string[]): Promise<Record<string, number>> {
+export async function loadHeldLoad(ctx: PulseContext, people: PersonRow[], activeIds: string[]): Promise<Record<string, number>> {
   const out: Record<string, number> = {};
   if (activeIds.length === 0) return out;
   await Promise.all(people.map(async (p) => {
@@ -272,6 +272,7 @@ export async function loadPulse(ctx: PulseContext): Promise<PulseResponse> {
     },
     briefing,
     attention,
+    heldLoad,
     coverage: { baselineCovered, hasUsual: teamHasUsual },
     window: ctx.windowInfo,
     branchId,

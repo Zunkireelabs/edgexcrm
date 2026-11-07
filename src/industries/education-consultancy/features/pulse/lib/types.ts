@@ -293,6 +293,8 @@ export interface PulseResponse {
   header: PulseHeader;
   briefing: Briefing | null;
   attention: AttentionItem[];
+  /** Open leads each person holds right now (the load a reassign target is chosen by). Additive: lets Home reuse it instead of recounting. */
+  heldLoad?: Record<string, number>;
   /** Whether "last period" and "usual" are backed by data (the tenant has records that far back). */
   coverage?: { baselineCovered: boolean; hasUsual: boolean };
   window: PulseWindowInfo;

@@ -44,6 +44,7 @@ export const task = (o: Partial<HomeTask> = {}): HomeTask => ({
 export const app = (o: Partial<HomeApplication> = {}): HomeApplication => ({
   id: "a1",
   leadId: "l9",
+  assigneeId: "me",
   leadName: "Sita Gurung",
   university: "Deakin",
   program: "Master of IT",

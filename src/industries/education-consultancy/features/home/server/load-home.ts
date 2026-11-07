@@ -187,18 +187,31 @@ export interface LoadedApplications {
 
 /** My live applications, with the missing-documents verdict from the ONE shared definition (computeMissingDocuments). */
 export async function loadMyApplications(db: HomeDb, userId: string, today: string): Promise<LoadedApplications> {
+  return loadApplications(db, { userId }, today);
+}
+
+/**
+ * Live applications for one person (`userId`) or for a manager's scope (`branchId`: the lead's branch; null/undefined =
+ * the whole tenant). Same verdicts either way; the manager's "applications at risk" row reuses A1's deadline_docs rule.
+ */
+export async function loadApplications(
+  db: HomeDb,
+  opts: { userId?: string; branchId?: string | null },
+  today: string,
+): Promise<LoadedApplications> {
+  let appsQuery = db
+    .from("applications")
+    .select("id, lead_id, assigned_to, university_name, program_name, application_deadline, applied_date, deposit_paid, stage_changed_at, application_stages(name, position, terminal_type, pipeline_id), leads!inner(first_name, last_name, branch_id)")
+    .is("deleted_at", null);
+  if (opts.userId) appsQuery = appsQuery.eq("assigned_to", opts.userId);
+  if (opts.branchId) appsQuery = appsQuery.eq("leads.branch_id", opts.branchId);
   const [appsRes, submitRes, settingsRes] = await Promise.all([
-    db
-      .from("applications")
-      .select("id, lead_id, university_name, program_name, application_deadline, applied_date, deposit_paid, stage_changed_at, application_stages(name, position, terminal_type, pipeline_id), leads(first_name, last_name)")
-      .eq("assigned_to", userId)
-      .is("deleted_at", null)
-      .limit(500),
+    appsQuery.limit(2000),
     db.from("application_stages").select("pipeline_id, position").eq("is_submit_stage", true),
     db.from("tenant_document_settings").select("required_document_types").maybeSingle(),
   ]);
   type Row = {
-    id: string; lead_id: string; university_name: string; program_name: string; application_deadline: string | null;
+    id: string; lead_id: string; assigned_to: string | null; university_name: string; program_name: string; application_deadline: string | null;
     applied_date: string | null; deposit_paid: boolean | null; stage_changed_at: string;
     application_stages: { name: string; position: number; terminal_type: "won" | "lost" | null; pipeline_id: string | null } | null;
     leads: { first_name: string | null; last_name: string | null } | null;
@@ -234,6 +247,7 @@ export async function loadMyApplications(db: HomeDb, userId: string, today: stri
       return {
         id: r.id,
         leadId: r.lead_id,
+        assigneeId: r.assigned_to,
         leadName: r.leads ? fullName(r.leads.first_name, r.leads.last_name) : "Unnamed lead",
         university: r.university_name,
         program: r.program_name,
