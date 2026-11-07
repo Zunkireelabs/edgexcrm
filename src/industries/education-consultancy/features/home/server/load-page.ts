@@ -11,6 +11,8 @@ import { loadMyApplications, loadMyConversations, loadMyLeads, loadMyTasks, load
 import { loadMyWeek } from "./load-week";
 
 export interface HomeData {
+  /** Tenant timezone: the call log reads the picked date/time in this zone, not the browser's. */
+  tz: string;
   greeting: string;
   lede: string;
   dateShort: string;
@@ -75,6 +77,7 @@ export async function loadHome(
   const agenda = buildAgenda(leads, sched, tasks, ctx);
   const nextTimed = agenda.find((e) => e.time && e.at >= now.getTime());
   return {
+    tz,
     greeting: greeting(firstName, now, tz),
     lede: lede(now, tz, doNext.items.length, doNext.bookedToday),
     dateShort: shortDate(now, tz),

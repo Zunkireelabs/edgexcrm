@@ -35,8 +35,34 @@ export function clockLabel(d: Date, tz: string): string {
   return d.toLocaleTimeString("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
+/** The ONE time format on Home: "9:08 pm", in the tenant timezone. */
 export function clock12(d: Date, tz: string): string {
-  return d.toLocaleTimeString("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit", hour12: true }).replace(" AM", " am").replace(" PM", " pm");
+  return d
+    .toLocaleTimeString("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit", hour12: true })
+    .replace(/\s*(AM|PM)$/i, (_m, ap: string) => ` ${ap.toLowerCase()}`);
+}
+
+/** UTC offset (ms) of `tz` at the instant `t`: local wall clock minus UTC. */
+function tzOffsetMs(t: number, tz: string): number {
+  const p = new Intl.DateTimeFormat("en-GB", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" })
+    .formatToParts(new Date(t))
+    .reduce<Record<string, number>>((a, x) => (x.type === "literal" ? a : { ...a, [x.type]: Number(x.value) }), {});
+  return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - Math.floor(t / 1000) * 1000;
+}
+
+/**
+ * A `datetime-local` value ("2026-11-11T09:08") is a wall-clock time with NO zone, and `new Date(value)` reads it in
+ * the BROWSER's zone. Home books call-backs in the TENANT's zone, so convert here: the instant whose wall clock in
+ * `tz` is `value`. Null for anything that isn't a valid local date-time.
+ */
+export function tenantLocalToIso(value: string, tz: string): string | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
+  if (!m) return null;
+  const [y, mo, d, h, mi] = m.slice(1).map(Number);
+  const wall = Date.UTC(y, mo - 1, d, h, mi);
+  let t = wall - tzOffsetMs(wall, tz);
+  t = wall - tzOffsetMs(t, tz); // re-evaluate at the candidate (DST edges)
+  return new Date(t).toISOString();
 }
 
 export function weekdayShort(d: Date, tz: string): string {

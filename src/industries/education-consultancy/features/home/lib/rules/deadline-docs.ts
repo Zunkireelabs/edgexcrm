@@ -5,6 +5,13 @@ import type { RuleCtx } from "./ctx";
 
 export const DEADLINE_WINDOW_DAYS = 7;
 
+/** "Bank statement missing", "Passport and Bank statement missing", "Passport, Bank statement and 1 more missing". */
+export function missingPhrase(labels: string[]): string {
+  if (labels.length <= 1) return `${labels[0] ?? "Documents"} missing`;
+  if (labels.length === 2) return `${labels[0]} and ${labels[1]} missing`;
+  return `${labels[0]}, ${labels[1]} and ${labels.length - 2} more missing`;
+}
+
 /**
  * deadline_docs: my application, deadline within 7 days (tenant-local), NOT submitted (definite; "unknown" never
  * fires), and at least one required document missing. The tenant must have a required-documents list
@@ -25,16 +32,14 @@ export function deadlineDocsRule(
     if (!a.docs.assessable || a.docs.missingLabels.length === 0) continue;
     const left = daysBetween(today, a.deadline);
     const have = a.docs.requiredCount - a.docs.missingLabels.length;
-    const missing = a.docs.missingLabels.length === 1
-      ? `${a.docs.missingLabels[0].toLowerCase()} missing`
-      : `${a.docs.missingLabels.length} documents missing`;
+    const missing = missingPhrase(a.docs.missingLabels);
     out.push({
       key: `deadline_docs:${a.id}`,
       kind: "deadline_docs",
       tier: "today",
       leadId: a.leadId,
       title: a.leadName,
-      why: `${a.university} · ${a.program} · ${missing} (${have} of ${a.docs.requiredCount} documents in)`,
+      why: [a.university, a.program, missing, have > 0 ? `${have} of ${a.docs.requiredCount} in` : ""].filter(Boolean).join(" · "),
       chip: {
         text: left === 0 ? "Closes today" : `Closes in ${left} ${left === 1 ? "day" : "days"}`,
         tone: left <= 2 ? "bad" : "warn",

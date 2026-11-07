@@ -76,7 +76,7 @@ describe("callbacks (leads.callback_due_at)", () => {
     const [i] = callbackRules([lead({ callbackDueAt: "2026-11-09T05:45:00.000Z" })], KTM); // 11:30 Kathmandu
     expect(i.kind).toBe("callback_today");
     expect(i.tier).toBe("today");
-    expect(i.chip.text).toBe("Call back 11:30");
+    expect(i.chip.text).toBe("Call back 11:30 am");
   });
   it("UTC vs Kathmandu: 19:00 UTC on the 9th is already TOMORROW in Kathmandu (00:45 on the 10th)", () => {
     const due = "2026-11-09T19:00:00.000Z";
@@ -123,7 +123,13 @@ describe("deadline_docs", () => {
     const [i] = deadlineDocsRule([app()], SUBMIT, KTM);
     expect(i.kind).toBe("deadline_docs");
     expect(i.chip).toEqual({ text: "Closes in 6 days", tone: "warn" });
-    expect(i.why).toBe("Deakin · Master of IT · bank statement missing (3 of 4 documents in)");
+    expect(i.why).toBe("Deakin · Master of IT · Bank statement missing · 3 of 4 in");
+  });
+  it("names the missing documents: up to two, then 'and N more'; 'N of M in' only when something is in", () => {
+    const docs = (missingLabels: string[], requiredCount: number) => ({ assessable: true, missingLabels, requiredCount });
+    expect(deadlineDocsRule([app({ docs: docs(["Passport", "Bank statement"], 4) })], SUBMIT, KTM)[0].why).toBe("Deakin · Master of IT · Passport and Bank statement missing · 2 of 4 in");
+    expect(deadlineDocsRule([app({ docs: docs(["Passport", "Bank statement", "CV"], 4) })], SUBMIT, KTM)[0].why).toBe("Deakin · Master of IT · Passport, Bank statement and 1 more missing · 1 of 4 in");
+    expect(deadlineDocsRule([app({ docs: docs(["Passport", "Bank statement", "CV"], 3) })], SUBMIT, KTM)[0].why).toBe("Deakin · Master of IT · Passport, Bank statement and 1 more missing");
   });
   it("closes today / within 2 days is red", () => {
     expect(deadlineDocsRule([app({ deadline: "2026-11-09" })], SUBMIT, KTM)[0].chip).toEqual({ text: "Closes today", tone: "bad" });
@@ -176,5 +182,13 @@ describe("stuck_in_stage", () => {
   it("without history the 14-day floor alone applies; terminal never counts", () => {
     expect(stuckInStageRule([stuck(15)], new Map(), KTM)).toHaveLength(1);
     expect(stuckInStageRule([stuck(40, { stage: { position: 9, terminalType: "won", pipelineId: "p1" } })], new Map(), KTM)).toEqual([]);
+  });
+});
+
+describe("one time format", () => {
+  it("chips use '9:08 pm' style in the tenant zone, like the why-lines", () => {
+    // 15:23 UTC = 21:08 in Kathmandu
+    const [i] = callbackRules([lead({ callbackDueAt: "2026-11-09T15:23:00.000Z", lastTouchedAt: "2026-11-09T01:00:00.000Z" })], KTM);
+    expect(i.chip.text).toBe("Call back 9:08 pm");
   });
 });

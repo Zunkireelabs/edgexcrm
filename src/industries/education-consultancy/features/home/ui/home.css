@@ -83,3 +83,11 @@
 }
 .eh-ph { display: none; }
 @media (max-width: 767px) { .eh-ph { display: inline; } }
+/* segmented counts: 4px gap, count in ds-faint (the shared control renders a bare <span>, so style it here) */
+.eh-seg button > span { margin-left: 4px; color: var(--ds-faint); font-variant-numeric: tabular-nums; }
+.eh-seg { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.eh-seg::-webkit-scrollbar { display: none; }
+.eh-seg > * { flex-shrink: 0; width: max-content; }
+.eh-seg button { flex-shrink: 0; white-space: nowrap; }
+.eh-ag { grid-template-columns: 64px minmax(0, 1fr); }
+@media (max-width: 767px) { .eh-seg { margin-left: 0; width: 100%; } }

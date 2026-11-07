@@ -1,4 +1,4 @@
-import { clockLabel, dayBounds } from "./time";
+import { clock12, dayBounds } from "./time";
 import type { HomeLead, HomeTask } from "./types";
 import { localDate } from "./time";
 import type { RuleCtx } from "./rules/ctx";
@@ -43,14 +43,14 @@ export function buildAgenda(
     if (!l.isActive || !l.callbackDueAt) continue;
     const t = inDay(l.callbackDueAt);
     if (t === null) continue;
-    timed.push({ time: clockLabel(new Date(t), ctx.tz), title: `Call back · ${l.name}`, sub: l.context || null, at: t, soon: t >= ctx.now.getTime() && t - ctx.now.getTime() <= 3_600_000 });
+    timed.push({ time: clock12(new Date(t), ctx.tz), title: `Call back · ${l.name}`, sub: l.context || null, at: t, soon: t >= ctx.now.getTime() && t - ctx.now.getTime() <= 3_600_000 });
   }
   for (const s of schedule) {
     const t = inDay(s.scheduledAt);
     if (t === null) continue;
     const verb = s.activityType === "call" ? "Call" : s.activityType === "meeting" ? "Meeting" : "Email";
     timed.push({
-      time: clockLabel(new Date(t), ctx.tz),
+      time: clock12(new Date(t), ctx.tz),
       title: `${verb}${s.leadName ? ` · ${s.leadName}` : ""}`,
       sub: [s.subject, s.location].filter(Boolean).join(" · ") || null,
       at: t,

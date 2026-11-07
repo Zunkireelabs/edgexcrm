@@ -1,4 +1,4 @@
-import { ageLabel, clockLabel, clock12, dayBounds, daysBetween, localDate } from "../time";
+import { ageLabel, clock12, dayBounds, daysBetween, localDate } from "../time";
 import type { DoNextItem, HomeLead } from "../types";
 import type { RuleCtx } from "./ctx";
 
@@ -53,7 +53,7 @@ export function callbackRules(leads: HomeLead[], ctx: RuleCtx): DoNextItem[] {
         leadId: l.id,
         title: l.name,
         why: l.context ? `${l.context}${lastCall(l)}` : lastCall(l).replace(/^ · /, ""),
-        chip: { text: `Call back ${clockLabel(dueAt, ctx.tz)}`, tone: "neutral" },
+        chip: { text: `Call back ${clock12(dueAt, ctx.tz)}`, tone: "neutral" },
         tone: "neutral",
         primaryAction: { type: "call", leadId: l.id, phone: l.phone, leadName: l.name },
         sortKey: { group: 0, at: due },

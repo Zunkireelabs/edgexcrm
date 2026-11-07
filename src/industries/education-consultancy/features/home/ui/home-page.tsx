@@ -30,6 +30,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { filterItems } from "../lib/build";
 import { VISIBLE_LIMIT } from "../lib/rank";
+import { tenantLocalToIso } from "../lib/time";
 import {
   OUTCOME_LABEL,
   planCallLogSave,
@@ -81,7 +82,7 @@ async function send(req: PlannedRequest) {
 }
 
 /** The inline call log (H4 without the note box). Writes through the existing endpoints, in a fixed order (see call-log.ts). */
-function CallLog({ item, nextStage, onSaved }: { item: DoNextItem; nextStage: { id: string; name: string } | null; onSaved: () => void }) {
+function CallLog({ item, nextStage, tz, onSaved }: { item: DoNextItem; nextStage: { id: string; name: string } | null; tz: string; onSaved: () => void }) {
   const [outcome, setOutcome] = useState<CallOutcomeChoice>("talked");
   const [wantCallback, setWantCallback] = useState(false);
   const [callbackAt, setCallbackAt] = useState("");
@@ -96,11 +97,13 @@ function CallLog({ item, nextStage, onSaved }: { item: DoNextItem; nextStage: { 
   const save = async () => {
     setError(null);
     if (wantCallback && !callbackAt) return setError("Pick a date and time for the call-back.");
+    const callbackIso = wantCallback ? tenantLocalToIso(callbackAt, tz) : null;
+    if (wantCallback && !callbackIso) return setError("That date and time isn't valid.");
     setSaving(true);
     const plan = planCallLogSave({
       leadId,
       outcome,
-      callbackAt: wantCallback && callbackAt ? new Date(callbackAt).toISOString() : null,
+      callbackAt: callbackIso,
       nextListId: moveNext && nextStage ? nextStage.id : null,
       note: wantNote ? note : "",
     });
@@ -132,7 +135,10 @@ function CallLog({ item, nextStage, onSaved }: { item: DoNextItem; nextStage: { 
           <CalendarBlankIcon size={14} aria-hidden /> Call back
         </button>
         {wantCallback ? (
-          <input type="datetime-local" aria-label="Call-back date and time" value={callbackAt} onChange={(e) => setCallbackAt(e.target.value)} />
+          <>
+            <input type="datetime-local" aria-label="Call-back date and time" value={callbackAt} onChange={(e) => setCallbackAt(e.target.value)} />
+            <span className="eh-wh" style={{ margin: 0 }}>{tz.replace(/^.*\//, "").replace(/_/g, " ")} time</span>
+          </>
         ) : null}
         {nextStage ? (
           <button type="button" className="eh-opt" aria-pressed={moveNext} onClick={() => setMoveNext((v) => !v)}>
@@ -290,7 +296,7 @@ export function EducationHome({ data }: { data: HomeData }) {
                               <Link href={item.evidenceHref} className="eh-nm">{item.title}</Link>
                               <span className={`eh-chip ${item.chip.tone === "neutral" ? "" : item.chip.tone}`}>{item.chip.text}</span>
                             </div>
-                            <div className="eh-wh"><span className="eh-ph">{item.chip.text} · </span>{item.why}</div>
+                            <div className="eh-wh"><span className="eh-ph">{item.chip.text}{item.why ? " · " : ""}</span>{item.why}</div>
                           </div>
                           <div className="eh-ac">
                             <RowAction item={item} busy={busy === item.key} onCall={() => setOpenLog(item.key)} onDone={() => markDone(item)} />
@@ -310,6 +316,7 @@ export function EducationHome({ data }: { data: HomeData }) {
                           <CallLog
                             item={item}
                             nextStage={data.nextStageByLead[item.primaryAction.leadId] ?? null}
+                            tz={data.tz}
                             onSaved={() => { setOpenLog(null); router.refresh(); }}
                           />
                         ) : null}

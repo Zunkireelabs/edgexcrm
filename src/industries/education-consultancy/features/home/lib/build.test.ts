@@ -103,7 +103,7 @@ describe("agenda (Today card)", () => {
       [task()],
       ctx,
     );
-    expect(a.map((e) => [e.time, e.title])).toEqual([["11:30", "Call back · Nabin KC"], ["14:00", "Meeting · Pooja Shrestha"], [null, "Send SOP feedback"]]);
+    expect(a.map((e) => [e.time, e.title])).toEqual([["11:30 am", "Call back · Nabin KC"], ["2:00 pm", "Meeting · Pooja Shrestha"], [null, "Send SOP feedback"]]);
     expect(a[0].soon).toBe(false);
   });
 });
