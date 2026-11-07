@@ -14,6 +14,8 @@ import { impactRows, impactStatus, measuringSince, type ImpactRaw, type ImpactRo
 import { needsALook, type NeedsALook } from "../lib/needs-a-look";
 import {
   atRiskRow,
+  formerHolderRow,
+  formerHolderHref,
   quietOverRow,
   staleCallbacksRow,
   attentionRows,
@@ -102,8 +104,9 @@ export async function loadManagerHome(
   for (const p of pulse.people) if (p.flag) flags7d[p.userId] = p.flag;
 
   const leadScope = await makeLeadScope(db, auth, scope);
-  const [unassigned, nudges, atRisk, onLeave, impact, staleCount, quiet] = await Promise.all([
+  const [unassigned, former, nudges, atRisk, onLeave, impact, staleCount, quiet] = await Promise.all([
     loadUnassigned(db, scope.branchId),
+    loadFormerHolders(db, scope.branchId),
     loadNudgeStates(db, auth.userId, now, tz),
     loadAtRisk(db, scope.branchId, today, now, tz, pulse),
     loadOnLeaveToday(db, pulse.people.filter((p) => p.flag).map((p) => p.userId), today),
@@ -138,6 +141,7 @@ export async function loadManagerHome(
       leadIds: unassigned.count <= MAX_ASSIGN_IDS ? unassigned.ids : null,
       chooseHref: unassignedHref,
     }),
+    formerHolderRow({ ...former, href: formerHolderHref(former.holderIds, former.activeListIds) }),
     ...standalone,
     ...attention,
     atRiskRow(atRisk, "/applications"),
@@ -190,6 +194,70 @@ async function loadUnassigned(db: HomeDb, branchId: string | null): Promise<{ co
   const { data, count } = await q;
   const rows = (data ?? []) as unknown as Array<{ id: string; created_at: string }>;
   return { count: count ?? rows.length, oldestAt: rows[0]?.created_at ?? null, ids: rows.map((r) => r.id) };
+}
+
+/** Most ex-member-held active leads we read in one go (the count is exact; the stage / holder spread is from these). */
+const FORMER_HOLDER_READ_CAP = 1000;
+
+/**
+ * Leads in an active list (exactly `loadUnassigned`'s definition: non-archive, non-staging, not archived, not deleted)
+ * held by someone who is NOT a current `tenant_users` member. Suspended members are still members, so never counted.
+ * Archived leads never count. Branch scope is `leads.branch_id`, like the unassigned count.
+ */
+export async function loadFormerHolders(db: HomeDb, branchId: string | null): Promise<{
+  total: number;
+  byStage: Array<{ name: string; count: number }>;
+  applications: number;
+  byHolder: Array<{ name: string | null; count: number }>;
+  holderIds: string[];
+  activeListIds: string[];
+}> {
+  const none = { total: 0, byStage: [], applications: 0, byHolder: [], holderIds: [], activeListIds: [] };
+  const [{ data: listRows }, { data: memberRows }] = await Promise.all([
+    db.from("lead_lists").select("id, name, is_archive, is_staging"),
+    db.from("tenant_users").select("user_id"),
+  ]);
+  const lists = ((listRows ?? []) as unknown as Array<{ id: string; name: string; is_archive: boolean; is_staging: boolean | null }>).filter((l) => !l.is_archive && !l.is_staging);
+  const members = ((memberRows ?? []) as unknown as Array<{ user_id: string }>).map((m) => m.user_id);
+  if (lists.length === 0) return none;
+  const activeListIds = lists.map((l) => l.id);
+  let q = db
+    .from("leads")
+    .select("id, list_id, assigned_to", { count: "exact" })
+    .not("assigned_to", "is", null)
+    .is("deleted_at", null)
+    .is("archived_at", null)
+    .in("list_id", activeListIds)
+    .limit(FORMER_HOLDER_READ_CAP);
+  if (members.length > 0) q = q.not("assigned_to", "in", `(${members.join(",")})`);
+  if (branchId) q = q.eq("branch_id", branchId);
+  const { data, count } = await q;
+  const rows = (data ?? []) as unknown as Array<{ id: string; list_id: string; assigned_to: string }>;
+  if (rows.length === 0) return none;
+
+  const stageName = new Map(lists.map((l) => [l.id, l.name]));
+  const stageCount = new Map<string, number>();
+  const holderCount = new Map<string, number>();
+  for (const r of rows) {
+    const sn = stageName.get(r.list_id) ?? "Other";
+    stageCount.set(sn, (stageCount.get(sn) ?? 0) + 1);
+    holderCount.set(r.assigned_to, (holderCount.get(r.assigned_to) ?? 0) + 1);
+  }
+  const holderIds = [...holderCount.keys()];
+  const names = await resolveUserNames(holderIds);
+  let applications = 0;
+  for (const ids of chunk(rows.map((r) => r.id))) {
+    const { count: c } = await db.from("applications").select("id", { count: "exact", head: true }).is("deleted_at", null).in("lead_id", ids);
+    applications += c ?? 0;
+  }
+  return {
+    total: count ?? rows.length,
+    byStage: [...stageCount].map(([name, n]) => ({ name, count: n })),
+    applications,
+    byHolder: holderIds.map((id) => ({ name: names.get(id) ?? null, count: holderCount.get(id) ?? 0 })),
+    holderIds,
+    activeListIds,
+  };
 }
 
 /** My open nudges and where each stands; one that has nothing left untouched is stamped resolved. */

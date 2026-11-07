@@ -17,7 +17,8 @@
 --                              coalesce(assigned_at, created_at) to the first CONTACT = a lead_activities row OR a human
 --                              lead_notes row (ai_tool_call_id IS NULL). Same definition as home/lib/contact.ts and migration 284.
 --      flag_7d                 Pulse's 7-day red / amber / green flag, written by the nightly job (not by this function).
---    Attribution is to the CURRENT holder (assigned_to); leads reassigned away count for their current holder. That is an
+--    Attribution is to the CURRENT holder (assigned_to), and only CURRENT tenant members get rows; leads held by people who
+--    left (no tenant_users row) are ignored. Leads reassigned away count for their current holder. That is an
 --    approximation: there is no per-holder history of progress.
 --    Sparse tenants: rows carry raw counts only. Smoothing toward the team rate and minimum sample sizes are applied by the
 --    scorer (home/lib/assignment/weights.ts), so a person with 3 leads never looks like a 100% closer.
@@ -113,6 +114,7 @@ BEGIN
     LEFT JOIN lead_lists ll ON ll.id = l.list_id
     LEFT JOIN q ON true
     WHERE l.tenant_id = p_tenant AND l.deleted_at IS NULL AND l.assigned_to IS NOT NULL
+      AND EXISTS (SELECT 1 FROM tenant_users tu WHERE tu.tenant_id = p_tenant AND tu.user_id = l.assigned_to)
       AND COALESCE(l.assigned_at, l.created_at) >= now() - make_interval(days => p_days)
   ),
   first_contact AS (

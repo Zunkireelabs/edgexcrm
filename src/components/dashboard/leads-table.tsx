@@ -1,7 +1,7 @@
 "use client";
 
 import { matchesCollaboratorFilter } from "@/lib/leads/collaborator-filter";
-import { countSuffix, isOfferedByCount, sortByCountDesc, formerCollaboratorOptions, type FacetOptionLike } from "@/lib/leads/facet-labels";
+import { countSuffix, isOfferedByCount, sortByCountDesc, formerCollaboratorOptions, holderLabel, type FacetOptionLike } from "@/lib/leads/facet-labels";
 import { useState, useMemo, useEffect, useRef, useCallback, cloneElement, isValidElement, type ReactElement, type ReactNode, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -1324,7 +1324,7 @@ export function LeadsTable({
       if (single === null) {
         return "Selected leads are unassigned — pick a member to assign them on route.";
       }
-      const name = (memberNames[single] || memberMap[single]?.split("@")[0]) ?? single;
+      const name = holderLabel(single, memberNames, memberMap) || single;
       return `All selected are assigned to ${name} — 'Keep current assignee' leaves them with this owner.`;
     }
     return "Selected leads have mixed assignees — choosing a member reassigns all of them.";
@@ -1699,7 +1699,7 @@ export function LeadsTable({
     const first = leadsInRestore[0].assigned_to ?? null;
     const sameAssignee = leadsInRestore.every((l) => (l.assigned_to ?? null) === first);
     if (!sameAssignee) return "Assignments stay as they are";
-    const name = first ? memberNames[first] || memberMap[first]?.split("@")[0] || first : "Unassigned";
+    const name = first ? holderLabel(first, memberNames, memberMap) || first : "Unassigned";
     return `Assigned to ${name}`;
   }, [restoreIds, localLeads, memberNames, memberMap]);
 
@@ -2530,6 +2530,10 @@ export function LeadsTable({
             value: userId,
             label: `${memberNames[userId] || email.split("@")[0]}${countSuffix(counselorCounts, userId)}`,
           })),
+        // A selected assignee who is no longer a member (the Home "held by people who left" link): named, never a raw uuid.
+        ...Array.from(selectedAssignees)
+          .filter((id) => id !== "unassigned" && !counselors.some(([userId]) => userId === id))
+          .map((id) => ({ value: id, label: holderLabel(id, memberNames, memberMap) || id })),
       ],
       // Collaborators: every team member is offered, regardless of role or count (an
       // owner/admin who is genuinely a collaborator must be filterable, and a name must

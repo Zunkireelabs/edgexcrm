@@ -1,3 +1,4 @@
+import { encodeFilterTree } from "@/lib/filters/serialize";
 import type { AttentionItem } from "../../pulse/lib/types";
 import type { ReassignPlan } from "../../pulse/lib/suggest";
 import type { NudgeState } from "./nudge";
@@ -205,4 +206,55 @@ export function quietOverRow(total: number, byPerson: Array<{ name: string; coun
     why: `${top.join(" \u00B7 ")}${others > 0 ? ` and ${others} more ${others === 1 ? "person" : "people"}` : ""}${top.length ? " \u00B7 " : ""}${scopeLabel}`,
     actions: [{ type: "link", label: "Review", href: "/leads" }],
   };
+}
+
+const FORMER_PERSON = "a former team member";
+
+/**
+ * Leads in an active list whose holder is no longer on the team: nobody is working them. One row for whoever sees the
+ * scope. Not smart assignment (these are mid-application and need a counsellor), so the one action just opens the leads
+ * list filtered to exactly these leads, where the existing bulk assign does the work.
+ */
+export function formerHolderRow(args: {
+  total: number;
+  /** Stage (lead list) name and how many of the leads sit there. */
+  byStage: Array<{ name: string; count: number }>;
+  /** Live applications on these leads (0 hides the part). */
+  applications: number;
+  /** Who held them, name null when that user no longer exists at all. */
+  byHolder: Array<{ name: string | null; count: number }>;
+  href: string;
+}): NeedsYouRow | null {
+  const n = args.total;
+  if (n <= 0) return null;
+  const stages = [...args.byStage].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  const holders = [...args.byHolder].sort((a, b) => b.count - a.count);
+  const top = holders.slice(0, 2).map((h) => `${h.name ?? FORMER_PERSON} ${h.count}`);
+  const rest = holders.length - top.length;
+  const parts = [
+    stages.map((s) => `${s.name} ${s.count}`).join(" \u00B7 "),
+    args.applications > 0 ? `${args.applications} ${args.applications === 1 ? "application" : "applications"}` : "",
+    top.length ? `last held by ${top.join(", ")}${rest > 0 ? ` and ${rest} more` : ""}` : "",
+  ].filter(Boolean);
+  return {
+    key: "former_holder",
+    tone: "warn",
+    icon: "user-switch",
+    title: n === 1 ? "1 lead is held by someone who left" : `${n} leads are held by people who left`,
+    chip: { text: "Nobody working them", tone: "warn" },
+    why: parts.join(" \u00B7 "),
+    actions: [{ type: "link", label: `Reassign ${n}`, href: args.href, primary: true }],
+  };
+}
+
+/** `/leads` on exactly these leads: held by these ex-members AND in the active lists (so the archived ones stay out). */
+export function formerHolderHref(holderIds: string[], activeListIds: string[]): string {
+  const tree = {
+    conjunction: "and" as const,
+    conditions: [
+      { id: "home:former-holders", field: "assignees", op: "is_any_of" as const, value: holderIds },
+      { id: "home:active-lists", field: "stage", op: "is_any_of" as const, value: activeListIds },
+    ],
+  };
+  return `/leads?${new URLSearchParams({ f: encodeFilterTree(tree) }).toString()}`;
 }

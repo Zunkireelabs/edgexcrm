@@ -1,5 +1,6 @@
 "use client";
 
+import { holderLabel } from "@/lib/leads/facet-labels";
 import React from "react";
 import Link from "next/link";
 import { EyeIcon, ArrowCounterClockwiseIcon } from "@/components/icons";
@@ -402,9 +403,7 @@ const STATIC_COLUMNS: LeadColumn[] = [
       </th>
     ),
     renderTd: (lead, ctx) => {
-      const assignedEmail = lead.assigned_to ? ctx.memberMap[lead.assigned_to] : null;
-      const assignedName = lead.assigned_to ? ctx.memberNames?.[lead.assigned_to] : null;
-      const label = assignedName || (assignedEmail ? assignedEmail.split("@")[0] : "");
+      const label = holderLabel(lead.assigned_to, ctx.memberNames, ctx.memberMap);
 
       // Education: same read-only AssigneeChip visual as other industries, but never
       // routed through AssigneeSelector — protects counselor / shared-pool /

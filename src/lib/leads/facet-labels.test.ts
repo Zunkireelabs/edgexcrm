@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { countSuffix, isOfferedByCount, sortByCountDesc, formerCollaboratorOptions } from "./facet-labels";
+import { countSuffix, isOfferedByCount, sortByCountDesc, formerCollaboratorOptions, holderLabel, FORMER_MEMBER_LABEL } from "./facet-labels";
 
 describe("facet label helpers", () => {
   const counts = new Map([["a", 1234], ["b", 0]]);
@@ -50,5 +50,25 @@ describe("facet label helpers", () => {
 
   it("formerCollaboratorOptions: no facet (server gave no answer) => no extra entries", () => {
     expect(formerCollaboratorOptions(null, () => false)).toEqual([]);
+  });
+});
+
+describe("holderLabel", () => {
+  const names = { a: "Asha Rai" };
+  const emails = { a: "asha@x.org", b: "bikash@x.org" };
+  it("uses the display name, then the email's local part", () => {
+    expect(holderLabel("a", names, emails)).toBe("Asha Rai");
+    expect(holderLabel("b", names, emails)).toBe("bikash");
+  });
+  it("blank for no holder", () => {
+    expect(holderLabel(null, names, emails)).toBe("");
+    expect(holderLabel(undefined, names, emails)).toBe("");
+  });
+  it("names a non-member as a former team member, never the uuid", () => {
+    expect(holderLabel("gone", names, emails)).toBe(FORMER_MEMBER_LABEL);
+  });
+  it("stays blank when no member list was loaded", () => {
+    expect(holderLabel("gone", {}, {})).toBe("");
+    expect(holderLabel("gone", undefined, undefined)).toBe("");
   });
 });
