@@ -15,6 +15,8 @@ export async function POST(_request: Request, { params }: { params: Promise<{ ke
     if (out.kind === "not_found") return apiNotFound("Version");
     if (out.kind === "forbidden") return apiForbidden();
     if (out.kind === "not_a_draft") return apiError("CONFLICT", `Only a draft can be approved (this one is ${out.status})`, 409);
+    if (out.kind === "no_changes_taken") return apiError("CONFLICT", "Tick at least one change, or reject the draft", 409);
+    if (out.kind === "invalid") return apiError("VALIDATION_ERROR", out.error, 422);
     return apiSuccess({ approved: true, retiredVersionId: out.retiredVersionId });
   } catch (err) {
     logger.error({ err, route: "processes/approve" }, "Failed to approve version");

@@ -1,3 +1,7 @@
+import { applyChanges, changeTitle } from "./changes";
+import { isProcessKey } from "./keys";
+import { safeParseProcessSpec } from "./spec";
+
 /** A live version is due for review this many days after it was approved. */
 export const REVIEW_EVERY_DAYS = 30;
 
@@ -5,7 +9,20 @@ export type ApproveOutcome =
   | { kind: "ok"; retiredVersionId: string | null }
   | { kind: "not_found" }
   | { kind: "forbidden" }
-  | { kind: "not_a_draft"; status: string };
+  | { kind: "not_a_draft"; status: string }
+  /** The draft has changes and none is ticked. */
+  | { kind: "no_changes_taken" }
+  /** The ticked changes don't make a valid spec (or the base is unreadable). */
+  | { kind: "invalid"; error: string };
+
+/** The part of a change the approve path needs. */
+export interface TakenChange {
+  id: string;
+  part: string;
+  field: "target" | "wording" | "who";
+  after: unknown;
+  taken: boolean;
+}
 
 export interface ApproveStore {
   /** The version, scoped to the tenant, with its process's owner. */
@@ -14,12 +31,23 @@ export interface ApproveStore {
   /** Move one version's status; `from` makes the write conditional (a concurrent change makes it return false). */
   setStatus(versionId: string, from: string, to: "live" | "retired", approver?: { userId: string; at: string }): Promise<boolean>;
   setProcessLive(processId: string, versionId: string, reviewDueAt: string): Promise<void>;
+  /** The draft's changes (P2). Empty for a baseline or any draft written without changes. */
+  listChanges(versionId: string): Promise<TakenChange[]>;
+  getSpec(versionId: string): Promise<unknown | null>;
+  positionSlugs(): Promise<ReadonlySet<string>>;
+  /** Write the rebuilt spec + summary into the draft (only while it is still a draft). */
+  setDraftSpec(versionId: string, spec: unknown, changeSummary: string): Promise<boolean>;
+  /** Mark the ticked changes `taken` and the rest `not_taken`. */
+  markChanges(takenIds: string[], notTakenIds: string[]): Promise<void>;
 }
 
 /**
  * Make a draft version live. Only the process's owner or a tenant owner may (`canApprove`, decided by the caller). The current live
  * version, if any, is retired FIRST (one live per process is a unique index) and restored if the promotion fails. The spec is never
- * touched; the DB trigger would refuse it anyway.
+ * touched once live; the DB trigger would refuse it anyway.
+ *
+ * A draft WITH changes (P2) is rebuilt first: the CURRENT live spec + only the ticked changes, validated, written into the draft, the
+ * changes marked taken / not_taken, then promoted. A base that moved since the draft was opened is fine: we always apply onto live.
  */
 export async function approveVersion(
   store: ApproveStore,
@@ -31,6 +59,28 @@ export async function approveVersion(
   if (v.status !== "draft") return { kind: "not_a_draft", status: v.status };
 
   const liveId = await store.getLiveVersionId(v.process_id);
+
+  const changes = await store.listChanges(v.id);
+  if (changes.length > 0) {
+    const taken = changes.filter((c) => c.taken);
+    if (taken.length === 0) return { kind: "no_changes_taken" };
+    if (!isProcessKey(args.processKey)) return { kind: "invalid", error: "Unknown process" };
+    const base = safeParseProcessSpec(args.processKey, await store.getSpec(liveId ?? v.id));
+    if (!base.ok) return { kind: "invalid", error: `The base version is unreadable: ${base.error}` };
+    let rebuilt;
+    try {
+      rebuilt = applyChanges(args.processKey, base.spec, taken, await store.positionSlugs());
+    } catch (e) {
+      return { kind: "invalid", error: e instanceof Error ? e.message : String(e) };
+    }
+    const summary = taken.map((c) => changeTitle(c, base.spec)).join("; ");
+    if (!(await store.setDraftSpec(v.id, rebuilt, summary))) return { kind: "not_a_draft", status: "changed" };
+    await store.markChanges(
+      taken.map((c) => c.id),
+      changes.filter((c) => !c.taken).map((c) => c.id),
+    );
+  }
+
   if (liveId && !(await store.setStatus(liveId, "live", "retired"))) return { kind: "not_a_draft", status: "changed" };
   const promoted = await store.setStatus(v.id, "draft", "live", { userId: args.userId, at: args.now.toISOString() });
   if (!promoted) {

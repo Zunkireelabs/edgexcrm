@@ -6,15 +6,30 @@ vi.mock("@/lib/api/auth", () => ({ authenticateRequest: vi.fn(async () => auth.c
 const scoped = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/supabase/scoped", () => ({ scopedClient: scoped }));
 
+vi.mock("@/lib/api/audit", () => ({ createAuditLog: vi.fn(async () => undefined) }));
+
 import { GET as getList } from "./route";
+import { POST as suggest } from "./[key]/changes/route";
+import { PATCH as editChange } from "./[key]/changes/[id]/route";
+import { POST as reject } from "./[key]/versions/[versionId]/reject/route";
+import { GET as getDraft } from "./[key]/draft/route";
+import { GET as getCompare } from "./[key]/compare/route";
+import { GET as getImprovements } from "./improvements/route";
 import { GET as getOne } from "./[key]/route";
 import { POST as approve } from "./[key]/versions/[versionId]/approve/route";
 
 const req = (path: string) => ({ nextUrl: new URL(`http://localhost${path}`) }) as unknown as Parameters<typeof getList>[0];
+const jsonReq = (method: string, body: unknown) => new Request("http://localhost", { method, body: JSON.stringify(body), headers: { "content-type": "application/json" } }) as unknown as Parameters<typeof suggest>[0];
 const ROUTES: Array<[string, () => Promise<Response>]> = [
   ["GET /api/v1/processes", () => getList(req("/api/v1/processes"))],
   ["GET /api/v1/processes/[key]", () => getOne(req("/api/v1/processes/new_lead_first_call"), { params: Promise.resolve({ key: "new_lead_first_call" }) })],
   ["POST …/versions/[versionId]/approve", () => approve(new Request("http://localhost", { method: "POST" }), { params: Promise.resolve({ key: "new_lead_first_call", versionId: "v1" }) })],
+  ["POST …/changes", () => suggest(jsonReq("POST", { part: "done", field: "wording", after: "x", why: "y" }), { params: Promise.resolve({ key: "new_lead_first_call" }) })],
+  ["PATCH …/changes/[id]", () => editChange(jsonReq("PATCH", { taken: false }), { params: Promise.resolve({ key: "new_lead_first_call", id: "c1" }) })],
+  ["POST …/versions/[versionId]/reject", () => reject(jsonReq("POST", { reason: "no" }), { params: Promise.resolve({ key: "new_lead_first_call", versionId: "v1" }) })],
+  ["GET …/draft", () => getDraft(new Request("http://localhost"), { params: Promise.resolve({ key: "new_lead_first_call" }) })],
+  ["GET …/compare", () => getCompare(req("/api/v1/processes/new_lead_first_call/compare"), { params: Promise.resolve({ key: "new_lead_first_call" }) })],
+  ["GET /api/v1/processes/improvements", () => getImprovements(req("/api/v1/processes/improvements?process=new_lead_first_call"))],
 ];
 
 beforeEach(() => {

@@ -29,6 +29,7 @@ export const ADMIZZ_NEW_LEAD_RAW: RawMetrics = {
   owner_wait_p75_min: 522,
   contacted: 125,
   within_1h: 22,
+  within_1wh: 31, // migration 287; NOT a quoted figure, a plausible value so the registry tests have a denominator-backed fraction
   first_contact_median_min: 852,
   never: 6,
   callbacks_booked: 78,

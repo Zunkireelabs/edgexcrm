@@ -25,7 +25,12 @@ export interface MetricDef {
   note?: string;
   /** The list-row label under the headline. Never lower-cased by the UI. Defaults to `label`. */
   listLabel?: (raw: RawMetrics) => string;
+  /** Days a version must have been live before before -> after is trusted for this measure. Default 7 (DEFAULT_MIN_DAYS). */
+  minDays?: number;
 }
+
+/** Before -> after waits this long for a measure that sets no `minDays` of its own. */
+export const DEFAULT_MIN_DAYS = 7;
 
 const num = (raw: RawMetrics, k: string): number | null => {
   const v = raw[k];
@@ -98,6 +103,16 @@ export const METRIC_REGISTRY: Record<ProcessKey, Record<string, MetricDef>> = {
       detail: (r) =>
         `${fmtN(n0(r, "within_1h"))} of ${fmtN(n0(r, "arrived"))} within an hour. Median ${formatMinutes(num(r, "first_contact_median_min"))} to first contact. ${fmtN(n0(r, "never"))} never contacted.`,
     },
+    first_contact_1wh_pct: {
+      label: "Contacted within 1 working hour",
+      listLabel: () => "contacted within 1 working hour",
+      unit: "percent",
+      // Needs `within_1wh` from migration 287; older snapshots don't have it and read as "no data".
+      read: (r) => pct(num(r, "within_1wh"), num(r, "arrived")),
+      fraction: (r) => frac(num(r, "within_1wh"), num(r, "arrived")),
+      detail: (r) =>
+        `${fmtN(n0(r, "within_1wh"))} of ${fmtN(n0(r, "arrived"))} within an hour of the working day starting (${officeHoursText(r)}). ${fmtN(n0(r, "never"))} never contacted.`,
+    },
     callbacks_kept_pct: {
       label: "Call-backs kept on the day",
       unit: "percent",
@@ -108,6 +123,7 @@ export const METRIC_REGISTRY: Record<ProcessKey, Record<string, MetricDef>> = {
     reached_qualified_pct: {
       label: "Reached Qualified or later",
       fractionNoun: "Qualified+",
+      minDays: 14,
       unit: "percent",
       read: (r) => pct(num(r, "reached_qualified"), num(r, "arrived")),
       fraction: (r) => frac(num(r, "reached_qualified"), num(r, "arrived")),
@@ -157,6 +173,27 @@ export const METRIC_REGISTRY: Record<ProcessKey, Record<string, MetricDef>> = {
     },
   },
 };
+
+/** Which target metrics a step's target picker offers (a fixed list, never free metrics). The first option is the step's default. */
+export interface TargetOption {
+  metric: string;
+  /** Short label in the picker ("hour" / "working hour"). */
+  label: string;
+  /** The target in words for the map card ("within 1 working hour"). */
+  phrase: string;
+}
+export const TARGET_OPTIONS: Partial<Record<ProcessKey, Record<string, TargetOption[]>>> = {
+  new_lead_first_call: {
+    first_contact: [
+      { metric: "first_contact_1h_pct", label: "hour", phrase: "within 1 hour" },
+      { metric: "first_contact_1wh_pct", label: "working hour", phrase: "within 1 working hour" },
+    ],
+  },
+};
+export const targetOptionsFor = (key: ProcessKey, stepKey: string): TargetOption[] => TARGET_OPTIONS[key]?.[stepKey] ?? [];
+
+/** Days a version must be live before before -> after is shown for this measure. */
+export const metricMinDays = (key: ProcessKey, metric: string): number => METRIC_REGISTRY[key][metric]?.minDays ?? DEFAULT_MIN_DAYS;
 
 export type StepStatus = "met" | "amber" | "red" | "unknown";
 

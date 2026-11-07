@@ -31,6 +31,24 @@ describe("PostgREST embeds between processes and process_versions", () => {
   });
 });
 
+describe("PostgREST embeds involving process_changes (it points at BOTH processes and process_versions)", () => {
+  it("nothing embeds process_changes, and nothing embeds FROM it: plain queries only", () => {
+    const hits: string[] = [];
+    for (const f of [...files(ROOT), ...files(API)]) {
+      const src = readFileSync(f, "utf8");
+      for (const m of src.matchAll(/process_changes[!(]|,\s*process_versions[!(]|\bprocesses\([a-z_, ]*\)/g)) hits.push(`${f}: ${m[0]}`);
+    }
+    expect(hits).toEqual([]);
+  });
+  it("any `process_versions!`/`process_versions(` embed would have to name a FK", () => {
+    const hits: string[] = [];
+    for (const f of [...files(ROOT), ...files(API)]) {
+      for (const m of readFileSync(f, "utf8").matchAll(/process_versions[!(][^`"]*/g)) if (!/^process_versions!process_[a-z_]+_fkey/.test(m[0])) hits.push(`${f}: ${m[0].slice(0, 40)}`);
+    }
+    expect(hits).toEqual([]);
+  });
+});
+
 /** A chainable fake for supabase-js that resolves to {data, error} at the end. */
 const fakeDb = (result: { data: unknown; error: unknown }) => {
   const chain: Record<string, unknown> = {};

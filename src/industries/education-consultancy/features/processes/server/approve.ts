@@ -1,7 +1,9 @@
 import type { AuthContext } from "@/lib/api/auth";
+import { createAuditLog } from "@/lib/api/audit";
 import { logger } from "@/lib/logger";
-import { approveVersion, type ApproveStore } from "../lib/approve";
+import { approveVersion, type ApproveStore, type TakenChange } from "../lib/approve";
 import { canApproveProcess, type ProcessesDb } from "./context";
+import { getVersionSpec, must, positionSlugSet } from "./changes";
 
 /** `processes` and `process_versions` have TWO foreign keys between them (process_id, and processes.live_version_id), so an embed
  *  without the FK name is ambiguous (PGRST201). Every embed names the FK. A guard test enforces it. */
@@ -36,14 +38,47 @@ export function dbApproveStore(db: ProcessesDb): ApproveStore {
       const { error } = await db.from("processes").update({ live_version_id: versionId, review_due_at: reviewDueAt }).eq("id", processId);
       if (error) throw new Error(`processes live_version_id/review_due_at: ${error.message}`);
     },
+    async listChanges(versionId) {
+      const rows = must("changes read", await db.from("process_changes").select("id, part, field, after, taken").eq("version_id", versionId)) as unknown as TakenChange[] | null;
+      return rows ?? [];
+    },
+    getSpec: (versionId) => getVersionSpec(db, versionId),
+    positionSlugs: () => positionSlugSet(db),
+    async setDraftSpec(versionId, spec, changeSummary) {
+      const { data, error } = await db.from("process_versions").update({ spec, change_summary: changeSummary }).eq("id", versionId).eq("status", "draft").select("id");
+      if (error) throw new Error(`draft spec write: ${error.message}`);
+      return ((data as unknown[] | null)?.length ?? 0) > 0;
+    },
+    async markChanges(takenIds, notTakenIds) {
+      if (takenIds.length) {
+        const { error } = await db.from("process_changes").update({ status: "taken" }).in("id", takenIds);
+        if (error) throw new Error(`changes mark taken: ${error.message}`);
+      }
+      if (notTakenIds.length) {
+        const { error } = await db.from("process_changes").update({ status: "not_taken" }).in("id", notTakenIds);
+        if (error) throw new Error(`changes mark not_taken: ${error.message}`);
+      }
+    },
   };
 }
 
-export const approveProcessVersion = (db: ProcessesDb, auth: AuthContext, processKey: string, versionId: string) =>
-  approveVersion(dbApproveStore(db), {
+export async function approveProcessVersion(db: ProcessesDb, auth: AuthContext, processKey: string, versionId: string) {
+  const out = await approveVersion(dbApproveStore(db), {
     processKey,
     versionId,
     userId: auth.userId,
     canApprove: (owner) => canApproveProcess(auth, owner),
     now: new Date(),
   });
+  if (out.kind === "ok") {
+    await createAuditLog({
+      tenantId: auth.tenantId,
+      userId: auth.userId,
+      action: "process.version_approved",
+      entityType: "process_version",
+      entityId: versionId,
+      changes: { status: { old: "draft", new: "live" }, retired_version_id: { old: null, new: out.retiredVersionId } },
+    });
+  }
+  return out;
+}

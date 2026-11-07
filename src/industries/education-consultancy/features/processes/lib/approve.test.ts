@@ -13,6 +13,11 @@ function store(init: { versions: Array<{ id: string; status: string }>; owner?: 
     async getLiveVersionId() { return versions.find((v) => v.status === "live")?.id ?? null; },
     async setStatus(id, from, to) { const v = versions.find((x) => x.id === id); if (!v || v.status !== from) return false; v.status = to; log.push(`${id}:${from}->${to}`); return true; },
     async setProcessLive(_p, id, due) { liveOn = id; dueOn = due; },
+    async listChanges() { return []; },
+    async getSpec() { return null; },
+    async positionSlugs() { return new Set<string>(); },
+    async setDraftSpec() { return true; },
+    async markChanges() {},
   };
   return { s, versions, log, live: () => liveOn, due: () => dueOn };
 }
