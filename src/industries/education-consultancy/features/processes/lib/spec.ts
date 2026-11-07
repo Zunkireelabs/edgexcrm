@@ -20,6 +20,10 @@ export const stepSchema = z.object({
   drives: z.array(z.string()),
   /** May carry `**bold**` lead phrases (rendered by the SOP table; nothing else is interpreted). */
   text: z.string().min(1),
+  /** The target in words for the map card ("within 5 minutes"). Falls back to the generated "at least 80%". */
+  targetText: z.string().min(1).optional(),
+  /** Show another registry metric as the card's big number (the bar and colour still follow the target metric). */
+  show: z.object({ metric: z.string().min(1) }).optional(),
   /** "done" marks the last card of the map ("DONE WHEN"). Default "step". */
   kind: z.enum(["step", "done"]).optional(),
   /** The fields/tables this step reads, shown as mono chips in the SOP. */
@@ -28,6 +32,10 @@ export const stepSchema = z.object({
 
 export const processSpecSchema = z.object({
   purpose: z.string().min(1),
+  /** One short sentence under the title. Falls back to `purpose`. */
+  summary: z.string().min(1).optional(),
+  /** Short "what it drives" for the list line and the About card. Falls back to the union of the steps' drives. */
+  drivesSummary: z.string().min(1).optional(),
   trigger: z.object({
     text: z.string().min(1),
     event: z.string().min(1),
@@ -55,6 +63,7 @@ export function parseProcessSpec(processKey: ProcessKey, raw: unknown): ProcessS
   for (const s of spec.steps) {
     if (!(s.target.metric in known)) throw new Error(`Step "${s.key}": metric "${s.target.metric}" is not in the ${processKey} registry`);
     if (seen.has(s.key)) throw new Error(`Duplicate step key "${s.key}"`);
+    if (s.show && !(s.show.metric in known)) throw new Error(`Step "${s.key}": show metric "${s.show.metric}" is not in the ${processKey} registry`);
     seen.add(s.key);
   }
   return spec;

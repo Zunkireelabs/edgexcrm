@@ -23,6 +23,15 @@ export const HEADLINE_METRIC: Record<ProcessKey, string> = {
   leaver_handover: "leavers_holding",
 };
 
+/** How the list row shows the headline: a percent ("17%"), a fraction ("0 of 47"), or a count with its target ("7 · target 0"). */
+export type HeadlineStyle = "percent" | "fraction" | "count";
+export const HEADLINE_STYLE: Record<ProcessKey, HeadlineStyle> = {
+  new_lead_first_call: "percent",
+  visa_to_enrolled: "fraction",
+  dropping_a_student: "fraction",
+  leaver_handover: "count",
+};
+
 /** The metric shown on the map's Trigger card, where one exists. */
 export const TRIGGER_METRIC: Partial<Record<ProcessKey, string>> = {
   new_lead_first_call: "arrived",

@@ -4,7 +4,7 @@ export function fmtValue(value: number | null, unit: MetricUnit): string {
   if (value === null) return "No data";
   if (unit === "percent") return `${Math.round(value)}%`;
   if (unit === "min") return value < 90 ? `${Math.round(value)} min` : `${(value / 60).toFixed(1)} h`;
-  return String(value);
+  return value.toLocaleString("en-US");
 }
 
 export const fmtTarget = (op: "<=" | ">=", value: number, unit: MetricUnit): string =>

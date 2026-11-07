@@ -1,17 +1,29 @@
 import type { AuthContext } from "@/lib/api/auth";
+import { logger } from "@/lib/logger";
 import { approveVersion, type ApproveStore } from "../lib/approve";
 import { canApproveProcess, type ProcessesDb } from "./context";
+
+/** `processes` and `process_versions` have TWO foreign keys between them (process_id, and processes.live_version_id), so an embed
+ *  without the FK name is ambiguous (PGRST201). Every embed names the FK. A guard test enforces it. */
+export const PROCESS_EMBED = "processes!process_versions_process_id_fkey!inner";
+
+function fail(op: string, error: { message: string; code?: string }): never {
+  logger.error({ err: error, op, route: "processes/approve" }, "Processes store read failed");
+  throw new Error(`${op}: ${error.message}`);
+}
 
 export function dbApproveStore(db: ProcessesDb): ApproveStore {
   return {
     async getVersion(processKey, versionId) {
-      const { data } = await db.from("process_versions").select("id, process_id, status, processes!inner(key, owner_user_id)").eq("id", versionId).maybeSingle();
+      const { data, error } = await db.from("process_versions").select(`id, process_id, status, ${PROCESS_EMBED}(key, owner_user_id)`).eq("id", versionId).maybeSingle();
+      if (error) fail("process_versions read", error);
       const r = data as unknown as { id: string; process_id: string; status: string; processes: { key: string; owner_user_id: string | null } | Array<{ key: string; owner_user_id: string | null }> } | null;
       const p = Array.isArray(r?.processes) ? r?.processes[0] : r?.processes;
       return r && p && p.key === processKey ? { id: r.id, process_id: r.process_id, status: r.status, owner_user_id: p.owner_user_id } : null;
     },
     async getLiveVersionId(processId) {
-      const { data } = await db.from("process_versions").select("id").eq("process_id", processId).eq("status", "live").maybeSingle();
+      const { data, error } = await db.from("process_versions").select("id").eq("process_id", processId).eq("status", "live").maybeSingle();
+      if (error) fail("process_versions live read", error);
       return (data as unknown as { id: string } | null)?.id ?? null;
     },
     async setStatus(versionId, from, to, approver) {

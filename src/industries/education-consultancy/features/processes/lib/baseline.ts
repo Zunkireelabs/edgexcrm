@@ -38,6 +38,8 @@ export function buildBaselineSpec(processKey: ProcessKey, setup: BaselineSetup):
 
   const specs: Record<ProcessKey, ProcessSpec> = {
     new_lead_first_call: {
+      summary: `How ${setup.tenantName || "your team"} turns a new enquiry into a first conversation.`,
+      drivesSummary: "Home rules, smart assignment, call-back reminders",
       purpose: "Every new enquiry hears from a real person fast, while they are still choosing an agency.",
       trigger: {
         text: "A lead is created by a form, an event page, a walk-in or staff. Imports don't count.",
@@ -51,6 +53,8 @@ export function buildBaselineSpec(processKey: ProcessKey, setup: BaselineSetup):
       steps: [
         {
           key: "assign",
+          targetText: `within ${r.assignWithinMinutes} minutes`,
+          show: { metric: "owner_wait_median_min" },
           title: "Gets an owner",
           who: ["branch-manager"],
           target: { metric: "owner_within_5min_pct", op: ">=", value: 90, unit: "percent" },
@@ -60,6 +64,7 @@ export function buildBaselineSpec(processKey: ProcessKey, setup: BaselineSetup):
         },
         {
           key: "first_contact",
+          targetText: `within ${hours}`,
           title: "First contact",
           who,
           target: { metric: "first_contact_1h_pct", op: ">=", value: 80, unit: "percent" },
@@ -69,6 +74,7 @@ export function buildBaselineSpec(processKey: ProcessKey, setup: BaselineSetup):
         },
         {
           key: "call_back",
+          targetText: "on the day booked",
           title: "Call-back kept",
           who,
           target: { metric: "callbacks_kept_pct", op: ">=", value: 80, unit: "percent" },
@@ -78,6 +84,7 @@ export function buildBaselineSpec(processKey: ProcessKey, setup: BaselineSetup):
         },
         {
           key: "decide",
+          targetText: `decided within ${r.decideWithinDays} days`,
           title: `${qualified}, or dropped with a reason`,
           who,
           target: { metric: "reached_qualified_pct", op: ">=", value: 90, unit: "percent" },
@@ -95,6 +102,8 @@ export function buildBaselineSpec(processKey: ProcessKey, setup: BaselineSetup):
       example: "A student fills the Australia form at 10:12. The counsellor gets it at 10:14, calls at 10:40 (no answer), books 4 pm, talks at 4:05 and moves the lead to Qualified the same day.",
     },
     visa_to_enrolled: {
+      summary: `How ${setup.tenantName || "your team"} moves a student with an approved visa to ${enrolled}.`,
+      drivesSummary: `the Applications and ${enrolled} stages`,
       purpose: "A student whose visa is approved is moved to the Enrolled stage, so the team can see who has actually started.",
       trigger: {
         text: "An application reaches a winning (won) status.",
@@ -108,6 +117,7 @@ export function buildBaselineSpec(processKey: ProcessKey, setup: BaselineSetup):
       steps: [
         {
           key: "move_to_enrolled",
+          targetText: "every won student moved",
           title: `Moved to ${enrolled}`,
           who,
           target: { metric: "moved_to_enrolled_pct", op: ">=", value: 100, unit: "percent" },
@@ -121,6 +131,8 @@ export function buildBaselineSpec(processKey: ProcessKey, setup: BaselineSetup):
       example: `A student's visa is approved on Monday. The counsellor moves the lead to ${enrolled} the same day.`,
     },
     dropping_a_student: {
+      summary: `How ${setup.tenantName || "your team"} records why a student is dropped.`,
+      drivesSummary: "the lost statuses",
       purpose: "When a student is dropped, we record why, so we can see what is costing us students.",
       trigger: {
         text: "A lead or application is moved to a lost status.",
@@ -134,6 +146,7 @@ export function buildBaselineSpec(processKey: ProcessKey, setup: BaselineSetup):
       steps: [
         {
           key: "record_reason",
+          targetText: "every drop has a reason",
           title: "Drop reason recorded",
           who,
           target: { metric: "drops_with_reason_pct", op: ">=", value: 100, unit: "percent" },
@@ -147,6 +160,8 @@ export function buildBaselineSpec(processKey: ProcessKey, setup: BaselineSetup):
       example: "A student chooses another country. The counsellor drops the lead and records the reason.",
     },
     leaver_handover: {
+      summary: `How ${setup.tenantName || "your team"} hands over a leaver's leads.`,
+      drivesSummary: "Team → remove member",
       purpose: "When someone leaves the team, their open leads go to someone else the same day.",
       trigger: {
         text: "A team member is removed from the team.",
@@ -160,6 +175,7 @@ export function buildBaselineSpec(processKey: ProcessKey, setup: BaselineSetup):
       steps: [
         {
           key: "no_open_leads",
+          targetText: "no open leads left",
           title: "No open leads left with a leaver",
           who: ["branch-manager"],
           target: { metric: "live_leads_held", op: "<=", value: 0, unit: "count" },
@@ -169,6 +185,7 @@ export function buildBaselineSpec(processKey: ProcessKey, setup: BaselineSetup):
         },
         {
           key: "no_leavers_holding",
+          targetText: "no leaver holds a lead",
           title: "No leaver still holds leads",
           who: ["branch-manager"],
           target: { metric: "leavers_holding", op: "<=", value: 0, unit: "count" },

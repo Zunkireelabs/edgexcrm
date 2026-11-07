@@ -51,7 +51,7 @@ export const manifest: IndustryManifest = {
   sidebar: [
     // Intelligence section
     { featureId: FEATURES.PULSE, href: "/pulse", label: "Pulse", icon: "Activity", minRoles: ["owner", "admin"] },
-    { featureId: FEATURES.PROCESSES, href: "/processes", label: "Processes", icon: "Workflow", minRoles: ["owner", "admin"] },
+    { featureId: FEATURES.PROCESSES, href: "/processes", label: "Processes", icon: "Network", minRoles: ["owner", "admin"] },
     { featureId: FEATURES.INSIGHTS, href: "/insights/dashboards", label: "Dashboards", icon: "LayoutDashboard" },
     // Operations section
     { featureId: FEATURES.APPLICATION_TRACKING, href: "/applications", label: "Applications", icon: "GraduationCap" },

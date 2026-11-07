@@ -1,11 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { METRIC_REGISTRY, readMetric } from "./metrics";
-import { HEADLINE_METRIC, PROCESS_KEYS, TRIGGER_METRIC } from "./keys";
+import { METRIC_REGISTRY, friendlySource, officeHoursText, readMetric } from "./metrics";
+import { HEADLINE_METRIC, HEADLINE_STYLE, PROCESS_KEYS, TRIGGER_METRIC } from "./keys";
 import { ADMIZZ_NEW_LEAD_RAW, ADMIZZ_SETUP } from "./fixtures";
 import { buildBaselineSpec } from "./baseline";
-import { liveRules, needsYou, onTrack, resolvePositionName, stepOwners, splitBold, writtenFrom, lastReviewed } from "./view";
+import { liveRules, needsYou, onTrack, resolvePositionName, stepOwners, pluralizeRole, splitBold, writtenFrom, lastReviewed } from "./view";
 import { parseProcessSpec, processSpecSchema } from "./spec";
-import { buildStepViews, buildTrigger, pickHeadline } from "../server/load-processes";
+import { buildStepViews, buildTrigger, headlineLabel, pickHeadline } from "../server/load-processes";
 
 describe("headline + trigger metrics", () => {
   it("every headline and trigger metric exists in its registry", () => {
@@ -75,7 +75,7 @@ describe("dropping a student, reason field missing", () => {
 describe("leavers detail", () => {
   it("says how many are still open", () => {
     expect(METRIC_REGISTRY.leaver_handover.leavers_holding.detail({ leavers_holding: 7, all_leads_held: 3651, live_leads_held: 12 })).toBe(
-      "7 people who left still hold 3651 leads (12 of them still open).",
+      "7 people who left still hold 3,651 leads (12 of them still open).",
     );
   });
 });
@@ -163,5 +163,62 @@ describe("addendum: SOP + About text", () => {
     expect(lastReviewed(null, "2026-12-07T12:00:00Z")).toBe("Not yet");
     expect(lastReviewed("2026-11-07T10:00:00Z", "2026-12-07T12:00:00Z", new Date("2026-11-07T12:00:00Z"))).toBe("Today · next by 7 Dec");
     expect(lastReviewed("2026-11-01T10:00:00Z", null, new Date("2026-11-07T12:00:00Z"))).toBe("1 Nov");
+  });
+});
+
+describe("round 2: wording, formatting, registry-driven display", () => {
+  const spec = buildBaselineSpec("new_lead_first_call", ADMIZZ_SETUP);
+  const steps = buildStepViews("new_lead_first_call", spec, { ...ADMIZZ_NEW_LEAD_RAW, owner_wait_median_min: 102 });
+  it("every process has a headline style and the list labels keep their capitals", () => {
+    for (const k of PROCESS_KEYS) expect(HEADLINE_STYLE[k]).toBeTruthy();
+    const visa = buildBaselineSpec("visa_to_enrolled", ADMIZZ_SETUP);
+    const vs = buildStepViews("visa_to_enrolled", visa, { moved_to_enrolled: 0, won_not_enrolled: 47 });
+    expect(headlineLabel("visa_to_enrolled", vs, { moved_to_enrolled: 0, won_not_enrolled: 47 })).toBe("students with a visa moved to Enrolled");
+    expect(vs[0].big).toBe("0%");
+  });
+  it("leaver label carries the lead count with a thousands separator", () => {
+    const raw = { leavers_holding: 7, all_leads_held: 3651, live_leads_held: 0 };
+    const ls = buildStepViews("leaver_handover", buildBaselineSpec("leaver_handover", ADMIZZ_SETUP), raw);
+    expect(headlineLabel("leaver_handover", ls, raw)).toBe("leavers still hold 3,651 leads");
+  });
+  it("Gets an owner shows the median wait, with the % still driving the bar", () => {
+    const assign = steps.find((s) => s.key === "assign")!;
+    expect(assign.big).toBe("1.7 h");
+    expect(assign.small).toBe("median wait");
+    expect(assign.value).toBe(14.5);
+    expect(assign.detail).toBe("17 of 117 within 5 minutes. A quarter waited over 8.7 h.");
+    expect(assign.detail).not.toContain("incl.");
+    expect(assign.note).toContain("already assigned");
+    expect(assign.targetWords).toBe("within 5 minutes");
+  });
+  it("Qualified+ noun on the decide card only", () => {
+    expect(steps.find((s) => s.key === "decide")!.small).toBe("85 of 131 Qualified+");
+    expect(steps.find((s) => s.key === "first_contact")!.small).toBe("22 of 131");
+  });
+  it("friendly sources, merged, and the office hours the SQL uses", () => {
+    expect(friendlySource(null)).toBe("website forms");
+    expect(friendlySource("/register")).toBe("website forms");
+    expect(friendlySource("event-page")).toBe("event page");
+    expect(friendlySource("dashboard")).toBe("added by staff");
+    expect(friendlySource("check_in")).toBe("check-in");
+    expect(friendlySource("walk-in")).toBe("walk-in");
+    expect(officeHoursText({})).toBe("9–6");
+    expect(officeHoursText({ office_hours: { start: 10, end: 19 } })).toBe("10–7");
+    const d = METRIC_REGISTRY.new_lead_first_call.arrived.detail({ by_source: [{ medium: null, n: 90 }, { medium: "/register", n: 8 }, { medium: "check_in", n: 8 }], outside_office_hours: 62 });
+    expect(d).toBe("98 website forms · 8 check-in. 62 arrived outside 9–6.");
+  });
+  it("roles are pluralised for About", () => {
+    expect(pluralizeRole("Manager")).toBe("Managers");
+    expect(pluralizeRole("Lead Executive")).toBe("Lead Executives");
+    expect(pluralizeRole("Sales")).toBe("Sales");
+  });
+  it("baseline fills summary, drivesSummary and targetText everywhere; show metric must exist", () => {
+    for (const k of PROCESS_KEYS) {
+      const sp = buildBaselineSpec(k, ADMIZZ_SETUP);
+      expect(sp.summary, k).toContain("Admizz");
+      expect(sp.drivesSummary, k).toBeTruthy();
+      for (const st of sp.steps) expect(st.targetText, `${k}/${st.key}`).toBeTruthy();
+    }
+    expect(() => parseProcessSpec("new_lead_first_call", { ...spec, steps: [{ ...spec.steps[0], show: { metric: "nope" } }] })).toThrow(/show metric/);
   });
 });

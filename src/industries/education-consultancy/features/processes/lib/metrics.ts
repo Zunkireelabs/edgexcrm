@@ -17,6 +17,14 @@ export interface MetricDef {
   detail: (raw: RawMetrics) => string;
   /** Percent metrics only: the "x of y" behind the percentage (same numbers as `detail`). Null when there's no denominator. */
   fraction?: (raw: RawMetrics) => { n: number; d: number } | null;
+  /** Short noun after the fraction on a map card ("85 of 131 Qualified+"). */
+  fractionNoun?: string;
+  /** Short label next to a big number that is not a percent ("median wait"). */
+  shortLabel?: string;
+  /** Tooltip text for caveats we keep off the card. */
+  note?: string;
+  /** The list-row label under the headline. Never lower-cased by the UI. Defaults to `label`. */
+  listLabel?: (raw: RawMetrics) => string;
 }
 
 const num = (raw: RawMetrics, k: string): number | null => {
@@ -26,6 +34,24 @@ const num = (raw: RawMetrics, k: string): number | null => {
 const pct = (n: number | null, d: number | null): number | null => (n === null || d === null || d <= 0 ? null : Math.round((n / d) * 1000) / 10);
 const n0 = (raw: RawMetrics, k: string) => num(raw, k) ?? 0;
 const frac = (n: number | null, d: number | null): { n: number; d: number } | null => (n === null || d === null || d <= 0 ? null : { n, d });
+
+/** 3651 -> "3,651". */
+export const fmtN = (n: number): string => n.toLocaleString("en-US");
+
+/** How the intake_medium values are shown. null and "/register" are the website form. */
+export function friendlySource(medium: string | null): string {
+  if (medium === null || medium === "/register") return "website forms";
+  const map: Record<string, string> = { "event-page": "event page", dashboard: "added by staff", check_in: "check-in" };
+  return map[medium] ?? medium;
+}
+
+/** "9–6" from the office hours the SQL uses (24h in, 12h out). */
+export function officeHoursText(raw: RawMetrics): string {
+  const oh = (raw.office_hours ?? {}) as { start?: unknown; end?: unknown };
+  const start = typeof oh.start === "number" ? oh.start : 9;
+  const end = typeof oh.end === "number" ? oh.end : 18;
+  return `${start > 12 ? start - 12 : start}–${end > 12 ? end - 12 : end}`;
+}
 
 /** "1.9 h" / "32 min" / "2.4 days" */
 export function formatMinutes(min: number | null): string {
@@ -42,10 +68,10 @@ export const METRIC_REGISTRY: Record<ProcessKey, Record<string, MetricDef>> = {
       unit: "count",
       read: (r) => num(r, "arrived"),
       detail: (r) => {
-        const src = Array.isArray(r.by_source)
-          ? (r.by_source as Array<{ medium: string | null; n: number }>).map((s) => `${s.n} ${s.medium ?? "website form"}`).join(" · ")
-          : "";
-        return `${src}${src ? ". " : ""}${n0(r, "outside_office_hours")} arrived outside office hours.`;
+        const merged = new Map<string, number>();
+        if (Array.isArray(r.by_source)) for (const s of r.by_source as Array<{ medium: string | null; n: number }>) merged.set(friendlySource(s.medium), (merged.get(friendlySource(s.medium)) ?? 0) + s.n);
+        const src = [...merged.entries()].map(([label, n]) => `${fmtN(n)} ${label}`).join(" · ");
+        return `${src}${src ? ". " : ""}${fmtN(n0(r, "outside_office_hours"))} arrived outside ${officeHoursText(r)}.`;
       },
     },
     owner_within_5min_pct: {
@@ -53,67 +79,81 @@ export const METRIC_REGISTRY: Record<ProcessKey, Record<string, MetricDef>> = {
       unit: "percent",
       read: (r) => pct(num(r, "owner_within_5min"), num(r, "owner_assigned")),
       fraction: (r) => frac(num(r, "owner_within_5min"), num(r, "owner_assigned")),
-      detail: (r) =>
-        `${n0(r, "owner_within_5min")} of ${n0(r, "owner_assigned")} within 5 minutes (incl. leads created already assigned). Median wait ${formatMinutes(num(r, "owner_wait_median_min"))}, a quarter waited over ${formatMinutes(num(r, "owner_wait_p75_min"))}.`,
+      note: "Includes leads created already assigned.",
+      detail: (r) => `${fmtN(n0(r, "owner_within_5min"))} of ${fmtN(n0(r, "owner_assigned"))} within 5 minutes. A quarter waited over ${formatMinutes(num(r, "owner_wait_p75_min"))}.`,
+    },
+    owner_wait_median_min: {
+      label: "Median wait for an owner",
+      shortLabel: "median wait",
+      unit: "min",
+      read: (r) => num(r, "owner_wait_median_min"),
+      detail: (r) => `Median wait ${formatMinutes(num(r, "owner_wait_median_min"))}.`,
     },
     first_contact_1h_pct: {
       label: "Contacted within 1 hour",
+      listLabel: () => "contacted within 1 hour",
       unit: "percent",
       read: (r) => pct(num(r, "within_1h"), num(r, "arrived")),
       fraction: (r) => frac(num(r, "within_1h"), num(r, "arrived")),
       detail: (r) =>
-        `${n0(r, "within_1h")} of ${n0(r, "arrived")} within an hour. Median ${formatMinutes(num(r, "first_contact_median_min"))} to first contact. ${n0(r, "never")} never contacted.`,
+        `${fmtN(n0(r, "within_1h"))} of ${fmtN(n0(r, "arrived"))} within an hour. Median ${formatMinutes(num(r, "first_contact_median_min"))} to first contact. ${fmtN(n0(r, "never"))} never contacted.`,
     },
     callbacks_kept_pct: {
       label: "Call-backs kept on the day",
       unit: "percent",
       read: (r) => pct(num(r, "callbacks_kept"), num(r, "callbacks_booked")),
       fraction: (r) => frac(num(r, "callbacks_kept"), num(r, "callbacks_booked")),
-      detail: (r) => `${n0(r, "callbacks_kept")} of ${n0(r, "callbacks_booked")} call-backs done on the day booked.`,
+      detail: (r) => `${fmtN(n0(r, "callbacks_kept"))} of ${fmtN(n0(r, "callbacks_booked"))} call-backs done on the day booked.`,
     },
     reached_qualified_pct: {
       label: "Reached Qualified or later",
+      fractionNoun: "Qualified+",
       unit: "percent",
       read: (r) => pct(num(r, "reached_qualified"), num(r, "arrived")),
       fraction: (r) => frac(num(r, "reached_qualified"), num(r, "arrived")),
       detail: (r) =>
-        `${n0(r, "reached_qualified")} of ${n0(r, "arrived")} are at Qualified or beyond. ${r.reason_field_missing ? "Dropped leads: no reason is recorded yet." : ""}`.trim(),
+        `${fmtN(n0(r, "reached_qualified"))} of ${fmtN(n0(r, "arrived"))} are at Qualified or beyond. ${r.reason_field_missing ? "Dropped leads: no reason is recorded yet." : ""}`.trim(),
     },
   },
   visa_to_enrolled: {
     moved_to_enrolled_pct: {
       label: "Visa-approved students moved to Enrolled",
+      listLabel: () => "students with a visa moved to Enrolled",
       unit: "percent",
       read: (r) => pct(num(r, "moved_to_enrolled"), n0(r, "moved_to_enrolled") + n0(r, "won_not_enrolled")),
       fraction: (r) => frac(num(r, "moved_to_enrolled"), n0(r, "moved_to_enrolled") + n0(r, "won_not_enrolled")),
-      detail: (r) => `${n0(r, "moved_to_enrolled")} of ${n0(r, "moved_to_enrolled") + n0(r, "won_not_enrolled")} won students are in the Enrolled stage.`,
+      detail: (r) => `${fmtN(n0(r, "moved_to_enrolled"))} of ${fmtN(n0(r, "moved_to_enrolled") + n0(r, "won_not_enrolled"))} won students are in the Enrolled stage.`,
     },
   },
   dropping_a_student: {
     drops_with_reason_pct: {
       label: "Drops with a reason recorded",
+      listLabel: () => "drops with a reason recorded",
       unit: "percent",
       // The reason field doesn't exist yet, so it is TRUE that no drop has a reason: 0%, not "no data". Nothing dropped = nothing to measure.
       read: (r) => (n0(r, "dropped") <= 0 ? null : r.reason_field_missing ? 0 : pct(num(r, "with_reason"), num(r, "dropped"))),
       fraction: (r) => (n0(r, "dropped") <= 0 ? null : r.reason_field_missing ? { n: 0, d: n0(r, "dropped") } : frac(num(r, "with_reason"), num(r, "dropped"))),
       detail: (r) =>
         r.reason_field_missing
-          ? `${n0(r, "dropped")} students were dropped. None has a reason, because EdgeX can't record one yet.`
-          : `${n0(r, "with_reason")} of ${n0(r, "dropped")} have a reason.`,
+          ? `${fmtN(n0(r, "dropped"))} students were dropped. None has a reason, because EdgeX can't record one yet.`
+          : `${fmtN(n0(r, "with_reason"))} of ${fmtN(n0(r, "dropped"))} have a reason.`,
     },
   },
   leaver_handover: {
     leavers_holding: {
       label: "Leavers still holding leads",
+      shortLabel: "leavers still holding leads",
+      listLabel: (r) => `leavers still hold ${fmtN(n0(r, "all_leads_held"))} leads`,
       unit: "count",
       read: (r) => num(r, "leavers_holding"),
-      detail: (r) => `${n0(r, "leavers_holding")} people who left still hold ${n0(r, "all_leads_held")} leads (${n0(r, "live_leads_held")} of them still open).`,
+      detail: (r) => `${fmtN(n0(r, "leavers_holding"))} people who left still hold ${fmtN(n0(r, "all_leads_held"))} leads (${fmtN(n0(r, "live_leads_held"))} of them still open).`,
     },
     live_leads_held: {
       label: "Workable leads held by leavers",
+      shortLabel: "open leads held",
       unit: "count",
       read: (r) => num(r, "live_leads_held"),
-      detail: (r) => `${n0(r, "live_leads_held")} of those leads are still open work.`,
+      detail: (r) => `${fmtN(n0(r, "live_leads_held"))} of those leads are still open work.`,
     },
   },
 };

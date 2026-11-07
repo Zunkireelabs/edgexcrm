@@ -7,7 +7,7 @@ import type { StepView } from "../server/load-processes";
 
 const step = (value: number | null): StepView => ({
   key: "k", title: "t", who: [], text: "", drives: [], target: { metric: "m", op: ">=", value: 80, unit: "percent" },
-  metricLabel: "m", value, detail: "", fraction: null, owners: "", kind: "step", status: "red",
+  metricLabel: "m", value, detail: "", fraction: null, owners: "", kind: "step", big: "", small: "", targetWords: null, note: null, status: "red",
 });
 
 describe("SegmentedControl count gap", () => {

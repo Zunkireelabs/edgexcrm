@@ -4,8 +4,9 @@ import { useState } from "react";
 import Link from "next/link";
 import { CheckIcon, FileXIcon, GraduationCapIcon, PencilSimpleIcon, TrendUpIcon, UserPlusIcon, UserSwitchIcon, type Icon } from "@/components/icons";
 import { SegmentedControl } from "@/components/ui/segmented-control";
-import { DEFAULT_WINDOW_DAYS, type ProcessKey } from "../lib/keys";
+import { DEFAULT_WINDOW_DAYS, type HeadlineStyle, type ProcessKey } from "../lib/keys";
 import { fmtValue, STATUS_TONE } from "../lib/format";
+import { fmtN } from "../lib/metrics";
 import type { ImprovementEvent } from "../lib/improvements";
 import { needsYou, onTrack } from "../lib/view";
 import type { ProcessView, StepView } from "../server/load-processes";
@@ -30,18 +31,20 @@ const ICONS: Record<ProcessKey, Icon> = {
 
 const TILE_BG = { met: "bg-ds-good-soft", amber: "bg-ds-warn-soft", red: "bg-ds-bad-soft", unknown: "bg-ds-sunken" } as const;
 
-/** The big number + its "x of y" line + bar, for one step. Shared by the list rows. */
-function HeadlineBlock({ h }: { h: StepView }) {
+/** The list row's headline, in the style the process uses: "17%", "0 of 47", or "7 · target 0". Labels come from the registry as written. */
+function HeadlineBlock({ h, style, label }: { h: StepView; style: HeadlineStyle; label: string }) {
   const tone = STATUS_TONE[h.status];
   const isPercent = h.target.unit === "percent";
+  const big = style === "fraction" && h.fraction ? `${fmtN(h.fraction.n)} of ${fmtN(h.fraction.d)}` : fmtValue(h.value, h.target.unit);
+  const withTarget = style !== "fraction";
   return (
     <div className="min-w-0">
-      <div className={`text-[22px] font-semibold leading-none ${tone.text}`}>{fmtValue(h.value, h.target.unit)}</div>
-      <div className="mt-1.5 text-[12.5px] text-ds-muted">
-        {isPercent && h.fraction ? `${h.fraction.n} of ${h.fraction.d} ` : ""}
-        {h.metricLabel.toLowerCase()} · target {fmtValue(h.target.value, h.target.unit)}
+      <div className={`text-[15px] font-semibold tabular-nums ${tone.text}`}>{big}</div>
+      <div className="mt-px text-[12px] text-ds-muted">
+        {label}
+        {withTarget ? ` · target ${fmtValue(h.target.value, h.target.unit)}` : ""}
       </div>
-      {isPercent ? <StepBar step={h} /> : null}
+      {isPercent ? <StepBar step={h} className="mt-[5px]" /> : null}
     </div>
   );
 }
@@ -50,36 +53,38 @@ function ProcessRowCard({ p }: { p: ProcessView }) {
   const h = p.headline;
   const draft = p.shown?.status === "draft";
   const Icon = ICONS[p.key];
-  const drives = p.drives.slice(0, 3).join(", ");
+  const drives = p.drivesSummary;
   return (
-    <Link href={`/processes/${p.key}`} className="grid items-center gap-4 rounded-ds-lg border border-ds-border bg-ds-surface p-4 hover:bg-ds-hover md:grid-cols-[minmax(0,1fr)_minmax(0,340px)_auto]">
-      <div className="flex min-w-0 items-start gap-3">
-        <span className={`grid size-10 shrink-0 place-items-center rounded-ds-lg ${TILE_BG[h?.status ?? "unknown"]} ${STATUS_TONE[h?.status ?? "unknown"].text}`}>
-          <Icon size={20} aria-hidden />
+    <Link href={`/processes/${p.key}`} className="grid items-center gap-x-3.5 gap-y-3 rounded-[12px] border border-ds-border bg-ds-surface px-4 py-3.5 hover:bg-ds-hover md:grid-cols-[36px_minmax(0,1fr)_250px_128px]">
+      <div className="flex min-w-0 items-start gap-3 md:contents">
+        <span className={`grid size-9 shrink-0 place-items-center rounded-[10px] border border-ds-border ${TILE_BG[h?.status ?? "unknown"]} ${STATUS_TONE[h?.status ?? "unknown"].text}`}>
+          <Icon size={18} aria-hidden />
         </span>
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[15px] font-semibold text-ds-ink">{p.name}</span>
+            <span className="text-[14.5px] font-semibold text-ds-ink">{p.name}</span>
             {p.shown ? (
               <span className={`rounded-ds-full px-2 py-0.5 text-[11.5px] font-medium ${draft ? "bg-ds-warn-soft text-ds-warn" : "bg-ds-good-soft text-ds-good"}`}>
                 v{p.shown.version} {draft ? "draft" : "live"}
               </span>
             ) : null}
           </div>
-          <div className="mt-1 text-[12.5px] text-ds-muted">
+          <div className="mt-0.5 text-[12.5px] text-ds-muted">
             Owner {p.ownerName ?? "not set"} · {p.shown?.approvedAt ? when(p.shown.approvedAt) : "not approved yet"}
             {drives ? ` · drives ${drives}` : ""}
           </div>
         </div>
       </div>
-      {h ? <HeadlineBlock h={h} /> : <div className="text-[12.5px] text-ds-muted">{p.specError ? "This version could not be read." : "No numbers yet."}</div>}
+      {h ? <HeadlineBlock h={h} style={p.headlineStyle} label={p.headlineLabel} /> : <div className="text-[12.5px] text-ds-muted">{p.specError ? "This version could not be read." : "No numbers yet."}</div>}
       {/* The row is the link; this is its visible affordance, so it is a span, not a nested button. */}
+      <span className="md:text-right">
       <span
         className={`inline-flex h-8 items-center justify-center rounded-ds-sm px-3 text-[12.5px] font-medium ${
           draft && p.canApprove ? "bg-ds-ink text-white" : "border border-ds-border bg-ds-surface text-ds-ink"
         }`}
       >
         {draft && p.canApprove ? "Review baseline" : "Open"}
+      </span>
       </span>
     </Link>
   );
@@ -101,7 +106,7 @@ export function ProcessesPage({ tenantName = "" }: { tenantName?: string }) {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-[26px] font-semibold leading-tight tracking-[-0.02em] text-ds-ink">Processes</h1>
-          <p className="mt-1 max-w-[640px] text-[13.5px] text-ds-muted">
+          <p className="mt-1 text-[13.5px] text-ds-muted">
             How {team} works, written down, measured from your data, and improved with you. <strong className="font-semibold text-ds-ink">Only owners and admins see this page.</strong>
           </p>
         </div>

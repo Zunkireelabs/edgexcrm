@@ -2,12 +2,15 @@ import { scopedClientForTenant } from "@/lib/supabase/scoped";
 import { loadUserNames } from "../../pulse/server/context";
 import { loadAssignmentSettings } from "../../home/server/assignment/settings";
 import type { AssignmentMode } from "../../home/lib/assignment/outcome";
-import { DEFAULT_WINDOW_DAYS, HEADLINE_METRIC, PROCESS_KEYS, PROCESS_NAMES, TRIGGER_METRIC, WINDOW_DAYS, isProcessKey, type ProcessKey } from "../lib/keys";
-import { liveRules, resolvePositionName, stepOwners, type RuleRow } from "../lib/view";
-import { readMetric, stepStatus, type MetricUnit, type RawMetrics, type StepStatus } from "../lib/metrics";
+import { DEFAULT_WINDOW_DAYS, HEADLINE_METRIC, HEADLINE_STYLE, type HeadlineStyle, PROCESS_KEYS, PROCESS_NAMES, TRIGGER_METRIC, WINDOW_DAYS, isProcessKey, type ProcessKey } from "../lib/keys";
+import { fmtValue } from "../lib/format";
+import { liveRules, pluralizeRole, resolvePositionName, stepOwners, type RuleRow } from "../lib/view";
+import { METRIC_REGISTRY, fmtN, formatMinutes, readMetric, stepStatus, type MetricUnit, type RawMetrics, type StepStatus } from "../lib/metrics";
 import { safeParseProcessSpec, type ProcessSpec } from "../lib/spec";
 import type { ProcessRow } from "../lib/store";
 import { buildImprovements, type ImprovementEvent, type VersionEventRow } from "../lib/improvements";
+import { logger } from "@/lib/logger";
+import { PROCESS_EMBED } from "./approve";
 import { canApproveProcess, type ProcessesContext } from "./context";
 
 type Db = Awaited<ReturnType<typeof scopedClientForTenant>>;
@@ -42,6 +45,13 @@ export interface StepView {
   owners: string;
   /** "done" = the map's last card, labelled DONE WHEN. */
   kind: "step" | "done";
+  /** The card's big number and the small text after it, already formatted (separators, "22 of 131", "median wait"). */
+  big: string;
+  small: string;
+  /** The target in words ("within 5 minutes"). */
+  targetWords: string | null;
+  /** Caveat for a tooltip, kept off the card. */
+  note: string | null;
   status: StepStatus;
 }
 
@@ -57,9 +67,16 @@ export interface ProcessView {
   shown: { id: string; version: number; status: VersionRow["status"]; source: VersionRow["source"]; approvedAt: string | null; changeSummary: string | null } | null;
   /** The step whose metric is this process's HEADLINE_METRIC (else the first step with a value): the row on the list page. */
   headline: StepView | null;
+  headlineStyle: HeadlineStyle;
+  /** The label under the headline number ("students with a visa moved to Enrolled"). */
+  headlineLabel: string;
+  /** One short sentence under the title (spec.summary, else purpose). */
+  summary: string | null;
   /** The map's Trigger card number, where the process has one. */
   trigger: { value: number | null; detail: string } | null;
-  /** Union of the position names that own the steps. */
+  /** What it drives, short (spec.drivesSummary, else the union of the steps' drives). */
+  drivesSummary: string;
+  /** Union of the position names that own the steps, plural ("Managers, Counselors"). */
   stepOwners: string[];
   /** Union of what the steps drive. */
   drives: string[];
@@ -99,6 +116,14 @@ export function pickHeadline(key: ProcessKey, steps: StepView[]): StepView | nul
   return steps.find((s) => s.target.metric === HEADLINE_METRIC[key]) ?? steps.find((s) => s.value !== null) ?? steps[0] ?? null;
 }
 
+/** The list row's label under the headline number. Registry text, never lower-cased by code. */
+export function headlineLabel(key: ProcessKey, steps: StepView[], raw: RawMetrics | null): string {
+  const h = pickHeadline(key, steps);
+  if (!h) return "";
+  const def = METRIC_REGISTRY[key][h.target.metric];
+  return def?.listLabel && raw ? def.listLabel(raw) : h.metricLabel;
+}
+
 export function buildTrigger(key: ProcessKey, raw: RawMetrics | null): { value: number | null; detail: string } | null {
   const metric = TRIGGER_METRIC[key];
   const m = metric && raw ? readMetric(key, metric, raw) : null;
@@ -109,6 +134,17 @@ export function buildStepViews(key: ProcessKey, spec: ProcessSpec, raw: RawMetri
   return spec.steps.map((s) => {
     const m = raw ? readMetric(key, s.target.metric, raw) : null;
     const value = m?.value ?? null;
+    const def = METRIC_REGISTRY[key][s.target.metric];
+    const shown = s.show && raw ? readMetric(key, s.show.metric, raw) : null;
+    const showDef = s.show ? METRIC_REGISTRY[key][s.show.metric] : undefined;
+    const big = shown ? (shown.unit === "min" ? formatMinutes(shown.value) : shown.value === null ? "No data" : fmtN(shown.value)) : fmtValue(value, s.target.unit);
+    const small = shown
+      ? (showDef?.shortLabel ?? shown.label.toLowerCase())
+      : s.target.unit === "percent"
+        ? m?.fraction
+          ? `${fmtN(m.fraction.n)} of ${fmtN(m.fraction.d)}${def?.fractionNoun ? ` ${def.fractionNoun}` : ""}`
+          : ""
+        : (def?.shortLabel ?? "");
     return {
       key: s.key,
       title: s.title,
@@ -122,6 +158,10 @@ export function buildStepViews(key: ProcessKey, spec: ProcessSpec, raw: RawMetri
       fraction: m?.fraction ?? null,
       owners: stepOwners(s.key, s.who, nameBySlug, mode),
       kind: s.kind ?? "step",
+      big,
+      small,
+      targetWords: s.targetText ?? null,
+      note: def?.note ?? null,
       status: stepStatus(value, s.target.op, s.target.value),
     };
   });
@@ -129,10 +169,12 @@ export function buildStepViews(key: ProcessKey, spec: ProcessSpec, raw: RawMetri
 
 export async function loadProcessViews(ctx: ProcessesContext, windowDays: number, only?: ProcessKey): Promise<ProcessView[]> {
   const { db, auth, tz } = ctx;
-  const { data: procs } = await db.from("processes").select(PROC_COLS);
+  const { data: procs, error: procErr } = await db.from("processes").select(PROC_COLS);
+  if (procErr) throw new Error(`processes read: ${procErr.message}`);
   const rows = ((procs ?? []) as unknown as ProcessRow[]).filter((p) => !only || p.key === only);
   if (rows.length === 0) return [];
-  const { data: vers } = await db.from("process_versions").select(VER_COLS).in("process_id", rows.map((r) => r.id));
+  const { data: vers, error: verErr } = await db.from("process_versions").select(VER_COLS).in("process_id", rows.map((r) => r.id));
+  if (verErr) throw new Error(`process_versions read: ${verErr.message}`);
   const versions = (vers ?? []) as unknown as VersionRow[];
   const names = await loadUserNames(db);
   const [{ data: posRows }, settings] = await Promise.all([db.from("positions").select("slug, name"), loadAssignmentSettings(db)]);
@@ -159,8 +201,12 @@ export async function loadProcessViews(ctx: ProcessesContext, windowDays: number
           ? { id: shownVer.id, version: shownVer.version, status: shownVer.status, source: shownVer.source, approvedAt: shownVer.approved_at, changeSummary: shownVer.change_summary }
           : null,
         headline: pickHeadline(p.key, steps),
+        headlineStyle: HEADLINE_STYLE[p.key],
+        headlineLabel: headlineLabel(p.key, steps, raw),
+        summary: spec ? (spec.summary ?? spec.purpose) : null,
         trigger: buildTrigger(p.key, raw),
-        stepOwners: uniqueOf(spec ? spec.steps.flatMap((s) => s.who.map((w) => resolvePositionName(w, nameBySlug))) : []),
+        drivesSummary: spec?.drivesSummary ?? uniqueOf(steps.flatMap((s) => s.drives)).join(", "),
+        stepOwners: uniqueOf(spec ? spec.steps.flatMap((s) => s.who.map((w) => pluralizeRole(resolvePositionName(w, nameBySlug)))) : []),
         drives: uniqueOf(steps.flatMap((s) => s.drives)),
         rules: liveRules(p.key, settings.mode),
         steps,
@@ -174,7 +220,8 @@ export async function loadProcessViews(ctx: ProcessesContext, windowDays: number
 }
 
 export async function loadProcessVersions(db: Db, processId: string): Promise<Array<Omit<VersionRow, "spec" | "process_id">>> {
-  const { data } = await db.from("process_versions").select(VER_COLS).eq("process_id", processId).order("version", { ascending: false });
+  const { data, error } = await db.from("process_versions").select(VER_COLS).eq("process_id", processId).order("version", { ascending: false });
+  if (error) throw new Error(`process_versions list: ${error.message}`);
   return ((data ?? []) as unknown as VersionRow[]).map((v) => ({
     id: v.id,
     version: v.version,
@@ -192,7 +239,11 @@ export { isProcessKey };
 
 /** Real events only: baselines written and versions approved. */
 export async function loadImprovements(db: Db): Promise<ImprovementEvent[]> {
-  const { data } = await db.from("process_versions").select("version, source, created_at, approved_at, processes!inner(key)");
+  const { data, error } = await db.from("process_versions").select(`version, source, created_at, approved_at, ${PROCESS_EMBED}(key)`);
+  if (error) {
+    logger.error({ err: error, route: "processes" }, "Failed to load improvements");
+    throw new Error(`improvements read: ${error.message}`);
+  }
   const rows = ((data ?? []) as unknown as Array<{ version: number; source: VersionEventRow["source"]; created_at: string; approved_at: string | null; processes: { key: ProcessKey } | Array<{ key: ProcessKey }> }>).map((r) => ({
     key: (Array.isArray(r.processes) ? r.processes[0] : r.processes).key,
     version: r.version,

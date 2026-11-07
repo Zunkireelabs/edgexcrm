@@ -21,7 +21,7 @@ describe("metrics registry reads the SQL output", () => {
   });
   it("detail lines carry the real counts", () => {
     expect(METRIC_REGISTRY.new_lead_first_call.arrived.detail(r)).toContain("98 website form");
-    expect(METRIC_REGISTRY.new_lead_first_call.arrived.detail(r)).toContain("62 arrived outside office hours");
+    expect(METRIC_REGISTRY.new_lead_first_call.arrived.detail(r)).toContain("62 arrived outside 9–6");
     expect(METRIC_REGISTRY.new_lead_first_call.owner_within_5min_pct.detail(r)).toContain("17 of 117");
   });
 });

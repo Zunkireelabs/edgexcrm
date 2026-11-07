@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowSquareOutIcon, CaretRightIcon, FlowArrowIcon } from "@/components/icons";
+import { ArrowSquareOutIcon, CaretRightIcon, TreeStructureIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { DEFAULT_WINDOW_DAYS, WINDOW_DAYS } from "../lib/keys";
-import { fmtTarget, fmtValue, STATUS_TONE } from "../lib/format";
+import { fmtTarget, STATUS_TONE } from "../lib/format";
 import type { StepStatus } from "../lib/metrics";
 import { fmtDay, lastReviewed, writtenFrom } from "../lib/view";
 import type { ProcessView, VersionRow } from "../server/load-processes";
@@ -51,7 +51,7 @@ export function ProcessDetail({ processKey, tenantName }: { processKey: string; 
   return (
     <div className="mx-auto max-w-[1100px] px-4 py-6 sm:px-6">
       <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-[13px] text-ds-muted">
-        <FlowArrowIcon size={14} aria-hidden />
+        <TreeStructureIcon size={14} aria-hidden />
         <Link href="/processes" className="hover:text-ds-ink">Processes</Link>
         {p ? (
           <>
@@ -79,8 +79,8 @@ export function ProcessDetail({ processKey, tenantName }: { processKey: string; 
                   </span>
                 ) : null}
               </div>
-              <p className="mt-1 max-w-[720px] text-[13.5px] text-ds-muted">
-                {p.spec ? `${p.spec.purpose} ` : ""}
+              <p className="mt-1 text-[13.5px] text-ds-muted">
+                {p.summary ? `${p.summary} ` : ""}
                 <strong className="font-semibold text-ds-ink">
                   The numbers are from your last <DaysMenu days={days} onChange={setDays} /> days.
                 </strong>
@@ -234,7 +234,7 @@ function ProcessMap({ p, spec, days }: { p: ProcessView; spec: NonNullable<Proce
             </div>
             <p className="mt-1 text-[12px] leading-[1.45] text-ds-muted">
               {sentences.map((s, i) => (
-                <span key={i} className={s.includes("outside office hours") ? "text-ds-warn" : undefined}>
+                <span key={i} className={/\boutside\b/.test(s) ? "text-ds-warn" : undefined}>
                   {s}{" "}
                 </span>
               ))}
@@ -255,13 +255,11 @@ function ProcessMap({ p, spec, days }: { p: ProcessView; spec: NonNullable<Proce
             <div className="mt-1.5 text-[14px] font-semibold text-ds-ink">{s.title}</div>
             {s.owners ? <div className="mt-px text-[12px] text-ds-muted">{s.owners}</div> : null}
             <div className="mt-2.5 text-[12px] text-ds-muted">
-              Target <b className="font-medium text-ds-ink">{fmtTarget(s.target.op, s.target.value, s.target.unit)}</b>
+              Target <b className="font-medium text-ds-ink">{s.targetWords ?? fmtTarget(s.target.op, s.target.value, s.target.unit)}</b>
             </div>
-            <div className={`mt-1.5 text-[20px] font-semibold tabular-nums tracking-[-.01em] ${tone.text}`}>
-              {fmtValue(s.value, s.target.unit)}
-              <small className="ml-1 text-[12px] font-medium tracking-normal text-ds-muted">
-                {s.target.unit === "percent" ? (s.fraction ? `${s.fraction.n} of ${s.fraction.d}` : "") : s.metricLabel.toLowerCase()}
-              </small>
+            <div title={s.note ?? undefined} className={`mt-1.5 text-[20px] font-semibold tabular-nums tracking-[-.01em] ${tone.text}`}>
+              {s.big}
+              {s.small ? <small className="ml-1 text-[12px] font-medium tracking-normal text-ds-muted">{s.small}</small> : null}
             </div>
             <StepBar step={s} className="mt-1.5" />
             {s.detail ? <p className="mt-1 text-[12px] leading-[1.45] text-ds-muted">{s.detail}</p> : null}
@@ -319,7 +317,7 @@ function AboutCard({ p, tenantName }: { p: ProcessView; tenantName: string }) {
           ["Written from", writtenFrom(tenantName, p.createdAt)],
           ["Last reviewed", lastReviewed(live ? (p.shown?.approvedAt ?? null) : null, p.reviewDueAt)],
           ["Steps owned by", p.stepOwners.join(", ") || "—"],
-          ["Drives", p.drives.join(", ") || "—"],
+          ["Drives", p.drivesSummary || "—"],
         ]}
       />
     </Card>

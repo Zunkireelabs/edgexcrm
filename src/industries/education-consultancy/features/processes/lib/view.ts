@@ -18,6 +18,9 @@ export function resolvePositionName(slug: string, nameBySlug: ReadonlyMap<string
   return nameBySlug.get(slug) ?? titleCase(slug);
 }
 
+/** "Manager" -> "Managers", "Lead Executive" -> "Lead Executives". Names already ending in s are left alone. */
+export const pluralizeRole = (name: string): string => (/s$/i.test(name) ? name : `${name}s`);
+
 const uniq = (xs: string[]) => [...new Set(xs)];
 
 /** Who does a step, in words. The assign step adds ", by hand" when smart assignment is off. */

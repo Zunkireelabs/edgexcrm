@@ -39,3 +39,12 @@ describe.each(ROUTES)("%s", (_name, call) => {
     expect(scoped).not.toHaveBeenCalled();
   });
 });
+
+describe("approve route: a store error is a 500, not a 404", () => {
+  it("500 when the version read errors", async () => {
+    const chain: unknown = new Proxy({}, { get: (_t, k) => (k === "then" ? (res: (v: unknown) => void) => res({ data: null, error: { message: "PGRST201" } }) : () => chain) });
+    scoped.mockResolvedValue({ from: () => chain, raw: () => ({ from: () => ({ select: () => ({ eq: () => ({ single: async () => ({ data: { name: "A", timezone: "UTC" } }) }) }) }) }) });
+    const res = await approve(new Request("http://localhost", { method: "POST" }), { params: Promise.resolve({ key: "new_lead_first_call", versionId: "v1" }) });
+    expect(res.status).toBe(500);
+  });
+});
