@@ -222,8 +222,18 @@ interface Ctx {
   fitSample: number;
 }
 
+/** "47 min", "4.7 h", "2.1 days": minutes under an hour, then hours to one decimal, then days. Never "1051 min". */
+export function formatDuration(minutes: number): string {
+  const m = Math.max(0, Math.round(minutes));
+  if (m < 60) return `${m} min`;
+  const h = Math.round((minutes / 60) * 10) / 10;
+  if (h < 24) return `${h.toFixed(1)} h`;
+  return `${(Math.round((minutes / 1440) * 10) / 10).toFixed(1)} days`;
+}
+
 /**
- * "Asha: best Australia record (42% vs team 31%) · 18 open leads (team median 24)": the top two factors WITH EVIDENCE.
+ * "Asha: best Australia record (42% vs team 31%) · 18 open leads (team median 24)": the top two factors WITH EVIDENCE that the
+ * pick is BETTER than the team on (higher Fit rate, faster first contact, fewer open leads): a factor where they are no better is no reason.
  * A factor is cited only when there is data behind it: Fit needs a sample of at least MIN_FIT_SAMPLES leads and a team rate
  * above 0; Room needs the pick to hold fewer open leads than a real team median (at least 1); Speed needs the person's own measured samples. With none, it says
  * "Most room" when that is true, else "Fewest new leads today". Never "0% vs team 0%".
@@ -232,7 +242,7 @@ export function explain(best: ScoredCandidate, cand: Candidate, field: ScoredCan
   const isTopFit = field.every((o) => o.fit.rate <= best.fit.rate + 1e-9);
   const parts: Array<{ key: FactorKey; weight: number; text: string }> = [];
   const dest = ctx.useDest ? `${ctx.destLabel} ` : "";
-  if (ctx.fitSample >= MIN_FIT_SAMPLES && ctx.tRateFit > 0) {
+  if (ctx.fitSample >= MIN_FIT_SAMPLES && ctx.tRateFit > 0 && best.fit.rate > ctx.tRateFit) {
     parts.push({
       key: "fit",
       weight: best.fit.score,
@@ -243,8 +253,14 @@ export function explain(best: ScoredCandidate, cand: Candidate, field: ScoredCan
   if (best.room.medianRaw >= 1 && best.room.held < best.room.medianRaw) {
     parts.push({ key: "room", weight: best.room.score, text: `${best.room.held} open leads (team median ${Math.round(best.room.medianRaw)})` });
   }
-  if (best.speed.minutes !== null && best.speed.source === "person" && cand.overall.speedN >= MIN_SPEED_EVIDENCE) {
-    parts.push({ key: "speed", weight: best.speed.score, text: `first contact in ${Math.round(best.speed.minutes)} min${ctx.teamSpeed !== null ? ` (team ${Math.round(ctx.teamSpeed)} min)` : ""}` });
+  if (
+    best.speed.minutes !== null &&
+    best.speed.source === "person" &&
+    cand.overall.speedN >= MIN_SPEED_EVIDENCE &&
+    ctx.teamSpeed !== null &&
+    best.speed.minutes < ctx.teamSpeed
+  ) {
+    parts.push({ key: "speed", weight: best.speed.score, text: `first contact in ${formatDuration(best.speed.minutes)} (team ${formatDuration(ctx.teamSpeed)})` });
   }
   if (cand.present) parts.push({ key: "present", weight: best.present.score, text: "active right now" });
   parts.sort((a, b) => b.weight - a.weight);

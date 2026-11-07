@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decideAssignment, smoothedRate, speedScore, type Candidate, type Team } from "./score";
+import { decideAssignment, formatDuration, smoothedRate, speedScore, type Candidate, type Team } from "./score";
 import { deriveLeadSignals } from "./signals";
 import { WEIGHTS } from "./weights";
 
@@ -180,10 +180,10 @@ describe("the why line", () => {
     const d = decideAssignment(lead(["Australia"]), [asha, bina], team());
     expect(d.why).toMatch(/^Asha: best Australia record \(\d+% vs team 31%\) · 18 open leads \(team median 21\)$/);
   });
-  it("names speed only when it is the person's own measured speed and one of the top two", () => {
-    const asha = cand("asha", { heldOpen: 60 }); // room = 0, so speed (full marks) and fit lead
+  it("names speed only when it is the person's own measured speed, faster than the team's, and one of the top two", () => {
+    const asha = cand("asha", { heldOpen: 60 }); // room = 0; fit equals the team's, so only speed (30 vs team 40 min) and presence remain
     const d = decideAssignment(lead(), [asha], team());
-    expect(d.why).toBe("Asha: overall record (30% vs team 30%) \u00B7 first contact in 30 min (team 40 min)".replace("overall record", "best overall record"));
+    expect(d.why).toBe("Asha: first contact in 30 min (team 40 min) \u00B7 active right now");
   });
   it("stores every candidate with each factor so the decision is auditable", () => {
     const d = decideAssignment(lead(), [cand("a"), cand("b")], team());
@@ -202,7 +202,7 @@ describe("the why line cites only factors with evidence", () => {
   it("Fit needs the person's own sample of at least 5 leads", () => {
     const few = decideAssignment(lead(), [cand("asha", { overall: thin })], team());
     expect(few.why).not.toContain("record");
-    const enough = decideAssignment(lead(), [cand("asha", { overall: { ...thin, received: 5 } })], team());
+    const enough = decideAssignment(lead(), [cand("asha", { overall: { ...thin, received: 5, progressed: 5 } })], team());
     expect(enough.why).toContain("record");
   });
   it("destination-aware Fit counts the destination sample, not the overall one", () => {
@@ -235,5 +235,45 @@ describe("the why line cites only factors with evidence", () => {
     expect(same.why).not.toContain("open leads (team median");
     const fewer = decideAssignment(lead(), [cand("asha", { heldOpen: 10, overall: ev, present: false }), cand("bina", { heldOpen: 30, overall: ev, present: false })], team());
     expect(fewer.why).toContain("10 open leads (team median 20)");
+  });
+
+  it("a factor is cited only when the pick is BETTER than the team on it", () => {
+    const ev = { received: 100, progressed: 20, speedN: 20, medianFirstContactMin: 1051 }; // 20% vs team 30%, slower than the team
+    const worse = decideAssignment(lead(), [cand("diplov", { overall: ev, heldOpen: 40, present: false })], team({ medianFirstContactMin: 936 }));
+    expect(worse.why).not.toContain("record");
+    expect(worse.why).not.toContain("first contact");
+    expect(worse.why).not.toContain("open leads (team median");
+  });
+  it("Fit: higher than the team's rate is cited, equal or lower is not", () => {
+    const better = decideAssignment(lead(), [cand("a", { overall: { received: 100, progressed: 45, speedN: 0, medianFirstContactMin: null }, present: false })], team());
+    expect(better.why).toContain("overall record");
+    const level = decideAssignment(lead(), [cand("a", { overall: { received: 100, progressed: 30, speedN: 0, medianFirstContactMin: null }, present: false })], team());
+    expect(level.why).not.toContain("record");
+  });
+  it("Speed: faster than the team is cited, slower or no team figure is not", () => {
+    const fast = decideAssignment(lead(), [cand("a", { overall: { received: 100, progressed: 30, speedN: 20, medianFirstContactMin: 20 }, present: false })], team({ medianFirstContactMin: 100 }));
+    expect(fast.why).toContain("first contact in 20 min (team 1.7 h)");
+    const slow = decideAssignment(lead(), [cand("a", { overall: { received: 100, progressed: 30, speedN: 20, medianFirstContactMin: 200 }, present: false })], team({ medianFirstContactMin: 100 }));
+    expect(slow.why).not.toContain("first contact");
+    const noTeam = decideAssignment(lead(), [cand("a", { present: false })], team({ medianFirstContactMin: null }));
+    expect(noTeam.why).not.toContain("first contact");
+  });
+});
+
+describe("formatDuration", () => {
+  it.each([
+    [0, "0 min"],
+    [47, "47 min"],
+    [59.4, "59 min"],
+    [60, "1.0 h"],
+    [284, "4.7 h"],
+    [936, "15.6 h"],
+    [1051, "17.5 h"],
+    [1430, "23.8 h"],
+    [1440, "1.0 days"],
+    [3024, "2.1 days"],
+  ])("%s min -> %s", (m, text) => expect(formatDuration(m)).toBe(text));
+  it("never prints a four-digit minute count", () => {
+    for (const m of [600, 1051, 5000]) expect(formatDuration(m)).not.toMatch(/\d{3,} min/);
   });
 });
