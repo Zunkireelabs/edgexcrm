@@ -6,6 +6,8 @@ import { DOCUMENT_TYPE_LABELS } from "../../applicant-documents/labels";
 import { addDaysStr } from "../lib/time";
 import { DEADLINE_WINDOW_DAYS } from "../lib/rules/deadline-docs";
 import { CONTACT_ACTIVITY_TYPES } from "../lib/contact";
+import { loadWorkablePlan } from "./workable";
+import { isWorkable } from "../lib/workable";
 import type { ContactEvent, HomeApplication, HomeConversation, HomeLead, HomeTask } from "../lib/types";
 
 export type HomeDb = Awaited<ReturnType<typeof scopedClient>>;
@@ -32,6 +34,9 @@ interface LeadRow {
   on_hold: boolean | null;
   list_id: string | null;
   destinations: string[] | null;
+  tags: string[] | null;
+  status: string | null;
+  pipeline_id: string | null;
   field_of_study: string | null;
   degree_level: string | null;
 }
@@ -51,15 +56,16 @@ export interface LoadedLeads {
 
 /** Leads ASSIGNED TO ME, not deleted, not archived. The only lead source for Home: it is what scopes a counsellor. */
 export async function loadMyLeads(db: HomeDb, userId: string): Promise<LoadedLeads> {
-  const [{ data: rows, error }, { data: listRows }] = await Promise.all([
+  const [{ data: rows, error }, { data: listRows }, workable] = await Promise.all([
     db
       .from("leads")
-      .select("id, first_name, last_name, phone, assigned_at, created_at, last_touched_at, callback_due_at, on_hold, list_id, destinations, field_of_study, degree_level")
+      .select("id, first_name, last_name, phone, assigned_at, created_at, last_touched_at, callback_due_at, on_hold, list_id, destinations, tags, status, pipeline_id, field_of_study, degree_level")
       .eq("assigned_to", userId)
       .is("deleted_at", null)
       .is("archived_at", null)
       .limit(2000),
     db.from("lead_lists").select("id, name, sort_order, is_archive, is_staging").order("sort_order", { ascending: true }),
+    loadWorkablePlan(db),
   ]);
   if (error) throw new Error(`home: leads query failed: ${error.message}`);
   const lists = (listRows ?? []) as unknown as ListRow[];
@@ -110,8 +116,9 @@ export async function loadMyLeads(db: HomeDb, userId: string): Promise<LoadedLea
       lastTouchedAt: r.last_touched_at,
       callbackDueAt: r.callback_due_at,
       onHold: !!r.on_hold,
-      // No list yet counts as active; archive and staging lists do not.
-      isActive: !list || (!list.is_archive && !list.is_staging),
+      // "A lead someone should be working" (lib/workable.ts): active list (no list counts as active), not terminal (won / lost),
+      // not a walk-in contact, not on hold. Every Home rule that asks `isActive` inherits it.
+      isActive: isWorkable({ list_id: r.list_id, on_hold: r.on_hold, tags: r.tags, status: r.status, pipeline_id: r.pipeline_id }, workable),
       stageName: list?.name ?? null,
       context,
       lastCallOutcome: contacts.get(r.id)?.find((e) => e.type === "call")?.outcome ?? null,

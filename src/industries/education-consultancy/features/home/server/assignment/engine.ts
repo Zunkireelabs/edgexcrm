@@ -6,6 +6,8 @@ import { decideAssignment, type Candidate, type Decision } from "../../lib/assig
 import { deriveLeadSignals } from "../../lib/assignment/signals";
 import { attendanceMeaningful, buildTeam, personFromStats, type StatsRow } from "../../lib/assignment/stats";
 import { PRESENT_ACTIVITY_HOURS } from "../../lib/assignment/weights";
+import { loadWorkablePlan } from "../workable";
+import { applyWorkable } from "../../lib/workable";
 import { firstTouchKeys, loadAssignmentSettings, type TenantDb } from "./settings";
 
 interface MemberRow {
@@ -15,10 +17,6 @@ interface MemberRow {
   positions: { slug: string | null; name: string | null } | Array<{ slug: string | null; name: string | null }> | null;
 }
 
-async function activeListIds(db: TenantDb): Promise<string[]> {
-  const { data } = await db.from("lead_lists").select("id, is_archive, is_staging");
-  return ((data ?? []) as unknown as Array<{ id: string; is_archive: boolean; is_staging: boolean | null }>).filter((l) => !l.is_archive && !l.is_staging).map((l) => l.id);
-}
 
 /**
  * Load the first-touch pool with everything the scorer needs, for ONE new lead. Reads only; the decision is pure
@@ -43,10 +41,10 @@ export async function buildPool(db: TenantDb, tenantId: string, now: Date): Prom
 
   const since2h = new Date(now.getTime() - PRESENT_ACTIVITY_HOURS * 3_600_000).toISOString();
   const since30d = new Date(now.getTime() - 30 * 86_400_000).toISOString().slice(0, 10);
-  const [names, statsRes, lists, leaveRes, attRes, actRes, noteRes] = await Promise.all([
+  const [names, statsRes, workable, leaveRes, attRes, actRes, noteRes] = await Promise.all([
     resolveUserNames(ids),
     db.from("lead_assignment_stats").select("user_id, destination, received, progressed, speed_n, median_first_contact_min, flag_7d"),
-    activeListIds(db),
+    loadWorkablePlan(db),
     db.from("leave_requests").select("user_id").eq("approval_status", "approved").lte("start_date", day).gte("end_date", day).in("user_id", ids),
     db.from("attendance_records").select("user_id, work_date, clock_in_at, status").gte("work_date", since30d).limit(5000),
     db.from("lead_activities").select("user_id").in("user_id", ids).gte("created_at", since2h).limit(2000),
@@ -62,8 +60,9 @@ export async function buildPool(db: TenantDb, tenantId: string, now: Date): Prom
   const counts = await Promise.all(
     poolMembers.map(async (m) => {
       const [held, recvToday] = await Promise.all([
-        lists.length
-          ? db.from("leads").select("id", { count: "exact", head: true }).eq("assigned_to", m.user_id).is("deleted_at", null).in("list_id", lists)
+        // Workload = workable leads only (lib/workable.ts): a won / lost / walk-in / on-hold lead is not work they carry.
+        workable.activeListIds.length
+          ? applyWorkable(db.from("leads").select("id", { count: "exact", head: true }).eq("assigned_to", m.user_id), workable)
           : Promise.resolve({ count: 0 }),
         db.from("leads").select("id", { count: "exact", head: true }).eq("assigned_to", m.user_id).is("deleted_at", null)
           .or(`assigned_at.gte.${today},and(assigned_at.is.null,created_at.gte.${today})`),

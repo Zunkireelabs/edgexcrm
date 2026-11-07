@@ -36,6 +36,8 @@ import { countStaleCallbacks } from "./stale-callbacks";
 import type { HomeData } from "./load-page";
 import { loadHome } from "./load-page";
 import { buildHomePulseContext } from "./pulse-ctx";
+import { loadWorkablePlan } from "./workable";
+import { applyWorkable, type WorkablePlan } from "../lib/workable";
 
 /** Beyond this many unassigned leads "Assign as suggested" is not offered (the list view does that job). */
 export const MAX_ASSIGN_IDS = 500;
@@ -103,16 +105,16 @@ export async function loadManagerHome(
   const flags7d: Record<string, "red" | "amber" | "green"> = {};
   for (const p of pulse.people) if (p.flag) flags7d[p.userId] = p.flag;
 
-  const leadScope = await makeLeadScope(db, auth, scope);
+  const [leadScope, workable] = await Promise.all([makeLeadScope(db, auth, scope), loadWorkablePlan(db)]);
   const [unassigned, former, nudges, atRisk, onLeave, impact, staleCount, quiet] = await Promise.all([
-    loadUnassigned(db, scope.branchId),
-    loadFormerHolders(db, scope.branchId),
+    loadUnassigned(db, scope.branchId, workable),
+    loadFormerHolders(db, scope.branchId, workable),
     loadNudgeStates(db, auth.userId, now, tz),
     loadAtRisk(db, scope.branchId, today, now, tz, pulse),
     loadOnLeaveToday(db, pulse.people.filter((p) => p.flag).map((p) => p.userId), today),
     loadImpact(db, auth.tenantId, launchedAt, scope.branchId, now, tz),
     countStaleCallbacks(leadScope, now, tz),
-    loadActiveListIds(db).then((ids) => loadQuietOverTwoWeeks(leadScope, ids, pulse.people.map((p) => p.userId), now, tz)),
+    loadQuietOverTwoWeeks(leadScope, workable, pulse.people.map((p) => p.userId), now, tz),
   ]);
 
   const nudgeByPerson = new Map<string, NudgeState>(nudges.map((n) => [n.toUserId, n.state]));
@@ -174,20 +176,10 @@ async function loadLaunchDate(db: HomeDb): Promise<string | null> {
   return (data as unknown as { home_launched_at: string | null } | null)?.home_launched_at ?? null;
 }
 
-/** Unassigned leads in active (non-archive, non-staging) lists, oldest first. */
-async function loadUnassigned(db: HomeDb, branchId: string | null): Promise<{ count: number; oldestAt: string | null; ids: string[] }> {
-  const { data: listRows } = await db.from("lead_lists").select("id, is_archive, is_staging");
-  const active = ((listRows ?? []) as unknown as Array<{ id: string; is_archive: boolean; is_staging: boolean | null }>)
-    .filter((l) => !l.is_archive && !l.is_staging)
-    .map((l) => l.id);
-  if (active.length === 0) return { count: 0, oldestAt: null, ids: [] };
-  let q = db
-    .from("leads")
-    .select("id, created_at", { count: "exact" })
-    .is("assigned_to", null)
-    .is("deleted_at", null)
-    .is("archived_at", null)
-    .in("list_id", active)
+/** Unassigned workable leads (lib/workable.ts: active list, not terminal / walk-in / on hold / archived), oldest first. */
+export async function loadUnassigned(db: HomeDb, branchId: string | null, plan: WorkablePlan): Promise<{ count: number; oldestAt: string | null; ids: string[] }> {
+  if (plan.activeListIds.length === 0) return { count: 0, oldestAt: null, ids: [] };
+  let q = applyWorkable(db.from("leads").select("id, created_at", { count: "exact" }).is("assigned_to", null), plan)
     .order("created_at", { ascending: true })
     .limit(MAX_ASSIGN_IDS);
   if (branchId) q = q.eq("branch_id", branchId);
@@ -200,11 +192,10 @@ async function loadUnassigned(db: HomeDb, branchId: string | null): Promise<{ co
 const FORMER_HOLDER_READ_CAP = 1000;
 
 /**
- * Leads in an active list (exactly `loadUnassigned`'s definition: non-archive, non-staging, not archived, not deleted)
- * held by someone who is NOT a current `tenant_users` member. Suspended members are still members, so never counted.
- * Archived leads never count. Branch scope is `leads.branch_id`, like the unassigned count.
+ * Workable leads (lib/workable.ts) held by someone who is NOT a current `tenant_users` member. Suspended members are still members, so never counted.
+ * Archived, terminal (won/lost), walk-in and on-hold leads never count. Branch scope is `leads.branch_id`, like the unassigned count.
  */
-export async function loadFormerHolders(db: HomeDb, branchId: string | null): Promise<{
+export async function loadFormerHolders(db: HomeDb, branchId: string | null, plan: WorkablePlan): Promise<{
   total: number;
   byStage: Array<{ name: string; count: number }>;
   applications: number;
@@ -214,21 +205,14 @@ export async function loadFormerHolders(db: HomeDb, branchId: string | null): Pr
 }> {
   const none = { total: 0, byStage: [], applications: 0, byHolder: [], holderIds: [], activeListIds: [] };
   const [{ data: listRows }, { data: memberRows }] = await Promise.all([
-    db.from("lead_lists").select("id, name, is_archive, is_staging"),
+    db.from("lead_lists").select("id, name"),
     db.from("tenant_users").select("user_id"),
   ]);
-  const lists = ((listRows ?? []) as unknown as Array<{ id: string; name: string; is_archive: boolean; is_staging: boolean | null }>).filter((l) => !l.is_archive && !l.is_staging);
+  const lists = ((listRows ?? []) as unknown as Array<{ id: string; name: string }>).filter((l) => plan.activeListIds.includes(l.id));
   const members = ((memberRows ?? []) as unknown as Array<{ user_id: string }>).map((m) => m.user_id);
   if (lists.length === 0) return none;
   const activeListIds = lists.map((l) => l.id);
-  let q = db
-    .from("leads")
-    .select("id, list_id, assigned_to", { count: "exact" })
-    .not("assigned_to", "is", null)
-    .is("deleted_at", null)
-    .is("archived_at", null)
-    .in("list_id", activeListIds)
-    .limit(FORMER_HOLDER_READ_CAP);
+  let q = applyWorkable(db.from("leads").select("id, list_id, assigned_to", { count: "exact" }).not("assigned_to", "is", null), plan).limit(FORMER_HOLDER_READ_CAP);
   if (members.length > 0) q = q.not("assigned_to", "in", `(${members.join(",")})`);
   if (branchId) q = q.eq("branch_id", branchId);
   const { data, count } = await q;
@@ -345,11 +329,6 @@ async function loadImpact(db: HomeDb, tenantId: string, launchedAt: string | nul
   return { status: "ready", since: measuringSince(status.before.to.toISOString(), tz), rows: impactRows(before, after) };
 }
 
-
-async function loadActiveListIds(db: HomeDb): Promise<string[]> {
-  const { data } = await db.from("lead_lists").select("id, is_archive, is_staging");
-  return ((data ?? []) as unknown as Array<{ id: string; is_archive: boolean; is_staging: boolean | null }>).filter((l) => !l.is_archive && !l.is_staging).map((l) => l.id);
-}
 
 /** Owner / admin only: the shadow-mode agreement card, or the auto-mode "assigned automatically" FYI row. Off = nothing. */
 async function loadAssignmentCards(db: HomeDb, now: Date, names: ReadonlyMap<string, string>): Promise<{ shadow: ShadowCard | null; auto: NeedsYouRow | null }> {
