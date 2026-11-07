@@ -1,3 +1,6 @@
+/** A live version is due for review this many days after it was approved. */
+export const REVIEW_EVERY_DAYS = 30;
+
 export type ApproveOutcome =
   | { kind: "ok"; retiredVersionId: string | null }
   | { kind: "not_found" }
@@ -10,7 +13,7 @@ export interface ApproveStore {
   getLiveVersionId(processId: string): Promise<string | null>;
   /** Move one version's status; `from` makes the write conditional (a concurrent change makes it return false). */
   setStatus(versionId: string, from: string, to: "live" | "retired", approver?: { userId: string; at: string }): Promise<boolean>;
-  setProcessLive(processId: string, versionId: string): Promise<void>;
+  setProcessLive(processId: string, versionId: string, reviewDueAt: string): Promise<void>;
 }
 
 /**
@@ -34,6 +37,6 @@ export async function approveVersion(
     if (liveId) await store.setStatus(liveId, "retired", "live");
     return { kind: "not_a_draft", status: "changed" };
   }
-  await store.setProcessLive(v.process_id, v.id);
+  await store.setProcessLive(v.process_id, v.id, new Date(args.now.getTime() + REVIEW_EVERY_DAYS * 86_400_000).toISOString());
   return { kind: "ok", retiredVersionId: liveId };
 }

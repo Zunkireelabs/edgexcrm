@@ -3,7 +3,7 @@ import { METRIC_REGISTRY, friendlySource, officeHoursText, readMetric } from "./
 import { HEADLINE_METRIC, HEADLINE_STYLE, PROCESS_KEYS, TRIGGER_METRIC } from "./keys";
 import { ADMIZZ_NEW_LEAD_RAW, ADMIZZ_SETUP } from "./fixtures";
 import { buildBaselineSpec } from "./baseline";
-import { liveRules, needsYou, onTrack, resolvePositionName, stepOwners, pluralizeRole, splitBold, writtenFrom, lastReviewed } from "./view";
+import { liveRules, needsYou, onTrack, resolvePositionName, stepOwners, pluralizeRole, splitBold, writtenFrom, lastReviewed, reviewedText } from "./view";
 import { parseProcessSpec, processSpecSchema } from "./spec";
 import { buildStepViews, buildTrigger, headlineLabel, pickHeadline } from "../server/load-processes";
 
@@ -158,6 +158,12 @@ describe("addendum: SOP + About text", () => {
   });
   it("writtenFrom gives the 30 days ending at creation", () => {
     expect(writtenFrom("Admizz", "2026-11-07T12:00:00Z")).toBe("How Admizz worked, 8 Oct–7 Nov");
+  });
+  it("reviewedText: list meta wording", () => {
+    const now = new Date("2026-11-07T12:00:00Z");
+    expect(reviewedText(null, now)).toBe("not approved yet");
+    expect(reviewedText("2026-11-07T08:00:00Z", now)).toBe("reviewed today");
+    expect(reviewedText("2026-11-01T08:00:00Z", now)).toBe("reviewed 1 Nov");
   });
   it("lastReviewed: draft is 'Not yet'; same day says Today with the next review", () => {
     expect(lastReviewed(null, "2026-12-07T12:00:00Z")).toBe("Not yet");

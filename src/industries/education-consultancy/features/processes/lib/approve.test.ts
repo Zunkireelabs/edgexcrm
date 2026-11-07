@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { approveVersion, type ApproveStore } from "./approve";
+import { approveVersion, REVIEW_EVERY_DAYS, type ApproveStore } from "./approve";
 import { canApproveProcess } from "../server/context";
 import { buildImprovements } from "./improvements";
 
@@ -7,13 +7,14 @@ function store(init: { versions: Array<{ id: string; status: string }>; owner?: 
   const versions = init.versions.map((v) => ({ ...v, process_id: "p1" }));
   const log: string[] = [];
   let liveOn: string | null = null;
+  let dueOn: string | null = null;
   const s: ApproveStore = {
     async getVersion(_k, id) { const v = versions.find((x) => x.id === id); return v ? { id: v.id, process_id: "p1", status: v.status, owner_user_id: init.owner ?? "owner-1" } : null; },
     async getLiveVersionId() { return versions.find((v) => v.status === "live")?.id ?? null; },
     async setStatus(id, from, to) { const v = versions.find((x) => x.id === id); if (!v || v.status !== from) return false; v.status = to; log.push(`${id}:${from}->${to}`); return true; },
-    async setProcessLive(_p, id) { liveOn = id; },
+    async setProcessLive(_p, id, due) { liveOn = id; dueOn = due; },
   };
-  return { s, versions, log, live: () => liveOn };
+  return { s, versions, log, live: () => liveOn, due: () => dueOn };
 }
 const run = (s: ApproveStore, can: boolean, id = "v1") => approveVersion(s, { processKey: "new_lead_first_call", versionId: id, userId: "u", canApprove: () => can, now: new Date("2026-11-07T00:00:00Z") });
 
@@ -23,6 +24,17 @@ describe("approveVersion", () => {
     expect(await run(m.s, true)).toEqual({ kind: "ok", retiredVersionId: null });
     expect(m.versions[0].status).toBe("live");
     expect(m.live()).toBe("v1");
+  });
+  it("sets the next review 30 days after approval", async () => {
+    const m = store({ versions: [{ id: "v1", status: "draft" }] });
+    await run(m.s, true);
+    expect(REVIEW_EVERY_DAYS).toBe(30);
+    expect(m.due()).toBe("2026-12-07T00:00:00.000Z");
+  });
+  it("sets no review date when nothing was approved", async () => {
+    const m = store({ versions: [{ id: "v1", status: "live" }] });
+    await run(m.s, true);
+    expect(m.due()).toBeNull();
   });
   it("retires the previous live version first", async () => {
     const m = store({ versions: [{ id: "v0", status: "live" }, { id: "v1", status: "draft" }] });

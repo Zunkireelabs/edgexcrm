@@ -32,9 +32,9 @@ export function dbApproveStore(db: ProcessesDb): ApproveStore {
       const { data, error } = await db.from("process_versions").update(patch).eq("id", versionId).eq("status", from).select("id");
       return !error && ((data as unknown[] | null)?.length ?? 0) > 0;
     },
-    async setProcessLive(processId, versionId) {
-      const { error } = await db.from("processes").update({ live_version_id: versionId }).eq("id", processId);
-      if (error) throw new Error(`processes live_version_id: ${error.message}`);
+    async setProcessLive(processId, versionId, reviewDueAt) {
+      const { error } = await db.from("processes").update({ live_version_id: versionId, review_due_at: reviewDueAt }).eq("id", processId);
+      if (error) throw new Error(`processes live_version_id/review_due_at: ${error.message}`);
     },
   };
 }

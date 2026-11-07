@@ -8,7 +8,7 @@ import { DEFAULT_WINDOW_DAYS, type HeadlineStyle, type ProcessKey } from "../lib
 import { fmtValue, STATUS_TONE } from "../lib/format";
 import { fmtN } from "../lib/metrics";
 import type { ImprovementEvent } from "../lib/improvements";
-import { needsYou, onTrack } from "../lib/view";
+import { needsYou, onTrack, reviewedText } from "../lib/view";
 import type { ProcessView, StepView } from "../server/load-processes";
 import { StepBar } from "./step-bar";
 import { useProcessesFetch } from "./use-processes";
@@ -70,7 +70,7 @@ function ProcessRowCard({ p }: { p: ProcessView }) {
             ) : null}
           </div>
           <div className="mt-0.5 text-[12.5px] text-ds-muted">
-            Owner {p.ownerName ?? "not set"} · {p.shown?.approvedAt ? when(p.shown.approvedAt) : "not approved yet"}
+            Owner {p.ownerName ?? "not set"} · {reviewedText(p.shown?.status === "live" ? (p.shown.approvedAt ?? null) : null)}
             {drives ? ` · drives ${drives}` : ""}
           </div>
         </div>
@@ -102,7 +102,7 @@ export function ProcessesPage({ tenantName = "" }: { tenantName?: string }) {
   const shown = filter === "needs" ? all.filter(needsYou) : filter === "track" ? all.filter(onTrack) : all;
 
   return (
-    <div className="mx-auto max-w-[1100px] px-4 py-6 sm:px-6">
+    <div className="mx-auto max-w-[1160px] px-4 py-7 sm:px-8">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-[26px] font-semibold leading-tight tracking-[-0.02em] text-ds-ink">Processes</h1>
@@ -119,7 +119,7 @@ export function ProcessesPage({ tenantName = "" }: { tenantName?: string }) {
       ) : loading && !data ? (
         <div className="mt-6 text-[13px] text-ds-muted">Loading…</div>
       ) : data ? (
-        <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-7">
           <div>
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
               <h2 className="flex items-center gap-2 text-[16px] font-semibold text-ds-ink">

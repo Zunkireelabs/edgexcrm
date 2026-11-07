@@ -116,7 +116,7 @@ export const SHELL_ICONS_BY_HREF: Record<string, Icon> = {
   "/attendance": CalendarCheckIcon,
   "/team": TreeStructureIcon,
   "/pulse": PulseIcon,
-  "/processes": FlowArrowIcon,
+  "/processes": TreeStructureIcon,
   "/insights/dashboards": SquaresFourIcon,
   "/time-tracking": TimerIcon,
   "/approvals": ChecksIcon,

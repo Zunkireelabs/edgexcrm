@@ -63,6 +63,12 @@ export function liveRules(key: ProcessKey, mode: AssignmentMode): RuleRow[] | nu
 
 const DAY = 86_400_000;
 
+/** The list meta wording: "reviewed today" / "reviewed 7 Nov"; a draft was never approved. */
+export function reviewedText(approvedAtIso: string | null, now: Date = new Date()): string {
+  if (!approvedAtIso) return "not approved yet";
+  return new Date(approvedAtIso).toDateString() === now.toDateString() ? "reviewed today" : `reviewed ${fmtDay(approvedAtIso)}`;
+}
+
 /** "7 Nov" (or "7 Nov 2026"). */
 export const fmtDay = (iso: string, withYear = false): string =>
   new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", ...(withYear ? { year: "numeric" } : {}) });
