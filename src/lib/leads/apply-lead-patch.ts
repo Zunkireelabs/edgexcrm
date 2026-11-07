@@ -32,6 +32,7 @@ import {
 } from "@/lib/leads/prospect-qualification";
 import { PERSONAL_DETAIL_COLUMNS, coercePersonalDetailsPayload } from "@/lib/leads/personal-details";
 import { STUDENT_RECORD_COLUMNS, coerceStudentRecordPayload } from "@/lib/leads/student-record-columns";
+import { coerceCallbackDue } from "@/lib/leads/callback-due";
 import { normalizeDestinations, normalizeFieldOfStudy, normalizeDegreeLevel } from "@/lib/leads/destination-normalize";
 import type { Lead } from "@/types/database";
 
@@ -94,6 +95,8 @@ export const UPDATABLE_FIELDS = [
   "sat_score",
   "gre_gmat_score",
   "on_hold",
+  // Manually booked call-back (EDGEX-87): ISO time or null; validated by coerceCallbackDue below.
+  "callback_due_at",
   // Student personal / passport / citizenship details (migration 234) — normalised below.
   ...PERSONAL_DETAIL_COLUMNS,
   // Student record: qualification details (migration 236) + financial (migration 239) — validated below.
@@ -631,6 +634,12 @@ export async function applyLeadPatch(
     return { kind: "validation", errors: studentRecord.errors };
   }
   Object.assign(updatePayload, studentRecord.values);
+
+  if (updatePayload.callback_due_at !== undefined) {
+    const cb = coerceCallbackDue(updatePayload.callback_due_at);
+    if (!cb.ok) return { kind: "validation", errors: { callback_due_at: [cb.error] } };
+    updatePayload.callback_due_at = cb.value;
+  }
 
   // Mirror lead_type on list move (keeps existing education UI working during transition)
   // Also resolve list names for the audit log so the activity timeline can render them.

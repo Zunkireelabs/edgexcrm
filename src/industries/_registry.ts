@@ -43,6 +43,7 @@ export const FEATURES = {
   CLASSES: "classes",
   TEAM_PERFORMANCE: "team-performance",
   PULSE: "pulse",
+  EDU_HOME: "edu-home",
   // Industry-scoped (it_agency)
   TIME_TRACKING: "time-tracking",
   ACCOUNTS: "accounts",

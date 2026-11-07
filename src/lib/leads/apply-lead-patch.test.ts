@@ -1085,3 +1085,53 @@ describe("applyLeadPatch — student record columns (migrations 236 + 239)", () 
   });
 });
 
+
+describe("applyLeadPatch — callback_due_at (EDGEX-87 call-back booking)", () => {
+  const CB_LEAD = { id: "lead-1", pipeline_id: "pipe-1", assigned_to: "user-1", branch_id: null, list_id: null, callback_due_at: null };
+  const written = (db: Awaited<ReturnType<typeof setFakeDb>>) => ((db._updates.leads ?? []) as Array<Record<string, unknown>>);
+  const inHours = (h: number) => new Date(Date.now() + h * 3_600_000).toISOString();
+
+  it("writes a valid future call-back and records it in the audit diff (old → new)", async () => {
+    const db = await setFakeDb({ leads: CB_LEAD });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const at = inHours(26);
+    const outcome = await applyLeadPatch(fixtureAuth(), "lead-1", { callback_due_at: at }, OPTS);
+    expect(outcome.kind).toBe("ok");
+    expect(written(db)[0]).toMatchObject({ callback_due_at: at });
+    if (outcome.kind === "ok") expect(outcome.changes.callback_due_at).toEqual({ old: null, new: at });
+  });
+
+  it("null clears it", async () => {
+    const db = await setFakeDb({ leads: { ...CB_LEAD, callback_due_at: inHours(2) } });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(fixtureAuth(), "lead-1", { callback_due_at: null }, OPTS);
+    expect(outcome.kind).toBe("ok");
+    expect(written(db)[0]).toMatchObject({ callback_due_at: null });
+  });
+
+  it("rejects a time more than 5 minutes in the past", async () => {
+    const db = await setFakeDb({ leads: CB_LEAD });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(fixtureAuth(), "lead-1", { callback_due_at: inHours(-1) }, OPTS);
+    expect(outcome).toMatchObject({ kind: "validation", errors: { callback_due_at: [expect.stringContaining("past")] } });
+    expect(written(db)).toHaveLength(0);
+  });
+
+  it("rejects a time more than 90 days ahead, and garbage", async () => {
+    const db = await setFakeDb({ leads: CB_LEAD });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const far = await applyLeadPatch(fixtureAuth(), "lead-1", { callback_due_at: inHours(24 * 91) }, OPTS);
+    expect(far).toMatchObject({ kind: "validation", errors: { callback_due_at: [expect.stringContaining("90 days")] } });
+    const bad = await applyLeadPatch(fixtureAuth(), "lead-1", { callback_due_at: "tomorrow-ish" }, OPTS);
+    expect(bad.kind).toBe("validation");
+    expect(written(db)).toHaveLength(0);
+  });
+
+  it("follows the existing edit rules: an own-scope counselor cannot book a call-back on someone else's lead", async () => {
+    const db = await setFakeDb({ leads: { ...CB_LEAD, assigned_to: "someone-else" } });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(fixtureAuth(), "lead-1", { callback_due_at: inHours(5) }, OPTS);
+    expect(outcome.kind).not.toBe("ok");
+    expect(written(db)).toHaveLength(0);
+  });
+});

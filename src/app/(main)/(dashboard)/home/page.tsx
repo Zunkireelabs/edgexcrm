@@ -17,6 +17,9 @@ import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { todayInTz } from "@/lib/hr/dates";
 import { deriveHomeTip } from "@/lib/home/tips";
+import { authenticateRequest } from "@/lib/api/auth";
+import { EducationHome } from "@/industries/education-consultancy/features/home/ui/home-page";
+import { loadHome } from "@/industries/education-consultancy/features/home/server/load-page";
 
 export default async function HomePage() {
   const user = await getCachedUser();
@@ -27,6 +30,17 @@ export default async function HomePage() {
 
   const { tenant, userId, permissions } = tenantData;
   const isEducation = tenant.industry_id === "education_consultancy";
+
+  // Education tenants get the new "Do next" Home (EDGEX-87). Every other industry renders today's HomeContent below, unchanged.
+  if (isEducation && getFeatureAccess(tenant.industry_id, FEATURES.EDU_HOME)) {
+    const auth = await authenticateRequest();
+    if (!auth) redirect("/login");
+    const meta = user.user_metadata as Record<string, unknown> | undefined;
+    const fullName = (meta?.name ?? meta?.full_name) as string | undefined;
+    const firstName = fullName?.trim().split(" ")[0] || user.email?.split("@")[0] || "there";
+    const data = await loadHome(auth, { timezone: tenant.timezone ?? null, config: (tenant.config as import("@/types/database").TenantConfig | null) ?? null }, firstName);
+    return <EducationHome data={data} />;
+  }
   const outreachEnabled = getFeatureAccess(tenant.industry_id, FEATURES.OUTREACH);
   const applicationTrackingEnabled = getFeatureAccess(tenant.industry_id, FEATURES.APPLICATION_TRACKING);
   const projectBoardEnabled = getFeatureAccess(tenant.industry_id, FEATURES.PROJECT_BOARD);
