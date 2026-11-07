@@ -14,3 +14,16 @@ export const isProcessKey = (v: unknown): v is ProcessKey => typeof v === "strin
 /** Window choices on the pages (days). Only `new_lead_first_call` is windowed; the others are current-state counts. */
 export const WINDOW_DAYS = [7, 30, 90] as const;
 export const DEFAULT_WINDOW_DAYS = 30;
+
+/** The one number each process leads with on the list page. A step's `target.metric` must match for it to be the headline. */
+export const HEADLINE_METRIC: Record<ProcessKey, string> = {
+  new_lead_first_call: "first_contact_1h_pct",
+  visa_to_enrolled: "moved_to_enrolled_pct",
+  dropping_a_student: "drops_with_reason_pct",
+  leaver_handover: "leavers_holding",
+};
+
+/** The metric shown on the map's Trigger card, where one exists. */
+export const TRIGGER_METRIC: Partial<Record<ProcessKey, string>> = {
+  new_lead_first_call: "arrived",
+};

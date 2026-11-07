@@ -2,14 +2,17 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeftIcon } from "@/components/icons";
+import { ArrowSquareOutIcon, CaretRightIcon, FlowArrowIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
-import { SegmentedControl } from "@/components/ui/segmented-control";
-import { DEFAULT_WINDOW_DAYS } from "../lib/keys";
+import { DEFAULT_WINDOW_DAYS, WINDOW_DAYS } from "../lib/keys";
 import { fmtTarget, fmtValue, STATUS_TONE } from "../lib/format";
+import type { StepStatus } from "../lib/metrics";
+import { fmtDay, lastReviewed, writtenFrom } from "../lib/view";
 import type { ProcessView, VersionRow } from "../server/load-processes";
-import { WindowPicker, when } from "./processes-page";
+import { when } from "./processes-page";
+import { SopTable } from "./sop-table";
 import { StepBar } from "./step-bar";
+import { UnderlineTabs } from "./underline-tabs";
 import { useProcessesFetch } from "./use-processes";
 
 type VersionListRow = Omit<VersionRow, "spec" | "process_id">;
@@ -46,10 +49,17 @@ export function ProcessDetail({ processKey, tenantName }: { processKey: string; 
   };
 
   return (
-    <div className="mx-auto max-w-[1000px] px-4 py-6 sm:px-6">
-      <Link href="/processes" className="inline-flex items-center gap-1 text-[12.5px] text-ds-muted hover:text-ds-ink">
-        <ArrowLeftIcon size={12} aria-hidden /> Processes
-      </Link>
+    <div className="mx-auto max-w-[1100px] px-4 py-6 sm:px-6">
+      <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-[13px] text-ds-muted">
+        <FlowArrowIcon size={14} aria-hidden />
+        <Link href="/processes" className="hover:text-ds-ink">Processes</Link>
+        {p ? (
+          <>
+            <CaretRightIcon size={11} aria-hidden />
+            <span className="text-ds-ink">{p.name}</span>
+          </>
+        ) : null}
+      </nav>
 
       {error ? (
         <div className="mt-4 rounded-ds-lg border border-ds-border bg-ds-surface p-4 text-[13px] text-ds-bad">
@@ -59,16 +69,23 @@ export function ProcessDetail({ processKey, tenantName }: { processKey: string; 
         <div className="mt-4 text-[13px] text-ds-muted">Loading…</div>
       ) : p ? (
         <>
-          <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
+          <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
             <div>
-              <h1 className="text-[20px] font-semibold text-ds-ink">{p.name}</h1>
-              <div className="mt-1 text-[12.5px] text-ds-muted">
-                Owner {p.ownerName ?? "not set"}
-                {p.shown ? ` · v${p.shown.version} ${STATUS_LABEL[p.shown.status].toLowerCase()}` : ""}
-                {p.shown?.approvedAt ? ` · approved ${when(p.shown.approvedAt)}` : ""}
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="text-[26px] font-semibold leading-tight tracking-[-0.02em] text-ds-ink">{p.name}</h1>
+                {p.shown ? (
+                  <span className={`rounded-ds-full px-2 py-0.5 text-[11.5px] font-medium ${p.shown.status === "draft" ? "bg-ds-warn-soft text-ds-warn" : "bg-ds-good-soft text-ds-good"}`}>
+                    v{p.shown.version} {p.shown.status === "draft" ? "draft" : STATUS_LABEL[p.shown.status].toLowerCase()}
+                  </span>
+                ) : null}
               </div>
+              <p className="mt-1 max-w-[720px] text-[13.5px] text-ds-muted">
+                {p.spec ? `${p.spec.purpose} ` : ""}
+                <strong className="font-semibold text-ds-ink">
+                  The numbers are from your last <DaysMenu days={days} onChange={setDays} /> days.
+                </strong>
+              </p>
             </div>
-            <WindowPicker days={days} onChange={setDays} />
           </div>
 
           {p.shown?.status === "draft" ? (
@@ -88,11 +105,11 @@ export function ProcessDetail({ processKey, tenantName }: { processKey: string; 
           {approveError ? <p className="mt-2 text-[12.5px] text-ds-bad">{approveError}</p> : null}
 
           <div className="mt-5">
-            <SegmentedControl
-              aria-label="Process view"
+            <UnderlineTabs
+              label="Process view"
               value={tab}
-              onValueChange={(v) => setTab(v as Tab)}
-              items={[
+              onChange={(v) => setTab(v as Tab)}
+              tabs={[
                 { value: "map", label: "Map and numbers" },
                 { value: "sop", label: "The SOP" },
                 { value: "versions", label: "Versions", count: data.versions.length },
@@ -103,75 +120,36 @@ export function ProcessDetail({ processKey, tenantName }: { processKey: string; 
           {p.specError ? <p className="mt-4 text-[13px] text-ds-bad">This version could not be read: {p.specError}</p> : null}
 
           {tab === "map" && p.spec ? (
-            <ol className="mt-4 space-y-3">
-              <li className="rounded-ds-lg border border-ds-border bg-ds-surface p-4">
-                <div className="text-[11.5px] font-medium uppercase tracking-wide text-ds-faint">Trigger</div>
-                <div className="mt-1 text-[13.5px] text-ds-ink">{p.spec.trigger.text}</div>
-              </li>
-              {p.steps.map((s, i) => {
-                const tone = STATUS_TONE[s.status];
-                return (
-                  <li key={s.key} className="rounded-ds-lg border border-ds-border bg-ds-surface p-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <div className="text-[11.5px] font-medium uppercase tracking-wide text-ds-faint">Step {i + 1}</div>
-                        <div className="mt-0.5 text-[14px] font-semibold text-ds-ink">{s.title}</div>
-                        <div className="mt-0.5 text-[12px] text-ds-muted">Target {fmtTarget(s.target.op, s.target.value, s.target.unit)} · {s.metricLabel}</div>
-                      </div>
-                      <div className="text-right">
-                        <div className={`text-[22px] font-semibold leading-none ${tone.text}`}>{fmtValue(s.value, s.target.unit)}</div>
-                        <div className={`mt-1 text-[11.5px] ${tone.text}`}>{tone.label}</div>
-                      </div>
-                    </div>
-                    <StepBar step={s} />
-                    {s.detail ? <p className="mt-2 text-[12.5px] text-ds-text">{s.detail}</p> : null}
-                    {s.drives.length ? (
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        {s.drives.map((d) => (
-                          <span key={d} className="rounded-ds-full border border-ds-border bg-ds-sunken px-2 py-0.5 text-[11.5px] text-ds-muted">
-                            {d}
-                          </span>
-                        ))}
-                      </div>
-                    ) : null}
-                  </li>
-                );
-              })}
-              <li className="rounded-ds-lg border border-ds-border bg-ds-surface p-4">
-                <div className="text-[11.5px] font-medium uppercase tracking-wide text-ds-faint">Done when</div>
-                <div className="mt-1 text-[13.5px] text-ds-ink">{p.spec.doneWhen}</div>
-              </li>
-            </ol>
+            <div role="tabpanel" aria-labelledby="tab-map">
+              <ProcessMap p={p} spec={p.spec} days={days} />
+              <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+                <section>
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <h2 className="flex items-center gap-2 text-[16px] font-semibold text-ds-ink">
+                      The SOP {p.shown ? <span className="rounded-ds-full border border-ds-border bg-ds-sunken px-2 py-0.5 text-[11.5px] font-medium text-ds-muted">v{p.shown.version}</span> : null}
+                    </h2>
+                    <button type="button" onClick={() => setTab("sop")} className="inline-flex items-center gap-1 text-[12.5px] text-ds-muted hover:text-ds-ink">
+                      Open full page <ArrowSquareOutIcon size={13} aria-hidden />
+                    </button>
+                  </div>
+                  <SopTable spec={p.spec} />
+                </section>
+                <aside className="space-y-4">
+                  <AboutCard p={p} tenantName={tenantName} />
+                  {p.rules ? <RulesCard rules={p.rules} /> : null}
+                </aside>
+              </div>
+            </div>
           ) : null}
 
           {tab === "sop" && p.spec ? (
-            <div className="mt-4 space-y-4 rounded-ds-lg border border-ds-border bg-ds-surface p-5 text-[13.5px] text-ds-text">
-              <Field label="Purpose">{p.spec.purpose}</Field>
-              <Field label="Trigger">{p.spec.trigger.text}</Field>
-              <Field label="Data needed">{p.spec.dataNeeded}</Field>
-              <div>
-                <div className="text-[11.5px] font-medium uppercase tracking-wide text-ds-faint">Steps</div>
-                <ol className="mt-1 list-decimal space-y-1.5 pl-5">
-                  {p.spec.steps.map((s) => (
-                    <li key={s.key}>{s.text}</li>
-                  ))}
-                </ol>
-              </div>
-              <Field label="Done when">{p.spec.doneWhen}</Field>
-              <div>
-                <div className="text-[11.5px] font-medium uppercase tracking-wide text-ds-faint">Exceptions</div>
-                <ul className="mt-1 list-disc space-y-1 pl-5">
-                  {p.spec.exceptions.map((e) => (
-                    <li key={e}>{e}</li>
-                  ))}
-                </ul>
-              </div>
-              <Field label="Example">{p.spec.example}</Field>
+            <div role="tabpanel" aria-labelledby="tab-sop" className="mt-4">
+              <SopTable spec={p.spec} />
             </div>
           ) : null}
 
           {tab === "versions" ? (
-            <ul className="mt-4 divide-y divide-ds-divider rounded-ds-lg border border-ds-border bg-ds-surface">
+            <ul role="tabpanel" aria-labelledby="tab-versions" className="mt-4 divide-y divide-ds-divider rounded-ds-lg border border-ds-border bg-ds-surface">
               {data.versions.map((v) => (
                 <li key={v.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-[13px]">
                   <span className="font-semibold text-ds-ink">v{v.version}</span>
@@ -189,11 +167,171 @@ export function ProcessDetail({ processKey, tenantName }: { processKey: string; 
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+const CIRCLE: Record<StepStatus, string> = { met: "bg-ds-good border-ds-good", amber: "bg-ds-warn border-ds-warn", red: "bg-ds-bad border-ds-bad", unknown: "bg-ds-ghost border-ds-ghost" };
+
+/** "30" as a small inline menu (7 / 30 / 90) inside the sentence. A native select keeps it keyboard- and screen-reader-friendly. */
+function DaysMenu({ days, onChange }: { days: number; onChange: (d: number) => void }) {
   return (
-    <div>
-      <div className="text-[11.5px] font-medium uppercase tracking-wide text-ds-faint">{label}</div>
-      <div className="mt-1">{children}</div>
+    <select
+      aria-label="Time window in days"
+      value={days}
+      onChange={(e) => onChange(Number(e.target.value))}
+      className="cursor-pointer rounded-ds-sm border-0 bg-transparent px-0.5 font-semibold text-ds-ink underline decoration-dotted underline-offset-4 outline-none focus-visible:outline-2 focus-visible:outline-ds-accent"
+    >
+      {WINDOW_DAYS.map((d) => (
+        <option key={d} value={d}>
+          {d}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function Circle({ n, status }: { n: number; status?: StepStatus }) {
+  return (
+    <i
+      aria-hidden
+      className={`grid size-[18px] place-items-center rounded-full border text-[10.5px] font-semibold not-italic tracking-normal ${status ? `${CIRCLE[status]} text-white` : "border-ds-border bg-ds-sunken text-ds-ink"}`}
+    >
+      {n}
+    </i>
+  );
+}
+
+const Label = ({ children }: { children: React.ReactNode }) => <span className="text-[11px] font-semibold uppercase tracking-[.05em] text-ds-muted">{children}</span>;
+
+const ARROW =
+  "lg:after:absolute lg:after:-right-[7px] lg:after:top-[22px] lg:after:z-10 lg:after:size-3 lg:after:rotate-45 lg:after:border-r lg:after:border-t lg:after:border-ds-divider lg:after:bg-ds-surface lg:after:content-['']";
+
+/** One row of cards, left to right, joined edge to edge: Trigger first, then every step. Stacks below 1024px. Circles number across all cards. */
+function ProcessMap({ p, spec, days }: { p: ProcessView; spec: NonNullable<ProcessView["spec"]>; days: number }) {
+  const cols = Math.min(5, p.steps.length + 1);
+  const total = p.steps.length + 1;
+  const sentences = p.trigger?.detail.split(/(?<=\.)\s+/).filter(Boolean) ?? [];
+  const t = spec.trigger;
+  return (
+    <ol
+      className="mt-3.5 grid divide-y divide-ds-divider overflow-hidden rounded-[14px] border border-ds-border bg-ds-surface lg:divide-x lg:divide-y-0 lg:[grid-template-columns:repeat(var(--cols),minmax(0,1fr))]"
+      style={{ "--cols": cols } as React.CSSProperties}
+    >
+      <li className={`relative min-w-0 px-3.5 pb-3 pt-3.5 ${total > 1 ? ARROW : ""}`}>
+        <div className="flex items-center gap-[7px]">
+          <Circle n={1} />
+          <Label>Trigger</Label>
+        </div>
+        <div className="mt-1.5 text-[14px] font-semibold text-ds-ink">{t.title ?? t.text}</div>
+        {t.sources ? <div className="mt-px text-[12px] text-ds-muted">{t.sources}</div> : null}
+        {t.target ? (
+          <div className="mt-2.5 text-[12px] text-ds-muted">
+            Target <b className="font-medium text-ds-ink">{t.target}</b>
+          </div>
+        ) : null}
+        {p.trigger ? (
+          <>
+            <div className="mt-1.5 text-[20px] font-semibold tabular-nums tracking-[-.01em] text-ds-ink">
+              {p.trigger.value ?? "No data"}
+              <small className="ml-1 text-[12px] font-medium tracking-normal text-ds-muted">in {days} days</small>
+            </div>
+            <p className="mt-1 text-[12px] leading-[1.45] text-ds-muted">
+              {sentences.map((s, i) => (
+                <span key={i} className={s.includes("outside office hours") ? "text-ds-warn" : undefined}>
+                  {s}{" "}
+                </span>
+              ))}
+            </p>
+          </>
+        ) : null}
+        <Drives items={t.drives ?? []} />
+      </li>
+      {p.steps.map((s, i) => {
+        const tone = STATUS_TONE[s.status];
+        const last = i === p.steps.length - 1;
+        return (
+          <li key={s.key} className={`relative min-w-0 px-3.5 pb-3 pt-3.5 ${last ? "" : ARROW}`}>
+            <div className="flex items-center gap-[7px]">
+              <Circle n={i + 2} status={s.status} />
+              <Label>{s.kind === "done" ? "Done when" : "Step"}</Label>
+            </div>
+            <div className="mt-1.5 text-[14px] font-semibold text-ds-ink">{s.title}</div>
+            {s.owners ? <div className="mt-px text-[12px] text-ds-muted">{s.owners}</div> : null}
+            <div className="mt-2.5 text-[12px] text-ds-muted">
+              Target <b className="font-medium text-ds-ink">{fmtTarget(s.target.op, s.target.value, s.target.unit)}</b>
+            </div>
+            <div className={`mt-1.5 text-[20px] font-semibold tabular-nums tracking-[-.01em] ${tone.text}`}>
+              {fmtValue(s.value, s.target.unit)}
+              <small className="ml-1 text-[12px] font-medium tracking-normal text-ds-muted">
+                {s.target.unit === "percent" ? (s.fraction ? `${s.fraction.n} of ${s.fraction.d}` : "") : s.metricLabel.toLowerCase()}
+              </small>
+            </div>
+            <StepBar step={s} className="mt-1.5" />
+            {s.detail ? <p className="mt-1 text-[12px] leading-[1.45] text-ds-muted">{s.detail}</p> : null}
+            <Drives items={s.drives} />
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function Drives({ items }: { items: string[] }) {
+  if (!items.length) return null;
+  return (
+    <div className="mt-2.5 flex flex-wrap gap-1">
+      {items.map((d) => (
+        <span key={d} className="whitespace-nowrap rounded-[5px] border border-dashed border-ds-ghost px-1.5 py-px text-[11px] text-ds-text">
+          {d}
+        </span>
+      ))}
     </div>
+  );
+}
+
+function Card({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-ds-lg border border-ds-border bg-ds-surface p-3.5">
+      <h2 className="text-[14px] font-semibold text-ds-ink">{title}</h2>
+      {children}
+    </section>
+  );
+}
+
+function Facts({ rows }: { rows: Array<[string, string]> }) {
+  return (
+    <dl className="mt-3 grid grid-cols-[96px_minmax(0,1fr)] gap-x-2.5 gap-y-1.5 text-[12.5px]">
+      {rows.map(([k, v]) => (
+        <div key={k} className="contents">
+          <dt className="text-ds-muted">{k}</dt>
+          <dd className="text-ds-ink">{v}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function AboutCard({ p, tenantName }: { p: ProcessView; tenantName: string }) {
+  const live = p.shown?.status === "live";
+  return (
+    <Card title="About this process">
+      <Facts
+        rows={[
+          ["Owner", p.ownerName ?? "Not set"],
+          ["Live version", live && p.shown ? `v${p.shown.version} · since ${p.shown.approvedAt ? fmtDay(p.shown.approvedAt, true) : "—"}` : "Draft, not approved yet"],
+          ["Written from", writtenFrom(tenantName, p.createdAt)],
+          ["Last reviewed", lastReviewed(live ? (p.shown?.approvedAt ?? null) : null, p.reviewDueAt)],
+          ["Steps owned by", p.stepOwners.join(", ") || "—"],
+          ["Drives", p.drives.join(", ") || "—"],
+        ]}
+      />
+    </Card>
+  );
+}
+
+function RulesCard({ rules }: { rules: NonNullable<ProcessView["rules"]> }) {
+  return (
+    <Card title="Rules that run from it">
+      <Facts rows={rules.map((r) => [r.label, r.value])} />
+      {/* Until P3 makes "change a rule here and Home changes" true, the footer only states what runs today. */}
+      <p className="mt-3 text-[12.5px] text-ds-muted">These are the values EdgeX runs today.</p>
+    </Card>
   );
 }

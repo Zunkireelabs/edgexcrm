@@ -1,6 +1,9 @@
 import { scopedClientForTenant } from "@/lib/supabase/scoped";
 import { loadUserNames } from "../../pulse/server/context";
-import { DEFAULT_WINDOW_DAYS, PROCESS_KEYS, PROCESS_NAMES, WINDOW_DAYS, isProcessKey, type ProcessKey } from "../lib/keys";
+import { loadAssignmentSettings } from "../../home/server/assignment/settings";
+import type { AssignmentMode } from "../../home/lib/assignment/outcome";
+import { DEFAULT_WINDOW_DAYS, HEADLINE_METRIC, PROCESS_KEYS, PROCESS_NAMES, TRIGGER_METRIC, WINDOW_DAYS, isProcessKey, type ProcessKey } from "../lib/keys";
+import { liveRules, resolvePositionName, stepOwners, type RuleRow } from "../lib/view";
 import { readMetric, stepStatus, type MetricUnit, type RawMetrics, type StepStatus } from "../lib/metrics";
 import { safeParseProcessSpec, type ProcessSpec } from "../lib/spec";
 import type { ProcessRow } from "../lib/store";
@@ -33,6 +36,12 @@ export interface StepView {
   metricLabel: string;
   value: number | null;
   detail: string;
+  /** "x of y" behind a percent value, when the registry has one. */
+  fraction: { n: number; d: number } | null;
+  /** Who does this step, in words (position names; the assign step says "by hand" while smart assignment is off). */
+  owners: string;
+  /** "done" = the map's last card, labelled DONE WHEN. */
+  kind: "step" | "done";
   status: StepStatus;
 }
 
@@ -43,10 +52,19 @@ export interface ProcessView {
   ownerUserId: string | null;
   ownerName: string | null;
   reviewDueAt: string | null;
+  createdAt: string;
   /** The version being shown: the live one, else the newest draft. */
   shown: { id: string; version: number; status: VersionRow["status"]; source: VersionRow["source"]; approvedAt: string | null; changeSummary: string | null } | null;
-  /** The first step's headline number against its target: the card on the list page. */
+  /** The step whose metric is this process's HEADLINE_METRIC (else the first step with a value): the row on the list page. */
   headline: StepView | null;
+  /** The map's Trigger card number, where the process has one. */
+  trigger: { value: number | null; detail: string } | null;
+  /** Union of the position names that own the steps. */
+  stepOwners: string[];
+  /** Union of what the steps drive. */
+  drives: string[];
+  /** Rules EdgeX really runs today (new-lead process only). */
+  rules: RuleRow[] | null;
   steps: StepView[];
   spec: ProcessSpec | null;
   specError: string | null;
@@ -65,6 +83,7 @@ export async function fetchProcessMetrics(db: Db, tenantId: string, key: Process
 }
 
 const PROC_COLS = "id, key, name, owner_user_id, live_version_id, review_due_at, created_at";
+const uniqueOf = (xs: string[]) => [...new Set(xs)];
 const VER_COLS = "id, process_id, version, status, spec, source, proposed_by, change_summary, approved_by, approved_at, created_at";
 
 /** Live version, else the newest non-rejected one. */
@@ -74,7 +93,19 @@ export function pickShownVersion(versions: VersionRow[]): VersionRow | null {
   return [...versions].filter((v) => v.status === "draft").sort((a, b) => b.version - a.version)[0] ?? null;
 }
 
-export function buildStepViews(key: ProcessKey, spec: ProcessSpec, raw: RawMetrics | null): StepView[] {
+const NO_NAMES: ReadonlyMap<string, string> = new Map();
+
+export function pickHeadline(key: ProcessKey, steps: StepView[]): StepView | null {
+  return steps.find((s) => s.target.metric === HEADLINE_METRIC[key]) ?? steps.find((s) => s.value !== null) ?? steps[0] ?? null;
+}
+
+export function buildTrigger(key: ProcessKey, raw: RawMetrics | null): { value: number | null; detail: string } | null {
+  const metric = TRIGGER_METRIC[key];
+  const m = metric && raw ? readMetric(key, metric, raw) : null;
+  return m ? { value: m.value, detail: m.detail } : null;
+}
+
+export function buildStepViews(key: ProcessKey, spec: ProcessSpec, raw: RawMetrics | null, nameBySlug: ReadonlyMap<string, string> = NO_NAMES, mode: AssignmentMode = "off"): StepView[] {
   return spec.steps.map((s) => {
     const m = raw ? readMetric(key, s.target.metric, raw) : null;
     const value = m?.value ?? null;
@@ -88,6 +119,9 @@ export function buildStepViews(key: ProcessKey, spec: ProcessSpec, raw: RawMetri
       metricLabel: m?.label ?? s.target.metric,
       value,
       detail: m?.detail ?? "",
+      fraction: m?.fraction ?? null,
+      owners: stepOwners(s.key, s.who, nameBySlug, mode),
+      kind: s.kind ?? "step",
       status: stepStatus(value, s.target.op, s.target.value),
     };
   });
@@ -101,6 +135,8 @@ export async function loadProcessViews(ctx: ProcessesContext, windowDays: number
   const { data: vers } = await db.from("process_versions").select(VER_COLS).in("process_id", rows.map((r) => r.id));
   const versions = (vers ?? []) as unknown as VersionRow[];
   const names = await loadUserNames(db);
+  const [{ data: posRows }, settings] = await Promise.all([db.from("positions").select("slug, name"), loadAssignmentSettings(db)]);
+  const nameBySlug = new Map(((posRows ?? []) as unknown as Array<{ slug: string; name: string }>).map((r) => [r.slug, r.name]));
   const to = new Date();
   const from = new Date(to.getTime() - windowDays * 86_400_000);
 
@@ -110,7 +146,7 @@ export async function loadProcessViews(ctx: ProcessesContext, windowDays: number
       const raw = await fetchProcessMetrics(db, auth.tenantId, p.key, from, to, tz);
       const parsed = shownVer ? safeParseProcessSpec(p.key, shownVer.spec) : null;
       const spec = parsed?.ok ? parsed.spec : null;
-      const steps = spec ? buildStepViews(p.key, spec, raw) : [];
+      const steps = spec ? buildStepViews(p.key, spec, raw, nameBySlug, settings.mode) : [];
       return {
         key: p.key,
         name: p.name || PROCESS_NAMES[p.key],
@@ -118,10 +154,15 @@ export async function loadProcessViews(ctx: ProcessesContext, windowDays: number
         ownerUserId: p.owner_user_id,
         ownerName: p.owner_user_id ? (names.get(p.owner_user_id)?.name ?? null) : null,
         reviewDueAt: p.review_due_at,
+        createdAt: p.created_at,
         shown: shownVer
           ? { id: shownVer.id, version: shownVer.version, status: shownVer.status, source: shownVer.source, approvedAt: shownVer.approved_at, changeSummary: shownVer.change_summary }
           : null,
-        headline: steps[0] ? (steps.find((s) => s.value !== null) ?? steps[0]) : null,
+        headline: pickHeadline(p.key, steps),
+        trigger: buildTrigger(p.key, raw),
+        stepOwners: uniqueOf(spec ? spec.steps.flatMap((s) => s.who.map((w) => resolvePositionName(w, nameBySlug))) : []),
+        drives: uniqueOf(steps.flatMap((s) => s.drives)),
+        rules: liveRules(p.key, settings.mode),
         steps,
         spec,
         specError: parsed && !parsed.ok ? parsed.error : null,

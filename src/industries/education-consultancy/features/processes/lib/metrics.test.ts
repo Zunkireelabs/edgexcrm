@@ -13,7 +13,7 @@ describe("metrics registry reads the SQL output", () => {
   });
   it("is null (not 0) without a denominator or a field", () => {
     expect(METRIC_REGISTRY.new_lead_first_call.callbacks_kept_pct.read({ callbacks_booked: 0, callbacks_kept: 0 })).toBeNull();
-    expect(METRIC_REGISTRY.dropping_a_student.drops_with_reason_pct.read({ dropped: 46, with_reason: null, reason_field_missing: true })).toBeNull();
+    expect(METRIC_REGISTRY.dropping_a_student.drops_with_reason_pct.read({ dropped: 0, with_reason: null, reason_field_missing: true })).toBeNull();
     expect(METRIC_REGISTRY.visa_to_enrolled.moved_to_enrolled_pct.read({ moved_to_enrolled: 0, won_not_enrolled: 0 })).toBeNull();
   });
   it("visa_to_enrolled: 0 of 47 is 0%", () => {

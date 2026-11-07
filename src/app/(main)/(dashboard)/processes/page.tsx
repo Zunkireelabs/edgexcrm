@@ -12,5 +12,5 @@ export default async function Page() {
   if (!tenantData) redirect("/login");
   if (!getFeatureAccess(tenantData.tenant.industry_id, FEATURES.PROCESSES)) notFound();
   if (tenantData.role !== "owner" && tenantData.role !== "admin") notFound();
-  return <ProcessesPage />;
+  return <ProcessesPage tenantName={tenantData.tenant.name ?? ""} />;
 }

@@ -54,7 +54,7 @@ describe("baseline builder (Admizz-shaped fixtures)", () => {
   });
 
   it("dropping_a_student is honest that the reason field does not exist yet", () => {
-    expect(buildBaselineSpec("dropping_a_student", ADMIZZ_SETUP).steps[0].text).toContain("can't record one yet");
+    expect(buildBaselineSpec("dropping_a_student", ADMIZZ_SETUP).steps[0].text).toContain("can't record a reason yet");
   });
 
   it("leaver_handover targets zero leavers / zero live leads", () => {

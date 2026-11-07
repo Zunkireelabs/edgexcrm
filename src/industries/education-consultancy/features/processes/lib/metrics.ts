@@ -15,6 +15,8 @@ export interface MetricDef {
   read: (raw: RawMetrics) => number | null;
   /** One honest line of detail from the same raw numbers (shown under the step). */
   detail: (raw: RawMetrics) => string;
+  /** Percent metrics only: the "x of y" behind the percentage (same numbers as `detail`). Null when there's no denominator. */
+  fraction?: (raw: RawMetrics) => { n: number; d: number } | null;
 }
 
 const num = (raw: RawMetrics, k: string): number | null => {
@@ -23,6 +25,7 @@ const num = (raw: RawMetrics, k: string): number | null => {
 };
 const pct = (n: number | null, d: number | null): number | null => (n === null || d === null || d <= 0 ? null : Math.round((n / d) * 1000) / 10);
 const n0 = (raw: RawMetrics, k: string) => num(raw, k) ?? 0;
+const frac = (n: number | null, d: number | null): { n: number; d: number } | null => (n === null || d === null || d <= 0 ? null : { n, d });
 
 /** "1.9 h" / "32 min" / "2.4 days" */
 export function formatMinutes(min: number | null): string {
@@ -49,6 +52,7 @@ export const METRIC_REGISTRY: Record<ProcessKey, Record<string, MetricDef>> = {
       label: "Got an owner within 5 minutes",
       unit: "percent",
       read: (r) => pct(num(r, "owner_within_5min"), num(r, "owner_assigned")),
+      fraction: (r) => frac(num(r, "owner_within_5min"), num(r, "owner_assigned")),
       detail: (r) =>
         `${n0(r, "owner_within_5min")} of ${n0(r, "owner_assigned")} within 5 minutes (incl. leads created already assigned). Median wait ${formatMinutes(num(r, "owner_wait_median_min"))}, a quarter waited over ${formatMinutes(num(r, "owner_wait_p75_min"))}.`,
     },
@@ -56,6 +60,7 @@ export const METRIC_REGISTRY: Record<ProcessKey, Record<string, MetricDef>> = {
       label: "Contacted within 1 hour",
       unit: "percent",
       read: (r) => pct(num(r, "within_1h"), num(r, "arrived")),
+      fraction: (r) => frac(num(r, "within_1h"), num(r, "arrived")),
       detail: (r) =>
         `${n0(r, "within_1h")} of ${n0(r, "arrived")} within an hour. Median ${formatMinutes(num(r, "first_contact_median_min"))} to first contact. ${n0(r, "never")} never contacted.`,
     },
@@ -63,12 +68,14 @@ export const METRIC_REGISTRY: Record<ProcessKey, Record<string, MetricDef>> = {
       label: "Call-backs kept on the day",
       unit: "percent",
       read: (r) => pct(num(r, "callbacks_kept"), num(r, "callbacks_booked")),
+      fraction: (r) => frac(num(r, "callbacks_kept"), num(r, "callbacks_booked")),
       detail: (r) => `${n0(r, "callbacks_kept")} of ${n0(r, "callbacks_booked")} call-backs done on the day booked.`,
     },
     reached_qualified_pct: {
       label: "Reached Qualified or later",
       unit: "percent",
       read: (r) => pct(num(r, "reached_qualified"), num(r, "arrived")),
+      fraction: (r) => frac(num(r, "reached_qualified"), num(r, "arrived")),
       detail: (r) =>
         `${n0(r, "reached_qualified")} of ${n0(r, "arrived")} are at Qualified or beyond. ${r.reason_field_missing ? "Dropped leads: no reason is recorded yet." : ""}`.trim(),
     },
@@ -78,6 +85,7 @@ export const METRIC_REGISTRY: Record<ProcessKey, Record<string, MetricDef>> = {
       label: "Visa-approved students moved to Enrolled",
       unit: "percent",
       read: (r) => pct(num(r, "moved_to_enrolled"), n0(r, "moved_to_enrolled") + n0(r, "won_not_enrolled")),
+      fraction: (r) => frac(num(r, "moved_to_enrolled"), n0(r, "moved_to_enrolled") + n0(r, "won_not_enrolled")),
       detail: (r) => `${n0(r, "moved_to_enrolled")} of ${n0(r, "moved_to_enrolled") + n0(r, "won_not_enrolled")} won students are in the Enrolled stage.`,
     },
   },
@@ -85,9 +93,13 @@ export const METRIC_REGISTRY: Record<ProcessKey, Record<string, MetricDef>> = {
     drops_with_reason_pct: {
       label: "Drops with a reason recorded",
       unit: "percent",
-      read: (r) => pct(num(r, "with_reason"), num(r, "dropped")),
+      // The reason field doesn't exist yet, so it is TRUE that no drop has a reason: 0%, not "no data". Nothing dropped = nothing to measure.
+      read: (r) => (n0(r, "dropped") <= 0 ? null : r.reason_field_missing ? 0 : pct(num(r, "with_reason"), num(r, "dropped"))),
+      fraction: (r) => (n0(r, "dropped") <= 0 ? null : r.reason_field_missing ? { n: 0, d: n0(r, "dropped") } : frac(num(r, "with_reason"), num(r, "dropped"))),
       detail: (r) =>
-        r.reason_field_missing ? `${n0(r, "dropped")} students were dropped. EdgeX can't record a reason yet.` : `${n0(r, "with_reason")} of ${n0(r, "dropped")} have a reason.`,
+        r.reason_field_missing
+          ? `${n0(r, "dropped")} students were dropped. None has a reason, because EdgeX can't record one yet.`
+          : `${n0(r, "with_reason")} of ${n0(r, "dropped")} have a reason.`,
     },
   },
   leaver_handover: {
@@ -95,7 +107,7 @@ export const METRIC_REGISTRY: Record<ProcessKey, Record<string, MetricDef>> = {
       label: "Leavers still holding leads",
       unit: "count",
       read: (r) => num(r, "leavers_holding"),
-      detail: (r) => `${n0(r, "leavers_holding")} people who left still hold ${n0(r, "all_leads_held")} leads.`,
+      detail: (r) => `${n0(r, "leavers_holding")} people who left still hold ${n0(r, "all_leads_held")} leads (${n0(r, "live_leads_held")} of them still open).`,
     },
     live_leads_held: {
       label: "Workable leads held by leavers",
@@ -120,7 +132,11 @@ export function stepStatus(value: number | null, op: "<=" | ">=", target: number
 }
 
 /** Everything the pages need about one metric, read from raw: value, label, unit, detail. */
-export function readMetric(processKey: ProcessKey, metric: string, raw: RawMetrics): { value: number | null; label: string; unit: MetricUnit; detail: string } | null {
+export function readMetric(
+  processKey: ProcessKey,
+  metric: string,
+  raw: RawMetrics,
+): { value: number | null; label: string; unit: MetricUnit; detail: string; fraction: { n: number; d: number } | null } | null {
   const def = METRIC_REGISTRY[processKey][metric];
-  return def ? { value: def.read(raw), label: def.label, unit: def.unit, detail: def.detail(raw) } : null;
+  return def ? { value: def.read(raw), label: def.label, unit: def.unit, detail: def.detail(raw), fraction: def.fraction?.(raw) ?? null } : null;
 }

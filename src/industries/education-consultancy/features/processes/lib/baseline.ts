@@ -39,7 +39,14 @@ export function buildBaselineSpec(processKey: ProcessKey, setup: BaselineSetup):
   const specs: Record<ProcessKey, ProcessSpec> = {
     new_lead_first_call: {
       purpose: "Every new enquiry hears from a real person fast, while they are still choosing an agency.",
-      trigger: { text: "A lead is created by a form, an event page, a walk-in or staff. Imports don't count.", event: "lead created" },
+      trigger: {
+        text: "A lead is created by a form, an event page, a walk-in or staff. Imports don't count.",
+        event: "lead created",
+        title: "A new lead arrives",
+        sources: "Website forms, events, walk-ins",
+        target: "every lead recorded once",
+        drives: ["duplicate check"],
+      },
       dataNeeded: "Name and phone; destination and intake if given. Branch, if the form knows it.",
       steps: [
         {
@@ -48,7 +55,8 @@ export function buildBaselineSpec(processKey: ProcessKey, setup: BaselineSetup):
           who: ["branch-manager"],
           target: { metric: "owner_within_5min_pct", op: ">=", value: 90, unit: "percent" },
           drives: ["Home: Assign new leads", "Smart assignment"],
-          text: `A manager assigns it to ${names} in the lead's branch within ${r.assignWithinMinutes} minutes.`,
+          reads: ["assigned_to"],
+          text: `**A manager assigns it** to ${names} in the lead's branch within ${r.assignWithinMinutes} minutes.`,
         },
         {
           key: "first_contact",
@@ -56,7 +64,8 @@ export function buildBaselineSpec(processKey: ProcessKey, setup: BaselineSetup):
           who,
           target: { metric: "first_contact_1h_pct", op: ">=", value: 80, unit: "percent" },
           drives: ["Home: new lead not called"],
-          text: `The owner calls within ${hours}. A logged call or a note both count.`,
+          reads: ["lead_activities", "lead_notes"],
+          text: `**The owner calls** within ${hours}. A logged call or a note both count.`,
         },
         {
           key: "call_back",
@@ -64,7 +73,8 @@ export function buildBaselineSpec(processKey: ProcessKey, setup: BaselineSetup):
           who,
           target: { metric: "callbacks_kept_pct", op: ">=", value: 80, unit: "percent" },
           drives: ["Home: call-backs", `Unreachable after ${r.unreachableAfterCalls}`],
-          text: `If there's no answer, book a call-back and keep it on the day. After ${r.unreachableAfterCalls} unanswered calls, send one message.`,
+          reads: ["callback_due_at"],
+          text: `**If there's no answer,** book a call-back and keep it on the day. After ${r.unreachableAfterCalls} unanswered calls, send one message.`,
         },
         {
           key: "decide",
@@ -72,7 +82,9 @@ export function buildBaselineSpec(processKey: ProcessKey, setup: BaselineSetup):
           who,
           target: { metric: "reached_qualified_pct", op: ">=", value: 90, unit: "percent" },
           drives: [`Stage: ${qualified}`],
-          text: `Within ${r.decideWithinDays} days, move the lead to ${qualified} or drop it with a reason.`,
+          kind: "done",
+          reads: ["list", "status"],
+          text: `**Within ${r.decideWithinDays} days,** move the lead to ${qualified} or drop it with a reason.`,
         },
       ],
       doneWhen: `The lead is ${qualified}, or dropped with a reason.`,
@@ -84,7 +96,14 @@ export function buildBaselineSpec(processKey: ProcessKey, setup: BaselineSetup):
     },
     visa_to_enrolled: {
       purpose: "A student whose visa is approved is moved to the Enrolled stage, so the team can see who has actually started.",
-      trigger: { text: "An application reaches a winning (won) status.", event: "application status set to won" },
+      trigger: {
+        text: "An application reaches a winning (won) status.",
+        event: "application status set to won",
+        title: "A student's visa is approved",
+        sources: "Applications set to won",
+        target: "every won student handled",
+        drives: ["Applications"],
+      },
       dataNeeded: "The student's application, the visa decision and the intake.",
       steps: [
         {
@@ -93,7 +112,8 @@ export function buildBaselineSpec(processKey: ProcessKey, setup: BaselineSetup):
           who,
           target: { metric: "moved_to_enrolled_pct", op: ">=", value: 100, unit: "percent" },
           drives: [`Stage: ${enrolled}`, "Applications"],
-          text: `When the visa is approved, the counsellor moves the student's lead to ${enrolled}.`,
+          reads: ["list", "status"],
+          text: `**When the visa is approved,** the counsellor moves the student's lead to ${enrolled}.`,
         },
       ],
       doneWhen: `The student is in ${enrolled}.`,
@@ -102,7 +122,14 @@ export function buildBaselineSpec(processKey: ProcessKey, setup: BaselineSetup):
     },
     dropping_a_student: {
       purpose: "When a student is dropped, we record why, so we can see what is costing us students.",
-      trigger: { text: "A lead or application is moved to a lost status.", event: "lead status set to lost" },
+      trigger: {
+        text: "A lead or application is moved to a lost status.",
+        event: "lead status set to lost",
+        title: "A student is dropped",
+        sources: "Leads and applications set to lost",
+        target: "every drop handled",
+        drives: ["The lost statuses"],
+      },
       dataNeeded: "The reason the student is dropped.",
       steps: [
         {
@@ -111,7 +138,8 @@ export function buildBaselineSpec(processKey: ProcessKey, setup: BaselineSetup):
           who,
           target: { metric: "drops_with_reason_pct", op: ">=", value: 100, unit: "percent" },
           drives: ["The lost statuses"],
-          text: "Every dropped student has a reason recorded. EdgeX can't record one yet, so this step reads 'no data' until it can.",
+          reads: ["status"],
+          text: "**Every dropped student has a reason recorded.** EdgeX can't record a reason yet, so today none has one.",
         },
       ],
       doneWhen: "The student is dropped and the reason is on the record.",
@@ -120,7 +148,14 @@ export function buildBaselineSpec(processKey: ProcessKey, setup: BaselineSetup):
     },
     leaver_handover: {
       purpose: "When someone leaves the team, their open leads go to someone else the same day.",
-      trigger: { text: "A team member is removed from the team.", event: "team member removed" },
+      trigger: {
+        text: "A team member is removed from the team.",
+        event: "team member removed",
+        title: "A team member leaves",
+        sources: "Team → remove member",
+        target: "handed over on their last day",
+        drives: ["Team → remove member"],
+      },
       dataNeeded: "The leaver's open leads and the branch they belong to.",
       steps: [
         {
@@ -129,7 +164,8 @@ export function buildBaselineSpec(processKey: ProcessKey, setup: BaselineSetup):
           who: ["branch-manager"],
           target: { metric: "live_leads_held", op: "<=", value: 0, unit: "count" },
           drives: ["Team → remove member"],
-          text: "A manager reassigns every open lead of the leaver before or on their last day.",
+          reads: ["assigned_to"],
+          text: "**A manager reassigns every open lead** of the leaver before or on their last day.",
         },
         {
           key: "no_leavers_holding",
@@ -137,7 +173,8 @@ export function buildBaselineSpec(processKey: ProcessKey, setup: BaselineSetup):
           who: ["branch-manager"],
           target: { metric: "leavers_holding", op: "<=", value: 0, unit: "count" },
           drives: ["Team → remove member"],
-          text: "Closed and archived leads are handed over too, so nobody who has left still appears as an owner.",
+          reads: ["assigned_to"],
+          text: "**Closed and archived leads are handed over too,** so nobody who has left still appears as an owner.",
         },
       ],
       doneWhen: "No lead is held by someone who is no longer on the team.",

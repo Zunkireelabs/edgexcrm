@@ -18,12 +18,25 @@ export const stepSchema = z.object({
     unit: z.enum(["percent", "count", "min"]),
   }),
   drives: z.array(z.string()),
+  /** May carry `**bold**` lead phrases (rendered by the SOP table; nothing else is interpreted). */
   text: z.string().min(1),
+  /** "done" marks the last card of the map ("DONE WHEN"). Default "step". */
+  kind: z.enum(["step", "done"]).optional(),
+  /** The fields/tables this step reads, shown as mono chips in the SOP. */
+  reads: z.array(z.string()).optional(),
 });
 
 export const processSpecSchema = z.object({
   purpose: z.string().min(1),
-  trigger: z.object({ text: z.string().min(1), event: z.string().min(1) }),
+  trigger: z.object({
+    text: z.string().min(1),
+    event: z.string().min(1),
+    /** Map card: short title, sources line, target in words, and what it drives. All optional. */
+    title: z.string().min(1).optional(),
+    sources: z.string().min(1).optional(),
+    target: z.string().min(1).optional(),
+    drives: z.array(z.string()).optional(),
+  }),
   dataNeeded: z.string().min(1),
   steps: z.array(stepSchema).min(1),
   doneWhen: z.string().min(1),
