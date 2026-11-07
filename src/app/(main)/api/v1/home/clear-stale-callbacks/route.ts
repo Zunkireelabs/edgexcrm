@@ -8,10 +8,12 @@ import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { resolveHomeScope } from "@/industries/education-consultancy/features/home/lib/scope";
 import { clearCountMatches } from "@/industries/education-consultancy/features/home/lib/stale-callbacks";
+import { makeLeadScope } from "@/industries/education-consultancy/features/home/server/lead-scope";
 import { clearStaleCallbacks, countStaleCallbacks } from "@/industries/education-consultancy/features/home/server/stale-callbacks";
 
 // POST /api/v1/home/clear-stale-callbacks  { expected_count }
-// Owner / admin / team-scope manager only (anyone who sees more than their own leads), for THEIR scope. Clears call-back
+// Owner / admin / team-scope manager only (anyone who sees more than their own leads), for THEIR scope (the leads list's own
+// branch definitions: see server/lead-scope.ts). Clears call-back
 // reminders older than 14 tenant-local days through the audited lead-patch path. The server recomputes the set; the client
 // only confirms the number it showed (a >10% difference returns 409 with the new count so the person re-confirms).
 export async function POST(request: NextRequest) {
@@ -39,9 +41,10 @@ export async function POST(request: NextRequest) {
   const tz = (tenantRow as unknown as { timezone: string | null } | null)?.timezone ?? "Asia/Kathmandu";
   const now = new Date();
 
-  const actual = await countStaleCallbacks(db, scope, now, tz);
+  const leads = await makeLeadScope(db, auth, scope);
+  const actual = await countStaleCallbacks(leads, now, tz);
   if (!clearCountMatches(expected, actual)) {
     return apiError("COUNT_CHANGED", "The number of reminders changed", 409, { count: actual });
   }
-  return apiSuccess(await clearStaleCallbacks(db, auth, scope, now, tz));
+  return apiSuccess(await clearStaleCallbacks(leads, auth, now, tz));
 }

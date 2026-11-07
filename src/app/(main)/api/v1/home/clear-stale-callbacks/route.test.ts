@@ -12,6 +12,7 @@ vi.mock("@/lib/supabase/scoped", () => ({
   scopedClient: async () => ({ raw: () => ({ from: () => ({ select: () => ({ eq: () => ({ single: async () => ({ data: { timezone: "Asia/Kathmandu" } }) }) }) }) }) }),
 }));
 vi.mock("@/industries/education-consultancy/features/home/lib/scope", () => ({ resolveHomeScope: () => scopeRef.value }));
+vi.mock("@/industries/education-consultancy/features/home/server/lead-scope", () => ({ makeLeadScope: async () => ({ definition: "tenant", select: () => ({}) }) }));
 vi.mock("@/industries/education-consultancy/features/home/server/stale-callbacks", () => ({ countStaleCallbacks: countMock, clearStaleCallbacks: clearMock }));
 
 const req = (body: unknown) => new Request("http://x/api/v1/home/clear-stale-callbacks", { method: "POST", body: JSON.stringify(body) }) as never;

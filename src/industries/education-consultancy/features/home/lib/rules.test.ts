@@ -148,22 +148,54 @@ describe("deadline_docs", () => {
   });
 });
 
-describe("going_quiet", () => {
+describe("going_quiet (5-14 tenant-local days since contact)", () => {
+  // Now = Mon 9 Nov 10:00 Kathmandu. Last contact at 12:00 Kathmandu (06:15Z) `days` calendar days ago.
   const quiet = (id: string, name: string, days: number, o = {}) =>
-    lead({ id, name, lastTouchedAt: new Date(now.getTime() - days * 86_400_000).toISOString(), assignedAt: "2026-09-01T00:00:00.000Z", ...o });
-  it("is ONE grouped row with the range and names", () => {
+    lead({ id, name, lastTouchedAt: new Date(Date.UTC(2026, 10, 9 - days, 6, 15)).toISOString(), assignedAt: "2026-09-01T00:00:00.000Z", ...o });
+
+  it("is ONE grouped row: range, names (up to 3), and a sheet action that opens exactly those leads", () => {
     const items = goingQuietRule([quiet("a", "Ramesh", 9), quiet("b", "Dipa", 6), quiet("c", "Saroj", 5), quiet("d", "Mina", 7)], KTM, "u1");
     expect(items).toHaveLength(1);
-    expect(items[0].title).toBe("4 Qualified leads going quiet");
-    expect(items[0].chip.text).toBe("5–9 days since last touch");
-    expect(items[0].why).toBe("Ramesh, Mina, Dipa and 1 more");
+    const g = items[0];
+    expect(g.title).toBe("4 Qualified leads going quiet");
+    expect(g.chip.text).toBe("5\u20139 days since last contact");
+    expect(g.why).toBe("Ramesh, Mina, Dipa and 1 more");
+    expect(g.primaryAction).toEqual({ type: "sheet", label: "Open 4" });
+    expect(g.children!.map((c) => c.title)).toEqual(["Ramesh", "Mina", "Dipa", "Saroj"]); // longest quiet first
+    expect(g.children!.every((c) => c.primaryAction.type === "call")).toBe(true);
   });
-  it("skips fresh, on-hold, inactive and already-listed leads", () => {
-    const items = goingQuietRule([quiet("a", "A", 4), quiet("b", "B", 8, { onHold: true }), quiet("c", "C", 8, { isActive: false }), quiet("d", "D", 8)], KTM, "u1", new Set(["d"]));
+
+  it("boundaries: day 4 is not quiet yet, day 5 is, day 14 is, day 15 is OFF the personal list", () => {
+    const kinds = (days: number) => goingQuietRule([quiet("x", "X", days)], KTM, "u1").length;
+    expect(kinds(4)).toBe(0);
+    expect(kinds(5)).toBe(1);
+    expect(kinds(14)).toBe(1);
+    expect(kinds(15)).toBe(0);
+    expect(kinds(100)).toBe(0);
+  });
+
+  it("days are tenant-local calendar days, not 24-hour blocks", () => {
+    // Last contact 2026-11-04 23:30 Kathmandu (17:45Z): 5 calendar days ago, though only ~4.4 days (106 h) back.
+    const l = lead({ id: "e", lastTouchedAt: "2026-11-04T17:45:00.000Z", assignedAt: "2026-09-01T00:00:00.000Z" });
+    expect(goingQuietRule([l], KTM, "u").length).toBe(1);
+    // The same instant in UTC is 2026-11-04 → also 5 days; contact at 2026-11-04T23:30Z is 5 days in UTC but 4 in Kathmandu.
+    const m = lead({ id: "f", lastTouchedAt: "2026-11-04T23:30:00.000Z", assignedAt: "2026-09-01T00:00:00.000Z" });
+    expect(goingQuietRule([m], UTC, "u").length).toBe(1);
+    expect(goingQuietRule([m], KTM, "u").length).toBe(0);
+  });
+
+  it("a note counts as contact (last_touched_at), so a recent note keeps the lead off the list", () => {
+    expect(goingQuietRule([quiet("n", "N", 1)], KTM, "u1")).toEqual([]);
+  });
+
+  it("skips on-hold, inactive and already-listed leads", () => {
+    const items = goingQuietRule([quiet("b", "B", 8, { onHold: true }), quiet("c", "C", 8, { isActive: false }), quiet("d", "D", 8)], KTM, "u1", new Set(["d"]));
     expect(items).toEqual([]);
   });
-  it("clears on any touch (a fresh last_touched_at)", () => {
-    expect(goingQuietRule([quiet("a", "A", 0)], KTM, "u1")).toEqual([]);
+
+  it("a never-touched lead is judged from when it reached the person", () => {
+    const l = lead({ id: "g", lastTouchedAt: null, assignedAt: new Date(Date.UTC(2026, 10, 1, 6, 15)).toISOString() }); // 8 days ago
+    expect(goingQuietRule([l], KTM, "u")[0].chip.text).toBe("8 days since last contact");
   });
 });
 

@@ -14,6 +14,7 @@ import { impactRows, impactStatus, measuringSince, type ImpactRaw, type ImpactRo
 import { needsALook, type NeedsALook } from "../lib/needs-a-look";
 import {
   atRiskRow,
+  quietOverRow,
   staleCallbacksRow,
   attentionRows,
   standaloneNudgeRow,
@@ -25,6 +26,8 @@ import { deadlineDocsRule } from "../lib/rules/deadline-docs";
 import { localDate } from "../lib/time";
 import type { HomeScope } from "../lib/scope";
 import { loadApplications, type HomeDb } from "./load-home";
+import { makeLeadScope } from "./lead-scope";
+import { loadQuietOverTwoWeeks } from "./quiet-leads";
 import { countStaleCallbacks } from "./stale-callbacks";
 import type { HomeData } from "./load-page";
 import { loadHome } from "./load-page";
@@ -94,20 +97,22 @@ export async function loadManagerHome(
   const flags7d: Record<string, "red" | "amber" | "green"> = {};
   for (const p of pulse.people) if (p.flag) flags7d[p.userId] = p.flag;
 
-  const [unassigned, nudges, atRisk, onLeave, impact, staleCount] = await Promise.all([
+  const leadScope = await makeLeadScope(db, auth, scope);
+  const [unassigned, nudges, atRisk, onLeave, impact, staleCount, quiet] = await Promise.all([
     loadUnassigned(db, scope.branchId),
     loadNudgeStates(db, auth.userId, now, tz),
     loadAtRisk(db, scope.branchId, today, now, tz, pulse),
     loadOnLeaveToday(db, pulse.people.filter((p) => p.flag).map((p) => p.userId), today),
     loadImpact(db, auth.tenantId, launchedAt, scope.branchId, now, tz),
-    countStaleCallbacks(db, scope, now, tz),
+    countStaleCallbacks(leadScope, now, tz),
+    loadActiveListIds(db).then((ids) => loadQuietOverTwoWeeks(leadScope, ids, pulse.people.map((p) => p.userId), now, tz)),
   ]);
 
   const nudgeByPerson = new Map<string, NudgeState>(nudges.map((n) => [n.toUserId, n.state]));
   const plan = planReassign(pulse.people, { userId: null, positionKey: normalizePosition("lead-caller").key }, unassigned.count, pulse.heldLoad ?? {}, flags7d);
   const unassignedHref = `/leads?${new URLSearchParams({ f: encodeFilterTree({ conjunction: "and", conditions: [{ id: "home:unassigned", field: "assignees", op: "is_any_of", value: ["unassigned"] }] }) }).toString()}`;
 
-  const attention = attentionRows(pulse.attention, nudgeByPerson);
+  const attention = attentionRows(pulse.attention, nudgeByPerson, auth.userId);
   const listedPeople = new Set(pulse.attention.flatMap((a) => a.links.flatMap((l) => (l.personId ? [l.personId] : []))));
   const nameOf = new Map(pulse.people.map((p) => [p.userId, p.name]));
   const standalone = nudges
@@ -117,6 +122,7 @@ export async function loadManagerHome(
       return standaloneNudgeRow(nameOf.get(n.toUserId) ?? "Someone", n.toUserId, st.still, st.when, untouchedHeldOfPersonHref(n.toUserId));
     });
 
+  const scopeLabel = scope.branchId ? (branches.find((b) => b.id === scope.branchId)?.name ?? "this branch") : "all branches";
   const needsYou = [
     unassignedRow({
       count: unassigned.count,
@@ -129,7 +135,8 @@ export async function loadManagerHome(
     ...standalone,
     ...attention,
     atRiskRow(atRisk, "/applications"),
-    staleCallbacksRow(staleCount),
+    staleCallbacksRow(staleCount, scopeLabel),
+    quietOverRow(quiet.total, quiet.byPerson.map((p) => ({ name: nameOf.get(p.userId) ?? "Someone", count: p.count })), scopeLabel),
   ].filter((r): r is NeedsYouRow => r !== null);
 
   const shortName = ctx.tenantName.trim().split(/\s+/)[0] || "Your team";
@@ -263,3 +270,8 @@ async function loadImpact(db: HomeDb, tenantId: string, launchedAt: string | nul
   return { status: "ready", since: measuringSince(status.before.to.toISOString(), tz), rows: impactRows(before, after) };
 }
 
+
+async function loadActiveListIds(db: HomeDb): Promise<string[]> {
+  const { data } = await db.from("lead_lists").select("id, is_archive, is_staging");
+  return ((data ?? []) as unknown as Array<{ id: string; is_archive: boolean; is_staging: boolean | null }>).filter((l) => !l.is_archive && !l.is_staging).map((l) => l.id);
+}

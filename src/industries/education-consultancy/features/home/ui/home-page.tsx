@@ -49,7 +49,7 @@ export function EducationHome({ data }: { data: HomeData }) {
 
   return (
     <div className="eh">
-      {visibleAll.filter((i) => i.kind === "missed_callbacks").map((i) => (
+      {visibleAll.filter((i) => i.children).map((i) => (
         <MissedCallbacksSheet key={i.key} item={i} nextStageByLead={data.nextStageByLead} tz={data.tz} rows={rows} />
       ))}
       <h1 className="eh-h1">{data.greeting}</h1>

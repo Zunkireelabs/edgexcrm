@@ -10,6 +10,7 @@ import {
   CaretDownIcon,
   FileXIcon,
   PhoneXIcon,
+  SnowflakeIcon,
   ListChecksIcon,
   PulseIcon,
   TrendDownIcon,
@@ -33,6 +34,7 @@ const ICONS = {
   "list-checks": ListChecksIcon,
   "user-switch": UserSwitchIcon,
   "phone-x": PhoneXIcon,
+  snowflake: SnowflakeIcon,
 } as const;
 
 async function postJson(url: string, method: string, body?: unknown): Promise<{ ok: boolean; message?: string }> {
@@ -174,7 +176,7 @@ export function ManagerHome({ data }: { data: ManagerData }) {
 
   return (
     <div className="eh">
-      {ownItems.filter((i) => i.kind === "missed_callbacks").map((i) => (
+      {ownItems.filter((i) => i.children).map((i) => (
         <MissedCallbacksSheet key={i.key} item={i} nextStageByLead={data.own.nextStageByLead} tz={data.tz} rows={rows} />
       ))}
       <h1 className="eh-h1">{data.greeting}</h1>
@@ -263,7 +265,7 @@ export function ManagerHome({ data }: { data: ManagerData }) {
               <div key={p.userId} className="eh-pp">
                 <span className={`eh-av ${p.tone}`} aria-hidden>{p.initials}</span>
                 <div className="x">{p.name}<span>{p.sub}</span></div>
-                <span className="v" title={p.unit} style={{ flexDirection: "column", alignItems: "flex-end" }}><span><span className={`eh-fl ${p.tone}`} />{p.value}</span><span style={{ color: "var(--ds-muted)", fontSize: 11 }}>{p.unit}</span></span>
+                <span className="v" title={p.unit}><span className={`eh-fl ${p.tone}`} />{p.value}</span>
               </div>
             ))}
             <div className="eh-note"><span className="eh-fl good" />{data.needsALook.others} {data.needsALook.others === 1 ? "other" : "others"} on track</div>

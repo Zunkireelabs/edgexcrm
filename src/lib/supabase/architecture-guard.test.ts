@@ -55,6 +55,7 @@ const EXEMPT_SITES: Record<string, "rpc-only" | "auth-only"> = {
   "src/app/(main)/api/v1/inbox/conversations/[id]/draft/route.ts": "rpc-only", // canAccessConversationLead() -> visibleLeadsBase() call site
   "src/app/(main)/api/v1/inbox/conversations/[id]/attachments/signed-url/route.ts": "rpc-only", // canAccessConversationLead() -> visibleLeadsBase() call site
   "src/app/(main)/(dashboard)/inbox/page.tsx": "rpc-only", // visibleLeadIdsAmong() -> visibleLeadsBase() call site
+  "src/industries/education-consultancy/features/home/server/lead-scope.ts": "rpc-only", // education Home (EDGEX-87 A2c): the user client is only handed to visibleLeadsBase() so a branch manager's counts use the leads list's own branch visibility RPC
   // auth-only: the createClient() binding is only ever used for `.auth.*` calls —
   // never a table read, so there is nothing for RLS-vs-app-filter to protect.
   "src/lib/supabase/server.ts": "auth-only", // getCachedUser() -> supabase.auth.getClaims()

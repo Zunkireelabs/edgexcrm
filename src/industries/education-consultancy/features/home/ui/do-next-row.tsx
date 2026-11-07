@@ -270,7 +270,7 @@ export function MissedCallbacksSheet({ item, nextStageByLead, tz, rows }: { item
       <SheetContent look="v2" size="md">
         <SheetHeader>
           <SheetTitle>{item.title}</SheetTitle>
-          <SheetDescription>{item.chip.text} \u00B7 newest first. Log each call and the reminder clears itself.</SheetDescription>
+          <SheetDescription>{item.chip.text}. Log each call and it drops off this list.</SheetDescription>
         </SheetHeader>
         <div className="eh" style={{ padding: "0 16px 24px", maxWidth: "none" }}>
           <div className="eh-list">

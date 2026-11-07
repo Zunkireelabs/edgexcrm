@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AttentionItem, PersonRow } from "../../pulse/lib/types";
 import { needsALook } from "./needs-a-look";
+import { quietOverRow } from "./needs-you";
 import { attentionRows, atRiskRow, sliceAssignments, unassignedRow } from "./needs-you";
 import { nudgeState, stillUntouchedCount } from "./nudge";
 
@@ -17,24 +18,45 @@ const attn = (o: Partial<AttentionItem> = {}): AttentionItem => ({
 
 describe("attentionRows (Pulse's own items, top 3)", () => {
   it("keeps Pulse's order and takes the first 3 needs-action items", () => {
-    const rows = attentionRows([attn({ id: "a" }), attn({ id: "b" }), attn({ id: "c" }), attn({ id: "d" })], new Map());
+    const rows = attentionRows([attn({ id: "a" }), attn({ id: "b" }), attn({ id: "c" }), attn({ id: "d" })], new Map(), "me");
     expect(rows.map((r) => r.key)).toEqual(["attn:a", "attn:b", "attn:c"]);
   });
   it("offers 'Nudge <first name>' then Reassign for a person item", () => {
-    const [r] = attentionRows([attn()], new Map());
+    const [r] = attentionRows([attn()], new Map(), "me");
     expect(r.actions.map((a) => a.label)).toEqual(["Nudge Asha", "Reassign 14 to Bikash"]);
     expect(r.title).toBe("Asha Tamang");
     expect(r.chip).toEqual({ text: "14 leads untouched", tone: "bad" });
   });
   it("after a nudge today: chip 'Nudged today', no second nudge", () => {
-    const [r] = attentionRows([attn()], new Map([["asha", { kind: "today" as const }]]));
+    const [r] = attentionRows([attn()], new Map([["asha", { kind: "today" as const }]]), "me");
     expect(r.chip?.text).toBe("Nudged today");
     expect(r.actions.some((a) => a.type === "nudge")).toBe(false);
   });
   it("next day, still untouched: 'nudged yesterday, still N' with Reassign FIRST", () => {
-    const [r] = attentionRows([attn()], new Map([["asha", { kind: "returned" as const, still: 9, when: "yesterday" }]]));
+    const [r] = attentionRows([attn()], new Map([["asha", { kind: "returned" as const, still: 9, when: "yesterday" }]]), "me");
     expect(r.title).toBe("Asha Tamang · nudged yesterday, still 9");
     expect(r.actions[0]).toMatchObject({ type: "link", label: "Reassign 14 to Bikash", primary: true });
+  });
+});
+
+describe("the viewer is never a Needs-you subject", () => {
+  const self = attn({ id: "self", subject: "Bijay Dahal", links: [{ label: "See", href: "/x" }, { label: "Bijay's activity", personId: "bijay" }] });
+  it("drops the viewer's own item and never offers 'Nudge <self>'", () => {
+    const rows = attentionRows([self, attn({ id: "asha" })], new Map(), "bijay");
+    expect(rows.map((r) => r.key)).toEqual(["attn:asha"]);
+    expect(rows.flatMap((r) => r.actions).some((a) => a.type === "nudge" && a.userId === "bijay")).toBe(false);
+  });
+  it("refills the top 3 from the next items instead of leaving a gap", () => {
+    const rows = attentionRows([self, attn({ id: "a" }), attn({ id: "b" }), attn({ id: "c" })], new Map(), "bijay");
+    expect(rows.map((r) => r.key)).toEqual(["attn:a", "attn:b", "attn:c"]);
+  });
+  it("an item the viewer is NOT the subject of is untouched, and non-person items stay", () => {
+    expect(attentionRows([self], new Map(), "someone-else")).toHaveLength(1);
+    const team = attn({ id: "team", icon: "clock", subject: "6 new leads", links: [{ label: "See", href: "/y" }], action: null });
+    expect(attentionRows([team], new Map(), "bijay")).toHaveLength(1);
+  });
+  it("the nudge API refuses a self-nudge (canNudge)", () => {
+    expect(canNudge({ restrictToSelf: false, selfId: "bijay", targetId: "bijay", branchPinned: false, branchMemberIds: ["bijay"] })).toBe(false);
   });
 });
 
@@ -139,5 +161,18 @@ describe("managerDisplayName", () => {
     expect(managerDisplayName(new Map([["m", "Sadin Shrestha"]]), "m", "sadin@zunkireelabs.com")).toBe("Sadin Shrestha");
     expect(managerDisplayName(new Map(), "m", "sadin@zunkireelabs.com")).toBe("sadin");
     expect(managerDisplayName(new Map([["m", "  "]]), "m", null)).toBe("Your manager");
+  });
+});
+
+describe("quietOverRow (managers: leads with no contact for over 2 weeks)", () => {
+  it("one item, grouped by person: the top 3 in the grey line, with the scope", () => {
+    const r = quietOverRow(215, [{ name: "Gautam", count: 101 }, { name: "Kamana", count: 85 }, { name: "Rita", count: 20 }, { name: "Asha", count: 9 }], "all branches")!;
+    expect(r.title).toBe("215 leads with no contact for over 2 weeks");
+    expect(r.why).toBe("Gautam 101 · Kamana 85 · Rita 20 and 1 more person · all branches");
+    expect(r.actions).toEqual([{ type: "link", label: "Review", href: "/leads" }]);
+  });
+  it("none → no row; no bulk action ever", () => {
+    expect(quietOverRow(0, [], "all branches")).toBeNull();
+    expect(quietOverRow(1, [], "Kathmandu")!.why).toBe("Kathmandu");
   });
 });

@@ -39,10 +39,11 @@ describe("clearCountMatches (client confirms only a count)", () => {
 
 describe("staleCallbacksRow", () => {
   it("one item with 'Clear them'; nothing when there are none", () => {
-    const r = staleCallbacksRow(572)!;
+    const r = staleCallbacksRow(572, "all branches")!;
     expect(r.title).toBe("572 call-back reminders are over 2 weeks old");
     expect(r.actions).toEqual([{ type: "clear_stale", label: "Clear them", count: 572 }]);
-    expect(staleCallbacksRow(1)!.title).toBe("1 call-back reminder is over 2 weeks old");
-    expect(staleCallbacksRow(0)).toBeNull();
+    expect(r.why).toContain("all branches");
+    expect(staleCallbacksRow(1, "Kathmandu")!.title).toBe("1 call-back reminder is over 2 weeks old");
+    expect(staleCallbacksRow(0, "x")).toBeNull();
   });
 });

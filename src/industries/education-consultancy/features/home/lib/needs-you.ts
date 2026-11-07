@@ -14,7 +14,7 @@ export type NeedsAction =
 export interface NeedsYouRow {
   key: string;
   tone: Tone;
-  icon: "user-plus" | "trend-down" | "file-x" | "bell" | "list-checks" | "user-switch" | "phone-x";
+  icon: "user-plus" | "trend-down" | "file-x" | "bell" | "list-checks" | "user-switch" | "phone-x" | "snowflake";
   title: string;
   chip: { text: string; tone: Tone } | null;
   why: string;
@@ -33,10 +33,13 @@ const TONE: Record<string, Tone> = { bad: "bad", warn: "warn", good: "good", inf
 export function attentionRows(
   items: AttentionItem[],
   nudgeByPerson: ReadonlyMap<string, NudgeState>,
+  /** The signed-in person: never the subject of their own Needs-you row, and never offered a nudge to themselves. */
+  selfId: string,
   limit = NEEDS_YOU_LIMIT,
 ): NeedsYouRow[] {
   return items
     .filter((a) => a.category === "needs_action")
+    .filter((a) => !isAboutPerson(a, selfId))
     .slice(0, limit)
     .map((a): NeedsYouRow => {
       const personId = a.links.find((l) => l.personId)?.personId ?? a.action?.personId ?? null;
@@ -69,6 +72,11 @@ export function attentionRows(
         actions,
       };
     });
+}
+
+/** Does this Pulse item name `userId` as its subject (any of its person links)? */
+export function isAboutPerson(a: AttentionItem, userId: string): boolean {
+  return a.links.some((l) => l.personId === userId) || a.action?.personId === userId;
 }
 
 /** A nudge whose person Pulse no longer flags still returns while their leads are untouched. */
@@ -164,7 +172,7 @@ export function atRiskRow(apps: AtRiskApp[], href: string): NeedsYouRow | null {
 }
 
 /** Reminders nobody will ever act on (over 2 weeks old): one item for whoever sees the whole scope. */
-export function staleCallbacksRow(count: number): NeedsYouRow | null {
+export function staleCallbacksRow(count: number, scopeLabel: string): NeedsYouRow | null {
   if (count <= 0) return null;
   return {
     key: "stale_callbacks",
@@ -172,7 +180,27 @@ export function staleCallbacksRow(count: number): NeedsYouRow | null {
     icon: "phone-x",
     title: `${count} call-back ${count === 1 ? "reminder is" : "reminders are"} over 2 weeks old`,
     chip: null,
-    why: "Left over from no-answer calls. They stay on nobody's list, so they only add noise.",
+    why: `Left over from no-answer calls. They stay on nobody's list, so they only add noise \u00B7 ${scopeLabel}`,
     actions: [{ type: "clear_stale", label: "Clear them", count }],
+  };
+}
+
+/**
+ * Leads someone holds that nobody has contacted for over 2 weeks. Off personal lists (nobody can act on "101 leads going
+ * quiet"), so the manager sees it ONCE, grouped by person (the three biggest in the grey line). No bulk action here:
+ * reassigning / re-engaging comes later, "Review" just opens the leads list.
+ */
+export function quietOverRow(total: number, byPerson: Array<{ name: string; count: number }>, scopeLabel: string): NeedsYouRow | null {
+  if (total <= 0) return null;
+  const top = byPerson.slice(0, 3).map((p) => `${p.name} ${p.count}`);
+  const others = byPerson.length - top.length;
+  return {
+    key: "quiet_over_14",
+    tone: "neutral",
+    icon: "snowflake",
+    title: `${total} ${total === 1 ? "lead" : "leads"} with no contact for over 2 weeks`,
+    chip: null,
+    why: `${top.join(" \u00B7 ")}${others > 0 ? ` and ${others} more ${others === 1 ? "person" : "people"}` : ""}${top.length ? " \u00B7 " : ""}${scopeLabel}`,
+    actions: [{ type: "link", label: "Review", href: "/leads" }],
   };
 }

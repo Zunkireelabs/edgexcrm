@@ -1,26 +1,24 @@
 import type { AuthContext } from "@/lib/api/auth";
 import { applyLeadPatch, type ApplyLeadPatchOutcome } from "@/lib/leads/apply-lead-patch";
 import { CLEAR_MAX, staleCutoff } from "../lib/stale-callbacks";
-import type { HomeScope } from "../lib/scope";
-import type { HomeDb } from "./load-home";
+import type { ScopedLeads } from "./lead-scope";
 
-type ManagerScope = Extract<HomeScope, { mode: "manager" }>;
-
-/** Leads in the manager's scope whose call-back reminder is over 14 tenant-local days old. */
-function staleQuery(db: HomeDb, scope: ManagerScope, cutoff: Date, columns: string, count: boolean) {
-  let q = db
-    .from("leads")
+/**
+ * Leads in the manager's scope (`ScopedLeads`: the leads list's own branch definitions) whose call-back reminder is over 14
+ * tenant-local days old. Exact predicate:
+ *   deleted_at IS NULL AND callback_due_at IS NOT NULL AND callback_due_at < local midnight of (tenant today - 14 days)
+ * (so day 14 is still "missed" and day 15 is stale), plus the scope.
+ */
+function staleQuery(leads: ScopedLeads, cutoff: Date, columns: string, count: boolean) {
+  return leads
     .select(columns, count ? { count: "exact", head: true } : undefined)
     .is("deleted_at", null)
     .not("callback_due_at", "is", null)
     .lt("callback_due_at", cutoff.toISOString());
-  // Scope = the leads list's: a branch-pinned manager, or an owner / admin narrowed by the branch picker.
-  if (scope.branchId) q = q.eq("branch_id", scope.branchId);
-  return q;
 }
 
-export async function countStaleCallbacks(db: HomeDb, scope: ManagerScope, now: Date, tz: string): Promise<number> {
-  const { count, error } = await staleQuery(db, scope, staleCutoff(now, tz), "id", true);
+export async function countStaleCallbacks(leads: ScopedLeads, now: Date, tz: string): Promise<number> {
+  const { count, error } = await staleQuery(leads, staleCutoff(now, tz), "id", true);
   return error ? 0 : count ?? 0;
 }
 
@@ -39,16 +37,15 @@ const CONCURRENCY = 8;
  * Idempotent: a cleared lead no longer matches, so a second call finds nothing new.
  */
 export async function clearStaleCallbacks(
-  db: HomeDb,
+  leads: ScopedLeads,
   auth: AuthContext,
-  scope: ManagerScope,
   now: Date,
   tz: string,
   patch: (auth: AuthContext, id: string, body: Record<string, unknown>) => Promise<ApplyLeadPatchOutcome> = (a, id, body) =>
     applyLeadPatch(a, id, body, { requestId: crypto.randomUUID(), ip: null, userAgent: null }),
 ): Promise<ClearResult> {
   const cutoff = staleCutoff(now, tz);
-  const { data } = await staleQuery(db, scope, cutoff, "id", false).order("callback_due_at", { ascending: true }).limit(CLEAR_MAX);
+  const { data } = await staleQuery(leads, cutoff, "id", false).order("callback_due_at", { ascending: true }).limit(CLEAR_MAX);
   const ids = ((data ?? []) as unknown as Array<{ id: string }>).map((r) => r.id);
   let cleared = 0;
   let failed = 0;
@@ -61,5 +58,5 @@ export async function clearStaleCallbacks(
       else failed += 1;
     }
   }
-  return { cleared, failed, remaining: await countStaleCallbacks(db, scope, now, tz) };
+  return { cleared, failed, remaining: await countStaleCallbacks(leads, now, tz) };
 }
