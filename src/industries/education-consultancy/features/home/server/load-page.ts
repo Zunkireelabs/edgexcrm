@@ -38,7 +38,7 @@ export async function loadHome(
   const today = localDate(now, tz);
 
   const [{ leads, nextStageByLead }, tasks, apps, snoozed, schedule, week] = await Promise.all([
-    loadMyLeads(db, auth.userId),
+    loadMyLeads(db, auth.tenantId, auth.userId),
     loadMyTasks(db, auth.userId, today),
     loadMyApplications(db, auth.userId, today),
     loadSnoozedKeys(db, auth.userId, now),

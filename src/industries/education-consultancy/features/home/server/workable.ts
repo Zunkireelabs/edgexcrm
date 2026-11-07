@@ -1,5 +1,6 @@
+import { scopedClientForTenant } from "@/lib/supabase/scoped";
 import type { HomeDb } from "./load-home";
-import { buildWorkablePlan, type StageRow, type WorkablePlan } from "../lib/workable";
+import { applyWorkable, buildWorkablePlan, type StageRow, type WorkablePlan } from "../lib/workable";
 
 /** The tenant's active lists + terminal stage slugs, read once per Home load and shared by every loader. */
 export async function loadWorkablePlan(db: Pick<HomeDb, "from">): Promise<WorkablePlan> {
@@ -11,4 +12,16 @@ export async function loadWorkablePlan(db: Pick<HomeDb, "from">): Promise<Workab
     .filter((l) => !l.is_archive && !l.is_staging)
     .map((l) => l.id);
   return buildWorkablePlan(active, (stageRows ?? []) as unknown as StageRow[]);
+}
+
+/** Is this one lead workable right now (the shared definition, evaluated in the database)? False on any read error. */
+export async function isLeadWorkableNow(tenantId: string, leadId: string): Promise<boolean> {
+  try {
+    const db = await scopedClientForTenant(tenantId);
+    const plan = await loadWorkablePlan(db);
+    const { count, error } = await applyWorkable(db.from("leads").select("id", { count: "exact", head: true }).eq("id", leadId), plan);
+    return !error && (count ?? 0) > 0;
+  } catch {
+    return false;
+  }
 }

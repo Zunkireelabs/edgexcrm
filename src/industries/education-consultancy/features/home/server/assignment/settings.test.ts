@@ -49,7 +49,9 @@ describe("engine: dormant filter input", () => {
     const src = fs.readFileSync(path.resolve(__dirname, "engine.ts"), "utf8");
     expect(src).toContain("DORMANT_DAYS");
     expect(src).toMatch(/lead_activities"\)\.select\("id", \{ count: "exact", head: true \}\)\.eq\("user_id", m\.user_id\)\.gte\("created_at", since14d\)/);
-    expect(src).toMatch(/lead_notes"\)\.select\("id", \{ count: "exact", head: true \}\)\.eq\("user_id", m\.user_id\)\.is\("ai_tool_call_id", null\)\.gte\("created_at", since14d\)/);
+    expect(src).toMatch(/leadNotes\(db, tenantId, "id", \{ count: "exact", head: true \}\)\.eq\("user_id", m\.user_id\)\.is\("ai_tool_call_id", null\)\.gte\("created_at", since14d\)/);
+    expect(src).toMatch(/leadNotes\(db, tenantId, "user_id"\)\.in\("user_id", ids\)/);
+    expect(src).not.toContain('from("lead_notes")');
     expect(src).toContain("dormant: !(countBy.get(m.user_id)?.working ?? false)");
   });
 });

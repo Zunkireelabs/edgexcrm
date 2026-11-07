@@ -225,7 +225,7 @@ interface Ctx {
 /**
  * "Asha: best Australia record (42% vs team 31%) · 18 open leads (team median 24)": the top two factors WITH EVIDENCE.
  * A factor is cited only when there is data behind it: Fit needs a sample of at least MIN_FIT_SAMPLES leads and a team rate
- * above 0; Room needs a real team median of at least 1; Speed needs the person's own measured samples. With none, it says
+ * above 0; Room needs the pick to hold fewer open leads than a real team median (at least 1); Speed needs the person's own measured samples. With none, it says
  * "Most room" when that is true, else "Fewest new leads today". Never "0% vs team 0%".
  */
 export function explain(best: ScoredCandidate, cand: Candidate, field: ScoredCandidate[], ctx: Ctx): string {
@@ -239,7 +239,8 @@ export function explain(best: ScoredCandidate, cand: Candidate, field: ScoredCan
       text: `${isTopFit ? "best " : ""}${ctx.useDest ? `${dest}record` : "overall record"} (${pct(best.fit.rate)}% vs team ${pct(ctx.tRateFit)}%)`,
     });
   }
-  if (best.room.medianRaw >= 1) {
+  // Room is evidence only when the pick carries FEWER open leads than the team median ("129 open leads (team median 129)" says nothing).
+  if (best.room.medianRaw >= 1 && best.room.held < best.room.medianRaw) {
     parts.push({ key: "room", weight: best.room.score, text: `${best.room.held} open leads (team median ${Math.round(best.room.medianRaw)})` });
   }
   if (best.speed.minutes !== null && best.speed.source === "person" && cand.overall.speedN >= MIN_SPEED_EVIDENCE) {

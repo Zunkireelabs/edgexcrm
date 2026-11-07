@@ -15,6 +15,7 @@ import {
   type WeekMetric,
 } from "../lib/week-stats";
 import type { HomeDb } from "./load-home";
+import { leadNotes, noteReadFailed } from "./lead-notes";
 
 const DAY = 86_400_000;
 
@@ -43,7 +44,7 @@ export async function loadMyWeek(
     ),
     loadCoverage(ctx),
     loadLeaveDays(db, auth.userId, window.from, window.to, tz),
-    loadFirstHour(db, auth.userId, now),
+    loadFirstHour(db, auth.tenantId, auth.userId, now),
   ]);
   const infos = (await loadPeople(ctx, new Set([auth.userId]))).filter((p) => p.userId === auth.userId);
   const rows = statsAll.buckets.rows.filter((r) => r.user_id === auth.userId);
@@ -78,7 +79,7 @@ async function loadLeaveDays(db: HomeDb, userId: string, from: Date, to: Date, t
 }
 
 /** "New leads contacted within 1 hour" (a call, email, meeting or note by me: lib/contact.ts): this week vs the mean of the 4 weeks before. */
-async function loadFirstHour(db: HomeDb, userId: string, now: Date) {
+async function loadFirstHour(db: HomeDb, tenantId: string, userId: string, now: Date) {
   const t1 = now.getTime();
   const earliest = t1 - 35 * DAY;
   const iso = new Date(earliest).toISOString();
@@ -91,12 +92,13 @@ async function loadFirstHour(db: HomeDb, userId: string, now: Date) {
       .or(`assigned_at.gte.${iso},and(assigned_at.is.null,created_at.gte.${iso})`)
       .limit(3000),
     db.from("lead_activities").select("lead_id, created_at").eq("user_id", userId).gte("created_at", iso).limit(10000),
-    db.from("lead_notes").select("lead_id, created_at").eq("user_id", userId).is("ai_tool_call_id", null).gte("created_at", iso).limit(10000),
+    leadNotes(db, tenantId, "lead_id, created_at").eq("user_id", userId).is("ai_tool_call_id", null).gte("created_at", iso).limit(10000),
   ]);
   const leads = ((leadsRes.data ?? []) as unknown as Array<{ id: string; assigned_at: string | null; created_at: string }>).map((l) => ({
     id: l.id,
     assignedAt: Date.parse(l.assigned_at ?? l.created_at),
   }));
+  noteReadFailed("loadFirstHour", notesRes.error);
   const contactsByLead = new Map<string, number[]>();
   for (const c of [...((callsRes.data ?? []) as unknown as Array<{ lead_id: string; created_at: string }>), ...((notesRes.data ?? []) as unknown as Array<{ lead_id: string; created_at: string }>)]) {
     const list = contactsByLead.get(c.lead_id) ?? [];

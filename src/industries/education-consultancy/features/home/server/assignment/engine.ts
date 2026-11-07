@@ -7,6 +7,8 @@ import { deriveLeadSignals } from "../../lib/assignment/signals";
 import { attendanceMeaningful, buildTeam, personFromStats, type StatsRow } from "../../lib/assignment/stats";
 import { DORMANT_DAYS, PRESENT_ACTIVITY_HOURS } from "../../lib/assignment/weights";
 import { loadWorkablePlan } from "../workable";
+import { leadNotes, noteReadFailed } from "../lead-notes";
+import { logger } from "@/lib/logger";
 import { applyWorkable } from "../../lib/workable";
 import { firstTouchKeys, loadAssignmentSettings, resolveFirstTouchPositions, type TenantDb } from "./settings";
 
@@ -49,8 +51,9 @@ export async function buildPool(db: TenantDb, tenantId: string, now: Date): Prom
     db.from("leave_requests").select("user_id").eq("approval_status", "approved").lte("start_date", day).gte("end_date", day).in("user_id", ids),
     db.from("attendance_records").select("user_id, work_date, clock_in_at, status").gte("work_date", since30d).limit(5000),
     db.from("lead_activities").select("user_id").in("user_id", ids).gte("created_at", since2h).limit(2000),
-    db.from("lead_notes").select("user_id").in("user_id", ids).is("ai_tool_call_id", null).gte("created_at", since2h).limit(2000),
+    leadNotes(db, tenantId, "user_id").in("user_id", ids).is("ai_tool_call_id", null).gte("created_at", since2h).limit(2000),
   ]);
+  noteReadFailed("smart assignment: present (last 2h notes)", noteRes.error);
   const stats = ((statsRes.data ?? []) as unknown as StatsRow[]);
   const onLeave = new Set(((leaveRes.data ?? []) as unknown as Array<{ user_id: string }>).map((r) => r.user_id));
   const att = (attRes.data ?? []) as unknown as Array<{ user_id: string; work_date: string; clock_in_at: string | null; status: string }>;
@@ -70,9 +73,11 @@ export async function buildPool(db: TenantDb, tenantId: string, now: Date): Prom
         // "Working" = any lead activity or human note in the last 14 days (the same union as lib/contact.ts). A shared mailbox or a
         // left-but-not-removed account shows none, and must never be handed a lead.
         db.from("lead_activities").select("id", { count: "exact", head: true }).eq("user_id", m.user_id).gte("created_at", since14d),
-        db.from("lead_notes").select("id", { count: "exact", head: true }).eq("user_id", m.user_id).is("ai_tool_call_id", null).gte("created_at", since14d),
+        leadNotes(db, tenantId, "id", { count: "exact", head: true }).eq("user_id", m.user_id).is("ai_tool_call_id", null).gte("created_at", since14d),
       ]);
-      return { id: m.user_id, held: held.count ?? 0, today: recvToday.count ?? 0, working: (acts14.count ?? 0) + (notes14.count ?? 0) > 0 };
+      // A failed read is NOT "no activity": log it and don't call the person dormant on our own error.
+      const readFailed = [acts14.error, notes14.error].map((e, i) => (e ? (logger.error({ userId: m.user_id, err: e.message, source: i ? "lead_notes" : "lead_activities" }, "smart assignment: dormant check read failed"), true) : false)).some(Boolean);
+      return { id: m.user_id, held: held.count ?? 0, today: recvToday.count ?? 0, working: readFailed || (acts14.count ?? 0) + (notes14.count ?? 0) > 0 };
     }),
   );
   const countBy = new Map(counts.map((c) => [c.id, c]));

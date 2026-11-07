@@ -1478,7 +1478,7 @@ async function handlePost(request: NextRequest) {
 
         log.info({ draftId: leadId, canonicalId: canonical.id }, "Draft folded into canonical lead");
         // Smart assignment: the multi-step form just completed, so the lead that SURVIVES the fold is the one to place.
-        if (!(draftLead as Lead).is_final) void requestSmartAssignment({ tenantId, leadId: canonical.id, assignedTo: canonical.assigned_to });
+        if (!(draftLead as Lead).is_final) void requestSmartAssignment({ tenantId, leadId: canonical.id, assignedTo: canonical.assigned_to, requireWorkable: true });
         return apiSuccess({ ...canonical, id: canonical.id }, 200);
       }
     }

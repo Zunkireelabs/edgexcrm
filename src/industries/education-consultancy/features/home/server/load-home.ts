@@ -7,6 +7,7 @@ import { addDaysStr } from "../lib/time";
 import { DEADLINE_WINDOW_DAYS } from "../lib/rules/deadline-docs";
 import { CONTACT_ACTIVITY_TYPES } from "../lib/contact";
 import { loadWorkablePlan } from "./workable";
+import { leadNotes, noteReadFailed } from "./lead-notes";
 import { isWorkable } from "../lib/workable";
 import type { ContactEvent, HomeApplication, HomeConversation, HomeLead, HomeTask } from "../lib/types";
 
@@ -55,7 +56,7 @@ export interface LoadedLeads {
 }
 
 /** Leads ASSIGNED TO ME, not deleted, not archived. The only lead source for Home: it is what scopes a counsellor. */
-export async function loadMyLeads(db: HomeDb, userId: string): Promise<LoadedLeads> {
+export async function loadMyLeads(db: HomeDb, tenantId: string, userId: string): Promise<LoadedLeads> {
   const [{ data: rows, error }, { data: listRows }, workable] = await Promise.all([
     db
       .from("leads")
@@ -80,13 +81,14 @@ export async function loadMyLeads(db: HomeDb, userId: string): Promise<LoadedLea
   for (const ids of chunk(withCallback, 50)) {
     const [acts, notes] = await Promise.all([
       db.from("lead_activities").select("lead_id, activity_type, call_outcome, created_at").in("lead_id", ids).in("activity_type", [...CONTACT_ACTIVITY_TYPES]).order("created_at", { ascending: false }).limit(ids.length * 8),
-      db.from("lead_notes").select("lead_id, created_at").in("lead_id", ids).is("ai_tool_call_id", null).order("created_at", { ascending: false }).limit(ids.length * 8),
+      leadNotes(db, tenantId, "lead_id, created_at").in("lead_id", ids).is("ai_tool_call_id", null).order("created_at", { ascending: false }).limit(ids.length * 8),
     ]);
     for (const a of (acts.data ?? []) as unknown as Array<{ lead_id: string; activity_type: ContactEvent["type"]; call_outcome: string | null; created_at: string }>) {
       const l = contacts.get(a.lead_id) ?? [];
       l.push({ type: a.activity_type, outcome: a.call_outcome, at: a.created_at });
       contacts.set(a.lead_id, l);
     }
+    noteReadFailed("loadMyLeads (call-back contacts)", notes.error);
     for (const n of (notes.data ?? []) as unknown as Array<{ lead_id: string; created_at: string }>) {
       const l = contacts.get(n.lead_id) ?? [];
       l.push({ type: "note", outcome: null, at: n.created_at });

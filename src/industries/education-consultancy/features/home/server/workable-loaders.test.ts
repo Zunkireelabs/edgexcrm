@@ -52,7 +52,7 @@ describe("loadMyLeads: isActive means workable", () => {
       pipeline_stages: { data: [{ pipeline_id: "P1", slug: "dropped", is_terminal: true }], error: null },
     };
     const db = { from: (t: string) => chain([], tables[t] ?? { data: [] }) } as unknown as HomeDb;
-    const { leads } = await loadMyLeads(db, "u1");
+    const { leads } = await loadMyLeads(db, "t1", "u1");
     expect(Object.fromEntries(leads.map((l) => [l.id, l.isActive]))).toEqual({ ok: true, lost: false, walkin: false, hold: false });
   });
 });

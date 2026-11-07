@@ -229,4 +229,11 @@ describe("the why line cites only factors with evidence", () => {
     const d = decideAssignment(lead(), [cand("asha", { heldOpen: 0, overall: noEv, present: false, receivedToday: 0 }), cand("bina", { heldOpen: 0, overall: noEv, present: false, receivedToday: 1 })], team({ overall: { received: 0, progressed: 0 }, byDestination: {}, medianFirstContactMin: null }));
     expect(d.why).toBe("Asha: fewest new leads today");
   });
+  it("Room is cited only when the pick holds FEWER open leads than the team median: '129 open leads (team median 129)' is not evidence", () => {
+    const ev = { received: 100, progressed: 30, speedN: 0, medianFirstContactMin: null };
+    const same = decideAssignment(lead(), [cand("asha", { heldOpen: 129, overall: ev, present: false })], team());
+    expect(same.why).not.toContain("open leads (team median");
+    const fewer = decideAssignment(lead(), [cand("asha", { heldOpen: 10, overall: ev, present: false }), cand("bina", { heldOpen: 30, overall: ev, present: false })], team());
+    expect(fewer.why).toContain("10 open leads (team median 20)");
+  });
 });
