@@ -48,6 +48,16 @@ export const processSpecSchema = z.object({
   dataNeeded: z.string().min(1),
   steps: z.array(stepSchema).min(1),
   doneWhen: z.string().min(1),
+  /**
+   * The numbers the product runs on that are not a step's target (EDGEX-109 P3). Optional: a version without the block means
+   * today's values (HOME_RULES). Read ONLY through the policy reader (lib/policy.ts).
+   */
+  rules: z
+    .object({
+      unreachableAfterCalls: z.number().int().min(2).max(10).optional(),
+      decideWithinDays: z.number().int().min(3).max(60).optional(),
+    })
+    .optional(),
   exceptions: z.array(z.string()),
   example: z.string().min(1),
 });

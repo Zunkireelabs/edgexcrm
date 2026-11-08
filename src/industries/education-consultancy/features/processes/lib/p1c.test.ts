@@ -238,3 +238,11 @@ describe("round 2: wording, formatting, registry-driven display", () => {
     expect(() => parseProcessSpec("new_lead_first_call", { ...spec, steps: [{ ...spec.steps[0], show: { metric: "nope" } }] })).toThrow(/show metric/);
   });
 });
+
+describe("officeHoursText (migration 288 shape)", () => {
+  it("reads the real days and hours, and still reads the older whole-hour shape", () => {
+    expect(officeHoursText({ office_hours: { days: [0, 1, 2, 3, 4, 5], start: 9.5, end: 17.5, start_min: 570, end_min: 1050, source: "learned" } })).toBe("Sun–Fri, 9:30–5:30");
+    expect(officeHoursText({ office_hours: { start: 9, end: 18 } })).toBe("9–6");
+    expect(officeHoursText({})).toBe("9–6");
+  });
+});

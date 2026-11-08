@@ -21,6 +21,13 @@ export interface LogVersion {
   rejected_by: string | null;
   rejected_reason: string | null;
 }
+/** A saved office-hours change (audit row `office_hours.updated`). `from` / `to` are already in words: "Sun–Fri, 9–6". */
+export interface OfficeHoursChange {
+  at: string;
+  actor: string | null;
+  from: string | null;
+  to: string;
+}
 export interface LogChange {
   id: string;
   processKey: ProcessKey;
@@ -34,7 +41,7 @@ export interface LogChange {
   created_at: string;
 }
 
-export type LogKind = "baseline" | "suggested" | "approved" | "rejected" | "thirty_days";
+export type LogKind = "baseline" | "suggested" | "approved" | "rejected" | "thirty_days" | "office_hours";
 export interface LogEvent {
   at: string;
   kind: LogKind;
@@ -90,6 +97,10 @@ export function buildImprovementLog(input: {
   now: Date;
   /** The cheap list-card variant skips the "30 days on" events (they need the metrics SQL). */
   skipThirtyDays?: boolean;
+  /** Saved office-hours changes, shown under every process in `workingClockVersions`. */
+  officeHoursChanges?: OfficeHoursChange[];
+  /** The LIVE versions whose first-contact clock is "working" (office hours): the processes an office-hours change affects. */
+  workingClockVersions?: LogVersion[];
 }): LogEvent[] {
   const { versions, changes, names, measuresByVersion, now } = input;
   const who = (id: string | null) => (id ? (names.get(id) ?? null) : null);
@@ -143,6 +154,12 @@ export function buildImprovementLog(input: {
     if (!v) continue;
     const actor = c.author_kind === "agent" ? "Orca" : who(c.author_user_id);
     out.push(ev(v, { at: c.created_at, kind: "suggested", text: `${PROCESS_NAMES[c.processKey]}: change suggested`, meta: `${actor ?? "someone"} · ${c.title} · "${clip(c.why, 80)}"`, actor }));
+  }
+  for (const wv of input.workingClockVersions ?? []) {
+    for (const o of input.officeHoursChanges ?? []) {
+      if (wv.approved_at && o.at < wv.approved_at) continue; // before this version went live: it did not run on it
+      out.push(ev(wv, { at: o.at, kind: "office_hours", text: `${PROCESS_NAMES[wv.processKey]}: office hours changed`, meta: `${o.actor ?? "Someone"} · ${o.from ? `${o.from} → ` : "now "}${o.to}`, actor: o.actor }));
+    }
   }
   if (!input.skipThirtyDays) {
     for (const t of thirtyDaysOn(versions, now)) {

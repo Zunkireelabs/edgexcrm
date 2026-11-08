@@ -17,6 +17,7 @@ import { GET as getCompare } from "./[key]/compare/route";
 import { GET as getImprovements } from "./improvements/route";
 import { GET as getOne } from "./[key]/route";
 import { POST as approve } from "./[key]/versions/[versionId]/approve/route";
+import { GET as getOfficeHours, PUT as putOfficeHours } from "../settings/office-hours/route";
 
 const req = (path: string) => ({ nextUrl: new URL(`http://localhost${path}`) }) as unknown as Parameters<typeof getList>[0];
 const jsonReq = (method: string, body: unknown) => new Request("http://localhost", { method, body: JSON.stringify(body), headers: { "content-type": "application/json" } }) as unknown as Parameters<typeof suggest>[0];
@@ -30,6 +31,8 @@ const ROUTES: Array<[string, () => Promise<Response>]> = [
   ["GET …/draft", () => getDraft(new Request("http://localhost"), { params: Promise.resolve({ key: "new_lead_first_call" }) })],
   ["GET …/compare", () => getCompare(req("/api/v1/processes/new_lead_first_call/compare"), { params: Promise.resolve({ key: "new_lead_first_call" }) })],
   ["GET /api/v1/processes/improvements", () => getImprovements(req("/api/v1/processes/improvements?process=new_lead_first_call"))],
+  ["GET /api/v1/settings/office-hours", () => getOfficeHours()],
+  ["PUT /api/v1/settings/office-hours", () => putOfficeHours(jsonReq("PUT", { days: [0, 1, 2, 3, 4, 5], startMin: 540, endMin: 1080 }) as unknown as Parameters<typeof putOfficeHours>[0])],
 ];
 
 beforeEach(() => {

@@ -2,7 +2,9 @@ import { loadUserNames } from "../../pulse/server/context";
 import { buildMeasures, comparePeriods, measureMetrics, previousOnlyMetrics, WINDOWED_PROCESSES, type Measure } from "../lib/compare";
 import { changeTitle } from "../lib/changes";
 import type { ChangeRecord } from "../lib/changes-flow";
-import { buildImprovementLog, thirtyDaysOn, type LogChange, type LogEvent, type LogVersion } from "../lib/improvements-log";
+import { buildImprovementLog, thirtyDaysOn, type LogChange, type LogEvent, type LogVersion, type OfficeHoursChange } from "../lib/improvements-log";
+import { describeOfficeHours } from "../lib/working-hours";
+import { METRIC_REGISTRY } from "../lib/metrics";
 import { canApproveProcess } from "./context";
 import { PROCESS_NAMES, type ProcessKey } from "../lib/keys";
 import type { RawMetrics } from "../lib/metrics";
@@ -144,6 +146,25 @@ export async function loadCompare(ctx: ProcessesContext, key: ProcessKey, versio
   return result ? { kind: "ok", result } : { kind: "not_found" };
 }
 
+/** Saved office-hours changes from the audit trail (written by PUT /settings/office-hours), as words. */
+async function loadOfficeHoursChanges(ctx: ProcessesContext, names: ReadonlyMap<string, { name: string }>): Promise<OfficeHoursChange[]> {
+  const rows =
+    (must("office hours audit read", await ctx.db.from("audit_logs").select("created_at, user_id, changes").eq("entity_type", "tenant_office_hours").eq("action", "office_hours.updated").order("created_at", { ascending: false }).limit(50)) as unknown as
+      | Array<{ created_at: string; user_id: string | null; changes: Record<string, { old: unknown; new: unknown }> | null }>
+      | null) ?? [];
+  const words = (c: Record<string, { old: unknown; new: unknown }>, side: "old" | "new"): string | null => {
+    const days = c.days?.[side];
+    const start = c.start_min?.[side];
+    const end = c.end_min?.[side];
+    if (!Array.isArray(days) || typeof start !== "number" || typeof end !== "number") return null;
+    return describeOfficeHours({ days: days.filter((d): d is number => typeof d === "number"), startMin: start, endMin: end });
+  };
+  return rows.flatMap((r) => {
+    const to = r.changes ? words(r.changes, "new") : null;
+    return to ? [{ at: r.created_at, actor: r.user_id ? (names.get(r.user_id)?.name ?? null) : null, from: words(r.changes!, "old"), to }] : [];
+  });
+}
+
 /** Real events, newest first. `processKey` filters to one process. "30 days on" carries the measures from the compare logic. */
 export async function loadImprovementLog(ctx: ProcessesContext, processKey: ProcessKey | null, now: Date = new Date(), opts: { measures?: boolean } = {}): Promise<LogEvent[]> {
   const withMeasures = opts.measures !== false;
@@ -195,7 +216,16 @@ export async function loadImprovementLog(ctx: ProcessesContext, processKey: Proc
     const res = await compareVersion(ctx, proc, vers.filter((v) => v.process_id === proc.id), cur, now, names);
     measuresByVersion.set(t.id, res?.measures ?? []);
   }
+  const officeHoursChanges = await loadOfficeHoursChanges(ctx, names);
+  const workingClockVersions = logVersions.filter((lv) => {
+    if (lv.status !== "live") return false;
+    const parsed = safeParseProcessSpec(lv.processKey, specByVersion.get(lv.id));
+    const fc = parsed.ok ? parsed.spec.steps.find((s) => s.key === "first_contact") : undefined;
+    return !!fc && METRIC_REGISTRY[lv.processKey][fc.target.metric]?.clock === "working";
+  });
   return buildImprovementLog({
+    officeHoursChanges,
+    workingClockVersions,
     versions: logVersions,
     changes: logChanges,
     names: new Map([...names.entries()].map(([id, n]) => [id, n.name])),

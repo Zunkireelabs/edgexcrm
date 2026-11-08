@@ -1,4 +1,5 @@
 import type { ProcessKey } from "./keys";
+import { describeOfficeHours } from "./working-hours";
 
 /**
  * The metrics registry: for each process, the named numbers a step's `target.metric` may point at, and how to read each one out of the
@@ -27,6 +28,13 @@ export interface MetricDef {
   listLabel?: (raw: RawMetrics) => string;
   /** Days a version must have been live before before -> after is trusted for this measure. Default 7 (DEFAULT_MIN_DAYS). */
   minDays?: number;
+  /**
+   * The clock a time-window measure runs on: `clock` = plain minutes since arrival, `working` = minutes inside the tenant's office
+   * hours. Read by the policy reader (lib/policy.ts) to decide what Home counts. Absent = not a time-window measure.
+   */
+  clock?: "clock" | "working";
+  /** The window in minutes ("within 1 hour" = 60, "within 5 minutes" = 5). Read with `clock` by the policy reader. */
+  windowMin?: number;
   /** The row name on the Before -> after page ("Called within 1 working hour"). Falls back to `label`. */
   compareLabel?: string;
 }
@@ -52,9 +60,15 @@ export function friendlySource(medium: string | null): string {
   return map[medium] ?? medium;
 }
 
-/** "9–6" from the office hours the SQL uses (24h in, 12h out). */
+/**
+ * The office hours the SQL used, in words: "Sun–Fri, 9–6" (migration 288 returns days + start_min/end_min). Older snapshots only
+ * carry whole-hour `start`/`end`: those read "9–6".
+ */
 export function officeHoursText(raw: RawMetrics): string {
-  const oh = (raw.office_hours ?? {}) as { start?: unknown; end?: unknown };
+  const oh = (raw.office_hours ?? {}) as { days?: unknown; start_min?: unknown; end_min?: unknown; start?: unknown; end?: unknown };
+  if (Array.isArray(oh.days) && typeof oh.start_min === "number" && typeof oh.end_min === "number") {
+    return describeOfficeHours({ days: oh.days.filter((d): d is number => typeof d === "number"), startMin: oh.start_min, endMin: oh.end_min });
+  }
   const start = typeof oh.start === "number" ? oh.start : 9;
   const end = typeof oh.end === "number" ? oh.end : 18;
   return `${start > 12 ? start - 12 : start}–${end > 12 ? end - 12 : end}`;
@@ -83,6 +97,8 @@ export const METRIC_REGISTRY: Record<ProcessKey, Record<string, MetricDef>> = {
     },
     owner_within_5min_pct: {
       label: "Got an owner within 5 minutes",
+      clock: "clock",
+      windowMin: 5,
       unit: "percent",
       read: (r) => pct(num(r, "owner_within_5min"), num(r, "owner_assigned")),
       fraction: (r) => frac(num(r, "owner_within_5min"), num(r, "owner_assigned")),
@@ -99,6 +115,8 @@ export const METRIC_REGISTRY: Record<ProcessKey, Record<string, MetricDef>> = {
     },
     first_contact_1h_pct: {
       label: "Contacted within 1 hour",
+      clock: "clock",
+      windowMin: 60,
       compareLabel: "Called within 1 hour",
       listLabel: () => "called within 1 hour",
       unit: "percent",
@@ -109,6 +127,8 @@ export const METRIC_REGISTRY: Record<ProcessKey, Record<string, MetricDef>> = {
     },
     first_contact_1wh_pct: {
       label: "Contacted within 1 working hour",
+      clock: "working",
+      windowMin: 60,
       compareLabel: "Called within 1 working hour",
       listLabel: () => "called within 1 working hour",
       unit: "percent",

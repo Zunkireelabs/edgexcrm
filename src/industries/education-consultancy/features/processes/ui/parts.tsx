@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CaretRightIcon, CheckIcon, PencilSimpleIcon, TrendUpIcon, TreeStructureIcon, XIcon, type Icon } from "@/components/icons";
+import { CaretRightIcon, CheckIcon, ClockIcon, PencilSimpleIcon, TrendUpIcon, TreeStructureIcon, XIcon, type Icon } from "@/components/icons";
 import type { LogKind } from "../lib/improvements-log";
 
 /** The mockup's `.pg`: max-width 1160, 32px side padding. Every Processes page uses it. */
@@ -72,6 +72,7 @@ const LOG_ICON: Record<LogKind, { icon: Icon; cls: string }> = {
   approved: { icon: CheckIcon, cls: "border-[#cde9da] bg-ds-good-soft text-ds-good" },
   rejected: { icon: XIcon, cls: "border-[#f6d5d1] bg-ds-bad-soft text-ds-bad" },
   thirty_days: { icon: TrendUpIcon, cls: "border-[#cde9da] bg-ds-good-soft text-ds-good" },
+  office_hours: { icon: ClockIcon, cls: "border-[#cfe1f2] bg-ds-accent-soft text-ds-accent" },
 };
 
 /** The tone icon of an improvements event (the card's 22px, the page's 28px). */

@@ -199,3 +199,30 @@ describe("improvements log", () => {
     expect(log.find((e) => e.kind === "suggested")!.actor).toBe("Orca");
   });
 });
+
+describe("improvements log: office hours changed", () => {
+  const live = (o: Partial<LogVersion> & { id: string; processKey: LogVersion["processKey"]; version: number }): LogVersion => ({
+    status: "live", source: "person", created_at: "2026-10-01T00:00:00Z", approved_at: "2026-10-10T00:00:00Z", approved_by: "u1", rejected_at: null, rejected_by: null, rejected_reason: null, ...o,
+  });
+  const base = { changes: [], names: new Map([["u1", "Manish"]]), measuresByVersion: new Map(), now: new Date("2026-11-20T00:00:00Z"), skipThirtyDays: true };
+  const change = { at: "2026-11-08T06:00:00Z", actor: "Sadin", from: "every day, 9–6", to: "Sun–Fri, 9–6" };
+
+  it("appears once under each process whose live version uses a working clock, with who and old → new", () => {
+    const v = live({ id: "v2", processKey: "new_lead_first_call", version: 2 });
+    const log = buildImprovementLog({ ...base, versions: [v], workingClockVersions: [v], officeHoursChanges: [change] });
+    const e = log.filter((x) => x.kind === "office_hours");
+    expect(e).toHaveLength(1);
+    expect(e[0]).toMatchObject({ processKey: "new_lead_first_call", version: 2, at: change.at, actor: "Sadin", text: "New lead → first call: office hours changed", meta: "Sadin · every day, 9–6 → Sun–Fri, 9–6" });
+  });
+  it("is absent for a process on the plain clock, and for a change made before the version went live", () => {
+    const v = live({ id: "v1", processKey: "new_lead_first_call", version: 1 });
+    expect(buildImprovementLog({ ...base, versions: [v], officeHoursChanges: [change] }).some((x) => x.kind === "office_hours")).toBe(false);
+    const late = live({ id: "v2", processKey: "new_lead_first_call", version: 2, approved_at: "2026-11-09T00:00:00Z" });
+    expect(buildImprovementLog({ ...base, versions: [late], workingClockVersions: [late], officeHoursChanges: [change] }).some((x) => x.kind === "office_hours")).toBe(false);
+  });
+  it("a first save (no old value) reads 'now …'", () => {
+    const v = live({ id: "v2", processKey: "new_lead_first_call", version: 2 });
+    const log = buildImprovementLog({ ...base, versions: [v], workingClockVersions: [v], officeHoursChanges: [{ ...change, from: null }] });
+    expect(log.find((x) => x.kind === "office_hours")!.meta).toBe("Sadin · now Sun–Fri, 9–6");
+  });
+});
