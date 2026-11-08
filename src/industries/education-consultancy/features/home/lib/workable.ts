@@ -1,4 +1,5 @@
 import { OTHER_TAG_VALUES } from "@/lib/leads/lead-type";
+import { workableSteps } from "@/lib/filters/workable-clauses";
 
 /**
  * ONE definition of "a lead someone should be working", shared by every Home rule / loader and smart assignment's Room count.
@@ -73,34 +74,19 @@ interface FilterChain {
   in(column: string, values: string[]): unknown;
 }
 
-const quote = (v: string) => `"${v.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 const NO_LIST = "00000000-0000-0000-0000-000000000000";
 
 /**
  * Apply the definition to a PostgREST builder, so counts (`head: true`, `count: "exact"`) stay exact: nothing is filtered after
  * the fetch. No active list yields an impossible filter (no rows), never "all lists". NULL status / tags / on_hold stay workable.
+ * The clauses come from `workableSteps` (src/lib/filters/workable-clauses.ts), the same builder the leads list's `workable` filter compiles.
  */
 export function applyWorkable<T>(query: T, plan: WorkablePlan): T {
   let b = query as unknown as FilterChain;
-  const step = (next: unknown) => {
-    b = next as FilterChain;
-  };
-  step(b.is("deleted_at", null));
-  step(b.is("archived_at", null));
-  step(b.or("on_hold.is.null,on_hold.eq.false"));
-  step(b.in("list_id", plan.activeListIds.length ? plan.activeListIds : [NO_LIST]));
-  step(b.or(`tags.is.null,tags.not.ov.{${OTHER_TAG_VALUES.join(",")}}`));
-  if (plan.terminalEverywhere.length) step(b.or(`status.is.null,status.not.in.(${plan.terminalEverywhere.map(quote).join(",")})`));
-  for (const t of plan.terminalSome) {
-    const ids = t.pipelineIds.filter((p): p is string => p !== null);
-    const hasNull = t.pipelineIds.includes(null);
-    // Not terminal = another status, OR a pipeline where this slug is still open.
-    const open = hasNull
-      ? ids.length
-        ? `and(pipeline_id.not.is.null,pipeline_id.not.in.(${ids.join(",")}))`
-        : "pipeline_id.not.is.null"
-      : `pipeline_id.is.null,pipeline_id.not.in.(${ids.join(",")})`;
-    step(b.or(`status.is.null,status.neq.${quote(t.slug)},${open}`));
+  for (const step of workableSteps(plan)) {
+    if (step.kind === "is_null") b = b.is(step.column, null) as FilterChain;
+    else if (step.kind === "or") b = b.or(step.expr) as FilterChain;
+    else b = b.in("list_id", plan.activeListIds.length ? plan.activeListIds : [NO_LIST]) as FilterChain;
   }
   return b as unknown as T;
 }

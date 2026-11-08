@@ -83,7 +83,7 @@
   .eh-it .eh-chip { display: none; }
   .eh-it .eh-wh { white-space: normal; }
   /* long titles wrap to two lines on a phone instead of being cut off ("551 call-back remind…") */
-  .eh-nm { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; text-overflow: clip; overflow-wrap: anywhere; }
+  .eh-nm { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; text-overflow: clip; overflow-wrap: break-word; }
   .eh-lbl { display: none; }
   .eh-log { padding-left: 14px; }
   .eh-seg { margin-left: 0; width: 100%; overflow-x: auto; }
@@ -118,3 +118,6 @@
 .eh-nudged { color: var(--ds-muted); font-size: 12.5px; padding: 0 6px; white-space: nowrap; }
 .eh-linkbtn { color: var(--ds-accent); font-weight: 500; font-size: 12.5px; }
 @media (max-width: 767px) { .eh-ac { flex-wrap: wrap; justify-content: flex-end; } }
+/* phone: a row with 2+ actions ("Assign as suggested" + "Choose…") puts them on their own line under the text (column 2 to the end),
+   so the text column keeps the width instead of being squeezed to a few letters. One-action rows stay beside the text. */
+@media (max-width: 767px) { .eh-it > .eh-ac.eh-ac-multi { grid-column: 2 / -1; justify-content: flex-start; } }

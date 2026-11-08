@@ -1,8 +1,9 @@
 import { encodeFilterTree } from "@/lib/filters/serialize";
 import type { AttentionItem } from "../../pulse/lib/types";
 import { leadsOfPersonHref } from "../../pulse/lib/leads-links";
-import { noTakerSentence, type NewLeadSuggestion } from "./assignment/suggest";
+import { noTakerSentence, suggestionNames, type NewLeadSuggestion } from "./assignment/suggest";
 import type { NudgeState } from "./nudge";
+import type { WorkablePlan } from "./workable";
 import type { Tone } from "./types";
 
 export type NeedsAction =
@@ -176,7 +177,7 @@ export function unassignedRow(args: {
   const assignments = suggestion.assignments.map((a) => ({ userId: a.userId, name: a.name, take: a.take }));
   const left = Math.max(0, n - suggestion.placed);
   const why =
-    `Suggested: ${assignments.map((a) => `${a.name} +${a.take}`).join(", ")} \u00B7 they have the most room` +
+    `Suggested: ${suggestionNames(assignments)} \u00B7 they have the most room` +
     (left > 0 ? ` \u00B7 ${left} left for you to place${suggestion.unplaced > 0 && suggestion.reason ? ` (${suggestion.reason})` : ""}` : "");
   const actions: NeedsAction[] = [];
   const canAssign = !!args.leadIds && args.leadIds.length === n;
@@ -275,15 +276,17 @@ export function quietOverRow(total: number, byPerson: Array<{ name: string; coun
 
 /**
  * `/leads` on exactly the leads the quiet row counted: held by someone, no contact for 2+ weeks (the `no_contact_14d` filter is the
- * same test the count runs), in the active lists (the workable list rule, as Home's unassigned link encodes it).
+ * same test the count runs), and workable (the `workable` filter compiles the same clauses `applyWorkable` puts on the count: not
+ * archived / on hold / walk-in / in a terminal status for its pipeline), in the active lists.
  */
-export function quietOverHref(activeListIds: string[]): string {
+export function quietOverHref(plan: WorkablePlan): string {
   const tree = {
     conjunction: "and" as const,
     conditions: [
       { id: "home:no-contact", field: "no_contact_14d", op: "is_true" as const },
       { id: "home:held", field: "assignees", op: "is_not_empty" as const },
-      ...(activeListIds.length ? [{ id: "home:active-lists", field: "stage", op: "is_any_of" as const, value: activeListIds }] : []),
+      { id: "home:workable", field: "workable", op: "is" as const, value: JSON.stringify({ terminalEverywhere: plan.terminalEverywhere, terminalSome: plan.terminalSome }) },
+      ...(plan.activeListIds.length ? [{ id: "home:active-lists", field: "stage", op: "is_any_of" as const, value: plan.activeListIds }] : []),
     ],
   };
   return `/leads?${new URLSearchParams({ f: encodeFilterTree(tree) }).toString()}`;

@@ -71,3 +71,15 @@ export function noTakerSentence(s: NewLeadSuggestion, total: number): string {
   if (/^No one is in the first-touch positions/.test(r)) return r;
   return `No one can take ${them} now${r ? ` (${r})` : ""}.`;
 }
+
+/**
+ * "Gautam +2, Diplov +2, Kamana +1": a suggestion names people by first name (a full-name list is cut off on the row).
+ * People in one suggestion who share a first name keep their full names, so two "Anil"s are never ambiguous.
+ * One function for Home's row and Pulse's row, so the two pages read the same.
+ */
+export function suggestionNames(assignments: ReadonlyArray<{ name: string; take: number }>): string {
+  const first = (n: string) => n.trim().split(/\s+/)[0] || n;
+  const count = new Map<string, number>();
+  for (const a of assignments) count.set(first(a.name).toLowerCase(), (count.get(first(a.name).toLowerCase()) ?? 0) + 1);
+  return assignments.map((a) => `${(count.get(first(a.name).toLowerCase()) ?? 0) > 1 ? a.name.trim() : first(a.name)} +${a.take}`).join(", ");
+}

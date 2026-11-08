@@ -6,6 +6,11 @@ import { attentionRows, atRiskRow, quietOverHref, sliceAssignments, unassignedRo
 import { nudgeState, stillUntouchedCount } from "./nudge";
 
 import { decodeFilterTree } from "@/lib/filters/serialize";
+import { planFilter } from "@/lib/filters/compile";
+import { leadFields } from "@/lib/filters/registry/leads";
+import type { CompileCtx } from "@/lib/filters/types";
+import { buildWorkablePlan } from "./workable";
+import { suggestionNames } from "./assignment/suggest";
 
 function treeOfHref(href: string) {
   const res = decodeFilterTree(new URL(href, "http://x").searchParams.get("f")!);
@@ -160,11 +165,28 @@ describe("attentionRows: the intake-alarm row counts HELD leads only (click-thro
 });
 
 describe("quietOverHref: Review opens exactly the counted leads (click-through fix 5)", () => {
-  it("is the no-contact filter + held + the active lists", () => {
-    const href = quietOverHref(["L1", "L2"]);
-    const f = treeOfHref(href);
-    expect(f.conditions.map((c) => [c.field, c.op])).toEqual([["no_contact_14d", "is_true"], ["assignees", "is_not_empty"], ["stage", "is_any_of"]]);
-    expect((f.conditions[2] as { value?: string[] }).value).toEqual(["L1", "L2"]);
+  const plan = buildWorkablePlan(["L1", "L2"], [{ pipeline_id: "11111111-1111-4111-8111-111111111111", slug: "won", is_terminal: true }]);
+  it("is the no-contact filter + held + the full workable rule + the active lists", () => {
+    const f = treeOfHref(quietOverHref(plan));
+    expect(f.conditions.map((c) => [c.field, c.op])).toEqual([["no_contact_14d", "is_true"], ["assignees", "is_not_empty"], ["workable", "is"], ["stage", "is_any_of"]]);
+    expect((f.conditions[3] as { value?: string[] }).value).toEqual(["L1", "L2"]);
+    // The terminal plan travels in the workable condition, and the link is valid for the real registry.
+    expect(JSON.parse(String(f.conditions[2].value))).toEqual({ terminalEverywhere: ["won"], terminalSome: [] });
+    const ctx = { tz: "UTC", now: new Date(), industryId: "education_consultancy", permissions: {} } as unknown as CompileCtx;
+    expect(planFilter(f, leadFields(ctx), ctx).ok).toBe(true);
+  });
+});
+
+describe("suggestionNames (click-through round 2, C)", () => {
+  it("uses first names", () => {
+    expect(suggestionNames([{ name: "Gautam Ray", take: 2 }, { name: "Diplov Karn", take: 2 }, { name: "Kamana Shah", take: 2 }, { name: "Nikhil Mirdha", take: 1 }])).toBe("Gautam +2, Diplov +2, Kamana +2, Nikhil +1");
+  });
+  it("two people who share a first name keep their full names; the others stay short", () => {
+    expect(suggestionNames([{ name: "Anil Karki", take: 2 }, { name: "Gautam Ray", take: 1 }, { name: "anil Thapa", take: 1 }])).toBe("Anil Karki +2, Gautam +1, anil Thapa +1");
+  });
+  it("the Home row uses them", () => {
+    const r = unassignedRow({ count: 2, oldestAt: null, now: new Date(), suggestion: { assignments: [{ userId: "a", name: "Gautam Ray", take: 1, leadIds: ["1"] }, { userId: "b", name: "Diplov Karn", take: 1, leadIds: ["2"] }], placed: 2, unplaced: 0, reason: null }, leadIds: ["1", "2"], chooseHref: "/l" })!;
+    expect(r.why).toBe("Suggested: Gautam +1, Diplov +1 · they have the most room");
   });
 });
 

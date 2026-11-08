@@ -185,7 +185,7 @@ export async function loadManagerHome(
     ...attention,
     atRiskRow(atRisk, "/applications"),
     staleCallbacksRow(staleCount, scopeLabel),
-    quietOverRow(quiet.total, quiet.byPerson.map((p) => ({ name: nameOf.get(p.userId) ?? "Someone", count: p.count })), scopeLabel, quietOverHref(workable.activeListIds)),
+    quietOverRow(quiet.total, quiet.byPerson.map((p) => ({ name: nameOf.get(p.userId) ?? "Someone", count: p.count })), scopeLabel, quietOverHref(workable)),
   ].filter((r): r is NeedsYouRow => r !== null);
 
   const shortName = ctx.tenantName.trim().split(/\s+/)[0] || "Your team";

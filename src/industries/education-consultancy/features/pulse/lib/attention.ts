@@ -1,6 +1,6 @@
 import { leadsOfPersonHref, untouchedHeldOfPersonHref, untouchedLeadsHref } from "./leads-links";
 import { planReassign, type ReassignPlan } from "./suggest";
-import { noTakerSentence, type NewLeadSuggestion } from "../../home/lib/assignment/suggest";
+import { noTakerSentence, suggestionNames, type NewLeadSuggestion } from "../../home/lib/assignment/suggest";
 import { pluralLabel } from "./positions";
 import { compareToUsual } from "./compare";
 import { activityWhat } from "./activity-text";
@@ -47,7 +47,7 @@ function planText(plan: ReassignPlan, n: number, roleLabel: string, verb: "Reass
 /** The intake-alarm row's label / meta / why from the smart-assignment suggestion for its unassigned leads. */
 function untouchedPlanText(sug: NewLeadSuggestion | null, n: number): { label: string; meta: string; why: string; suggested: boolean } {
   if (sug && sug.placed > 0) {
-    const names = sug.assignments.map((a) => `${a.name} +${a.take}`).join(", ");
+    const names = suggestionNames(sug.assignments);
     const label = sug.assignments.length === 1 ? `Assign ${sug.placed} to ${sug.assignments[0].name}` : `Assign ${sug.placed} \u00B7 split across ${sug.assignments.length} people`;
     const left = sug.unplaced > 0 ? ` ${noTakerSentence(sug, sug.unplaced)}` : "";
     return { label, meta: names, why: ` Smart assignment would give the ${sug.placed} unassigned ones to: ${names}.${left}`, suggested: true };

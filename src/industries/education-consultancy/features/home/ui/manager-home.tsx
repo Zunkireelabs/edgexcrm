@@ -231,7 +231,7 @@ export function ManagerHome({ data }: { data: ManagerData }) {
                     </div>
                     <div className="eh-wh">{r.chip ? <span className="eh-ph">{r.chip.text}{r.why ? " \u00B7 " : ""}</span> : null}{r.why}</div>
                   </div>
-                  <div className="eh-ac">
+                  <div className={r.actions.length > 1 ? "eh-ac eh-ac-multi" : "eh-ac"}>
                     {r.actions.map((a, i) => (
                       <NeedsAction
                         key={`${r.key}-${i}`}
