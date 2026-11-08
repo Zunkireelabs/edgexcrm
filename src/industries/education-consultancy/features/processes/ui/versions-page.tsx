@@ -169,7 +169,6 @@ function Body({ d, processKey, tenantName }: { d: Payload; processKey: string; t
       )}
 
       <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {read ? <OrcaReadCard processKey={processKey} read={read} onDismissed={() => setReadHidden(true)} /> : null}
         {hasCompare && compare && compare.changes.length > 0 ? (
           <section className="rounded-ds-lg border border-ds-border bg-ds-surface px-3.5 pb-1.5 pt-3.5">
             <h2 className="mb-2 text-[13.5px] font-semibold text-ds-ink">What changed in v{compare.current.version}</h2>
@@ -180,6 +179,7 @@ function Body({ d, processKey, tenantName }: { d: Payload; processKey: string; t
             </ul>
           </section>
         ) : null}
+        {read ? <OrcaReadCard processKey={processKey} read={read} onDismissed={() => setReadHidden(true)} /> : null}
         <section className="rounded-ds-lg border border-ds-border bg-ds-surface p-3.5">
           <h2 className="mb-2 flex items-center gap-2 text-[13.5px] font-semibold text-ds-ink">
             <ListChecksIcon size={16} aria-hidden /> How this is measured

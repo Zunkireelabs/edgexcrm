@@ -147,6 +147,7 @@ export function ProcessDetail({ processKey, tenantName }: { processKey: string; 
                   version={p.draft.version}
                   changeCount={p.draft.changeCount}
                   arrived={p.draft.orca.arrived}
+                  windowLabel={p.draft.orca.windowLabel}
                   summary={p.draft.summary}
                   skipped={p.draft.orca.skipped}
                   stepTitle={(k) => p.spec?.steps.find((s) => s.key === k)?.title ?? null}

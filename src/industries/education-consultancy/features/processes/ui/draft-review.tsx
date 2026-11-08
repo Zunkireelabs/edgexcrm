@@ -336,7 +336,7 @@ function ChangeCard({
         </span>
       </div>
       )}
-      <div className="mt-2 text-[12px] text-ds-muted">{c.field === "wording" ? c.drives : `Changes: ${c.drives}`}</div>
+      {c.turnsOn && c.drives.startsWith("No product change") ? null : <div className="mt-2 text-[12px] text-ds-muted">{c.field === "wording" ? c.drives : `Changes: ${c.drives}`}</div>}
       <TurnsOnLine turnsOn={c.turnsOn} />
     </article>
   );

@@ -242,7 +242,7 @@ export async function loadProcessViews(ctx: ProcessesContext, windowDays: number
         draft: (() => {
           const open = versions.find((v) => v.process_id === p.id && v.status === "draft");
           return open && p.live_version_id
-            ? { id: open.id, version: open.version, changeCount: countByDraft.get(open.id) ?? 0, source: open.source as DraftSource, summary: open.change_summary, orca: open.source === "agent" ? readOrcaMeta(open.evidence) : null }
+            ? { id: open.id, version: open.version, changeCount: countByDraft.get(open.id) ?? 0, source: open.source as DraftSource, summary: open.change_summary, orca: open.source === "agent" ? readOrcaMeta(open.evidence, tz) : null }
             : null;
         })(),
       };

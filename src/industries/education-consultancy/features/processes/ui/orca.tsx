@@ -76,6 +76,7 @@ export function OrcaBanner({
   version,
   changeCount,
   arrived,
+  windowLabel,
   summary,
   skipped,
   stepTitle,
@@ -84,12 +85,13 @@ export function OrcaBanner({
   version: number;
   changeCount: number;
   arrived: number | null;
+  windowLabel?: string | null;
   summary: string | null;
   skipped: readonly Skipped[];
   stepTitle: (key: string) => string | null;
   reviewHref: string;
 }) {
-  const t = bannerText({ version, changeCount, arrived });
+  const t = bannerText({ version, changeCount, arrived, windowLabel });
   const lines = skippedLines(skipped, stepTitle);
   return (
     <section className="mt-4 rounded-[12px] border border-ds-ai-line bg-[image:var(--ds-ai-wash)] p-3.5" data-testid="orca-banner">
@@ -139,7 +141,7 @@ export function NotChanged({ lines }: { lines: { shown: SkippedLine[]; more: Ski
   );
 }
 
-/** P3: the Why row of an Orca change. Numbers bold; a number whose evidence has a link is that link; an evidence item with NO link is plain bold text. */
+/** P3: the Why row of an Orca change. Only numbers that match an evidence value are bold (linked when the evidence has an href); uncited evidence is one muted line below. */
 export function OrcaWhy({ why, evidence }: { why: string; evidence: readonly Evidence[] }) {
   const { segments, rest } = whySegments(why, evidence);
   return (
@@ -148,35 +150,42 @@ export function OrcaWhy({ why, evidence }: { why: string; evidence: readonly Evi
         <SparkleIcon size={14} aria-hidden /> Why
       </span>
       <span className="min-w-0">
-        {segments.map((s, i) =>
-          s.bold ? (
-            s.href ? (
-              <Link key={i} href={s.href} className="font-semibold text-ds-ink underline decoration-ds-ai-line underline-offset-2 hover:decoration-ds-ai">
-                {s.text}
-              </Link>
+        <span>
+          {segments.map((s, i) =>
+            s.bold ? (
+              s.href ? (
+                <Link key={i} href={s.href} className="font-semibold text-ds-ink underline decoration-ds-ai-line underline-offset-2 hover:decoration-ds-ai">
+                  {s.text}
+                </Link>
+              ) : (
+                <b key={i} className="font-semibold text-ds-ink">
+                  {s.text}
+                </b>
+              )
             ) : (
-              <b key={i} className="font-semibold text-ds-ink">
-                {s.text}
-              </b>
-            )
-          ) : (
-            <span key={i}>{s.text}</span>
-          ),
-        )}
-        {rest.map((r, i) => (
-          <span key={`${r.label}-${i}`}>
-            {" · "}
-            {r.href ? (
-              <Link href={r.href} className="underline decoration-ds-ai-line underline-offset-2 hover:decoration-ds-ai">
-                <b className="font-semibold text-ds-ink">{r.value}</b> {r.label}
-              </Link>
-            ) : (
-              <span>
-                <b className="font-semibold text-ds-ink">{r.value}</b> {r.label}
+              <span key={i}>{s.text}</span>
+            ),
+          )}
+        </span>
+        {rest.length > 0 ? (
+          <span className="mt-1 block text-[12px] text-ds-muted" data-testid="orca-why-evidence">
+            Evidence:{" "}
+            {rest.map((r, i) => (
+              <span key={`${r.label}-${i}`}>
+                {i > 0 ? " · " : ""}
+                {r.href ? (
+                  <Link href={r.href} className="underline decoration-ds-ai-line underline-offset-2 hover:decoration-ds-ai">
+                    {r.value} {r.label}
+                  </Link>
+                ) : (
+                  <span>
+                    {r.value} {r.label}
+                  </span>
+                )}
               </span>
-            )}
+            ))}
           </span>
-        ))}
+        ) : null}
       </span>
     </div>
   );

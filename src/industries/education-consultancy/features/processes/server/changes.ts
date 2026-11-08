@@ -315,6 +315,6 @@ export async function loadDraft(ctx: ProcessesContext, key: ProcessKey): Promise
     seen.add(id);
     authors.push({ userId: c.authorUserId, kind: c.authorKind, name: c.authorName });
   }
-  base.draft = { id: draft.id, version: draft.version, createdAt: draft.created_at, isBaseline: !proc.live_version_id, source: draft.source, summary: draft.source === "agent" ? draft.change_summary : null, orca: draft.source === "agent" ? readOrcaMeta(draft.evidence) : null, authors, changes };
+  base.draft = { id: draft.id, version: draft.version, createdAt: draft.created_at, isBaseline: !proc.live_version_id, source: draft.source, summary: draft.source === "agent" ? draft.change_summary : null, orca: draft.source === "agent" ? readOrcaMeta(draft.evidence, ctx.tz) : null, authors, changes };
   return base;
 }

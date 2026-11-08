@@ -12,26 +12,41 @@ export interface OrcaDraftMeta {
   /** New leads in the 30-day window the run read (`evidence.arrived`). */
   arrived: number | null;
   skipped: Skipped[];
+  /** Orca's window in the tenant's days, "9 Oct – 7 Nov" (from `evidence.window`); null when absent or unreadable. */
+  windowLabel?: string | null;
+}
+
+/** "9 Oct – 7 Nov": Orca's window in the tenant tz. `to` is exclusive (midnight after the last day), so the last day is 1 second earlier. */
+export function windowLabel(window: unknown, tz: string): string | null {
+  const w = (window ?? {}) as { from?: unknown; to?: unknown };
+  if (typeof w.from !== "string" || typeof w.to !== "string") return null;
+  const from = Date.parse(w.from);
+  const to = Date.parse(w.to);
+  if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) return null;
+  const day = (ms: number) => new Date(ms).toLocaleDateString("en-GB", { timeZone: tz, day: "numeric", month: "short" });
+  const a = day(from);
+  const b = day(to - 1000);
+  return a === b ? a : `${a} – ${b}`;
 }
 
 /** Reads `process_versions.evidence` of an agent draft. Anything unreadable gives an empty, safe meta (the banner then just omits that part). */
-export function readOrcaMeta(evidence: unknown): OrcaDraftMeta {
-  const e = (evidence ?? {}) as { arrived?: unknown; skipped?: unknown };
+export function readOrcaMeta(evidence: unknown, tz = "UTC"): OrcaDraftMeta {
+  const e = (evidence ?? {}) as { arrived?: unknown; skipped?: unknown; window?: unknown };
   const skipped = Array.isArray(e.skipped)
     ? (e.skipped as unknown[]).flatMap((s) => {
         const o = s as { step?: unknown; reason?: unknown };
         return typeof o?.step === "string" && typeof o?.reason === "string" ? [{ step: o.step, reason: o.reason }] : [];
       })
     : [];
-  return { arrived: typeof e.arrived === "number" && Number.isFinite(e.arrived) ? e.arrived : null, skipped };
+  return { arrived: typeof e.arrived === "number" && Number.isFinite(e.arrived) ? e.arrived : null, skipped, windowLabel: windowLabel(e.window, tz) };
 }
 
-/** "Orca suggests 3 changes for v2" and, when the run counted new leads, "from 131 new leads in 30 days". */
-export function bannerText(a: { version: number; changeCount: number; arrived: number | null; windowDays?: number }): { title: string; from: string | null } {
+/** "Orca suggests 3 changes for v2" and, when the run counted new leads, "from 130 new leads, 9 Oct – 7 Nov" (Orca's own dates, never "30 days"). */
+export function bannerText(a: { version: number; changeCount: number; arrived: number | null; windowLabel?: string | null }): { title: string; from: string | null } {
   const n = a.changeCount;
   return {
     title: `Orca suggests ${n} ${n === 1 ? "change" : "changes"} for v${a.version}`,
-    from: a.arrived === null ? null : `from ${fmtN(a.arrived)} new ${a.arrived === 1 ? "lead" : "leads"} in ${a.windowDays ?? 30} days`,
+    from: a.arrived === null ? null : `from ${fmtN(a.arrived)} new ${a.arrived === 1 ? "lead" : "leads"}${a.windowLabel ? `, ${a.windowLabel}` : ""}`,
   };
 }
 
@@ -66,12 +81,10 @@ export interface WhySegment {
   href?: string;
 }
 
-const NUM = /\d[\d,]*(?:\.\d+)?(?:\s?(?:%|hours?\b|h\b|min(?:utes?)?\b|days?\b))?(?:\s+of\s+\d[\d,]*)?/g;
-
 /**
- * Orca's sentence with its numbers in bold, each linked to the evidence that carries it. An evidence value found in the sentence ("17 of 131",
- * "30%") is matched first (longest first); any other number is bold without a link. Evidence the sentence never quotes is returned in `rest`,
- * so every cited item still shows (bold value, linked when it has an href).
+ * Orca's sentence with ONLY the numbers that match an evidence value in bold ("17 of 131", "30%"), longest first, each linked when its evidence
+ * has an href. Every other number ("1 working hour", "5 minutes") stays plain. Evidence the sentence never quotes is returned in `rest`
+ * with a short lower-case label, for the one muted "Evidence:" line.
  */
 export function whySegments(why: string, evidence: readonly Evidence[]): { segments: WhySegment[]; rest: Array<{ label: string; value: string; href?: string }> } {
   const inOrder = evidence
@@ -99,10 +112,6 @@ export function whySegments(why: string, evidence: readonly Evidence[]): { segme
       from = end;
     }
   });
-  for (const m of why.matchAll(NUM)) {
-    const start = m.index ?? 0;
-    if (!taken(start, start + m[0].length)) hits.push({ start, end: start + m[0].length });
-  }
   hits.sort((a, b) => a.start - b.start);
 
   const segments: WhySegment[] = [];
@@ -114,9 +123,15 @@ export function whySegments(why: string, evidence: readonly Evidence[]): { segme
   }
   if (cursor < why.length) segments.push({ text: why.slice(cursor), bold: false });
 
-  const rest = items.flatMap((it, idx) => (used.has(idx) ? [] : [{ order: it.order, label: it.e.label, value: it.value, ...(it.e.href ? { href: it.e.href } : {}) }]));
+  const rest = items.flatMap((it, idx) => (used.has(idx) ? [] : [{ order: it.order, label: shortLabel(it.e.label), value: it.value, ...(it.e.href ? { href: it.e.href } : {}) }]));
   rest.sort((a, b) => a.order - b.order);
   return { segments, rest: rest.map(({ label, value, href }) => ({ label, value, ...(href ? { href } : {}) })) };
+}
+
+/** "First contact: Contacted within 1 working hour" -> "contacted within 1 working hour": drop the "Step:" prefix, lower-case the first letter (not an acronym). */
+export function shortLabel(label: string): string {
+  const t = (label.includes(": ") ? label.slice(label.lastIndexOf(": ") + 2) : label).trim();
+  return /^[A-Z][a-z]/.test(t) ? t.charAt(0).toLowerCase() + t.slice(1) : t;
 }
 
 /** "needs per-lead SMS · EDGEX-104" (the mockup's chip). */

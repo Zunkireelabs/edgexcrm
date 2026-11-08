@@ -21,7 +21,7 @@ const KEY = "new_lead_first_call" as const;
 const spec = buildBaselineSpec(KEY, ADMIZZ_SETUP);
 
 type D = NonNullable<ProcessView["draft"]>;
-const ORCA: Pick<D, "source" | "summary" | "orca"> = { source: "agent", summary: "Steps 2 and 3 are red; most delay is before an owner is named.", orca: { arrived: 131, skipped: [{ step: "call_back", reason: "Rota-driven." }] } };
+const ORCA: Pick<D, "source" | "summary" | "orca"> = { source: "agent", summary: "Steps 2 and 3 are red; most delay is before an owner is named.", orca: { arrived: 130, windowLabel: "9 Oct – 7 Nov", skipped: [{ step: "call_back", reason: "Rota-driven." }] } };
 const PERSON: Pick<D, "source" | "summary" | "orca"> = { source: "person", summary: null, orca: null };
 const draft = (over: Partial<D> = {}): D => ({ id: "d3", version: 3, changeCount: 2, ...ORCA, ...over }) as D;
 
@@ -58,7 +58,7 @@ describe("P1 · list: the Orca draft chip, the drafts-waiting row, the follows c
 
   it("an Orca draft: 'Draft v3 from Orca' chip, 'Review draft', and '1 draft waiting for you · Orca, from 30 days of data'", async () => {
     await open(draft());
-    expect(screen.getByText(/Draft v3 from Orca · 2 changes/)).toBeTruthy();
+    expect(screen.getByText("Draft v3 from Orca")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Review draft" }).getAttribute("href")).toBe("/processes/new_lead_first_call/draft");
     const row = screen.getByTestId("orca-drafts-waiting");
     expect(within(row).getByText("1 draft waiting for you")).toBeTruthy();
@@ -91,11 +91,11 @@ describe("P2 · the banner above the map", () => {
     await screen.findByText("Map and numbers");
   };
 
-  it("an open Orca draft: 'Orca suggests 2 changes for v3 · from 131 new leads in 30 days', its summary and 'Review draft v3'", async () => {
+  it("an open Orca draft: 'Orca suggests 2 changes for v3 · from 130 new leads, 9 Oct – 7 Nov', its summary and 'Review draft v3'", async () => {
     await open(draft());
     const b = screen.getByTestId("orca-banner");
     expect(within(b).getByText("Orca suggests 2 changes for v3")).toBeTruthy();
-    expect(within(b).getByText("from 131 new leads in 30 days")).toBeTruthy();
+    expect(within(b).getByText("from 130 new leads, 9 Oct – 7 Nov")).toBeTruthy();
     expect(within(b).getByText(/most delay is before an owner is named/)).toBeTruthy();
     expect(within(b).getByRole("link", { name: "Review draft v3" }).getAttribute("href")).toBe("/processes/new_lead_first_call/draft");
   });
@@ -109,7 +109,7 @@ describe("P2 · the banner above the map", () => {
   it("a banner without the run's lead count just leaves that part out", async () => {
     await open(draft({ orca: { arrived: null, skipped: [] } }));
     expect(screen.getByText("Orca suggests 2 changes for v3")).toBeTruthy();
-    expect(screen.queryByText(/new leads in/)).toBeNull();
+    expect(screen.queryByText(/^from \d+ new leads?/)).toBeNull();
   });
   it("'Not changed' lines: the step's name and the reason, at most 2 shown, the rest behind '+N more'", async () => {
     const skipped = [{ step: "call_back", reason: "Rota-driven." }, { step: "decide", reason: "Waits on the owner." }, { step: "assign", reason: "Fine by hand." }, { step: "first_contact", reason: "Already changed." }];
@@ -188,12 +188,14 @@ describe("P3 · review: Proposed by Orca, the Why row, the badges, the footer", 
     expect(why.querySelectorAll("a[href='']").length).toBe(0);
     expect(why.querySelector("b")).toBeTruthy();
   });
-  it("evidence the sentence doesn't quote still shows, bold; linked only when it has an href", async () => {
+  it("evidence the sentence doesn't quote goes on one muted 'Evidence:' line; linked only when it has an href", async () => {
     await open(view([change({ why: "Saturday leads wait.", evidence: [{ metric: "a", label: "never contacted", value: "17 of 17", stepKey: null, href: null }, { metric: "b", label: "Saturday: new leads", value: "17 of 131", stepKey: null, href: "/leads?f=sat" }] })]));
     const why = screen.getByTestId("orca-why");
-    expect(within(why).getByText("17 of 17").tagName).toBe("B");
-    expect(within(why).queryByRole("link", { name: /17 of 17/ })).toBeNull();
-    expect(within(why).getByRole("link", { name: /17 of 131/ }).getAttribute("href")).toBe("/leads?f=sat");
+    const line = within(why).getByTestId("orca-why-evidence");
+    expect(line.textContent).toBe("Evidence: 17 of 17 never contacted · 17 of 131 new leads");
+    expect(why.querySelector("b")).toBeNull();
+    expect(within(line).queryByRole("link", { name: /17 of 17/ })).toBeNull();
+    expect(within(line).getByRole("link", { name: /17 of 131/ }).getAttribute("href")).toBe("/leads?f=sat");
   });
   it("the needs badge and the 'Turns on: Settings → Smart assignment → Shadow' link (to the Lead Management settings)", async () => {
     await open(view([change({ needs: "EDGEX-104", turnsOn: "smart_assignment_shadow" })]));
@@ -201,6 +203,13 @@ describe("P3 · review: Proposed by Orca, the Why row, the badges, the footer", 
     const link = screen.getByRole("link", { name: "Settings → Smart assignment → Shadow" });
     expect(link.getAttribute("href")).toBe("?settings=lead-management");
     expect(screen.getByTestId("turns-on").textContent).toContain("Turns on:");
+  });
+  it("a change that turns something on does not also say 'No product change'", async () => {
+    await open(view([change({ field: "wording", drives: "No product change: wording only", turnsOn: "smart_assignment_shadow" })]));
+    expect(screen.queryByText(/No product change/)).toBeNull();
+    cleanup();
+    await open(view([change({ field: "wording", drives: "No product change: wording only" })]));
+    expect(screen.getByText("No product change: wording only")).toBeTruthy();
   });
   it("no badge and no turns-on line when the change has neither", async () => {
     await open(view([change()]));

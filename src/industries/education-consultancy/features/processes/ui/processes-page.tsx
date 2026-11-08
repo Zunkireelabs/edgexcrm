@@ -78,7 +78,7 @@ function ProcessRowCard({ p }: { p: ProcessView }) {
             {p.draft ? (
               p.draft.source === "agent" ? (
                 <OrcaChip>
-                  Draft v{p.draft.version} from Orca · {p.draft.changeCount} {p.draft.changeCount === 1 ? "change" : "changes"}
+                  Draft v{p.draft.version} from Orca
                 </OrcaChip>
               ) : (
                 <VChip tone="person" icon={PencilSimpleIcon}>
