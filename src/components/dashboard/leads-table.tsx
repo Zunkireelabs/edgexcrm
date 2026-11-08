@@ -21,6 +21,11 @@ import { TOOLBAR_BTN } from "@/components/dashboard/leads/toolbar-btn";
 // NEXT_PUBLIC_ADVANCED_FILTERS. The legacy FilterMenu/FilterChips imports above
 // stay as the flag-off fallback; see their @deprecated JSDoc.
 import { AdvancedFilterBar, DEFAULT_MAX_CONDITIONS } from "@/components/filters/advanced-filter-bar";
+// Leads toolbar v2 (EDGEX-116): new layout lives in its own folder; this file only feeds it state.
+import { LeadsToolbar } from "@/components/dashboard/leads/toolbar/leads-toolbar";
+import type { CountLoader, OptionContext } from "@/components/dashboard/leads/toolbar/condition-body";
+import { fetchLeadCount, treeWithoutField } from "@/components/dashboard/leads/toolbar/lead-count";
+import { CTRL, CTRL_BORDERED, CTRL_PRIMARY } from "@/components/dashboard/leads/toolbar/tokens";
 import { AddFilterButton } from "@/components/filters/add-filter-button";
 import { SavedFiltersMenu } from "@/industries/education-consultancy/features/saved-lead-filters/components/saved-filters-menu";
 import { useFilterOptions } from "@/components/filters/use-filter-options";
@@ -74,6 +79,8 @@ import {
   ArrowCounterClockwiseIcon,
   ArrowCircleUpIcon,
   GitBranchIcon,
+  SlidersHorizontalIcon,
+  CaretDownIcon,
 } from "@/components/icons";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
@@ -2625,17 +2632,139 @@ export function LeadsTable({
     handleAdvancedFilterChange({ ...displayFilterTree, conditions: addOrMergeCondition(displayFilterTree.conditions, condition) });
   }
 
+  // Leads toolbar v2 (EDGEX-116): education_consultancy with advanced filters on. Every other
+  // consumer of this table (Contacts, leads-organise, other industries) keeps the legacy toolbar.
+  const useToolbarV2 = advancedFiltersEnabled && industryId === "education_consultancy";
+
+  // "This scope, no extra filters": the locked Stage tab's synthetic chip, or nothing.
+  const toolbarScopeTree: FilterTree = useMemo(
+    () => ({
+      conjunction: "and",
+      conditions: displayFilterTree.conditions.filter((c) => c.id === SYNTHETIC_STAGE_CONDITION_ID),
+    }),
+    [displayFilterTree, SYNTHETIC_STAGE_CONDITION_ID]
+  );
+
+  // Per-option numbers for the Pick-values panel. Assignee/source/collaborator/destination counts
+  // are the scope-aware facet maps the table already holds. Stage has no facet, so it is counted
+  // lazily through the table's own list endpoint (same role/branch/own scoping as the rows) — and
+  // a failed count is simply omitted, never guessed.
+  const toolbarStageCountLoader: CountLoader = useMemo(
+    () => ({
+      supports: (fieldKey) => fieldKey === "stage",
+      load: async (_fieldKey, signal) => {
+        const tree = treeWithoutField(advancedFilters.tree, "stage");
+        const entries = await Promise.all(
+          leadLists.map(async (l) => [l.id, await fetchLeadCount({ listSlug: l.slug, tree }, signal)] as const)
+        );
+        const counted = entries.filter((e): e is readonly [string, number] => e[1] !== null);
+        return counted.length > 0 ? new Map(counted) : null;
+      },
+    }),
+    [advancedFilters.tree, leadLists]
+  );
+  const toolbarOptionContext: OptionContext = useMemo(
+    () => ({
+      getOptions: advancedGetOptions,
+      countSources: {
+        assignees: counselorCounts,
+        collaborators: collaboratorCounts,
+        source: sourceCounts,
+        destinations: destinationCounts,
+      },
+      countLoader: toolbarStageCountLoader,
+      optionColors: {
+        stage: new Map(leadLists.filter((l) => !!l.color).map((l) => [l.id, l.color as string])),
+      },
+    }),
+    [advancedGetOptions, counselorCounts, collaboratorCounts, sourceCounts, destinationCounts, toolbarStageCountLoader, leadLists]
+  );
+
   return (
     <div className="flex flex-1 min-h-0 gap-0">
       {/* Main Table Section - shrinks when preview is open */}
       <div className="flex flex-col flex-1 min-h-0 min-w-0 gap-1 overflow-hidden">
-        {pageHeading && <h1 className={pageHeadingClassName}>{pageHeading}</h1>}
+        {pageHeading && !useToolbarV2 && <h1 className={pageHeadingClassName}>{pageHeading}</h1>}
         {pageSubheading && (
           <p className="shrink-0 text-sm text-muted-foreground mb-4 pr-6">{pageSubheading}</p>
         )}
         {beforeTable}
 
+      {useToolbarV2 && (
+        <LeadsToolbar
+          key={`${activeListSlug ?? activeFunnelKey ?? "all"}:${viewMode}`}
+          title={!pageHeading || pageHeading === "All Leads" ? "Leads" : pageHeading}
+          total={effectiveTotal}
+          titleActions={
+            <>
+              {canExport && (
+                <button type="button" onClick={exportCSV} className={CTRL_BORDERED}>
+                  <DownloadIcon className="size-4" />
+                  Export
+                </button>
+              )}
+              {canCreateLead && tenantId && (
+                <button type="button" onClick={() => setAddLeadOpen(true)} className={CTRL_PRIMARY}>
+                  <PlusIcon className="size-4" />
+                  Add lead
+                </button>
+              )}
+            </>
+          }
+          viewActions={
+            <>
+              {hasListPipeline && (activeListSlug || activeFunnelKey) && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    router.push(
+                      activeListSlug ? `/leads?list=${activeListSlug}&view=kanban` : `/leads?funnel=${activeFunnelKey}&view=kanban`
+                    )
+                  }
+                  className={CTRL}
+                >
+                  <ColumnsIcon className="size-4" />
+                  Kanban view
+                </button>
+              )}
+              {/* Placeholder until Leads table v2 phase 2 (EDGEX-117): still opens the existing Edit-columns dialog. */}
+              <button type="button" onClick={() => setColumnDialogOpen(true)} className={CTRL}>
+                <SlidersHorizontalIcon className="size-4" />
+                View settings
+                <CaretDownIcon className="size-3.5 text-ds-faint" />
+              </button>
+            </>
+          }
+          search={{ value: search, onChange: setSearch, loading: tableLoading }}
+          sortControl={
+            <SortPopover
+              sortField={sortField}
+              sortDirection={sortDirection}
+              setSortField={setSortField}
+              setSortDirection={setSortDirection}
+              industryId={industryId}
+              align="start"
+            />
+          }
+          filter={{
+            fields: advancedVisibleFields,
+            tree: displayFilterTree,
+            onChange: handleAdvancedFilterChange,
+            ctx: toolbarOptionContext,
+            maxConditions: DEFAULT_MAX_CONDITIONS,
+          }}
+          scopeTree={toolbarScopeTree}
+          sort={{ field: sortField, direction: sortDirection }}
+          onSortChange={(next) => {
+            setSortField(next.field as SortField);
+            setSortDirection(next.direction);
+          }}
+          savedViewsEnabled={hasSavedLeadFilters}
+        />
+      )}
+
       {/* Enhanced Toolbar - matching pipeline style */}
+      {!useToolbarV2 && (
       <div className="shrink-0">
         {/* Top Row: Search + Actions */}
         <div className="flex flex-wrap items-center gap-3 p-3">
@@ -2781,6 +2910,7 @@ export function LeadsTable({
           </>
         )}
       </div>
+      )}
 
       {/* Bulk Action Bar - animated container between filters and table */}
       <div
