@@ -39,6 +39,7 @@ import { countStaleCallbacks } from "./stale-callbacks";
 import type { HomeData } from "./load-page";
 import { loadHome } from "./load-page";
 import { buildHomePulseContext } from "./pulse-ctx";
+import { canOpenNamedList } from "@/lib/leads/master-exclusion";
 import { loadIntakeListIds, loadWorkablePlan } from "./workable";
 import { applyWorkable, type WorkablePlan } from "../lib/workable";
 
@@ -110,7 +111,7 @@ export async function loadManagerHome(
   const flags7d: Record<string, "red" | "amber" | "green"> = {};
   for (const p of pulse.people) if (p.flag) flags7d[p.userId] = p.flag;
 
-  const [leadScope, workable, policy, intakeListIds] = await Promise.all([makeLeadScope(db, auth, scope), loadWorkablePlan(db), loadProcessPolicy(db, auth.tenantId), loadIntakeListIds(db)]);
+  const [leadScope, workable, policy, intakeListIds] = await Promise.all([makeLeadScope(db, auth, scope), loadWorkablePlan(db), loadProcessPolicy(db, auth.tenantId), loadIntakeListIds(db, (l) => canOpenNamedList(auth, l))]);
   // First-hour numbers follow the live clock: 60 office minutes when the process counts working hours.
   const workingClock = policy.source !== null && policy.firstContact.clock === "working";
   const [unassigned, former, nudges, atRisk, onLeave, impact, staleCount, quiet] = await Promise.all([

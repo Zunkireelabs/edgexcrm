@@ -85,4 +85,14 @@ describe("T2 owner Home: Rules from your processes", () => {
     render(<ManagerHome data={managerData(null)} />);
     expect(screen.queryByText("Rules from your processes")).toBeNull();
   });
+  it("an owner 'Needs you' row repeats its chip text in the phone-only eh-ph span before the why-line (EDGEX-109 P3b round 4)", () => {
+    const data = {
+      ...managerData(null),
+      needsYou: [{ key: "unassigned", tone: "bad", icon: "user-plus", title: "Assign 9 new leads", chip: { text: "Waiting 11 days \u00B7 target 5 min", tone: "bad" }, why: "Oldest arrived 28 Oct.", actions: [] }],
+    } as unknown as ManagerData;
+    const { container } = render(<ManagerHome data={data} />);
+    const ph = container.querySelector(".eh-wh .eh-ph");
+    expect(ph?.textContent).toBe("Waiting 11 days \u00B7 target 5 min \u00B7 ");
+    expect(ph?.parentElement?.textContent).toBe("Waiting 11 days \u00B7 target 5 min \u00B7 Oldest arrived 28 Oct.");
+  });
 });

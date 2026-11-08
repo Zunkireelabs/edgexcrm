@@ -1,4 +1,5 @@
 import type { FilterTree } from "@/lib/filters/types";
+import { canAccessList, type ResolvedPermissions } from "@/lib/api/permissions";
 
 /**
  * The leads master view (no ?list / ?funnel) hides archive and staging lists. An explicit `stage is_any_of [...]` filter beats that hide for
@@ -24,4 +25,16 @@ export function masterViewExcludeIds(
 ): string[] {
   const named = new Set(namedStageListIds(tree));
   return lists.filter((l) => (l.is_archive || l.is_staging) && !(named.has(l.id) && canSee(l.id))).map((l) => l.id);
+}
+
+/**
+ * The one rule for "may this viewer open a named staging/intake list through the master view": owner/admin AND the list's own `access`.
+ * The leads page, the leads API and Home's unassigned count all call this, so a Home number can never count leads its link hides (EDGEX-109 P3b round 4).
+ */
+export function canOpenNamedList(
+  viewer: { role: string; permissions: ResolvedPermissions; positionId: string | null },
+  list: { id: string; access: unknown },
+): boolean {
+  const isAdminOrOwner = viewer.role === "owner" || viewer.role === "admin";
+  return isAdminOrOwner && canAccessList(viewer.permissions, list.access as { mode: string; positionIds?: string[] }, viewer.positionId, list.id);
 }

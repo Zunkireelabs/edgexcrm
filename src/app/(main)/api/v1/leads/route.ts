@@ -4,7 +4,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { normalizePhoneForStorage } from "@/lib/phone-utils";
 import { getBranchIds, getChecklistCounts, getTaskCounts } from "@/lib/supabase/queries";
 import { authenticateRequest, getClientIp } from "@/lib/api/auth";
-import { masterViewExcludeIds } from "@/lib/leads/master-exclusion";
+import { canOpenNamedList, masterViewExcludeIds } from "@/lib/leads/master-exclusion";
 import { leadQueryScope, canSeeNav, canAccessList, isSharedPoolList, resolveEffectiveBranch } from "@/lib/api/permissions";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
@@ -310,7 +310,7 @@ export async function GET(request: NextRequest) {
       // An explicit `stage is_any_of` filter lifts the hide for the lists it names, admin/owner only (staging is admin-only) and within `access`.
       excludeListIds = masterViewExcludeIds(lists, filterTree, (id) => {
         const l = lists.find((x) => x.id === id);
-        return !!l && isAdminOrOwner && canAccessList(auth.permissions, l.access as { mode: string; positionIds?: string[] }, auth.positionId, l.id);
+        return !!l && canOpenNamedList(auth, l);
       });
 
       if (listSlug) {

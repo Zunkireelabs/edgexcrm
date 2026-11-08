@@ -14,7 +14,7 @@ import { POSITION_ROUTE_MAP as POSITION_HOME_LIST } from "@/industries/education
 import { filterAssignableMembersByChain } from "@/lib/leads/assignable";
 import { canBypassProspectQualification } from "@/lib/leads/prospect-qualification";
 import { resolveThresholds } from "@/industries/education-consultancy/features/team-performance/lib/thresholds";
-import { masterViewExcludeIds } from "@/lib/leads/master-exclusion";
+import { canOpenNamedList, masterViewExcludeIds } from "@/lib/leads/master-exclusion";
 import { decodeFilterTree } from "@/lib/filters/serialize";
 import { isOffFunnelLeadList } from "@/lib/leads/list-funnel";
 import type { TenantEntity, Industry, LeadList, PipelineWithCounts, Lead, PipelineLead, TenantConfig } from "@/types/database";
@@ -113,7 +113,7 @@ export default async function LeadsPage({
     const decodedFilter = filterParam ? decodeFilterTree(filterParam) : null;
     const excludeIds = masterViewExcludeIds(allLists, decodedFilter?.ok ? decodedFilter.tree : null, (id) => {
       const l = allLists.find((x) => x.id === id);
-      return !!l && isAdminOrOwner && canAccessList(tenantData.permissions, l.access as { mode: string; positionIds?: string[] }, tenantData.positionId, l.id);
+      return !!l && canOpenNamedList({ role: tenantData.role, permissions: tenantData.permissions, positionId: tenantData.positionId }, l);
     });
     if (activeList?.slug === "delete") {
       scope.onlyDeleted = true; // Delete view = recycle bin of soft-deleted leads

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { masterViewExcludeIds, namedStageListIds } from "./master-exclusion";
+import { canOpenNamedList, masterViewExcludeIds, namedStageListIds } from "./master-exclusion";
+import { resolvePermissions } from "@/lib/api/permissions";
 import type { FilterTree } from "@/lib/filters/types";
 
 const lists = [
@@ -27,5 +28,14 @@ describe("masterViewExcludeIds", () => {
     expect(namedStageListIds(isNot)).toEqual([]);
     const nested: FilterTree = { conjunction: "and", conditions: [], groups: [{ conjunction: "and", conditions: [{ id: "c", field: "stage", op: "is_any_of", value: ["L-new"] }] }] };
     expect(namedStageListIds(nested)).toEqual([]);
+  });
+});
+
+describe("canOpenNamedList", () => {
+  const v = (role: "owner" | "admin" | "staff") => ({ role, permissions: resolvePermissions(role, null), positionId: null });
+  it("owner/admin open an all-access list; a branch manager (staff) never does", () => {
+    expect(canOpenNamedList(v("owner"), { id: "L-new", access: { mode: "all" } })).toBe(true);
+    expect(canOpenNamedList(v("admin"), { id: "L-new", access: { mode: "all" } })).toBe(true);
+    expect(canOpenNamedList(v("staff"), { id: "L-new", access: { mode: "all" } })).toBe(false);
   });
 });

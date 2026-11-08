@@ -8,6 +8,8 @@ vi.mock("@/lib/supabase/scoped", () => ({ scopedClient: vi.fn() }));
 
 import { loadFormerHolders, loadUnassigned } from "./load-manager";
 import { loadIntakeListIds } from "./workable";
+import { canOpenNamedList } from "@/lib/leads/master-exclusion";
+import { resolvePermissions } from "@/lib/api/permissions";
 import { buildWorkablePlan } from "../lib/workable";
 import type { HomeDb } from "./load-home";
 
@@ -129,5 +131,23 @@ describe("loadUnassigned", () => {
     const { db, calls } = fakeDb({ leads: [{ id: "i1", created_at: "2026-11-07" }] });
     expect((await loadUnassigned(db, null, noPlan, ["L-new"])).count).toBe(1);
     expect(calls.leads).toContainEqual(["in", "list_id", ["L-new"]]);
+  });
+  it("only counts intake lists the viewer can open: a branch manager's intake lead is not counted, the owner's is (EDGEX-109 P3b round 4)", async () => {
+    const lists = [
+      { id: "L-new", is_intake: true, is_archive: false, access: { mode: "all" } },
+      { id: "L-app", is_intake: false, is_archive: false, access: { mode: "all" } },
+    ];
+    const viewer = (role: "owner" | "staff") => ({ role, permissions: resolvePermissions(role, null), positionId: null });
+    const ownerIds = await loadIntakeListIds(fakeDb({ lead_lists: lists }).db, (l) => canOpenNamedList(viewer("owner"), l));
+    const managerIds = await loadIntakeListIds(fakeDb({ lead_lists: lists }).db, (l) => canOpenNamedList(viewer("staff"), l));
+    expect(ownerIds).toEqual(["L-new"]);
+    expect(managerIds).toEqual([]);
+    const owner = fakeDb({ leads: [{ id: "i1", created_at: "2026-11-07" }] });
+    expect((await loadUnassigned(owner.db, null, plan, ownerIds)).count).toBe(1);
+    expect(owner.calls.leads).toContainEqual(["in", "list_id", ["L-app", "L-new"]]);
+    const manager = fakeDb({ leads: [] });
+    await loadUnassigned(manager.db, "B1", plan, managerIds);
+    expect(manager.calls.leads).toContainEqual(["in", "list_id", ["L-app"]]);
+    expect(manager.calls.leads.flat()).not.toContain("L-new");
   });
 });
