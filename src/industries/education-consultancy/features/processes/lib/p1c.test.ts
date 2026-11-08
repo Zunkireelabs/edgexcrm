@@ -25,7 +25,7 @@ describe("headline + trigger metrics", () => {
     const h = pickHeadline("new_lead_first_call", steps)!;
     expect(h.target.metric).toBe("first_contact_1wh_pct");
     expect(h.target.value).toBe(75);
-    expect(headlineLabel("new_lead_first_call", steps, raw)).toBe("contacted within 1 working hour");
+    expect(headlineLabel("new_lead_first_call", steps, raw)).toBe("called within 1 working hour");
   });
   it("leaver headline is leavers_holding (not the 0-workable step)", () => {
     const spec = buildBaselineSpec("leaver_handover", ADMIZZ_SETUP);

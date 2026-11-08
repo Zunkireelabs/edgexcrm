@@ -42,7 +42,7 @@ function HeadlineBlock({ h, style, label }: { h: StepView; style: HeadlineStyle;
   return (
     <div className="min-w-0">
       <div className={`text-[15px] font-semibold tabular-nums ${tone.text}`}>{big}</div>
-      <div className="mt-px text-[12px] text-ds-muted">
+      <div className="mt-px text-[12px] text-ds-muted md:whitespace-nowrap">
         {label}
         {withTarget ? ` · target ${fmtValue(h.target.value, h.target.unit)}` : ""}
       </div>
@@ -57,7 +57,7 @@ function ProcessRowCard({ p }: { p: ProcessView }) {
   const Icon = ICONS[p.key];
   const drives = p.drivesSummary;
   return (
-    <div className="relative grid items-center gap-x-3.5 gap-y-3 rounded-[12px] border border-ds-border bg-ds-surface px-4 py-3.5 hover:bg-ds-hover md:grid-cols-[36px_minmax(0,1fr)_250px_128px]">
+    <div className="relative grid items-center gap-x-3.5 gap-y-3 rounded-[12px] border border-ds-border bg-ds-surface px-4 py-3.5 hover:bg-ds-hover md:grid-cols-[36px_minmax(0,1fr)_290px_128px]">
       <div className="flex min-w-0 items-start gap-3 md:contents">
         <span className={`grid size-9 shrink-0 place-items-center rounded-[10px] border border-ds-border ${TILE_BG[h?.status ?? "unknown"]} ${STATUS_TONE[h?.status ?? "unknown"].text}`}>
           <Icon size={18} aria-hidden />

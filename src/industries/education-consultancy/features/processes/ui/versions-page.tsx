@@ -115,11 +115,20 @@ function Body({ d, processKey, tenantName }: { d: Payload; processKey: string; t
             <div className="mt-3.5 flex items-start gap-2.5 rounded-[10px] border border-[#cfe1f2] bg-ds-accent-soft px-3 py-2.5 text-[13px] text-ds-text">
               <ClockIcon size={16} aria-hidden className="mt-px shrink-0 text-ds-accent" />
               <span>
-                <b className="font-medium text-ds-ink">{cur.daysLive === 0 ? `v${cur.version} went live today.` : `v${cur.version} has run for ${cur.daysLive} ${cur.daysLive === 1 ? "day" : "days"}.`}</b> {cur.daysLive < 1 ? "First numbers tomorrow." : "These are the numbers so far."} The change column fills in after {DEFAULT_MIN_DAYS} days, so a few good or bad days can&apos;t look like a result.
+                {cur.daysLive < 1 ? (
+                  <>
+                    <b className="font-medium text-ds-ink">{`v${cur.version} went live less than a day ago.`}</b> First numbers after its first full day.
+                  </>
+                ) : (
+                  <>
+                    <b className="font-medium text-ds-ink">{`v${cur.version} has run for ${cur.daysLive} ${cur.daysLive === 1 ? "day" : "days"}.`}</b> These are the numbers so far.
+                  </>
+                )}{" "}
+                The change column fills in after {DEFAULT_MIN_DAYS} days, so a few good or bad days can&apos;t look like a result.
               </span>
             </div>
           ) : null}
-          <div className="mt-3 max-w-full overflow-x-auto rounded-ds-lg border border-ds-border bg-ds-surface">
+          <div className="mt-3 max-w-full overflow-x-auto rounded-ds-lg border border-ds-border bg-ds-surface sm:rounded-none sm:border-0 sm:bg-transparent">
             <table className="w-full min-w-[560px] border-collapse text-[13px]">
               <thead>
                 <tr className="text-left text-[12px] font-medium text-ds-muted">

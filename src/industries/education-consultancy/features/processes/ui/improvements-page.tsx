@@ -35,14 +35,14 @@ export function ImprovementsPage() {
   return (
     <div className={PAGE}>
       <Crumb items={[{ label: "Processes", href: "/processes" }, { label: "EdgeX improvements" }]} />
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
+      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <div className="min-w-0 md:flex-1">
           <h1 className="text-[26px] font-semibold leading-tight tracking-[-0.02em] text-ds-ink">EdgeX improvements</h1>
           <p className="mt-1 text-[13.5px] text-ds-muted">
             Every change to how your team works: who suggested it, who approved it, and what it did. <strong className="font-semibold text-ds-ink">Only real events, newest first.</strong>
           </p>
         </div>
-        <div className="max-w-full overflow-x-auto">
+        <div className="max-w-full overflow-x-auto md:shrink-0 md:overflow-visible">
           <SegmentedControl
             aria-label="Filter by process"
             value={filter}

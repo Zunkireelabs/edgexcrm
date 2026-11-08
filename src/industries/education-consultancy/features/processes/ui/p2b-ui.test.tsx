@@ -318,6 +318,14 @@ describe("S3 before → after", () => {
     expect(screen.getByText(/v2 · live since 9 Nov 2026/)).toBeTruthy();
   });
 
+  it("under a full day: never says 'today'; first numbers after its first full day", async () => {
+    mockFetch({ "GET /api/v1/processes/new_lead_first_call/versions": () => json(base(compare(0, [measure({ after: null })]))) });
+    render(<VersionsPage processKey={KEY} versionId={null} tenantName="Admizz" />);
+    expect(await screen.findByText("v2 went live less than a day ago.")).toBeTruthy();
+    expect(screen.getByText(/First numbers after its first full day/)).toBeTruthy();
+    expect(screen.queryByText(/today|yesterday|tomorrow/i)).toBeNull();
+  });
+
   it("ready: the change is signed and coloured by direction", async () => {
     mockFetch({ "GET /api/v1/processes/new_lead_first_call/versions": () => json(base(compare(10, [measure({ ready: true, change: 13, waitText: "" }), measure({ label: "Wait for an owner (median)", unit: "min", better: "down", before: 120, after: 90, change: -25, ready: true, waitText: "" })]))) });
     render(<VersionsPage processKey={KEY} versionId={null} tenantName="Admizz" />);

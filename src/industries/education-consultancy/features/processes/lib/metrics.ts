@@ -100,7 +100,7 @@ export const METRIC_REGISTRY: Record<ProcessKey, Record<string, MetricDef>> = {
     first_contact_1h_pct: {
       label: "Contacted within 1 hour",
       compareLabel: "Called within 1 hour",
-      listLabel: () => "contacted within 1 hour",
+      listLabel: () => "called within 1 hour",
       unit: "percent",
       read: (r) => pct(num(r, "within_1h"), num(r, "arrived")),
       fraction: (r) => frac(num(r, "within_1h"), num(r, "arrived")),
@@ -110,7 +110,7 @@ export const METRIC_REGISTRY: Record<ProcessKey, Record<string, MetricDef>> = {
     first_contact_1wh_pct: {
       label: "Contacted within 1 working hour",
       compareLabel: "Called within 1 working hour",
-      listLabel: () => "contacted within 1 working hour",
+      listLabel: () => "called within 1 working hour",
       unit: "percent",
       // Needs `within_1wh` from migration 287; older snapshots don't have it and read as "no data".
       read: (r) => pct(num(r, "within_1wh"), num(r, "arrived")),
