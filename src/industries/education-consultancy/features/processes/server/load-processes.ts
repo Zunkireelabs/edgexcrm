@@ -6,7 +6,7 @@ import { DEFAULT_WINDOW_DAYS, HEADLINE_METRIC, HEADLINE_STYLE, type HeadlineStyl
 import { fmtValue } from "../lib/format";
 import { liveRules, measuredRules, rulesFooter, pluralizeRole, resolvePositionName, stepOwners, type RuleRow } from "../lib/view";
 import { METRIC_REGISTRY, TARGET_OPTIONS, fmtN, formatMinutes, readMetric, stepStatus, type MetricUnit, type RawMetrics, type StepStatus } from "../lib/metrics";
-import { safeParseProcessSpec, type ProcessSpec } from "../lib/spec";
+import { renderStepText, safeParseProcessSpec, type ProcessSpec } from "../lib/spec";
 import type { ProcessRow } from "../lib/store";
 import { canApproveProcess, type ProcessesContext } from "./context";
 import { loadProcessPolicy } from "./policy";
@@ -162,7 +162,7 @@ export function buildStepViews(key: ProcessKey, spec: ProcessSpec, raw: RawMetri
       key: s.key,
       title: s.title,
       who: s.who,
-      text: s.text,
+      text: renderStepText(s.text, s.targetText),
       drives: s.drives,
       target: s.target,
       metricLabel: m?.label ?? s.target.metric,

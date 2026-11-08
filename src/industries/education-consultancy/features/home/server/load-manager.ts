@@ -39,7 +39,7 @@ import { countStaleCallbacks } from "./stale-callbacks";
 import type { HomeData } from "./load-page";
 import { loadHome } from "./load-page";
 import { buildHomePulseContext } from "./pulse-ctx";
-import { loadWorkablePlan } from "./workable";
+import { loadIntakeListIds, loadWorkablePlan } from "./workable";
 import { applyWorkable, type WorkablePlan } from "../lib/workable";
 
 /** Beyond this many unassigned leads "Assign as suggested" is not offered (the list view does that job). */
@@ -110,11 +110,11 @@ export async function loadManagerHome(
   const flags7d: Record<string, "red" | "amber" | "green"> = {};
   for (const p of pulse.people) if (p.flag) flags7d[p.userId] = p.flag;
 
-  const [leadScope, workable, policy] = await Promise.all([makeLeadScope(db, auth, scope), loadWorkablePlan(db), loadProcessPolicy(db, auth.tenantId)]);
+  const [leadScope, workable, policy, intakeListIds] = await Promise.all([makeLeadScope(db, auth, scope), loadWorkablePlan(db), loadProcessPolicy(db, auth.tenantId), loadIntakeListIds(db)]);
   // First-hour numbers follow the live clock: 60 office minutes when the process counts working hours.
   const workingClock = policy.source !== null && policy.firstContact.clock === "working";
   const [unassigned, former, nudges, atRisk, onLeave, impact, staleCount, quiet] = await Promise.all([
-    loadUnassigned(db, scope.branchId, workable),
+    loadUnassigned(db, scope.branchId, workable, intakeListIds),
     loadFormerHolders(db, scope.branchId, workable),
     loadNudgeStates(db, auth.userId, now, tz),
     loadAtRisk(db, scope.branchId, today, now, tz, pulse),
@@ -126,7 +126,16 @@ export async function loadManagerHome(
 
   const nudgeByPerson = new Map<string, NudgeState>(nudges.map((n) => [n.toUserId, n.state]));
   const plan = planReassign(pulse.people, { userId: null, positionKey: normalizePosition("lead-caller").key }, unassigned.count, pulse.heldLoad ?? {}, flags7d);
-  const unassignedHref = `/leads?${new URLSearchParams({ f: encodeFilterTree({ conjunction: "and", conditions: [{ id: "home:unassigned", field: "assignees", op: "is_any_of", value: ["unassigned"] }] }) }).toString()}`;
+  // The Review link covers the same lists as the count: the personal lists plus the intake lists (as the former-holders link does).
+  const unassignedHref = `/leads?${new URLSearchParams({
+    f: encodeFilterTree({
+      conjunction: "and",
+      conditions: [
+        { id: "home:unassigned", field: "assignees", op: "is_any_of", value: ["unassigned"] },
+        ...(intakeListIds.length ? [{ id: "home:unassigned-lists", field: "stage", op: "is_any_of" as const, value: [...new Set([...workable.activeListIds, ...intakeListIds])] }] : []),
+      ],
+    }),
+  }).toString()}`;
 
   const attention = attentionRows(pulse.attention, nudgeByPerson, auth.userId);
   const listedPeople = new Set(pulse.attention.flatMap((a) => a.links.flatMap((l) => (l.personId ? [l.personId] : []))));
@@ -192,10 +201,12 @@ async function loadLaunchDate(db: HomeDb): Promise<string | null> {
   return (data as unknown as { home_launched_at: string | null } | null)?.home_launched_at ?? null;
 }
 
-/** Unassigned workable leads (lib/workable.ts: active list, not terminal / walk-in / on hold / archived), oldest first. */
-export async function loadUnassigned(db: HomeDb, branchId: string | null, plan: WorkablePlan): Promise<{ count: number; oldestAt: string | null; ids: string[] }> {
-  if (plan.activeListIds.length === 0) return { count: 0, oldestAt: null, ids: [] };
-  let q = applyWorkable(db.from("leads").select("id, created_at", { count: "exact" }).is("assigned_to", null), plan)
+/** Unassigned workable leads (lib/workable.ts: active or non-archive intake list, not terminal / walk-in / on hold / archived), oldest first. */
+export async function loadUnassigned(db: HomeDb, branchId: string | null, plan: WorkablePlan, intakeListIds: string[] = []): Promise<{ count: number; oldestAt: string | null; ids: string[] }> {
+  // Intake lists count too (form leads land there unassigned); every other workable rule still applies. The personal-list plan is untouched.
+  const lists = [...new Set([...plan.activeListIds, ...intakeListIds])];
+  if (lists.length === 0) return { count: 0, oldestAt: null, ids: [] };
+  let q = applyWorkable(db.from("leads").select("id, created_at", { count: "exact" }).is("assigned_to", null), { ...plan, activeListIds: lists })
     .order("created_at", { ascending: true })
     .limit(MAX_ASSIGN_IDS);
   if (branchId) q = q.eq("branch_id", branchId);

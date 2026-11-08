@@ -14,6 +14,15 @@ export async function loadWorkablePlan(db: Pick<HomeDb, "from">): Promise<Workab
   return buildWorkablePlan(active, (stageRows ?? []) as unknown as StageRow[]);
 }
 
+/**
+ * Non-archive intake lists (`lead_lists.is_intake`), e.g. "New Leads". They are staging, so the workable plan drops them, but form leads land
+ * there unassigned and an owner must still see them on Home (EDGEX-109 P3b round 2). Used for the unassigned count only.
+ */
+export async function loadIntakeListIds(db: Pick<HomeDb, "from">): Promise<string[]> {
+  const { data } = await db.from("lead_lists").select("id, is_archive, is_intake");
+  return ((data ?? []) as unknown as Array<{ id: string; is_archive: boolean; is_intake: boolean | null }>).filter((l) => l.is_intake && !l.is_archive).map((l) => l.id);
+}
+
 /** Is this one lead workable right now (the shared definition, evaluated in the database)? False on any read error. */
 export async function isLeadWorkableNow(tenantId: string, leadId: string): Promise<boolean> {
   try {

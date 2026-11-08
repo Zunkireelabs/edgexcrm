@@ -60,7 +60,7 @@ export function buildBaselineSpec(processKey: ProcessKey, setup: BaselineSetup):
           target: { metric: "owner_within_5min_pct", op: ">=", value: 90, unit: "percent" },
           drives: ["Home: Assign new leads", "Smart assignment"],
           reads: ["assigned_to"],
-          text: `**A manager assigns it** to ${names} in the lead's branch within ${r.assignWithinMinutes} minutes.`,
+          text: `**A manager assigns it** to ${names} in the lead's branch {target}.`,
         },
         {
           key: "first_contact",
@@ -70,7 +70,7 @@ export function buildBaselineSpec(processKey: ProcessKey, setup: BaselineSetup):
           target: { metric: "first_contact_1h_pct", op: ">=", value: 80, unit: "percent" },
           drives: ["Home: new lead not called"],
           reads: ["lead_activities", "lead_notes"],
-          text: `**The owner calls** within ${hours}. A logged call or a note both count.`,
+          text: `**The owner calls** {target}. A logged call or a note both count.`,
         },
         {
           key: "call_back",
@@ -91,7 +91,7 @@ export function buildBaselineSpec(processKey: ProcessKey, setup: BaselineSetup):
           drives: [`Stage: ${qualified}`],
           kind: "done",
           reads: ["list", "status"],
-          text: `**Within ${r.decideWithinDays} days,** move the lead to ${qualified} or drop it with a reason.`,
+          text: `**Every lead is {target}:** moved to ${qualified} or dropped with a reason.`,
         },
       ],
       doneWhen: `The lead is ${qualified}, or dropped with a reason.`,

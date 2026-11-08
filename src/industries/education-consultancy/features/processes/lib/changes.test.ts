@@ -3,6 +3,7 @@ import { applyChanges, changeTitle, describeValue, currentValue, describeDrives,
 import { buildBaselineSpec } from "./baseline";
 import { ADMIZZ_SETUP } from "./fixtures";
 import { METRIC_REGISTRY, metricMinDays, targetOptionsFor } from "./metrics";
+import { renderStepText } from "./spec";
 import { withinOneWorkingHour, workingClockStart } from "./working-hours";
 
 const live = () => buildBaselineSpec("new_lead_first_call", ADMIZZ_SETUP);
@@ -260,5 +261,36 @@ describe("working clock start (twin of migration 287's wstart)", () => {
     expect(withinOneWorkingHour(created, at("2026-11-03T03:55:00Z"), KTM)).toBe(true); // 09:40 KTM
     expect(withinOneWorkingHour(created, at("2026-11-03T04:46:00Z"), KTM)).toBe(false); // 10:31 KTM
     expect(withinOneWorkingHour(created, null, KTM)).toBe(false);
+  });
+});
+
+describe("{target} in step text (EDGEX-109 P3b round 2)", () => {
+  const text = (spec: ReturnType<typeof live>, key: string) => {
+    const st = spec.steps.find((s) => s.key === key)!;
+    return renderStepText(st.text, st.targetText);
+  };
+  it("the baseline writes the token where the text states the target", () => {
+    for (const k of ["assign", "first_contact", "decide"]) expect(live().steps.find((s) => s.key === k)!.text).toContain("{target}");
+    expect(text(live(), "first_contact")).toContain("within 1 hour");
+  });
+  it("a v1 spec reads 'within 1 hour'; a v2 spec with the 1-working-hour option reads 'within 1 working hour' (applyChanges leaves the text alone)", () => {
+    const v2 = applyChanges("new_lead_first_call", live(), [{ part: "step:first_contact", field: "target", after: { value: 80, metric: "first_contact_1wh_pct" } }], POS);
+    expect(v2.steps.find((s) => s.key === "first_contact")!.text).toBe(live().steps.find((s) => s.key === "first_contact")!.text);
+    expect(text(v2, "first_contact")).toBe("**The owner calls** within 1 working hour. A logged call or a note both count.");
+    expect(text(live(), "first_contact")).toBe("**The owner calls** within 1 hour. A logged call or a note both count.");
+  });
+  it("text without the token is untouched", () => {
+    expect(renderStepText("**The owner calls** within 1 hour.", "within 1 working hour")).toBe("**The owner calls** within 1 hour.");
+    expect(text(live(), "call_back")).toBe(live().steps.find((s) => s.key === "call_back")!.text);
+  });
+  it("no targetText: the token is dropped, never shown literally", () => {
+    expect(renderStepText("**The owner calls** {target}. Then logs it.", undefined)).toBe("**The owner calls**. Then logs it.");
+    expect(renderStepText("Done {target}", "  ")).toBe("Done");
+  });
+  it("the wording cards render the token too", () => {
+    const spec = live();
+    const raw = spec.steps.find((s) => s.key === "assign")!.text;
+    expect(describeValue("new_lead_first_call", spec, "step:assign", "wording", raw)).toContain("within 5 minutes");
+    expect(describeValue("new_lead_first_call", spec, "step:assign", "wording", raw)).not.toContain("{target}");
   });
 });

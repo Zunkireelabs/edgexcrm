@@ -7,6 +7,7 @@ vi.mock("@/lib/supabase/queries", () => ({
 vi.mock("@/lib/supabase/scoped", () => ({ scopedClient: vi.fn() }));
 
 import { loadFormerHolders, loadUnassigned } from "./load-manager";
+import { loadIntakeListIds } from "./workable";
 import { buildWorkablePlan } from "../lib/workable";
 import type { HomeDb } from "./load-home";
 
@@ -105,5 +106,28 @@ describe("loadUnassigned", () => {
     const { db, calls } = fakeDb({});
     expect((await loadUnassigned(db, null, noPlan)).count).toBe(0);
     expect(calls.leads).toBeUndefined();
+  });
+  it("counts intake-list leads too, never an archive list's (EDGEX-109 P3b round 2)", async () => {
+    const intakeIds = await loadIntakeListIds(
+      fakeDb({
+        lead_lists: [
+          { id: "L-new", is_intake: true, is_archive: false },
+          { id: "L-arch", is_intake: false, is_archive: true },
+          { id: "L-oldintake", is_intake: true, is_archive: true },
+          { id: "L-app", is_intake: false, is_archive: false },
+        ],
+      }).db,
+    );
+    expect(intakeIds).toEqual(["L-new"]);
+    const { db, calls } = fakeDb({ leads: [{ id: "i1", created_at: "2026-11-07" }] });
+    const r = await loadUnassigned(db, null, plan, intakeIds);
+    expect(r).toEqual({ count: 1, oldestAt: "2026-11-07", ids: ["i1"] });
+    expect(calls.leads).toContainEqual(["in", "list_id", ["L-app", "L-new"]]);
+    expect(calls.leads.flat()).not.toContain("L-arch");
+  });
+  it("an intake list alone is enough: no personal list, still queried", async () => {
+    const { db, calls } = fakeDb({ leads: [{ id: "i1", created_at: "2026-11-07" }] });
+    expect((await loadUnassigned(db, null, noPlan, ["L-new"])).count).toBe(1);
+    expect(calls.leads).toContainEqual(["in", "list_id", ["L-new"]]);
   });
 });

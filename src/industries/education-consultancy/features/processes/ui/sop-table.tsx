@@ -1,5 +1,5 @@
 import { splitBold } from "../lib/view";
-import type { ProcessSpec } from "../lib/spec";
+import { renderStepText, type ProcessSpec } from "../lib/spec";
 
 /** Step text with its `**bold**` lead phrase. Plain text nodes only: nothing is parsed as HTML. */
 export function RichText({ text }: { text: string }) {
@@ -35,7 +35,7 @@ export function SopTable({ spec }: { spec: ProcessSpec }) {
         <ol className="flex list-decimal flex-col gap-[5px] pl-[18px]">
           {spec.steps.map((s) => (
             <li key={s.key}>
-              <RichText text={s.text} />
+              <RichText text={renderStepText(s.text, s.targetText)} />
               {s.reads?.length ? <> <Chip>{s.reads.join(" · ")}</Chip></> : null}
             </li>
           ))}

@@ -37,9 +37,11 @@ describe("baseline builder (Admizz-shaped fixtures)", () => {
     expect(spec.steps.map((s) => s.key)).toEqual(["assign", "first_contact", "call_back", "decide"]);
     expect(spec.steps[0].text).toContain("Counselor or Lead Executive");
     expect(spec.steps[1].who).toEqual(["counselor", "lead-executive"]);
-    expect(spec.steps[1].text).toContain("within 1 hour");
+    expect(spec.steps[1].text).toContain("{target}");
+    expect(spec.steps[1].targetText).toBe("within 1 hour");
     expect(spec.steps[2].text).toContain(`After ${HOME_RULES.unreachableAfterCalls} unanswered calls`);
-    expect(spec.steps[3].text).toContain("Within 14 days");
+    expect(spec.steps[3].text).toContain("{target}");
+    expect(spec.steps[3].targetText).toBe("decided within 14 days");
     expect(spec.steps[3].title).toContain("Qualified");
   });
 

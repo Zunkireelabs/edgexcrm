@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { currentValue, describeDrives, describeValue, type ChangeField } from "../lib/changes";
+import { renderStepText } from "../lib/spec";
 import type { ProcessKey } from "../lib/keys";
 import { targetOptionsFor, type StepStatus } from "../lib/metrics";
 import type { ProcessView } from "../server/load-processes";
@@ -310,6 +311,9 @@ function normalise(v: unknown, field: ChangeField, hasOptions: boolean): unknown
 }
 
 function describeNow(key: ProcessKey, spec: NonNullable<ProcessView["spec"]>, part: string, field: ChangeField, live: unknown, nameBySlug: ReadonlyMap<string, string>): string {
-  if (field === "wording" && typeof live === "string") return stripBold(live);
+  if (field === "wording" && typeof live === "string") {
+    const step = part.startsWith("step:") ? spec.steps.find((s) => s.key === part.slice(5)) : undefined;
+    return stripBold(step ? renderStepText(live, step.targetText) : live);
+  }
   return describeValue(key, spec, part, field, live, undefined, nameBySlug);
 }

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { METRIC_REGISTRY, targetOptionsFor, type MetricUnit, type TargetOption } from "./metrics";
 import { fmtValue } from "./format";
 import type { ProcessKey } from "./keys";
-import { parseProcessSpec, type ProcessSpec, type ProcessStep } from "./spec";
+import { parseProcessSpec, renderStepText, type ProcessSpec, type ProcessStep } from "./spec";
 
 /**
  * Changes (EDGEX-109 P2): a draft is a list of small, structured edits to a live spec. One change = one part x one field.
@@ -249,7 +249,12 @@ export function changeTitle(change: TitleChange, spec: ProcessSpec | null, opts:
  */
 export function describeValue(processKey: ProcessKey, spec: ProcessSpec | null, partRaw: string, field: ChangeField, value: unknown, fallback?: unknown, nameBySlug: ReadonlyMap<string, string> = new Map()): string {
   if (field === "who") return slugNames(value, nameBySlug).join(", ") || "Nobody";
-  if (field === "wording") return Array.isArray(value) ? (value as unknown[]).map((v) => `• ${String(v)}`).join("\n") || "No exceptions" : typeof value === "string" ? value : "—";
+  if (field === "wording") {
+    if (Array.isArray(value)) return (value as unknown[]).map((v) => `• ${String(v)}`).join("\n") || "No exceptions";
+    if (typeof value !== "string") return "—";
+    const stepOf = partRaw.startsWith("step:") ? spec?.steps.find((s) => s.key === partRaw.slice(5)) : undefined;
+    return stepOf ? renderStepText(value, stepOf.targetText) : value;
+  }
   const v = targetAfterSchema.safeParse(value);
   if (!v.success) return "—";
   let stepKey: string | null = null;

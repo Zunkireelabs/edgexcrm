@@ -88,3 +88,18 @@ export const safeParseProcessSpec = (processKey: ProcessKey, raw: unknown): { ok
 };
 
 export { PROCESS_KEYS };
+
+/** The token a step's `text` may carry in place of its target in words (EDGEX-109 P3b round 2). */
+export const TARGET_TOKEN = "{target}";
+
+/**
+ * Step text as shown: `{target}` becomes the step's `targetText`, so a target change ("within 1 hour" -> "within 1 working hour") can never
+ * leave stale wording behind. Text without the token is returned untouched. With no `targetText` the token is dropped (with the space before
+ * it), never shown literally.
+ */
+export function renderStepText(text: string, targetText?: string | null): string {
+  if (!text.includes(TARGET_TOKEN)) return text;
+  const words = targetText?.trim();
+  if (words) return text.split(TARGET_TOKEN).join(words);
+  return text.replace(/\s*\{target\}/g, "").replace(/\s{2,}/g, " ");
+}
