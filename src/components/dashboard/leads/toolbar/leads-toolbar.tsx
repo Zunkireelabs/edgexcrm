@@ -15,7 +15,7 @@ import { isEmptyTree } from "@/lib/filters/serialize";
 import type { FieldDef, FieldRegistry, FilterTree } from "@/lib/filters/types";
 import { prepareSavedFilterTree } from "@/industries/education-consultancy/features/saved-lead-filters/lib/apply-saved-filter";
 import { useSavedLeadFilters, type SavedLeadFilter } from "@/industries/education-consultancy/features/saved-lead-filters/lib/use-saved-lead-filters";
-import { buildBuiltinViews, singleValueTree, type ViewDef } from "./builtin-views";
+import { buildBuiltinViews, matchBuiltinView, singleValueTree, type ViewDef } from "./builtin-views";
 import { fetchLeadCount } from "./lead-count";
 import { ViewTabs } from "./view-tabs";
 import type { OptionContext } from "./condition-body";
@@ -90,20 +90,27 @@ export function LeadsToolbar({
   const [filterOpen, setFilterOpen] = useState(false);
   const saved = useSavedLeadFilters();
 
-  // The active view's baseline. Starts as "this scope, default sort"; leads-table remounts the
-  // toolbar (key) when the scope changes, so a new tab starts clean.
-  const [baseline, setBaseline] = useState<ViewBaseline>(() => ({ id: "all", tree: scopeTree, sort: DEFAULT_SORT }));
-  const current = useMemo(() => ({ tree: filter.tree, sort }), [filter.tree, sort]);
-  const dirty = isViewDirty(baseline, current);
-  const hasFilters = !isEmptyTree(filter.tree);
-
-  // --- view tabs ---------------------------------------------------------------------
+  // --- view tabs + the active view's baseline ----------------------------------------
   const [activeSaved, setActiveSaved] = useState<{ id: string; name: string } | null>(null);
   const fieldKeys = useMemo(() => new Set(filter.fields.map((f) => f.key)), [filter.fields]);
   const builtin = useMemo(
     () => buildBuiltinViews({ scopeTree, currentUserId: views.currentUserId, fieldKeys, applicationsListId: views.applicationsListId }),
     [scopeTree, views.currentUserId, fieldKeys, views.applicationsListId],
   );
+  const current = useMemo(() => ({ tree: filter.tree, sort }), [filter.tree, sort]);
+
+  // Until the user picks or saves a view, the active view is whichever built-in tab the current
+  // state equals (else "All leads", so anything extra reads as unsaved changes). Once they pick or
+  // save one, that choice is the baseline. leads-table remounts this toolbar (key) when the scope
+  // changes, so a new tab starts clean.
+  const [explicit, setExplicit] = useState<ViewBaseline | null>(null);
+  const implicit = useMemo<ViewBaseline>(() => {
+    const match = matchBuiltinView(builtin, current);
+    return match ? { id: match.id, tree: match.tree, sort: match.sort } : { id: "all", tree: scopeTree, sort: DEFAULT_SORT };
+  }, [builtin, current, scopeTree]);
+  const baseline = explicit ?? implicit;
+  const dirty = isViewDirty(baseline, current);
+  const hasFilters = !isEmptyTree(filter.tree);
 
   // Tab counts: lazy, after the table has painted, through the table's own scope-aware list
   // endpoint (role / branch / own limits apply). A failed count stays undefined -> no number drawn.
@@ -120,7 +127,7 @@ export function LeadsToolbar({
 
   function activateView(view: ViewDef) {
     setActiveSaved(null);
-    setBaseline(baselineFromState(view.id, { tree: view.tree, sort: view.sort }));
+    setExplicit(baselineFromState(view.id, { tree: view.tree, sort: view.sort }));
     filter.onChange(view.tree);
     onSortChange(view.sort);
   }
@@ -134,7 +141,7 @@ export function LeadsToolbar({
     }
     if (dropped > 0) toast.info(`${dropped} part${dropped === 1 ? "" : "s"} of this view no longer exist and were skipped.`);
     setActiveSaved({ id: f.id, name: f.name });
-    setBaseline(baselineFromState(f.id, { tree: prepared, sort: DEFAULT_SORT }));
+    setExplicit(baselineFromState(f.id, { tree: prepared, sort: DEFAULT_SORT }));
     filter.onChange(prepared);
     onSortChange(DEFAULT_SORT);
   }
@@ -148,7 +155,7 @@ export function LeadsToolbar({
   async function saveView(name: string): Promise<string | null> {
     const result = await saved.create(name.trim(), filter.tree);
     if ("error" in result) return result.error;
-    setBaseline(baselineFromState(result.filter.id, current));
+    setExplicit(baselineFromState(result.filter.id, current));
     setActiveSaved({ id: result.filter.id, name: result.filter.name });
     toast.success(`Saved “${result.filter.name}”`);
     return null;

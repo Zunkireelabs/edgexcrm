@@ -181,3 +181,55 @@ describe("built-in view tabs", () => {
     expect(isViewDirty(baseline, { tree: edited, sort: mine.sort })).toBe(true);
   });
 });
+
+import { SORT_OPTIONS, directionOptions, isDefaultSort, sortOption, withDirection, withField } from "./sort-options";
+import { DEFAULT_SORT } from "./view-state";
+
+describe("one-level sort rules", () => {
+  it("offers the same fields as the old popover", () => {
+    expect(SORT_OPTIONS.map((o) => o.key)).toEqual(["activity", "created", "updated", "name", "email", "follow_up_needed"]);
+  });
+
+  it("words directions by field kind", () => {
+    expect(directionOptions("date").map((d) => d.label)).toEqual(["Newest first", "Oldest first"]);
+    expect(directionOptions("text").map((d) => d.label)).toEqual(["A to Z", "Z to A"]);
+    expect(directionOptions("stale")).toEqual([{ direction: "asc", label: "Stalest first" }]);
+  });
+
+  it("forces ascending when switching to Follow-up needed, keeps direction otherwise", () => {
+    expect(withField({ field: "activity", direction: "desc" }, "follow_up_needed")).toEqual({ field: "follow_up_needed", direction: "asc" });
+    expect(withField({ field: "activity", direction: "asc" }, "name")).toEqual({ field: "name", direction: "asc" });
+    expect(withField({ field: "activity", direction: "desc" }, "created")).toEqual({ field: "created", direction: "desc" });
+  });
+
+  it("ignores a direction a fixed-direction field doesn't allow", () => {
+    const s = { field: "follow_up_needed", direction: "asc" as const };
+    expect(withDirection(s, "desc")).toBe(s);
+    expect(withDirection({ field: "name", direction: "asc" }, "desc")).toEqual({ field: "name", direction: "desc" });
+  });
+
+  it("falls back to the first option for an unknown key, and recognises the default", () => {
+    expect(sortOption("nope").key).toBe("activity");
+    expect(isDefaultSort(DEFAULT_SORT)).toBe(true);
+    expect(isDefaultSort({ field: "name", direction: "asc" })).toBe(false);
+  });
+});
+
+import { matchBuiltinView } from "./builtin-views";
+
+describe("implicit active view", () => {
+  const scopeTree: FilterTree = { conjunction: "and", conditions: [] };
+  const views = buildBuiltinViews({ scopeTree, currentUserId: "u1", fieldKeys: new Set(["assignees", "stage"]), applicationsListId: "l-apps" });
+
+  it("treats a restored Applications filter as the Applications tab (clean), not All + unsaved", () => {
+    const restored: FilterTree = { conjunction: "and", conditions: [{ id: "random", field: "stage", op: "is_any_of", value: ["l-apps"] }] };
+    expect(matchBuiltinView(views, { tree: restored, sort: DEFAULT_SORT })?.id).toBe("applications");
+  });
+
+  it("matches All for no filters, and nothing for an unrelated filter or a changed sort", () => {
+    expect(matchBuiltinView(views, { tree: scopeTree, sort: DEFAULT_SORT })?.id).toBe("all");
+    const other: FilterTree = { conjunction: "and", conditions: [{ id: "x", field: "stage", op: "is_any_of", value: ["l-other"] }] };
+    expect(matchBuiltinView(views, { tree: other, sort: DEFAULT_SORT })).toBeNull();
+    expect(matchBuiltinView(views, { tree: scopeTree, sort: { field: "name", direction: "asc" } })).toBeNull();
+  });
+});

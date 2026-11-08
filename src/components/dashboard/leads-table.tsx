@@ -26,6 +26,7 @@ import { LeadsToolbar } from "@/components/dashboard/leads/toolbar/leads-toolbar
 import type { CountLoader, OptionContext } from "@/components/dashboard/leads/toolbar/condition-body";
 import { fetchLeadCount, treeWithoutField } from "@/components/dashboard/leads/toolbar/lead-count";
 import { CTRL, CTRL_BORDERED, CTRL_PRIMARY } from "@/components/dashboard/leads/toolbar/tokens";
+import { SortControl } from "@/components/dashboard/leads/toolbar/sort-control";
 import { AddFilterButton } from "@/components/filters/add-filter-button";
 import { SavedFiltersMenu } from "@/industries/education-consultancy/features/saved-lead-filters/components/saved-filters-menu";
 import { useFilterOptions } from "@/components/filters/use-filter-options";
@@ -2737,13 +2738,12 @@ export function LeadsTable({
           }
           search={{ value: search, onChange: setSearch, loading: tableLoading }}
           sortControl={
-            <SortPopover
-              sortField={sortField}
-              sortDirection={sortDirection}
-              setSortField={setSortField}
-              setSortDirection={setSortDirection}
-              industryId={industryId}
-              align="start"
+            <SortControl
+              sort={{ field: sortField, direction: sortDirection }}
+              onChange={(next) => {
+                setSortField(next.field as SortField);
+                setSortDirection(next.direction);
+              }}
             />
           }
           filter={{

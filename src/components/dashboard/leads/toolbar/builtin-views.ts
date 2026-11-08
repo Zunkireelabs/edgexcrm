@@ -7,7 +7,7 @@
 // FOLLOW_UP_TAB_EXTENSION_POINT below).
 
 import type { FilterTree } from "@/lib/filters/types";
-import { DEFAULT_SORT, type SortState } from "./view-state";
+import { DEFAULT_SORT, viewSignature, type SortState, type ViewState } from "./view-state";
 
 export interface ViewDef {
   id: string;
@@ -51,4 +51,15 @@ export function buildBuiltinViews({ scopeTree, currentUserId, fieldKeys, applica
     views.push({ id: "applications", label: "Applications", tree: singleValueTree("stage", applicationsListId), sort: DEFAULT_SORT, showCount: true });
   }
   return views;
+}
+
+/**
+ * The built-in tab whose filters + sort exactly equal the current state, if any. Until the user
+ * picks or saves a view themselves, THIS is the active view — so a filter restored from the URL /
+ * persistence that happens to be "Applications" shows the Applications tab as clean, instead of
+ * "All leads + unsaved changes".
+ */
+export function matchBuiltinView(views: ViewDef[], current: ViewState): ViewDef | null {
+  const signature = viewSignature(current);
+  return views.find((v) => viewSignature({ tree: v.tree, sort: v.sort }) === signature) ?? null;
 }
