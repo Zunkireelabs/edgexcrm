@@ -2,7 +2,7 @@ import { splitBold } from "../lib/view";
 import type { ProcessSpec } from "../lib/spec";
 
 /** Step text with its `**bold**` lead phrase. Plain text nodes only: nothing is parsed as HTML. */
-function RichText({ text }: { text: string }) {
+export function RichText({ text }: { text: string }) {
   return (
     <>
       {splitBold(text).map((part, i) =>

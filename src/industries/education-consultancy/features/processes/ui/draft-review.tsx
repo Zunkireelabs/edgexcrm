@@ -11,6 +11,7 @@ import { METRIC_REGISTRY, targetOptionsFor } from "../lib/metrics";
 import type { ProcessKey } from "../lib/keys";
 import type { ChangeView, DraftView } from "../server/changes";
 import { sendJson } from "./api";
+import { RichText } from "./sop-table";
 import { ChangeInputs, editFromValue, toAfter, type EditState } from "./change-fields";
 import { splitLeadingNumber } from "./evidence";
 import { Crumb, MiniLabel, PAGE, VChip, suggestedBy } from "./parts";
@@ -264,7 +265,7 @@ function ChangeCard({
       <div className="mt-2.5 grid grid-cols-1 items-stretch gap-2.5 sm:grid-cols-[minmax(0,1fr)_24px_minmax(0,1fr)]">
         <div className="rounded-[9px] border border-ds-border bg-ds-sunken px-[11px] py-[9px] text-[12.5px] leading-[1.5] text-ds-muted">
           <MiniLabel>v{liveV} · now</MiniLabel>
-          <span className="whitespace-pre-line">{c.beforeText}</span>
+          <span className="whitespace-pre-line"><RichText text={c.beforeText} /></span>
         </div>
         <div aria-hidden className="hidden place-items-center text-ds-faint sm:grid">
           <ArrowRightIcon size={14} />
@@ -294,7 +295,7 @@ function ChangeCard({
               </div>
             </div>
           ) : (
-            <span className="whitespace-pre-line">{c.afterText}</span>
+            <span className="whitespace-pre-line"><RichText text={c.afterText} /></span>
           )}
         </div>
       </div>

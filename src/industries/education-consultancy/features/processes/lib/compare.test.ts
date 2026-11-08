@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildMeasures, changeValue, comparePeriods, measureMetrics, specMetrics, waitText } from "./compare";
+import { buildMeasures, changeValue, comparePeriods, measureMetrics, previousOnlyMetrics, specMetrics, waitText } from "./compare";
 import { buildBaselineSpec } from "./baseline";
 import { ADMIZZ_NEW_LEAD_RAW, ADMIZZ_SETUP } from "./fixtures";
 import { buildImprovementLog, dayKey, groupLogEvents, thirtyDaysOn, type LogChange, type LogVersion } from "./improvements-log";
@@ -32,6 +32,13 @@ describe("compare labels (the S3 wording) and direction", () => {
   });
 });
 
+describe("previous-only measures are labelled", () => {
+  it("'Called within 1 hour (v1's measure)'", () => {
+    const ms = buildMeasures("new_lead_first_call", ["first_contact_1wh_pct", "first_contact_1h_pct"], null, null, 5, { previousOnly: new Set(["first_contact_1h_pct"]), previousVersion: 1 });
+    expect(ms.map((m) => m.label)).toEqual(["Called within 1 working hour", "Called within 1 hour (v1's measure)"]);
+  });
+});
+
 describe("changeValue", () => {
   it("percent -> points, min -> % on the old value, count -> absolute", () => {
     expect(changeValue("percent", 16, 29)).toBe(13);
@@ -56,6 +63,17 @@ describe("buildMeasures: ready / minDays / wait text", () => {
     expect(ms.every((m) => !m.ready && m.change === null)).toBe(true);
     expect(ms.find((m) => m.metric === "callbacks_kept_pct")).toMatchObject({ waitText: "after 7 days", after: 25.6 });
     expect(ms.find((m) => m.metric === "reached_qualified_pct")).toMatchObject({ ready: false, after: null, waitText: "needs 14 days (the step's own target)", minDays: 14 });
+  });
+  it("under 1 full day live: no numbers yet, only the wait text", () => {
+    const ms = buildMeasures("new_lead_first_call", metrics, before, after, 0);
+    expect(ms.every((m) => m.after === null && m.change === null && !m.ready)).toBe(true);
+  });
+  it("1 full day live: v2's number shows, only the Change column waits; the 14-day measure stays empty with its wait text", () => {
+    const ms = buildMeasures("new_lead_first_call", metrics, before, after, 1);
+    const by = Object.fromEntries(ms.map((m) => [m.metric, m]));
+    expect(by.first_contact_1wh_pct).toMatchObject({ after: 61.1, change: null, ready: false, waitText: "after 7 days" });
+    expect(by.owner_wait_median_min).toMatchObject({ after: 60, change: null });
+    expect(by.reached_qualified_pct).toMatchObject({ after: null, change: null, waitText: "needs 14 days (the step's own target)" });
   });
   it("8 days in: the 7-day measures are ready with their change; the 14-day one still waits", () => {
     const ms = buildMeasures("new_lead_first_call", metrics, before, after, 8);
@@ -92,7 +110,9 @@ describe("which measures", () => {
     expect(specMetrics(cur)).toEqual(["owner_within_5min_pct", "owner_wait_median_min", "first_contact_1h_pct", "callbacks_kept_pct", "reached_qualified_pct"]);
     const next = structuredClone(cur);
     next.steps[1].target.metric = "first_contact_1wh_pct";
-    expect(measureMetrics(cur, next)).toEqual(["owner_within_5min_pct", "owner_wait_median_min", "first_contact_1wh_pct", "callbacks_kept_pct", "reached_qualified_pct", "first_contact_1h_pct"]);
+    // v1's "1 hour" measure sits right after v2's "1 working hour" (same step), not last.
+    expect(measureMetrics(cur, next)).toEqual(["owner_within_5min_pct", "owner_wait_median_min", "first_contact_1wh_pct", "first_contact_1h_pct", "callbacks_kept_pct", "reached_qualified_pct"]);
+    expect([...previousOnlyMetrics(cur, next)]).toEqual(["first_contact_1h_pct"]);
     expect(measureMetrics(null, cur)).toEqual(specMetrics(cur));
   });
   it("previousVersion = the highest earlier version that was ever approved", () => {

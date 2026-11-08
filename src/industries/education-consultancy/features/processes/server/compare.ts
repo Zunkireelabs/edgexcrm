@@ -1,5 +1,5 @@
 import { loadUserNames } from "../../pulse/server/context";
-import { buildMeasures, comparePeriods, measureMetrics, WINDOWED_PROCESSES, type Measure } from "../lib/compare";
+import { buildMeasures, comparePeriods, measureMetrics, previousOnlyMetrics, WINDOWED_PROCESSES, type Measure } from "../lib/compare";
 import { changeTitle } from "../lib/changes";
 import type { ChangeRecord } from "../lib/changes-flow";
 import { buildImprovementLog, thirtyDaysOn, type LogChange, type LogEvent, type LogVersion } from "../lib/improvements-log";
@@ -112,13 +112,14 @@ export async function compareVersion(ctx: ProcessesContext, proc: Proc, versions
   if (!prev || !curSpec.ok) return result;
 
   const prevSpec = safeParseProcessSpec(proc.key, prev.spec);
-  const metrics = measureMetrics(prevSpec.ok ? prevSpec.spec : null, curSpec.spec);
+  const prevParsed = prevSpec.ok ? prevSpec.spec : null;
+  const metrics = measureMetrics(prevParsed, curSpec.spec);
   const windowed = WINDOWED_PROCESSES.includes(proc.key);
   const [rawBefore, rawAfter] = await Promise.all([
     windowed ? fetchProcessMetrics(ctx.db, ctx.auth.tenantId, proc.key, periods.previous.from, periods.previous.to, ctx.tz) : snapshotBefore(ctx, proc.id, localDay(approved, ctx.tz)),
     fetchProcessMetrics(ctx.db, ctx.auth.tenantId, proc.key, periods.current.from, periods.current.to, ctx.tz),
   ]);
-  result.measures = buildMeasures(proc.key, metrics, rawBefore, rawAfter, periods.daysLive);
+  result.measures = buildMeasures(proc.key, metrics, rawBefore, rawAfter, periods.daysLive, { previousOnly: previousOnlyMetrics(prevParsed, curSpec.spec), previousVersion: prev.version });
   return result;
 }
 

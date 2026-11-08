@@ -186,7 +186,7 @@ export function ProcessesPage({ tenantName = "" }: { tenantName?: string }) {
                       <LogIcon kind={e.kind} />
                       <div className="min-w-0">
                         <div className="text-[13px] font-medium text-ds-ink">{e.text}</div>
-                        <div className="mt-px truncate text-[12px] text-ds-muted" title={e.meta}>
+                        <div className="mt-px line-clamp-2 text-[12px] text-ds-muted" title={e.meta}>
                           {dayWord(e.at)}
                           {e.meta ? ` · ${e.meta}` : ""}
                         </div>

@@ -5,7 +5,7 @@ import type { AssignmentMode } from "../../home/lib/assignment/outcome";
 import { DEFAULT_WINDOW_DAYS, HEADLINE_METRIC, HEADLINE_STYLE, type HeadlineStyle, PROCESS_KEYS, PROCESS_NAMES, TRIGGER_METRIC, WINDOW_DAYS, isProcessKey, type ProcessKey } from "../lib/keys";
 import { fmtValue } from "../lib/format";
 import { liveRules, pluralizeRole, resolvePositionName, stepOwners, type RuleRow } from "../lib/view";
-import { METRIC_REGISTRY, fmtN, formatMinutes, readMetric, stepStatus, type MetricUnit, type RawMetrics, type StepStatus } from "../lib/metrics";
+import { METRIC_REGISTRY, TARGET_OPTIONS, fmtN, formatMinutes, readMetric, stepStatus, type MetricUnit, type RawMetrics, type StepStatus } from "../lib/metrics";
 import { safeParseProcessSpec, type ProcessSpec } from "../lib/spec";
 import type { ProcessRow } from "../lib/store";
 import { canApproveProcess, type ProcessesContext } from "./context";
@@ -111,8 +111,19 @@ export function pickShownVersion(versions: VersionRow[]): VersionRow | null {
 
 const NO_NAMES: ReadonlyMap<string, string> = new Map();
 
+/** The headline metric plus every other option of the step that owns it (v2 can switch first contact from hours to working hours). */
+function headlineMetrics(key: ProcessKey): ReadonlySet<string> {
+  const head = HEADLINE_METRIC[key];
+  const out = new Set<string>([head]);
+  for (const options of Object.values(TARGET_OPTIONS[key] ?? {})) {
+    if (options.some((o) => o.metric === head)) for (const o of options) out.add(o.metric);
+  }
+  return out;
+}
+
 export function pickHeadline(key: ProcessKey, steps: StepView[]): StepView | null {
-  return steps.find((s) => s.target.metric === HEADLINE_METRIC[key]) ?? steps.find((s) => s.value !== null) ?? steps[0] ?? null;
+  const accepted = headlineMetrics(key);
+  return steps.find((s) => accepted.has(s.target.metric)) ?? steps.find((s) => s.value !== null) ?? steps[0] ?? null;
 }
 
 /** The list row's label under the headline number. Registry text, never lower-cased by code. */

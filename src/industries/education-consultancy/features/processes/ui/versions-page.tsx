@@ -56,7 +56,7 @@ function VersionCard({ v, selected, processKey, tenantName, live, tz }: { v: Ver
     v.source === "system" && v.version === 1
       ? `Written from how ${tenantName || "your team"} worked.${by ? ` ${by}` : ""}`
       : `${v.takenCount} ${v.takenCount === 1 ? "change" : "changes"}${v.suggestedBy ? ` suggested by ${v.suggestedBy}` : ""}${v.approvedByName ? `, approved by ${v.approvedByName}` : ""}.`;
-  const cls = `block min-w-[200px] flex-1 rounded-[10px] border px-3 py-2.5 ${live ? "border-[#cde9da] bg-ds-good-soft" : "bg-ds-surface border-ds-border"} ${selected && !live ? "border-ds-ink" : ""}`;
+  const cls = `block sm:min-w-[200px] flex-1 rounded-[10px] border px-3 py-2.5 ${live ? "border-[#cde9da] bg-ds-good-soft" : "bg-ds-surface border-ds-border"} ${selected && !live ? "border-ds-ink" : ""}`;
   const inner = (
     <>
       <b className="block text-[13px] font-semibold text-ds-ink">
@@ -88,17 +88,17 @@ function Body({ d, processKey, tenantName }: { d: Payload; processKey: string; t
       <h1 className="text-[26px] font-semibold leading-tight tracking-[-0.02em] text-ds-ink">Before → after</h1>
       <p className="mt-1 text-[13.5px] text-ds-muted">What changed, who changed it, and whether it worked. The same measures, before and after.</p>
 
-      <div className="mt-3.5 flex items-center overflow-x-auto pb-1">
+      <div className="mt-3.5 flex flex-col gap-0 sm:flex-row sm:items-center sm:overflow-x-auto sm:pb-1">
         {shown.map((v, i) => (
-          <div key={v.id} className="flex flex-1 items-center">
-            {i > 0 ? <span aria-hidden className="h-px w-7 shrink-0 bg-ds-border" /> : null}
+          <div key={v.id} className="flex flex-1 flex-col sm:flex-row sm:items-center">
+            {i > 0 ? <span aria-hidden className="h-3.5 w-px shrink-0 self-center bg-ds-border sm:h-px sm:w-7" /> : null}
             <VersionCard v={v} selected={v.id === cur?.versionId} processKey={processKey} tenantName={tenantName} live={v.id === liveId} tz={tz} />
           </div>
         ))}
         {draft ? (
-          <div className="flex flex-1 items-center">
-            <span aria-hidden className="h-px w-7 shrink-0 bg-ds-border" />
-            <Link href={`/processes/${processKey}/draft`} className="block min-w-[200px] flex-1 rounded-[10px] border border-dashed border-ds-border bg-ds-surface px-3 py-2.5 hover:bg-ds-hover">
+          <div className="flex flex-1 flex-col sm:flex-row sm:items-center">
+            <span aria-hidden className="h-3.5 w-px shrink-0 self-center bg-ds-border sm:h-px sm:w-7" />
+            <Link href={`/processes/${processKey}/draft`} className="block sm:min-w-[200px] flex-1 rounded-[10px] border border-dashed border-ds-border bg-ds-surface px-3 py-2.5 hover:bg-ds-hover">
               <b className="block text-[13px] font-semibold text-ds-ink">v{draft.version} · draft</b>
               <span className="block text-[12px] text-ds-muted">
                 {draft.changeCount} {draft.changeCount === 1 ? "change" : "changes"}
@@ -115,11 +115,11 @@ function Body({ d, processKey, tenantName }: { d: Payload; processKey: string; t
             <div className="mt-3.5 flex items-start gap-2.5 rounded-[10px] border border-[#cfe1f2] bg-ds-accent-soft px-3 py-2.5 text-[13px] text-ds-text">
               <ClockIcon size={16} aria-hidden className="mt-px shrink-0 text-ds-accent" />
               <span>
-                <b className="font-medium text-ds-ink">{cur.daysLive === 0 ? `v${cur.version} went live today.` : `v${cur.version} has run for ${cur.daysLive} ${cur.daysLive === 1 ? "day" : "days"}.`}</b> These are the numbers so far. The change column fills in after {DEFAULT_MIN_DAYS} days, so a few good or bad days can&apos;t look like a result.
+                <b className="font-medium text-ds-ink">{cur.daysLive === 0 ? `v${cur.version} went live today.` : `v${cur.version} has run for ${cur.daysLive} ${cur.daysLive === 1 ? "day" : "days"}.`}</b> {cur.daysLive < 1 ? "First numbers tomorrow." : "These are the numbers so far."} The change column fills in after {DEFAULT_MIN_DAYS} days, so a few good or bad days can&apos;t look like a result.
               </span>
             </div>
           ) : null}
-          <div className="mt-3 overflow-x-auto">
+          <div className="mt-3 max-w-full overflow-x-auto rounded-ds-lg border border-ds-border bg-ds-surface">
             <table className="w-full min-w-[560px] border-collapse text-[13px]">
               <thead>
                 <tr className="text-left text-[12px] font-medium text-ds-muted">

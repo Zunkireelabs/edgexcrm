@@ -17,6 +17,16 @@ describe("headline + trigger metrics", () => {
     const steps = buildStepViews("new_lead_first_call", spec, ADMIZZ_NEW_LEAD_RAW);
     expect(pickHeadline("new_lead_first_call", steps)?.target.metric).toBe("first_contact_1h_pct");
   });
+  it("keeps the first-contact step as headline after v2 switches it to working hours", () => {
+    const spec = buildBaselineSpec("new_lead_first_call", ADMIZZ_SETUP);
+    const v2 = { ...spec, steps: spec.steps.map((s) => (s.key === "first_contact" ? { ...s, target: { ...s.target, metric: "first_contact_1wh_pct", value: 75 } } : s)) };
+    const raw = { ...ADMIZZ_NEW_LEAD_RAW, within_1wh: 24 };
+    const steps = buildStepViews("new_lead_first_call", v2, raw);
+    const h = pickHeadline("new_lead_first_call", steps)!;
+    expect(h.target.metric).toBe("first_contact_1wh_pct");
+    expect(h.target.value).toBe(75);
+    expect(headlineLabel("new_lead_first_call", steps, raw)).toBe("contacted within 1 working hour");
+  });
   it("leaver headline is leavers_holding (not the 0-workable step)", () => {
     const spec = buildBaselineSpec("leaver_handover", ADMIZZ_SETUP);
     const steps = buildStepViews("leaver_handover", spec, { leavers_holding: 7, all_leads_held: 3651, live_leads_held: 0 });

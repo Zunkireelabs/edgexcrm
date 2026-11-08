@@ -2,15 +2,16 @@
 
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { CheckIcon, PencilSimpleIcon } from "@/components/icons";
+import { CheckIcon, PencilSimpleIcon, XIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
+import { Sheet, SheetClose, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { currentValue, describeDrives, describeValue, type ChangeField } from "../lib/changes";
 import type { ProcessKey } from "../lib/keys";
 import { targetOptionsFor, type StepStatus } from "../lib/metrics";
 import type { ProcessView } from "../server/load-processes";
 import { sendJson } from "./api";
+import { RichText } from "./sop-table";
 import { ChangeInputs, editFromValue, toAfter, type EditState } from "./change-fields";
 import { evidenceOptions } from "./evidence";
 
@@ -86,7 +87,7 @@ export function SuggestSheet({
 }) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent look="v2" className="sm:max-w-[600px]">
+      <SheetContent look="v2" showCloseButton={false} className="sm:max-w-[600px]">
         {open ? <SuggestForm p={p} days={days} positions={positions} nextVersion={nextVersion} draftChanges={draftChanges} liveVersion={liveVersion} onClose={() => onOpenChange(false)} onAdded={onAdded} /> : null}
       </SheetContent>
     </Sheet>
@@ -149,6 +150,11 @@ function SuggestForm({ p, days, positions, nextVersion, draftChanges, liveVersio
       <div className="border-b border-ds-divider px-[22px] pb-3.5 pt-[18px] pr-16">
         <SheetTitle className="flex items-center gap-2 text-[17px] font-semibold text-ds-ink">
           <PencilSimpleIcon size={16} aria-hidden /> Suggest a change
+          <SheetClose asChild>
+            <Button look="v2" variant="ghost" size="icon" aria-label="Close" className="ml-auto text-ds-muted">
+              <XIcon />
+            </Button>
+          </SheetClose>
         </SheetTitle>
         <SheetDescription className="mt-1 text-[12.5px] leading-[1.55] text-ds-muted">
           {p.name} · live <b className="font-medium text-ds-text">v{liveVersion}</b>. Your change goes into <b className="font-medium text-ds-text">draft v{nextVersion}</b>. Nothing changes until{" "}
@@ -194,7 +200,7 @@ function SuggestForm({ p, days, positions, nextVersion, draftChanges, liveVersio
           <span className="text-[12.5px] font-medium text-ds-ink">3. Your change</span>
           <div className="rounded-[9px] border border-ds-border bg-ds-sunken px-[11px] py-2 text-[12.5px] leading-[1.5] text-ds-muted">
             <span className="mb-0.5 block text-[10.5px] font-semibold uppercase tracking-[.05em]">v{liveVersion} · now</span>
-            <span className="whitespace-pre-line text-ds-text">{nowText}</span>
+            <span className="whitespace-pre-line text-ds-text"><RichText text={nowText} /></span>
           </div>
           <ChangeInputs
             field={field}

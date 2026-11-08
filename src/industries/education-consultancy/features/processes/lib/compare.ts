@@ -66,11 +66,29 @@ export function specMetrics(spec: ProcessSpec | null): string[] {
   return out;
 }
 
-/** Union of the two versions' metrics: current's in step order, then any only the previous one had. */
+/**
+ * Union of the two versions' metrics: current's in step order. A metric only the previous version had sits right after the
+ * current metric of the same step ("Called within 1 hour" after "Called within 1 working hour"); with no such step it goes last.
+ */
 export function measureMetrics(previous: ProcessSpec | null, current: ProcessSpec): string[] {
   const out = specMetrics(current);
-  for (const m of specMetrics(previous)) if (!out.includes(m)) out.push(m);
+  if (!previous) return out;
+  for (const s of previous.steps) {
+    for (const m of [s.target.metric, s.show?.metric]) {
+      if (!m || out.includes(m)) continue;
+      const sibling = current.steps.find((c) => c.key === s.key);
+      const anchors = sibling ? [sibling.target.metric, sibling.show?.metric].filter((x): x is string => !!x) : [];
+      const at = anchors.length ? Math.max(...anchors.map((a) => out.indexOf(a))) : -1;
+      out.splice(at >= 0 ? at + 1 : out.length, 0, m);
+    }
+  }
   return out;
+}
+
+/** Metrics only the previous version measured. Their rows say so ("Called within 1 hour (v1's measure)"). */
+export function previousOnlyMetrics(previous: ProcessSpec | null, current: ProcessSpec): Set<string> {
+  const cur = new Set(specMetrics(current));
+  return new Set(specMetrics(previous).filter((m) => !cur.has(m)));
 }
 
 export function buildMeasures(
@@ -79,6 +97,7 @@ export function buildMeasures(
   rawBefore: RawMetrics | null,
   rawAfter: RawMetrics | null,
   daysLive: number,
+  opts: { previousOnly?: ReadonlySet<string>; previousVersion?: number } = {},
 ): Measure[] {
   const out: Measure[] = [];
   for (const metric of metrics) {
@@ -88,11 +107,13 @@ export function buildMeasures(
     const ready = daysLive >= minDays;
     const before = rawBefore ? def.read(rawBefore) : null;
     const rawNow = rawAfter ? def.read(rawAfter) : null;
-    // A measure with its own longer clock (e.g. "decided within 14 days") means nothing before that clock has run: show no "after" yet.
-    const after = ready || minDays <= DEFAULT_MIN_DAYS ? rawNow : null;
+    // v2's numbers show once it has been live a full day. A measure with its own longer clock (e.g. "decided within 14 days") shows
+    // no "after" until that clock has run. Only the Change column waits for `minDays`.
+    const after = daysLive >= 1 && (ready || minDays <= DEFAULT_MIN_DAYS) ? rawNow : null;
+    const baseLabel = def.compareLabel ?? def.label;
     out.push({
       metric,
-      label: def.compareLabel ?? def.label,
+      label: opts.previousOnly?.has(metric) && opts.previousVersion ? `${baseLabel} (v${opts.previousVersion}'s measure)` : baseLabel,
       unit: def.unit,
       better: def.unit === "percent" ? "up" : "down",
       before,
