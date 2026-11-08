@@ -12,7 +12,7 @@ import { canApproveProcess, type ProcessesContext, type ProcessesDb } from "./co
  * already have two FKs between them, so NOTHING here embeds: every read is a plain single-table query (the PGRST201 lesson).
  */
 
-const CHANGE_COLS = "id, process_id, version_id, part, field, before, after, why, evidence, author_kind, author_user_id, status, taken, edited_by, edited_at, created_at";
+export const CHANGE_COLS = "id, process_id, version_id, part, field, before, after, why, evidence, author_kind, author_user_id, needs, turns_on, status, taken, edited_by, edited_at, created_at";
 
 export function must<T>(op: string, res: { data: T | null; error: { message: string; code?: string } | null }): T | null {
   if (res.error) {
@@ -51,7 +51,7 @@ export function dbSuggestStore(db: ProcessesDb): SuggestStore {
       return rows?.[0]?.version ?? 0;
     },
     async createDraft(row) {
-      const res = await db.from("process_versions").insert({ ...row, status: "draft", source: "person" }).select("id, version, status").single();
+      const res = await db.from("process_versions").insert({ source: "person", ...row, status: "draft" }).select("id, version, status").single();
       if (res.error?.code === "23505") return null; // uniq_process_versions_one_draft: a concurrent suggestion opened it first
       return must("draft insert", res) as unknown as { id: string; version: number; status: string };
     },

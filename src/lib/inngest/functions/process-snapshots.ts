@@ -17,6 +17,15 @@ export const processSnapshots = inngest.createFunction(
         }
       });
     }
+    // EDGEX-109 P4a: once the night's numbers are in, ask Orca to check for live versions that just turned 7 days old.
+    // Fire-and-forget: a failure to enqueue never touches the snapshots above.
+    for (const tenantId of tenants) {
+      try {
+        await step.sendEvent(`reads-check-${tenantId}`, { name: "process/reads.check", data: { tenantId } });
+      } catch {
+        /* quiet by design */
+      }
+    }
     return results;
   },
 );

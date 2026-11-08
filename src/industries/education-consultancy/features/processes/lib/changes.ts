@@ -29,6 +29,8 @@ export const evidenceSchema = z.object({
   label: z.string().min(1),
   value: z.union([z.number(), z.string(), z.null()]),
   stepKey: z.string().nullable().optional(),
+  /** A leads-list link that opens exactly the leads the value counts (set by Orca's evidence guard; people leave it out). */
+  href: z.string().nullable().optional(),
 });
 export type Evidence = z.infer<typeof evidenceSchema>;
 

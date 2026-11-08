@@ -1,6 +1,6 @@
-import { applyChanges, changeInputSchema, currentValue, type ChangeField, type Evidence } from "./changes";
+import { applyChanges, changeInputSchema, currentValue, type ChangeField, type ChangeInput, type Evidence } from "./changes";
 import type { ProcessKey } from "./keys";
-import { safeParseProcessSpec } from "./spec";
+import { safeParseProcessSpec, type ProcessSpec } from "./spec";
 
 /**
  * Suggest / edit / reject, as pure flows over a small store (the server wires it to the scoped client; tests wire it to memory).
@@ -19,6 +19,9 @@ export interface ChangeRecord {
   evidence: Evidence[];
   author_kind: "person" | "agent";
   author_user_id: string | null;
+  /** Orca's badges (migration 289): a not-yet-built feature the change needs, and the Settings switch the owner flips after approving. */
+  needs?: string | null;
+  turns_on?: string | null;
   status: "open" | "taken" | "not_taken";
   taken: boolean;
   edited_by: string | null;
@@ -43,7 +46,7 @@ export interface SuggestStore {
   getOpenDraft(processId: string): Promise<DraftRef | null>;
   maxVersion(processId: string): Promise<number>;
   /** Insert the draft. A unique-violation (a concurrent first suggestion won) resolves to null, and the caller re-reads. */
-  createDraft(row: { process_id: string; version: number; spec: unknown; proposed_by: string; change_summary: string }): Promise<DraftRef | null>;
+  createDraft(row: { process_id: string; version: number; spec: unknown; proposed_by: string | null; change_summary: string; source?: "person" | "agent"; evidence?: unknown }): Promise<DraftRef | null>;
   insertChange(row: Omit<ChangeRecord, "id" | "created_at" | "status" | "taken" | "edited_by" | "edited_at">): Promise<ChangeRecord>;
   positionSlugs(): Promise<ReadonlySet<string>>;
 }
@@ -54,30 +57,47 @@ export type SuggestOutcome =
   | { kind: "no_baseline" }
   | { kind: "invalid"; error: string };
 
+export type ValidateOutcome =
+  | { kind: "ok"; proc: ProcessRef; liveSpec: ProcessSpec; before: unknown; input: ChangeInput }
+  | { kind: "not_found" }
+  | { kind: "no_baseline" }
+  | { kind: "invalid"; error: string };
+
 /**
- * Add one change to the process's ONE open draft (created from the live spec on the first suggestion). 409-case: no live version yet.
- * `before` is read from the live spec; the proposal is validated by dry-running it onto the live spec (same code as approve).
+ * The ONE validation every proposed change goes through, a person's or Orca's (EDGEX-109 P4a, decision 5): parse the input, find the live
+ * version, read `before` from it, and dry-run the proposal onto the live spec with the same code approve uses.
  */
-export async function suggestChange(store: SuggestStore, args: { processKey: ProcessKey; userId: string; input: unknown }): Promise<SuggestOutcome> {
-  const parsed = changeInputSchema.safeParse(args.input);
+export async function validateChange(store: SuggestStore, processKey: ProcessKey, rawInput: unknown): Promise<ValidateOutcome> {
+  const parsed = changeInputSchema.safeParse(rawInput);
   if (!parsed.success) return { kind: "invalid", error: parsed.error.issues[0]?.message ?? "Invalid change" };
   const input = parsed.data;
 
-  const proc = await store.getProcess(args.processKey);
+  const proc = await store.getProcess(processKey);
   if (!proc) return { kind: "not_found" };
   if (!proc.live_version_id) return { kind: "no_baseline" };
 
   const rawLive = await store.getSpec(proc.live_version_id);
-  const live = safeParseProcessSpec(args.processKey, rawLive);
+  const live = safeParseProcessSpec(processKey, rawLive);
   if (!live.ok) return { kind: "invalid", error: `The live version is unreadable: ${live.error}` };
 
   let before: unknown;
   try {
     before = currentValue(live.spec, input.part, input.field);
-    applyChanges(args.processKey, live.spec, [{ part: input.part, field: input.field, after: input.after }], await store.positionSlugs());
+    applyChanges(processKey, live.spec, [{ part: input.part, field: input.field, after: input.after }], await store.positionSlugs());
   } catch (e) {
     return { kind: "invalid", error: e instanceof Error ? e.message : String(e) };
   }
+  return { kind: "ok", proc, liveSpec: live.spec, before, input };
+}
+
+/**
+ * Add one change to the process's ONE open draft (created from the live spec on the first suggestion). 409-case: no live version yet.
+ * `before` is read from the live spec; the proposal is validated by dry-running it onto the live spec (same code as approve).
+ */
+export async function suggestChange(store: SuggestStore, args: { processKey: ProcessKey; userId: string; input: unknown }): Promise<SuggestOutcome> {
+  const v = await validateChange(store, args.processKey, args.input);
+  if (v.kind !== "ok") return v;
+  const { proc, liveSpec, before, input } = v;
 
   let createdDraft = false;
   let draft = await store.getOpenDraft(proc.id);
@@ -85,7 +105,7 @@ export async function suggestChange(store: SuggestStore, args: { processKey: Pro
     draft = await store.createDraft({
       process_id: proc.id,
       version: (await store.maxVersion(proc.id)) + 1,
-      spec: live.spec,
+      spec: liveSpec,
       proposed_by: args.userId,
       change_summary: "Suggested changes",
     });
