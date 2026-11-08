@@ -56,6 +56,8 @@ export interface LogEvent {
   /** The grey line under it. */
   meta: string;
   actor: string | null;
+  /** Orca wrote it (every taken change of an approved version, or the suggested change itself): the row gets the AI sparkle tile. */
+  ai?: boolean;
   reason: string | null;
   /** True where a "Before -> after" button applies (an approved v2+, and every "30 days on"). */
   beforeAfter: boolean;
@@ -134,12 +136,13 @@ export function buildImprovementLog(input: {
         const taken = mine.filter((c) => c.status === "taken");
         const notTaken = mine.filter((c) => c.status === "not_taken");
         const authors = [...new Set(taken.map(authorOf))];
+        const byOrca = taken.length > 0 && taken.every((c) => c.author_kind === "agent");
         const bits = [
           taken.length ? `${taken.length} ${taken.length === 1 ? "change" : "changes"}: ${taken.map((c) => c.title).join("; ")}` : null,
-          taken.length ? `suggested by ${joinNames(authors)}, approved by ${actor ?? "someone"}` : `approved by ${actor ?? "someone"}`,
+          taken.length ? (byOrca ? `Proposed by Orca · approved by ${actor ?? "someone"}` : `suggested by ${joinNames(authors)}, approved by ${actor ?? "someone"}`) : `approved by ${actor ?? "someone"}`,
           notTaken.length ? `${notTaken.length} ${notTaken.length === 1 ? "change" : "changes"} not taken` : null,
         ].filter(Boolean);
-        out.push(ev(v, { at: v.approved_at, kind: "approved", text: `${name}: v${v.version} live`, meta: bits.join(" · "), actor, beforeAfter: true }));
+        out.push(ev(v, { at: v.approved_at, kind: "approved", text: `${name}: v${v.version} live`, meta: bits.join(" · "), actor, beforeAfter: true, ...(byOrca ? { ai: true } : {}) }));
       } else {
         out.push(ev(v, { at: v.approved_at, kind: "approved", text: `${name}: baseline approved`, meta: `v1 approved by ${actor ?? "someone"}`, actor }));
       }
@@ -153,7 +156,7 @@ export function buildImprovementLog(input: {
     const v = vById.get(c.versionId);
     if (!v) continue;
     const actor = c.author_kind === "agent" ? "Orca" : who(c.author_user_id);
-    out.push(ev(v, { at: c.created_at, kind: "suggested", text: `${PROCESS_NAMES[c.processKey]}: change suggested`, meta: `${actor ?? "someone"} · ${c.title} · "${clip(c.why, 80)}"`, actor }));
+    out.push(ev(v, { at: c.created_at, kind: "suggested", text: `${PROCESS_NAMES[c.processKey]}: change suggested`, meta: `${actor ?? "someone"} · ${c.title} · "${clip(c.why, 80)}"`, actor, ...(c.author_kind === "agent" ? { ai: true } : {}) }));
   }
   for (const wv of input.workingClockVersions ?? []) {
     for (const o of input.officeHoursChanges ?? []) {

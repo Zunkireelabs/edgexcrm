@@ -85,7 +85,7 @@ describe("pure helpers", () => {
 describe("list: draft chip + Review draft", () => {
   const list = (draft: ProcessView["draft"], canApprove = true) => ({ windowDays: 30, baselinesCreated: [], processes: [processView({ draft, canApprove })], improvements: [], tz: "UTC" });
   it("shows 'Draft v2 · 2 changes' after the live pill and a Review draft button to the review page", async () => {
-    mockFetch({ "GET /api/v1/processes": () => json(list({ id: "d2", version: 2, changeCount: 2 })) });
+    mockFetch({ "GET /api/v1/processes": () => json(list({ id: "d2", version: 2, changeCount: 2, source: "person", summary: null, orca: null })) });
     render(<ProcessesPage tenantName="Admizz" />);
     expect(await screen.findByText("Draft v2 · 2 changes")).toBeTruthy();
     const btn = screen.getByRole("link", { name: "Review draft" });
@@ -94,7 +94,7 @@ describe("list: draft chip + Review draft", () => {
     expect(screen.getByText("v1 live")).toBeTruthy();
   });
   it("is the secondary look for someone who can't approve; 'Needs you' counts the open draft", async () => {
-    mockFetch({ "GET /api/v1/processes": () => json(list({ id: "d2", version: 2, changeCount: 1 }, false)) });
+    mockFetch({ "GET /api/v1/processes": () => json(list({ id: "d2", version: 2, changeCount: 1, source: "person", summary: null, orca: null }, false)) });
     render(<ProcessesPage tenantName="Admizz" />);
     const btn = await screen.findByRole("link", { name: "Review draft" });
     expect(btn.className).not.toContain("bg-ds-ink");
@@ -170,12 +170,12 @@ describe("S2 review draft", () => {
     before: { value: 80, metric: "first_contact_1h_pct" }, after: { value: 80, metric: "first_contact_1wh_pct" },
     beforeText: "within 1 hour · target 80%", afterText: "within 1 working hour · target 80%", why: "Almost half arrive after 6 pm.",
     evidence: [{ metric: "trigger", label: "62 arrived outside 9–6", value: 62, stepKey: null }], authorKind: "person", authorUserId: "u1", authorName: "Manish",
-    status: "open", taken: true, editedByName: null, editedAt: null, createdAt: "2026-11-08T00:00:00Z", drives: "Home: new lead not called uses the new target", ...o,
+    status: "open", taken: true, editedByName: null, editedAt: null, createdAt: "2026-11-08T00:00:00Z", drives: "Home: new lead not called uses the new target", needs: null, turnsOn: null, ...o,
   });
   const view = (over: Partial<DraftView> = {}, changes: ChangeView[] = [change({}), change({ id: "c2", title: "Call-back kept: new wording", field: "wording", part: "step:call_back", stepKey: "call_back", before: "a", after: "b", beforeText: "a", afterText: "b", why: "Re-books are not misses.", evidence: [], drives: "No product change: wording only" })]): DraftView => ({
     process: { key: KEY, name: "New lead → first call", processId: "p1", ownerUserId: "u1", ownerName: "Manish Sah", canApprove: true },
     viewerName: "Manish", positions: POSITIONS, live: { id: "v1", version: 1, approvedAt: "2026-11-07T00:00:00Z" },
-    draft: { id: "d2", version: 2, createdAt: "2026-11-08T00:00:00Z", isBaseline: false, authors: [{ userId: "u1", kind: "person", name: "Manish" }], changes },
+    draft: { id: "d2", version: 2, createdAt: "2026-11-08T00:00:00Z", isBaseline: false, source: "person", summary: null, orca: null, authors: [{ userId: "u1", kind: "person", name: "Manish" }], changes },
     ...over,
   });
 
@@ -338,7 +338,7 @@ describe("S3 before → after", () => {
   it("only v1: says before → after starts when v2 goes live, and links an open draft", async () => {
     mockFetch({
       "GET /api/v1/processes/new_lead_first_call/versions": () =>
-        json(base({ process: { key: KEY, name: "n" }, previous: null, current: { versionId: "v1", version: 1, status: "live", approvedAt: "2026-11-07T11:00:00Z", approvedByName: "Manish", period: { from: "a", to: "b" }, daysLive: 1 }, measures: [], changes: [] } as unknown as VersionsPayload["compare"], [verItem({ status: "live" })], { id: "d2", version: 2, changeCount: 1, suggestedBy: "Manish" })),
+        json(base({ process: { key: KEY, name: "n" }, previous: null, current: { versionId: "v1", version: 1, status: "live", approvedAt: "2026-11-07T11:00:00Z", approvedByName: "Manish", period: { from: "a", to: "b" }, daysLive: 1 }, measures: [], changes: [] } as unknown as VersionsPayload["compare"], [verItem({ status: "live" })], { id: "d2", version: 2, changeCount: 1, suggestedBy: "Manish", source: "person" })),
     });
     render(<VersionsPage processKey={KEY} versionId={null} tenantName="Admizz" />);
     expect(await screen.findByText("Before → after starts when v2 goes live.")).toBeTruthy();

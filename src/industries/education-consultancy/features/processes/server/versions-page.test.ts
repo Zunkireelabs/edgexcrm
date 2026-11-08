@@ -60,7 +60,8 @@ describe("loadVersionsPage", () => {
     expect(page!.process).toMatchObject({ key: KEY, ownerName: "Manish", canApprove: true });
     expect(page!.versions.map((v) => `${v.version}:${v.status}`)).toEqual(["1:retired", "2:live", "3:draft"]);
     expect(page!.versions[1]).toMatchObject({ approvedByName: "Manish", suggestedBy: "Manish", changeCount: 2, takenCount: 1, summary: "First contact: count in working hours" });
-    expect(page!.draft).toEqual({ id: "v3", version: 3, changeCount: 1, suggestedBy: "Asha" });
+    expect(page!.draft).toEqual({ id: "v3", version: 3, changeCount: 1, suggestedBy: "Asha", source: "person" });
+    expect(page!.orcaRead).toBeNull(); // v2 has been live 3 days: no read
     expect(page!.compare!.current).toMatchObject({ versionId: "v2", version: 2, daysLive: 3 });
     expect(page!.compare!.previous!.version).toBe(1);
     expect(page!.compare!.measures.length).toBeGreaterThan(0);
@@ -139,7 +140,7 @@ describe("loadProcessViews: the open draft on top of a live version", () => {
   it("carries the draft id, version and how many changes it holds", async () => {
     const [p] = await loadProcessViews(ctx(withProc(TABLES)), 30);
     expect(p.shown).toMatchObject({ id: "v2", status: "live" });
-    expect(p.draft).toEqual({ id: "v3", version: 3, changeCount: 1 });
+    expect(p.draft).toEqual({ id: "v3", version: 3, changeCount: 1, source: "person", summary: null, orca: null });
     expect(p.canApprove).toBe(true);
   });
   it("a baseline-only draft is `shown`, not `draft`; no draft means null", async () => {
@@ -149,5 +150,39 @@ describe("loadProcessViews: the open draft on top of a live version", () => {
     expect(b.draft).toBeNull();
     const none = { ...withProc(TABLES), process_versions: TABLES.process_versions.filter((v) => v.status !== "draft") };
     expect((await loadProcessViews(ctx(none), 30))[0].draft).toBeNull();
+  });
+});
+
+
+describe("Orca on the server views (EDGEX-109 P4b)", () => {
+  const read = (over: Record<string, unknown> = {}) => ({ id: "o1", kind: "process_read", subject_type: "process_version", subject_id: "v2", status: "proposed", created_at: "2026-11-20T00:00:00Z", payload: { summary: "Calls within the hour went up.", version: 2, processId: "p1", usedFallback: false, generatedAt: "2026-11-17T00:00:00Z" }, ...over });
+  const LATER = new Date("2026-11-20T11:00:00Z"); // v2 live since 9 Nov: 11 days
+  const agentDraft = { evidence: { arrived: 131, skipped: [{ step: "call_back", reason: "Rota-driven." }] }, source: "agent", change_summary: "Orca suggests a softer target." };
+  const withDraft = (over: Record<string, unknown>) => ({ ...TABLES, process_versions: TABLES.process_versions.map((v) => (v.id === "v3" ? { ...v, ...over } : v)) });
+
+  it("shows the read for a live version that has run 7+ days, with the open Orca draft as 'Open draft'", async () => {
+    const page = await loadVersionsPage(ctx({ ...withDraft(agentDraft), agent_outputs: [read()] }), KEY, null, LATER);
+    expect(page!.orcaRead).toMatchObject({ versionId: "v2", version: 2, summary: "Calls within the hour went up.", nextDraft: { id: "v3", version: 3 } });
+  });
+  it("no next draft button when the open draft is a person's", async () => {
+    const page = await loadVersionsPage(ctx({ ...TABLES, agent_outputs: [read()] }), KEY, null, LATER);
+    expect(page!.orcaRead).toMatchObject({ nextDraft: null });
+  });
+  it("a dismissed read, a version under 7 days, or no read at all shows nothing", async () => {
+    expect((await loadVersionsPage(ctx({ ...TABLES, agent_outputs: [read({ status: "dismissed" })] }), KEY, null, LATER))!.orcaRead).toBeNull();
+    expect((await loadVersionsPage(ctx({ ...TABLES, agent_outputs: [read()] }), KEY, null, new Date("2026-11-12T11:00:00Z")))!.orcaRead).toBeNull(); // 3 days
+    expect((await loadVersionsPage(ctx({ ...TABLES, agent_outputs: [] }), KEY, null, LATER))!.orcaRead).toBeNull();
+  });
+  it("the list view carries an Orca draft's source, banner line and run metadata", async () => {
+    const [p] = await loadProcessViews(ctx({ ...withDraft(agentDraft), processes: [{ ...TABLES.processes[0], created_at: "2026-11-07T10:00:00Z", review_due_at: null }] }), 30);
+    expect(p.draft).toMatchObject({ source: "agent", summary: "Orca suggests a softer target.", orca: { arrived: 131, skipped: [{ step: "call_back", reason: "Rota-driven." }] } });
+  });
+  it("the review view says who wrote it and carries each change's badges", async () => {
+    const t: Record<string, unknown[]> = withDraft(agentDraft);
+    t.process_changes = (t.process_changes as Array<{ id: string }>).map((c) => (c.id === "c3" ? { ...c, author_kind: "agent", author_user_id: null, needs: "EDGEX-104", turns_on: "smart_assignment_shadow" } : c));
+    const v = await loadDraft(ctx(t), KEY);
+    expect(v!.draft).toMatchObject({ source: "agent", summary: "Orca suggests a softer target.", orca: { arrived: 131 } });
+    expect(v!.draft!.changes[0]).toMatchObject({ authorName: "Orca", needs: "EDGEX-104", turnsOn: "smart_assignment_shadow" });
+    expect(v!.stepTitles?.first_contact).toBeTruthy();
   });
 });

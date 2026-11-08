@@ -20,8 +20,8 @@ export type NeedsBadge = keyof typeof NEEDS_BADGES;
 export const NEEDS_IDS = Object.keys(NEEDS_BADGES) as NeedsBadge[];
 
 export const TURNS_ON = {
-  smart_assignment_shadow: { label: "Settings → Smart assignment → Shadow", href: "/settings" },
-  smart_assignment_auto: { label: "Settings → Smart assignment → Auto", href: "/settings" },
+  smart_assignment_shadow: { label: "Settings → Smart assignment → Shadow", href: "?settings=lead-management" },
+  smart_assignment_auto: { label: "Settings → Smart assignment → Auto", href: "?settings=lead-management" },
 } as const;
 export type TurnsOn = keyof typeof TURNS_ON;
 export const TURNS_ON_IDS = Object.keys(TURNS_ON) as TurnsOn[];

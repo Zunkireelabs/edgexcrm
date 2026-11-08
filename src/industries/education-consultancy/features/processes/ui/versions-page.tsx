@@ -1,11 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { ClockIcon, ListChecksIcon, PencilSimpleIcon, XIcon } from "@/components/icons";
 import { fmtValue } from "../lib/format";
 import { DEFAULT_MIN_DAYS, type MetricUnit } from "../lib/metrics";
 import type { Measure } from "../lib/compare";
 import type { CompareChange, VersionListItem, VersionsPage as VersionsPayload } from "../server/compare";
+import { OrcaReadCard } from "./orca";
 import { Crumb, PAGE } from "./parts";
 import { useProcessesFetch } from "./use-processes";
 
@@ -81,6 +83,8 @@ function Body({ d, processKey, tenantName }: { d: Payload; processKey: string; t
   const prev = compare?.previous;
   const hasCompare = !!cur && !!prev;
   const liveId = d.versions.find((v) => v.status === "live")?.id;
+  const [readHidden, setReadHidden] = useState(false);
+  const read = d.orcaRead && !readHidden ? d.orcaRead : null;
 
   return (
     <>
@@ -165,6 +169,7 @@ function Body({ d, processKey, tenantName }: { d: Payload; processKey: string; t
       )}
 
       <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {read ? <OrcaReadCard processKey={processKey} read={read} onDismissed={() => setReadHidden(true)} /> : null}
         {hasCompare && compare && compare.changes.length > 0 ? (
           <section className="rounded-ds-lg border border-ds-border bg-ds-surface px-3.5 pb-1.5 pt-3.5">
             <h2 className="mb-2 text-[13.5px] font-semibold text-ds-ink">What changed in v{compare.current.version}</h2>

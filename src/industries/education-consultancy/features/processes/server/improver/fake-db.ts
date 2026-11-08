@@ -29,7 +29,7 @@ export function fakeWorld(tenantId: string, rows: Record<string, Row[]>, rpcResu
     const finish = () => {
       if (mode === "delete") rows[table] = (rows[table] ?? []).filter((r) => !pick.includes(r));
       if (mode === "update" && patch) for (const r of pick) Object.assign(r, patch);
-      return { data: pick, error: null };
+      return { data: pick, error: null, count: pick.length };
     };
     Object.assign(q, {
       select: () => q,

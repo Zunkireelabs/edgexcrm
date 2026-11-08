@@ -5,6 +5,8 @@ import type { ChangeRecord } from "../lib/changes-flow";
 import { buildImprovementLog, thirtyDaysOn, type LogChange, type LogEvent, type LogVersion, type OfficeHoursChange } from "../lib/improvements-log";
 import { describeOfficeHours } from "../lib/working-hours";
 import { METRIC_REGISTRY } from "../lib/metrics";
+import { isOldEnoughForRead, loadProcessRead } from "./improver/read-store";
+import type { DraftSource } from "../lib/improver/screens";
 import { canApproveProcess } from "./context";
 import { PROCESS_NAMES, type ProcessKey } from "../lib/keys";
 import type { RawMetrics } from "../lib/metrics";
@@ -254,7 +256,12 @@ export interface VersionsPage {
   process: { key: ProcessKey; name: string; ownerName: string | null; canApprove: boolean };
   versions: VersionListItem[];
   /** The open draft on top of a live version (null when none, or when the only draft is the baseline). */
-  draft: { id: string; version: number; changeCount: number; suggestedBy: string | null } | null;
+  draft: { id: string; version: number; changeCount: number; suggestedBy: string | null; source: DraftSource } | null;
+  /**
+   * Orca's read on the compared version (mockup P4): only for a live version that has run 7+ days, only while not dismissed. `nextDraft` is set
+   * when Orca's own draft is open ("Open draft vN+1").
+   */
+  orcaRead: { id: string; versionId: string; version: number; summary: string; generatedAt: string; nextDraft: { id: string; version: number } | null } | null;
   /** The compared version (`?version=`, default the live one) with its before -> after; null when the process has no live version. */
   compare: CompareResult | null;
 }
@@ -298,9 +305,17 @@ export async function loadVersionsPage(ctx: ProcessesContext, key: ProcessKey, v
     }))
     .sort((a, b) => a.version - b.version);
   const open = items.find((v) => v.status === "draft");
-  const draft = open && proc.live_version_id ? { id: open.id, version: open.version, changeCount: open.changeCount, suggestedBy: open.suggestedBy } : null;
+  const draft = open && proc.live_version_id ? { id: open.id, version: open.version, changeCount: open.changeCount, suggestedBy: open.suggestedBy, source: open.source as DraftSource } : null;
 
   const current = versionId ? versions.find((v) => v.id === versionId) : versions.find((v) => v.id === proc.live_version_id);
   const compare = current && current.approved_at ? await compareVersion(ctx, proc, versions, current, now, names) : null;
-  return { process: { key, name: proc.name || PROCESS_NAMES[key], ownerName: nameOf(ownerId), canApprove: canApproveProcess(ctx.auth, ownerId) }, versions: items, draft, compare };
+  // Orca's read: live version, 7+ days live, newest read not dismissed. Anything else shows nothing (we never claim a result early).
+  let orcaRead: VersionsPage["orcaRead"] = null;
+  if (current && current.id === proc.live_version_id && isOldEnoughForRead(current.approved_at, now)) {
+    const r = await loadProcessRead(ctx.db, current.id);
+    if (r && r.status === "proposed") {
+      orcaRead = { id: r.id, versionId: current.id, version: current.version, summary: r.summary, generatedAt: r.generatedAt, nextDraft: draft && draft.source === "agent" ? { id: draft.id, version: draft.version } : null };
+    }
+  }
+  return { process: { key, name: proc.name || PROCESS_NAMES[key], ownerName: nameOf(ownerId), canApprove: canApproveProcess(ctx.auth, ownerId) }, versions: items, draft, orcaRead, compare };
 }

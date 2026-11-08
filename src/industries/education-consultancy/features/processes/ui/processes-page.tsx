@@ -10,6 +10,8 @@ import { fmtN } from "../lib/metrics";
 import type { LogEvent } from "../lib/improvements-log";
 import { needsYou, onTrack, reviewedText } from "../lib/view";
 import type { ProcessView, StepView } from "../server/load-processes";
+import { draftsWaiting } from "../lib/improver/screens";
+import { DraftsWaitingRow, OrcaChip, OrcaFollowsCard, OrcaLogIcon } from "./orca";
 import { LogIcon, PAGE, VChip } from "./parts";
 import { StepBar } from "./step-bar";
 import { useProcessesFetch } from "./use-processes";
@@ -74,9 +76,15 @@ function ProcessRowCard({ p }: { p: ProcessView }) {
               </VChip>
             ) : null}
             {p.draft ? (
-              <VChip tone="person" icon={PencilSimpleIcon}>
-                Draft v{p.draft.version} · {p.draft.changeCount} {p.draft.changeCount === 1 ? "change" : "changes"}
-              </VChip>
+              p.draft.source === "agent" ? (
+                <OrcaChip>
+                  Draft v{p.draft.version} from Orca · {p.draft.changeCount} {p.draft.changeCount === 1 ? "change" : "changes"}
+                </OrcaChip>
+              ) : (
+                <VChip tone="person" icon={PencilSimpleIcon}>
+                  Draft v{p.draft.version} · {p.draft.changeCount} {p.draft.changeCount === 1 ? "change" : "changes"}
+                </VChip>
+              )
             ) : null}
           </div>
           <div className="mt-0.5 text-[12.5px] text-ds-muted">
@@ -118,6 +126,7 @@ export function ProcessesPage({ tenantName = "" }: { tenantName?: string }) {
 
   const all = data?.processes ?? [];
   const counts = { all: all.length, needs: all.filter(needsYou).length, track: all.filter(onTrack).length };
+  const waiting = draftsWaiting(all.flatMap((p) => (p.draft ? [{ source: p.draft.source }] : [])));
   const shown = filter === "needs" ? all.filter(needsYou) : filter === "track" ? all.filter(onTrack) : all;
 
   return (
@@ -168,7 +177,6 @@ export function ProcessesPage({ tenantName = "" }: { tenantName?: string }) {
           </div>
 
           <aside className="space-y-4">
-            {/* Slot: "Orca follows these" card arrives in P4. Hidden in P1. */}
             <section className="rounded-ds-lg border border-ds-border bg-ds-surface p-4">
               <div className="flex items-center gap-2">
                 <TrendUpIcon size={16} aria-hidden />
@@ -177,13 +185,18 @@ export function ProcessesPage({ tenantName = "" }: { tenantName?: string }) {
                   All →
                 </Link>
               </div>
+              {waiting ? (
+                <div className="mt-3">
+                  <DraftsWaitingRow title={waiting.title} sub={waiting.sub} />
+                </div>
+              ) : null}
               {data.improvements.length === 0 ? (
                 <p className="mt-3 text-[12.5px] text-ds-muted">Nothing yet. Approved versions, suggestions and new baselines show up here.</p>
               ) : (
                 <ul className="mt-2 divide-y divide-ds-divider">
                   {data.improvements.map((e) => (
                     <li key={`${e.kind}-${e.at}-${e.versionId}-${e.text}`} className="grid grid-cols-[22px_minmax(0,1fr)] gap-2 py-[9px] first:pt-0 last:pb-0">
-                      <LogIcon kind={e.kind} />
+                      {e.ai ? <OrcaLogIcon /> : <LogIcon kind={e.kind} />}
                       <div className="min-w-0">
                         <div className="text-[13px] font-medium text-ds-ink">{e.text}</div>
                         <div className="mt-px line-clamp-2 text-[12px] text-ds-muted" title={e.meta}>
@@ -196,6 +209,7 @@ export function ProcessesPage({ tenantName = "" }: { tenantName?: string }) {
                 </ul>
               )}
             </section>
+            <OrcaFollowsCard />
           </aside>
         </div>
       ) : null}

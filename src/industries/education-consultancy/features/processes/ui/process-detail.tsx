@@ -11,6 +11,7 @@ import type { StepStatus } from "../lib/metrics";
 import { fmtDay, lastReviewed, writtenFrom } from "../lib/view";
 import type { ProcessView, VersionRow } from "../server/load-processes";
 import { when } from "./processes-page";
+import { OrcaBanner } from "./orca";
 import { Crumb, PAGE, VChip } from "./parts";
 import { SopTable } from "./sop-table";
 import { StepBar } from "./step-bar";
@@ -140,6 +141,18 @@ export function ProcessDetail({ processKey, tenantName }: { processKey: string; 
 
           {tab === "map" && p.spec ? (
             <div role="tabpanel" aria-labelledby="tab-map">
+              {/* P2: only while Orca's OWN draft is open. A person's draft, or none, shows nothing here. */}
+              {p.draft && p.draft.source === "agent" && p.draft.orca ? (
+                <OrcaBanner
+                  version={p.draft.version}
+                  changeCount={p.draft.changeCount}
+                  arrived={p.draft.orca.arrived}
+                  summary={p.draft.summary}
+                  skipped={p.draft.orca.skipped}
+                  stepTitle={(k) => p.spec?.steps.find((s) => s.key === k)?.title ?? null}
+                  reviewHref={`/processes/${p.key}/draft`}
+                />
+              ) : null}
               <ProcessMap p={p} spec={p.spec} days={days} />
               <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
                 <section>

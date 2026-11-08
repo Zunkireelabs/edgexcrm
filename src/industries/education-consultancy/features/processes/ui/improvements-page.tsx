@@ -8,6 +8,7 @@ import { dayKey, dayLabel, groupLogEvents, type LogEvent } from "../lib/improvem
 import { PROCESS_KEYS, PROCESS_NAMES, type ProcessKey } from "../lib/keys";
 import type { Measure } from "../lib/compare";
 import { changeTone } from "./versions-page";
+import { OrcaLogIcon } from "./orca";
 import { Crumb, LogIcon, PAGE, SmallChip } from "./parts";
 import { useProcessesFetch } from "./use-processes";
 
@@ -91,7 +92,7 @@ function EventRow({ e }: { e: LogEvent }) {
   const btn = "inline-flex h-[30px] items-center rounded-ds-sm border border-ds-border bg-ds-surface px-[11px] text-[12.5px] font-medium text-ds-ink hover:bg-ds-hover";
   return (
     <li className="grid grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-3 border-t border-ds-divider px-3.5 py-[11px] first:border-t-0">
-      <LogIcon kind={e.kind} size={28} />
+      {e.ai ? <OrcaLogIcon size={28} /> : <LogIcon kind={e.kind} size={28} />}
       <div className="min-w-0 text-[13.5px] text-ds-text">
         <b className="font-medium text-ds-ink">{e.text}</b>
         {e.meta ? <span className="mt-px block text-[12px] text-ds-muted">{e.meta}</span> : null}

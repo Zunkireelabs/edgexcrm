@@ -14,6 +14,8 @@ import { sendJson } from "./api";
 import { RichText } from "./sop-table";
 import { ChangeInputs, editFromValue, toAfter, type EditState } from "./change-fields";
 import { splitLeadingNumber } from "./evidence";
+import { NeedsChip, NotChanged, OrcaChip, OrcaWhy, TurnsOnLine } from "./orca";
+import { skippedLines } from "../lib/improver/screens";
 import { Crumb, MiniLabel, PAGE, VChip, suggestedBy } from "./parts";
 import { useProcessesFetch } from "./use-processes";
 
@@ -82,7 +84,9 @@ function ReviewBody({ view, processKey, reload }: { view: DraftView; processKey:
   const ticked = draft.changes.filter((c) => taken[c.id]).length;
   const unticked = count - ticked;
   const liveV = live?.version ?? draft.version - 1;
+  const byOrca = draft.source === "agent";
   const authors = suggestedBy(draft.authors.map((a) => a.name));
+  const stepTitle = (k: string) => view.stepTitles?.[k] ?? null;
 
   const toggle = async (c: ChangeView, v: boolean) => {
     setTaken((t) => ({ ...t, [c.id]: v }));
@@ -112,9 +116,13 @@ function ReviewBody({ view, processKey, reload }: { view: DraftView; processKey:
       <div>
         <h1 className="flex flex-wrap items-center gap-2.5 text-[26px] font-semibold leading-tight tracking-[-0.02em] text-ds-ink">
           Review draft v{draft.version}
-          <VChip tone="person" icon={PencilSimpleIcon}>
-            Suggested by {authors}
-          </VChip>
+          {byOrca ? (
+            <OrcaChip>Proposed by Orca</OrcaChip>
+          ) : (
+            <VChip tone="person" icon={PencilSimpleIcon}>
+              Suggested by {authors}
+            </VChip>
+          )}
         </h1>
         <p className="mt-1 text-[13.5px] text-ds-muted">
           {count} {count === 1 ? "change" : "changes"}, each with the reason and the numbers behind it.{" "}
@@ -128,6 +136,8 @@ function ReviewBody({ view, processKey, reload }: { view: DraftView; processKey:
         </p>
       </div>
 
+      {byOrca && draft.orca && draft.orca.skipped.length > 0 ? <NotChanged lines={skippedLines(draft.orca.skipped, stepTitle)} /> : null}
+
       <div className="mt-[18px] space-y-3">
         {draft.changes.map((c) => (
           <ChangeCard
@@ -139,6 +149,7 @@ function ReviewBody({ view, processKey, reload }: { view: DraftView; processKey:
             positions={view.positions}
             liveV={liveV}
             draftV={draft.version}
+            byOrca={byOrca}
             editing={editing === c.id}
             onToggle={(v) => toggle(c, v)}
             onEdit={() => setEditing(c.id)}
@@ -156,7 +167,7 @@ function ReviewBody({ view, processKey, reload }: { view: DraftView; processKey:
           <>
             <span className="min-w-0 flex-1 basis-64 text-[12.5px] text-ds-muted">
               Approving makes <b className="font-medium text-ds-ink">v{draft.version} live for everyone</b> with {ticked === 0 ? "no ticked changes" : `the ${ticked} ticked ${ticked === 1 ? "change" : "changes"}`}.
-              {unticked > 0 ? ` The unticked ${unticked === 1 ? "one is" : "ones are"} kept as "not taken".` : ""} Logged as &ldquo;Approved by {view.viewerName ?? "you"} · suggested by {authors}&rdquo;.
+              {unticked > 0 ? ` The unticked ${unticked === 1 ? "one is" : "ones are"} kept as "not taken".` : ""} Logged as &ldquo;Approved by {view.viewerName ?? "you"} · {byOrca ? "proposed by Orca" : `suggested by ${authors}`}&rdquo;.
               {approveError ? <span role="alert" className="mt-1 block text-ds-bad">{approveError}</span> : null}
             </span>
             <div className="ml-auto flex gap-2">
@@ -198,6 +209,7 @@ function ChangeCard({
   positions,
   liveV,
   draftV,
+  byOrca,
   editing,
   onToggle,
   onEdit,
@@ -211,6 +223,7 @@ function ChangeCard({
   positions: DraftView["positions"];
   liveV: number;
   draftV: number;
+  byOrca: boolean;
   editing: boolean;
   onToggle: (v: boolean) => void;
   onEdit: () => void;
@@ -252,6 +265,7 @@ function ChangeCard({
       <div className="flex flex-wrap items-center gap-2.5">
         {canApprove ? <Switch on={on} label={`Include "${c.title}"`} onChange={onToggle} /> : <VChip tone={on ? "live" : "plain"}>{on ? "Included" : "Left out"}</VChip>}
         <h2 className="text-[14px] font-semibold text-ds-ink">{c.title}</h2>
+        {c.needs ? <NeedsChip needs={c.needs} /> : null}
         {c.editedByName ? <VChip>Edited by {c.editedByName}</VChip> : null}
         {canApprove && !editing ? (
           <div className="ml-auto flex gap-1.5">
@@ -300,6 +314,7 @@ function ChangeCard({
         </div>
       </div>
 
+      {byOrca ? <OrcaWhy why={c.why} evidence={c.evidence} /> : (
       <div className="mt-2.5 flex items-baseline gap-2 text-[12.5px] text-ds-text">
         <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap font-medium text-ds-accent">
           <ChatCircleTextIcon size={14} aria-hidden /> Why
@@ -320,7 +335,9 @@ function ChangeCard({
           })}
         </span>
       </div>
+      )}
       <div className="mt-2 text-[12px] text-ds-muted">{c.field === "wording" ? c.drives : `Changes: ${c.drives}`}</div>
+      <TurnsOnLine turnsOn={c.turnsOn} />
     </article>
   );
 }

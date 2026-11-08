@@ -11,6 +11,8 @@ import type { ProcessRow } from "../lib/store";
 import { canApproveProcess, type ProcessesContext } from "./context";
 import { loadProcessPolicy } from "./policy";
 
+import { readOrcaMeta, type DraftSource, type OrcaDraftMeta } from "../lib/improver/screens";
+
 type Db = Awaited<ReturnType<typeof scopedClientForTenant>>;
 
 export interface VersionRow {
@@ -22,6 +24,8 @@ export interface VersionRow {
   source: "system" | "person" | "agent";
   proposed_by: string | null;
   change_summary: string | null;
+  /** Run metadata of an agent draft ({arrived, skipped, ...}); empty for everything else. */
+  evidence?: unknown;
   approved_by: string | null;
   approved_at: string | null;
   created_at: string;
@@ -87,7 +91,7 @@ export interface ProcessView {
   specError: string | null;
   canApprove: boolean;
   /** An open draft sitting on top of a live version (decision 3: at most one). Null for a baseline draft (that one is `shown`). */
-  draft: { id: string; version: number; changeCount: number } | null;
+  draft: { id: string; version: number; changeCount: number; source: DraftSource; summary: string | null; orca: OrcaDraftMeta | null } | null;
 }
 
 export const parseWindowDays = (raw: string | null): number => {
@@ -103,7 +107,7 @@ export async function fetchProcessMetrics(db: Db, tenantId: string, key: Process
 
 const PROC_COLS = "id, key, name, owner_user_id, live_version_id, review_due_at, created_at";
 const uniqueOf = (xs: string[]) => [...new Set(xs)];
-const VER_COLS = "id, process_id, version, status, spec, source, proposed_by, change_summary, approved_by, approved_at, created_at";
+const VER_COLS = "id, process_id, version, status, spec, source, proposed_by, change_summary, evidence, approved_by, approved_at, created_at";
 
 /** Live version, else the newest non-rejected one. */
 export function pickShownVersion(versions: VersionRow[]): VersionRow | null {
@@ -237,7 +241,9 @@ export async function loadProcessViews(ctx: ProcessesContext, windowDays: number
         canApprove: canApproveProcess(auth, p.owner_user_id),
         draft: (() => {
           const open = versions.find((v) => v.process_id === p.id && v.status === "draft");
-          return open && p.live_version_id ? { id: open.id, version: open.version, changeCount: countByDraft.get(open.id) ?? 0 } : null;
+          return open && p.live_version_id
+            ? { id: open.id, version: open.version, changeCount: countByDraft.get(open.id) ?? 0, source: open.source as DraftSource, summary: open.change_summary, orca: open.source === "agent" ? readOrcaMeta(open.evidence) : null }
+            : null;
         })(),
       };
     }),

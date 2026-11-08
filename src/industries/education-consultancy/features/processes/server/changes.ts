@@ -3,6 +3,7 @@ import { logger } from "@/lib/logger";
 import { loadUserNames } from "../../pulse/server/context";
 import { describeDrives, describeValue, changeTitle } from "../lib/changes";
 import { editChange, rejectDraft, suggestChange, type ChangeRecord, type EditStore, type ProcessRef, type RejectStore, type SuggestStore } from "../lib/changes-flow";
+import { readOrcaMeta, type DraftSource, type OrcaDraftMeta } from "../lib/improver/screens";
 import { isProcessKey, PROCESS_NAMES, type ProcessKey } from "../lib/keys";
 import { safeParseProcessSpec } from "../lib/spec";
 import { canApproveProcess, type ProcessesContext, type ProcessesDb } from "./context";
@@ -201,6 +202,9 @@ export interface ChangeView {
   createdAt: string;
   /** "Changes in EdgeX" line. */
   drives: string;
+  /** Orca's badges (migration 289/290): a feature that is not built yet, and the Settings switch to flip after approving. */
+  needs: string | null;
+  turnsOn: string | null;
 }
 
 export interface DraftAuthor {
@@ -215,6 +219,8 @@ export interface DraftView {
   viewerName: string | null;
   /** For the who editor. */
   positions: Array<{ slug: string; name: string }>;
+  /** Step key -> its title, for "Not changed: Call-backs: ..." lines. */
+  stepTitles?: Record<string, string>;
   live: { id: string; version: number; approvedAt: string | null } | null;
   draft: null | {
     id: string;
@@ -222,6 +228,11 @@ export interface DraftView {
     createdAt: string;
     /** True while the process has no live version: this is the baseline draft and cannot hold changes. */
     isBaseline: boolean;
+    /** Who wrote the draft. `agent` = Orca: the screens say "Proposed by Orca" and show each change's Why with its evidence. */
+    source: DraftSource;
+    /** The banner line Orca wrote (`change_summary`) and its run metadata (new leads counted, red steps it left alone and why). Null for a person's draft. */
+    summary: string | null;
+    orca: OrcaDraftMeta | null;
     authors: DraftAuthor[];
     changes: ChangeView[];
   };
@@ -241,8 +252,8 @@ export async function loadDraft(ctx: ProcessesContext, key: ProcessKey): Promise
     live: null,
     draft: null,
   };
-  const draft = must("draft read", await db.from("process_versions").select("id, version, created_at, spec").eq("process_id", proc.id).eq("status", "draft").maybeSingle()) as unknown as
-    | { id: string; version: number; created_at: string; spec: unknown }
+  const draft = must("draft read", await db.from("process_versions").select("id, version, created_at, spec, source, change_summary, evidence").eq("process_id", proc.id).eq("status", "draft").maybeSingle()) as unknown as
+    | { id: string; version: number; created_at: string; spec: unknown; source: DraftSource; change_summary: string | null; evidence: unknown }
     | null;
   let liveSpec: unknown = null;
   if (proc.live_version_id) {
@@ -266,6 +277,7 @@ export async function loadDraft(ctx: ProcessesContext, key: ProcessKey): Promise
   const parsed = safeParseProcessSpec(key, liveSpec ?? draft.spec);
   const spec = parsed.ok ? parsed.spec : null;
   const nameBySlug = new Map(positions.map((p) => [p.slug, p.name]));
+  if (spec) base.stepTitles = Object.fromEntries(spec.steps.map((st) => [st.key, st.title]));
 
   const changes: ChangeView[] = rows.map((c) => {
     const stepKey = c.part.startsWith("step:") ? c.part.slice(5) : null;
@@ -291,6 +303,8 @@ export async function loadDraft(ctx: ProcessesContext, key: ProcessKey): Promise
       editedAt: c.edited_at,
       createdAt: c.created_at,
       drives: describeDrives(c, step, nameBySlug),
+      needs: c.needs ?? null,
+      turnsOn: c.turns_on ?? null,
     };
   });
   const seen = new Set<string>();
@@ -301,6 +315,6 @@ export async function loadDraft(ctx: ProcessesContext, key: ProcessKey): Promise
     seen.add(id);
     authors.push({ userId: c.authorUserId, kind: c.authorKind, name: c.authorName });
   }
-  base.draft = { id: draft.id, version: draft.version, createdAt: draft.created_at, isBaseline: !proc.live_version_id, authors, changes };
+  base.draft = { id: draft.id, version: draft.version, createdAt: draft.created_at, isBaseline: !proc.live_version_id, source: draft.source, summary: draft.source === "agent" ? draft.change_summary : null, orca: draft.source === "agent" ? readOrcaMeta(draft.evidence) : null, authors, changes };
   return base;
 }
