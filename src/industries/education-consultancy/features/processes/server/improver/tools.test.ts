@@ -4,6 +4,8 @@ vi.mock("@/lib/logger", () => ({ logger: { error: vi.fn(), info: vi.fn(), warn: 
 vi.mock("@/lib/api/audit", () => ({ createAuditLog: vi.fn(async () => undefined) }));
 const { loadCompareMock } = vi.hoisted(() => ({ loadCompareMock: vi.fn() }));
 vi.mock("../compare", () => ({ loadCompare: loadCompareMock }));
+const { assignmentMock } = vi.hoisted(() => ({ assignmentMock: vi.fn() }));
+vi.mock("./assignment-state", () => ({ loadAssignmentState: assignmentMock }));
 
 import { buildBaselineSpec } from "../../lib/baseline";
 import { ADMIZZ_NEW_LEAD_RAW, ADMIZZ_SETUP } from "../../lib/fixtures";
@@ -62,7 +64,11 @@ function setup(subjectId: string | null, event = IMPROVER_EVENT, tenantId = A, e
   return { w, tools: buildImproverTools(ctx) as Record<string, unknown> };
 }
 
-beforeEach(() => vi.clearAllMocks());
+const STATE = { mode: "off", shadowDecisions30d: 0, agreement: { matched: 0, total: 0, pct: null }, shadowDays: null, shadowRanLongEnough: false, capacity: { found: true, eligible: 2, poolSize: 3 } };
+beforeEach(() => {
+  vi.clearAllMocks();
+  assignmentMock.mockResolvedValue(STATE);
+});
 
 describe("tenant isolation", () => {
   it("another tenant's process id finds nothing: no numbers, no rpc, no write", async () => {
@@ -85,7 +91,12 @@ describe("tenant isolation", () => {
     const { w, tools } = setup("pA");
     await call(tools, "process_read");
     await call(tools, "process_breakdown", { cut: "by_weekday" });
-    expect(w.rpcs.map((r) => [r.name, r.args.p_tenant])).toEqual([["education_process_metrics", A], ["education_process_breakdown", A]]);
+    expect(w.rpcs.map((r) => [r.name, r.args.p_tenant])).toEqual([
+      ["education_process_metrics", A],
+      ["education_process_breakdown", A], // process_read: the office split, read for Orca
+      ["education_process_breakdown", A], // process_read: the weekday cut
+      ["education_process_breakdown", A], // process_breakdown
+    ]);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const schema = (tools.process_breakdown as any).inputSchema;
     expect(schema.safeParse({ cut: "by_weekday", p_tenant: B }).success).toBe(true); // extra keys are stripped, never read
@@ -138,9 +149,9 @@ describe("propose_process_draft, end to end through the tools", () => {
         field: "target",
         after: { value: 50 },
         why: "Only 17% (22 of 131) were called within the hour, and 17 of 131 arrived on a Saturday.",
-        evidenceRefs: ["step.first_contact.value", "by_weekday.6.size"],
+        evidenceRefs: ["step.first_contact.value", "by_weekday.6.size", "assign.state"],
         needs: null,
-        turnsOn: "smart_assignment_auto",
+        turnsOn: "smart_assignment_shadow",
         ...over,
       },
     ],
@@ -154,8 +165,8 @@ describe("propose_process_draft, end to end through the tools", () => {
     const draft = w.rows.process_versions.find((v) => v.status === "draft")!;
     expect(draft).toMatchObject({ tenant_id: A, process_id: "pA", version: 3, source: "agent", proposed_by: null, change_summary: "Orca suggests a gentler first-call target." });
     const ch = w.rows.process_changes[0];
-    expect(ch).toMatchObject({ tenant_id: A, version_id: draft.id, author_kind: "agent", author_user_id: null, turns_on: "smart_assignment_auto", needs: null });
-    expect((ch.evidence as Array<{ href: string | null }>).every((e) => typeof e.href === "string")).toBe(true);
+    expect(ch).toMatchObject({ tenant_id: A, version_id: draft.id, author_kind: "agent", author_user_id: null, turns_on: "smart_assignment_shadow", needs: null });
+    expect((ch.evidence as Array<{ href: string | null }>).some((e) => typeof e.href === "string")).toBe(true);
   });
   it("drops a reason with a number no tool produced: no draft", async () => {
     const { w, tools } = setup("pA");
@@ -187,7 +198,7 @@ describe("propose_process_draft, end to end through the tools", () => {
       return fakeWorld(A, w.rows).db.from(t);
     }) as never;
     const out = await call(tools, "propose_process_draft", change());
-    expect(out).toEqual({ ok: false, message: "The draft could not be saved. Nothing was changed." });
+    expect(out).toMatchObject({ ok: false, message: "The draft could not be saved. Nothing was changed." });
   });
 });
 
@@ -259,5 +270,63 @@ describe("storing, loading and dismissing a read", () => {
     expect(await dismissProcessRead(w.db, "vA2", "u1", NOW)).toBe(true);
     expect(out[0].status).toBe("dismissed");
     expect(await dismissProcessRead(w.db, "vA2", "u1", NOW)).toBe(false);
+  });
+});
+
+describe("round 2: smart assignment's real state, every red step decided", () => {
+  const prop = (over: Record<string, unknown> = {}, extra: Record<string, unknown> = {}) => ({
+    summary: "Orca suggests a gentler first-call target.",
+    changes: [{ part: "step:first_contact", field: "target", after: { value: 50 }, why: "Only 17% (22 of 131) were called within the hour.", evidenceRefs: ["step.first_contact.value", "assign.state"], turnsOn: null, ...over }],
+    ...extra,
+  });
+  const ready = async (tools: Record<string, unknown>) => {
+    await call(tools, "process_read");
+  };
+
+  it("process_read carries the office split, the weekday cut and smart assignment's real state, so they can't be skipped", async () => {
+    const { tools } = setup("pA");
+    const out = await call(tools, "process_read");
+    expect(Object.keys(out.alreadyRead).sort()).toEqual(["by_weekday", "office_split"]);
+    expect(out.smartAssignment.state).toEqual({ id: "assign.state", display: "Smart assignment is off", linkable: false });
+    expect(out.smartAssignment.shadow_decisions.display).toBe("0");
+    expect(out.smartAssignment.shadow_days.display).toBe("never ran in shadow");
+    expect(out.smartAssignment.autoAllowed).toBe(false);
+  });
+  it("with no capacity today the read says so, and any turn-on change is refused", async () => {
+    assignmentMock.mockResolvedValue({ ...STATE, capacity: { found: false, eligible: 0, poolSize: 3 } });
+    const { w, tools } = setup("pA");
+    const out = await call(tools, "process_read");
+    expect(out.smartAssignment.note).toMatch(/assign no one/);
+    const res = await call(tools, "propose_process_draft", prop({ turnsOn: "smart_assignment_shadow" }));
+    expect(res.ok).toBe(false);
+    expect(res.dropped[0].reason).toMatch(/no room|Nobody has room/i);
+    expect(w.rows.process_versions.some((v) => v.status === "draft")).toBe(false);
+  });
+  it("auto is refused until shadow has run 14+ days; shadow first is allowed; a turn-on must cite the state fact", async () => {
+    const a = setup("pA");
+    await ready(a.tools);
+    expect((await call(a.tools, "propose_process_draft", prop({ turnsOn: "smart_assignment_auto" }))).dropped[0].reason).toMatch(/shadow mode to have run for at least 14 days/);
+    const b = setup("pA");
+    await ready(b.tools);
+    expect((await call(b.tools, "propose_process_draft", prop({ turnsOn: "smart_assignment_shadow", evidenceRefs: ["step.first_contact.value"] }))).dropped[0].reason).toMatch(/must cite the smart assignment state/);
+    const c = setup("pA");
+    await ready(c.tools);
+    expect((await call(c.tools, "propose_process_draft", prop({ turnsOn: "smart_assignment_shadow" }))).ok).toBe(true);
+    assignmentMock.mockResolvedValue({ ...STATE, mode: "shadow", shadowDecisions30d: 40, shadowDays: 20, shadowRanLongEnough: true, agreement: { matched: 34, total: 40, pct: 85 } });
+    const d = setup("pA");
+    await ready(d.tools);
+    expect((await call(d.tools, "propose_process_draft", prop({ turnsOn: "smart_assignment_auto" }))).ok).toBe(true);
+  });
+  it("skipped red steps are stored on the draft's evidence, with unknown steps and made-up numbers left out", async () => {
+    const { w, tools } = setup("pA");
+    await ready(tools);
+    const res = await call(
+      tools,
+      "propose_process_draft",
+      prop({}, { skipped: [{ step: "call_back", reason: "Call-backs depend on the counsellors' own rota." }, { step: "ghost", reason: "n/a" }, { step: "decide", reason: "Only 99% were decided." }] }),
+    );
+    expect(res.ok).toBe(true);
+    const draft = w.rows.process_versions.find((v) => v.status === "draft")!;
+    expect((draft.evidence as { skipped: unknown }).skipped).toEqual([{ step: "call_back", reason: "Call-backs depend on the counsellors' own rota." }]);
   });
 });

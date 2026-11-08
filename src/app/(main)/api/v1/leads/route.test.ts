@@ -139,10 +139,12 @@ function makeLeadsChain(calls: Call[]) {
   return chain;
 }
 
-function fakeDb(opts: { leadsCalls: Call[]; leadBranchesRows?: Array<{ lead_id: string }> }) {
+function fakeDb(opts: { leadsCalls: Call[]; leadBranchesRows?: Array<{ lead_id: string }>; timezone?: string | null }) {
   return {
     from: (table: string) => {
       if (table === "leads") return makeLeadsChain(opts.leadsCalls);
+      // EDGEX-114: the route reads the tenant's timezone (and config) once per request.
+      if (table === "tenants") return { select: () => ({ eq: () => ({ single: () => Promise.resolve({ data: { config: null } }), maybeSingle: () => Promise.resolve({ data: { timezone: opts.timezone ?? null } }) }) }) };
       if (table === "lead_branches") {
         return {
           select: () => ({
@@ -783,6 +785,23 @@ describe("GET /api/v1/leads — ?f= compiles through the SAME compileFilter() as
     expect(fRes.status).toBe(200);
 
     expect(fCalls).toEqual(legacyCalls);
+  });
+
+  // EDGEX-114: a date filter counts days in the TENANT's timezone. A lead at 00:30 Nepal time on 9 Oct is "on 9 Oct".
+  it("an `on` date filter spans the tenant-local day (Asia/Kathmandu), not the UTC day", async () => {
+    const dateTree = { conjunction: "and" as const, conditions: [{ id: "d1", field: "created_at", op: "on" as const, value: "2026-10-09" }] };
+    const run = async (timezone: string | null) => {
+      const calls: Call[] = [];
+      createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: calls, timezone }));
+      const { GET } = await import("./route");
+      const res = await GET(fakeReq({ [FILTER_PARAM]: encodeFilterTree(dateTree) }));
+      expect(res.status).toBe(200);
+      return calls.filter(([m, a]) => m === "or" && String(a[0]).includes("created_at")).map(([, a]) => a[0]);
+    };
+    const day = (from: string, to: string) => [`and(created_at.gte."${from}",created_at.lt."${to}")`];
+    expect(await run("Asia/Kathmandu")).toEqual(day("2026-10-08T18:15:00.000Z", "2026-10-09T18:15:00.000Z"));
+    expect(await run("America/New_York")).toEqual(day("2026-10-09T04:00:00.000Z", "2026-10-10T04:00:00.000Z"));
+    expect(await run(null)).toEqual(day("2026-10-08T18:15:00.000Z", "2026-10-09T18:15:00.000Z")); // default tz
   });
 
   // Client report (Admizz, 2026-11-05): "search doesn't work when filters are on". With ?f= the typed search

@@ -8,6 +8,7 @@ import type { ProcessSpec } from "../spec";
 import { breakdownFacts, needsImprovement, stepReads, type BreakdownCtx, type RawBreakdown } from "./breakdown";
 import { checkNumbers, evidenceFromFacts, FactStore, numberTokens, type Fact } from "./facts";
 import { cohortHref, datesOnWeekday, improverWindow, intakeLeftoverHref, weekdayHref } from "./links";
+import { shadowEvidence, turnsOnProblem, type AssignmentState } from "./assignment";
 import { blockingIdea, changeDirection, movedSince, type RejectedIdea } from "./memory";
 import { proposeProcessDraft, type ProposeStore, type ProposedChange } from "./propose";
 
@@ -217,6 +218,7 @@ const facts = () => {
   s.addAll([
     { id: "by_weekday.6.size", label: "Saturday: new leads", display: "17 of 122", raw: 17, href: "/leads?f=sat" },
     { id: "by_weekday.0.called_1h_pct", label: "Sunday: called within 1 hour", display: "30%", raw: 30, href: "/leads?f=sun" },
+    { id: "assign.state", label: "Smart assignment right now", display: "Smart assignment is off", raw: "off", href: null },
     { id: "office_split.outside.size", label: "Outside office hours", display: "17 of 122", raw: 17, href: null },
   ]);
   return s;
@@ -229,6 +231,7 @@ const good: ProposedChange = {
   why: "Only 30% of Sunday leads were called within the hour, and 17 of 122 arrived on a Saturday when the office is closed.",
   evidenceRefs: ["by_weekday.0.called_1h_pct", "by_weekday.6.size"],
 };
+const STATE_OFF: AssignmentState = { mode: "off", shadowDecisions30d: 0, agreement: { matched: 0, total: 0, pct: null }, shadowDays: null, shadowRanLongEnough: false, capacity: { found: true, eligible: 2, poolSize: 3 } };
 const run = (w: ReturnType<typeof world>, over: Partial<Parameters<typeof proposeProcessDraft>[1]> = {}) =>
   proposeProcessDraft(w.store, { processKey: KEY, summary: "Orca suggests a softer first-call target.", changes: [good], facts: facts(), onTarget: false, now: NOW, meta: META, ...over });
 
@@ -308,13 +311,58 @@ describe("proposeProcessDraft", () => {
   });
   it("carries Orca's badges from the fixed lists", async () => {
     const w = world();
-    await run(w, { changes: [{ ...good, needs: "EDGEX-104", turnsOn: "smart_assignment_auto" }] });
-    expect(w.inserted[0]).toMatchObject({ needs: "EDGEX-104", turns_on: "smart_assignment_auto" });
+    await run(w, { assignment: STATE_OFF, changes: [{ ...good, needs: "EDGEX-104", turnsOn: "smart_assignment_shadow", evidenceRefs: [...good.evidenceRefs, "assign.state"] }] });
+    expect(w.inserted[0]).toMatchObject({ needs: "EDGEX-104", turns_on: "smart_assignment_shadow" });
+  });
+  it("names the real feature: 'the system' in new wording is dropped, 'Smart assignment gives it' is kept", async () => {
+    const wording = (after: string): ProposedChange => ({ ...good, field: "wording", part: "step:assign", after, why: "Saturday leads wait." });
+    const bad = await run(world(), { changes: [wording("The system assigns it to the Counselor with the most room.")] });
+    expect(bad.kind).toBe("none");
+    expect(bad.dropped[0].reason).toMatch(/Smart assignment gives it/);
+    expect((await run(world(), { changes: [wording("Smart assignment gives it to the Counselor with the most room.")] })).kind).toBe("created");
+  });
+  it("skipped red steps: kept for real steps, one line each, numbers guarded, stored beside the run metadata", async () => {
+    const w = world();
+    const out = await run(w, { offTargetSteps: ["call_back", "decide"], skipped: [{ step: "step:call_back", reason: "Rota-driven." }, { step: "assign", reason: "not red" }, { step: "decide", reason: "Only 77% were decided." }] });
+    expect(out.kind).toBe("created");
+    expect(w.drafts[0].evidence).toMatchObject({ ...META, skipped: [{ step: "call_back", reason: "Rota-driven." }] });
+    expect(out.dropped.some((d) => d.field === "skipped")).toBe(true);
   });
   it("if writing the changes fails halfway, the half-made draft is removed and the error surfaces", async () => {
     const w = world({ failInsertAt: 1 });
     await expect(run(w, { changes: [good, { ...good, part: "step:assign" }] })).rejects.toThrow(/db down/);
     expect(w.deleted).toEqual(["d-orca"]);
     expect(w.drafts).toHaveLength(0);
+  });
+});
+
+describe("smart assignment evidence and rules", () => {
+  const D = (daysAgo: number, mode: "shadow" | "auto" = "shadow", outcome: "matched" | "overridden" | null = "matched") => ({ mode, outcome, created_at: new Date(NOW.getTime() - daysAgo * 86_400_000).toISOString() });
+  it("shadow evidence: counts the last 30 days, agreement, days since the first decision, and 'ran long enough' needs 14+ days AND recent decisions", () => {
+    expect(shadowEvidence([], NOW)).toMatchObject({ shadowDecisions30d: 0, shadowDays: null, shadowRanLongEnough: false });
+    const ran = shadowEvidence([D(20), D(10), D(3, "shadow", "overridden"), D(40)], NOW);
+    expect(ran).toMatchObject({ shadowDecisions30d: 3, shadowDays: 40, shadowRanLongEnough: true });
+    expect(ran.agreement).toEqual({ matched: 2, total: 3, pct: 67 });
+    expect(shadowEvidence([D(5), D(2)], NOW).shadowRanLongEnough).toBe(false); // only 5 days old
+    expect(shadowEvidence([D(30), D(25)], NOW).shadowRanLongEnough).toBe(false); // old, but nothing in the last 14 days
+    expect(shadowEvidence([D(20, "auto")], NOW).shadowDecisions30d).toBe(0); // auto decisions are not shadow
+  });
+  const state = (over: Partial<AssignmentState> = {}): AssignmentState => ({ ...STATE_OFF, ...over });
+  const cited = ["assign.state"];
+  it("shadow: only from off, only with capacity, only citing the state", () => {
+    expect(turnsOnProblem("smart_assignment_shadow", state(), cited)).toBeNull();
+    expect(turnsOnProblem("smart_assignment_shadow", state(), [])).toMatch(/must cite/);
+    expect(turnsOnProblem("smart_assignment_shadow", state({ mode: "shadow" }), cited)).toMatch(/already shadow/);
+    expect(turnsOnProblem("smart_assignment_shadow", state({ capacity: { found: false, eligible: 0, poolSize: 3 } }), cited)).toMatch(/assign no one/);
+  });
+  it("auto: only after shadow ran 14+ days with decisions", () => {
+    expect(turnsOnProblem("smart_assignment_auto", state({ mode: "shadow", shadowRanLongEnough: false }), cited)).toMatch(/at least 14 days/);
+    expect(turnsOnProblem("smart_assignment_auto", state({ mode: "shadow", shadowRanLongEnough: true }), cited)).toBeNull();
+    expect(turnsOnProblem("smart_assignment_auto", state({ mode: "auto", shadowRanLongEnough: true }), cited)).toMatch(/already automatic/);
+  });
+  it("propose refuses any turn-on when the state is unknown", async () => {
+    const out = await run(world(), { assignment: null, changes: [{ ...good, turnsOn: "smart_assignment_shadow", evidenceRefs: [...good.evidenceRefs, "assign.state"] }] });
+    expect(out.kind).toBe("none");
+    expect(out.dropped[0].reason).toMatch(/unknown/);
   });
 });

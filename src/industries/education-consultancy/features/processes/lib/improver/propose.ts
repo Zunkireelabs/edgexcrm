@@ -2,6 +2,7 @@ import { targetAfterSchema, type ChangeField } from "../changes";
 import { validateChange, type ChangeRecord, type DraftRef, type SuggestStore } from "../changes-flow";
 import type { ProcessKey } from "../keys";
 import { checkNumbers, evidenceFromFacts, numberTokens, type FactStore } from "./facts";
+import { turnsOnProblem, type AssignmentState } from "./assignment";
 import { blockingIdea, type NeedsBadge, type RejectedIdea, type TurnsOn } from "./memory";
 
 /**
@@ -25,6 +26,12 @@ export interface ProposedChange {
   evidenceRefs: string[];
   needs?: NeedsBadge | null;
   turnsOn?: TurnsOn | null;
+}
+
+/** A red or amber step Orca decided NOT to change, with one line why (shown in P4b as "Not changed: ..."). */
+export interface Skipped {
+  step: string;
+  reason: string;
 }
 
 export interface Dropped {
@@ -51,6 +58,8 @@ export interface RunMeta {
   window: { from: string; to: string };
   arrived: number | null;
   generatedAt: string;
+  /** Round 2: red/amber steps left unchanged and why. */
+  skipped?: Skipped[];
 }
 
 /** Numbers a proposed `after` introduces itself: a new target value is a proposal, not a claim about the data. */
@@ -74,6 +83,11 @@ export async function proposeProcessDraft(
     onTarget: boolean;
     now: Date;
     meta: RunMeta;
+    /** Smart assignment's real state (null when unknown: any turn-on change is then refused). */
+    assignment?: AssignmentState | null;
+    /** Red/amber step keys, to validate `skipped` against. */
+    offTargetSteps?: readonly string[];
+    skipped?: Skipped[];
   },
 ): Promise<ProposeOutcome> {
   const dropped: Dropped[] = [];
@@ -138,6 +152,21 @@ export async function proposeProcessDraft(
       }
     }
 
+    // 3b. wording the owner reads names the real feature, never "the system" (EDGEX-109 P4a round 2).
+    if (c.field === "wording" && /\bthe system\b/i.test(asText(c.after))) {
+      drop('The new wording says "the system": name the feature ("Smart assignment gives it", "Home shows it").');
+      continue;
+    }
+
+    // 3c. a change that turns smart assignment on must be earned by the feature's real state.
+    if (c.turnsOn) {
+      const problem = args.assignment ? turnsOnProblem(c.turnsOn, args.assignment, c.evidenceRefs) : "Smart assignment's state is unknown: no turn-on change.";
+      if (problem) {
+        drop(problem);
+        continue;
+      }
+    }
+
     // 4. manners: never an idea the owner rejected in the last 60 days (unless the number moved).
     const blocked = blockingIdea({ part: c.part, field: c.field, before: v.before, after: c.after }, rejected, args.now);
     if (blocked) {
@@ -156,6 +185,19 @@ export async function proposeProcessDraft(
   const summaryOk = trimmed.length > 0 && checkNumbers(trimmed, all).ok;
   const summary = summaryOk ? trimmed : `Orca suggests ${kept.length} ${kept.length === 1 ? "change" : "changes"}.`;
 
+  const known = new Set(args.offTargetSteps ?? []);
+  const skipped: Skipped[] = [];
+  for (const sk of args.skipped ?? []) {
+    const step = sk.step.replace(/^step:/, "");
+    const reason = sk.reason.trim().slice(0, 240);
+    if (!reason || (known.size > 0 && !known.has(step))) continue;
+    if (!checkNumbers(reason, all).ok) {
+      dropped.push({ part: `step:${step}`, field: "skipped", reason: "The reason carries a number no tool produced." });
+      continue;
+    }
+    skipped.push({ step, reason });
+  }
+
   const draft = await store.createDraft({
     process_id: proc.id,
     version: (await store.maxVersion(proc.id)) + 1,
@@ -163,7 +205,7 @@ export async function proposeProcessDraft(
     proposed_by: null,
     change_summary: summary,
     source: "agent",
-    evidence: args.meta,
+    evidence: { ...args.meta, skipped },
   });
   if (!draft) return { kind: "none", reason: "A draft was opened by someone else a moment ago: no draft from Orca.", dropped };
 

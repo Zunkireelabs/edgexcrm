@@ -4,6 +4,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { normalizePhoneForStorage } from "@/lib/phone-utils";
 import { getBranchIds, getChecklistCounts, getTaskCounts } from "@/lib/supabase/queries";
 import { authenticateRequest, getClientIp } from "@/lib/api/auth";
+import { resolveTenantTz } from "@/lib/filters/tenant-tz";
 import { canOpenNamedList, masterViewExcludeIds } from "@/lib/leads/master-exclusion";
 import { leadQueryScope, canSeeNav, canAccessList, isSharedPoolList, resolveEffectiveBranch } from "@/lib/api/permissions";
 import { getFeatureAccess } from "@/industries/_loader";
@@ -215,10 +216,8 @@ export async function GET(request: NextRequest) {
   // compileFilter() call further below, which is the whole point (the existing
   // route.test.ts suite is a full-fidelity regression harness for the compiler
   // against real production semantics precisely because the legacy path routes
-  // through it too). `tz` is fixed at "UTC" for now — no legacy toolbar param
-  // needs tz-aware day boundaries (they all use rolling within_last windows or
-  // plain column comparisons), and per-tenant timezone wiring for the real
-  // date-picker UI is Phase 3+ work.
+  // through it too). `tz` is the tenant's own timezone (EDGEX-114): a date filter's day
+  // starts and ends at the tenant's midnight, not UTC's.
   // "Follow-up needed"'s cutoff is the same tenant-configurable threshold the Team &
   // Lead Performance dashboard's Pipeline widget already reads (resolveThresholds()) —
   // one threshold, one meaning, never a second config key for the same concept. Only
@@ -232,8 +231,17 @@ export async function GET(request: NextRequest) {
     followUpStaleDays = resolveThresholds((tenantRow?.config ?? null) as TenantConfig | null).followUpStaleDays;
   }
 
+  // EDGEX-114: date filters count days in the TENANT's timezone, never UTC. A failed read falls back to the default, never breaks the list.
+  let tenantTz = resolveTenantTz(null);
+  try {
+    const tzClient = await createServiceClient();
+    const { data: tzRow } = await tzClient.from("tenants").select("timezone").eq("id", auth.tenantId).maybeSingle();
+    tenantTz = resolveTenantTz((tzRow as { timezone?: string | null } | null)?.timezone);
+  } catch {
+    /* default tz */
+  }
   const compileCtx: CompileCtx = {
-    tz: "UTC",
+    tz: tenantTz,
     now: new Date(),
     industryId: auth.industryId,
     // src/lib/filters/types.ts deliberately does not import the real ResolvedPermissions

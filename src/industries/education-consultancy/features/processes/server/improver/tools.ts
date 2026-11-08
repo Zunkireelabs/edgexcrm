@@ -15,6 +15,8 @@ import { loadCompare } from "../compare";
 import { must } from "../changes";
 import type { ProcessesDb } from "../context";
 import { isOldEnoughForRead, saveProcessRead } from "./read-store";
+import { assignmentFacts, type AssignmentState } from "../../lib/improver/assignment";
+import { loadAssignmentState } from "./assignment-state";
 
 /**
  * The Process Improver's tools (EDGEX-109 P4a, decision 4). Run-scoped, like draft-tools.ts: built fresh for each run, bound to the run's ONE
@@ -60,6 +62,11 @@ const proposeSchema = z.object({
     )
     .min(1)
     .max(3),
+  skipped: z
+    .array(z.object({ step: z.string().min(1).describe("A step key that is red or amber and that you did NOT change"), reason: z.string().trim().min(1).max(240).describe("One plain line why not. Numbers only as tools displayed them.") }))
+    .max(8)
+    .nullish()
+    .describe("EVERY red or amber step that has no change in this draft, each with one line why not."),
 });
 
 const readSchema = z.object({ summary: z.string().trim().min(1).max(400).describe("2 short sentences on how the live version is doing. Use only numbers a tool showed.") });
@@ -75,6 +82,24 @@ export function buildImproverTools(ctx: ImproverToolsContext): ToolSet {
     if (!ctx.subjectId) return Promise.resolve(null);
     loaded ??= loadImproverContext(ctx.db, ctx.tenantId, ctx.subjectId, ctx.now);
     return loaded;
+  };
+
+  let assignment: AssignmentState | null = null;
+
+  /** One fixed SQL cut -> facts registered in the run's store + the model-facing view. Never throws; null when unavailable. */
+  const runCut = async (c: ImproverContext, cut: string) => {
+    const { data, error } = await ctx.db
+      .raw()
+      .rpc("education_process_breakdown", { p_tenant: ctx.tenantId, p_key: c.process.key, p_cut: cut, p_from: c.window.from.toISOString(), p_to: c.window.to.toISOString(), p_tz: c.tz });
+    if (error || !data) {
+      ctx.logger.warn({ err: error, cut, processKey: c.process.key }, "process_breakdown RPC failed");
+      return null;
+    }
+    const arrived = typeof c.rawNow?.arrived === "number" ? (c.rawNow.arrived as number) : 0;
+    const positionNames = new Map(c.positions.map((p) => [p.slug, p.name]));
+    const out = breakdownFacts(cut, data as unknown as RawBreakdown, { key: c.process.key, window: c.window, listIds: c.listIds, intakeListIds: c.intakeListIds, positionNames, arrived });
+    c.facts.addAll(out.facts);
+    return { cut, help: CUT_HELP[cut], window: `${c.window.firstDay} to ${c.window.lastDay}`, total: out.total, groups: out.groups };
   };
 
   const process_read = tool({
@@ -102,6 +127,12 @@ export function buildImproverTools(ctx: ImproverToolsContext): ToolSet {
         | null) ?? [];
       const hasDraft = versions.some((v) => v.status === "draft");
       const oh = (c.rawNow?.office_hours ?? null) as { days?: number[]; start_min?: number; end_min?: number } | null;
+      // Smart assignment's real state and the two summaries Orca must see before it chooses (it can't skip them).
+      assignment = await loadAssignmentState(ctx.db, ctx.tenantId, ctx.now);
+      if (assignment) c.facts.addAll(assignmentFacts(assignment));
+      const summaryCuts = (["office_split", "by_weekday"] as const).filter((k) => CUTS[c.process.key].includes(k));
+      const summaries: Record<string, unknown> = {};
+      for (const k of summaryCuts) summaries[k] = await runCut(c, k);
       const rejected = await loadRejectedIdeas(ctx.db, { processId: c.process.id, key: c.process.key, spec: c.live.spec, rawNow: c.rawNow }, ctx.now);
       return {
         process: { name: c.process.name, key: c.process.key, liveVersion: c.live.version, liveSince: c.live.approvedAt },
@@ -132,6 +163,16 @@ export function buildImproverTools(ctx: ImproverToolsContext): ToolSet {
           mayProposeAgain: r.movedSince,
         })),
         needsBadges: NEEDS_BADGES,
+        smartAssignment: assignment
+          ? {
+              ...Object.fromEntries(assignmentFacts(assignment).map((f) => [f.id.replace("assign.", ""), view(f)])),
+              note: assignment.capacity.found
+                ? undefined
+                : "Nobody could take a new lead today, so turning smart assignment on would assign no one. Say that; do not propose automation.",
+              autoAllowed: assignment.mode !== "auto" && assignment.shadowRanLongEnough && assignment.capacity.found,
+            }
+          : { unknown: "Smart assignment's state could not be read: propose no turn-on change." },
+        alreadyRead: summaries,
       };
     },
   });
@@ -147,18 +188,8 @@ export function buildImproverTools(ctx: ImproverToolsContext): ToolSet {
       if (!c) return NO_PROCESS;
       if (!c.live) return { error: "This process has no live version yet." };
       if (!CUTS[c.process.key].includes(cut)) return { error: `The cut "${cut}" does not exist for ${c.process.name}. Available: ${CUTS[c.process.key].join(", ") || "none"}.` };
-      const { data, error } = await ctx.db
-        .raw()
-        .rpc("education_process_breakdown", { p_tenant: ctx.tenantId, p_key: c.process.key, p_cut: cut, p_from: c.window.from.toISOString(), p_to: c.window.to.toISOString(), p_tz: c.tz });
-      if (error || !data) {
-        ctx.logger.warn({ err: error, cut, processKey: c.process.key }, "process_breakdown RPC failed");
-        return { error: "That cut is not available right now." };
-      }
-      const arrived = typeof c.rawNow?.arrived === "number" ? (c.rawNow.arrived as number) : 0;
-      const positionNames = new Map(c.positions.map((p) => [p.slug, p.name]));
-      const out = breakdownFacts(cut, data as unknown as RawBreakdown, { key: c.process.key, window: c.window, listIds: c.listIds, intakeListIds: c.intakeListIds, positionNames, arrived });
-      c.facts.addAll(out.facts);
-      return { cut, help: CUT_HELP[cut], window: `${c.window.firstDay} to ${c.window.lastDay}`, total: out.total, groups: out.groups };
+      const out = await runCut(c, cut);
+      return out ?? { error: "That cut is not available right now." };
     },
   });
 
@@ -176,10 +207,18 @@ export function buildImproverTools(ctx: ImproverToolsContext): ToolSet {
           changes: input.changes.map((x) => ({ part: x.part, field: x.field, after: x.after, why: x.why, evidenceRefs: x.evidenceRefs, needs: (x.needs ?? null) as never, turnsOn: (x.turnsOn ?? null) as never })),
           facts: c.facts,
           onTarget: c.onTarget,
+          assignment,
+          offTargetSteps: c.steps.filter((x) => x.status === "red" || x.status === "amber").map((x) => x.stepKey),
+          skipped: input.skipped ?? [],
           now: ctx.now,
           meta: { runId: ctx.runId, window: { from: c.window.from.toISOString(), to: c.window.to.toISOString() }, arrived: typeof c.rawNow?.arrived === "number" ? (c.rawNow.arrived as number) : null, generatedAt: ctx.now.toISOString() },
         });
         for (const d of out.dropped) ctx.logger.info({ runId: ctx.runId, processKey: c.process.key, part: d.part, field: d.field, reason: d.reason }, "process improver: change dropped");
+        if (out.kind === "created") {
+          const decided = new Set([...input.changes.map((x) => x.part.replace(/^step:/, "")), ...(input.skipped ?? []).map((x) => x.step.replace(/^step:/, ""))]);
+          const undecided = c.steps.filter((x) => (x.status === "red" || x.status === "amber") && !decided.has(x.stepKey)).map((x) => x.stepKey);
+          if (undecided.length) ctx.logger.warn({ runId: ctx.runId, undecided }, "process improver: off-target steps with neither a change nor a reason");
+        }
         if (out.kind === "none") {
           ctx.logger.info({ runId: ctx.runId, processKey: c.process.key, reason: out.reason }, "process improver: no draft");
           return { ok: false, message: out.reason, dropped: out.dropped };
