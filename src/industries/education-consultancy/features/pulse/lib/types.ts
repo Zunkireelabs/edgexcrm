@@ -241,6 +241,8 @@ export interface AttentionItem {
   figure: { strong?: string; text: string; textFirst?: boolean } | null;
   /** Rule-generated suggestion → gradient "Suggested" tag. */
   suggested: boolean;
+  /** Activity-drop items: how many leads this person holds with no touch or move for 3+ days (what a nudge would be about). */
+  staleHeld?: number;
   /** The concrete action, carrying its value ("Reassign 12 to Anil KC"). */
   action: { label: string; href: string; primary: boolean; drill?: EventsQuery; /** Opens this person's drawer instead of a lead set. */ personId?: string } | null;
   /** Expanded: the why sentence (an AI paragraph block in Preview mode), a meta line and links. */

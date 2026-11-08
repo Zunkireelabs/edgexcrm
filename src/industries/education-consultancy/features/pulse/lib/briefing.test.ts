@@ -96,7 +96,7 @@ describe("uncovered baseline → no zero-baseline text anywhere", () => {
     const inp = input(people, { baselineCovered: false, stageFlows: flows, untouched: { count: 12 }, leakReasons: { q: [{ reason: "Not reachable", leads: 9 }] }, horizon: "next month's" });
     const b = buildBriefing(inp)!;
     const sig = computeSignals({ people, stageFlows: flows, untouched: { count: 12, byPerson: [] }, branchKpis: [], thresholds: T, baselineCovered: false });
-    const att = buildAttention({ people, signals: sig.all, stageFlows: flows, leakReasons: inp.leakReasons, staleHeld: {}, untouched: { count: 12, byBranch: [], byRole: [] }, baselineCovered: false });
+    const att = buildAttention({ people, signals: sig.all, stageFlows: flows, leakReasons: inp.leakReasons, staleHeld: {}, untouched: { count: 12, listIds: [], byBranch: [], byRole: [] }, baselineCovered: false });
     const all = JSON.stringify([b, att, sig.all]);
     expect(all).not.toMatch(/usual 0|from 0\b|up from/);
     expect(b.items.find((i) => i.id === "leak")?.headline).toBe("27 leads left Qualified this period.");

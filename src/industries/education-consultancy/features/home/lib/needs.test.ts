@@ -2,8 +2,16 @@ import { describe, expect, it } from "vitest";
 import type { AttentionItem, PersonRow } from "../../pulse/lib/types";
 import { needsALook } from "./needs-a-look";
 import { quietOverRow } from "./needs-you";
-import { attentionRows, atRiskRow, sliceAssignments, unassignedRow } from "./needs-you";
+import { attentionRows, atRiskRow, quietOverHref, sliceAssignments, unassignedRow, type NeedsAction } from "./needs-you";
 import { nudgeState, stillUntouchedCount } from "./nudge";
+
+import { decodeFilterTree } from "@/lib/filters/serialize";
+
+function treeOfHref(href: string) {
+  const res = decodeFilterTree(new URL(href, "http://x").searchParams.get("f")!);
+  if (!res.ok) throw new Error(JSON.stringify(res.errors));
+  return res.tree;
+}
 
 const TZ = "Asia/Kathmandu";
 
@@ -106,22 +114,99 @@ describe("needsALook", () => {
   });
 });
 
+describe("attentionRows: Nudge only when there is something to nudge about (click-through fix 4)", () => {
+  it("a person with untouched leads still gets Nudge", () => {
+    const [r] = attentionRows([attn({ staleHeld: 14 })], new Map(), "me");
+    expect(r.actions.map((a) => a.label)).toContain("Nudge Asha");
+  });
+  it("zero untouched leads → no Nudge button (the API would refuse); 'Open in Pulse' for an owner/admin", () => {
+    const [r] = attentionRows([attn({ staleHeld: 0, figure: { strong: "9", text: " vs usual 40" }, action: { label: "See Asha's day", href: "", primary: true, personId: "asha" } })], new Map(), "me");
+    expect(r.actions.some((a) => a.type === "nudge")).toBe(false);
+    expect(r.actions).toEqual([{ type: "link", label: "Open in Pulse", href: "/pulse" }]);
+  });
+  it("a branch manager (no /pulse) is sent to the person's leads instead", () => {
+    const [r] = attentionRows([attn({ staleHeld: 0, action: { label: "See Asha's day", href: "", primary: true, personId: "asha" } })], new Map(), "me", 3, { canOpenPulse: false });
+    expect(r.actions[0]).toMatchObject({ type: "link", label: "See their leads" });
+    expect((r.actions[0] as { href: string }).href).toContain("/leads?");
+  });
+  it("the returned / nudged-today states are unchanged", () => {
+    const [today] = attentionRows([attn({ staleHeld: 0 })], new Map([["asha", { kind: "today" as const }]]), "me");
+    expect(today.chip?.text).toBe("Nudged today");
+    const [back] = attentionRows([attn({ staleHeld: 14 })], new Map([["asha", { kind: "returned" as const, still: 9, when: "yesterday" }]]), "me");
+    expect(back.title).toBe("Asha Tamang · nudged yesterday, still 9");
+  });
+});
+
+describe("attentionRows: the intake-alarm row counts HELD leads only (click-through fix 3)", () => {
+  const alarm = attn({ id: "untouched_leads", icon: "clock", tone: "warn", subject: "12 new leads", what: "untouched for over 48 hours", figure: null, links: [], action: { label: "Review 12 leads", href: "/pulse-link", primary: false } });
+  it("shows Home's held count and link, not Pulse's all-untouched number", () => {
+    const [r] = attentionRows([alarm], new Map(), "me", 3, { untouchedHeld: { count: 5, href: "/leads?held", byHolder: [{ name: "Bijay", count: 3 }, { name: "Kamana", count: 2 }] } });
+    expect(r.title).toBe("5 new leads");
+    expect(r.why).toBe("untouched for over 48 hours · held by Bijay 3, Kamana 2");
+    expect(r.actions).toEqual([{ type: "link", label: "Review 5", href: "/leads?held" }]);
+  });
+  it("zero held → no row, and it does not use up one of the three slots", () => {
+    const rows = attentionRows([alarm, attn({ id: "a" }), attn({ id: "b" }), attn({ id: "c" })], new Map(), "me", 3, { untouchedHeld: { count: 0, href: "/x", byHolder: [] } });
+    expect(rows.map((r) => r.key)).toEqual(["attn:a", "attn:b", "attn:c"]);
+  });
+  it("a lead that is both unassigned and untouched sits on the Assign row only: with every untouched lead unassigned, Home has no untouched row", () => {
+    const rows = attentionRows([alarm], new Map(), "me", 3, { untouchedHeld: { count: 0, href: "/x", byHolder: [] } });
+    expect(rows).toEqual([]);
+  });
+  it("without Home's count (Pulse itself) the row is unchanged", () => {
+    const [r] = attentionRows([alarm], new Map(), "me");
+    expect(r.title).toBe("12 new leads");
+  });
+});
+
+describe("quietOverHref: Review opens exactly the counted leads (click-through fix 5)", () => {
+  it("is the no-contact filter + held + the active lists", () => {
+    const href = quietOverHref(["L1", "L2"]);
+    const f = treeOfHref(href);
+    expect(f.conditions.map((c) => [c.field, c.op])).toEqual([["no_contact_14d", "is_true"], ["assignees", "is_not_empty"], ["stage", "is_any_of"]]);
+    expect((f.conditions[2] as { value?: string[] }).value).toEqual(["L1", "L2"]);
+  });
+});
+
 describe("unassignedRow", () => {
   const now = new Date("2026-11-09T12:00:00.000Z");
-  const p = (id: string, name: string) => ({ userId: id, name }) as unknown as PersonRow;
-  it("a split plan offers 'Assign as suggested' (primary) and 'Choose…', and says who gets what", () => {
-    const r = unassignedRow({ count: 6, oldestAt: "2026-11-08T22:00:00.000Z", now, plan: { kind: "split", targets: [{ person: p("a", "Asha"), held: 20, take: 3 }, { person: p("c", "Chirag"), held: 22, take: 3 }] }, leadIds: ["1", "2", "3", "4", "5", "6"], chooseHref: "/leads?x" })!;
+  const sug = (assignments: Array<[string, string, string[]]>, unplaced = 0, reason: string | null = null) => ({
+    assignments: assignments.map(([userId, name, leadIds]) => ({ userId, name, take: leadIds.length, leadIds })),
+    placed: assignments.reduce((n, a) => n + a[2].length, 0),
+    unplaced,
+    reason,
+  });
+  it("a plan offers 'Assign as suggested' (primary) and 'Choose…', says who gets what, and hands ids out grouped by person", () => {
+    const r = unassignedRow({ count: 6, oldestAt: "2026-11-08T22:00:00.000Z", now, suggestion: sug([["a", "Diplov", ["1", "3", "5"]], ["c", "Gautam", ["2", "4", "6"]]]), leadIds: ["1", "2", "3", "4", "5", "6"], chooseHref: "/leads?x" })!;
     expect(r.title).toBe("Assign 6 new leads");
     expect(r.chip?.text).toBe("Waiting 14 h");
-    expect(r.why).toBe("Suggested: Asha +3, Chirag +3 · they have the most room");
+    expect(r.why).toBe("Suggested: Diplov +3, Gautam +3 · they have the most room");
     expect(r.actions.map((a) => a.label)).toEqual(["Assign as suggested", "Choose…"]);
+    const assign = r.actions[0] as Extract<NeedsAction, { type: "assign" }>;
+    // sliceAssignments slices in plan order, so the ids must already be grouped by person.
+    expect(sliceAssignments(assign.leadIds, assign.assignments)).toEqual([{ userId: "a", ids: ["1", "3", "5"] }, { userId: "c", ids: ["2", "4", "6"] }]);
   });
-  it("no capacity → Review, no assign button; too many to assign in one click → only Choose", () => {
-    expect(unassignedRow({ count: 4, oldestAt: null, now, plan: { kind: "none" }, leadIds: ["1"], chooseHref: "/l" })!.actions.map((a) => a.label)).toEqual(["Review 4"]);
-    expect(unassignedRow({ count: 900, oldestAt: null, now, plan: { kind: "one", target: p("a", "Asha"), held: 2000 }, leadIds: null, chooseHref: "/l" })!.actions.map((a) => a.label)).toEqual(["Choose…"]);
+  it("nobody can take them → the engine's own reason (not the +50% cap sentence), Review N kept", () => {
+    const r = unassignedRow({ count: 4, oldestAt: null, now, suggestion: sug([], 4, "3 on leave, 1 suspended"), leadIds: ["1"], chooseHref: "/l" })!;
+    expect(r.actions.map((a) => a.label)).toEqual(["Review 4"]);
+    expect(r.why).toBe("No one can take them now (3 on leave, 1 suspended).");
+    expect(r.why).not.toContain("+50%");
+  });
+  it("some can be placed and some can't → suggest only what can be placed and say how many are left", () => {
+    const r = unassignedRow({ count: 5, oldestAt: null, now, suggestion: sug([["a", "Diplov", ["1", "2", "3"]]], 2, "2 over today's share"), leadIds: ["1", "2", "3", "4", "5"], chooseHref: "/l" })!;
+    expect(r.why).toBe("Suggested: Diplov +3 · they have the most room · 2 left for you to place (2 over today's share)");
+    const assign = r.actions[0] as Extract<NeedsAction, { type: "assign" }>;
+    expect(assign.leadIds).toEqual(["1", "2", "3"]); // only the placeable ones are assigned in one click
+  });
+  it("too many to assign in one click → only Choose", () => {
+    expect(unassignedRow({ count: 900, oldestAt: null, now, suggestion: sug([["a", "Asha", ["1"]]]), leadIds: null, chooseHref: "/l" })!.actions.map((a) => a.label)).toEqual(["Choose…"]);
+  });
+  it("a failed suggestion says so instead of blaming the team", () => {
+    const r = unassignedRow({ count: 2, oldestAt: null, now, suggestion: { assignments: [], placed: 0, unplaced: 2, reason: null, failed: true }, leadIds: ["1", "2"], chooseHref: "/l" })!;
+    expect(r.why).toContain("Couldn't work out a suggestion");
   });
   it("nothing unassigned → no row", () => {
-    expect(unassignedRow({ count: 0, oldestAt: null, now, plan: { kind: "none" }, leadIds: [], chooseHref: "/l" })).toBeNull();
+    expect(unassignedRow({ count: 0, oldestAt: null, now, suggestion: sug([]), leadIds: [], chooseHref: "/l" })).toBeNull();
   });
   it("sliceAssignments hands the ids out in plan order", () => {
     expect(sliceAssignments(["1", "2", "3", "4", "5"], [{ userId: "a", take: 3 }, { userId: "c", take: 2 }])).toEqual([{ userId: "a", ids: ["1", "2", "3"] }, { userId: "c", ids: ["4", "5"] }]);
@@ -166,13 +251,13 @@ describe("managerDisplayName", () => {
 
 describe("quietOverRow (managers: leads with no contact for over 2 weeks)", () => {
   it("one item, grouped by person: the top 3 in the grey line, with the scope", () => {
-    const r = quietOverRow(215, [{ name: "Gautam", count: 101 }, { name: "Kamana", count: 85 }, { name: "Rita", count: 20 }, { name: "Asha", count: 9 }], "all branches")!;
+    const r = quietOverRow(215, [{ name: "Gautam", count: 101 }, { name: "Kamana", count: 85 }, { name: "Rita", count: 20 }, { name: "Asha", count: 9 }], "all branches", "/leads?f=Q")!;
     expect(r.title).toBe("215 leads with no contact for over 2 weeks");
     expect(r.why).toBe("Gautam 101 · Kamana 85 · Rita 20 and 1 more person · all branches");
-    expect(r.actions).toEqual([{ type: "link", label: "Review", href: "/leads" }]);
+    expect(r.actions).toEqual([{ type: "link", label: "Review", href: "/leads?f=Q" }]); // Review opens exactly the counted set, never plain /leads
   });
   it("none → no row; no bulk action ever", () => {
-    expect(quietOverRow(0, [], "all branches")).toBeNull();
-    expect(quietOverRow(1, [], "Kathmandu")!.why).toBe("Kathmandu");
+    expect(quietOverRow(0, [], "all branches", "/l")).toBeNull();
+    expect(quietOverRow(1, [], "Kathmandu", "/l")!.why).toBe("Kathmandu");
   });
 });

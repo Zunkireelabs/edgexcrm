@@ -205,12 +205,17 @@ const EXCLUDED_WORDS: Record<NonNullable<ScoredCandidate["excluded"]>, string> =
   at_cap: "over today's share",
 };
 
-/** "No one can take it now (2 suspended, 1 on leave), so it stays unassigned." */
-export function nobodyWhy(scored: ScoredCandidate[]): string {
+/** "2 suspended, 1 on leave": why each person was filtered out (empty when nobody was). */
+export function excludedSummary(scored: ScoredCandidate[]): string {
   const counts = new Map<string, number>();
   for (const c of scored) if (c.excluded) counts.set(c.excluded, (counts.get(c.excluded) ?? 0) + 1);
-  const parts = [...counts].map(([k, n]) => `${n} ${EXCLUDED_WORDS[k as NonNullable<ScoredCandidate["excluded"]>]}`);
-  return `No one can take it now${parts.length ? ` (${parts.join(", ")})` : ""}, so it stays unassigned for a manager.`;
+  return [...counts].map(([k, n]) => `${n} ${EXCLUDED_WORDS[k as NonNullable<ScoredCandidate["excluded"]>]}`).join(", ");
+}
+
+/** "No one can take it now (2 suspended, 1 on leave), so it stays unassigned." */
+export function nobodyWhy(scored: ScoredCandidate[]): string {
+  const summary = excludedSummary(scored);
+  return `No one can take it now${summary ? ` (${summary})` : ""}, so it stays unassigned for a manager.`;
 }
 
 interface Ctx {

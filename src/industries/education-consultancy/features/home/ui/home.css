@@ -25,6 +25,8 @@
 .eh-ic.good { background: var(--ds-good-soft); border-color: color-mix(in srgb, var(--ds-good) 18%, var(--ds-surface)); color: var(--ds-good); }
 .eh-tl { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .eh-nm { color: var(--ds-ink); font-weight: 500; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.eh-nm-btn { background: none; border: 0; padding: 0; text-align: left; cursor: pointer; font-family: inherit; }
+.eh-nm-btn:hover { text-decoration: underline; }
 .eh-wh { color: var(--ds-muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
 .eh-ac { display: flex; gap: 6px; align-items: center; }
 .eh-chip { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px; border-radius: var(--ds-r-xs); font-size: 11.5px; font-weight: 500; white-space: nowrap; border: 1px solid var(--ds-border); background: var(--ds-sunken); color: var(--ds-text); flex-shrink: 0; }
@@ -80,6 +82,8 @@
   .eh-it { padding: 10px; gap: 10px; }
   .eh-it .eh-chip { display: none; }
   .eh-it .eh-wh { white-space: normal; }
+  /* long titles wrap to two lines on a phone instead of being cut off ("551 call-back remind…") */
+  .eh-nm { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; text-overflow: clip; overflow-wrap: anywhere; }
   .eh-lbl { display: none; }
   .eh-log { padding-left: 14px; }
   .eh-seg { margin-left: 0; width: 100%; overflow-x: auto; }

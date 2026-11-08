@@ -50,7 +50,7 @@ describe("buildRulesCard (T2)", () => {
 });
 
 describe("unassignedRow against the process target (T2)", () => {
-  const base = { count: 3, oldestAt: "2026-11-08T05:00:00Z", now: new Date("2026-11-08T05:20:00Z"), plan: { kind: "none" } as never, leadIds: ["a", "b", "c"], chooseHref: "/leads" };
+  const base = { count: 3, oldestAt: "2026-11-08T05:00:00Z", now: new Date("2026-11-08T05:20:00Z"), suggestion: { assignments: [], placed: 0, unplaced: 3, reason: "2 on leave" }, leadIds: ["a", "b", "c"], chooseHref: "/leads" };
   it("over the target: red, 'Waiting 12 min · target 5 min'", () => {
     const r = unassignedRow({ ...base, target: { waitMin: 12, targetMin: 5 } })!;
     expect(r.chip).toEqual({ text: "Waiting 12 min · target 5 min", tone: "bad" });

@@ -232,7 +232,12 @@ export function DoNextRow({ item, nextStage, tz, rows }: { item: DoNextItem; nex
         <span className={`eh-ic ${item.tone === "neutral" ? "" : item.tone}`}><KindIcon item={item} /></span>
         <div style={{ minWidth: 0 }}>
           <div className="eh-tl">
-            <Link href={item.evidenceHref} className="eh-nm">{item.title}</Link>
+            {item.primaryAction.type === "sheet" ? (
+              // A grouped row: its title opens the same sheet as its button (the exact leads it counted), never plain /leads.
+              <button type="button" className="eh-nm eh-nm-btn" onClick={() => rows.setSheetKey(item.key)}>{item.title}</button>
+            ) : (
+              <Link href={item.evidenceHref} className="eh-nm">{item.title}</Link>
+            )}
             <span className={`eh-chip ${item.chip.tone === "neutral" ? "" : item.chip.tone}`}>{item.chip.text}</span>
           </div>
           <div className="eh-wh"><span className="eh-ph">{item.chip.text}{item.why ? " \u00B7 " : ""}</span>{item.why}</div>

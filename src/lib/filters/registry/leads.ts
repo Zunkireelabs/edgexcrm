@@ -1,4 +1,5 @@
 import { and, or, pgLike, pgVal } from "../pgrst";
+import { quietContactClauses, quietContactCutoff } from "../quiet-contact";
 import { FilterCompileError, type CompileCtx, type FieldDef, type FieldRegistry, type FilterCondition } from "../types";
 
 // Mirrors DEFAULT_FOLLOW_UP_STALE_DAYS in
@@ -200,6 +201,15 @@ const UNTOUCHED_HELD_DAYS = 3;
 function compileUntouchedHeld(_cond: FilterCondition, ctx: CompileCtx): string {
   const cutoff = pgVal(new Date(ctx.now.getTime() - UNTOUCHED_HELD_DAYS * 86_400_000).toISOString());
   return and(or("last_touched_at.is.null", `last_touched_at.lt.${cutoff}`), `stage_changed_at.lt.${cutoff}`, "archived_at.is.null");
+}
+
+// ── no_contact_14d: virtual — no contact for 2+ tenant-local weeks (Home "N leads with no contact") ──
+// The exact contact test Home's quiet-leads count uses (../quiet-contact.ts is the one definition; ctx.tz is the
+// tenant's day). It is ONLY the contact test: "someone holds it" and "it is workable" are separate conditions the
+// caller adds (Home's Review link adds `assignees is_not_empty` and the workable stage list).
+
+function compileNoContact14d(_cond: FilterCondition, ctx: CompileCtx): string {
+  return or(...quietContactClauses(quietContactCutoff(ctx.now, ctx.tz)));
 }
 
 // ── callback_due: virtual — a pending callback window that has fully elapsed ─
@@ -521,6 +531,16 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       label: "Untouched for 3+ days",
       type: "boolean",
       source: { kind: "virtual", compile: compileUntouchedHeld },
+      operators: ["is_true"],
+      group: "Basic",
+      filterable: true,
+      industries: ["education_consultancy"],
+    },
+    {
+      key: "no_contact_14d",
+      label: "No contact for 2+ weeks",
+      type: "boolean",
+      source: { kind: "virtual", compile: compileNoContact14d },
       operators: ["is_true"],
       group: "Basic",
       filterable: true,

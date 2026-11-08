@@ -5,6 +5,7 @@ vi.mock("@/lib/supabase/scoped", () => ({ scopedClient: vi.fn() }));
 
 import fs from "node:fs";
 import path from "node:path";
+import { quietContactClauses, quietContactCutoff } from "@/lib/filters/quiet-contact";
 import { loadQuietOverTwoWeeks } from "./quiet-leads";
 import { loadMyLeads, type HomeDb } from "./load-home";
 import { buildWorkablePlan } from "../lib/workable";
@@ -30,6 +31,14 @@ describe("loadQuietOverTwoWeeks", () => {
     expect(log).toContainEqual(["or", "tags.is.null,tags.not.ov.{other,parent}"]);
     expect(log).toContainEqual(["or", 'status.is.null,status.not.in.("dropped")']);
     expect(log).toContainEqual(["or", "on_hold.is.null,on_hold.eq.false"]);
+  });
+  it("uses the SAME quiet test as the no_contact_14d filter (shared clauses, tenant-day cutoff)", async () => {
+    const log: unknown[][] = [];
+    const leads: ScopedLeads = { definition: "tenant", select: (c, o) => (log.push(["scope", c, o]), chain(log, { count: 1 })) };
+    const now = new Date("2026-11-08T19:00:00.000Z");
+    await loadQuietOverTwoWeeks(leads, plan, [], now, "Asia/Kathmandu");
+    const expected = quietContactClauses(quietContactCutoff(now, "Asia/Kathmandu")).join(",");
+    expect(log).toContainEqual(["or", expected]);
   });
   it("no active list: nothing", async () => {
     const leads: ScopedLeads = { definition: "tenant", select: () => { throw new Error("should not query"); } };

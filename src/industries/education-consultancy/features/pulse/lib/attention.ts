@@ -1,5 +1,6 @@
 import { leadsOfPersonHref, untouchedHeldOfPersonHref, untouchedLeadsHref } from "./leads-links";
 import { planReassign, type ReassignPlan } from "./suggest";
+import { noTakerSentence, type NewLeadSuggestion } from "../../home/lib/assignment/suggest";
 import { pluralLabel } from "./positions";
 import { compareToUsual } from "./compare";
 import { activityWhat } from "./activity-text";
@@ -15,8 +16,13 @@ export interface AttentionInput {
   signals: Signal[];
   stageFlows: StageFlow[];
   leakReasons: Record<string, LeakReason[]>;
-  /** Untouched-new-leads set: count + where they are held. */
-  untouched: { count: number; byBranch: Array<{ name: string; count: number }>; byRole: Array<{ key: string; label: string; count: number }> };
+  /** Untouched-new-leads set: count + where they are held, and the intake lists it was counted on (the Review link names them). */
+  untouched: { count: number; listIds: string[]; byBranch: Array<{ name: string; count: number }>; byRole: Array<{ key: string; label: string; count: number }> };
+  /**
+   * What smart assignment would do with the UNASSIGNED leads in that set (the same function Home's "Assign N new leads" row
+   * uses, so the two pages agree). Absent / nothing placeable = a plain Review.
+   */
+  newLeadSuggestion?: NewLeadSuggestion | null;
   /** Leads each person still holds that nobody touched this window (for the "Reassign N" value). */
   staleHeld: Record<string, number>;
   /** Open leads each person holds RIGHT NOW (active lists, not deleted) — the load a reassign target is chosen by. */
@@ -38,6 +44,18 @@ function planText(plan: ReassignPlan, n: number, roleLabel: string, verb: "Reass
   }
   return { label: `Review ${n} leads`, meta: `no ${roleLabel} has spare capacity`, why: ` No ${roleLabel} has room to take them without their load rising over 50%.`, suggested: false };
 }
+/** The intake-alarm row's label / meta / why from the smart-assignment suggestion for its unassigned leads. */
+function untouchedPlanText(sug: NewLeadSuggestion | null, n: number): { label: string; meta: string; why: string; suggested: boolean } {
+  if (sug && sug.placed > 0) {
+    const names = sug.assignments.map((a) => `${a.name} +${a.take}`).join(", ");
+    const label = sug.assignments.length === 1 ? `Assign ${sug.placed} to ${sug.assignments[0].name}` : `Assign ${sug.placed} \u00B7 split across ${sug.assignments.length} people`;
+    const left = sug.unplaced > 0 ? ` ${noTakerSentence(sug, sug.unplaced)}` : "";
+    return { label, meta: names, why: ` Smart assignment would give the ${sug.placed} unassigned ones to: ${names}.${left}`, suggested: true };
+  }
+  const why = sug && sug.unplaced > 0 ? ` ${noTakerSentence(sug, sug.unplaced)}` : "";
+  return { label: `Review ${n} leads`, meta: "", why, suggested: false };
+}
+
 const pctOf = (cur: number, base: number) => { const shown = Math.max(1, Math.round(base)); return Math.round(Math.abs((cur - shown) / shown) * 100); };
 
 const firstName = (name: string) => name.trim().split(/\s+/)[0] || name;
@@ -58,6 +76,7 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
         what: activityWhat(p, cur, usual, period),
         figure: stale > 0 ? { strong: String(stale), text: " leads untouched" } : { strong: String(cur), text: ` vs usual ${Math.round(usual)}` },
         suggested: stale > 0 && pt.suggested,
+        staleHeld: stale,
         // No untouched leads → no lead set to name: the button opens the person's day instead.
         action: stale > 0
           ? { label: pt.label, href: untouchedHeldOfPersonHref(p.userId), primary: true }
@@ -72,16 +91,16 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
       const n = input.untouched.count;
       const topB = input.untouched.byBranch[0];
       const topR = input.untouched.byRole[0];
-      const plan = topR ? planReassign(input.people, { userId: null, positionKey: topR.key }, n, input.heldLoad ?? {}, input.flags7d ?? {}) : ({ kind: "none" } as ReassignPlan);
-      const pt = planText(plan, n, topR?.label ?? "team member", "Assign");
+      const pt = untouchedPlanText(input.newLeadSuggestion ?? null, n);
+      const href = untouchedLeadsHref(input.untouched.listIds);
       out.push({
         id: s.id, category: "needs_action", tone: "warn", icon: "clock", subject: `${n} new lead${n === 1 ? "" : "s"}`,
         what: `untouched for over 48 hours${topB && topB.count < n ? `, ${topB.count} of them with ${topB.name}` : ""}`,
         figure: null, suggested: pt.suggested,
-        action: { label: pt.label, href: untouchedLeadsHref(), primary: false },
-        why: `No call, email, meeting or note since they arrived.` + (topR ? ` ${topR.count} of them are held by ${pluralLabel(topR.label)}.` : "") + (topR ? pt.why : ""),
-        meta: [input.untouched.byBranch.slice(0, 3).map((b) => `${b.name} ${b.count}`).join(" · "), topR ? pt.meta : ""].filter(Boolean).join(" · ") || null,
-        links: [{ label: `See the ${n} leads →`, href: untouchedLeadsHref() }],
+        action: { label: pt.label, href, primary: false },
+        why: `No call, email, meeting or note since they arrived.` + (topR ? ` ${topR.count} of them are held by ${pluralLabel(topR.label)}.` : "") + pt.why,
+        meta: [input.untouched.byBranch.slice(0, 3).map((b) => `${b.name} ${b.count}`).join(" · "), pt.meta].filter(Boolean).join(" · ") || null,
+        links: [{ label: `See the ${n} leads →`, href }],
         drill: s.drill,
       });
     } else if (s.kind === "over_capacity") {

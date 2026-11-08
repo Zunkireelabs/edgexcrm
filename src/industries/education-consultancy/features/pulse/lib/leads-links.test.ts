@@ -42,16 +42,24 @@ describe("leadsOfPersonHref — Reassign lands on exactly that person's leads", 
 
 describe("untouchedLeadsHref — Reassign for the untouched signal lands on exactly that set", () => {
   const ctx = { tz: "Asia/Kathmandu", now: new Date("2026-11-05T12:00:00.000Z"), industryId: "education_consultancy", permissions: {} } as unknown as CompileCtx;
-  it("stays on the intake list and is valid for the real registry", () => {
-    const href = untouchedLeadsHref();
-    expect(new URL(href, "http://x").searchParams.get("list")).toBe("pre-qualified");
+  it("names the intake lists that were counted (any number) and is valid for the real registry", () => {
+    const href = untouchedLeadsHref(["l-new", "l-web"]);
+    expect(new URL(href, "http://x").searchParams.get("list")).toBeNull();
+    expect(treeOf(href).conditions.find((c) => c.field === "stage")?.value).toEqual(["l-new", "l-web"]);
+    expect(treeOf(untouchedLeadsHref(["only"])).conditions.find((c) => c.field === "stage")?.value).toEqual(["only"]);
     expect(planFilter(treeOf(untouchedHeldHref()), leadFields(ctx), ctx).ok).toBe(true);
     expect(planFilter(treeOf(href), leadFields(ctx), ctx).ok).toBe(true);
+  });
+  it("heldOnly adds 'someone holds it' (Home's row counts held leads only, so the link must open the same set)", () => {
+    const held = treeOf(untouchedLeadsHref(["l-new"], { heldOnly: true }));
+    expect(held.conditions.map((c) => [c.field, c.op])).toEqual([["untouched_new", "is_true"], ["stage", "is_any_of"], ["assignees", "is_not_empty"]]);
+    expect(planFilter(held, leadFields(ctx), ctx).ok).toBe(true);
+    expect(treeOf(untouchedLeadsHref(["l-new"])).conditions.some((c) => c.field === "assignees")).toBe(false);
   });
   it("compiles to never-touched AND created more than 48h ago (the intake alarm's rule)", () => {
     const rec: string[] = [];
     const b: Record<string, unknown> = new Proxy({}, { get: (_t, name: string) => (...args: unknown[]) => { rec.push(`${name}(${args.map((a) => JSON.stringify(a)).join(",")})`); return b; } });
-    compileFilter(b as never, treeOf(untouchedLeadsHref()), leadFields(ctx), ctx);
+    compileFilter(b as never, treeOf(untouchedLeadsHref(["l-new"])), leadFields(ctx), ctx);
     const joined = rec.join(" ");
     expect(joined).toContain("last_touched_at.is.null");
     expect(joined).toContain("created_at.lt.\\\"2026-11-03T12:00:00.000Z"); // now − 48h exactly

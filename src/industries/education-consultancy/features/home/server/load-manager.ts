@@ -4,9 +4,7 @@ import { getLeaveForHome, resolveUserNames } from "@/lib/supabase/queries";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { encodeFilterTree } from "@/lib/filters/serialize";
 import type { TenantConfig } from "@/types/database";
-import { normalizePosition } from "../../pulse/lib/positions";
-import { planReassign } from "../../pulse/lib/suggest";
-import { untouchedHeldOfPersonHref } from "../../pulse/lib/leads-links";
+import { untouchedHeldOfPersonHref, untouchedLeadsHref } from "../../pulse/lib/leads-links";
 import type { PulseResponse } from "../../pulse/lib/types";
 import { loadPulse } from "../../pulse/server/load-pulse";
 import { greeting, shortDate } from "../lib/greeting";
@@ -19,6 +17,7 @@ import {
   quietOverRow,
   staleCallbacksRow,
   attentionRows,
+  quietOverHref,
   standaloneNudgeRow,
   unassignedRow,
   type NeedsYouRow,
@@ -30,6 +29,7 @@ import type { HomeScope } from "../lib/scope";
 import { loadApplications, type HomeDb } from "./load-home";
 import { autoAssignedRow, shadowCard, type AutoDecision, type ShadowCard } from "../lib/assignment/summary";
 import { loadAssignmentSettings } from "./assignment/settings";
+import { suggestForLeads } from "./assignment/suggest";
 import { loadProcessPolicy } from "../../processes/server/policy";
 import { workingMinutesBetween } from "../../processes/lib/working-hours";
 import { buildRulesCard, type RulesCard } from "../lib/rules-card";
@@ -114,7 +114,7 @@ export async function loadManagerHome(
   const [leadScope, workable, policy, intakeListIds] = await Promise.all([makeLeadScope(db, auth, scope), loadWorkablePlan(db), loadProcessPolicy(db, auth.tenantId), loadIntakeListIds(db, (l) => canOpenNamedList(auth, l))]);
   // First-hour numbers follow the live clock: 60 office minutes when the process counts working hours.
   const workingClock = policy.source !== null && policy.firstContact.clock === "working";
-  const [unassigned, former, nudges, atRisk, onLeave, impact, staleCount, quiet] = await Promise.all([
+  const [unassigned, former, nudges, atRisk, onLeave, impact, staleCount, quiet, untouchedHeld] = await Promise.all([
     loadUnassigned(db, scope.branchId, workable, intakeListIds),
     loadFormerHolders(db, scope.branchId, workable),
     loadNudgeStates(db, auth.userId, now, tz),
@@ -123,10 +123,13 @@ export async function loadManagerHome(
     loadImpact(db, auth.tenantId, launchedAt, scope.branchId, now, tz, workingClock),
     countStaleCallbacks(leadScope, now, tz),
     loadQuietOverTwoWeeks(leadScope, workable, pulse.people.map((p) => p.userId), now, tz),
+    loadUntouchedHeld(db, scope.branchId, intakeListIds, now),
   ]);
 
   const nudgeByPerson = new Map<string, NudgeState>(nudges.map((n) => [n.toUserId, n.state]));
-  const plan = planReassign(pulse.people, { userId: null, positionKey: normalizePosition("lead-caller").key }, unassigned.count, pulse.heldLoad ?? {}, flags7d);
+  // "Assign N new leads" is answered by smart assignment itself (the people the live process names for first contact, its filters
+  // and its spread), the same function Pulse's untouched row calls. A branch manager's suggestion stays inside their branch.
+  const suggestion = await suggestForLeads(db, auth.tenantId, unassigned.ids, { branchId: scope.branchId, now });
   // The Review link covers the same lists as the count: the personal lists plus the intake lists (as the former-holders link does).
   const unassignedHref = `/leads?${new URLSearchParams({
     f: encodeFilterTree({
@@ -138,7 +141,15 @@ export async function loadManagerHome(
     }),
   }).toString()}`;
 
-  const attention = attentionRows(pulse.attention, nudgeByPerson, auth.userId);
+  const holderNames = await namesOf(untouchedHeld.holders.map((h) => h.userId), nameOf0(pulse));
+  const attention = attentionRows(pulse.attention, nudgeByPerson, auth.userId, undefined, {
+    untouchedHeld: {
+      count: untouchedHeld.count,
+      href: untouchedLeadsHref(intakeListIds, { heldOnly: true }),
+      byHolder: untouchedHeld.holders.map((h) => ({ name: holderNames.get(h.userId) ?? "Someone", count: h.count })),
+    },
+    canOpenPulse: isAdmin,
+  });
   const listedPeople = new Set(pulse.attention.flatMap((a) => a.links.flatMap((l) => (l.personId ? [l.personId] : []))));
   const nameOf = new Map(pulse.people.map((p) => [p.userId, p.name]));
   const standalone = nudges
@@ -157,7 +168,7 @@ export async function loadManagerHome(
       count: unassigned.count,
       oldestAt: unassigned.oldestAt,
       now,
-      plan,
+      suggestion,
       leadIds: unassigned.count <= MAX_ASSIGN_IDS ? unassigned.ids : null,
       chooseHref: unassignedHref,
       // Only with a live process: today's plain "Waiting 14 h" when none is.
@@ -174,7 +185,7 @@ export async function loadManagerHome(
     ...attention,
     atRiskRow(atRisk, "/applications"),
     staleCallbacksRow(staleCount, scopeLabel),
-    quietOverRow(quiet.total, quiet.byPerson.map((p) => ({ name: nameOf.get(p.userId) ?? "Someone", count: p.count })), scopeLabel),
+    quietOverRow(quiet.total, quiet.byPerson.map((p) => ({ name: nameOf.get(p.userId) ?? "Someone", count: p.count })), scopeLabel, quietOverHref(workable.activeListIds)),
   ].filter((r): r is NeedsYouRow => r !== null);
 
   const shortName = ctx.tenantName.trim().split(/\s+/)[0] || "Your team";
@@ -195,6 +206,38 @@ export async function loadManagerHome(
     shadow: assignment.shadow,
     rules: isAdmin ? buildRulesCard(policy, assignmentMode, tz) : null,
   };
+}
+
+/** Pulse's people, by id, for naming holders (the rest are looked up). */
+const nameOf0 = (pulse: PulseResponse) => new Map(pulse.people.map((p) => [p.userId, p.name]));
+async function namesOf(ids: string[], known: ReadonlyMap<string, string>): Promise<Map<string, string>> {
+  const out = new Map(known);
+  const missing = ids.filter((id) => !out.has(id));
+  if (missing.length) for (const [id, name] of await resolveUserNames(missing)) out.set(id, name);
+  return out;
+}
+
+/**
+ * Untouched NEW leads that someone HOLDS: in the intake lists, never touched, created over 48 hours ago, `assigned_to` set. Pulse's
+ * intake alarm counts the unassigned ones too, but those are already on "Assign N new leads", so Home's row counts held ones
+ * only (a lead sits on one row). Same predicate as the `untouched_new` filter its Review link applies, plus "held".
+ */
+export async function loadUntouchedHeld(db: HomeDb, branchId: string | null, intakeListIds: string[], now: Date): Promise<{ count: number; holders: Array<{ userId: string; count: number }> }> {
+  if (intakeListIds.length === 0) return { count: 0, holders: [] };
+  let q = db
+    .from("leads")
+    .select("assigned_to", { count: "exact" })
+    .in("list_id", intakeListIds)
+    .is("deleted_at", null)
+    .is("last_touched_at", null)
+    .lt("created_at", new Date(now.getTime() - 48 * 3_600_000).toISOString())
+    .not("assigned_to", "is", null)
+    .limit(5000);
+  if (branchId) q = q.eq("branch_id", branchId);
+  const { data, count } = await q;
+  const per = new Map<string, number>();
+  for (const r of (data ?? []) as unknown as Array<{ assigned_to: string }>) per.set(r.assigned_to, (per.get(r.assigned_to) ?? 0) + 1);
+  return { count: count ?? 0, holders: [...per].map(([userId, n]) => ({ userId, count: n })).sort((a, b) => b.count - a.count) };
 }
 
 async function loadLaunchDate(db: HomeDb): Promise<string | null> {

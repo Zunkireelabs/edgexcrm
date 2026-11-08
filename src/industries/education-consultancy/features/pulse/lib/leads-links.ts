@@ -44,12 +44,20 @@ export function untouchedHeldOfPersonHref(userId: string): string {
   return `/leads?${new URLSearchParams({ f: encodeFilterTree(tree) }).toString()}`;
 }
 
-/** `/leads` on the intake list, filtered to NEW leads nobody has touched for 48h+ — the intake alarm's set. */
-export function untouchedLeadsHref(listSlug = "pre-qualified"): string {
+/**
+ * `/leads` on the intake list(s), filtered to NEW leads nobody has touched for 48h+ — the intake alarm's set.
+ * `listIds` are the intake lists the count was read from (any number, never a hard-coded slug), carried as a `stage`
+ * condition exactly like Home's unassigned link, so the link opens what was counted. `heldOnly` adds "someone holds it"
+ * (Home counts only held leads on this row; the unassigned ones are on "Assign N new leads").
+ */
+export function untouchedLeadsHref(listIds: string[], opts: { heldOnly?: boolean } = {}): string {
   const tree: FilterTree = {
     conjunction: "and",
-    conditions: [{ id: "pulse:untouched", field: "untouched_new", op: "is_true" }],
+    conditions: [
+      { id: "pulse:untouched", field: "untouched_new", op: "is_true" },
+      ...(listIds.length ? [{ id: "pulse:untouched-lists", field: "stage", op: "is_any_of" as const, value: [...new Set(listIds)] }] : []),
+      ...(opts.heldOnly ? [{ id: "pulse:untouched-held-by", field: "assignees", op: "is_not_empty" as const }] : []),
+    ],
   };
-  const p = new URLSearchParams({ list: listSlug, f: encodeFilterTree(tree) });
-  return `/leads?${p.toString()}`;
+  return `/leads?${new URLSearchParams({ f: encodeFilterTree(tree) }).toString()}`;
 }

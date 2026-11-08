@@ -1,6 +1,7 @@
 import { encodeFilterTree } from "@/lib/filters/serialize";
 import type { AttentionItem } from "../../pulse/lib/types";
-import type { ReassignPlan } from "../../pulse/lib/suggest";
+import { leadsOfPersonHref } from "../../pulse/lib/leads-links";
+import { noTakerSentence, type NewLeadSuggestion } from "./assignment/suggest";
 import type { NudgeState } from "./nudge";
 import type { Tone } from "./types";
 
@@ -33,18 +34,55 @@ const TONE: Record<string, Tone> = { bad: "bad", warn: "warn", good: "good", inf
  * re-skin of `buildAttention`'s output so Home and Pulse can never disagree. A person-shaped item (an activity drop)
  * also offers "Nudge <first name>" unless a nudge is already out / returning.
  */
+/**
+ * Pulse's intake alarm counts every untouched new lead, including the unassigned ones that "Assign N new leads" already
+ * covers. Home shows this row for HELD leads only (a lead sits on one row), and its Review link opens the same set.
+ */
+export interface HeldUntouched {
+  count: number;
+  href: string;
+  /** Who holds them, biggest first (the grey line names the top three). */
+  byHolder: Array<{ name: string; count: number }>;
+}
+
+export interface AttentionRowOptions {
+  /** Home's own count for the intake-alarm row. Absent = Pulse's row as it is. Zero = no row. */
+  untouchedHeld?: HeldUntouched;
+  /** /pulse is owner/admin-only: anyone else gets a link to the person's leads instead. Default true. */
+  canOpenPulse?: boolean;
+}
+
+const UNTOUCHED_ROW_ID = "untouched_leads";
+
 export function attentionRows(
   items: AttentionItem[],
   nudgeByPerson: ReadonlyMap<string, NudgeState>,
   /** The signed-in person: never the subject of their own Needs-you row, and never offered a nudge to themselves. */
   selfId: string,
   limit = NEEDS_YOU_LIMIT,
+  opts: AttentionRowOptions = {},
 ): NeedsYouRow[] {
+  const held = opts.untouchedHeld;
   return items
     .filter((a) => a.category === "needs_action")
     .filter((a) => !isAboutPerson(a, selfId))
+    // Zero held untouched leads: no row (and it must not use up one of the top-3 slots).
+    .filter((a) => !(held && a.id === UNTOUCHED_ROW_ID && held.count <= 0))
     .slice(0, limit)
     .map((a): NeedsYouRow => {
+      if (held && a.id === UNTOUCHED_ROW_ID) {
+        const top = held.byHolder.slice(0, 3).map((h) => `${h.name} ${h.count}`);
+        const others = held.byHolder.length - top.length;
+        return {
+          key: `attn:${a.id}`,
+          tone: TONE[a.tone] ?? "neutral",
+          icon: "user-plus",
+          title: `${held.count} new ${held.count === 1 ? "lead" : "leads"}`,
+          chip: null,
+          why: `untouched for over 48 hours${top.length ? ` \u00B7 held by ${top.join(", ")}${others > 0 ? ` and ${others} more` : ""}` : ""}`,
+          actions: [{ type: "link", label: `Review ${held.count}`, href: held.href }],
+        };
+      }
       const personId = a.links.find((l) => l.personId)?.personId ?? a.action?.personId ?? null;
       const person = personId && a.icon === "down" ? { id: personId, first: a.subject.trim().split(/\s+/)[0] || a.subject } : null;
       const nudge = person ? nudgeByPerson.get(person.id) : undefined;
@@ -61,7 +99,13 @@ export function attentionRows(
         if (reassign) actions.push(reassign);
         actions.push({ type: "note", label: "Nudged today" });
       } else {
-        if (person) actions.push({ type: "nudge", label: `Nudge ${person.first}`, userId: person.id, userName: a.subject });
+        if (person) {
+          // Nudge only when there is something to nudge about (the API refuses a person with no untouched leads): otherwise
+          // the way forward is to look at the person.
+          if ((a.staleHeld ?? 1) > 0) actions.push({ type: "nudge", label: `Nudge ${person.first}`, userId: person.id, userName: a.subject });
+          else if (opts.canOpenPulse === false) actions.push({ type: "link", label: "See their leads", href: leadsOfPersonHref(person.id) });
+          else actions.push({ type: "link", label: "Open in Pulse", href: "/pulse" });
+        }
         if (reassign) actions.push(reassign);
         if (!person && !reassign && a.links[0]?.href) actions.push({ type: "link", label: a.links[0].label, href: a.links[0].href });
       }
@@ -100,7 +144,8 @@ export function unassignedRow(args: {
   /** Oldest waiting lead, for "Waiting 14 h". */
   oldestAt: string | null;
   now: Date;
-  plan: ReassignPlan;
+  /** What smart assignment would do with these leads (the engine's own pick, not Pulse's spare-capacity rule). */
+  suggestion: NewLeadSuggestion;
   /** Up to MAX_ASSIGN_IDS ids, oldest first; null when there are too many to assign in one click. */
   leadIds: string[] | null;
   chooseHref: string;
@@ -111,7 +156,7 @@ export function unassignedRow(args: {
    */
   target?: { waitMin: number | null; targetMin: number; /** Working clock only: one working day in minutes, and the calendar days since arrival, shown from one working day up. */ long?: { dayMin: number; days: string } };
 }): NeedsYouRow | null {
-  const { count: n, plan } = args;
+  const { count: n, suggestion } = args;
   if (n <= 0) return null;
   const t = args.target && args.target.waitMin !== null ? { wait: args.target.waitMin, target: args.target.targetMin } : null;
   const over = t ? t.wait > t.target : false;
@@ -121,22 +166,25 @@ export function unassignedRow(args: {
     tone: (over ? "bad" : "new") as Tone,
     icon: "user-plus" as const,
     title: `Assign ${n} new ${n === 1 ? "lead" : "leads"}`,
-    chip: waiting ? { text: `Waiting ${waiting}${over && t ? ` · target ${t.target} min` : ""}`, tone: (over ? "bad" : "new") as Tone } : null,
+    chip: waiting ? { text: `Waiting ${waiting}${over && t ? ` \u00B7 target ${t.target} min` : ""}`, tone: (over ? "bad" : "new") as Tone } : null,
   };
   const choose: NeedsAction = { type: "link", label: "Choose…", href: args.chooseHref };
-  if (plan.kind === "none") {
-    return { ...base, why: "No one with the right role has spare capacity (a +50% cap on their open leads).", actions: [{ type: "link", label: `Review ${n}`, href: args.chooseHref, primary: true }] };
+  if (suggestion.placed <= 0 || suggestion.assignments.length === 0) {
+    // Nobody can take them: say why in the engine's own words, keep Review N.
+    return { ...base, why: noTakerSentence(suggestion, n), actions: [{ type: "link", label: `Review ${n}`, href: args.chooseHref, primary: true }] };
   }
-  const assignments =
-    plan.kind === "one"
-      ? [{ userId: plan.target.userId, name: plan.target.name, take: n }]
-      : plan.targets.map((t) => ({ userId: t.person.userId, name: t.person.name, take: t.take }));
-  const why = `Suggested: ${assignments.map((a) => `${a.name} +${a.take}`).join(", ")} · they have the most room`;
+  const assignments = suggestion.assignments.map((a) => ({ userId: a.userId, name: a.name, take: a.take }));
+  const left = Math.max(0, n - suggestion.placed);
+  const why =
+    `Suggested: ${assignments.map((a) => `${a.name} +${a.take}`).join(", ")} \u00B7 they have the most room` +
+    (left > 0 ? ` \u00B7 ${left} left for you to place${suggestion.unplaced > 0 && suggestion.reason ? ` (${suggestion.reason})` : ""}` : "");
   const actions: NeedsAction[] = [];
-  if (args.leadIds && args.leadIds.length === n) {
-    actions.push({ type: "assign", label: "Assign as suggested", leadIds: args.leadIds, assignments, primary: true });
+  const canAssign = !!args.leadIds && args.leadIds.length === n;
+  if (canAssign) {
+    // Grouped by person, in plan order, so `sliceAssignments` hands each person exactly their leads.
+    actions.push({ type: "assign", label: "Assign as suggested", leadIds: suggestion.assignments.flatMap((a) => a.leadIds), assignments, primary: true });
   }
-  actions.push(args.leadIds && args.leadIds.length === n ? choose : { ...choose, label: "Choose…" });
+  actions.push(choose);
   return { ...base, why, actions };
 }
 
@@ -208,9 +256,9 @@ export function staleCallbacksRow(count: number, scopeLabel: string): NeedsYouRo
 /**
  * Leads someone holds that nobody has contacted for over 2 weeks. Off personal lists (nobody can act on "101 leads going
  * quiet"), so the manager sees it ONCE, grouped by person (the three biggest in the grey line). No bulk action here:
- * reassigning / re-engaging comes later, "Review" just opens the leads list.
+ * reassigning / re-engaging comes later; "Review" opens exactly the counted leads (`quietOverHref`).
  */
-export function quietOverRow(total: number, byPerson: Array<{ name: string; count: number }>, scopeLabel: string): NeedsYouRow | null {
+export function quietOverRow(total: number, byPerson: Array<{ name: string; count: number }>, scopeLabel: string, href: string): NeedsYouRow | null {
   if (total <= 0) return null;
   const top = byPerson.slice(0, 3).map((p) => `${p.name} ${p.count}`);
   const others = byPerson.length - top.length;
@@ -221,8 +269,24 @@ export function quietOverRow(total: number, byPerson: Array<{ name: string; coun
     title: `${total} ${total === 1 ? "lead" : "leads"} with no contact for over 2 weeks`,
     chip: null,
     why: `${top.join(" \u00B7 ")}${others > 0 ? ` and ${others} more ${others === 1 ? "person" : "people"}` : ""}${top.length ? " \u00B7 " : ""}${scopeLabel}`,
-    actions: [{ type: "link", label: "Review", href: "/leads" }],
+    actions: [{ type: "link", label: "Review", href }],
   };
+}
+
+/**
+ * `/leads` on exactly the leads the quiet row counted: held by someone, no contact for 2+ weeks (the `no_contact_14d` filter is the
+ * same test the count runs), in the active lists (the workable list rule, as Home's unassigned link encodes it).
+ */
+export function quietOverHref(activeListIds: string[]): string {
+  const tree = {
+    conjunction: "and" as const,
+    conditions: [
+      { id: "home:no-contact", field: "no_contact_14d", op: "is_true" as const },
+      { id: "home:held", field: "assignees", op: "is_not_empty" as const },
+      ...(activeListIds.length ? [{ id: "home:active-lists", field: "stage", op: "is_any_of" as const, value: activeListIds }] : []),
+    ],
+  };
+  return `/leads?${new URLSearchParams({ f: encodeFilterTree(tree) }).toString()}`;
 }
 
 const FORMER_PERSON = "a former team member";

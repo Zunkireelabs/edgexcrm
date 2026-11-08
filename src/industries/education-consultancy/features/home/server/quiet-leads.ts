@@ -1,4 +1,4 @@
-import { staleCutoff } from "../lib/stale-callbacks";
+import { quietContactClauses, quietContactCutoff } from "@/lib/filters/quiet-contact";
 import type { ScopedLeads } from "./lead-scope";
 import { applyWorkable, type WorkablePlan } from "../lib/workable";
 
@@ -10,7 +10,7 @@ export interface QuietOver {
 
 /**
  * Workable leads (lib/workable.ts: active list, not terminal / walk-in / on hold / archived / deleted) held by someone, with NO
- * contact for over 14 tenant-local days. Exact predicate (same cutoff instant as stale call-backs: local midnight of tenant-today - 14):
+ * contact for over 14 tenant-local days. Exact predicate (cutoff = local midnight of tenant-today - 14, lib/filters/quiet-contact.ts):
  *   workable AND assigned_to IS NOT NULL
  *   AND ( last_touched_at < cutoff
  *      OR (last_touched_at IS NULL AND assigned_at < cutoff)
@@ -20,10 +20,11 @@ export interface QuietOver {
  */
 export async function loadQuietOverTwoWeeks(leads: ScopedLeads, plan: WorkablePlan, peopleIds: string[], now: Date, tz: string): Promise<QuietOver> {
   if (plan.activeListIds.length === 0) return { total: 0, byPerson: [] };
-  const cutoff = staleCutoff(now, tz).toISOString();
+  // The one shared test (lib/filters/quiet-contact.ts) — the same one the leads list's `no_contact_14d` filter compiles.
+  const clauses = quietContactClauses(quietContactCutoff(now, tz));
   const quiet = (count: boolean) =>
     applyWorkable(leads.select("id", count ? { count: "exact", head: true } : undefined).not("assigned_to", "is", null), plan)
-      .or(`last_touched_at.lt.${cutoff},and(last_touched_at.is.null,assigned_at.lt.${cutoff}),and(last_touched_at.is.null,assigned_at.is.null,created_at.lt.${cutoff})`);
+      .or(clauses.join(","));
   const [{ count }, per] = await Promise.all([
     quiet(true),
     Promise.all(peopleIds.map(async (userId) => ({ userId, count: (await quiet(true).eq("assigned_to", userId)).count ?? 0 }))),
