@@ -192,7 +192,7 @@ describe("P3 · review: Proposed by Orca, the Why row, the badges, the footer", 
     await open(view([change({ why: "Saturday leads wait.", evidence: [{ metric: "a", label: "never contacted", value: "17 of 17", stepKey: null, href: null }, { metric: "b", label: "Saturday: new leads", value: "17 of 131", stepKey: null, href: "/leads?f=sat" }] })]));
     const why = screen.getByTestId("orca-why");
     const line = within(why).getByTestId("orca-why-evidence");
-    expect(line.textContent).toBe("Evidence: 17 of 17 never contacted · 17 of 131 new leads");
+    expect(line.textContent).toBe("Evidence: 17 of 17 never contacted · 17 of 131 Saturday new leads");
     expect(why.querySelector("b")).toBeNull();
     expect(within(line).queryByRole("link", { name: /17 of 17/ })).toBeNull();
     expect(within(line).getByRole("link", { name: /17 of 131/ }).getAttribute("href")).toBe("/leads?f=sat");

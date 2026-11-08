@@ -55,9 +55,13 @@ describe("the Why sentence", () => {
     const { rest } = whySegments("Saturday leads wait.", [ev("17 of 17", null, "never contacted"), ev("17 of 131", "/leads?f=s", "Saturday")]);
     expect(rest).toEqual([{ label: "never contacted", value: "17 of 17" }, { label: "saturday", value: "17 of 131", href: "/leads?f=s" }]);
   });
-  it("short labels drop the 'Step:' prefix and lower-case the first word", () => {
-    expect(shortLabel("First contact: Contacted within 1 working hour")).toBe("contacted within 1 working hour");
-    expect(shortLabel("Saturday: Saturday leads called within 1 working hour")).toBe("saturday leads called within 1 working hour");
+  it("a step fact drops its 'Step:' prefix; a group fact keeps its group (Saturday, after-hours)", () => {
+    expect(shortLabel("First contact: Contacted within 1 working hour", "first_contact")).toBe("contacted within 1 working hour");
+    expect(shortLabel("Saturday: called within 1 working hour")).toBe("Saturday leads called within 1 working hour");
+    expect(shortLabel("Saturday: first contact median")).toBe("Saturday first contact median");
+    expect(shortLabel("Arrived outside office hours: first contact median")).toBe("after-hours first contact median");
+    expect(shortLabel("All new leads: never contacted")).toBe("all new leads never contacted");
+    expect(shortLabel("Saturday: new leads")).toBe("Saturday new leads");
     expect(shortLabel("SMS sent")).toBe("SMS sent");
   });
 });

@@ -123,15 +123,35 @@ export function whySegments(why: string, evidence: readonly Evidence[]): { segme
   }
   if (cursor < why.length) segments.push({ text: why.slice(cursor), bold: false });
 
-  const rest = items.flatMap((it, idx) => (used.has(idx) ? [] : [{ order: it.order, label: shortLabel(it.e.label), value: it.value, ...(it.e.href ? { href: it.e.href } : {}) }]));
+  const rest = items.flatMap((it, idx) => (used.has(idx) ? [] : [{ order: it.order, label: shortLabel(it.e.label, it.e.stepKey ?? null), value: it.value, ...(it.e.href ? { href: it.e.href } : {}) }]));
   rest.sort((a, b) => a.order - b.order);
   return { segments, rest: rest.map(({ label, value, href }) => ({ label, value, ...(href ? { href } : {}) })) };
 }
 
-/** "First contact: Contacted within 1 working hour" -> "contacted within 1 working hour": drop the "Step:" prefix, lower-case the first letter (not an acronym). */
-export function shortLabel(label: string): string {
-  const t = (label.includes(": ") ? label.slice(label.lastIndexOf(": ") + 2) : label).trim();
-  return /^[A-Z][a-z]/.test(t) ? t.charAt(0).toLowerCase() + t.slice(1) : t;
+const GENERIC_GROUPS: Array<[RegExp, string]> = [
+  [/^arrived outside office hours$/i, "after-hours"],
+  [/^arrived inside office hours$/i, "in-hours"],
+];
+const LOWER_GROUPS = /^(all new leads|gets an owner|oldest|\d{1,2}(:\d{2})?\s?(am|pm)?\s?[–-]\s?\d{1,2}.*)$/i;
+
+/**
+ * "First contact: Contacted within 1 working hour" -> "contacted within 1 working hour": a STEP fact (stepKey set) drops its "Step:" prefix.
+ * A GROUP fact keeps its group: "Saturday: called within 1 working hour" -> "Saturday leads called within 1 working hour",
+ * "Arrived outside office hours: first contact median" -> "after-hours first contact median". Proper names (weekday, branch, position) keep
+ * their capital; generic groups ("All new leads", "Gets an owner") are lower-cased.
+ */
+export function shortLabel(label: string, stepKey: string | null = null): string {
+  const at = label.lastIndexOf(": ");
+  const lower = (t: string) => (/^[A-Z][a-z]/.test(t) ? t.charAt(0).toLowerCase() + t.slice(1) : t);
+  if (at < 0) return lower(label.trim());
+  const head = label.slice(0, at).trim();
+  const measure = label.slice(at + 2).trim();
+  if (stepKey) return lower(measure);
+  const generic = GENERIC_GROUPS.find(([re]) => re.test(head));
+  const group = generic ? generic[1] : LOWER_GROUPS.test(head) ? lower(head) : head;
+  // "called within…" / "never contacted" are about leads; "new leads" and "first contact median" read as they are
+  const m = /^(called|never)\b/.test(measure) && !/leads$/.test(group) ? `leads ${measure}` : measure;
+  return `${group} ${m}`;
 }
 
 /** "needs per-lead SMS · EDGEX-104" (the mockup's chip). */
