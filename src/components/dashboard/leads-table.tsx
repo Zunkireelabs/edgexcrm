@@ -2760,6 +2760,14 @@ export function LeadsTable({
             setSortDirection(next.direction);
           }}
           savedViewsEnabled={hasSavedLeadFilters}
+          views={{
+            currentUserId,
+            applicationsListId: leadLists.find((l) => l.slug === "applications")?.id ?? null,
+            archiveSlug: leadLists.find((l) => l.is_archive && l.slug !== "delete")?.slug ?? null,
+            trashSlug: leadLists.find((l) => l.slug === "delete")?.slug ?? null,
+            onOpenList: (slug) => router.push(`/leads?list=${slug}`),
+            registry: advancedFilterRegistry,
+          }}
         />
       )}
 

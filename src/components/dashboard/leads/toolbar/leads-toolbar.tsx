@@ -12,8 +12,12 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { UsersIcon } from "@/components/icons";
 import { isEmptyTree } from "@/lib/filters/serialize";
-import type { FieldDef, FilterTree } from "@/lib/filters/types";
-import { useSavedLeadFilters } from "@/industries/education-consultancy/features/saved-lead-filters/lib/use-saved-lead-filters";
+import type { FieldDef, FieldRegistry, FilterTree } from "@/lib/filters/types";
+import { prepareSavedFilterTree } from "@/industries/education-consultancy/features/saved-lead-filters/lib/apply-saved-filter";
+import { useSavedLeadFilters, type SavedLeadFilter } from "@/industries/education-consultancy/features/saved-lead-filters/lib/use-saved-lead-filters";
+import { buildBuiltinViews, singleValueTree, type ViewDef } from "./builtin-views";
+import { fetchLeadCount } from "./lead-count";
+import { ViewTabs } from "./view-tabs";
 import type { OptionContext } from "./condition-body";
 import { FilterChips } from "./filter-chips";
 import { FilterMenu } from "./filter-menu";
@@ -50,6 +54,16 @@ export interface LeadsToolbarProps {
   onSortChange: (sort: SortState) => void;
   /** Saved views are an education_consultancy feature; false hides Save as view. */
   savedViewsEnabled: boolean;
+  views: {
+    currentUserId: string;
+    /** The tenant's Applications lead list id (tab hidden when null). */
+    applicationsListId: string | null;
+    archiveSlug: string | null;
+    trashSlug: string | null;
+    onOpenList: (slug: string) => void;
+    /** Registry used to re-validate a saved view's tree when it is applied. */
+    registry: FieldRegistry;
+  };
 }
 
 function isTypingTarget(target: EventTarget | null): boolean {
@@ -70,6 +84,7 @@ export function LeadsToolbar({
   sort,
   onSortChange,
   savedViewsEnabled,
+  views,
 }: LeadsToolbarProps) {
   const searchRef = useRef<HTMLInputElement>(null);
   const [filterOpen, setFilterOpen] = useState(false);
@@ -82,6 +97,48 @@ export function LeadsToolbar({
   const dirty = isViewDirty(baseline, current);
   const hasFilters = !isEmptyTree(filter.tree);
 
+  // --- view tabs ---------------------------------------------------------------------
+  const [activeSaved, setActiveSaved] = useState<{ id: string; name: string } | null>(null);
+  const fieldKeys = useMemo(() => new Set(filter.fields.map((f) => f.key)), [filter.fields]);
+  const builtin = useMemo(
+    () => buildBuiltinViews({ scopeTree, currentUserId: views.currentUserId, fieldKeys, applicationsListId: views.applicationsListId }),
+    [scopeTree, views.currentUserId, fieldKeys, views.applicationsListId],
+  );
+
+  // Tab counts: lazy, after the table has painted, through the table's own scope-aware list
+  // endpoint (role / branch / own limits apply). A failed count stays undefined -> no number drawn.
+  const [counts, setCounts] = useState<Record<string, number | null>>({});
+  const countsListId = fieldKeys.has("stage") ? views.applicationsListId : null;
+  useEffect(() => {
+    if (!countsListId) return;
+    const controller = new AbortController();
+    void fetchLeadCount({ tree: singleValueTree("stage", countsListId) }, controller.signal).then((n) => {
+      if (!controller.signal.aborted) setCounts((prev) => ({ ...prev, applications: n }));
+    });
+    return () => controller.abort();
+  }, [countsListId]);
+
+  function activateView(view: ViewDef) {
+    setActiveSaved(null);
+    setBaseline(baselineFromState(view.id, { tree: view.tree, sort: view.sort }));
+    filter.onChange(view.tree);
+    onSortChange(view.sort);
+  }
+
+  function applySaved(f: SavedLeadFilter) {
+    const { tree: prepared, dropped } = prepareSavedFilterTree(f.filter_tree, views.registry);
+    const remaining = prepared.conditions.length + (prepared.groups ?? []).reduce((n, g) => n + g.conditions.length, 0);
+    if (remaining === 0) {
+      toast.error("This saved view no longer applies to your leads.");
+      return;
+    }
+    if (dropped > 0) toast.info(`${dropped} part${dropped === 1 ? "" : "s"} of this view no longer exist and were skipped.`);
+    setActiveSaved({ id: f.id, name: f.name });
+    setBaseline(baselineFromState(f.id, { tree: prepared, sort: DEFAULT_SORT }));
+    filter.onChange(prepared);
+    onSortChange(DEFAULT_SORT);
+  }
+
   function discard() {
     const restored = discardToBaseline(baseline);
     filter.onChange(restored.tree);
@@ -92,6 +149,7 @@ export function LeadsToolbar({
     const result = await saved.create(name.trim(), filter.tree);
     if ("error" in result) return result.error;
     setBaseline(baselineFromState(result.filter.id, current));
+    setActiveSaved({ id: result.filter.id, name: result.filter.name });
     toast.success(`Saved “${result.filter.name}”`);
     return null;
   }
@@ -130,6 +188,32 @@ export function LeadsToolbar({
       {/* Row 2 — view tabs */}
       <div className="flex h-10 items-center gap-0.5 border-b border-ds-border px-3">
         {viewTabs}
+        <ViewTabs
+          views={builtin}
+          activeId={baseline.id}
+          counts={counts}
+          activeSaved={activeSaved}
+          onSelect={activateView}
+          more={{
+            saved: saved.filters,
+            savedLoaded: saved.loaded,
+            savedLoading: saved.loading,
+            loadSaved: saved.load,
+            onApplySaved: applySaved,
+            onDeleteSaved: async (id) => {
+              const err = await saved.remove(id);
+              if (!err && activeSaved?.id === id) setActiveSaved(null);
+              return err;
+            },
+            archive: views.archiveSlug ? { slug: views.archiveSlug } : null,
+            trash: views.trashSlug ? { slug: views.trashSlug } : null,
+            onOpenList: views.onOpenList,
+            hasFilters,
+            savedViewsEnabled,
+            onCreate: saveView,
+            activeSavedId: activeSaved?.id ?? null,
+          }}
+        />
         <span className="flex-1" />
         <div className="flex items-center gap-1">{viewActions}</div>
       </div>

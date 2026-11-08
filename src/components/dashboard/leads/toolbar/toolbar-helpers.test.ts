@@ -146,3 +146,38 @@ describe("tree edits", () => {
     expect(findConditionForField(base, "email")).toBeUndefined();
   });
 });
+
+import { buildBuiltinViews } from "./builtin-views";
+import { isViewDirty } from "./view-state";
+
+describe("built-in view tabs", () => {
+  const scopeTree: FilterTree = { conjunction: "and", conditions: [] };
+  const all = new Set(["assignees", "stage"]);
+
+  it("builds All / My / Applications from existing registry fields", () => {
+    const v = buildBuiltinViews({ scopeTree, currentUserId: "u1", fieldKeys: all, applicationsListId: "l-apps" });
+    expect(v.map((x) => x.id)).toEqual(["all", "mine", "applications"]);
+    expect(v[1].tree.conditions[0]).toMatchObject({ field: "assignees", op: "is_any_of", value: ["u1"] });
+    expect(v[2].tree.conditions[0]).toMatchObject({ field: "stage", op: "is_any_of", value: ["l-apps"] });
+    expect(v[2].showCount).toBe(true);
+    expect(v[0].showCount).toBe(false);
+  });
+
+  it("hides a tab whose field the tenant can't filter by, or whose list doesn't exist", () => {
+    expect(buildBuiltinViews({ scopeTree, currentUserId: "u1", fieldKeys: new Set(["stage"]), applicationsListId: null }).map((x) => x.id)).toEqual(["all"]);
+    expect(buildBuiltinViews({ scopeTree, currentUserId: "", fieldKeys: all, applicationsListId: "l" }).map((x) => x.id)).toEqual(["all", "applications"]);
+  });
+
+  it("does not define a Needs follow-up tab (owned by EDGEX-87 / EDGEX-121)", () => {
+    const v = buildBuiltinViews({ scopeTree, currentUserId: "u1", fieldKeys: all, applicationsListId: "l" });
+    expect(v.some((x) => x.id === "needs-follow-up")).toBe(false);
+  });
+
+  it("a tab is clean when selected and dirty once the user edits it", () => {
+    const [, mine] = buildBuiltinViews({ scopeTree, currentUserId: "u1", fieldKeys: all, applicationsListId: null });
+    const baseline = { id: mine.id, tree: mine.tree, sort: mine.sort };
+    expect(isViewDirty(baseline, { tree: mine.tree, sort: mine.sort })).toBe(false);
+    const edited: FilterTree = { ...mine.tree, conditions: [...mine.tree.conditions, { id: "n", field: "stage", op: "is", value: "s" }] };
+    expect(isViewDirty(baseline, { tree: edited, sort: mine.sort })).toBe(true);
+  });
+});
