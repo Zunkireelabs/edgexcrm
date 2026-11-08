@@ -5,6 +5,7 @@ vi.mock("@/lib/supabase/scoped", () => ({ scopedClient: vi.fn() }));
 
 import fs from "node:fs";
 import path from "node:path";
+import { heldClauses, heldCutoff } from "@/lib/filters/held-cutoff";
 import { quietContactClauses, quietContactCutoff } from "@/lib/filters/quiet-contact";
 import { loadQuietOverTwoWeeks } from "./quiet-leads";
 import { loadMyLeads, type HomeDb } from "./load-home";
@@ -15,7 +16,7 @@ const plan = buildWorkablePlan(["L1"], [{ pipeline_id: "P1", slug: "dropped", is
 
 function chain(log: unknown[][], result: unknown) {
   const q: Record<string, unknown> = {};
-  for (const m of ["select", "not", "is", "in", "eq", "or", "order", "limit", "neq"]) q[m] = (...a: unknown[]) => (log.push([m, ...a]), q);
+  for (const m of ["select", "not", "is", "in", "eq", "or", "order", "limit", "neq", "lt"]) q[m] = (...a: unknown[]) => (log.push([m, ...a]), q);
   q.then = (res: (v: unknown) => unknown) => res(result);
   return q;
 }
@@ -71,5 +72,34 @@ describe("smart assignment Room count", () => {
     const src = fs.readFileSync(path.resolve(__dirname, "assignment/engine.ts"), "utf8");
     expect(src).toMatch(/applyWorkable\(\s*db\.from\("leads"\)\.select\("id", \{ count: "exact", head: true \}\)\.eq\("assigned_to", m\.user_id\)/);
     expect(src).not.toMatch(/\.in\("list_id", lists\)/);
+  });
+});
+
+describe("loadUntouchedHeld: a lead counts only once it has been held 48 hours (click-through round 3, F)", () => {
+  const now = new Date("2026-11-08T12:00:00.000Z");
+  // Evaluates the two shared clauses the way PostgREST would, for one lead's assigned_at.
+  const counts = (assignedAt: string | null) =>
+    heldClauses(heldCutoff(now)).some((c) => (c === "assigned_at.is.null" ? assignedAt === null : assignedAt !== null && Date.parse(assignedAt) < Date.parse(c.replace("assigned_at.lt.", ""))));
+  it("assigned 1 hour ago: not counted; 49 hours ago: counted; never stamped (null): counted", () => {
+    expect(counts("2026-11-08T11:00:00.000Z")).toBe(false);
+    expect(counts("2026-11-06T11:00:00.000Z")).toBe(true);
+    expect(counts(null)).toBe(true);
+  });
+  it("the loader applies exactly those clauses", async () => {
+    const { loadUntouchedHeld } = await import("./load-manager");
+    const log: unknown[][] = [];
+    const db = { from: () => chain(log, { data: [{ assigned_to: "u1" }], count: 1 }) } as unknown as HomeDb;
+    const r = await loadUntouchedHeld(db, null, ["L1"], now);
+    expect(r.count).toBe(1);
+    expect(log).toContainEqual(["or", heldClauses(heldCutoff(now)).join(",")]);
+  });
+  it("the link's `held_48h` filter compiles the same clauses at the same cutoff", async () => {
+    const { compileFilter } = await import("@/lib/filters/compile");
+    const { leadFields } = await import("@/lib/filters/registry/leads");
+    const ctx = { tz: "UTC", now, industryId: "education_consultancy", permissions: {} } as never;
+    const sent: string[] = [];
+    const b: Record<string, unknown> = new Proxy({}, { get: (_t, n: string) => (...a: unknown[]) => (sent.push(`${n}|${a.map(String).join("|")}`), b) });
+    compileFilter(b as never, { conjunction: "and", conditions: [{ id: "h", field: "held_48h", op: "is_true" }] }, leadFields(ctx), ctx);
+    for (const c of heldClauses(heldCutoff(now))) expect(sent.join("\n")).toContain(c);
   });
 });

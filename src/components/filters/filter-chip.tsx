@@ -118,11 +118,18 @@ export function FilterChip({
         className="inline-flex h-7 shrink-0 items-center gap-1 rounded-[4px] border pl-2.5 pr-1 text-xs"
         style={{ backgroundColor: `${color}20`, borderColor: `${color}66` }}
       >
-        <PopoverTrigger asChild>
-          <button type="button" data-testid="filter-chip" className="font-medium hover:underline" style={{ color }}>
+        {field.fixedChipLabel ? (
+          // Machine-data condition: plain words, nothing to edit; it can only be removed.
+          <span data-testid="filter-chip" className="font-medium" style={{ color }}>
             {formatChipLabel(field, condition, displayOptions)}
-          </button>
-        </PopoverTrigger>
+          </span>
+        ) : (
+          <PopoverTrigger asChild>
+            <button type="button" data-testid="filter-chip" className="font-medium hover:underline" style={{ color }}>
+              {formatChipLabel(field, condition, displayOptions)}
+            </button>
+          </PopoverTrigger>
+        )}
         <button
           type="button"
           onClick={onRemove}

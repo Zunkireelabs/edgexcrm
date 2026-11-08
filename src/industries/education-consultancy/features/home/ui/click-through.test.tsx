@@ -7,6 +7,8 @@ vi.mock("next/link", () => ({ default: ({ href, children, ...rest }: { href: str
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 import type { DoNextItem } from "../lib/types";
+import { ManagerHome } from "./manager-home";
+import type { ManagerData } from "../server/load-manager";
 import { DoNextRow, type DoNextRows } from "./do-next-row";
 
 afterEach(cleanup);
@@ -29,5 +31,26 @@ describe("grouped Do-next rows: the title opens the same sheet as the button (cl
     const item: DoNextItem = { ...base, key: "q", title: "Sita Gurung", primaryAction: { type: "open", href: "/leads/1", label: "Open" }, evidenceHref: "/leads/1" };
     render(<DoNextRow item={item} nextStage={null} tz="UTC" rows={rows()} />);
     expect(screen.getByRole("link", { name: "Sita Gurung" }).getAttribute("href")).toBe("/leads/1");
+  });
+});
+
+describe("manager Needs-you rows (click-through round 3, E)", () => {
+  const data = (why: string) =>
+    ({
+      tz: "UTC", greeting: "Hi", lede: "x", dateShort: "x", needsALook: { rows: [], others: 0 }, canOpenPulse: true, impact: { status: "unset", since: null, rows: [] },
+      canSetLaunch: false, own: { doNext: { items: [] }, nextStageByLead: {} }, leaveWaiting: 0, branchName: null, shadow: null, rules: null,
+      needsYou: [{ key: "k", tone: "new", icon: "user-plus", title: "Assign 7 new leads", chip: { text: "Waiting 2 h", tone: "new" }, why, actions: [] }],
+    }) as unknown as ManagerData;
+  it("a 'Suggested:' line may wrap to two lines; other rows stay on one", () => {
+    const a = render(<ManagerHome data={data("Suggested: Gautam +2, Diplov +2, Kamana +2, Nikhil +1 \u00B7 they have the most room")} />);
+    expect(a.container.querySelector(".eh-wh.eh-wh-wrap")).not.toBeNull();
+    a.unmount();
+    const b = render(<ManagerHome data={data("Oldest arrived 28 Oct.")} />);
+    expect(b.container.querySelector(".eh-wh-wrap")).toBeNull();
+  });
+  it("the title and the chip are siblings in .eh-tl so the stylesheet can let the chip shrink first", () => {
+    const { container } = render(<ManagerHome data={data("x")} />);
+    expect(container.querySelector(".eh-tl > .eh-nm")?.textContent).toBe("Assign 7 new leads");
+    expect(container.querySelector(".eh-tl > .eh-chip")?.textContent).toBe("Waiting 2 h");
   });
 });

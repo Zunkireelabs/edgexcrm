@@ -2,6 +2,7 @@ import type { AuthContext } from "@/lib/api/auth";
 import { canManageHR } from "@/lib/api/permissions";
 import { getLeaveForHome, resolveUserNames } from "@/lib/supabase/queries";
 import { scopedClient } from "@/lib/supabase/scoped";
+import { heldClauses, heldCutoff } from "@/lib/filters/held-cutoff";
 import { encodeFilterTree } from "@/lib/filters/serialize";
 import type { TenantConfig } from "@/types/database";
 import { untouchedHeldOfPersonHref, untouchedLeadsHref } from "../../pulse/lib/leads-links";
@@ -220,7 +221,7 @@ async function namesOf(ids: string[], known: ReadonlyMap<string, string>): Promi
 /**
  * Untouched NEW leads that someone HOLDS: in the intake lists, never touched, created over 48 hours ago, `assigned_to` set. Pulse's
  * intake alarm counts the unassigned ones too, but those are already on "Assign N new leads", so Home's row counts held ones
- * only (a lead sits on one row). Same predicate as the `untouched_new` filter its Review link applies, plus "held".
+ * only (a lead sits on one row), and only once held 48 hours (see `held-cutoff.ts`). Same predicate as the `untouched_new` filter its Review link applies, plus "held".
  */
 export async function loadUntouchedHeld(db: HomeDb, branchId: string | null, intakeListIds: string[], now: Date): Promise<{ count: number; holders: Array<{ userId: string; count: number }> }> {
   if (intakeListIds.length === 0) return { count: 0, holders: [] };
@@ -232,6 +233,9 @@ export async function loadUntouchedHeld(db: HomeDb, branchId: string | null, int
     .is("last_touched_at", null)
     .lt("created_at", new Date(now.getTime() - 48 * 3_600_000).toISOString())
     .not("assigned_to", "is", null)
+    // Held for 48h+ (assigned_at older than the cutoff, or null): leads handed over seconds ago are not "untouched" yet. The
+    // leads list's `held_48h` filter compiles the same clauses from the same cutoff.
+    .or(heldClauses(heldCutoff(now)).join(","))
     .limit(5000);
   if (branchId) q = q.eq("branch_id", branchId);
   const { data, count } = await q;

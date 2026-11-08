@@ -79,6 +79,7 @@ export function scopeOptionsToConditionGroup(condition: FilterCondition, options
 }
 
 export function formatChipLabel(field: FieldDef, condition: FilterCondition, options: FilterOption[]): string {
+  if (field.fixedChipLabel) return field.fixedChipLabel; // machine-data value: never printed
   const prefixLabel = resolvePrefixLabel(field, condition, options);
   if (NO_VALUE_OPS.has(condition.op)) {
     return `${prefixLabel}: ${OPERATOR_LABELS[condition.op]}`;

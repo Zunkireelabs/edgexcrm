@@ -25,6 +25,11 @@
 .eh-ic.good { background: var(--ds-good-soft); border-color: color-mix(in srgb, var(--ds-good) 18%, var(--ds-surface)); color: var(--ds-good); }
 .eh-tl { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .eh-nm { color: var(--ds-ink); font-weight: 500; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+/* the title never gives way to the chip: the chip is the one that shrinks (with an ellipsis) */
+.eh-tl > .eh-nm { flex: 0 0 auto; max-width: 100%; }
+.eh-tl > .eh-chip { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* a manager row's "Suggested: A +2, B +2, …" line may take two lines on desktop (four real names do not fit on one at 1280) */
+.eh-wh.eh-wh-wrap { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .eh-nm-btn { background: none; border: 0; padding: 0; text-align: left; cursor: pointer; font-family: inherit; }
 .eh-nm-btn:hover { text-decoration: underline; }
 .eh-wh { color: var(--ds-muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
@@ -83,6 +88,8 @@
   .eh-it .eh-chip { display: none; }
   .eh-it .eh-wh { white-space: normal; }
   /* long titles wrap to two lines on a phone instead of being cut off ("551 call-back remind…") */
+  .eh-tl > .eh-nm { flex: 0 1 auto; }
+  .eh-wh.eh-wh-wrap { display: block; -webkit-line-clamp: unset; }
   .eh-nm { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; text-overflow: clip; overflow-wrap: break-word; }
   .eh-lbl { display: none; }
   .eh-log { padding-left: 14px; }

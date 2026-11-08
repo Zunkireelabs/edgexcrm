@@ -229,7 +229,7 @@ export function ManagerHome({ data }: { data: ManagerData }) {
                       <span className="eh-nm">{r.title}</span>
                       {r.chip ? <span className={`eh-chip ${r.chip.tone === "neutral" ? "" : r.chip.tone}`}>{r.chip.text}</span> : null}
                     </div>
-                    <div className="eh-wh">{r.chip ? <span className="eh-ph">{r.chip.text}{r.why ? " \u00B7 " : ""}</span> : null}{r.why}</div>
+                    <div className={r.why.startsWith("Suggested:") ? "eh-wh eh-wh-wrap" : "eh-wh"}>{r.chip ? <span className="eh-ph">{r.chip.text}{r.why ? " \u00B7 " : ""}</span> : null}{r.why}</div>
                   </div>
                   <div className={r.actions.length > 1 ? "eh-ac eh-ac-multi" : "eh-ac"}>
                     {r.actions.map((a, i) => (

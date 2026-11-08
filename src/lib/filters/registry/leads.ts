@@ -1,4 +1,5 @@
 import { and, or, pgLike, pgVal } from "../pgrst";
+import { heldClauses, heldCutoff } from "../held-cutoff";
 import { quietContactClauses, quietContactCutoff } from "../quiet-contact";
 import { workableSteps, type WorkableTerminal } from "../workable-clauses";
 import { FilterCompileError, type CompileCtx, type FieldDef, type FieldRegistry, type FilterCondition } from "../types";
@@ -211,6 +212,13 @@ function compileUntouchedHeld(_cond: FilterCondition, ctx: CompileCtx): string {
 
 function compileNoContact14d(_cond: FilterCondition, ctx: CompileCtx): string {
   return or(...quietContactClauses(quietContactCutoff(ctx.now, ctx.tz)));
+}
+
+// ── held_48h: virtual — the holder has had the lead for 48h+ (Home's "untouched, held" row; link only) ──
+// `assigned_at` older than 48h, or null (older leads were never stamped). One definition with Home's count (../held-cutoff.ts).
+
+function compileHeld48h(_cond: FilterCondition, ctx: CompileCtx): string {
+  return or(...heldClauses(heldCutoff(ctx.now)));
 }
 
 // ── workable: virtual — Home's "a lead someone should be working" (links only; hidden from the picker) ──
@@ -610,6 +618,17 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       industries: ["education_consultancy"],
     },
     {
+      key: "held_48h",
+      label: "Held for 48h+",
+      type: "boolean",
+      source: { kind: "virtual", compile: compileHeld48h },
+      operators: ["is_true"],
+      group: "Basic",
+      filterable: true,
+      hiddenFromPicker: true,
+      industries: ["education_consultancy"],
+    },
+    {
       key: "workable",
       label: "Workable",
       // `is` + a JSON string: the shared filter schema allows no value on is_true, and the terminal plan has to travel in the link.
@@ -619,6 +638,7 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       group: "Basic",
       filterable: true,
       hiddenFromPicker: true,
+      fixedChipLabel: "Still being worked",
       industries: ["education_consultancy"],
     },
     {

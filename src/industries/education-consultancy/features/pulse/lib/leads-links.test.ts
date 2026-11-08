@@ -52,7 +52,7 @@ describe("untouchedLeadsHref — Reassign for the untouched signal lands on exac
   });
   it("heldOnly adds 'someone holds it' (Home's row counts held leads only, so the link must open the same set)", () => {
     const held = treeOf(untouchedLeadsHref(["l-new"], { heldOnly: true }));
-    expect(held.conditions.map((c) => [c.field, c.op])).toEqual([["untouched_new", "is_true"], ["stage", "is_any_of"], ["assignees", "is_not_empty"]]);
+    expect(held.conditions.map((c) => [c.field, c.op])).toEqual([["untouched_new", "is_true"], ["stage", "is_any_of"], ["assignees", "is_not_empty"], ["held_48h", "is_true"]]);
     expect(planFilter(held, leadFields(ctx), ctx).ok).toBe(true);
     expect(treeOf(untouchedLeadsHref(["l-new"])).conditions.some((c) => c.field === "assignees")).toBe(false);
   });

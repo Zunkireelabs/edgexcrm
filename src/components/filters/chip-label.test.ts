@@ -104,3 +104,15 @@ describe("scopeOptionsToConditionGroup — reopened chips only offer their own c
     expect(scopeOptionsToConditionGroup(cond, groupedOptions)).toBe(groupedOptions);
   });
 });
+
+describe("formatChipLabel — a machine-data condition prints plain words, never its value (click-through round 3, D)", () => {
+  it("the `workable` chip says 'Still being worked' with no JSON in it", async () => {
+    const { leadFields } = await import("@/lib/filters/registry/leads");
+    const ctx = { tz: "UTC", now: new Date(), industryId: "education_consultancy", permissions: {} } as never;
+    const workable = leadFields(ctx).workable;
+    const cond: FilterCondition = { id: "w", field: "workable", op: "is", value: JSON.stringify({ terminalEverywhere: ["closed"], terminalSome: [] }) };
+    const label = formatChipLabel(workable, cond, []);
+    expect(label).toBe("Still being worked");
+    expect(label).not.toMatch(/[{}\[\]"]|terminal/);
+  });
+});
