@@ -224,4 +224,7 @@ END $$;
 REVOKE ALL ON FUNCTION public.education_process_breakdown(UUID, TEXT, TEXT, TIMESTAMPTZ, TIMESTAMPTZ, TEXT) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.education_process_breakdown(UUID, TEXT, TEXT, TIMESTAMPTZ, TIMESTAMPTZ, TEXT) TO service_role;
 
+INSERT INTO public.schema_migrations (version) VALUES ('289_education_process_improver.sql')
+  ON CONFLICT (version) DO NOTHING;
+
 COMMIT;
