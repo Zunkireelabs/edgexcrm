@@ -1,4 +1,4 @@
-import { HOME_RULES } from "./baseline";
+import { defaultPolicy, describeWindow, type ProcessPolicy } from "./policy";
 import type { ProcessKey } from "./keys";
 import type { StepStatus } from "./metrics";
 import type { AssignmentMode } from "../../home/lib/assignment/outcome";
@@ -48,17 +48,35 @@ export interface RuleRow {
   value: string;
 }
 
-/** The rules EdgeX really runs today, from the constants Home uses plus the tenant's assignment mode. Only one process has live rules. */
-export function liveRules(key: ProcessKey, mode: AssignmentMode): RuleRow[] | null {
+/**
+ * The rules EdgeX really runs, from the policy reader (the live process) plus the tenant's assignment mode. Without a policy these are
+ * today's constants. Only one process has live rules: the other three are measured only (see `measuredRules`).
+ */
+export function liveRules(key: ProcessKey, mode: AssignmentMode, policy?: ProcessPolicy): RuleRow[] | null {
   if (key !== "new_lead_first_call") return null;
-  const r = HOME_RULES;
+  const p = policy ?? defaultPolicy();
   return [
-    { label: "Assign within", value: `${r.assignWithinMinutes} min · ${ASSIGN_MODE_LABEL[mode]}` },
-    { label: "First contact", value: r.firstContactMinutes === 60 ? "1 hour" : `${r.firstContactMinutes} min` },
+    { label: "Assign within", value: `${p.assignWithinMin} min · ${ASSIGN_MODE_LABEL[mode]}` },
+    { label: "First contact", value: describeWindow(p.firstContact.minutes, p.firstContact.clock) },
     { label: "Call-back", value: "on the day booked" },
-    { label: "Unreachable", value: `after ${r.unreachableAfterCalls} no-answers` },
-    { label: "Decide within", value: `${r.decideWithinDays} days` },
+    { label: "Unreachable", value: `after ${p.unreachableAfterCalls} no-answers` },
+    { label: "Decide within", value: `${p.decideWithinDays} days` },
   ];
+}
+
+/** The three processes that are measured but do not run anything yet, and the ticket that will make them run. */
+export const MEASURED_ONLY_TICKET: Partial<Record<ProcessKey, string>> = { visa_to_enrolled: "EDGEX-105", dropping_a_student: "EDGEX-107", leaver_handover: "EDGEX-108" };
+
+/** Rows from each step's target ("Move to Enrolled: at least 80%"), for a process that runs nothing yet. */
+export function measuredRules(steps: Array<{ title: string; target: { op: "<=" | ">="; value: number; unit: string }; targetWords: string | null }>): RuleRow[] {
+  return steps.map((s) => ({ label: s.title, value: s.targetWords ?? `${s.target.op === ">=" ? "at least" : "at most"} ${s.target.value}${s.target.unit === "percent" ? "%" : s.target.unit === "min" ? " min" : ""}` }));
+}
+
+/** The line under the Rules card. New lead: the sentence that is now true. The others: they are only measured. */
+export function rulesFooter(key: ProcessKey, live: boolean): string {
+  if (key === "new_lead_first_call") return live ? "Change a rule here (through a new version) and Home, assignment and reminders change with it." : "These are the values EdgeX runs today. Once a version is live, changing a rule here changes Home, assignment and reminders.";
+  const t = MEASURED_ONLY_TICKET[key];
+  return `Measured only today.${t ? ` ${t} makes it run.` : ""}`;
 }
 
 const DAY = 86_400_000;

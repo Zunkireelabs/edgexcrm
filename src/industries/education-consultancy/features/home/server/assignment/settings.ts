@@ -48,8 +48,13 @@ export async function loadLearnedPositions(db: TenantDb, now: Date = new Date())
   return learnFirstTouchPositions(members, received);
 }
 
-/** The positions that take first contact NOW: the saved ones, else the learned ones, else the old default. */
-export async function resolveFirstTouchPositions(db: TenantDb, settings: AssignmentSettings, now: Date = new Date()): Promise<string[]> {
+/**
+ * The positions that take first contact NOW: the LIVE process's First contact step first (`processPositions`, from the policy reader),
+ * else the saved ones, else the learned ones, else the old default. `lead_assignment_settings.first_touch_positions` stays in the table
+ * but is not read while a process is live.
+ */
+export async function resolveFirstTouchPositions(db: TenantDb, settings: AssignmentSettings, now: Date = new Date(), processPositions?: string[] | null): Promise<string[]> {
+  if (processPositions && processPositions.length > 0) return processPositions;
   if (settings.positionsSaved) return settings.firstTouchPositions;
   const learned = await loadLearnedPositions(db, now);
   return learned.chosen.length ? learned.chosen : DEFAULT_SETTINGS.firstTouchPositions;

@@ -15,6 +15,7 @@ import {
   PulseIcon,
   TrendDownIcon,
   TrendUpIcon,
+  TreeStructureIcon,
   UserPlusIcon,
   UserSwitchIcon,
   UsersIcon,
@@ -306,6 +307,23 @@ export function ManagerHome({ data }: { data: ManagerData }) {
                   <Button look="v2" variant="secondary" size="sm" asChild><Link href="/settings">Turn on</Link></Button>
                 </div>
               </div>
+            </div>
+          ) : null}
+
+          {data.rules ? (
+            <div className="eh-card">
+              <div className="eh-ch">
+                <TreeStructureIcon size={16} aria-hidden />
+                <h3>Rules from your processes</h3>
+                {data.rules.href ? <Link href={data.rules.href} className="r">Open</Link> : null}
+              </div>
+              {data.rules.rows.map((r) => (
+                <div key={r.label} className="eh-met">
+                  <span className="k">{r.label}</span>
+                  <span className="v">{r.value}</span>
+                </div>
+              ))}
+              <div className="eh-note">{data.rules.footer}</div>
             </div>
           ) : null}
 

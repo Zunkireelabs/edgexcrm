@@ -6,6 +6,7 @@ import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { LEARN_DAYS } from "@/industries/education-consultancy/features/home/lib/assignment/weights";
 import { ASSIGNMENT_MODES, type AssignmentMode } from "@/industries/education-consultancy/features/home/lib/assignment/outcome";
+import { loadProcessPolicy } from "@/industries/education-consultancy/features/processes/server/policy";
 import { loadAssignmentSettings, loadLearnedPositions, resolveFirstTouchPositions } from "@/industries/education-consultancy/features/home/server/assignment/settings";
 
 // GET/PUT /api/v1/settings/lead-assignment — owner / admin of an education tenant. { mode, first_touch_positions }.
@@ -25,9 +26,20 @@ export async function GET() {
   const s = await loadAssignmentSettings(db);
   const learned = await loadLearnedPositions(db);
   // Until the owner confirms, the positions in force are the learned ones, shown as a suggestion with the numbers behind it.
-  const inForce = s.positionsSaved ? s.firstTouchPositions : learned.chosen.length ? learned.chosen : s.firstTouchPositions;
+  const policy = await loadProcessPolicy(db, g.auth.tenantId);
+  const fromProcess = policy.source && policy.firstTouchPositions ? policy.firstTouchPositions : null;
+  let process: { key: string; name: string; version: number; step: string; positions: Array<{ slug: string; name: string }> } | null = null;
+  if (fromProcess && policy.source) {
+    // Slugs -> names, for the read-only chips (T4). Positions the tenant has since removed keep their slug.
+    const { data: posRows } = await db.from("positions").select("slug, name");
+    const nameBySlug = new Map(((posRows ?? []) as unknown as Array<{ slug: string; name: string }>).map((r) => [r.slug, r.name]));
+    process = { key: policy.source.processKey, name: "New lead → first call", version: policy.source.version, step: "First contact", positions: fromProcess.map((slug) => ({ slug, name: nameBySlug.get(slug) ?? slug })) };
+  }
+  // While a process is live its positions are the ones in force; the saved/learned ones apply only when none is live.
+  const inForce = fromProcess ?? (s.positionsSaved ? s.firstTouchPositions : learned.chosen.length ? learned.chosen : s.firstTouchPositions);
   return apiSuccess({
     mode: s.mode,
+    process,
     first_touch_positions: inForce,
     positions_saved: s.positionsSaved,
     suggestion: { window_days: LEARN_DAYS, positions: learned.positions, chosen: learned.chosen, total: learned.total, covered: learned.covered },
@@ -65,5 +77,5 @@ export async function PUT(request: NextRequest) {
   );
   if (error) return apiError("DB_ERROR", "Failed to save", 500);
   const after = await loadAssignmentSettings(db);
-  return apiSuccess({ mode: body.mode, first_touch_positions: await resolveFirstTouchPositions(db, after), positions_saved: after.positionsSaved });
+  return apiSuccess({ mode: body.mode, first_touch_positions: await resolveFirstTouchPositions(db, after, new Date(), (await loadProcessPolicy(db, g.auth.tenantId)).firstTouchPositions), positions_saved: after.positionsSaved });
 }

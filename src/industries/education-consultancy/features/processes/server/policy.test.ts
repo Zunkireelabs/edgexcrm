@@ -37,10 +37,10 @@ beforeEach(() => warn.mockClear());
 
 describe("loadProcessPolicy", () => {
   it("v1 live -> 60/clock, with the source filled in", async () => {
-    const db = fakeDb({ ...LIVE, versions: { data: { version: 1, spec: SPEC(), approved_at: "2026-11-01T00:00:00Z" }, error: null } });
+    const db = fakeDb({ ...LIVE, versions: { data: { version: 1, spec: SPEC(), approved_at: "2026-11-01T00:00:00Z", approved_by: "u1" }, error: null } });
     const p = await loadProcessPolicy(db, "t-v1");
     expect(p.firstContact).toEqual({ minutes: 60, clock: "clock" });
-    expect(p.source).toEqual({ processKey: "new_lead_first_call", version: 1, approvedAt: "2026-11-01T00:00:00Z", ownerName: "Manish Sah" });
+    expect(p.source).toEqual({ processKey: "new_lead_first_call", version: 1, approvedAt: "2026-11-01T00:00:00Z", ownerName: "Manish Sah", approvedByName: "Manish Sah" });
     expect(p.officeHours.days).toEqual([0, 1, 2, 3, 4, 5]);
     expect(warn).not.toHaveBeenCalled();
   });

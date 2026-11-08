@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
+import { PencilSimpleIcon, PulseIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { ATTENDANCE_MIN_PEOPLE, ATTENDANCE_MIN_RECORDS, CAP_SLACK, DORMANT_DAYS, FIT_PRIOR, ROOM_FACTOR, WEIGHTS } from "../lib/assignment/weights";
 import type { AssignmentMode } from "../lib/assignment/outcome";
@@ -14,11 +16,26 @@ interface Suggestion {
   covered: number;
 }
 
+/** The live process's First contact step, when one is live (EDGEX-109 P3). Its positions are the ones smart assignment picks from. */
+export interface ProcessSource {
+  key: string;
+  name: string;
+  version: number;
+  step: string;
+  positions: Array<{ slug: string; name: string }>;
+}
+
+/** The sentence under the chips, and where "Suggest a change" goes: the process page with the sheet open on that step's `who`. */
+export const processSuggestHref = (p: ProcessSource): string => `/processes/${p.key}?suggest=first_contact&field=who`;
+
 const MODES: Array<{ value: AssignmentMode; label: string; hint: string }> = [
   { value: "off", label: "Off", hint: "New leads wait for a manager, as today." },
   { value: "shadow", label: "Shadow", hint: "It picks someone for every new lead but assigns nothing. Your home shows how often your managers agree." },
   { value: "auto", label: "Auto", hint: "It assigns each new lead the moment it arrives, tells the person, and shows you an FYI with Undo." },
 ];
+
+/** "A", "A and B", "A, B and C". */
+export const joinWords = (xs: string[]): string => (xs.length <= 1 ? (xs[0] ?? "") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
 
 /** Settings → Lead management (owner / admin): the mode, and a read-only explanation of how it picks. */
 export function SmartAssignmentCard() {
@@ -28,6 +45,7 @@ export function SmartAssignmentCard() {
   const [savedPositions, setSavedPositions] = useState<string[]>([]);
   const [positionsSaved, setPositionsSaved] = useState(false);
   const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
+  const [process, setProcess] = useState<ProcessSource | null>(null);
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
@@ -35,7 +53,7 @@ export function SmartAssignmentCard() {
     let live = true;
     fetch("/api/v1/settings/lead-assignment")
       .then((r) => (r.ok ? r.json() : null))
-      .then((j: { data?: { mode: AssignmentMode; first_touch_positions: string[]; positions_saved: boolean; suggestion: Suggestion | null } } | null) => {
+      .then((j: { data?: { mode: AssignmentMode; first_touch_positions: string[]; positions_saved: boolean; suggestion: Suggestion | null; process?: ProcessSource | null } } | null) => {
         if (!live || !j?.data) return;
         setMode(j.data.mode);
         setSaved(j.data.mode);
@@ -43,6 +61,7 @@ export function SmartAssignmentCard() {
         setSavedPositions(j.data.first_touch_positions);
         setPositionsSaved(j.data.positions_saved);
         setSuggestion(j.data.suggestion);
+        setProcess(j.data.process ?? null);
         setLoaded(true);
       })
       .catch(() => {});
@@ -87,7 +106,29 @@ export function SmartAssignmentCard() {
       </div>
       <Button look="v2" variant="primary" size="sm" disabled={busy || mode === saved} onClick={save}>{busy ? "Saving" : "Save"}</Button>
 
-      {suggestion && suggestion.positions.length > 0 ? (
+      {process ? (
+        <div className="rounded-md border border-gray-200 p-3 text-sm space-y-2.5" data-testid="first-touch-from-process">
+          <p className="font-medium text-gray-700">Who takes new leads</p>
+          <div className="flex flex-wrap items-center gap-2">
+            {process.positions.map((p) => (
+              <span key={p.slug} className="inline-flex h-7 items-center rounded-md border border-gray-200 bg-gray-50 px-2.5 text-[13px] text-gray-800">{p.name}</span>
+            ))}
+            <span className="text-gray-500">
+              from <Link href={`/processes/${process.key}`} className="text-blue-700 hover:underline">{process.name} v{process.version}</Link>, step <b className="font-medium text-gray-800">{process.step}</b>
+            </span>
+          </div>
+          <p className="text-gray-600">To change who takes new leads, suggest a change to that step. Once the process owner approves it, smart assignment follows.</p>
+          <Button look="v2" variant="secondary" size="sm" asChild>
+            <Link href={processSuggestHref(process)}><PencilSimpleIcon size={14} aria-hidden /> Suggest a change</Link>
+          </Button>
+          {suggestion && suggestion.positions.length > 0 ? (
+            <div className="rounded-md border border-gray-200 bg-gray-50 p-3 text-gray-600">
+              <p className="flex items-center gap-1.5 text-[11.5px] font-semibold uppercase tracking-wide text-gray-500"><PulseIcon size={13} aria-hidden /> Last {suggestion.window_days} days</p>
+              <p className="mt-1">Your new leads went to {joinWords(suggestion.positions.map((p) => `${p.name} (${p.count})`))}.</p>
+            </div>
+          ) : null}
+        </div>
+      ) : suggestion && suggestion.positions.length > 0 ? (
         <div className="rounded-md border border-gray-200 p-3 text-sm space-y-2" data-testid="first-touch-positions">
           <p className="font-medium text-gray-700">Who takes new leads</p>
           <p className="text-gray-600">

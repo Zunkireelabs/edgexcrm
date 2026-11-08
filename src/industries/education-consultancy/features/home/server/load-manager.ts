@@ -30,6 +30,9 @@ import type { HomeScope } from "../lib/scope";
 import { loadApplications, type HomeDb } from "./load-home";
 import { autoAssignedRow, shadowCard, type AutoDecision, type ShadowCard } from "../lib/assignment/summary";
 import { loadAssignmentSettings } from "./assignment/settings";
+import { loadProcessPolicy } from "../../processes/server/policy";
+import { workingMinutesBetween } from "../../processes/lib/working-hours";
+import { buildRulesCard, type RulesCard } from "../lib/rules-card";
 import { makeLeadScope } from "./lead-scope";
 import { loadQuietOverTwoWeeks } from "./quiet-leads";
 import { countStaleCallbacks } from "./stale-callbacks";
@@ -66,6 +69,8 @@ export interface ManagerData {
   branchName: string | null;
   /** Shadow mode: how often smart assignment agreed with the managers (owner/admin only). */
   shadow: ShadowCard | null;
+  /** "Rules from your processes" (T2): owner/admin only. */
+  rules: RulesCard | null;
 }
 
 function chunk<T>(xs: T[], n = CHUNK): T[][] {
@@ -105,14 +110,16 @@ export async function loadManagerHome(
   const flags7d: Record<string, "red" | "amber" | "green"> = {};
   for (const p of pulse.people) if (p.flag) flags7d[p.userId] = p.flag;
 
-  const [leadScope, workable] = await Promise.all([makeLeadScope(db, auth, scope), loadWorkablePlan(db)]);
+  const [leadScope, workable, policy] = await Promise.all([makeLeadScope(db, auth, scope), loadWorkablePlan(db), loadProcessPolicy(db, auth.tenantId)]);
+  // First-hour numbers follow the live clock: 60 office minutes when the process counts working hours.
+  const workingClock = policy.source !== null && policy.firstContact.clock === "working";
   const [unassigned, former, nudges, atRisk, onLeave, impact, staleCount, quiet] = await Promise.all([
     loadUnassigned(db, scope.branchId, workable),
     loadFormerHolders(db, scope.branchId, workable),
     loadNudgeStates(db, auth.userId, now, tz),
     loadAtRisk(db, scope.branchId, today, now, tz, pulse),
     loadOnLeaveToday(db, pulse.people.filter((p) => p.flag).map((p) => p.userId), today),
-    loadImpact(db, auth.tenantId, launchedAt, scope.branchId, now, tz),
+    loadImpact(db, auth.tenantId, launchedAt, scope.branchId, now, tz, workingClock),
     countStaleCallbacks(leadScope, now, tz),
     loadQuietOverTwoWeeks(leadScope, workable, pulse.people.map((p) => p.userId), now, tz),
   ]);
@@ -133,6 +140,7 @@ export async function loadManagerHome(
 
   const scopeLabel = scope.branchId ? (branches.find((b) => b.id === scope.branchId)?.name ?? "this branch") : "all branches";
   const assignment = isAdmin ? await loadAssignmentCards(db, now, nameOf) : { shadow: null, auto: null };
+  const assignmentMode = isAdmin ? (await loadAssignmentSettings(db)).mode : "off";
   const needsYou = [
     assignment.auto,
     unassignedRow({
@@ -142,6 +150,13 @@ export async function loadManagerHome(
       plan,
       leadIds: unassigned.count <= MAX_ASSIGN_IDS ? unassigned.ids : null,
       chooseHref: unassignedHref,
+      // Only with a live process: today's plain "Waiting 14 h" when none is.
+      target: policy.source && unassigned.oldestAt
+        ? {
+            waitMin: workingClock ? workingMinutesBetween(new Date(unassigned.oldestAt), now, policy.officeHours, tz) : (now.getTime() - Date.parse(unassigned.oldestAt)) / 60_000,
+            targetMin: policy.assignWithinMin,
+          }
+        : undefined,
     }),
     formerHolderRow({ ...former, href: formerHolderHref(former.holderIds, former.activeListIds) }),
     ...standalone,
@@ -167,6 +182,7 @@ export async function loadManagerHome(
     leaveWaiting: leaveSummary.pendingLeaveApprovals,
     branchName,
     shadow: assignment.shadow,
+    rules: isAdmin ? buildRulesCard(policy, assignmentMode, tz) : null,
   };
 }
 
@@ -310,7 +326,7 @@ async function loadOnLeaveToday(db: HomeDb, userIds: string[], today: string): P
   return new Set(((data ?? []) as unknown as Array<{ user_id: string }>).map((r) => r.user_id));
 }
 
-async function loadImpact(db: HomeDb, tenantId: string, launchedAt: string | null, branchId: string | null, now: Date, tz: string): Promise<ImpactCard> {
+async function loadImpact(db: HomeDb, tenantId: string, launchedAt: string | null, branchId: string | null, now: Date, tz: string, working = false): Promise<ImpactCard> {
   const status = impactStatus(launchedAt, now);
   if (status.kind === "unset") return { status: "unset", since: null, rows: [] };
   if (status.kind === "measuring") return { status: "measuring", since: measuringSince(status.since, tz), rows: [] };
@@ -321,6 +337,7 @@ async function loadImpact(db: HomeDb, tenantId: string, launchedAt: string | nul
       p_from: w.from.toISOString(),
       p_to: w.to.toISOString(),
       p_tz: tz,
+      p_working: working,
     });
     return error ? null : (data as unknown as ImpactRaw);
   };

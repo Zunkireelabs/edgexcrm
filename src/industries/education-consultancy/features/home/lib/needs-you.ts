@@ -104,16 +104,24 @@ export function unassignedRow(args: {
   /** Up to MAX_ASSIGN_IDS ids, oldest first; null when there are too many to assign in one click. */
   leadIds: string[] | null;
   chooseHref: string;
+  /**
+   * The live process's assign target (EDGEX-109 P3, T2). `waitMin` is the oldest lead's wait in the process's own minutes (office
+   * minutes when its clock is working, else plain minutes). Over the target the row turns red; under it stays blue. Absent = today's
+   * plain "Waiting 14 h" in blue.
+   */
+  target?: { waitMin: number | null; targetMin: number };
 }): NeedsYouRow | null {
   const { count: n, plan } = args;
   if (n <= 0) return null;
-  const waiting = args.oldestAt ? waitingLabel(args.now.getTime() - Date.parse(args.oldestAt)) : null;
+  const t = args.target && args.target.waitMin !== null ? { wait: args.target.waitMin, target: args.target.targetMin } : null;
+  const over = t ? t.wait > t.target : false;
+  const waiting = t ? shortWait(t.wait) : args.oldestAt ? waitingLabel(args.now.getTime() - Date.parse(args.oldestAt)) : null;
   const base = {
     key: "unassigned",
-    tone: "new" as Tone,
+    tone: (over ? "bad" : "new") as Tone,
     icon: "user-plus" as const,
     title: `Assign ${n} new ${n === 1 ? "lead" : "leads"}`,
-    chip: waiting ? { text: `Waiting ${waiting}`, tone: "new" as Tone } : null,
+    chip: waiting ? { text: `Waiting ${waiting}${over && t ? ` · target ${t.target} min` : ""}`, tone: (over ? "bad" : "new") as Tone } : null,
   };
   const choose: NeedsAction = { type: "link", label: "Choose…", href: args.chooseHref };
   if (plan.kind === "none") {
@@ -130,6 +138,14 @@ export function unassignedRow(args: {
   }
   actions.push(args.leadIds && args.leadIds.length === n ? choose : { ...choose, label: "Choose…" });
   return { ...base, why, actions };
+}
+
+/** "12 min", "2 h": a wait in minutes. */
+export function shortWait(min: number): string {
+  const m = Math.max(0, Math.round(min));
+  if (m < 90) return `${Math.max(1, m)} min`;
+  const h = Math.round(m / 60);
+  return h < 48 ? `${h} h` : `${Math.floor(h / 24)} days`;
 }
 
 function waitingLabel(ms: number): string {

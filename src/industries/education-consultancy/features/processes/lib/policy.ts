@@ -19,7 +19,17 @@ export interface ProcessPolicy {
   firstTouchPositions: string[] | null;
   officeHours: OfficeHours;
   /** Where this came from. Null = no live version / unreadable: today's defaults are running. */
-  source: { processKey: "new_lead_first_call"; version: number; approvedAt: string | null; ownerName: string | null } | null;
+  source: { processKey: "new_lead_first_call"; version: number; approvedAt: string | null; ownerName: string | null; approvedByName: string | null } | null;
+}
+
+/** "1 hour", "1 working hour", "90 minutes", "90 working minutes". */
+export function describeWindow(minutes: number, clock: "clock" | "working"): string {
+  const w = clock === "working" ? "working " : "";
+  if (minutes % 60 === 0) {
+    const h = minutes / 60;
+    return `${h} ${w}${h === 1 ? "hour" : "hours"}`;
+  }
+  return `${minutes} ${w}${minutes === 1 ? "minute" : "minutes"}`;
 }
 
 export const POLICY_PROCESS_KEY = "new_lead_first_call" as const;
@@ -41,6 +51,7 @@ export interface LiveVersionInfo {
   version: number;
   approvedAt: string | null;
   ownerName: string | null;
+  approvedByName?: string | null;
   spec: ProcessSpec;
 }
 
@@ -59,6 +70,6 @@ export function derivePolicy(live: LiveVersionInfo, officeHours: OfficeHours): P
     decideWithinDays: live.spec.rules?.decideWithinDays ?? base.decideWithinDays,
     firstTouchPositions: first && first.who.length > 0 ? [...first.who] : null,
     officeHours,
-    source: { processKey: POLICY_PROCESS_KEY, version: live.version, approvedAt: live.approvedAt, ownerName: live.ownerName },
+    source: { processKey: POLICY_PROCESS_KEY, version: live.version, approvedAt: live.approvedAt, ownerName: live.ownerName, approvedByName: live.approvedByName ?? null },
   };
 }

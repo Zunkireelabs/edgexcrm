@@ -88,7 +88,23 @@ export function EducationHome({ data }: { data: HomeData }) {
               const isLastTier = tier === [...TIERS].reverse().find((t) => shown.some((i) => i.tier === t.tier))?.tier;
               return (
                 <div key={tier}>
-                  <div className="eh-tier"><span className="t">{title}</span><span className="d">{desc}</span></div>
+                  <div className="eh-tier">
+                    <span className="t">{title}</span>
+                    <span className="d">{desc}</span>
+                    {tier === "now" && data.firstCalls?.working ? (
+                      <span className="r">
+                        First calls count in working hours
+                        {data.firstCalls.processHref ? (
+                          <>
+                            {" · "}
+                            <Link href={data.firstCalls.processHref}>New lead process</Link>
+                          </>
+                        ) : (
+                          " · New lead process"
+                        )}
+                      </span>
+                    ) : null}
+                  </div>
                   <div className="eh-list">
                     {tierRows.map((item) => (
                       <DoNextRow key={item.key} item={item} nextStage={data.nextStageByLead[item.leadId ?? ""] ?? (item.primaryAction.type === "call" ? data.nextStageByLead[item.primaryAction.leadId] ?? null : null)} tz={data.tz} rows={rows} />

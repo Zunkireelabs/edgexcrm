@@ -23,7 +23,7 @@ describe("derivePolicy", () => {
     expect(p.unreachableAfterCalls).toBe(HOME_RULES.unreachableAfterCalls);
     expect(p.decideWithinDays).toBe(HOME_RULES.decideWithinDays);
     expect(p.officeHours).toBe(OH);
-    expect(p.source).toEqual({ processKey: "new_lead_first_call", version: 2, approvedAt: "2026-11-08T05:00:00Z", ownerName: "Manish" });
+    expect(p.source).toEqual({ processKey: "new_lead_first_call", version: 2, approvedAt: "2026-11-08T05:00:00Z", ownerName: "Manish", approvedByName: null });
   });
   it("v2 spec (first_contact_1wh_pct) -> 60 working minutes", () => {
     expect(derivePolicy(live(v2()), OH).firstContact).toEqual({ minutes: 60, clock: "working" });

@@ -31,7 +31,7 @@ const processView = (over: Partial<ProcessView> = {}): ProcessView => {
     key: KEY, name: "New lead → first call", processId: "p1", ownerUserId: "u1", ownerName: "Manish Sah", reviewDueAt: null, createdAt: "2026-11-07T10:00:00Z",
     shown: { id: "v1", version: 1, status: "live", source: "system", approvedAt: "2026-11-07T11:00:00Z", changeSummary: null },
     headline: steps[1], headlineStyle: "percent", headlineLabel: "contacted within 1 hour", summary: "s", trigger: buildTrigger(KEY, ADMIZZ_NEW_LEAD_RAW),
-    drivesSummary: "Home rules", stepOwners: [], drives: [], rules: null, steps, spec, specError: null, canApprove: true, draft: null, ...over,
+    drivesSummary: "Home rules", stepOwners: [], drives: [], rules: null, rulesFooter: "", steps, spec, specError: null, canApprove: true, draft: null, ...over,
   };
 };
 

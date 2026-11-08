@@ -42,12 +42,16 @@ export function countMetric(
 
 export const MIN_FIRST_HOUR_USUAL_LEADS = 3;
 
-export function firstHourMetric(f: FirstHourInput): WeekMetric {
+/** The label follows the live clock: "New leads called within 1 working hour" or "… within 1 hour". */
+export const firstHourLabel = (clock: "clock" | "working", minutes = 60): string =>
+  `New leads called within ${minutes === 60 ? (clock === "working" ? "1 working hour" : "1 hour") : `${minutes} ${clock === "working" ? "working minutes" : "minutes"}`}`;
+
+export function firstHourMetric(f: FirstHourInput, label: string = firstHourLabel("clock")): WeekMetric {
   const { called, total } = f.current;
   const value = `${called} of ${total}`;
   const u = f.usual;
   if (total === 0 || !u || u.total < MIN_FIRST_HOUR_USUAL_LEADS) {
-    return { key: "first_hour", label: "New leads contacted within 1 hour", value, note: null, tone: "neutral" };
+    return { key: "first_hour", label, value, note: null, tone: "neutral" };
   }
   const usualCalled = Math.round(u.called);
   const usualTotal = Math.round(u.total);
@@ -56,7 +60,7 @@ export function firstHourMetric(f: FirstHourInput): WeekMetric {
   const diff = rate - usualRate;
   const tone: Tone = diff >= 0.1 ? "good" : diff <= -0.1 ? "warn" : "neutral";
   const word = tone === "good" ? "better than your usual" : tone === "warn" ? "below your usual" : "about your usual";
-  return { key: "first_hour", label: "New leads contacted within 1 hour", value, note: `${word} ${usualCalled} of ${usualTotal}`, tone };
+  return { key: "first_hour", label, value, note: `${word} ${usualCalled} of ${usualTotal}`, tone };
 }
 
 /** "Friday", "Thu–Fri" or "12–13 Nov": the approved-leave days inside the window, for "you were on leave …". */
@@ -80,6 +84,8 @@ export function firstHourCounts(
   contactsByLead: ReadonlyMap<string, number[]>,
   from: number,
   to: number,
+  /** The deadline for a lead that reached me at `assignedAt` (ms). Default: 60 clock minutes; the live process may count office hours. */
+  deadlineOf: (assignedAt: number) => number = (a) => a + 3_600_000,
 ): { called: number; total: number } {
   let total = 0;
   let called = 0;
@@ -87,7 +93,7 @@ export function firstHourCounts(
     if (l.assignedAt < from || l.assignedAt >= to) continue;
     total += 1;
     const cs = contactsByLead.get(l.id) ?? [];
-    if (cs.some((t) => t >= l.assignedAt && t <= l.assignedAt + 3_600_000)) called += 1;
+    if (cs.some((t) => t >= l.assignedAt && t <= deadlineOf(l.assignedAt))) called += 1;
   }
   return { called, total };
 }

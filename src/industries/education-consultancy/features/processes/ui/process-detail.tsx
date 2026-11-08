@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowSquareOutIcon, PencilSimpleIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
@@ -33,7 +34,11 @@ export function ProcessDetail({ processKey, tenantName }: { processKey: string; 
   const [tab, setTab] = useState<Tab>("map");
   const [busy, setBusy] = useState(false);
   const [approveError, setApproveError] = useState<string | null>(null);
-  const [sheet, setSheet] = useState(false);
+  // ?suggest=first_contact&field=who (smart assignment's "Suggest a change") opens the sheet on that step and field.
+  const query = useSearchParams();
+  const suggestStep = query.get("suggest");
+  const suggestField = query.get("field");
+  const [sheet, setSheet] = useState(() => !!suggestStep);
   const { data, loading, error, reload } = useProcessesFetch<DetailResponse>(`/api/v1/processes/${processKey}?days=${days}`);
 
   // An evidence chip on the review page links to `#step-<key>`: the map renders after the fetch, so scroll once it is there.
@@ -150,7 +155,7 @@ export function ProcessDetail({ processKey, tenantName }: { processKey: string; 
                 </section>
                 <aside className="space-y-4">
                   <AboutCard p={p} tenantName={tenantName} />
-                  {p.rules ? <RulesCard rules={p.rules} /> : null}
+                  {p.rules ? <RulesCard rules={p.rules} footer={p.rulesFooter} /> : null}
                 </aside>
               </div>
             </div>
@@ -187,7 +192,7 @@ export function ProcessDetail({ processKey, tenantName }: { processKey: string; 
           ) : null}
 
           {canSuggest && p.shown ? (
-            <SuggestSheet open={sheet} onOpenChange={setSheet} p={p} days={days} positions={data.positions} nextVersion={nextVersion} draftChanges={p.draft?.changeCount ?? 0} liveVersion={p.shown.version} onAdded={reload} />
+            <SuggestSheet open={sheet} onOpenChange={setSheet} p={p} days={days} positions={data.positions} nextVersion={nextVersion} draftChanges={p.draft?.changeCount ?? 0} liveVersion={p.shown.version} onAdded={reload} initialPart={suggestStep ? `step:${suggestStep}` : undefined} initialField={suggestField === "who" || suggestField === "target" || suggestField === "wording" ? suggestField : undefined} />
           ) : null}
         </>
       ) : null}
@@ -352,12 +357,11 @@ function AboutCard({ p, tenantName }: { p: ProcessView; tenantName: string }) {
   );
 }
 
-function RulesCard({ rules }: { rules: NonNullable<ProcessView["rules"]> }) {
+function RulesCard({ rules, footer }: { rules: NonNullable<ProcessView["rules"]>; footer: string }) {
   return (
     <Card title="Rules that run from it">
       <Facts rows={rules.map((r) => [r.label, r.value])} />
-      {/* Until P3 makes "change a rule here and Home changes" true, the footer only states what runs today. */}
-      <p className="mt-3 text-[12.5px] text-ds-muted">These are the values EdgeX runs today.</p>
+      <p className="mt-3 text-[12.5px] text-ds-muted">{footer}</p>
     </Card>
   );
 }

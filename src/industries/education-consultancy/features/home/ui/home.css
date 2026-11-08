@@ -9,9 +9,12 @@
 .eh-sh h2 { font-size: 16px; font-weight: 600; color: var(--ds-ink); letter-spacing: -0.01em; }
 .eh-count { font-size: 12px; color: var(--ds-muted); background: var(--ds-sunken); border: 1px solid var(--ds-border); border-radius: var(--ds-r-full); padding: 0 7px; height: 20px; display: inline-grid; place-items: center; font-variant-numeric: tabular-nums; }
 .eh-seg { margin-left: auto; }
-.eh-tier { display: flex; align-items: center; gap: 8px; margin: 16px 0 2px; padding: 0 2px; }
+.eh-tier { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 16px 0 2px; padding: 0 2px; }
 .eh-tier .t { font-size: 12px; font-weight: 600; color: var(--ds-ink); }
 .eh-tier .d { font-size: 12px; color: var(--ds-muted); }
+.eh-tier .r { margin-left: auto; font-size: 12px; color: var(--ds-muted); }
+.eh-tier .r a { color: var(--ds-accent); font-weight: 500; }
+.eh-tier .r a:hover { text-decoration: underline; }
 .eh-list { border: 1px solid var(--ds-border); border-radius: var(--ds-r-md); overflow: hidden; background: var(--ds-surface); }
 .eh-it { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 11px 12px 11px 14px; border-top: 1px solid var(--ds-divider); }
 .eh-it:first-child { border-top: 0; }

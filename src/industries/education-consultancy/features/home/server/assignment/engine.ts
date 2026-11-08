@@ -11,6 +11,7 @@ import { leadNotes, noteReadFailed } from "../lead-notes";
 import { logger } from "@/lib/logger";
 import { applyWorkable } from "../../lib/workable";
 import { firstTouchKeys, loadAssignmentSettings, resolveFirstTouchPositions, type TenantDb } from "./settings";
+import { loadProcessPolicy } from "../../../processes/server/policy";
 
 interface MemberRow {
   user_id: string;
@@ -27,7 +28,9 @@ interface MemberRow {
  */
 export async function buildPool(db: TenantDb, tenantId: string, now: Date): Promise<{ pool: Candidate[]; team: ReturnType<typeof buildTeam>; tz: string }> {
   const settings = await loadAssignmentSettings(db);
-  const keys = firstTouchKeys(await resolveFirstTouchPositions(db, settings, now));
+  // "Who takes new leads" comes from the live New-lead process (its First contact step); saved/learned only when none is live.
+  const policy = await loadProcessPolicy(db, tenantId);
+  const keys = firstTouchKeys(await resolveFirstTouchPositions(db, settings, now, policy.firstTouchPositions));
   const { data: tenantRow } = await db.fromGlobal("tenants").select("timezone").eq("id", tenantId).maybeSingle();
   const tz = (tenantRow as unknown as { timezone: string | null } | null)?.timezone ?? "Asia/Kathmandu";
   const today = dayBounds(now, tz).start.toISOString();

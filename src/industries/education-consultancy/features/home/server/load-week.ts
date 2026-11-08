@@ -10,12 +10,15 @@ import { addDaysStr, localDate } from "../lib/time";
 import {
   countMetric,
   firstHourCounts,
+  firstHourLabel,
   firstHourMetric,
   leaveText,
   type WeekMetric,
 } from "../lib/week-stats";
 import type { HomeDb } from "./load-home";
 import { leadNotes, noteReadFailed } from "./lead-notes";
+import { workingDeadline } from "../../processes/lib/working-hours";
+import type { HomePolicy } from "../lib/rules/ctx";
 
 const DAY = 86_400_000;
 
@@ -30,6 +33,7 @@ export async function loadMyWeek(
   tz: string,
   config: TenantConfig | null | undefined,
   now: Date,
+  policy?: HomePolicy,
 ): Promise<WeekMetric[]> {
   const ctx = buildHomePulseContext(auth, db, tz, config, now, null, []);
   if (!ctx) return [];
@@ -44,7 +48,7 @@ export async function loadMyWeek(
     ),
     loadCoverage(ctx),
     loadLeaveDays(db, auth.userId, window.from, window.to, tz),
-    loadFirstHour(db, auth.tenantId, auth.userId, now),
+    loadFirstHour(db, auth.tenantId, auth.userId, now, tz, policy),
   ]);
   const infos = (await loadPeople(ctx, new Set([auth.userId]))).filter((p) => p.userId === auth.userId);
   const rows = statsAll.buckets.rows.filter((r) => r.user_id === auth.userId);
@@ -54,7 +58,7 @@ export async function loadMyWeek(
   const why = leaveText(leave);
   return [
     countMetric("calls", "Calls made", { current: me?.current.calls ?? 0, usual: me?.usual.calls ?? 0, hasUsual }, why),
-    firstHourMetric(firstHour),
+    firstHourMetric(firstHour, firstHourLabel(policy?.firstContact.clock ?? "clock", policy?.firstContact.minutes ?? 60)),
     countMetric("moves", "Moved forward", { current: me?.current.moves ?? 0, usual: me?.usual.moves ?? 0, hasUsual }, why),
   ];
 }
@@ -79,7 +83,7 @@ async function loadLeaveDays(db: HomeDb, userId: string, from: Date, to: Date, t
 }
 
 /** "New leads contacted within 1 hour" (a call, email, meeting or note by me: lib/contact.ts): this week vs the mean of the 4 weeks before. */
-async function loadFirstHour(db: HomeDb, tenantId: string, userId: string, now: Date) {
+async function loadFirstHour(db: HomeDb, tenantId: string, userId: string, now: Date, tz: string, policy?: HomePolicy) {
   const t1 = now.getTime();
   const earliest = t1 - 35 * DAY;
   const iso = new Date(earliest).toISOString();
@@ -105,8 +109,11 @@ async function loadFirstHour(db: HomeDb, tenantId: string, userId: string, now: 
     list.push(Date.parse(c.created_at));
     contactsByLead.set(c.lead_id, list);
   }
-  const current = firstHourCounts(leads, contactsByLead, t1 - 7 * DAY, t1);
-  const prior = [1, 2, 3, 4].map((i) => firstHourCounts(leads, contactsByLead, t1 - (i + 1) * 7 * DAY, t1 - i * 7 * DAY));
+  // The window follows the live process: 60 office minutes (working clock) or 60 clock minutes. Same rule as the Home rows.
+  const fc = policy?.live ? policy.firstContact : null;
+  const deadlineOf = fc?.clock === "working" ? (a: number) => workingDeadline(new Date(a), fc.minutes, policy!.officeHours, tz).getTime() : fc ? (a: number) => a + fc.minutes * 60_000 : undefined;
+  const current = firstHourCounts(leads, contactsByLead, t1 - 7 * DAY, t1, deadlineOf);
+  const prior = [1, 2, 3, 4].map((i) => firstHourCounts(leads, contactsByLead, t1 - (i + 1) * 7 * DAY, t1 - i * 7 * DAY, deadlineOf));
   const total = prior.reduce((s, p) => s + p.total, 0);
   const usual = total === 0 ? null : { called: prior.reduce((s, p) => s + p.called, 0) / 4, total: total / 4 };
   return { current, usual };

@@ -4,11 +4,12 @@ import { loadAssignmentSettings } from "../../home/server/assignment/settings";
 import type { AssignmentMode } from "../../home/lib/assignment/outcome";
 import { DEFAULT_WINDOW_DAYS, HEADLINE_METRIC, HEADLINE_STYLE, type HeadlineStyle, PROCESS_KEYS, PROCESS_NAMES, TRIGGER_METRIC, WINDOW_DAYS, isProcessKey, type ProcessKey } from "../lib/keys";
 import { fmtValue } from "../lib/format";
-import { liveRules, pluralizeRole, resolvePositionName, stepOwners, type RuleRow } from "../lib/view";
+import { liveRules, measuredRules, rulesFooter, pluralizeRole, resolvePositionName, stepOwners, type RuleRow } from "../lib/view";
 import { METRIC_REGISTRY, TARGET_OPTIONS, fmtN, formatMinutes, readMetric, stepStatus, type MetricUnit, type RawMetrics, type StepStatus } from "../lib/metrics";
 import { safeParseProcessSpec, type ProcessSpec } from "../lib/spec";
 import type { ProcessRow } from "../lib/store";
 import { canApproveProcess, type ProcessesContext } from "./context";
+import { loadProcessPolicy } from "./policy";
 
 type Db = Awaited<ReturnType<typeof scopedClientForTenant>>;
 
@@ -79,6 +80,8 @@ export interface ProcessView {
   drives: string[];
   /** Rules EdgeX really runs today (new-lead process only). */
   rules: RuleRow[] | null;
+  /** The line under the Rules card ("Measured only today. EDGEX-105 makes it run."). */
+  rulesFooter: string;
   steps: StepView[];
   spec: ProcessSpec | null;
   specError: string | null;
@@ -195,7 +198,7 @@ export async function loadProcessViews(ctx: ProcessesContext, windowDays: number
     if (chgErr) throw new Error(`process_changes count: ${chgErr.message}`);
     for (const c of (chg ?? []) as unknown as Array<{ version_id: string }>) countByDraft.set(c.version_id, (countByDraft.get(c.version_id) ?? 0) + 1);
   }
-  const [{ data: posRows }, settings] = await Promise.all([db.from("positions").select("slug, name"), loadAssignmentSettings(db)]);
+  const [{ data: posRows }, settings, policy] = await Promise.all([db.from("positions").select("slug, name"), loadAssignmentSettings(db), loadProcessPolicy(db, auth.tenantId)]);
   const nameBySlug = new Map(((posRows ?? []) as unknown as Array<{ slug: string; name: string }>).map((r) => [r.slug, r.name]));
   const to = new Date();
   const from = new Date(to.getTime() - windowDays * 86_400_000);
@@ -226,7 +229,8 @@ export async function loadProcessViews(ctx: ProcessesContext, windowDays: number
         drivesSummary: spec?.drivesSummary ?? uniqueOf(steps.flatMap((s) => s.drives)).join(", "),
         stepOwners: uniqueOf(spec ? spec.steps.flatMap((s) => s.who.map((w) => pluralizeRole(resolvePositionName(w, nameBySlug)))) : []),
         drives: uniqueOf(steps.flatMap((s) => s.drives)),
-        rules: liveRules(p.key, settings.mode),
+        rules: liveRules(p.key, settings.mode, policy) ?? (steps.length ? measuredRules(steps) : null),
+        rulesFooter: rulesFooter(p.key, policy.source !== null),
         steps,
         spec,
         specError: parsed && !parsed.ok ? parsed.error : null,

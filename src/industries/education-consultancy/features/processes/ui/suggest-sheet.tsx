@@ -74,6 +74,8 @@ export function SuggestSheet({
   draftChanges,
   liveVersion,
   onAdded,
+  initialPart,
+  initialField,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -84,26 +86,29 @@ export function SuggestSheet({
   draftChanges: number;
   liveVersion: number;
   onAdded: () => void;
+  /** Open on this part ("step:first_contact") and field ("who"): the deep link from smart assignment's Settings. */
+  initialPart?: string;
+  initialField?: ChangeField;
 }) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent look="v2" showCloseButton={false} className="sm:max-w-[600px]">
-        {open ? <SuggestForm p={p} days={days} positions={positions} nextVersion={nextVersion} draftChanges={draftChanges} liveVersion={liveVersion} onClose={() => onOpenChange(false)} onAdded={onAdded} /> : null}
+        {open ? <SuggestForm p={p} days={days} positions={positions} nextVersion={nextVersion} draftChanges={draftChanges} liveVersion={liveVersion} initialPart={initialPart} initialField={initialField} onClose={() => onOpenChange(false)} onAdded={onAdded} /> : null}
       </SheetContent>
     </Sheet>
   );
 }
 
-function SuggestForm({ p, days, positions, nextVersion, draftChanges, liveVersion, onClose, onAdded }: Omit<Parameters<typeof SuggestSheet>[0], "open" | "onOpenChange"> & { onClose: () => void }) {
+function SuggestForm({ p, days, positions, nextVersion, draftChanges, liveVersion, initialPart, initialField, onClose, onAdded }: Omit<Parameters<typeof SuggestSheet>[0], "open" | "onOpenChange"> & { onClose: () => void }) {
   const spec = p.spec!;
   const key = p.key as ProcessKey;
   const rows = useMemo(() => partRows(p, days), [p, days]);
   const nameBySlug = useMemo(() => new Map(positions.map((x) => [x.slug, x.name])), [positions]);
   const evidence = useMemo(() => evidenceOptions(p), [p]);
 
-  const [partId, setPartId] = useState(() => rows.find((r) => r.tone === "red")?.part ?? rows[1]?.part ?? rows[0].part);
+  const [partId, setPartId] = useState(() => rows.find((r) => r.part === initialPart)?.part ?? rows.find((r) => r.tone === "red")?.part ?? rows[1]?.part ?? rows[0].part);
   const row = rows.find((r) => r.part === partId) ?? rows[0];
-  const [fieldPick, setFieldPick] = useState<ChangeField>("target");
+  const [fieldPick, setFieldPick] = useState<ChangeField>(initialField ?? "target");
   const field: ChangeField = row.fields.includes(fieldPick) ? fieldPick : row.fields[0];
 
   const live = useMemo(() => currentValue(spec, row.part, field), [spec, row, field]);

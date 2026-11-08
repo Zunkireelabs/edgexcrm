@@ -15,17 +15,18 @@ export function unansweredStreak(l: Pick<HomeLead, "recentContacts">): number {
 }
 
 /**
- * unreachable: the lead's last 3 contacts are ALL unanswered calls (no answer / busy), with no note, email or other
+ * unreachable: the lead's last N (3 by default) contacts are ALL unanswered calls (no answer / busy), with no note, email or other
  * contact in between. Calling again is unlikely to work: say so instead of showing yet another call-back, and offer the
  * other channel. Such a lead is NOT also listed as a call-back row (build.ts passes its id to callbackRules).
  */
-export function unreachableRule(leads: HomeLead[], _ctx: RuleCtx): DoNextItem[] {
-  void _ctx;
+export function unreachableRule(leads: HomeLead[], ctx: RuleCtx): DoNextItem[] {
+  // The live process may set its own number (spec `rules.unreachableAfterCalls`); without one it is UNREACHABLE_CALLS.
+  const threshold = ctx.policy?.live ? ctx.policy.unreachableAfterCalls : UNREACHABLE_CALLS;
   const out: DoNextItem[] = [];
   for (const l of leads) {
     if (!l.isActive) continue;
     const n = unansweredStreak(l);
-    if (n < UNREACHABLE_CALLS) continue;
+    if (n < threshold) continue;
     out.push({
       key: `unreachable:${l.id}`,
       kind: "unreachable",

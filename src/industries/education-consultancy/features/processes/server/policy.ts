@@ -45,8 +45,8 @@ async function load(db: PolicyDb, tenantId: string): Promise<ProcessPolicy> {
       logger.warn({ tenantId }, "process policy: no live new-lead process, running today's values");
       return defaultPolicy(officeHours);
     }
-    const ver = (await db.from("process_versions").select("version, spec, approved_at").eq("id", proc.data.live_version_id).maybeSingle()) as unknown as {
-      data: { version: number; spec: unknown; approved_at: string | null } | null;
+    const ver = (await db.from("process_versions").select("version, spec, approved_at, approved_by").eq("id", proc.data.live_version_id).maybeSingle()) as unknown as {
+      data: { version: number; spec: unknown; approved_at: string | null; approved_by: string | null } | null;
       error: unknown;
     };
     if (ver.error) throw ver.error;
@@ -59,7 +59,10 @@ async function load(db: PolicyDb, tenantId: string): Promise<ProcessPolicy> {
       logger.warn({ tenantId, error: parsed.error }, "process policy: live spec unreadable, running today's values");
       return defaultPolicy(officeHours);
     }
-    return derivePolicy({ version: ver.data.version, approvedAt: ver.data.approved_at, ownerName: await ownerNameOf(db, proc.data.owner_user_id), spec: parsed.spec }, officeHours);
+    const ownerName = await ownerNameOf(db, proc.data.owner_user_id);
+    const approver = ver.data.approved_by;
+    const approvedByName = !approver ? null : approver === proc.data.owner_user_id ? ownerName : await ownerNameOf(db, approver);
+    return derivePolicy({ version: ver.data.version, approvedAt: ver.data.approved_at, ownerName, approvedByName, spec: parsed.spec }, officeHours);
   } catch (err) {
     logger.warn({ err, tenantId }, "process policy: read failed, running today's values");
     return defaultPolicy(officeHours);
