@@ -206,7 +206,7 @@ export function ValuesPanel({ field, rows, selected, onToggle, countsLoading }: 
                   on ? "bg-ds-accent" : "bg-ds-surface shadow-[inset_0_0_0_1.5px_var(--ds-ghost)]",
                 )}
               >
-                {on && <CheckIcon weight="bold" className="size-2.5 text-white" />}
+                {on && <CheckIcon className="size-3 text-white" />}
               </span>
               {row.color && <span aria-hidden="true" className="size-2 shrink-0 rounded-full" style={{ backgroundColor: row.color }} />}
               <span className="truncate">{row.label}</span>
