@@ -4,6 +4,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { normalizePhoneForStorage } from "@/lib/phone-utils";
 import { getBranchIds, getChecklistCounts, getTaskCounts } from "@/lib/supabase/queries";
 import { authenticateRequest, getClientIp } from "@/lib/api/auth";
+import { masterViewExcludeIds } from "@/lib/leads/master-exclusion";
 import { leadQueryScope, canSeeNav, canAccessList, isSharedPoolList, resolveEffectiveBranch } from "@/lib/api/permissions";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
@@ -306,7 +307,11 @@ export async function GET(request: NextRequest) {
       // Master view (no list/funnel) excludes both archive AND staging lists — the
       // page's `excludeIds` (page.tsx) filters on `is_archive || is_staging`; the old
       // version of this route only excluded is_archive, a real parity gap.
-      excludeListIds = lists.filter((l) => l.is_archive || l.is_staging).map((l) => l.id);
+      // An explicit `stage is_any_of` filter lifts the hide for the lists it names, admin/owner only (staging is admin-only) and within `access`.
+      excludeListIds = masterViewExcludeIds(lists, filterTree, (id) => {
+        const l = lists.find((x) => x.id === id);
+        return !!l && isAdminOrOwner && canAccessList(auth.permissions, l.access as { mode: string; positionIds?: string[] }, auth.positionId, l.id);
+      });
 
       if (listSlug) {
         const targetList = lists.find((l) => l.slug === listSlug);

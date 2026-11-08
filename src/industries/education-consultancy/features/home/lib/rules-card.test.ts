@@ -65,6 +65,14 @@ describe("unassignedRow against the process target (T2)", () => {
     expect(r.chip).toEqual({ text: "Waiting 1 h", tone: "new" });
     expect(r.tone).toBe("new");
   });
+  it("working clock, a working day or more: calendar days since arrival (P3b round 3)", () => {
+    const long = { dayMin: 540, days: "11 days" };
+    const r = unassignedRow({ ...base, target: { waitMin: 9 * 540, targetMin: 5, long } })!;
+    expect(r.chip).toEqual({ text: "Waiting 11 days · target 5 min", tone: "bad" });
+    expect(unassignedRow({ ...base, target: { waitMin: 86, targetMin: 5, long } })!.chip!.text).toBe("Waiting 86 min · target 5 min");
+    expect(shortWait(86, long)).toBe("86 min");
+    expect(shortWait(540, long)).toBe("11 days");
+  });
   it("shortWait", () => {
     expect([shortWait(0), shortWait(12), shortWait(89), shortWait(90), shortWait(60 * 50)]).toEqual(["1 min", "12 min", "89 min", "2 h", "2 days"]);
   });

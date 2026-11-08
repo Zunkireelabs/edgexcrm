@@ -1,4 +1,4 @@
-import { ageLabel, clock12, dayBounds, localDate, weekdayShort } from "../time";
+import { ageLabel, calendarDaysLabel, clock12, dayBounds, localDate, weekdayShort } from "../time";
 import { isInOfficeHours, workingDeadline, workingMinutesBetween } from "../../../processes/lib/working-hours";
 import type { DoNextItem, HomeLead } from "../types";
 import type { RuleCtx } from "./ctx";
@@ -9,7 +9,9 @@ export const NEW_LEAD_WINDOW_DAYS = 14;
 const MIN = 60_000;
 
 /** "35 min", "1 h 5 min", "2 h", "3 days": how late (compact, minutes known). */
-export function lateLabel(min: number): string {
+export function lateLabel(min: number, long?: { dayMin: number; days: string }): string {
+  // Working clock, a working day or more late: calendar days since the deadline ("4 days"), not office minutes divided by 24 h.
+  if (long && min >= long.dayMin) return long.days;
   const m = Math.max(1, Math.round(min));
   if (m < 60) return `${m} min`;
   const h = Math.floor(m / 60);
@@ -73,7 +75,7 @@ export function newUncalledRule(leads: HomeLead[], ctx: RuleCtx): DoNextItem[] {
 
     if (late) {
       const lateMin = working ? workingMinutesBetween(deadline, ctx.now, policy.officeHours, ctx.tz) : (ctx.now.getTime() - deadline.getTime()) / MIN;
-      out.push({ ...base, why: bits.join(" · "), chip: { text: `Late · ${lateLabel(lateMin)}`, tone: "bad" }, tone: "bad", sortKey: { group: 2, at: deadline.getTime() } });
+      out.push({ ...base, why: bits.join(" · "), chip: { text: `Late · ${lateLabel(lateMin, working ? { dayMin: policy.officeHours.endMin - policy.officeHours.startMin, days: calendarDaysLabel(deadline, ctx.now, ctx.tz) } : undefined)}`, tone: "bad" }, tone: "bad", sortKey: { group: 2, at: deadline.getTime() } });
     } else {
       // Group 2.5: upcoming deadlines come after every late row, soonest first.
       out.push({ ...base, why: bits.join(" · "), chip: { text: `New · call by ${whenLabel(deadline, ctx.now, ctx.tz)}`, tone: "new" }, tone: "new", sortKey: { group: 2.5, at: deadline.getTime() } });

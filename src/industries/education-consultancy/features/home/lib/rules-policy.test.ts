@@ -4,6 +4,7 @@ import { buildDoNext } from "./build";
 import { lateLabel, newUncalledRule, whenLabel } from "./rules/new-uncalled";
 import { unreachableRule } from "./rules/unreachable";
 import type { HomePolicy } from "./rules/ctx";
+import { calendarDaysLabel } from "./time";
 import { rankItems } from "./rank";
 import { firstHourCounts, firstHourLabel } from "./week-stats";
 import { workingDeadline } from "../../processes/lib/working-hours";
@@ -144,5 +145,33 @@ describe("your last 7 days follows the clock", () => {
     const to = at + 86_400_000 * 2;
     expect(firstHourCounts(leads, contacts, from, to)).toEqual({ called: 0, total: 1 });
     expect(firstHourCounts(leads, contacts, from, to, (a) => workingDeadline(new Date(a), 60, OH, KTM).getTime())).toEqual({ called: 1, total: 1 });
+  });
+});
+
+describe("long waits in calendar days (P3b round 3)", () => {
+  const long = (days: string) => ({ dayMin: OH.endMin - OH.startMin, days });
+  it("under one working day keeps the working-time text; from one working day up, the calendar days", () => {
+    expect(lateLabel(86, long("9 days"))).toBe("1 h 26 min");
+    expect(lateLabel(539, long("9 days"))).toBe("8 h 59 min");
+    expect(lateLabel(540, long("1 day"))).toBe("1 day");
+    expect(lateLabel(60 * 60)).toBe("2 days"); // clock mode: no `long`, today's label
+  });
+  it("a Saturday 8:10 pm lead on Sunday 11:26 still reads 'Late · 1 h 26 min'", () => {
+    const [i] = newUncalledRule([arrived("l-b", "Bikash", "2026-11-07T14:25:00.000Z")], ctx(WORKING, KTM, new Date("2026-11-08T05:41:00.000Z")));
+    expect(i.chip.text).toBe("Late · 1 h 26 min");
+  });
+  it("a lead whose deadline passed Wednesday 4 Nov reads 'Late · 4 days' on Sunday 8 Nov, not office minutes over 24 h", () => {
+    const [i] = newUncalledRule([arrived("l-o", "Old", "2026-11-04T04:15:00.000Z")], ctx(WORKING));
+    expect(i.chip.text).toBe("Late · 4 days");
+  });
+  it("clock mode keeps its own label", () => {
+    const [i] = newUncalledRule([arrived("l-c", "Clock", "2026-11-04T04:15:00.000Z")], ctx(CLOCK));
+    expect(i.chip.text).toMatch(/^Late · \d+ days$/);
+  });
+  it("calendarDaysLabel: 28 Oct 16:29 Kathmandu to 8 Nov is 11 days; the day boundary follows the tenant zone, not UTC", () => {
+    expect(calendarDaysLabel(new Date("2026-10-28T10:44:00.000Z"), NOW, KTM)).toBe("11 days");
+    // Los Angeles (UTC-8 after the 1 Nov change): Sat 7 Nov 11:30 pm -> Tue 10 Nov 1:00 am is 3 calendar days (UTC dates say 2).
+    expect(calendarDaysLabel(new Date("2026-11-08T07:30:00.000Z"), new Date("2026-11-10T09:00:00.000Z"), "America/Los_Angeles")).toBe("3 days");
+    expect(calendarDaysLabel(new Date("2026-11-08T07:30:00.000Z"), new Date("2026-11-08T08:30:00.000Z"), "America/Los_Angeles")).toBe("1 day");
   });
 });

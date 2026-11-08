@@ -25,7 +25,7 @@ import {
 } from "../lib/needs-you";
 import { nudgeState, stillUntouchedCount, type NudgeRecord, type NudgeState } from "../lib/nudge";
 import { deadlineDocsRule } from "../lib/rules/deadline-docs";
-import { localDate } from "../lib/time";
+import { calendarDaysLabel, localDate } from "../lib/time";
 import type { HomeScope } from "../lib/scope";
 import { loadApplications, type HomeDb } from "./load-home";
 import { autoAssignedRow, shadowCard, type AutoDecision, type ShadowCard } from "../lib/assignment/summary";
@@ -164,6 +164,7 @@ export async function loadManagerHome(
         ? {
             waitMin: workingClock ? workingMinutesBetween(new Date(unassigned.oldestAt), now, policy.officeHours, tz) : (now.getTime() - Date.parse(unassigned.oldestAt)) / 60_000,
             targetMin: policy.assignWithinMin,
+            long: workingClock ? { dayMin: policy.officeHours.endMin - policy.officeHours.startMin, days: calendarDaysLabel(new Date(unassigned.oldestAt), now, tz) } : undefined,
           }
         : undefined,
     }),

@@ -109,13 +109,13 @@ export function unassignedRow(args: {
    * minutes when its clock is working, else plain minutes). Over the target the row turns red; under it stays blue. Absent = today's
    * plain "Waiting 14 h" in blue.
    */
-  target?: { waitMin: number | null; targetMin: number };
+  target?: { waitMin: number | null; targetMin: number; /** Working clock only: one working day in minutes, and the calendar days since arrival, shown from one working day up. */ long?: { dayMin: number; days: string } };
 }): NeedsYouRow | null {
   const { count: n, plan } = args;
   if (n <= 0) return null;
   const t = args.target && args.target.waitMin !== null ? { wait: args.target.waitMin, target: args.target.targetMin } : null;
   const over = t ? t.wait > t.target : false;
-  const waiting = t ? shortWait(t.wait) : args.oldestAt ? waitingLabel(args.now.getTime() - Date.parse(args.oldestAt)) : null;
+  const waiting = t ? shortWait(t.wait, args.target?.long) : args.oldestAt ? waitingLabel(args.now.getTime() - Date.parse(args.oldestAt)) : null;
   const base = {
     key: "unassigned",
     tone: (over ? "bad" : "new") as Tone,
@@ -141,7 +141,8 @@ export function unassignedRow(args: {
 }
 
 /** "12 min", "2 h": a wait in minutes. */
-export function shortWait(min: number): string {
+export function shortWait(min: number, long?: { dayMin: number; days: string }): string {
+  if (long && min >= long.dayMin) return long.days;
   const m = Math.max(0, Math.round(min));
   if (m < 90) return `${Math.max(1, m)} min`;
   const h = Math.round(m / 60);

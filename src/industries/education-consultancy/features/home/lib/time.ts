@@ -5,6 +5,16 @@ export function localDate(d: Date, tz: string): string {
   return d.toLocaleString("sv-SE", { timeZone: tz }).slice(0, 10);
 }
 
+/**
+ * Whole calendar days from `from`'s local date to `to`'s local date in `tz` ("arrived 28 Oct, now 8 Nov" = 11), at least 1, as "1 day" / "11 days".
+ * For waits of a working day or more, where office minutes would understate how long someone has really waited.
+ */
+export function calendarDaysLabel(from: Date, to: Date, tz: string): string {
+  const diff = Math.round((Date.parse(`${localDate(to, tz)}T00:00:00Z`) - Date.parse(`${localDate(from, tz)}T00:00:00Z`)) / 86_400_000);
+  const n = Math.max(1, diff);
+  return `${n} ${n === 1 ? "day" : "days"}`;
+}
+
 export function addDaysStr(dateStr: string, days: number): string {
   const d = new Date(`${dateStr}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + days);
