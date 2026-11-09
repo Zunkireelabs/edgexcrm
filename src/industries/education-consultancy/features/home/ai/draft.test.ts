@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDraftPrompt, draftFacts, draftNumbersOk, draftOk, draftSchema, type DraftRaw } from "./draft";
+import { buildDraftPrompt, draftChecks, draftFacts, draftNumbersOk, draftOk, draftSchema, produceDraft, type DraftRaw } from "./draft";
 import type { DraftContext } from "../server/draft-context";
 
 const CTX: DraftContext = {
@@ -115,5 +115,56 @@ describe("S4: names only, never he/she", () => {
     expect(draftOk({ ...base, followUp: { title: "Call her on Thursday", inDays: 3 } }, facts)).toBe(false);
     expect(draftOk({ ...base, text: "Hi Sita, tell him to send it." }, facts)).toBe(false);
     expect(draftOk(base, facts)).toBe(true);
+  });
+});
+
+describe("C1: one automatic retry that says exactly what failed", () => {
+  const facts = draftFacts(CTX, IN);
+  const good: DraftRaw = { text: "Hi Sita, please send your bank statement.", subject: null, why: "The deadline is in 6 days.", followUp: { title: "Check for the statement", inDays: 3 } };
+  const input = { channel: "whatsapp" as const, tone: "new" as const, kind: "x", facts, previous: null, todayLabel: "t" };
+  it("names the failing checks without echoing any lead text", () => {
+    const bad = { ...good, text: "Hi Sita, I called yesterday.", why: "Her deadline is close." };
+    expect(draftChecks(bad, facts).map((c) => c.check)).toEqual(["time_word", "pronoun"]);
+    expect(draftChecks({ ...good, text: "The fee is 4500." }, facts).map((c) => c.check)).toEqual(["number"]);
+  });
+  it("a failing first draft is retried ONCE with the reason, and the second is shown", async () => {
+    const calls: Array<string[] | undefined> = [];
+    const write = async (p: { fix?: string[] }) => {
+      calls.push(p.fix);
+      return { raw: calls.length === 1 ? { ...good, why: "Her deadline is close." } : good, usage: {} };
+    };
+    const r = await produceDraft(input, write as never);
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toBeUndefined();
+    expect(calls[1]?.join(" ")).toContain("do not use he, she");
+    expect(r.raw).toEqual(good);
+    expect(r.failed).toEqual([["pronoun"], []]);
+  });
+  it("a second failure is null ('Write your own'), and there is never a third attempt", async () => {
+    let n = 0;
+    const write = async () => { n++; return { raw: { ...good, text: "I called yesterday." }, usage: {} }; };
+    const r = await produceDraft(input, write as never);
+    expect(n).toBe(2);
+    expect(r.raw).toBeNull();
+    expect(r.failed).toEqual([["time_word"], ["time_word"]]);
+  });
+  it("a first-try success makes one call", async () => {
+    let n = 0;
+    const r = await produceDraft(input, (async () => { n++; return { raw: good, usage: {} }; }) as never);
+    expect(n).toBe(1);
+    expect(r.raw).toEqual(good);
+  });
+  it("the retry prompt carries the exact reason", () => {
+    const { system } = buildDraftPrompt({ ...input, fix: ["no 'yesterday': no fact says when that happened"] });
+    expect(system).toContain("Your previous attempt was rejected: no 'yesterday'");
+  });
+  it("a provider error on the first try is retried once too", async () => {
+    let n = 0;
+    const r = await produceDraft(input, (async () => { n++; if (n === 1) throw new Error("timeout"); return { raw: good, usage: {} }; }) as never);
+    expect(r.raw).toEqual(good);
+    expect(r.failed).toEqual([["provider"], []]);
+  });
+  it("draftOk agrees with draftChecks", () => {
+    expect(draftOk(good, facts)).toBe(true);
   });
 });

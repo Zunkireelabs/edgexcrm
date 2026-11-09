@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { stripDecoration } from "@/lib/leads/destination-normalize";
+import { numbersIn } from "./numbers";
 import { localDate, addDaysStr, tenantLocalToIso } from "./time";
 
 /**
@@ -68,7 +69,7 @@ export interface NoteProposal {
 export type CurrentRecord = Partial<Record<NoteField, string>>;
 
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
-const numbersIn = (s: string) => s.match(/\d+(?:[.,]\d+)?/g) ?? [];
+
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const MONTH_KEYS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];

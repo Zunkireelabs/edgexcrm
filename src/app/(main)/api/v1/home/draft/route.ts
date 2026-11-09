@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { logger } from "@/lib/logger";
 import { authenticateRequest } from "@/lib/api/auth";
 import { apiForbidden, apiNotFound, apiSuccess, apiUnauthorized, apiValidationError } from "@/lib/api/response";
 import { getCurrentUserTenant } from "@/lib/supabase/queries";
@@ -7,7 +8,7 @@ import { scopedClient } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { homeAiEnabled } from "@/industries/education-consultancy/features/home/ai/gate";
-import { draftFacts, draftOk, writeDraft } from "@/industries/education-consultancy/features/home/ai/draft";
+import { draftFacts, produceDraft, writeDraft } from "@/industries/education-consultancy/features/home/ai/draft";
 import { homeOverBudget, recordHomeUsage } from "@/industries/education-consultancy/features/home/ai/usage";
 import { availableChannels, counsellorFirstName, defaultChannel, shortTenantName, type DraftChannel, type DraftTone } from "@/industries/education-consultancy/features/home/lib/draft";
 import { addDaysStr, localDate } from "@/industries/education-consultancy/features/home/lib/time";
@@ -77,8 +78,7 @@ export async function POST(request: NextRequest) {
   if (!channel) return apiSuccess({ ai: true, ...base, draft: null });
   if (await homeOverBudget(db, auth.tenantId)) return apiSuccess({ ai: true, paused: true, ...base, draft: null });
 
-  const runId = crypto.randomUUID();
-  // S1/S3: the company's short name, and the counsellor's name as Home greets them (profile name, never the email).
+    // S1/S3: the company's short name, and the counsellor's name as Home greets them (profile name, never the email).
   const user = await getCachedUser().catch(() => null);
   const factLines = draftFacts(ctx, {
     counsellorFirstName: counsellorFirstName(user?.user_metadata as Record<string, unknown> | undefined),
@@ -88,16 +88,19 @@ export async function POST(request: NextRequest) {
   });
   try {
     const today = localDate(now, tz);
-    const { raw, usage } = await writeDraft({
+    const produced = await produceDraft({
       channel,
       tone,
       kind: KINDS[kind],
       facts: factLines,
       previous,
       todayLabel: `${WEEKDAY[new Date(`${today}T00:00:00Z`).getUTCDay()]} ${today}`,
-    });
-    await recordHomeUsage(db, { surface: "home_draft", kind: "fast", userId: auth.userId, runId, usage }).catch(() => {});
-    if (!draftOk(raw, factLines)) return apiSuccess({ ai: true, ...base, draft: null });
+    }, writeDraft);
+    for (const usage of produced.usages) await recordHomeUsage(db, { surface: "home_draft", kind: "fast", userId: auth.userId, runId: crypto.randomUUID(), usage }).catch(() => {});
+    // C1: which check tripped, by name only (no text), so we can see what the model keeps getting wrong.
+    if (produced.failed.some((f) => f.length)) logger.info({ leadKind: kind, attempts: produced.failed, shown: !!produced.raw }, "home draft checks failed");
+    const raw = produced.raw;
+    if (!raw) return apiSuccess({ ai: true, ...base, draft: null });
 
     let draftId = typeof body.draftId === "string" ? body.draftId : null;
     if (draftId) {

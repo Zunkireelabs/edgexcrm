@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { askAbout, callPrepEligible, KB_MIN_SCORE, kbQuery, knownRows, maskPhone, pickKbChunk } from "./call-prep";
+import { askAbout, callPrepEligible, formCountry, formCourse, KB_MIN_SCORE, kbQuery, knownRows, maskPhone, pickKbChunk, tenantSpelling } from "./call-prep";
 
 describe("eligibility", () => {
   it("only new-lead call rows", () => {
@@ -91,5 +91,56 @@ describe("knowledge base: only a real match", () => {
   it("the search is the course + country only (no name, phone or email); empty means no search", () => {
     expect(kbQuery({ fieldOfStudy: "Nursing", destinations: ["Australia"] })).toBe("Nursing Australia");
     expect(kbQuery({ fieldOfStudy: null, destinations: [] })).toBe("");
+  });
+});
+
+describe("C3: the company's own spelling, home country, no repeats", () => {
+  const catalogs = { countries: ["UK", "USA", "Australia", "Nepal"], fieldsOfStudy: ["Engineering & Technology", "Medical & Pharmacy"], studyLevels: ["Undergraduate", "Postgraduate"] };
+  const base = { destinations: [] as string[], intakeTerm: null, fieldOfStudy: null, plusTwoStream: null, plusTwoGpa: null, bachelorGpa: null, mastersGpa: null, ieltsScore: null, customFields: null, catalogs };
+  it("tenantSpelling: catalog spelling, else a readable form", () => {
+    expect(tenantSpelling("uk", catalogs)).toBe("UK");
+    expect(tenantSpelling("engineering_technology", catalogs)).toBe("Engineering & Technology");
+    expect(tenantSpelling("masters", catalogs)).toBe("Masters");
+    expect(tenantSpelling("Postgraduate", catalogs)).toBe("Postgraduate");
+  });
+  it("'Wants: uk, nepal' reads 'UK' (Nepal is where they live, not where they want to study)", () => {
+    const rows = knownRows({ ...base, destinations: ["uk", "nepal"], fieldOfStudy: "engineering_technology" });
+    expect(rows[0]).toEqual({ k: "Wants", v: "Engineering & Technology · UK" });
+  });
+  it("a lead whose ONLY destination is Nepal still shows it (it is what they said)", () => {
+    expect(knownRows({ ...base, destinations: ["Nepal"] })[0].v).toBe("Nepal");
+  });
+  it("the same country under four form keys shows once (in Wants), not four times", () => {
+    const rows = knownRows({ ...base, destinations: ["uk"], customFields: { interested_country: "uk", countries: ["UK"], preferred_study_destination: "uk, nepal", country: "UK", school: "Budhanilkantha" } });
+    expect(rows.map((r) => r.k)).toEqual(["Wants", "English test", "School"]);
+  });
+  it("form answers read in the tenant's spelling; a repeat of a row above is left out", () => {
+    const rows = knownRows({ ...base, fieldOfStudy: "Engineering & Technology", customFields: { program_category: "engineering_technology", program_level: "masters", hear_about: "facebook" } });
+    expect(rows.map((r) => [r.k, r.v])).toEqual([["Wants", "Engineering & Technology"], ["English test", "none on record"], ["Program level", "Masters"], ["Hear about", "Facebook"]]);
+  });
+  it("with no record country, the form's country shows in Wants (tenant spelling, home country dropped)", () => {
+    expect(knownRows({ ...base, customFields: { interested_country: "uk, nepal" } })[0]).toEqual({ k: "Wants", v: "UK" });
+  });
+});
+
+describe("C4: Ask about says what the form already holds", () => {
+  const catalogs = { countries: ["UK"], fieldsOfStudy: ["Engineering & Technology"], studyLevels: [] };
+  it("formCourse / formCountry in the tenant's spelling", () => {
+    expect(formCourse({ field_of_study: "engineering_technology" }, catalogs)).toBe("Engineering & Technology");
+    expect(formCourse({}, catalogs)).toBeNull();
+    expect(formCountry({ interested_country: "uk, nepal" }, catalogs)).toBe("UK");
+    expect(formCountry({ interested_country: "nepal" }, catalogs)).toBeNull();
+  });
+  it("'Course (form says Engineering & Technology)' when the record is empty but the form isn't", () => {
+    const a = askAbout({}, { course: "Engineering & Technology", country: "UK" });
+    expect(a.find((x) => x.key === "course")?.label).toBe("Course (form says Engineering & Technology)");
+    expect(a.find((x) => x.key === "country")?.label).toBe("Country (form says UK)");
+  });
+  it("not listed at all when the record has it, hints or not", () => {
+    const a = askAbout({ field_of_study: "Nursing", destinations: "UK" }, { course: "Engineering & Technology", country: "UK" });
+    expect(a.some((x) => x.key === "course" || x.key === "country")).toBe(false);
+  });
+  it("no form answer: the plain label", () => {
+    expect(askAbout({}).find((x) => x.key === "course")?.label).toBe("Course");
   });
 });

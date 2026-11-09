@@ -4,6 +4,8 @@ import { DESTINATIONS, FIELDS_OF_STUDY } from "@/industries/_shared/features/lea
 export interface TenantCatalogs {
   countries: string[];
   fieldsOfStudy: string[];
+  /** The tenant's own study levels (`study_levels`); empty when none are configured (no built-in spelling to fall back to). */
+  studyLevels: string[];
 }
 
 const NOT_DECIDED = "Not decided";
@@ -14,13 +16,14 @@ const NOT_DECIDED = "Not decided";
  * always agree. "Not decided" is never something Orca can write.
  */
 export async function loadTenantCatalogs(db: ScopedClient): Promise<TenantCatalogs> {
-  const names = async (table: "countries" | "courses"): Promise<string[]> => {
+  const names = async (table: "countries" | "courses" | "study_levels"): Promise<string[]> => {
     const { data } = await db.from(table).select("name").eq("is_active", true).order("name", { ascending: true });
     return ((data ?? []) as unknown as Array<{ name: string }>).map((r) => r.name).filter((n) => n && n !== NOT_DECIDED);
   };
-  const [countries, courses] = await Promise.all([names("countries").catch(() => []), names("courses").catch(() => [])]);
+  const [countries, courses, levels] = await Promise.all([names("countries").catch(() => []), names("courses").catch(() => []), names("study_levels").catch(() => [])]);
   return {
     countries: countries.length ? countries : DESTINATIONS.filter((d) => d !== NOT_DECIDED),
+    studyLevels: levels,
     fieldsOfStudy: courses.length ? courses : FIELDS_OF_STUDY.filter((d) => d !== NOT_DECIDED),
   };
 }

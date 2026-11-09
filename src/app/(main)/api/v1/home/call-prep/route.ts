@@ -10,9 +10,10 @@ import { FEATURES } from "@/industries/_registry";
 import { homeAiEnabled } from "@/industries/education-consultancy/features/home/ai/gate";
 import { kbRestatementOk, openingOk, restateKb, writeOpening } from "@/industries/education-consultancy/features/home/ai/call-prep";
 import { homeOverBudget, recordHomeUsage } from "@/industries/education-consultancy/features/home/ai/usage";
-import { askAbout, kbQuery, knownRows, maskPhone, pickKbChunk } from "@/industries/education-consultancy/features/home/lib/call-prep";
+import { askAbout, formCountry, formCourse, kbQuery, knownRows, maskPhone, pickKbChunk } from "@/industries/education-consultancy/features/home/lib/call-prep";
 import { counsellorFirstName, shortTenantName } from "@/industries/education-consultancy/features/home/lib/draft";
 import { localDate } from "@/industries/education-consultancy/features/home/lib/time";
+import { loadTenantCatalogs } from "@/industries/education-consultancy/features/home/server/catalogs";
 import { loadCallPrepLead, openingFacts } from "@/industries/education-consultancy/features/home/server/call-prep";
 import { loadVisibleLead } from "@/industries/education-consultancy/features/home/server/visible-lead";
 
@@ -43,15 +44,19 @@ export async function POST(request: NextRequest) {
   const lead = await loadCallPrepLead(auth, leadId);
   if (!lead) return apiNotFound("Lead");
 
+  const db = await scopedClient(auth);
+  const catalogs = await loadTenantCatalogs(db);
+  const cats = { countries: catalogs.countries, fieldsOfStudy: catalogs.fieldsOfStudy, studyLevels: catalogs.studyLevels };
+  const withCatalogs = { ...lead, catalogs: cats };
   const base = {
     ai: true,
     leadName: lead.fullName,
     firstName: lead.firstName,
     chips: { source: lead.source, phone: maskPhone(lead.phone) },
-    known: knownRows(lead),
-    ask: askAbout(lead.record),
+    known: knownRows(withCatalogs),
+    // C4: when the form already holds the course or country, the record's gap says so; a record that has it isn't listed.
+    ask: askAbout(lead.record, { course: formCourse(lead.customFields, cats) ?? undefined, country: formCountry(lead.customFields, cats) ?? undefined }),
   };
-  const db = await scopedClient(auth);
   if (await homeOverBudget(db, auth.tenantId)) return apiSuccess({ ...base, paused: true, opening: null, kb: null });
 
   const tenantData = await getCurrentUserTenant();

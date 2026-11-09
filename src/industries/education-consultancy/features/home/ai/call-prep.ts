@@ -2,13 +2,14 @@ import { generateObject } from "ai";
 import { z } from "zod";
 import { model, aiRequestProviderOptions } from "@/lib/ai/provider";
 import { hasGenderedPronoun, unbackedTimeWords } from "../lib/draft";
+import { numbersIn } from "../lib/numbers";
 import { stripPrivate } from "./privacy";
 import { HOME_AI_TIMEOUT_MS } from "./usage";
 
 const lineSchema = z.object({ line: z.string().trim().min(1).max(400) });
 const kbSchema = z.object({ text: z.string().trim().min(1).max(400).nullable().describe("1 or 2 plain sentences, or null when the passage has nothing useful for this call.") });
 
-const nums = (s: string) => (s.match(/\d+(?:[.,]\d+)?/g) ?? []).map((n) => n.replace(",", "."));
+const nums = numbersIn;
 
 /** The opening line is held to the same rules as a draft: numbers, time words and he/she are all checked against the facts. */
 export function openingOk(line: string, facts: string[]): boolean {

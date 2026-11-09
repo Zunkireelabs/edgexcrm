@@ -15,6 +15,7 @@ vi.mock("@/industries/_loader", () => ({ getFeatureAccess: () => true }));
 vi.mock("@/lib/supabase/queries", () => ({ getCurrentUserTenant: async () => ({ tenant: { timezone: "UTC", name: "Admizz Education" } }) }));
 vi.mock("@/lib/supabase/server", () => ({ getCachedUser: async () => ({ id: "u1", email: "x@y.com", user_metadata: { name: "Rita Karki" } }) }));
 vi.mock("@/lib/supabase/scoped", () => ({ scopedClient: async () => ({}) }));
+vi.mock("@/industries/education-consultancy/features/home/server/catalogs", () => ({ loadTenantCatalogs: async () => ({ countries: ["UK", "Australia"], fieldsOfStudy: ["Bachelor of Nursing", "Engineering & Technology"], studyLevels: [] }) }));
 vi.mock("@/lib/ai/retrieval/retrieve", () => ({ retrieve: retrieveMock }));
 vi.mock("@/industries/education-consultancy/features/home/server/visible-lead", () => ({ loadVisibleLead: visibleMock }));
 vi.mock("@/industries/education-consultancy/features/home/server/call-prep", async (orig) => ({ ...(await orig<typeof import("@/industries/education-consultancy/features/home/server/call-prep")>()), loadCallPrepLead: leadMock }));

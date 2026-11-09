@@ -125,4 +125,19 @@ describe("POST /api/v1/home/draft", () => {
     writeMock.mockResolvedValue({ ...OK, raw: { ...OK.raw, why: "Her deadline is close." } });
     expect((await (await POST(req(BODY))).json()).data.draft).toBeNull();
   });
+
+  it("C1: a failing first draft is retried once with the reason; the good second one is shown", async () => {
+    writeMock.mockResolvedValueOnce({ ...OK, raw: { ...OK.raw, why: "Her deadline is close." } }).mockResolvedValueOnce(OK);
+    const { POST } = await import("./route");
+    const d = (await (await POST(req(BODY))).json()).data;
+    expect(writeMock).toHaveBeenCalledTimes(2);
+    expect((writeMock.mock.calls[1][0] as { fix: string[] }).fix.join(" ")).toContain("do not use he, she");
+    expect(d.draft.text).toBe(OK.raw.text);
+  });
+  it("C1: two failures in a row is 'Write your own' (null), and never a third call", async () => {
+    writeMock.mockResolvedValue({ ...OK, raw: { ...OK.raw, text: "Hi Sita, I called yesterday." } });
+    const { POST } = await import("./route");
+    expect((await (await POST(req(BODY))).json()).data.draft).toBeNull();
+    expect(writeMock).toHaveBeenCalledTimes(2);
+  });
 });

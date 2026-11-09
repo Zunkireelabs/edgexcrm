@@ -5,6 +5,7 @@ import type { NeedsYouRow } from "./needs-you";
 import type { NeedsALook } from "./needs-a-look";
 import type { ImpactRow } from "./impact";
 import { clock12 } from "./time";
+import { numbersIn } from "./numbers";
 
 /**
  * B2: Orca's read on Home. FACTS COME FROM THE RULES; ORCA ONLY WORDS AND RANKS THEM (doc 07 §1a). The model gets a list of
@@ -47,7 +48,7 @@ export interface ReadPoint {
   link: { href: string; label: string };
 }
 
-const numbersIn = (s: string) => (s.match(/\d+(?:[.,]\d+)?/g) ?? []).map((n) => n.replace(",", "."));
+
 
 /**
  * Turns the model's points into what Home shows. Drops, never repairs:
