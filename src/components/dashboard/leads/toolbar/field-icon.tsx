@@ -2,7 +2,7 @@
 // Keyed by registry key first, then by field type, so new registry fields still get a sane icon.
 
 import {
-  CalendarBlankIcon,
+  CalendarIcon,
   ClockIcon,
   EnvelopeSimpleIcon,
   GlobeIcon,
@@ -28,9 +28,9 @@ const BY_KEY: Record<string, Icon> = {
   assignees: UserIcon,
   collaborators: UsersIcon,
   last_activity_at: ClockIcon,
-  created: CalendarBlankIcon,
-  created_at: CalendarBlankIcon,
-  updated_at: CalendarBlankIcon,
+  created: CalendarIcon,
+  created_at: CalendarIcon,
+  updated_at: CalendarIcon,
   email: EnvelopeSimpleIcon,
   phone: PhoneIcon,
   city: MapPinIcon,
@@ -46,7 +46,7 @@ const BY_KEY: Record<string, Icon> = {
 const BY_TYPE: Record<FilterFieldType, Icon> = {
   text: TextTIcon,
   number: HashIcon,
-  date: CalendarBlankIcon,
+  date: CalendarIcon,
   boolean: ToggleLeftIcon,
   select: ListIcon,
   multiselect: ListIcon,
