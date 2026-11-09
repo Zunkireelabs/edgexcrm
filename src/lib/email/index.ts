@@ -1,7 +1,29 @@
 import { Resend } from "resend";
+import { getEmailTransportMode, sendStubEmail } from "./outbound/transport";
 
 // Initialize Resend client lazily to avoid build errors when API key is not set
 let _resend: Resend | null = null;
+
+/**
+ * The one choke point for every `resend.emails.send()` (EDGEX-125): under EMAIL_TRANSPORT=stub the provider is never reached.
+ * The mode is read per send, not per client, so the cached client follows the environment. Only `send` is replaced: webhook
+ * verification and inbound reads are the real client's own. Deliberately not EMAIL_OUTBOUND_SANDBOX, which defaults to on.
+ */
+function gateSends(client: Resend): Resend {
+  const providerSend = client.emails.send.bind(client.emails);
+  const send: Resend["emails"]["send"] = async (payload, options) => {
+    if (getEmailTransportMode() !== "stub") return providerSend(payload, options);
+    const stub = sendStubEmail({
+      to: Array.isArray(payload.to) ? payload.to : [payload.to],
+      from: payload.from ?? "",
+      subject: payload.subject ?? "",
+      html: payload.html ?? payload.text ?? "",
+    });
+    return { ...stub, headers: null };
+  };
+  client.emails.send = send;
+  return client;
+}
 
 export function getResendClient(): Resend | null {
   if (!process.env.RESEND_API_KEY) {
@@ -9,7 +31,7 @@ export function getResendClient(): Resend | null {
     return null;
   }
   if (!_resend) {
-    _resend = new Resend(process.env.RESEND_API_KEY);
+    _resend = gateSends(new Resend(process.env.RESEND_API_KEY));
   }
   return _resend;
 }
