@@ -92,7 +92,7 @@ function LastActivityCell({ lead, ctx }: { lead: Lead; ctx: LeadColumnCtx }) {
 // ─── Name ──────────────────────────────────────────────────────────────────────────
 
 const HOVER_BTN =
-  "inline-flex h-6 shrink-0 items-center gap-1 rounded-ds-xs bg-ds-surface px-1.5 text-xs font-medium text-ds-ink shadow-[inset_0_0_0_1px_var(--ds-border)] transition-colors hover:bg-ds-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ds-ghost";
+  "h-6 shrink-0 items-center gap-1 rounded-ds-xs bg-ds-surface px-1.5 text-xs font-medium text-ds-ink shadow-[inset_0_0_0_1px_var(--ds-border)] transition-colors hover:bg-ds-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ds-ghost";
 
 function NameCell({ lead, ctx }: { lead: Lead; ctx: LeadColumnCtx }) {
   const name = getLeadFullName(lead, "—");
@@ -125,7 +125,7 @@ function NameCell({ lead, ctx }: { lead: Lead; ctx: LeadColumnCtx }) {
       </Link>
       {/* Hover cluster (pointer devices). bg-inherit: the sticky Name cell is opaque in every state. */}
       <span className="absolute right-1.5 top-1/2 hidden -translate-y-1/2 items-center gap-1 bg-inherit opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100 [@media(hover:hover)]:flex">
-        <button type="button" onClick={open} className={HOVER_BTN} aria-label={`Open ${name} in preview`}>
+        <button type="button" onClick={open} className={`inline-flex ${HOVER_BTN}`} aria-label={`Open ${name} in preview`}>
           Open
           <kbd className="font-sans text-[11px] font-medium text-ds-faint">⌘↵</kbd>
         </button>
@@ -133,7 +133,7 @@ function NameCell({ lead, ctx }: { lead: Lead; ctx: LeadColumnCtx }) {
           <a
             href={`tel:${formatPhoneForTel(lead.phone)}`}
             onClick={(e) => e.stopPropagation()}
-            className={`${HOVER_BTN} w-6 justify-center px-0`}
+            className={`inline-flex ${HOVER_BTN} w-6 justify-center px-0`}
             aria-label={`Call ${name}`}
             title={`Call ${lead.phone}`}
           >
@@ -183,7 +183,7 @@ function StageCell({ lead, ctx }: { lead: Lead; ctx: LeadColumnCtx }) {
   const inIntake = !!intake && lead.list_id === intake.id;
   return (
     <div className="flex min-w-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
-      <div className="min-w-0 shrink">
+      <div className="-ml-1.5 min-w-0 shrink">
         <MoveToListSelector
           variant="dot"
           leadId={lead.id}

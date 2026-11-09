@@ -116,7 +116,7 @@ export function MoveToListSelector({
             type="button"
             disabled={disabled || saving}
             title={label}
-            className="-ml-1.5 inline-flex h-6 max-w-full items-center gap-1.5 rounded-ds-xs px-1.5 text-sm font-medium text-ds-ink transition-colors hover:bg-ds-hover data-[state=open]:bg-ds-hover disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex h-6 max-w-full items-center gap-1.5 rounded-ds-xs px-1.5 text-sm font-medium text-ds-ink transition-colors hover:bg-ds-hover data-[state=open]:bg-ds-hover disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <span
               className="size-2 shrink-0 rounded-full"
