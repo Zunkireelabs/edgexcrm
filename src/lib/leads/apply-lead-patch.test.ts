@@ -506,6 +506,20 @@ describe("applyLeadPatch — governance branches", () => {
     });
   });
 
+  it("prospect gate — one patch carrying the highest qualification AND the move passes (the rule merges incoming values)", async () => {
+    await setFakeDb({
+      leads: { id: "lead-1", pipeline_id: "pipe-1", assigned_to: "user-1", branch_id: null, list_id: "list-qualified", status: "s" },
+      leadLists: {
+        "list-qualified": { id: "list-qualified", slug: "qualified", name: "Qualified", is_archive: false, sort_order: 10 },
+        "list-prospects": { id: "list-prospects", slug: "prospects", name: "Prospects", pipeline_id: null, is_archive: false, sort_order: 20, access: { mode: "all" } },
+      },
+    });
+    const auth = fixtureAuth({ permissions: { leadScope: "own" } as ResolvedPermissions });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(auth, "lead-1", { bachelor_gpa: "3.2", list_id: "list-prospects" }, OPTS);
+    expect(outcome.kind).toBe("ok");
+  });
+
   it("prospect gate — a backward move (revert) into Prospects skips the gate for a non-bypass member", async () => {
     await setFakeDb({
       leads: { id: "lead-1", pipeline_id: "pipe-1", assigned_to: "user-1", branch_id: null, list_id: "list-applications", status: "s", lead_type: "prospect" },

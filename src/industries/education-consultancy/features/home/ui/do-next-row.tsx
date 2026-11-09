@@ -27,9 +27,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { tenantLocalToIso } from "../lib/time";
+import { addDaysStr, localDate, tenantLocalToIso } from "../lib/time";
 import {
   OUTCOME_LABEL,
+  failureReport,
   planCallLogSave,
   runPlan,
   type CallOutcomeChoice,
@@ -56,8 +57,8 @@ export function KindIcon({ item }: { item: DoNextItem }) {
 async function send(req: PlannedRequest) {
   try {
     const res = await fetch(req.url, { method: req.method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(req.body) });
-    if (res.ok) return { ok: true };
-    const j = (await res.json().catch(() => null)) as { error?: { message?: string; details?: Record<string, string[]> } } | null;
+    const j = (await res.json().catch(() => null)) as { data?: unknown; error?: { message?: string; details?: Record<string, string[]> } } | null;
+    if (res.ok) return { ok: true, data: j?.data };
     const detail = j?.error?.details ? Object.values(j.error.details).flat()[0] : undefined;
     return { ok: false, message: detail ?? j?.error?.message ?? `Request failed (${res.status})` };
   } catch {
@@ -65,7 +66,8 @@ async function send(req: PlannedRequest) {
   }
 }
 
-interface AiProposal { field: string; label: string; from: string; to: string; quote: string }
+interface AiProposal { field: string; label: string; from: string; to: string; quote: string; shows: string; additive?: boolean }
+interface NoteSaveResult { stageBlocked: string | null; undoDraftId: string | null }
 interface AiState { status: "idle" | "loading" | "done"; draftId: string | null; proposals: AiProposal[]; nextKind: "call_back" | "office_visit" | "none" }
 const AI_IDLE: AiState = { status: "idle", draftId: null, proposals: [], nextKind: "none" };
 const NOTE_IDLE_MS = 1500;
@@ -151,23 +153,54 @@ function CallLog({ item, nextStage, tz, aiNote, onSaved }: { item: DoNextItem; n
     setSaving(true);
     const noteText = aiBox || wantNote ? note.trim() : "";
     const fields = ai.status === "done" ? ai.proposals.filter((p) => p.field !== "stage" && ticked.has(p.field)).map((p) => ({ field: p.field, to: p.to })) : [];
+    const leadLabel = item.primaryAction.type === "call" ? item.primaryAction.leadName : "";
     const plan = planCallLogSave({
       leadId,
       outcome,
       callbackAt: callbackIso,
       nextListId: moveNext && nextStage ? nextStage.id : null,
-      note: officeVisit && aiBox ? `${noteText}${noteText ? "\n\n" : ""}Next step: office visit.` : noteText,
+      note: noteText,
+      // F8: the task is due on the call-back's day when one is booked, else tomorrow (tenant date).
+      officeVisit: officeVisit && aiBox ? { leadName: leadLabel, dueDate: wantCallback && callbackAt ? callbackAt.slice(0, 10) : addDaysStr(localDate(new Date(), tz), 1) } : undefined,
       ai: fields.length ? { draftId: ai.draftId, fields } : undefined,
     });
     const r = await runPlan(plan, send);
     setSaving(false);
     if (!r.ok) {
-      setError(r.done.length ? `Saved the call, but the ${r.failed === "lead" ? "next step" : r.failed} failed: ${r.message}` : r.message);
-      if (r.done.length) onSaved();
+      // F2: once the call is saved the log closes, so the failure is a lasting toast, not text inside a component about to go.
+      const f = failureReport(r);
+      if (f.toast) toast.error(f.toast, { duration: 15_000 });
+      if (f.inline) setError(f.inline);
+      if (f.close) onSaved();
       return;
     }
-    toast.success("Call logged");
+    const saved = (r.data.lead ?? null) as NoteSaveResult | null;
+    if (saved?.stageBlocked) {
+      // F1: the fields were saved; only the stage move was refused. Say so, with a way to fix it.
+      toast.warning(`Saved. Couldn't move to ${nextStage?.name ?? "that stage"}: ${saved.stageBlocked}`, {
+        duration: 15_000,
+        cancel: { label: "Open lead", onClick: () => window.open(`/leads/${leadId}`, "_blank") },
+        ...(saved.undoDraftId ? { action: { label: "Undo", onClick: () => void undo(saved.undoDraftId as string) } } : {}),
+      });
+    } else if (saved?.undoDraftId) {
+      // F9: Orca's fields can be taken back for 10 s; the call and the note stay.
+      toast.success("Call logged", { duration: 10_000, action: { label: "Undo", onClick: () => void undo(saved.undoDraftId as string) } });
+    } else {
+      toast.success("Call logged");
+    }
     onSaved();
+  };
+
+  const undo = async (draftId: string) => {
+    try {
+      const res = await fetch("/api/v1/home/note-undo", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ draftId }) });
+      const j = (await res.json().catch(() => null)) as { data?: { restored: string[]; skipped: string[] } } | null;
+      if (!res.ok) return toast.error("Couldn't undo that", { duration: 10_000 });
+      const skipped = j?.data?.skipped?.length ?? 0;
+      toast.success(skipped ? "Undone, except fields you changed since" : "Orca's fields are back as they were", { duration: 6_000 });
+    } catch {
+      toast.error("Couldn't undo that", { duration: 10_000 });
+    }
   };
 
   if (item.primaryAction.type !== "call") return null;
@@ -194,14 +227,13 @@ function CallLog({ item, nextStage, tz, aiNote, onSaved }: { item: DoNextItem; n
             <div className="eh-ai" role="group" aria-label="Orca's suggestions">
               <div className="eh-ai-h"><SparkleIcon size={14} aria-hidden /> Orca filled in {leadName.split(" ")[0]}&apos;s record from your note <span>untick anything wrong</span></div>
               {shown.map((p) => (
-                <label key={p.field} className="eh-ai-row">
+                <label key={p.field} className="eh-ai-row" title={`\u201C${p.quote}\u201D`}>
                   <input type="checkbox" checked={ticked.has(p.field)} onChange={() => toggleTick(p.field)} />
                   <span className="k">{p.label}</span>
                   <span className="v">
-                    {p.from ? <><s>{p.from}</s> {"\u2192"} </> : null}
-                    <b>{p.to}</b>
+                    {p.from && !p.additive ? <><s>{p.from}</s> {"\u2192"} </> : null}
+                    <b>{p.shows}</b>
                   </span>
-                  <span className="qt">&ldquo;{p.quote}&rdquo;</span>
                 </label>
               ))}
             </div>

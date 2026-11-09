@@ -9,6 +9,7 @@ import { extractFromNote } from "@/industries/education-consultancy/features/hom
 import { homeOverBudget, recordHomeUsage } from "@/industries/education-consultancy/features/home/ai/usage";
 import { callbackFromNextStep, sanitizeProposals } from "@/industries/education-consultancy/features/home/lib/note-extract";
 import { localDate } from "@/industries/education-consultancy/features/home/lib/time";
+import { loadTenantCatalogs } from "@/industries/education-consultancy/features/home/server/catalogs";
 import { currentRecord, loadVisibleLead } from "@/industries/education-consultancy/features/home/server/visible-lead";
 
 const NOTE_MAX = 4000;
@@ -49,6 +50,7 @@ export async function POST(request: NextRequest) {
   const now = new Date();
   const today = localDate(now, tz);
   const current = currentRecord(lead);
+  const catalogs = await loadTenantCatalogs(db);
 
   const runId = crypto.randomUUID();
   try {
@@ -58,10 +60,11 @@ export async function POST(request: NextRequest) {
       todayLabel: `${WEEKDAY_LONG[new Date(`${today}T00:00:00Z`).getUTCDay()]} ${today}`,
       current,
       nextStageName,
+      catalogs,
     });
     await recordHomeUsage(db, { surface: "home_note", kind: "fast", userId: auth.userId, runId, usage }).catch(() => {});
 
-    const proposals = sanitizeProposals(object.fields, { note, current, nextStageName });
+    const proposals = sanitizeProposals(object.fields, { note, current, nextStageName, now, tz, catalogs: { countries: catalogs.countries, fieldsOfStudy: catalogs.fieldsOfStudy } });
     const callbackAt = callbackFromNextStep(object.nextStep, now, tz);
     const nextKind = object.nextStep.kind;
 

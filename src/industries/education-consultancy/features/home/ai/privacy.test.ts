@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { stripPrivate } from "./privacy";
 import { buildNotePrompt } from "./note-extract";
 
+const CAT = { countries: ["UK", "USA"], fieldsOfStudy: ["Medical & Pharmacy"] };
+
 describe("stripPrivate: nothing private reaches a prompt", () => {
   it.each([
     ["call him on 9841234567 tomorrow", "9841234567"],
@@ -28,6 +30,7 @@ describe("the note prompt builder", () => {
       todayLabel: "Monday 2026-11-09",
       current: { sponsor_name: "reach me on 9812345678" },
       nextStageName: null,
+      catalogs: CAT,
     });
     for (const secret of ["9841234567", "sita@x.com", "PA1234567", "https://x.co/a", "9812345678"]) {
       expect(prompt).not.toContain(secret);
@@ -36,8 +39,20 @@ describe("the note prompt builder", () => {
     expect(prompt).toContain("plans UK");
   });
   it("offers the stage field only when there is a next stage", () => {
-    const base = { firstName: "S", note: "n", todayLabel: "t", current: {} };
+    const base = { firstName: "S", note: "n", todayLabel: "t", current: {}, catalogs: CAT };
     expect(buildNotePrompt({ ...base, nextStageName: null }).system).not.toContain("stage:");
     expect(buildNotePrompt({ ...base, nextStageName: "Qualified" }).system).toContain("stage:");
+  });
+});
+
+describe("the note prompt carries the tenant's own lists and the F3/F7 rules", () => {
+  const { system } = buildNotePrompt({ firstName: "S", note: "n", todayLabel: "t", current: {}, nextStageName: null, catalogs: CAT });
+  it("names the tenant's countries and field-of-study list", () => {
+    expect(system).toContain("UK; USA");
+    expect(system).toContain("Medical & Pharmacy");
+  });
+  it("asks for the month only on intake, and a decision maker only when the note says who decides or pays", () => {
+    expect(system).toContain("return only the month");
+    expect(system).toContain("who decides or who pays");
   });
 });

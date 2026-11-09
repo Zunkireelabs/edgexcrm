@@ -4,6 +4,7 @@ import { shouldRestrictToSelf } from "@/lib/api/permissions";
 import { getLeadMembership } from "@/lib/leads/branch-membership";
 import { isLeadCollaborator } from "@/lib/leads/collaborators";
 import { createServiceClient } from "@/lib/supabase/server";
+import type { NoteField } from "../lib/note-extract";
 
 type Db = Awaited<ReturnType<typeof createServiceClient>>;
 
@@ -21,6 +22,9 @@ export interface VisibleLead {
   sponsor_relationship: string | null;
   intake_term: string | null;
   field_of_study: string | null;
+  plus_two_gpa: string | null;
+  bachelor_gpa: string | null;
+  masters_gpa: string | null;
 }
 
 /**
@@ -32,7 +36,7 @@ export async function loadVisibleLead(auth: AuthContext, leadId: string, db?: Db
   const supabase = db ?? (await createServiceClient());
   const { data: lead } = await supabase
     .from("leads")
-    .select("id, first_name, last_name, assigned_to, branch_id, tags, custom_fields, destinations, ielts_score, sponsor_name, sponsor_relationship, intake_term, field_of_study")
+    .select("id, first_name, last_name, assigned_to, branch_id, tags, custom_fields, destinations, ielts_score, sponsor_name, sponsor_relationship, intake_term, field_of_study, plus_two_gpa, bachelor_gpa, masters_gpa")
     .eq("id", leadId)
     .eq("tenant_id", auth.tenantId)
     .is("deleted_at", null)
@@ -52,7 +56,7 @@ export async function loadVisibleLead(auth: AuthContext, leadId: string, db?: Db
 }
 
 /** The record's current values as text, for "from → to". */
-export function currentRecord(l: VisibleLead): Partial<Record<"ielts_score" | "english_test_plan" | "sponsor_name" | "sponsor_relationship" | "budget" | "destinations" | "intake_term" | "field_of_study", string>> {
+export function currentRecord(l: VisibleLead): Partial<Record<Exclude<NoteField, "stage">, string>> {
   const cf = l.custom_fields ?? {};
   const s = (v: unknown) => (typeof v === "string" ? v.trim() : "");
   return {
@@ -64,5 +68,8 @@ export function currentRecord(l: VisibleLead): Partial<Record<"ielts_score" | "e
     destinations: (l.destinations ?? []).join(", "),
     intake_term: s(l.intake_term),
     field_of_study: s(l.field_of_study),
+    plus_two_gpa: s(l.plus_two_gpa),
+    bachelor_gpa: s(l.bachelor_gpa),
+    masters_gpa: s(l.masters_gpa),
   };
 }

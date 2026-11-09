@@ -44,18 +44,33 @@ export interface CallLogInput {
   /** Destination list id for "Move to next stage", or null. */
   nextListId: string | null;
   note: string;
+  /** F8: "Book an office visit" creates a task for the counsellor (POST /api/v1/my-tasks), due on this date (YYYY-MM-DD). */
+  officeVisit?: { leadName: string; dueDate: string };
   /** Present only when AI is on and the person ticked at least one suggested field. */
   ai?: AiNoteSave;
 }
 
 export interface PlannedRequest {
-  step: "activity" | "note" | "lead";
+  step: "activity" | "note" | "lead" | "task";
   method: "POST" | "PATCH";
   url: string;
   body: Record<string, unknown>;
 }
 
 export function planCallLogSave(i: CallLogInput): PlannedRequest[] {
+  const plan = planCore(i);
+  if (i.officeVisit) {
+    plan.push({
+      step: "task",
+      method: "POST",
+      url: "/api/v1/my-tasks",
+      body: { title: `Office visit: ${i.officeVisit.leadName}`, due_date: i.officeVisit.dueDate, lead_id: i.leadId },
+    });
+  }
+  return plan;
+}
+
+function planCore(i: CallLogInput): PlannedRequest[] {
   const plan: PlannedRequest[] = [
     {
       step: "activity",
@@ -91,15 +106,32 @@ export function planCallLogSave(i: CallLogInput): PlannedRequest[] {
   return plan;
 }
 
-export type Fetcher = (req: PlannedRequest) => Promise<{ ok: boolean; message?: string }>;
+export type Fetcher = (req: PlannedRequest) => Promise<{ ok: boolean; message?: string; data?: unknown }>;
+
+export type RunResult =
+  | { ok: true; data: Partial<Record<PlannedRequest["step"], unknown>> }
+  | { ok: false; failed: PlannedRequest["step"]; message: string; done: PlannedRequest["step"][] };
 
 /** Runs the plan strictly in order and stops at the first failure, reporting which step failed. */
-export async function runPlan(plan: PlannedRequest[], send: Fetcher): Promise<{ ok: true } | { ok: false; failed: PlannedRequest["step"]; message: string; done: PlannedRequest["step"][] }> {
+export async function runPlan(plan: PlannedRequest[], send: Fetcher): Promise<RunResult> {
   const done: PlannedRequest["step"][] = [];
+  const data: Partial<Record<PlannedRequest["step"], unknown>> = {};
   for (const req of plan) {
     const r = await send(req);
     if (!r.ok) return { ok: false, failed: req.step, message: r.message ?? "Something went wrong", done };
     done.push(req.step);
+    if (r.data !== undefined) data[req.step] = r.data;
   }
-  return { ok: true };
+  return { ok: true, data };
+}
+
+const STEP_WORD: Record<PlannedRequest["step"], string> = { activity: "call", note: "note", lead: "next step", task: "office-visit task" };
+
+/**
+ * F2: how a failed save is shown. If NOTHING was saved the log stays open with the error inline (the person retries). If the
+ * call was already saved, the log is about to close, so inline text would vanish with it: it is a lasting toast instead.
+ */
+export function failureReport(r: Extract<RunResult, { ok: false }>): { toast: string | null; inline: string | null; close: boolean } {
+  if (r.done.length === 0) return { toast: null, inline: r.message, close: false };
+  return { toast: `Saved the call, but the ${STEP_WORD[r.failed]} failed: ${r.message}`, inline: null, close: true };
 }

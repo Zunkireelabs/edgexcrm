@@ -12,6 +12,7 @@ vi.mock("@/industries/education-consultancy/features/home/server/visible-lead", 
   ...(await orig<typeof import("@/industries/education-consultancy/features/home/server/visible-lead")>()),
   loadVisibleLead: visibleMock,
 }));
+vi.mock("@/industries/education-consultancy/features/home/server/catalogs", () => ({ loadTenantCatalogs: async () => ({ countries: ["UK", "Australia"], fieldsOfStudy: ["Medical & Pharmacy"] }) }));
 vi.mock("@/industries/education-consultancy/features/home/ai/gate", () => ({ homeAiEnabled: gateMock }));
 vi.mock("@/industries/education-consultancy/features/home/ai/note-extract", () => ({ extractFromNote: extractMock }));
 vi.mock("@/industries/education-consultancy/features/home/ai/usage", () => ({ homeOverBudget: async () => false, recordHomeUsage: async () => {} }));
@@ -64,5 +65,23 @@ describe("POST /api/v1/home/note-extract", () => {
     const res = await POST(req({ leadId: "L1", note: "call busy, will try later" }));
     const d = (await res.json()).data;
     expect(d).toMatchObject({ ai: true, proposals: [], callbackAt: null });
+  });
+
+  it("F3: an answer not on the tenant's list is dropped on the way out; one on it is written in their spelling", async () => {
+    visibleMock.mockResolvedValue({ id: "L1", first_name: "Sita", custom_fields: null, destinations: [] });
+    extractMock.mockResolvedValue({
+      object: {
+        fields: [
+          { field: "destinations", to: "uk", quote: "planning UK" },
+          { field: "field_of_study", to: "Nursing", quote: "nursing" },
+        ],
+        nextStep: { kind: "none", day: null, date: null, part: null, time: null },
+      },
+      usage: {},
+    });
+    const { POST } = await import("./route");
+    const res = await POST(req({ leadId: "L1", note: "planning UK and nursing" }));
+    const d = (await res.json()).data;
+    expect(d.proposals.map((p: { field: string; to: string }) => [p.field, p.to])).toEqual([["destinations", "UK"]]);
   });
 });
