@@ -1,12 +1,13 @@
 import { Resend } from "resend";
-import { getEmailTransportMode, sendStubEmail } from "./outbound/transport";
+import { getEmailTransportMode, recordStubForward, sendStubEmail } from "./outbound/transport";
 
 // Initialize Resend client lazily to avoid build errors when API key is not set
 let _resend: Resend | null = null;
 
 /**
- * The one choke point for every `resend.emails.send()` (EDGEX-125): under EMAIL_TRANSPORT=stub the provider is never reached.
- * The mode is read per send, not per client, so the cached client follows the environment. Only `send` is replaced: webhook
+ * The one choke point for every `resend.emails.send()` and `resend.emails.receiving.forward()` (EDGEX-125): under
+ * EMAIL_TRANSPORT=stub the provider is never reached. The mode is read per send, not per client, so the cached client follows
+ * the environment. Only those two are replaced (`forward` posts to the provider itself, it does not go through `send`): webhook
  * verification and inbound reads are the real client's own. Deliberately not EMAIL_OUTBOUND_SANDBOX, which defaults to on.
  */
 function gateSends(client: Resend): Resend {
@@ -22,6 +23,16 @@ function gateSends(client: Resend): Resend {
     return { ...stub, headers: null };
   };
   client.emails.send = send;
+
+  const receiving = client.emails.receiving;
+  const providerForward = receiving.forward.bind(receiving);
+  const forward: Resend["emails"]["receiving"]["forward"] = async (options) => {
+    if (getEmailTransportMode() !== "stub") return providerForward(options);
+    const to = Array.isArray(options.to) ? options.to : [options.to];
+    return { ...recordStubForward({ emailId: options.emailId, to, from: options.from }), headers: null };
+  };
+  receiving.forward = forward;
+
   return client;
 }
 

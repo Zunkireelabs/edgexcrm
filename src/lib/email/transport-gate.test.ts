@@ -1,17 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // EDGEX-125: every email goes through EMAIL_TRANSPORT. Only the provider SDKs are faked: the gate under test is the real one.
-const { providerSend, webhookVerify, receivingGet, createTransport, smtpSend } = vi.hoisted(() => ({
+const { providerSend, webhookVerify, receivingGet, receivingForward, createTransport, smtpSend } = vi.hoisted(() => ({
   providerSend: vi.fn(),
   webhookVerify: vi.fn(),
   receivingGet: vi.fn(),
+  receivingForward: vi.fn(),
   createTransport: vi.fn(),
   smtpSend: vi.fn(),
 }));
 
 vi.mock("resend", () => ({
   Resend: class {
-    emails = { send: providerSend, receiving: { get: receivingGet } };
+    emails = { send: providerSend, receiving: { get: receivingGet, forward: receivingForward } };
     webhooks = { verify: webhookVerify };
   },
 }));
@@ -45,6 +46,7 @@ beforeEach(() => {
   providerSend.mockReset().mockResolvedValue({ data: { id: "re_1" }, error: null });
   webhookVerify.mockReset().mockReturnValue({ type: "email.delivered" });
   receivingGet.mockReset().mockResolvedValue({ data: { id: "in_1" }, error: null });
+  receivingForward.mockReset().mockResolvedValue({ data: { id: "fw_1" }, error: null });
   smtpSend.mockReset().mockResolvedValue({ messageId: "smtp_1" });
   createTransport.mockReset().mockReturnValue({ sendMail: smtpSend });
 });
@@ -106,6 +108,35 @@ describe("the client", () => {
     expect(client.webhooks.verify(args)).toEqual({ type: "email.delivered" });
     expect(webhookVerify).toHaveBeenCalledWith(args);
     await client.emails.receiving.get("in_1");
+    expect(receivingGet).toHaveBeenCalledWith("in_1");
+  });
+});
+
+describe("the inbound forward", () => {
+  const forward = { emailId: "in_1", to: REAL, from: "noreply@x.test", passthrough: true as const };
+
+  it("stub: never reaches the provider and returns the provider's success shape", async () => {
+    vi.stubEnv("EMAIL_TRANSPORT", "stub");
+    const r = await getResendClient()!.emails.receiving.forward(forward);
+    expect(r).toMatchObject({ data: { id: expect.stringMatching(/^stub_/) }, error: null });
+    expect(receivingForward).not.toHaveBeenCalled();
+  });
+  it("resend: calls the provider once, with the real arguments", async () => {
+    vi.stubEnv("EMAIL_TRANSPORT", "resend");
+    const r = await getResendClient()!.emails.receiving.forward(forward);
+    expect(r.data?.id).toBe("fw_1");
+    expect(receivingForward).toHaveBeenCalledTimes(1);
+    expect(receivingForward).toHaveBeenCalledWith(forward);
+  });
+  it("unset in production reaches the provider", async () => {
+    vi.stubEnv("EMAIL_TRANSPORT", "");
+    vi.stubEnv("NODE_ENV", "production");
+    await getResendClient()!.emails.receiving.forward(forward);
+    expect(receivingForward).toHaveBeenCalledTimes(1);
+  });
+  it("stub: receiving.get still reaches the provider", async () => {
+    vi.stubEnv("EMAIL_TRANSPORT", "stub");
+    await getResendClient()!.emails.receiving.get("in_1");
     expect(receivingGet).toHaveBeenCalledWith("in_1");
   });
 });
