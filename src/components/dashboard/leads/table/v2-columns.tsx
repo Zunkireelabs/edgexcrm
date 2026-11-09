@@ -16,6 +16,7 @@ import {
   HashIcon,
   MapPinIcon,
   PhoneIcon,
+  TagIcon,
   TextAaIcon,
   UserCircleIcon,
   UserIcon,
@@ -52,7 +53,9 @@ export interface RowSignal {
 }
 
 /** Callback due wins over follow-up needed; both use the table's existing rules (education only). */
-export function rowSignal(lead: Lead, ctx: Pick<LeadColumnCtx, "industryId" | "followUpStaleDays">): RowSignal | null {
+export function rowSignal(lead: Lead, ctx: Pick<LeadColumnCtx, "industryId" | "followUpStaleDays"> & { viewMode?: LeadColumnCtx["viewMode"] }): RowSignal | null {
+  // A follow-up nag means nothing on archived or deleted leads.
+  if (ctx.viewMode === "archived" || ctx.viewMode === "trash") return null;
   if (ctx.industryId !== "education_consultancy") return null;
   if (isCallbackDue(lead)) return { tone: "bad", text: "Callback due" };
   const label = followUpBadgeLabel(lead, ctx.followUpStaleDays ?? FALLBACK_FOLLOW_UP_STALE_DAYS);
@@ -282,6 +285,10 @@ const V2: Record<string, LeadColumnV2> = {
     sort: "activity",
     filterFieldKey: "last_activity_at",
   },
+  archived_from_stage: { width: 150, icon: CircleDashedIcon, label: "Archived from" },
+  archived_from_status: { width: 120, icon: TagIcon },
+  archived_by: { width: 150, icon: UserIcon },
+  archived_at: { width: 130, icon: CalendarIcon },
   phone: { width: 150, icon: PhoneIcon, filterFieldKey: "phone" },
   created: { width: 130, icon: CalendarIcon, sort: "created", filterFieldKey: "created_at" },
   updated_at: { width: 170, icon: ClockIcon, sort: "updated", filterFieldKey: "updated_at" },

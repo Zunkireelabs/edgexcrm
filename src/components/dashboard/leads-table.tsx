@@ -2085,6 +2085,9 @@ export function LeadsTable({
     const valid = new Set(allColumns.filter((c) => !c.required).map((c) => c.key));
     const base = V2_DEFAULT_KEYS.filter((k) => valid.has(k) && !excludeDefaultVisibleKeys.includes(k));
     const extra = extraDefaultVisibleKeys.filter((k) => k !== "name" && k !== "actions" && valid.has(k) && !base.includes(k));
+    // Archived view: lead with why it is here (Archived from / by / date), Status last.
+    const lead = ["archived_from_stage", "archived_by", "archived_at"].filter((k) => extra.includes(k));
+    if (lead.length > 0) return [...lead, ...base, ...extra.filter((k) => !lead.includes(k))];
     return [...base, ...extra];
   }, [allColumns, excludeDefaultVisibleKeys, extraDefaultVisibleKeys]);
   const [gridPrefs, setGridPrefs] = useState<GridPrefs>(() => defaultPrefs(v2DefaultKeys));

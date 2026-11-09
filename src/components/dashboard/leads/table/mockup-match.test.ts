@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { stageDotColor } from "./stage-color";
-import { twoLetterInitials, v2For, V2_DEFAULT_KEYS } from "./v2-columns";
+import { rowSignal, twoLetterInitials, v2For, V2_DEFAULT_KEYS } from "./v2-columns";
 import { CHECKBOX_WIDTH } from "./grid-layout";
 import { NAME_DEFAULT_WIDTH } from "./leads-grid";
 
@@ -33,5 +33,22 @@ describe("default column widths match the mockup", () => {
   it("defaults fit in a 1280px content width", () => {
     const total = CHECKBOX_WIDTH + NAME_DEFAULT_WIDTH + V2_DEFAULT_KEYS.reduce((n, k) => n + (v2For(k).width ?? 0), 0);
     expect(total).toBeLessThanOrEqual(1280);
+  });
+});
+
+describe("archived view polish", () => {
+  const lead = { callback_at: "2000-01-01T00:00:00Z", last_activity_at: "2000-01-01T00:00:00Z", created_at: "2000-01-01T00:00:00Z" } as never;
+  it("v2 labels and widths for the archive columns", () => {
+    expect(v2For("archived_from_stage")).toMatchObject({ label: "Archived from", width: 150 });
+    expect(v2For("archived_from_status")).toMatchObject({ width: 120 });
+    expect(v2For("archived_by")).toMatchObject({ width: 150 });
+    expect(v2For("archived_at")).toMatchObject({ width: 130 });
+    for (const k of ["archived_from_stage", "archived_from_status", "archived_by", "archived_at"]) expect(v2For(k).icon).toBeDefined();
+  });
+  it("no follow-up flag on archived or deleted leads", () => {
+    const ctx = { industryId: "education_consultancy", followUpStaleDays: 7 };
+    expect(rowSignal(lead, { ...ctx, viewMode: "archived" })).toBeNull();
+    expect(rowSignal(lead, { ...ctx, viewMode: "trash" })).toBeNull();
+    expect(rowSignal(lead, { ...ctx, viewMode: "normal" })).not.toBeNull();
   });
 });
