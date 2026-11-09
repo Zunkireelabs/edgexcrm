@@ -182,7 +182,7 @@ function StageCell({ lead, ctx }: { lead: Lead; ctx: LeadColumnCtx }) {
   const qualified = lists.find((l) => l.slug === "qualified");
   const inIntake = !!intake && lead.list_id === intake.id;
   return (
-    <div className="flex min-w-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
+    <div className="relative flex min-w-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
       <div className="-ml-1.5 min-w-0 shrink">
         <MoveToListSelector
           variant="dot"
@@ -193,7 +193,7 @@ function StageCell({ lead, ctx }: { lead: Lead; ctx: LeadColumnCtx }) {
         />
       </div>
       {ctx.industryId === "education_consultancy" && inIntake && qualified && (
-        <span className="shrink-0 opacity-0 transition-opacity focus-within:opacity-100 group-hover/row:opacity-100">
+        <span className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 bg-ds-hover pl-1 opacity-0 transition-opacity focus-within:pointer-events-auto focus-within:opacity-100 group-hover/row:pointer-events-auto group-hover/row:opacity-100">
           <QualifyRowButton
             quiet
             leadId={lead.id}
@@ -276,7 +276,7 @@ const V2: Record<string, LeadColumnV2> = {
     cell: (lead) => (lead.display_id ? <span className="tabular-nums text-ds-muted">{lead.display_id}</span> : DASH),
   },
   last_activity: {
-    width: 140,
+    width: 160,
     icon: ClockIcon,
     cell: (lead, ctx) => <LastActivityCell lead={lead} ctx={ctx} />,
     sort: "activity",

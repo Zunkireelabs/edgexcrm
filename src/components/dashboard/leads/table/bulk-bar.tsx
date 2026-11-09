@@ -6,16 +6,12 @@
 
 import { useState } from "react";
 import {
-  ArchiveIcon,
-  ArrowCounterClockwiseIcon,
   ArrowCircleUpIcon,
-  ArrowBendUpRightIcon,
   BuildingsIcon,
   DotsThreeIcon,
   GitBranchIcon,
   GitMergeIcon,
   TrashIcon,
-  UserPlusIcon,
   XIcon,
 } from "@/components/icons";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -103,7 +99,7 @@ export interface BulkBarHandlers {
 }
 
 const BTN =
-  "inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-ds-xs px-2 text-sm font-medium text-white transition-colors hover:bg-white/15 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/60";
+  "inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-ds-xs px-2 text-sm font-medium transition-colors hover:bg-white/15 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/60";
 const DIV = "mx-1 h-4 w-px bg-white/20";
 
 export function BulkBar({
@@ -145,7 +141,7 @@ export function BulkBar({
       data-testid="bulk-bar"
       className="pointer-events-auto absolute bottom-16 left-1/2 z-30 flex -translate-x-1/2 items-center gap-0.5 rounded-xl bg-ds-ink p-1 text-white shadow-[0_0_0_1px_rgba(16,17,18,.06),0_8px_24px_-4px_rgba(16,17,18,.14),0_2px_6px_rgba(16,17,18,.06)]"
     >
-      <span className="px-2 text-sm font-medium tabular-nums" aria-live="polite">
+      <span className="whitespace-nowrap px-2 text-sm font-medium tabular-nums" aria-live="polite">
         {countText}
       </span>
       {actions.selection === "select-all" && (
@@ -155,42 +151,36 @@ export function BulkBar({
       )}
       <span className={DIV} />
       {actions.restore && (
-        <button type="button" className={BTN} onClick={handlers.onRestore}>
-          <ArrowCounterClockwiseIcon className="size-4" />
+        <button type="button" className={`${BTN} text-white`} onClick={handlers.onRestore}>
           Restore
         </button>
       )}
       {actions.deleteForever && (
-        <button type="button" className={`${BTN} text-red-300`} onClick={handlers.onDeleteForever}>
-          <TrashIcon className="size-4" />
+        <button type="button" className={`${BTN} text-[#ff9a8c]`} onClick={handlers.onDeleteForever}>
           Delete
         </button>
       )}
       {actions.moveStage && (
-        <button type="button" className={BTN} onClick={handlers.onMoveStage}>
-          <ArrowBendUpRightIcon className="size-4" />
+        <button type="button" className={`${BTN} text-white`} onClick={handlers.onMoveStage}>
           {stageLabel}
         </button>
       )}
       {actions.assign && (
-        <button type="button" className={BTN} onClick={handlers.onAssign}>
-          <UserPlusIcon className="size-4" />
+        <button type="button" className={`${BTN} text-white`} onClick={handlers.onAssign}>
           Assign
         </button>
       )}
       {(actions.moveStage || actions.assign) && (actions.archive || actions.more.length > 0) && <span className={DIV} />}
       {actions.archive && (
-        <button type="button" className={`${BTN} text-red-300`} onClick={handlers.onArchive}>
-          <ArchiveIcon className="size-4" />
+        <button type="button" className={`${BTN} text-[#ff9a8c]`} onClick={handlers.onArchive}>
           Archive
         </button>
       )}
       {actions.more.length > 0 && (
         <Popover open={moreOpen} onOpenChange={setMoreOpen}>
           <PopoverTrigger asChild>
-            <button type="button" className={BTN} aria-label="More actions">
+            <button type="button" className={`${BTN} text-white`} aria-label="More actions">
               <DotsThreeIcon className="size-4" />
-              More
             </button>
           </PopoverTrigger>
           <PopoverContent align="center" side="top" sideOffset={8} className={`${POP} w-[220px]`}>
@@ -203,7 +193,7 @@ export function BulkBar({
         </Popover>
       )}
       <span className={DIV} />
-      <button type="button" className={`${BTN} w-7 justify-center px-0`} onClick={handlers.onClear} aria-label="Deselect all">
+      <button type="button" className={`${BTN} w-7 justify-center px-0 text-white`} onClick={handlers.onClear} aria-label="Deselect all">
         <XIcon className="size-4" />
       </button>
     </div>

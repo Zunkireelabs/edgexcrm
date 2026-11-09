@@ -3,7 +3,7 @@
 // Designed empty state (EDGEX-117). Replaces the table and footer; pagination stays and reads
 // "Showing 0 of 0". Never shown while the table is loading (the caller guards that).
 
-import { MagnifyingGlassIcon, TrayIcon, FunnelSimpleIcon, UsersIcon } from "@/components/icons";
+import { MagnifyingGlassIcon, TrayIcon, UsersIcon } from "@/components/icons";
 
 export type EmptyVariant = "filters" | "search" | "nothing" | "none";
 
@@ -37,7 +37,7 @@ export function GridEmptyState({
   onAddLead?: () => void;
 }) {
   const copy = {
-    filters: { Icon: FunnelSimpleIcon, title: "No leads match these filters", body: "Try removing a filter, or check the spelling of your search." },
+    filters: { Icon: MagnifyingGlassIcon, title: "No leads match these filters", body: "Try removing a filter, or check the spelling of your search." },
     search: { Icon: MagnifyingGlassIcon, title: "No leads match your search", body: "Check the spelling, or try a different name, email or phone number." },
     nothing: { Icon: TrayIcon, title: "Nothing here yet", body: "Leads will show up here when there are some." },
     none: { Icon: UsersIcon, title: "No leads yet", body: "Add your first lead to start building your pipeline." },

@@ -28,7 +28,7 @@ describe("default column widths match the mockup", () => {
   it("per-column widths", () => {
     expect(NAME_DEFAULT_WIDTH).toBe(210);
     const w = Object.fromEntries(V2_DEFAULT_KEYS.map((k) => [k, v2For(k).width]));
-    expect(w).toEqual({ lead_type: 150, assigned: 150, email: 240, location: 140, display_id: 124, last_activity: 140 });
+    expect(w).toEqual({ lead_type: 150, assigned: 150, email: 240, location: 140, display_id: 124, last_activity: 160 });
   });
   it("defaults fit in a 1280px content width", () => {
     const total = CHECKBOX_WIDTH + NAME_DEFAULT_WIDTH + V2_DEFAULT_KEYS.reduce((n, k) => n + (v2For(k).width ?? 0), 0);

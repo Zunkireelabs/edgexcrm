@@ -271,7 +271,7 @@ export function LeadsGrid(props: LeadsGridProps) {
   }
 
   const empty = leads.length === 0 && !loading;
-  if (empty) return <div className="flex min-h-0 flex-1 flex-col overflow-auto bg-ds-surface">{emptyState}</div>;
+  if (empty) return <div className="flex min-h-0 flex-1 flex-col overflow-auto border-y border-ds-border bg-ds-surface">{emptyState}</div>;
 
   const sortedKey = (col: LeadColumn) => !!col.v2?.sort && sort.field === col.v2.sort;
 
