@@ -7,6 +7,7 @@ const ctxMock = vi.fn();
 const writeMock = vi.fn();
 const gateMock = vi.fn();
 const insertMock = vi.fn();
+let keptRow: unknown = null;
 
 vi.mock("@/lib/api/auth", () => ({ authenticateRequest: authMock }));
 vi.mock("@/industries/_loader", () => ({ getFeatureAccess: () => true }));
@@ -19,7 +20,7 @@ vi.mock("@/industries/education-consultancy/features/home/ai/gate", () => ({ hom
 vi.mock("@/industries/education-consultancy/features/home/ai/usage", () => ({ homeOverBudget: async () => false, recordHomeUsage: async () => {} }));
 vi.mock("@/industries/education-consultancy/features/home/ai/draft", async (orig) => ({ ...(await orig<typeof import("@/industries/education-consultancy/features/home/ai/draft")>()), writeDraft: writeMock }));
 vi.mock("@/lib/supabase/scoped", () => ({
-  scopedClient: async () => ({ from: () => ({ insert: (v: unknown) => (insertMock(v), { select: () => ({ single: async () => ({ data: { id: "draft-1" } }) }) }), update: () => ({ eq: () => ({ eq: async () => ({}) }) }) }) }),
+  scopedClient: async () => ({ from: () => ({ select: () => { const q: Record<string, unknown> = {}; for (const k of ["eq", "is", "gte", "not", "order"]) q[k] = () => q; q.limit = async () => ({ data: keptRow ? [keptRow] : [] }); return q; }, insert: (v: unknown) => (insertMock(v), { select: () => ({ single: async () => ({ data: { id: "draft-1" } }) }) }), update: () => ({ eq: () => ({ eq: async () => ({}) }) }) }) }),
 }));
 
 const CTX = (o: Record<string, unknown> = {}) => ({
@@ -39,6 +40,7 @@ describe("POST /api/v1/home/draft", () => {
     gateMock.mockResolvedValue(true);
     ctxMock.mockResolvedValue(CTX());
     writeMock.mockResolvedValue(OK);
+    keptRow = null;
     userMock.mockResolvedValue({ id: "u1", email: "admizzintern4@gmail.com", user_metadata: { name: "Rita Karki" } });
   });
 
@@ -57,7 +59,7 @@ describe("POST /api/v1/home/draft", () => {
   });
   it("an unknown row kind is refused (the model is never asked to write for an arbitrary reason)", async () => {
     const { POST } = await import("./route");
-    expect((await POST(req({ leadId: "L1", kind: "going_quiet" }))).status).toBe(422);
+    expect((await POST(req({ leadId: "L1", kind: "new_uncalled" }))).status).toBe(422);
   });
   it("drafts when the panel opens: default WhatsApp, the draft saved on ai_drafts, records read named", async () => {
     const { POST } = await import("./route");
@@ -139,5 +141,26 @@ describe("POST /api/v1/home/draft", () => {
     const { POST } = await import("./route");
     expect((await (await POST(req(BODY))).json()).data.draft).toBeNull();
     expect(writeMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("B5: an unticked 'Prepare all' draft kept within 24 h reopens from the row WITHOUT asking the model", async () => {
+    keptRow = { id: "batch-1", draft_text: "Hi Sita, checking in.", channel: "whatsapp", proposed: { why: "Quiet for 9 days.", subject: null, followUp: { title: "Check back", dueDate: "2026-11-12" } } };
+    const { POST } = await import("./route");
+    const d = (await (await POST(req(BODY))).json()).data;
+    expect(writeMock).not.toHaveBeenCalled();
+    expect(d.draft).toMatchObject({ id: "batch-1", text: "Hi Sita, checking in.", why: "Quiet for 9 days.", kept: true });
+  });
+  it("B5: a different tone or a tab change (a draftId) always writes fresh", async () => {
+    keptRow = { id: "batch-1", draft_text: "old", channel: "whatsapp", proposed: { why: "w" } };
+    const { POST } = await import("./route");
+    await POST(req({ ...BODY, tone: "shorter", previous: "old" }));
+    expect(writeMock).toHaveBeenCalled();
+  });
+  it("B5: a kept draft on a channel the person can no longer use is ignored", async () => {
+    keptRow = { id: "batch-1", draft_text: "old", channel: "email", proposed: { why: "w" } };
+    ctxMock.mockResolvedValue(CTX({ gmail: null }));
+    const { POST } = await import("./route");
+    await POST(req(BODY));
+    expect(writeMock).toHaveBeenCalled();
   });
 });

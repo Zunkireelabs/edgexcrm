@@ -10,16 +10,12 @@ import { FEATURES } from "@/industries/_registry";
 import { homeAiEnabled } from "@/industries/education-consultancy/features/home/ai/gate";
 import { draftFacts, produceDraft, writeDraft } from "@/industries/education-consultancy/features/home/ai/draft";
 import { homeOverBudget, recordHomeUsage } from "@/industries/education-consultancy/features/home/ai/usage";
-import { availableChannels, counsellorFirstName, defaultChannel, shortTenantName, type DraftChannel, type DraftTone } from "@/industries/education-consultancy/features/home/lib/draft";
+import { availableChannels, counsellorFirstName, defaultChannel, DRAFT_REASONS, shortTenantName, type DraftChannel, type DraftTone } from "@/industries/education-consultancy/features/home/lib/draft";
 import { addDaysStr, localDate } from "@/industries/education-consultancy/features/home/lib/time";
 import { loadDraftContext } from "@/industries/education-consultancy/features/home/server/draft-context";
 import { loadVisibleLead } from "@/industries/education-consultancy/features/home/server/visible-lead";
 
-const KINDS: Record<string, string> = {
-  reply_waiting: "the lead wrote to the counsellor and is waiting for a reply",
-  deadline_docs: "an application deadline is close and a required document is still missing",
-  callback_overdue: "a call-back is overdue and the last call was not answered",
-};
+const KINDS = DRAFT_REASONS;
 const TONES = ["new", "shorter", "formal", "nepali", "retry"] as const;
 const WEEKDAY = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -73,6 +69,16 @@ export async function POST(request: NextRequest) {
       ? { application: `${ctx.applications[0].university} · ${ctx.applications[0].program}`, deadline: ctx.applications[0].deadline, missing: ctx.applications[0].docsAssessable ? ctx.applications[0].missing : [] }
       : null,
   };
+  const db0 = await scopedClient(auth);
+  // B5: an unticked draft from "Prepare all" is kept for 24 h and reopens from the row, without asking the model again.
+  if (tone === "new" && !body.draftId && channel) {
+    const since = new Date(now.getTime() - 24 * 3_600_000).toISOString();
+    const { data: kept } = await db0.from("ai_drafts").select("id, draft_text, channel, proposed").eq("user_id", auth.userId).eq("lead_id", leadId).eq("surface", "home_batch").is("outcome", null).gte("created_at", since).not("draft_text", "is", null).order("created_at", { ascending: false }).limit(1);
+    const k = ((kept ?? []) as unknown as Array<{ id: string; draft_text: string; channel: DraftChannel | null; proposed: { why?: string; subject?: string | null; followUp?: { title: string; dueDate: string } } | null }>)[0];
+    if (k && k.channel && channels.includes(k.channel) && k.proposed?.why) {
+      return apiSuccess({ ai: true, ...base, channel: k.channel, draft: { id: k.id, text: k.draft_text, subject: k.channel === "email" ? k.proposed.subject ?? "Following up" : null, why: k.proposed.why, followUp: k.proposed.followUp ?? { title: "Check back", dueDate: addDaysStr(localDate(now, tz), 3) }, kept: true } });
+    }
+  }
   // No tab at all: the panel shows the lead's details and "Copy" only; there is nothing to draft for.
   const db = await scopedClient(auth);
   if (!channel) return apiSuccess({ ai: true, ...base, draft: null });

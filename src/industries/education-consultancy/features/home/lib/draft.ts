@@ -111,3 +111,11 @@ const PRONOUN = /\b(he|she|his|her|hers|him|himself|herself)\b/i;
 export function hasGenderedPronoun(texts: string[]): boolean {
   return texts.some((t) => PRONOUN.test(t));
 }
+
+/** Why a message is being written, by row kind: the only reasons the model is ever given (single Draft and the batch share them). */
+export const DRAFT_REASONS: Record<string, string> = {
+  reply_waiting: "the lead wrote to the counsellor and is waiting for a reply",
+  deadline_docs: "an application deadline is close and a required document is still missing",
+  callback_overdue: "a call-back is overdue and the last call was not answered",
+  going_quiet: "the lead has gone quiet since the last contact and the counsellor is checking in",
+};

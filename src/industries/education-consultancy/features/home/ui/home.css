@@ -188,4 +188,16 @@
 .eh-cp-dl > div { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; font-size: 14px; }
 .eh-cp-dl dt { color: var(--ds-muted); }
 .eh-cp-dl dd { margin: 0; color: var(--ds-ink); }
+/* B5: Prepare all (H3b). */
+.eh-prep { display: flex; align-items: center; gap: 12px; border: 1px solid var(--ds-ai-line); background: var(--ds-ai-wash); border-radius: 14px; padding: 12px 14px; margin-bottom: 16px; }
+.eh-prep .spk { width: 28px; height: 28px; border-radius: 8px; background: var(--ds-ai-grad); display: grid; place-items: center; color: #fff; flex-shrink: 0; }
+.eh-prep .tx { display: flex; flex-direction: column; min-width: 0; flex: 1; font-size: 13px; color: var(--ds-muted); }
+.eh-prep .tx b { color: var(--ds-ink); font-weight: 500; font-size: 14px; }
+.eh-bp-card { border: 1px solid var(--ds-border); border-radius: 12px; background: var(--ds-surface); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.eh-bp-card[data-state="sent"] { opacity: 0.7; }
+.eh-bp-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.eh-bp-name { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--ds-ink); cursor: pointer; }
+.eh-bp-name b { font-weight: 500; }
+.eh-bp-edit { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; color: var(--ds-muted); background: transparent; border: 0; cursor: pointer; }
+.eh-bp-card textarea { width: 100%; min-height: 90px; border: 1px solid var(--ds-border); border-radius: var(--ds-r-sm); background: var(--ds-surface); font-size: 14px; color: var(--ds-ink); padding: 8px 10px; resize: vertical; }
 

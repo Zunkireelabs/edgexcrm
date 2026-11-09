@@ -343,6 +343,7 @@ export function useDoNextRows(opts: { aiNote?: boolean } = {}) {
   const [sheetKey, setSheetKey] = useState<string | null>(null);
   const [draftItem, setDraftItem] = useState<DoNextItem | null>(null);
   const [prepItem, setPrepItem] = useState<DoNextItem | null>(null);
+  const [batchOpen, setBatchOpen] = useState(false);
   const hide = (key: string) => setHidden((s) => new Set(s).add(key));
 
   const snooze = async (item: DoNextItem) => {
@@ -360,7 +361,7 @@ export function useDoNextRows(opts: { aiNote?: boolean } = {}) {
     hide(item.key);
     router.refresh();
   };
-  return { router, hidden, openLog, setOpenLog, busy, snooze, markDone, sheetKey, setSheetKey, draftItem, setDraftItem, prepItem, setPrepItem, aiNote: opts.aiNote === true };
+  return { router, hidden, openLog, setOpenLog, busy, snooze, markDone, sheetKey, setSheetKey, draftItem, setDraftItem, prepItem, setPrepItem, batchOpen, setBatchOpen, aiNote: opts.aiNote === true };
 }
 export type DoNextRows = ReturnType<typeof useDoNextRows>;
 
