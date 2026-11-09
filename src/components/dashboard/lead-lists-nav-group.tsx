@@ -3,11 +3,12 @@
 import { usePathname, useSearchParams } from "next/navigation";
 import type { LeadList } from "@/types/database";
 import { useSettingsModal } from "@/contexts/settings-modal-context";
+import { stageDotColor } from "@/components/dashboard/leads/table/stage-color";
 import { NavExpandable } from "@/components/dashboard/nav-primitives";
 import { shellIcon } from "@/components/dashboard/shell-icons";
 
 interface LeadListsNavGroupProps {
-  lists: Pick<LeadList, "id" | "name" | "slug" | "sort_order">[];
+  lists: Pick<LeadList, "id" | "name" | "slug" | "sort_order" | "color">[];
   onNavigate: () => void;
   isAdmin?: boolean;
   collapsed?: boolean;
@@ -39,6 +40,7 @@ export function LeadListsNavGroup({ lists, onNavigate, isAdmin = false, collapse
         href: `/leads?list=${l.slug}`,
         label: l.name,
         active: isOnLeads && currentList === l.slug,
+        dotColor: stageDotColor(l),
       }))}
       action={isAdmin ? { label: "Manage stages", onClick: () => openSettings("lead-management") } : undefined}
     />

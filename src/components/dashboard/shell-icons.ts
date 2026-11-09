@@ -149,6 +149,7 @@ export {
   MagnifyingGlassIcon as SearchIcon,
   RobotIcon,
   SidebarSimpleIcon as SidebarToggleIcon,
+  SlidersHorizontalIcon,
   SignOutIcon,
   SparkleIcon,
   SquaresFourIcon as OpsIcon,

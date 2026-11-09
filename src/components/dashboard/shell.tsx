@@ -49,6 +49,7 @@ import {
   NavExpandable,
   NavGroup,
   NavIcon,
+  NavCountPill,
 } from "@/components/dashboard/nav-primitives";
 import {
   ArchiveIcon,
@@ -109,7 +110,7 @@ const ORCA_NAV: Array<{ href: string; label: string; icon: Icon; adminOnly?: boo
 function NavFallback({ icon, label }: { icon?: Icon; label: string }) {
   return (
     <div className={cn(NAV_ROW, "text-ds-muted")}>
-      {icon ? <NavIcon icon={icon} /> : <span className="size-[18px] shrink-0" />}
+      {icon ? <NavIcon icon={icon} /> : <span className="size-4 shrink-0" />}
       {label}
     </div>
   );
@@ -166,7 +167,7 @@ interface DashboardShellProps {
   userBranchId?: string | null;
   leadScope?: "all" | "own" | "team";
   selectedBranchId?: string | null;
-  leadLists?: Pick<LeadList, "id" | "name" | "slug" | "sort_order" | "funnel_key">[];
+  leadLists?: Pick<LeadList, "id" | "name" | "slug" | "sort_order" | "funnel_key" | "color">[];
   stagingLists?: Pick<LeadList, "id" | "name" | "slug">[];
   archiveLists?: Pick<LeadList, "id" | "name" | "slug">[];
   /** Env flag AND tenants.ai_enabled (migration 174) — see src/lib/ai/flag.ts. */
@@ -225,6 +226,8 @@ export function DashboardShell({
   const { isOpen: isAssistantOpen, toggleAssistant } = useAIAssistant();
   const { openSettings } = useSettingsModal();
   const { open: openSearch, shortcutLabel } = useGlobalSearch();
+  // "⌘K" renders as two separate keys; "Ctrl K" splits on the space.
+  const shortcutKeys = shortcutLabel.includes(" ") ? shortcutLabel.split(" ") : Array.from(shortcutLabel);
   const { counts } = useBadgeCounts();
 
   // Logged-in user's display name (shown in the header avatar button and the menu).
@@ -382,9 +385,7 @@ export function DashboardShell({
               ? item.badgeSlot
               : item.badge
                 ? (
-                    <span className="ml-auto text-[11.5px] font-normal tabular-nums text-ds-muted">
-                      {item.badge > 9 ? "9+" : item.badge}
-                    </span>
+                    <NavCountPill>{item.badge > 9 ? "9+" : item.badge}</NavCountPill>
                   )
                 : null}
           </>
@@ -813,24 +814,28 @@ export function DashboardShell({
       )}
 
       {/* Search row — top of nav, opens command palette */}
-      <div className="px-3 pt-2 pb-1">
+      <div className="px-3 pb-[11px] pt-2.5">
         <SidebarTip label="Search" enabled={rail}>
         <button
           type="button"
           onClick={() => { openSearch(); setMobileOpen(false); }}
           aria-label={rail ? "Search" : undefined}
           className={cn(
-            "flex h-8 w-full items-center gap-2 rounded-ds-sm border border-ds-border bg-ds-surface text-[13px] text-ds-muted transition-colors hover:bg-ds-hover",
-            rail ? "justify-center px-0" : "pl-2.5 pr-2",
+            "flex h-7 w-full items-center gap-1.5 rounded-lg bg-white text-sm font-medium leading-5 tracking-[-0.07px] text-ds-ink shadow-[0_0_2px_rgba(28,40,64,0.18),0_1px_3px_rgba(0,0,0,0.04)] transition-colors hover:bg-white/80 dark:bg-white/10 dark:hover:bg-white/15",
+            rail ? "justify-center px-0" : "py-1 pl-1.5 pr-1",
           )}
         >
-          <SearchIcon size={16} weight="regular" aria-hidden className="shrink-0 text-ds-faint" />
+          <SearchIcon size={16} weight="regular" aria-hidden className="shrink-0 text-ds-text" />
           {!rail && (
             <>
               <span className="flex-1 text-left">Search</span>
-              <kbd className="grid h-[18px] place-items-center rounded-[5px] border border-ds-border bg-ds-sunken px-[5px] text-[11px] font-medium text-ds-faint">
-                {shortcutLabel}
-              </kbd>
+              <span className="flex gap-[3px]">
+                {shortcutKeys.map((k, i) => (
+                  <kbd key={i} className="grid h-[18px] min-w-[18px] place-items-center rounded-[5px] bg-ds-surface font-sans text-[11px] font-medium text-ds-faint shadow-[inset_0_0_0_1px_var(--ds-border)]">
+                    {k}
+                  </kbd>
+                ))}
+              </span>
             </>
           )}
         </button>
@@ -856,7 +861,7 @@ export function DashboardShell({
         <nav
           ref={navRef}
           onScroll={(e) => setNavScrolled(e.currentTarget.scrollTop > 4)}
-          className="flex h-full flex-col gap-px overflow-y-auto overflow-x-hidden px-3 pb-3 pt-1 no-scrollbar [&>*]:shrink-0"
+          className="flex h-full flex-col gap-px overflow-y-auto overflow-x-hidden px-2 pb-3 pt-0.5 no-scrollbar [&>*]:shrink-0"
         >
         {navMode === "ops" ? (
           isEducation ? nav.renderEducationNav()
@@ -877,7 +882,7 @@ export function DashboardShell({
 
       {/* Footer — Archive + Settings, pinned under the nav. The account button moved to the header (EDGEX-86 §5). */}
       {(showFooterArchive || showFooterSettings) && (
-        <div className="flex shrink-0 flex-col gap-px border-t border-ds-border px-3 py-2">
+        <div className="flex shrink-0 flex-col gap-px border-t border-ds-border px-2 py-2">
           {showFooterArchive && (
             <Suspense fallback={<NavFallback icon={ArchiveIcon} label="Archive" />}>
               <ArchiveNavLinks lists={archiveLists} onNavigate={closeMobile} collapsed={rail} />

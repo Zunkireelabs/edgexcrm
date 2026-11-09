@@ -135,7 +135,8 @@
   --chart-4: #f59e0b;
   --chart-5: #ef4444;
   /* Layout surfaces (Zunkireelabs standard) */
-  --sidebar-bg: #f9f9f9;   /* app chrome: sidebar + header + frame */
+  --sidebar-bg: #fbfbfb;   /* app chrome: sidebar + header + frame */
+  --sidebar-row-hover: rgba(0, 0, 0, 0.04); /* sidebar row hover + active fill (EDGEX-129, Attio-measured) */
   --content-bg: #ffffff;   /* scrolling content pane */
   --page-bg: #edeef2;      /* desktop behind the floating app card (light) */
   --nav-active: #f0f0f0;   /* active segmented tab (Ops/Orca) on white chrome */
@@ -194,6 +195,7 @@
   --chart-5: #ef4444;
   /* Layout surfaces (Zunkireelabs standard) */
   --sidebar-bg: #171717;   /* dark chrome */
+  --sidebar-row-hover: rgba(255, 255, 255, 0.06);
   --content-bg: #1e1e1e;   /* dark content pane */
   --page-bg: #0a0a0a;      /* dark desktop */
   --nav-active: #2a2a2a;   /* active tab on dark chrome */
