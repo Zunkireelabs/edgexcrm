@@ -10,9 +10,9 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 const COLORS: Array<[string, string]> = [
-  ["canvas", "#f6f6f5"], ["surface", "#ffffff"], ["sunken", "#fafaf9"], ["hover", "#f4f4f3"], ["selected", "#efefee"],
-  ["border", "#e8e8e6"], ["divider", "#f0f0ee"], ["ink", "#141414"], ["text", "#3a3a38"], ["muted", "#73736f"],
-  ["faint", "#a3a39e"], ["ghost", "#d6d6d2"], ["accent", "#2272B4"], ["accent-soft", "#eaf2fa"],
+  ["canvas", "#f6f6f5"], ["surface", "#ffffff"], ["sunken", "#fafaf9"], ["hover", "#f6f7f9"], ["selected", "#efefee"],
+  ["border", "#e8e9eb"], ["divider", "#f0f1f2"], ["ink", "#101112"], ["text", "#2b2d2f"], ["muted", "#6b6f76"],
+  ["faint", "#9a9ea5"], ["ghost", "#d0d3d7"], ["accent", "#2272B4"], ["accent-soft", "#eaf2fa"],
   ["good", "#127a4a"], ["good-soft", "#e9f6ef"], ["bad", "#b42318"], ["bad-soft", "#fdeeec"],
   ["warn", "#a15c07"], ["warn-soft", "#fdf3e3"], ["ai", "#5b47d6"], ["ai-soft", "#f3f1fd"], ["ai-line", "#d9d3fa"],
 ]

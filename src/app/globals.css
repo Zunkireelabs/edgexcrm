@@ -151,9 +151,9 @@
   --sidebar-ring: #2272B4;
 
   /* Design System v2 (EDGEX-84/85). Prefix ds- because 4 v2 names clash with shadcn tokens of a different meaning. Light mode only. */
-  --ds-canvas:#f6f6f5; --ds-surface:#ffffff; --ds-sunken:#fafaf9; --ds-hover:#f4f4f3; --ds-selected:#efefee;
-  --ds-border:#e8e8e6; --ds-divider:#f0f0ee;
-  --ds-ink:#141414; --ds-text:#3a3a38; --ds-muted:#73736f; --ds-faint:#a3a39e; --ds-ghost:#d6d6d2;
+  --ds-canvas:#f6f6f5; --ds-surface:#ffffff; --ds-sunken:#fafaf9; --ds-hover:#f6f7f9; --ds-selected:#efefee;
+  --ds-border:#e8e9eb; --ds-divider:#f0f1f2;
+  --ds-ink:#101112; --ds-text:#2b2d2f; --ds-muted:#6b6f76; --ds-faint:#9a9ea5; --ds-ghost:#d0d3d7;
   --ds-accent:#2272B4; --ds-accent-soft:#eaf2fa;
   --ds-good:#127a4a; --ds-good-soft:#e9f6ef; --ds-bad:#b42318; --ds-bad-soft:#fdeeec; --ds-warn:#a15c07; --ds-warn-soft:#fdf3e3;
   --ds-ai:#5b47d6; --ds-ai-soft:#f3f1fd; --ds-ai-line:#d9d3fa; --ds-ai-arc:#7c5cf0;
