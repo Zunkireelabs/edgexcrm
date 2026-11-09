@@ -7,7 +7,7 @@
 // FOLLOW_UP_TAB_EXTENSION_POINT below).
 
 import type { FilterTree } from "@/lib/filters/types";
-import { DEFAULT_SORT, viewSignature, type SortState, type ViewState } from "./view-state";
+import { DEFAULT_SORT, canonicalTreeSignature, sortSignature, viewSignature, type SortState, type ViewState } from "./view-state";
 
 export interface ViewDef {
   id: string;
@@ -62,4 +62,18 @@ export function buildBuiltinViews({ scopeTree, currentUserId, fieldKeys, applica
 export function matchBuiltinView(views: ViewDef[], current: ViewState): ViewDef | null {
   const signature = viewSignature(current);
   return views.find((v) => viewSignature({ tree: v.tree, sort: v.sort }) === signature) ?? null;
+}
+
+/**
+ * A restored filter that equals a saved view's tree (default sort) reads as that saved view,
+ * so it isn't flagged "Unsaved changes" after a reload.
+ */
+export function matchSavedView(
+  saved: { id: string; tree: FilterTree }[],
+  current: ViewState,
+): { id: string; tree: FilterTree; sort: SortState } | null {
+  if (sortSignature(current.sort) !== sortSignature(DEFAULT_SORT)) return null;
+  const signature = canonicalTreeSignature(current.tree);
+  const hit = saved.find((f) => canonicalTreeSignature(f.tree) === signature);
+  return hit ? { id: hit.id, tree: hit.tree, sort: DEFAULT_SORT } : null;
 }

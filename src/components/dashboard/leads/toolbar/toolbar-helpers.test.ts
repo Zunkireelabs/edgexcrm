@@ -215,7 +215,7 @@ describe("one-level sort rules", () => {
   });
 });
 
-import { matchBuiltinView } from "./builtin-views";
+import { matchBuiltinView, matchSavedView } from "./builtin-views";
 
 describe("implicit active view", () => {
   const scopeTree: FilterTree = { conjunction: "and", conditions: [] };
@@ -231,5 +231,21 @@ describe("implicit active view", () => {
     const other: FilterTree = { conjunction: "and", conditions: [{ id: "x", field: "stage", op: "is_any_of", value: ["l-other"] }] };
     expect(matchBuiltinView(views, { tree: other, sort: DEFAULT_SORT })).toBeNull();
     expect(matchBuiltinView(views, { tree: scopeTree, sort: { field: "name", direction: "asc" } })).toBeNull();
+  });
+});
+
+describe("matchSavedView", () => {
+  const tree: FilterTree = { conjunction: "and", conditions: [{ id: "a", field: "stage", op: "is_any_of", value: ["l1"] }] };
+  const saved = [{ id: "s1", tree }];
+
+  it("matches a restored tree to a saved view regardless of ids", () => {
+    const restored: FilterTree = { conjunction: "and", conditions: [{ id: "zzz", field: "stage", op: "is_any_of", value: ["l1"] }] };
+    expect(matchSavedView(saved, { tree: restored, sort: DEFAULT_SORT })?.id).toBe("s1");
+  });
+
+  it("does not match a different tree or a non-default sort", () => {
+    const other: FilterTree = { conjunction: "and", conditions: [{ id: "a", field: "stage", op: "is_any_of", value: ["l2"] }] };
+    expect(matchSavedView(saved, { tree: other, sort: DEFAULT_SORT })).toBeNull();
+    expect(matchSavedView(saved, { tree, sort: { field: "name", direction: "asc" } })).toBeNull();
   });
 });

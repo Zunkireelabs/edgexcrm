@@ -15,7 +15,7 @@ import { isEmptyTree } from "@/lib/filters/serialize";
 import type { FieldDef, FieldRegistry, FilterTree } from "@/lib/filters/types";
 import { prepareSavedFilterTree } from "@/industries/education-consultancy/features/saved-lead-filters/lib/apply-saved-filter";
 import { useSavedLeadFilters, type SavedLeadFilter } from "@/industries/education-consultancy/features/saved-lead-filters/lib/use-saved-lead-filters";
-import { buildBuiltinViews, matchBuiltinView, singleValueTree, type ViewDef } from "./builtin-views";
+import { buildBuiltinViews, matchBuiltinView, matchSavedView, singleValueTree, type ViewDef } from "./builtin-views";
 import { fetchLeadCount } from "./lead-count";
 import { ViewTabs } from "./view-tabs";
 import type { OptionContext } from "./condition-body";
@@ -106,9 +106,18 @@ export function LeadsToolbar({
   const [explicit, setExplicit] = useState<ViewBaseline | null>(null);
   const implicit = useMemo<ViewBaseline>(() => {
     const match = matchBuiltinView(builtin, current);
-    return match ? { id: match.id, tree: match.tree, sort: match.sort } : { id: "all", tree: scopeTree, sort: DEFAULT_SORT };
-  }, [builtin, current, scopeTree]);
+    if (match) return { id: match.id, tree: match.tree, sort: match.sort };
+    const savedMatch = matchSavedView(saved.filters.map((f) => ({ id: f.id, tree: f.filter_tree })), current);
+    return savedMatch ?? { id: "all", tree: scopeTree, sort: DEFAULT_SORT };
+  }, [builtin, current, scopeTree, saved.filters]);
   const baseline = explicit ?? implicit;
+
+  // A restored filter might equal a saved view: load the list once so it can read as clean.
+  const savedLoad = saved.load;
+  const needsSavedLookup = !explicit && !saved.loaded && !isEmptyTree(filter.tree) && !matchBuiltinView(builtin, current);
+  useEffect(() => {
+    if (needsSavedLookup) void savedLoad();
+  }, [needsSavedLookup, savedLoad]);
   const dirty = isViewDirty(baseline, current);
   const hasFilters = !isEmptyTree(filter.tree);
 

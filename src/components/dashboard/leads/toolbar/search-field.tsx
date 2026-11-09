@@ -21,6 +21,9 @@ export const SearchField = forwardRef<HTMLInputElement, SearchFieldProps>(functi
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") e.currentTarget.blur();
+        }}
         placeholder="Search leads"
         aria-label="Search leads"
         data-testid="leads-search"
