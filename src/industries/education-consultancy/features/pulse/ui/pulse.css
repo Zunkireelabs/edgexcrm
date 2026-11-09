@@ -1,7 +1,7 @@
 /* Pulse v5 — Design System v2 tokens + component styles, SCOPED to the Pulse root (.pulse).
    Generated from docs/design-system/mockups/pulse-v5.html (EDGEX-84). Nothing outside .pulse is affected.
    Gradients appear ONLY on AI elements (.brief, .badge, .rnote, .read, .ask). */
-.pulse{font-family:Inter,system-ui,sans-serif;font-size:13px;line-height:1.5;color:var(--text);font-feature-settings:"tnum" 1,"cv11" 1,"ss01" 1;-webkit-font-smoothing:antialiased}
+.pulse{font-family:var(--font-inter),system-ui,sans-serif;font-size:13px;line-height:1.5;color:var(--text);font-feature-settings:"tnum" 1,"cv11" 1,"ss01" 1;-webkit-font-smoothing:antialiased}
 .pulse *{box-sizing:border-box}
 /* temporary aliases; removed when Pulse CSS moves fully to ds- tokens */
 .pulse{--canvas:var(--ds-canvas); --surface:var(--ds-surface); --sunken:var(--ds-sunken); --hover:var(--ds-hover); --selected:var(--ds-selected);
