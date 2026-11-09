@@ -13,6 +13,7 @@ import type { DoNextFilter, DoNextTier } from "../lib/types";
 import type { HomeData } from "../server/load-page";
 import { DoNextRow, MissedCallbacksSheet, useDoNextRows } from "./do-next-row";
 import { OrcaReadCard } from "./orca-read";
+import { CallPrepPanel } from "./call-prep-panel";
 import { DraftPanel } from "./draft-panel";
 
 const TIERS: Array<{ tier: DoNextTier; title: string; desc: string }> = [
@@ -68,6 +69,7 @@ export function EducationHome({ data }: { data: HomeData }) {
       {visibleAll.filter((i) => i.children).map((i) => (
         <MissedCallbacksSheet key={i.key} item={i} nextStageByLead={data.nextStageByLead} tz={data.tz} rows={rows} />
       ))}
+      <CallPrepPanel key={rows.prepItem?.key ?? "none"} item={rows.prepItem} onClose={() => rows.setPrepItem(null)} onCall={(it) => { rows.setPrepItem(null); rows.setOpenLog(it.key); }} />
       <DraftPanel key={rows.draftItem?.key ?? "none"} item={rows.draftItem} onClose={() => rows.setDraftItem(null)} onSent={() => rows.router.refresh()} />
       <h1 className="eh-h1">{data.greeting}</h1>
       <p className="eh-lede">

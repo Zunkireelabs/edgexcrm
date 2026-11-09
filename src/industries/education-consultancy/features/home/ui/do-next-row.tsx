@@ -36,6 +36,7 @@ import {
   type CallOutcomeChoice,
   type PlannedRequest,
 } from "../lib/call-log";
+import { callPrepEligible } from "../lib/call-prep";
 import { draftLabel } from "../lib/draft";
 import type { DoNextItem } from "../lib/types";
 
@@ -341,6 +342,7 @@ export function useDoNextRows(opts: { aiNote?: boolean } = {}) {
   const [busy, setBusy] = useState<string | null>(null);
   const [sheetKey, setSheetKey] = useState<string | null>(null);
   const [draftItem, setDraftItem] = useState<DoNextItem | null>(null);
+  const [prepItem, setPrepItem] = useState<DoNextItem | null>(null);
   const hide = (key: string) => setHidden((s) => new Set(s).add(key));
 
   const snooze = async (item: DoNextItem) => {
@@ -358,7 +360,7 @@ export function useDoNextRows(opts: { aiNote?: boolean } = {}) {
     hide(item.key);
     router.refresh();
   };
-  return { router, hidden, openLog, setOpenLog, busy, snooze, markDone, sheetKey, setSheetKey, draftItem, setDraftItem, aiNote: opts.aiNote === true };
+  return { router, hidden, openLog, setOpenLog, busy, snooze, markDone, sheetKey, setSheetKey, draftItem, setDraftItem, prepItem, setPrepItem, aiNote: opts.aiNote === true };
 }
 export type DoNextRows = ReturnType<typeof useDoNextRows>;
 
@@ -381,6 +383,12 @@ export function DoNextRow({ item, nextStage, tz, rows }: { item: DoNextItem; nex
         </div>
         {/* "sheet" and "open" keep their words on a phone; the other actions shrink to an icon (.eh-lbl). */}
         <div className={item.primaryAction.type === "sheet" || item.primaryAction.type === "open" ? "eh-ac eh-ac-text" : "eh-ac"}>
+          {rows.aiNote && callPrepEligible(item) ? (
+            <Button look="v2" variant="secondary" size="sm" onClick={() => rows.setPrepItem(item)} aria-label={`Call prep for ${item.title}`}>
+              <SparkleIcon size={14} aria-hidden />
+              <span className="eh-lbl">Call prep</span>
+            </Button>
+          ) : null}
           {rows.aiNote && draftLabel(item) ? (
             <Button look="v2" variant="secondary" size="sm" onClick={() => rows.setDraftItem(item)} aria-label={`${draftLabel(item)} for ${item.title}`}>
               <SparkleIcon size={14} aria-hidden />

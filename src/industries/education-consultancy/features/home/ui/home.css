@@ -182,3 +182,10 @@
 .eh-dp-q { margin-right: auto; font-size: 13.5px; font-weight: 500; color: var(--ds-ink); }
 .eh-dp-title { display: inline-flex; align-items: center; gap: 8px; }
 .eh-dp-title svg { flex-shrink: 0; color: var(--ds-ai); }
+/* B4: Call prep (H3c). */
+.eh-cp-h { margin: 0 0 8px; font-size: 11.5px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ds-muted); }
+.eh-cp-dl { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.eh-cp-dl > div { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; font-size: 14px; }
+.eh-cp-dl dt { color: var(--ds-muted); }
+.eh-cp-dl dd { margin: 0; color: var(--ds-ink); }
+
