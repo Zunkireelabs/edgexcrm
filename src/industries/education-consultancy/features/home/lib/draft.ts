@@ -1,4 +1,5 @@
 import type { DoNextItem } from "./types";
+import { localDate } from "./time";
 
 /**
  * B3: Draft on a row (H3). Orca drafts; a human edits and sends; nothing goes out on its own.
@@ -66,3 +67,47 @@ export function whatsappTimelineNote(text: string): string {
 
 /** What a send attempt hands back. WhatsApp is a hand-off today; a real send later returns "sent" and the panel needs no change. */
 export type SendResult = { kind: "sent" } | { kind: "handoff"; url: string } | { kind: "failed"; message: string };
+
+/** "Admizz Education" -> "Admizz": the name a counsellor introduces themselves with (the same short name the owner Home uses). */
+export function shortTenantName(name: string | null | undefined): string | null {
+  return (name ?? "").trim().split(/\s+/)[0] || null;
+}
+
+/**
+ * The counsellor's first name EXACTLY as Home greets them (page.tsx): the profile's name / full_name. No profile name means NO name
+ * (never the email: admizzintern4@gmail.com must not sign as "admizzintern4"), and the draft is written without a sign-off name.
+ */
+export function counsellorFirstName(meta: Record<string, unknown> | null | undefined): string | null {
+  const full = (meta?.name ?? meta?.full_name) as string | undefined;
+  const first = typeof full === "string" ? full.trim().split(/\s+/)[0] : "";
+  return first || null;
+}
+
+/** "today" / "yesterday" / "5 days ago", by tenant-local calendar days, so the facts carry real timing the model can repeat. */
+export function relativeAge(at: string | Date, now: Date, tz: string): string {
+  const then = typeof at === "string" ? new Date(at) : at;
+  const days = Math.round((Date.parse(`${localDate(now, tz)}T00:00:00Z`) - Date.parse(`${localDate(then, tz)}T00:00:00Z`)) / 86_400_000);
+  return days <= 0 ? "today" : days === 1 ? "yesterday" : `${days} days ago`;
+}
+
+/** Words that state WHEN something happened. A draft may only say them when a fact does (a student would read a wrong "yesterday"). */
+const TIME_WORDS: RegExp[] = [/\byesterday\b/i, /\blast week\b/i, /\blast night\b/i, /\blast month\b/i, /\bearlier today\b/i, /हिजो/, /अस्ति/, /गत हप्ता/, /गत महिना/];
+
+/** The time words in `texts` that no fact backs up. Empty = fine. English and Nepali; the number check can't see words. */
+export function unbackedTimeWords(texts: string[], facts: string[]): string[] {
+  const hay = facts.join("\n").toLowerCase();
+  const out: string[] = [];
+  for (const re of TIME_WORDS) {
+    for (const t of texts) {
+      const m = t.match(re);
+      if (m && !hay.includes(m[0].toLowerCase())) out.push(m[0]);
+    }
+  }
+  return [...new Set(out)];
+}
+
+const PRONOUN = /\b(he|she|his|her|hers|him|himself|herself)\b/i;
+/** Gender is never guessed from a name: a draft (or its reason or task) using he/she/his/her is refused. Names only. */
+export function hasGenderedPronoun(texts: string[]): boolean {
+  return texts.some((t) => PRONOUN.test(t));
+}

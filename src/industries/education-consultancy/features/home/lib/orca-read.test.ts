@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ASK_CHIPS, counsellorFacts, managerFacts, madeAtLabel, READ_MAX_REFRESHES, refreshesLeft, validatePoints, type Fact } from "./orca-read";
+import { ASK_CHIPS, counsellorFacts, linkWords, managerFacts, madeAtLabel, READ_MAX_REFRESHES, refreshesLeft, validatePoints, type Fact } from "./orca-read";
 import type { DoNextItem } from "./types";
 import type { NeedsYouRow } from "./needs-you";
 
@@ -145,5 +145,44 @@ describe("small helpers", () => {
   it("two ask chips per role", () => {
     expect(ASK_CHIPS.me).toHaveLength(2);
     expect(ASK_CHIPS.business).toHaveLength(2);
+  });
+});
+
+describe("S6: the label counts only item facts", () => {
+  const facts = [
+    { id: "kind:new_uncalled", text: "new lead not yet called: 2", href: "/home#do-next", linkLabel: "Open 2 →" },
+    { id: "item:a", text: "Sujan Rai (new lead): 38 min", href: "/leads/a", linkLabel: "Open →" },
+    { id: "item:b", text: "Pooja Shrestha (new lead): 40 min", href: "/leads/b", linkLabel: "Open →" },
+  ];
+  it("a point citing the per-kind fact and 2 leads says 'first of 2', not 3, and links to a lead", () => {
+    const [p] = validatePoints([{ claim: "Call the 2 new leads", reason: "Neither has been called.", factIds: ["kind:new_uncalled", "item:a", "item:b"] }], facts);
+    expect(p.link).toEqual({ href: "/leads/a", label: "Open first of 2 →" });
+  });
+  it("a point citing only the per-kind fact and ONE lead is that lead's plain label", () => {
+    const [p] = validatePoints([{ claim: "Call Sujan Rai", reason: "38 min", factIds: ["kind:new_uncalled", "item:a"] }], facts);
+    expect(p.link).toEqual({ href: "/leads/a", label: "Open →" });
+  });
+  it("the per-kind text has no filler about rows or lists", () => {
+    const f = counsellorFacts([item({ key: "new_uncalled:a" }), item({ key: "new_uncalled:b" })], []).find((x) => x.id === "kind:new_uncalled");
+    expect(f?.text).toBe("new lead not yet called: 2");
+    expect(f?.text).not.toMatch(/row|list/i);
+  });
+});
+
+describe("S7: manager link words come from the row", () => {
+  it("'Review 388' reads 'Open 388'; person and Pulse words stay", () => {
+    expect(linkWords("Review 388")).toBe("Open 388");
+    expect(linkWords("See their leads")).toBe("See their leads");
+    expect(linkWords("Open in Pulse")).toBe("Open in Pulse");
+    expect(linkWords("  ")).toBe("Open");
+  });
+  it("a Needs-you row with a 'Review 388' link says 'Open 388 →'", () => {
+    const row = { key: "untouched_leads", tone: "warn", icon: "user-plus", title: "388 new leads nobody has contacted", chip: null, why: "x", actions: [{ type: "link", label: "Review 388", href: "/leads?f=1" }] } as unknown as NeedsYouRow;
+    const f = managerFacts([row], { rows: [], others: 0 }, [], true, (id) => id).find((x) => x.id === "need:untouched_leads");
+    expect(f).toMatchObject({ href: "/leads?f=1", linkLabel: "Open 388 →" });
+  });
+  it("a person row for a branch manager says 'See their leads →'", () => {
+    const row = { key: "drop", tone: "warn", icon: "trend-down", title: "Asha's activity dropped", chip: null, why: "x", actions: [{ type: "link", label: "See their leads", href: "/leads?f=asha" }] } as unknown as NeedsYouRow;
+    expect(managerFacts([row], { rows: [], others: 0 }, [], false, (id) => id)[0]).toMatchObject({ linkLabel: "See their leads →" });
   });
 });

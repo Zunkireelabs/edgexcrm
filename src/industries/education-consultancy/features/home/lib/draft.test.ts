@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { availableChannels, defaultChannel, draftLabel, outcomeOf, sameText, waLink, whatsappTimelineNote } from "./draft";
+import { availableChannels, counsellorFirstName, defaultChannel, draftLabel, hasGenderedPronoun, outcomeOf, relativeAge, sameText, shortTenantName, unbackedTimeWords, waLink, whatsappTimelineNote } from "./draft";
 import { sendToLead, textToHtml } from "./send-to-lead";
 
 describe("tab rules", () => {
@@ -83,5 +83,43 @@ describe("sendToLead: the one seam", () => {
   });
   it("text becomes safe HTML", () => {
     expect(textToHtml("a <b> & c")).toBe("<p>a &lt;b&gt; &amp; c</p>");
+  });
+});
+
+describe("S1/S3 names", () => {
+  it("the tenant's short name", () => {
+    expect(shortTenantName("Admizz Education")).toBe("Admizz");
+    expect(shortTenantName("  ")).toBeNull();
+    expect(shortTenantName(null)).toBeNull();
+  });
+  it("the counsellor's name is the profile name Home greets with: name, else full_name; none means none; never the email", () => {
+    expect(counsellorFirstName({ name: "Rita Karki" })).toBe("Rita");
+    expect(counsellorFirstName({ full_name: "Rita Karki" })).toBe("Rita");
+    expect(counsellorFirstName({ email: "admizzintern4@gmail.com" })).toBeNull();
+    expect(counsellorFirstName({})).toBeNull();
+    expect(counsellorFirstName(undefined)).toBeNull();
+    expect(counsellorFirstName({ name: "   " })).toBeNull();
+  });
+});
+
+describe("S2 timing", () => {
+  const now = new Date("2026-11-09T08:00:00.000Z");
+  it("relative age by tenant calendar day", () => {
+    expect(relativeAge("2026-11-09T01:00:00.000Z", now, "UTC")).toBe("today");
+    expect(relativeAge("2026-11-08T23:00:00.000Z", now, "UTC")).toBe("yesterday");
+    expect(relativeAge("2026-11-04T05:00:00.000Z", now, "UTC")).toBe("5 days ago");
+  });
+  it("time words are refused unless a fact has them (English and Nepali)", () => {
+    expect(unbackedTimeWords(["I called yesterday"], ["Last call: 5 days ago"])).toEqual(["yesterday"]);
+    expect(unbackedTimeWords(["मैले हिजो फोन गरें"], [])).toEqual(["हिजो"]);
+    expect(unbackedTimeWords(["as we discussed last week"], ["Message 1 (last week): hi"])).toEqual([]);
+    expect(unbackedTimeWords(["I called you 5 days ago"], ["Last call: 5 days ago"])).toEqual([]);
+  });
+});
+
+describe("S4 pronouns", () => {
+  it("he/she/his/her/him are flagged, names and 'the' are not", () => {
+    for (const t of ["her Australia interest", "call her", "he said", "his file", "tell him"]) expect(hasGenderedPronoun([t])).toBe(true);
+    for (const t of ["Sita's Australia interest", "other here", "there is the file"]) expect(hasGenderedPronoun([t])).toBe(false);
   });
 });

@@ -10,7 +10,9 @@ const insertMock = vi.fn();
 
 vi.mock("@/lib/api/auth", () => ({ authenticateRequest: authMock }));
 vi.mock("@/industries/_loader", () => ({ getFeatureAccess: () => true }));
-vi.mock("@/lib/supabase/queries", () => ({ getCurrentUserTenant: async () => ({ tenant: { timezone: "UTC" } }) }));
+const userMock = vi.fn();
+vi.mock("@/lib/supabase/queries", () => ({ getCurrentUserTenant: async () => ({ tenant: { timezone: "UTC", name: "Admizz Education" } }) }));
+vi.mock("@/lib/supabase/server", () => ({ getCachedUser: userMock }));
 vi.mock("@/industries/education-consultancy/features/home/server/visible-lead", () => ({ loadVisibleLead: visibleMock }));
 vi.mock("@/industries/education-consultancy/features/home/server/draft-context", () => ({ loadDraftContext: ctxMock }));
 vi.mock("@/industries/education-consultancy/features/home/ai/gate", () => ({ homeAiEnabled: gateMock }));
@@ -23,7 +25,7 @@ vi.mock("@/lib/supabase/scoped", () => ({
 const CTX = (o: Record<string, unknown> = {}) => ({
   lead: { firstName: "Sita", fullName: "Sita Gurung", phone: "+9779841234567", email: "sita@x.com", destinations: ["UK"], intakeTerm: null, fieldOfStudy: null },
   applications: [{ university: "Deakin", program: "Master of IT", deadline: "2026-11-15", daysLeft: 6, stageName: "Documents", missing: ["Bank statement"], docsAssessable: true }],
-  notes: [], messages: [], lastReplyChannel: null, gmail: { accountId: "acc", email: "rita@x.com" }, recordsRead: ["Sita's record"], ...o,
+  lastCall: { at: "2026-11-04T05:00:00.000Z", outcome: "no_answer" }, notes: [], messages: [], lastReplyChannel: null, gmail: { accountId: "acc", email: "rita@x.com" }, recordsRead: ["Sita's record"], ...o,
 });
 const OK = { raw: { text: "Hi Sita, we need your bank statement before 15 November.", subject: null, why: "The deadline is in 6 days.", followUp: { title: "Check for the statement", inDays: 3 } }, usage: {} };
 const req = (b: unknown) => new NextRequest("http://x/api/v1/home/draft", { method: "POST", body: JSON.stringify(b) });
@@ -37,6 +39,7 @@ describe("POST /api/v1/home/draft", () => {
     gateMock.mockResolvedValue(true);
     ctxMock.mockResolvedValue(CTX());
     writeMock.mockResolvedValue(OK);
+    userMock.mockResolvedValue({ id: "u1", email: "admizzintern4@gmail.com", user_metadata: { name: "Rita Karki" } });
   });
 
   it("404 for a lead this person can't see: nothing loaded, the model never called", async () => {
@@ -97,5 +100,29 @@ describe("POST /api/v1/home/draft", () => {
   it("a different tone needs the previous text", async () => {
     const { POST } = await import("./route");
     expect((await POST(req({ ...BODY, tone: "shorter" }))).status).toBe(422);
+  });
+
+  it("S1/S3: the prompt facts carry the company's short name and the profile first name, never the email", async () => {
+    const { POST } = await import("./route");
+    await POST(req(BODY));
+    const facts = (writeMock.mock.calls[0][0] as { facts: string[] }).facts.join("\n");
+    expect(facts).toContain("Company: Admizz");
+    expect(facts).toContain("Counsellor first name: Rita");
+    expect(facts).not.toMatch(/admizzintern/);
+  });
+  it("S3: no profile name: the draft is written without a name, still never from the email", async () => {
+    userMock.mockResolvedValue({ id: "u1", email: "admizzintern4@gmail.com", user_metadata: {} });
+    const { POST } = await import("./route");
+    await POST(req(BODY));
+    const facts = (writeMock.mock.calls[0][0] as { facts: string[] }).facts.join("\n");
+    expect(facts).toContain("do not sign with a name");
+    expect(facts).not.toMatch(/admizzintern/);
+  });
+  it("S2/S4: a draft saying 'yesterday' (no fact) or 'her' is refused", async () => {
+    writeMock.mockResolvedValue({ ...OK, raw: { ...OK.raw, text: "Hi Sita, I called yesterday." } });
+    const { POST } = await import("./route");
+    expect((await (await POST(req(BODY))).json()).data.draft).toBeNull();
+    writeMock.mockResolvedValue({ ...OK, raw: { ...OK.raw, why: "Her deadline is close." } });
+    expect((await (await POST(req(BODY))).json()).data.draft).toBeNull();
   });
 });

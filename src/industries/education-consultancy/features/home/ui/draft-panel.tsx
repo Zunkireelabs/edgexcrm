@@ -176,7 +176,7 @@ export function DraftPanel({ item, onClose, onSent }: { item: DoNextItem | null;
     <Sheet open={open} onOpenChange={(o) => { if (!o) close(); }}>
       <SheetContent look="v2" size="md">
         <SheetHeader>
-          <SheetTitle><SparkleIcon size={16} aria-hidden /> Message to {data?.leadName ?? item?.title ?? ""}</SheetTitle>
+          <SheetTitle><span className="eh-dp-title"><SparkleIcon size={16} aria-hidden /><span>Message to {data?.leadName ?? item?.title ?? ""}</span></span></SheetTitle>
           <SheetDescription className="sr-only">Orca&apos;s draft. Nothing is sent until you press the button.</SheetDescription>
           {chips ? (
             <div className="eh-dp-chips">

@@ -11,6 +11,7 @@ const clip = (s: string | null | undefined) => (s ?? "").replace(/\s+/g, " ").tr
 export interface DraftContext {
   lead: { firstName: string; fullName: string; phone: string | null; email: string | null; destinations: string[]; intakeTerm: string | null; fieldOfStudy: string | null };
   applications: Array<{ university: string; program: string; deadline: string | null; daysLeft: number | null; stageName: string; missing: string[]; docsAssessable: boolean }>;
+  lastCall: { at: string; outcome: string | null } | null;
   notes: Array<{ text: string; at: string }>;
   messages: Array<{ direction: "inbound" | "outbound"; text: string; at: string; channel: string }>;
   lastReplyChannel: DraftChannel | "sms" | null;
@@ -34,12 +35,14 @@ export async function loadDraftContext(auth: AuthContext, leadId: string, tz: st
   if (!l) return null;
   const fullName = [l.first_name, l.last_name].filter(Boolean).join(" ").trim() || "this lead";
 
-  const [apps, notesRes, convRes, acctRes] = await Promise.all([
+  const [apps, notesRes, convRes, acctRes, callRes] = await Promise.all([
     loadApplications(db, { leadId }, today).catch(() => ({ applications: [], submitStageByPipeline: new Map() })),
     leadNotes(db, auth.tenantId, "content, created_at").eq("lead_id", leadId).order("created_at", { ascending: false }).limit(3),
     db.from("conversations").select("id, provider").eq("lead_id", leadId),
     db.from("connected_email_accounts").select("id, email").eq("user_id", auth.userId).limit(1),
+    db.from("lead_activities").select("created_at, call_outcome").eq("lead_id", leadId).eq("activity_type", "call").order("created_at", { ascending: false }).limit(1),
   ]);
+  const lastCallRow = ((callRes.data ?? []) as unknown as Array<{ created_at: string; call_outcome: string | null }>)[0] ?? null;
 
   const convs = ((convRes.data ?? []) as unknown as Array<{ id: string; provider: string | null }>);
   const providerOf = new Map(convs.map((c) => [c.id, c.provider]));
@@ -68,12 +71,14 @@ export async function loadDraftContext(auth: AuthContext, leadId: string, tz: st
   const recordsRead = [
     `${first}'s record`,
     ...(applications.length ? [`${first}'s application${applications.length > 1 ? "s" : ""} and document checklist`] : []),
+    ...(lastCallRow ? [`your last call with ${first}`] : []),
     ...(notes.length ? [`your last ${notes.length} note${notes.length > 1 ? "s" : ""}`] : []),
     ...(messages.length ? [`your last ${messages.length} message${messages.length > 1 ? "s" : ""} with ${first}`] : []),
   ];
   return {
     lead: { firstName: first, fullName, phone: l.phone, email: l.email, destinations: l.destinations ?? [], intakeTerm: l.intake_term, fieldOfStudy: l.field_of_study },
     applications,
+    lastCall: lastCallRow ? { at: lastCallRow.created_at, outcome: lastCallRow.call_outcome } : null,
     notes,
     messages,
     lastReplyChannel: lastInbound ? providerChannel(lastInbound.channel) : null,

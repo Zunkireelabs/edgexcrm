@@ -65,11 +65,14 @@ export function validatePoints(raw: RawReadPoint[], facts: Fact[]): ReadPoint[] 
     const cited = p.factIds.map((id) => byId.get(id)).filter((f): f is Fact => !!f);
     if (cited.length === 0 || cited.length !== p.factIds.length) continue;
     if (![...numbersIn(p.claim), ...numbersIn(p.reason)].every((n) => known.has(n))) continue;
+    // S6: the label counts only ITEM facts (real leads/rows). A per-kind count is context, never a thing to open: it is not counted
+    // and not chosen for the link while an item fact is cited.
     const linked = cited.filter((f) => f.href);
-    const first = linked[0];
+    const items = linked.filter((f) => f.id.startsWith("item:"));
+    const first = items[0] ?? linked[0];
     // R2: a claim must open the records behind it. A point whose cited facts carry no link is dropped, not shown bare.
     if (!first?.href) continue;
-    const link = { href: first.href, label: linked.length > 1 && first.id.startsWith("item:") ? `Open first of ${linked.length} →` : first.linkLabel ?? "Open →" };
+    const link = { href: first.href, label: items.length > 1 ? `Open first of ${items.length} →` : first.linkLabel ?? "Open →" };
     out.push({ claim: p.claim.trim(), reason: p.reason.trim(), factIds: cited.map((f) => f.id), link });
     if (out.length === READ_MAX_POINTS) break;
   }
@@ -124,7 +127,7 @@ export function counsellorFacts(items: DoNextItem[], week: WeekMetric[]): Fact[]
   });
   for (const [kind, n] of byKind) {
     if (n < 2) continue;
-    facts.push({ id: `kind:${kind}`, text: `${KIND_WORD[kind]}: ${n} separate rows on your Do next list`, href: "/home#do-next", linkLabel: `Open ${n} →` });
+    facts.push({ id: `kind:${kind}`, text: `${KIND_WORD[kind]}: ${n}`, href: "/home#do-next", linkLabel: `Open ${n} →` });
   }
   for (const i of items.slice(0, READ_FACT_LIMIT - facts.length - weekFacts.length)) {
     if (grouped(i)) {
@@ -136,6 +139,17 @@ export function counsellorFacts(items: DoNextItem[], week: WeekMetric[]): Fact[]
   }
   for (const w of weekFacts) facts.push({ id: `week:${w.key}`, text: `In the last 7 days, ${w.label}: ${w.value}${w.note ? ` (${w.note})` : ""}`, href: "/home#week", linkLabel: "See why →" });
   return facts;
+}
+
+/**
+ * S7: a Needs-you row's own link words, as the row says them: "Review 388" reads "Open 388 →" (its real count), "See their leads" and
+ * "Open in Pulse" stay as they are. Anything unnamed is "Open".
+ */
+export function linkWords(label: string): string {
+  const review = /^Review (\d+)$/.exec(label.trim());
+  if (review) return `Open ${review[1]}`;
+  if (label.trim() === "Review") return "Open";
+  return label.trim() || "Open";
 }
 
 /**
@@ -160,7 +174,7 @@ export function managerFacts(
       id: `need:${r.key}`,
       text: `${r.title}${r.chip ? ` (${r.chip.text})` : ""}. ${r.why}`,
       href: assign ? own : link?.href ?? own,
-      linkLabel: assign ? `Assign ${assign.leadIds.length || assign.assignments.reduce((n, a) => n + a.take, 0)} →` : link ? "Open →" : "See why →",
+      linkLabel: assign ? `Assign ${assign.leadIds.length || assign.assignments.reduce((n, a) => n + a.take, 0)} →` : link ? `${linkWords(link.label)} →` : "See why →",
     });
   }
   for (const p of look.rows) {

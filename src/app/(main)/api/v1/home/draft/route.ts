@@ -2,13 +2,14 @@ import { NextRequest } from "next/server";
 import { authenticateRequest } from "@/lib/api/auth";
 import { apiForbidden, apiNotFound, apiSuccess, apiUnauthorized, apiValidationError } from "@/lib/api/response";
 import { getCurrentUserTenant } from "@/lib/supabase/queries";
+import { getCachedUser } from "@/lib/supabase/server";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { homeAiEnabled } from "@/industries/education-consultancy/features/home/ai/gate";
-import { draftFacts, draftNumbersOk, writeDraft } from "@/industries/education-consultancy/features/home/ai/draft";
+import { draftFacts, draftOk, writeDraft } from "@/industries/education-consultancy/features/home/ai/draft";
 import { homeOverBudget, recordHomeUsage } from "@/industries/education-consultancy/features/home/ai/usage";
-import { availableChannels, defaultChannel, type DraftChannel, type DraftTone } from "@/industries/education-consultancy/features/home/lib/draft";
+import { availableChannels, counsellorFirstName, defaultChannel, shortTenantName, type DraftChannel, type DraftTone } from "@/industries/education-consultancy/features/home/lib/draft";
 import { addDaysStr, localDate } from "@/industries/education-consultancy/features/home/lib/time";
 import { loadDraftContext } from "@/industries/education-consultancy/features/home/server/draft-context";
 import { loadVisibleLead } from "@/industries/education-consultancy/features/home/server/visible-lead";
@@ -77,8 +78,14 @@ export async function POST(request: NextRequest) {
   if (await homeOverBudget(db, auth.tenantId)) return apiSuccess({ ai: true, paused: true, ...base, draft: null });
 
   const runId = crypto.randomUUID();
-  const counsellor = auth.email.split("@")[0].split(/[._-]/)[0] || "your counsellor";
-  const factLines = draftFacts(ctx, counsellor);
+  // S1/S3: the company's short name, and the counsellor's name as Home greets them (profile name, never the email).
+  const user = await getCachedUser().catch(() => null);
+  const factLines = draftFacts(ctx, {
+    counsellorFirstName: counsellorFirstName(user?.user_metadata as Record<string, unknown> | undefined),
+    company: shortTenantName(tenantData?.tenant.name),
+    now,
+    tz,
+  });
   try {
     const today = localDate(now, tz);
     const { raw, usage } = await writeDraft({
@@ -90,7 +97,7 @@ export async function POST(request: NextRequest) {
       todayLabel: `${WEEKDAY[new Date(`${today}T00:00:00Z`).getUTCDay()]} ${today}`,
     });
     await recordHomeUsage(db, { surface: "home_draft", kind: "fast", userId: auth.userId, runId, usage }).catch(() => {});
-    if (!draftNumbersOk(raw, factLines)) return apiSuccess({ ai: true, ...base, draft: null });
+    if (!draftOk(raw, factLines)) return apiSuccess({ ai: true, ...base, draft: null });
 
     let draftId = typeof body.draftId === "string" ? body.draftId : null;
     if (draftId) {
