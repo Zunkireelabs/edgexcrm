@@ -114,6 +114,13 @@ import { loadColumnPrefs, saveColumnPrefs, clearColumnPrefs } from "@/lib/leads/
 import { STAGE_FRONTLINE, allowedAssigneePositionsForStage } from "@/lib/leads/stage-assignee-positions";
 import { buildIntakeTermOptions } from "@/lib/intake-options";
 import { ColumnManagerDialog } from "@/components/dashboard/leads/column-manager-dialog";
+import { LeadsGrid, countCounsellors } from "@/components/dashboard/leads/table/leads-grid";
+import { ColumnsPopover } from "@/components/dashboard/leads/table/columns-popover";
+import { BulkBar, getBulkBarActions } from "@/components/dashboard/leads/table/bulk-bar";
+import { GridEmptyState, emptyVariant } from "@/components/dashboard/leads/table/grid-empty-state";
+import { GridPagination } from "@/components/dashboard/leads/table/grid-pagination";
+import { attachV2, V2_DEFAULT_KEYS } from "@/components/dashboard/leads/table/v2-columns";
+import { clearGridPrefs, defaultPrefs, loadGridPrefs, saveGridPrefs, type GridPrefs } from "@/components/dashboard/leads/table/grid-prefs";
 import { POSITION_ROUTE_MAP_WITH_ADMIN } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
 import { DESTINATION_SYNONYM_KEYS } from "@/lib/leads/destination-normalize";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
@@ -495,6 +502,9 @@ export function LeadsTable({
   const advancedFilters = useAdvancedFilters(advancedFilterRegistry, advancedFiltersPersistKey);
   const advancedFiltersEnabled = process.env.NEXT_PUBLIC_ADVANCED_FILTERS === "1";
   const advancedFilterActive = advancedFiltersEnabled && !isEmptyTree(advancedFilters.tree);
+  // Leads toolbar + grid v2 (EDGEX-116/117): education_consultancy with advanced filters on. Every
+  // other consumer of this table (Contacts, leads-organise, other industries) keeps the legacy UI.
+  const useToolbarV2 = advancedFiltersEnabled && industryId === "education_consultancy";
 
   // Stage filter <-> current list-tab sync. `activeListSlug` is route-level SCOPE
   // (page.tsx's `?list=`), not a `?f=` condition — but it should look and act like
@@ -2066,8 +2076,60 @@ export function LeadsTable({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId, currentUserId]);
 
+  // ── Leads table v2 grid preferences (EDGEX-117) ─────────────────────────────────
+  // Order, pins, renames and widths are personal and never touch the Phase 1 unsaved-view bar.
+  const v2AllColumns = useMemo(() => (useToolbarV2 ? attachV2(allColumns) : []), [useToolbarV2, allColumns]);
+  const v2NameColumn = useMemo(() => v2AllColumns.find((c) => c.key === "name"), [v2AllColumns]);
+  const v2DefaultKeys = useMemo(() => {
+    const valid = new Set(allColumns.filter((c) => !c.required).map((c) => c.key));
+    const base = V2_DEFAULT_KEYS.filter((k) => valid.has(k) && !excludeDefaultVisibleKeys.includes(k));
+    const extra = extraDefaultVisibleKeys.filter((k) => k !== "name" && k !== "actions" && valid.has(k) && !base.includes(k));
+    return [...base, ...extra];
+  }, [allColumns, excludeDefaultVisibleKeys, extraDefaultVisibleKeys]);
+  const [gridPrefs, setGridPrefs] = useState<GridPrefs>(() => defaultPrefs(v2DefaultKeys));
+  const gridSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Load after mount (SSR-safe), like the legacy prefs. Reload only when identity changes.
+  useEffect(() => {
+    if (!useToolbarV2 || !tenantId || !currentUserId) return;
+    const cfKeys = Array.from(
+      new Set(leads.flatMap((l) => (l.custom_fields ? Object.keys(l.custom_fields) : []))),
+    ).sort().map((k) => `cf:${k}`);
+    const staticKeys = getLeadColumns(industryId, []).filter((c) => !c.required).map((c) => c.key);
+    setGridPrefs(
+      loadGridPrefs({ tenantId, userId: currentUserId, scope: columnPrefsScope, validKeys: [...staticKeys, ...cfKeys], defaultKeys: v2DefaultKeys }),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [useToolbarV2, tenantId, currentUserId]);
+
+  const updateGridPrefs = useCallback(
+    (update: (prev: GridPrefs) => GridPrefs) => {
+      setGridPrefs((prev) => {
+        const next = update(prev);
+        if (tenantId && currentUserId) {
+          if (gridSaveTimer.current) clearTimeout(gridSaveTimer.current);
+          gridSaveTimer.current = setTimeout(() => saveGridPrefs(tenantId, currentUserId, next, columnPrefsScope), 250);
+        }
+        return next;
+      });
+    },
+    [tenantId, currentUserId, columnPrefsScope],
+  );
+  const resetGridPrefs = useCallback(() => {
+    if (gridSaveTimer.current) clearTimeout(gridSaveTimer.current);
+    clearGridPrefs(tenantId, currentUserId, columnPrefsScope);
+    setGridPrefs(defaultPrefs(v2DefaultKeys));
+  }, [tenantId, currentUserId, columnPrefsScope, v2DefaultKeys]);
+
   // Resolve ordered column objects: name anchor → middle → actions anchor.
   const visibleColumns = useMemo<LeadColumn[]>(() => {
+    if (useToolbarV2) {
+      const map = new Map(v2AllColumns.map((c) => [c.key, c]));
+      return [
+        ...(v2NameColumn ? [v2NameColumn] : []),
+        ...gridPrefs.keys.map((k) => map.get(k)).filter((c): c is LeadColumn => c !== undefined),
+      ];
+    }
     const colMap = new Map(allColumns.map((c) => [c.key, c]));
     const nameCol = colMap.get("name");
     const actionsCol = colMap.get("actions");
@@ -2079,7 +2141,7 @@ export function LeadsTable({
       ...middleCols,
       ...(actionsCol ? [actionsCol] : []),
     ];
-  }, [allColumns, visibleKeys]);
+  }, [allColumns, visibleKeys, useToolbarV2, v2AllColumns, v2NameColumn, gridPrefs.keys]);
 
   // Handlers for the column manager dialog.
   function handleColumnApply(keys: string[]) {
@@ -2633,9 +2695,8 @@ export function LeadsTable({
     handleAdvancedFilterChange({ ...displayFilterTree, conditions: addOrMergeCondition(displayFilterTree.conditions, condition) });
   }
 
-  // Leads toolbar v2 (EDGEX-116): education_consultancy with advanced filters on. Every other
-  // consumer of this table (Contacts, leads-organise, other industries) keeps the legacy toolbar.
-  const useToolbarV2 = advancedFiltersEnabled && industryId === "education_consultancy";
+  // Column menu → "Filter by …": asks the toolbar's Filter menu to open on a field.
+  const [filterRequest, setFilterRequest] = useState<{ fieldKey: string; nonce: number } | null>(null);
 
   // "This scope, no extra filters": the locked Stage tab's synthetic chip, or nothing.
   const toolbarScopeTree: FilterTree = useMemo(
@@ -2728,12 +2789,20 @@ export function LeadsTable({
                   Kanban view
                 </button>
               )}
-              {/* Placeholder until Leads table v2 phase 2 (EDGEX-117): still opens the existing Edit-columns dialog. */}
-              <button type="button" onClick={() => setColumnDialogOpen(true)} className={CTRL}>
-                <SlidersHorizontalIcon className="size-4" />
-                View settings
-                <CaretDownIcon className="size-3.5 text-ds-faint" />
-              </button>
+              <ColumnsPopover
+                trigger={
+                  <button type="button" className={CTRL} data-testid="view-settings-trigger">
+                    <SlidersHorizontalIcon className="size-4" />
+                    View settings
+                    <CaretDownIcon className="size-3.5 text-ds-faint" />
+                  </button>
+                }
+                columns={v2AllColumns.filter((c) => !c.required)}
+                layout={{ keys: gridPrefs.keys, pins: gridPrefs.pins }}
+                titleFor={(c) => gridPrefs.labels[c.key] ?? c.v2?.label ?? c.label}
+                onLayoutChange={(next) => updateGridPrefs((p) => ({ ...p, keys: next.keys, pins: next.pins }))}
+                onReset={resetGridPrefs}
+              />
             </>
           }
           search={{ value: search, onChange: setSearch, loading: tableLoading }}
@@ -2754,6 +2823,7 @@ export function LeadsTable({
             maxConditions: DEFAULT_MAX_CONDITIONS,
           }}
           scopeTree={toolbarScopeTree}
+          filterRequest={filterRequest}
           sort={{ field: sortField, direction: sortDirection }}
           onSortChange={(next) => {
             setSortField(next.field as SortField);
@@ -2920,6 +2990,8 @@ export function LeadsTable({
       </div>
       )}
 
+      {!useToolbarV2 && (
+      <>
       {/* Bulk Action Bar - animated container between filters and table */}
       <div
         className={`shrink-0 overflow-hidden transition-all duration-300 ease-out ${
@@ -3086,6 +3158,134 @@ export function LeadsTable({
         </div>
       )}
 
+      </>
+      )}
+
+      {useToolbarV2 && v2NameColumn && (
+        <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-ds-surface">
+          <LeadsGrid
+            leads={displayLeads}
+            nameColumn={v2NameColumn}
+            columns={visibleColumns.filter((c) => c.key !== "name")}
+            ctx={columnCtx}
+            layout={{ keys: gridPrefs.keys, pins: gridPrefs.pins }}
+            widths={gridPrefs.widths}
+            labels={gridPrefs.labels}
+            onWidthChange={(key, width) => updateGridPrefs((p) => ({ ...p, widths: { ...p.widths, [key]: width } }))}
+            onWidthCommit={() => {}}
+            onLayoutChange={(next) => updateGridPrefs((p) => ({ ...p, keys: next.keys, pins: next.pins }))}
+            onRename={(key, label) =>
+              updateGridPrefs((p) => {
+                const labels = { ...p.labels };
+                if (label) labels[key] = label;
+                else delete labels[key];
+                return { ...p, labels };
+              })
+            }
+            selectedIds={selectedIds}
+            allSelected={allSelected}
+            someSelected={someSelected}
+            onToggleSelect={toggleSelect}
+            onToggleSelectAll={toggleSelectAll}
+            sort={{ field: sortField, direction: sortDirection }}
+            onSort={(key, direction) => {
+              setSortField(key as SortField);
+              setSortDirection(direction);
+            }}
+            filterFieldKeys={new Set(advancedVisibleFields.map((f) => f.key))}
+            onFilterRequest={(fieldKey) => setFilterRequest({ fieldKey, nonce: Date.now() })}
+            total={effectiveTotal}
+            counsellors={countCounsellors(serverAssigneeFacet)}
+            loading={tableLoading}
+            emptyState={
+              <GridEmptyState
+                variant={emptyVariant({
+                  hasUserFilters: displayFilterTree.conditions.some((c) => c.id !== SYNTHETIC_STAGE_CONDITION_ID),
+                  hasSearch: search.trim() !== "",
+                  viewMode,
+                })}
+                onClearFilters={() => {
+                  setSearch("");
+                  handleAdvancedFilterChange({ ...displayFilterTree, conditions: displayFilterTree.conditions.filter((c) => c.id === SYNTHETIC_STAGE_CONDITION_ID) });
+                }}
+                onClearSearch={() => setSearch("")}
+                onAddLead={canCreateLead && tenantId ? () => setAddLeadOpen(true) : undefined}
+              />
+            }
+          />
+          <GridPagination
+            total={effectiveTotal}
+            start={startIndex}
+            end={endIndex}
+            page={currentPage}
+            totalPages={totalPages}
+            pageSize={itemsPerPage}
+            onPage={setCurrentPage}
+            onPageSize={(n) => {
+              setItemsPerPage(n);
+              setCurrentPage(1);
+            }}
+          />
+          <BulkBar
+            selectedCount={selectedCount}
+            effectiveTotal={effectiveTotal}
+            actions={getBulkBarActions({
+              viewMode,
+              isAdmin,
+              isTeamScoped,
+              selectedCount,
+              teamMemberCount: teamMembers.length,
+              isStagingView,
+              hasOutreach,
+              showBranches,
+              branchCount: branches.length,
+              canGraduate,
+              hasArchiveList: !!archivedList,
+              pageFullySelected: allSelected,
+              pageCount: paginatedLeads.length,
+              effectiveTotal,
+              allResultsSelected,
+            })}
+            handlers={{
+              onMoveStage: () => {
+                setMoveArchiveReason("");
+                setMoveAssignTo("keep");
+                setIsGraduateMove(false);
+                setMoveListId("");
+                setMoveListDialogOpen(true);
+              },
+              onAssign: () => setAssignDialogOpen(true),
+              onArchive: () => {
+                if (!archivedList) return;
+                setMoveArchiveReason("");
+                setMoveAssignTo("keep");
+                setIsGraduateMove(false);
+                setMoveListId(archivedList.id);
+                setMoveListDialogOpen(true);
+              },
+              onRestore: () => (viewMode === "archived" ? openRestoreDialog(Array.from(selectedIds)) : restoreLeads(Array.from(selectedIds))),
+              onDeleteForever: () => setDeleteDialogOpen(true),
+              onEnroll: () => setBulkEnrollOpen(true),
+              onBranch: () => setBranchAssignDialogOpen(true),
+              onGraduate: () => {
+                if (!graduateTargetList) return;
+                setMoveArchiveReason("");
+                setMoveAssignTo("keep");
+                setMoveListId(graduateTargetList.id);
+                setIsGraduateMove(true);
+                setMoveListDialogOpen(true);
+              },
+              onMerge: () => setMergeDialogOpen(true),
+              onDelete: () => setDeleteDialogOpen(true),
+              onSelectAllMatching: serverPaginated ? selectAllMatching : () => setSelectedIds(new Set(filtered.map((l) => l.id))),
+              onClear: () => setSelectedIds(new Set()),
+            }}
+          />
+        </div>
+      )}
+
+      {!useToolbarV2 && (
+      <>
       {/* Table - Compact style with sticky header and horizontal scroll */}
       <div className="flex-1 min-h-0 bg-white flex flex-col overflow-hidden">
         <div className="flex-1 min-h-0 overflow-auto">
@@ -3259,6 +3459,8 @@ export function LeadsTable({
           </div>
         </div>
       </div>
+      </>
+      )}
       </div>
       {/* End of Main Table Section */}
 
@@ -3497,7 +3699,7 @@ export function LeadsTable({
           <div className="py-4 space-y-3">
             <Select value={moveListId} onValueChange={(v) => { setMoveListId(v); setMoveArchiveReason(""); }} disabled={isGraduateMove}>
               <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select list..." />
+                <SelectValue placeholder={industryId === "education_consultancy" ? "Select stage..." : "Select list..."} />
               </SelectTrigger>
               <SelectContent>
                 {(() => {

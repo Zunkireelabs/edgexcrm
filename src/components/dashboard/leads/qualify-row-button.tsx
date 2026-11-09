@@ -29,6 +29,8 @@ interface QualifyRowButtonProps {
   currentDegreeLevel: string | null;
   qualifiedList: LeadList;
   onQualified: (qualifiedListId: string) => Promise<void>;
+  /** Leads table v2: a quiet 24px control that fits the 36px row. */
+  quiet?: boolean;
 }
 
 export function QualifyRowButton({
@@ -38,6 +40,7 @@ export function QualifyRowButton({
   currentDegreeLevel,
   qualifiedList,
   onQualified,
+  quiet = false,
 }: QualifyRowButtonProps) {
   const { destinations: destOptions, fieldsOfStudy, studyLevels } = useEduTaxonomy();
   const [open, setOpen] = useState(false);
@@ -95,7 +98,11 @@ export function QualifyRowButton({
       <button
         type="button"
         onClick={openDialog}
-        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors"
+        className={
+          quiet
+            ? "inline-flex h-6 shrink-0 items-center rounded-ds-xs px-2 text-xs font-medium text-ds-accent transition-colors hover:bg-ds-accent-soft focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ds-ghost"
+            : "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors"
+        }
       >
         Qualify →
       </button>

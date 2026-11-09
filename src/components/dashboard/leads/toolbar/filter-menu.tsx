@@ -30,10 +30,25 @@ export interface FilterMenuProps {
   maxConditions: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Open straight on this field's editor (from a column header). A new nonce re-triggers it. */
+  request?: { fieldKey: string; nonce: number } | null;
 }
 
-export function FilterMenu({ fields, tree, onChange, ctx, mostUsedKeys, variant, maxConditions, open, onOpenChange }: FilterMenuProps) {
+export function FilterMenu({ fields, tree, onChange, ctx, mostUsedKeys, variant, maxConditions, open, onOpenChange, request }: FilterMenuProps) {
   const [screen, setScreen] = useState<Screen>({ kind: "menu" });
+  const [seenNonce, setSeenNonce] = useState<number | null>(request?.nonce ?? null);
+
+  // Column menu → "Filter by …": a new request nonce jumps to that field's editor. Done by adjusting
+  // state during render (own state only); the parent opens the popover on the same nonce.
+  // Reuses pick()'s rule: an existing chip for the field is reopened.
+  if (request && request.nonce !== seenNonce) {
+    setSeenNonce(request.nonce);
+    const field = fields.find((f) => f.key === request.fieldKey);
+    if (field) {
+      const existing = findConditionForField(tree, field.key);
+      setScreen({ kind: "field", field, conditionId: existing?.id ?? newConditionId() });
+    }
+  }
   const atCap = tree.conditions.length >= maxConditions;
 
   function handleOpenChange(next: boolean) {

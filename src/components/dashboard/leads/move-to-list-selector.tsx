@@ -49,6 +49,8 @@ interface MoveToListSelectorProps {
   lists: LeadList[];
   onMove: (listId: string, archiveReason?: string) => Promise<void>;
   disabled?: boolean;
+  /** "dot" = Leads table v2 trigger (colour dot + name, quiet hover pill). Changes the trigger only. */
+  variant?: "pill" | "dot";
 }
 
 export function MoveToListSelector({
@@ -56,6 +58,7 @@ export function MoveToListSelector({
   lists,
   onMove,
   disabled = false,
+  variant = "pill",
 }: MoveToListSelectorProps) {
   const [open, setOpen] = useState(false);
   const [pendingList, setPendingList] = useState<LeadList | null>(null);
@@ -108,13 +111,29 @@ export function MoveToListSelector({
     <>
     <Popover open={open} onOpenChange={(v) => { setOpen(v); if (!v) setPendingList(null); }}>
       <PopoverTrigger asChild>
-        <button
-          disabled={disabled || saving}
-          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] border-[0.5px] border-blue-300 text-[10px] font-semibold whitespace-nowrap bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <span className="whitespace-nowrap">{label}</span>
-          <CaretDownIcon className="w-3 h-3 shrink-0" />
-        </button>
+        {variant === "dot" ? (
+          <button
+            type="button"
+            disabled={disabled || saving}
+            title={label}
+            className="-ml-1.5 inline-flex h-6 max-w-full items-center gap-1.5 rounded-ds-xs px-1.5 text-sm font-medium text-ds-ink transition-colors hover:bg-ds-hover data-[state=open]:bg-ds-hover disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <span
+              className="size-2 shrink-0 rounded-full"
+              style={{ backgroundColor: currentList?.color || "var(--ds-ghost)" }}
+              aria-hidden
+            />
+            <span className="truncate">{label}</span>
+          </button>
+        ) : (
+          <button
+            disabled={disabled || saving}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] border-[0.5px] border-blue-300 text-[10px] font-semibold whitespace-nowrap bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <span className="whitespace-nowrap">{label}</span>
+            <CaretDownIcon className="w-3 h-3 shrink-0" />
+          </button>
+        )}
       </PopoverTrigger>
 
       <PopoverContent className="w-52 p-1" align="start">

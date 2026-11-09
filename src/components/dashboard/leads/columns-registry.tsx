@@ -2,6 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
+import type { Icon } from "@/components/icons";
 import { EyeIcon, ArrowCounterClockwiseIcon } from "@/components/icons";
 import { TruncatedText } from "@/components/ui/truncated-text";
 import { prospectIndustryLabel } from "@/industries/it-agency/leads/prospect-industries";
@@ -51,6 +52,23 @@ export interface LeadColumnCtx {
   onAssignChange?: (leadId: string, memberId: string | null) => Promise<void>;
 }
 
+/** Sort keys the table's sort state understands (leads-table.tsx SortField). */
+export type V2SortField = "activity" | "created" | "updated" | "name" | "email" | "follow_up_needed";
+
+/** Leads table v2 (EDGEX-117) presentation for a column. Populated by table/v2-columns.tsx. */
+export interface LeadColumnV2 {
+  width: number;
+  icon?: Icon;
+  /** Header title when it differs from `label`, e.g. "Assigned to". */
+  label?: string;
+  /** Cell content (the grid supplies the td). Omitted: the legacy renderTd children are reused. */
+  cell?: (lead: Lead, ctx: LeadColumnCtx) => React.ReactNode;
+  /** Omitted when the list API cannot sort this column. */
+  sort?: V2SortField;
+  /** Key in the filter registry, for "Filter by …". */
+  filterFieldKey?: string;
+}
+
 export interface LeadColumn {
   key: string;
   label: string;
@@ -62,6 +80,7 @@ export interface LeadColumn {
   tdClassName?: string;
   renderTh: (ctx: LeadColumnCtx) => React.ReactNode;
   renderTd: (lead: Lead, ctx: LeadColumnCtx) => React.ReactNode;
+  v2?: LeadColumnV2;
 }
 
 // ─── follow-up-needed / callback-due row badges (education_consultancy only, ───

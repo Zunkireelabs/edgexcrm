@@ -50,6 +50,8 @@ export interface LeadsToolbarProps {
   };
   /** The tree that means "this scope with no extra filters" — All leads, or the locked Stage tab. */
   scopeTree: FilterTree;
+  /** Column menu → "Filter by …": opens the Filter menu on that field (a fresh nonce re-opens it). */
+  filterRequest?: { fieldKey: string; nonce: number } | null;
   sort: SortState;
   onSortChange: (sort: SortState) => void;
   /** Saved views are an education_consultancy feature; false hides Save as view. */
@@ -81,6 +83,7 @@ export function LeadsToolbar({
   sortControl,
   filter,
   scopeTree,
+  filterRequest,
   sort,
   onSortChange,
   savedViewsEnabled,
@@ -88,6 +91,12 @@ export function LeadsToolbar({
 }: LeadsToolbarProps) {
   const searchRef = useRef<HTMLInputElement>(null);
   const [filterOpen, setFilterOpen] = useState(false);
+  // Column menu → "Filter by …": a new request nonce opens the Filter menu (state adjusted during render).
+  const [seenFilterNonce, setSeenFilterNonce] = useState<number | null>(filterRequest?.nonce ?? null);
+  if (filterRequest && filterRequest.nonce !== seenFilterNonce) {
+    setSeenFilterNonce(filterRequest.nonce);
+    setFilterOpen(true);
+  }
   const saved = useSavedLeadFilters();
 
   // --- view tabs + the active view's baseline ----------------------------------------
@@ -249,6 +258,7 @@ export function LeadsToolbar({
           maxConditions={filter.maxConditions}
           open={filterOpen}
           onOpenChange={setFilterOpen}
+          request={filterRequest ?? null}
         />
         <span className="flex-1" />
         {dirty && <UnsavedBar canSave={savedViewsEnabled && hasFilters} onDiscard={discard} onSave={saveView} />}
