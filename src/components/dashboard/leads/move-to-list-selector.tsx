@@ -17,6 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { CaretDownIcon, CheckIcon, ArrowBendUpRightIcon } from "@/components/icons";
 import type { LeadList } from "@/types/database";
+import { stageDotColor } from "@/components/dashboard/leads/table/stage-color";
 
 const ARCHIVE_REASONS = [
   "Not interested",
@@ -116,11 +117,11 @@ export function MoveToListSelector({
             type="button"
             disabled={disabled || saving}
             title={label}
-            className="inline-flex h-6 max-w-full items-center gap-1.5 rounded-ds-xs px-1.5 text-sm font-medium text-ds-ink transition-colors hover:bg-ds-hover data-[state=open]:bg-ds-hover disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex h-6 max-w-full items-center gap-2 rounded-ds-xs px-1.5 text-sm font-medium text-ds-ink transition-colors hover:bg-ds-hover data-[state=open]:bg-ds-hover disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <span
               className="size-2 shrink-0 rounded-full"
-              style={{ backgroundColor: currentList?.color || "var(--ds-ghost)" }}
+              style={{ backgroundColor: stageDotColor(currentList) }}
               aria-hidden
             />
             <span className="truncate">{label}</span>

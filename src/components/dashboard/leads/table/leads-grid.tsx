@@ -25,7 +25,13 @@ import {
 } from "./grid-layout";
 import { FALLBACK_COLUMN_ICON, legacyCellContent } from "./v2-columns";
 
-export const NAME_DEFAULT_WIDTH = 240;
+export const NAME_DEFAULT_WIDTH = 210;
+
+// Mockup checkbox: 16px, 5px radius, 1.5px ghost inset border, accent fill when checked.
+const CHECKBOX_CLASS =
+  "size-4 rounded-[5px] border-0 bg-ds-surface shadow-[inset_0_0_0_1.5px_var(--ds-ghost)] dark:bg-ds-surface data-[state=checked]:bg-ds-accent data-[state=checked]:text-white data-[state=checked]:shadow-none data-[state=indeterminate]:bg-ds-accent data-[state=indeterminate]:text-white data-[state=indeterminate]:shadow-none";
+// Stronger divider after Name (border plus inset shadow, as .sn in the mockup).
+const NAME_EDGE = "border-r border-ds-border";
 const MIN_WIDTH = 60;
 
 /** Counsellors summary: facet options with leads, excluding Unassigned. Null when the facet is not available. */
@@ -102,7 +108,7 @@ const Row = memo(function Row({ lead, nameColumn, columns, ctx, selected, anySel
       <td className={`${CELL_BASE} sticky left-0 z-10 px-0 ${bg}`} onClick={(e) => e.stopPropagation()}>
         <span className={`flex h-full items-center justify-center transition-opacity ${anySelected || selected ? "opacity-100" : "opacity-55 group-hover/row:opacity-100 focus-within:opacity-100"}`}>
           <Checkbox
-            className="size-4"
+            className={CHECKBOX_CLASS}
             checked={selected}
             onCheckedChange={() => onToggleSelect(lead.id)}
             aria-label={`Select ${lead.first_name} ${lead.last_name}`}
@@ -119,7 +125,7 @@ const Row = memo(function Row({ lead, nameColumn, columns, ctx, selected, anySel
             key={col.key}
             onClick={content.onClick}
             style={sticky ? ({ left } as CSSProperties) : undefined}
-            className={`${CELL_BASE} ${bg} ${isName ? "relative text-ds-ink" : "text-ds-muted"} ${sticky ? "sticky z-10" : ""}`}
+            className={`${CELL_BASE} ${bg} ${isName ? `relative ${NAME_EDGE}` : ""} text-ds-ink ${sticky ? "sticky z-10" : ""}`}
           >
             {content.content}
           </td>
@@ -270,7 +276,7 @@ export function LeadsGrid(props: LeadsGridProps) {
   const sortedKey = (col: LeadColumn) => !!col.v2?.sort && sort.field === col.v2.sort;
 
   return (
-    <div className="min-h-0 flex-1 overflow-auto bg-ds-surface" data-testid="leads-grid-scroller">
+    <div className="min-h-0 flex-1 overflow-auto border-t border-ds-border bg-ds-surface" data-testid="leads-grid-scroller">
       <table
         className="border-separate border-spacing-0 text-sm font-medium"
         style={{ tableLayout: "fixed", width: "100%", minWidth: totalWidth }}
@@ -288,7 +294,7 @@ export function LeadsGrid(props: LeadsGridProps) {
             <th className={`${HEAD_BASE} sticky left-0 top-0 z-30`}>
               <span className="flex h-full items-center justify-center">
                 <Checkbox
-                  className="size-4"
+                  className={CHECKBOX_CLASS}
                   checked={someSelected ? "indeterminate" : allSelected}
                   onCheckedChange={onToggleSelectAll}
                   aria-label="Select all"
@@ -308,7 +314,7 @@ export function LeadsGrid(props: LeadsGridProps) {
                   scope="col"
                   aria-sort={sorted ? (sort.direction === "asc" ? "ascending" : "descending") : undefined}
                   style={sticky ? ({ left } as CSSProperties) : undefined}
-                  className={`${HEAD_BASE} group/th relative sticky top-0 ${sticky ? "z-30" : "z-20"}`}
+                  className={`${HEAD_BASE} group/th relative sticky top-0 ${isName ? NAME_EDGE : ""} ${sticky ? "z-30" : "z-20"}`}
                 >
                   <button
                     type="button"
@@ -318,7 +324,7 @@ export function LeadsGrid(props: LeadsGridProps) {
                     onClick={(e) => openMenu(col, e.currentTarget.parentElement as HTMLElement)}
                     className="flex h-full w-full items-center gap-2 px-3 text-left font-medium text-ds-muted transition-colors hover:bg-ds-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ds-ghost"
                   >
-                    <Icon className="size-4 shrink-0 text-ds-faint" />
+                    {!isName && <Icon className="size-4 shrink-0 text-ds-faint" />}
                     <span className="min-w-0 flex-1 truncate text-ds-ink">{titleOf(col)}</span>
                     {isName ? (
                       <PushPinIcon className="size-3.5 shrink-0 text-ds-faint opacity-0 transition-opacity group-hover/th:opacity-100" />
@@ -397,7 +403,7 @@ export function LeadsGrid(props: LeadsGridProps) {
                 <td
                   key={col.key}
                   style={sticky ? ({ left } as CSSProperties) : undefined}
-                  className={`sticky bottom-0 ${sticky ? "z-30" : "z-20"} h-9 overflow-hidden whitespace-nowrap border-t border-ds-border bg-ds-sunken px-3 text-[13px] font-normal text-ds-faint shadow-[inset_-1px_0_0_var(--ds-border)]`}
+                  className={`sticky bottom-0 ${col.key === "name" ? NAME_EDGE : ""} ${sticky ? "z-30" : "z-20"} h-9 overflow-hidden whitespace-nowrap border-t border-ds-border bg-ds-sunken px-3 text-[13px] font-normal text-ds-faint shadow-[inset_-1px_0_0_var(--ds-border)]`}
                 >
                   {summary}
                 </td>

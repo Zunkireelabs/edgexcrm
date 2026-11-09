@@ -1,5 +1,6 @@
 "use client";
 
+import { stageDotColor } from "@/components/dashboard/leads/table/stage-color";
 import { matchesCollaboratorFilter } from "@/lib/leads/collaborator-filter";
 import { countSuffix, isOfferedByCount, sortByCountDesc, formerCollaboratorOptions, type FacetOptionLike } from "@/lib/leads/facet-labels";
 import { useState, useMemo, useEffect, useRef, useCallback, cloneElement, isValidElement, type ReactElement, type ReactNode, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
@@ -2736,7 +2737,7 @@ export function LeadsTable({
       },
       countLoader: toolbarStageCountLoader,
       optionColors: {
-        stage: new Map(leadLists.filter((l) => !!l.color).map((l) => [l.id, l.color as string])),
+        stage: new Map(leadLists.map((l) => [l.id, stageDotColor(l)])),
       },
     }),
     [advancedGetOptions, counselorCounts, collaboratorCounts, sourceCounts, destinationCounts, toolbarStageCountLoader, leadLists]

@@ -20,7 +20,7 @@ import {
   UserCircleIcon,
   UserIcon,
 } from "@/components/icons";
-import { AssigneeChip } from "@/components/dashboard/leads/assignee-selector";
+import { memberTint } from "@/lib/ui/member-gradient";
 import { MoveToListSelector } from "@/components/dashboard/leads/move-to-list-selector";
 import { QualifyRowButton } from "@/components/dashboard/leads/qualify-row-button";
 import { getLeadFullName, getLeadInitials } from "@/components/dashboard/lead/lead-name";
@@ -77,7 +77,7 @@ function LastActivityCell({ lead, ctx }: { lead: Lead; ctx: LeadColumnCtx }) {
         aria-label={`${signal.text}${date ? `. Last activity: ${date}` : ""}`}
         suppressHydrationWarning
       >
-        <span className={`size-1.5 shrink-0 rounded-full ${signal.tone === "bad" ? "bg-ds-bad" : "bg-ds-warn"}`} aria-hidden />
+        <span className={`size-2 shrink-0 rounded-full ${signal.tone === "bad" ? "bg-ds-bad" : "bg-ds-warn"}`} aria-hidden />
         <span className="truncate">{signal.text}</span>
       </span>
     );
@@ -104,7 +104,7 @@ function NameCell({ lead, ctx }: { lead: Lead; ctx: LeadColumnCtx }) {
   return (
     <div className="flex min-w-0 items-center gap-2">
       <span className="relative shrink-0">
-        <span className="flex size-5 items-center justify-center rounded-full bg-ds-hover text-[10px] font-semibold leading-none text-ds-muted">
+        <span className="flex size-5 items-center justify-center rounded-full bg-ds-selected text-[9px] font-semibold leading-none text-ds-text">
           {getLeadInitials(lead)}
         </span>
         {unread && (
@@ -211,11 +211,30 @@ function StageCell({ lead, ctx }: { lead: Lead; ctx: LeadColumnCtx }) {
 
 // ─── The rest ──────────────────────────────────────────────────────────────────────
 
+export function twoLetterInitials(label: string): string {
+  const parts = label.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
 function AssignedCell({ lead, ctx }: { lead: Lead; ctx: LeadColumnCtx }) {
   const email = lead.assigned_to ? ctx.memberMap[lead.assigned_to] : null;
   const name = lead.assigned_to ? ctx.memberNames?.[lead.assigned_to] : null;
   const label = name || (email ? email.split("@")[0] : "");
-  return <AssigneeChip seed={lead.assigned_to ?? null} label={label} />;
+  if (!lead.assigned_to) return <span className="text-ds-faint">Unassigned</span>;
+  return (
+    <span className="inline-flex min-w-0 items-center gap-2">
+      <span
+        className="flex size-5 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold leading-none text-ds-text"
+        style={{ backgroundColor: memberTint(lead.assigned_to) }}
+        aria-hidden
+      >
+        {twoLetterInitials(label)}
+      </span>
+      <span className="truncate text-ds-ink">{label}</span>
+    </span>
+  );
 }
 
 function EmailCell({ lead }: { lead: Lead }) {
@@ -238,12 +257,12 @@ function locationText(lead: Lead): string | null {
 }
 
 const V2: Record<string, LeadColumnV2> = {
-  name: { width: 240, icon: UserIcon, cell: (lead, ctx) => <NameCell lead={lead} ctx={ctx} />, sort: "name", filterFieldKey: "first_name" },
-  lead_type: { width: 170, icon: CircleDashedIcon, cell: (lead, ctx) => <StageCell lead={lead} ctx={ctx} />, filterFieldKey: "stage" },
-  assigned: { width: 180, icon: UserCircleIcon, label: "Assigned to", cell: (lead, ctx) => <AssignedCell lead={lead} ctx={ctx} />, filterFieldKey: "assignees" },
+  name: { width: 210, icon: UserIcon, cell: (lead, ctx) => <NameCell lead={lead} ctx={ctx} />, sort: "name", filterFieldKey: "first_name" },
+  lead_type: { width: 150, icon: CircleDashedIcon, cell: (lead, ctx) => <StageCell lead={lead} ctx={ctx} />, filterFieldKey: "stage" },
+  assigned: { width: 150, icon: UserCircleIcon, label: "Assigned to", cell: (lead, ctx) => <AssignedCell lead={lead} ctx={ctx} />, filterFieldKey: "assignees" },
   email: { width: 240, icon: EnvelopeSimpleIcon, cell: (lead) => <EmailCell lead={lead} />, sort: "email", filterFieldKey: "email" },
   location: {
-    width: 180,
+    width: 140,
     icon: MapPinIcon,
     cell: (lead) => {
       const t = locationText(lead);
@@ -252,12 +271,12 @@ const V2: Record<string, LeadColumnV2> = {
     filterFieldKey: "location",
   },
   display_id: {
-    width: 110,
+    width: 124,
     icon: HashIcon,
-    cell: (lead) => (lead.display_id ? <span className="tabular-nums">{lead.display_id}</span> : DASH),
+    cell: (lead) => (lead.display_id ? <span className="tabular-nums text-ds-muted">{lead.display_id}</span> : DASH),
   },
   last_activity: {
-    width: 150,
+    width: 140,
     icon: ClockIcon,
     cell: (lead, ctx) => <LastActivityCell lead={lead} ctx={ctx} />,
     sort: "activity",
