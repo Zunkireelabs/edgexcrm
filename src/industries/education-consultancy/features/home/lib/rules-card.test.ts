@@ -121,7 +121,7 @@ describe("wiring guards (the readers are really used)", () => {
   const read = (p: string) => fs.readFileSync(path.resolve(__dirname, p), "utf8");
   it("the engine picks from the live process's positions first", () => {
     const src = read("../server/assignment/engine.ts");
-    expect(src).toContain("loadProcessPolicy(db, tenantId)");
+    expect(src).toContain("loadProcessPolicy(db, tenantId, opts)");
     expect(src).toContain("resolveFirstTouchPositions(db, settings, now, policy.firstTouchPositions)");
   });
   it("owner Home passes the clock to education_home_impact and compares the wait with the process target", () => {

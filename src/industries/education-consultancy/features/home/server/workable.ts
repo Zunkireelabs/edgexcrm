@@ -2,12 +2,14 @@ import { scopedClientForTenant } from "@/lib/supabase/scoped";
 import type { HomeDb } from "./load-home";
 import { applyWorkable, buildWorkablePlan, type StageRow, type WorkablePlan } from "../lib/workable";
 
-/** The tenant's active lists + terminal stage slugs, read once per Home load and shared by every loader. */
-export async function loadWorkablePlan(db: Pick<HomeDb, "from">): Promise<WorkablePlan> {
-  const [{ data: listRows }, { data: stageRows }] = await Promise.all([
+/** The tenant's active lists + terminal stage slugs, read once per Home load and shared by every loader. `strict`: a failed read throws instead of reading as an empty plan. */
+export async function loadWorkablePlan(db: Pick<HomeDb, "from">, opts: { strict?: boolean } = {}): Promise<WorkablePlan> {
+  const [{ data: listRows, error: listError }, { data: stageRows, error: stageError }] = await Promise.all([
     db.from("lead_lists").select("id, is_archive, is_staging"),
     db.from("pipeline_stages").select("pipeline_id, slug, is_terminal"),
   ]);
+  const readError = listError ?? stageError;
+  if (readError && opts.strict) throw new Error(`workable plan: read failed: ${readError.message}`);
   const active = ((listRows ?? []) as unknown as Array<{ id: string; is_archive: boolean; is_staging: boolean | null }>)
     .filter((l) => !l.is_archive && !l.is_staging)
     .map((l) => l.id);

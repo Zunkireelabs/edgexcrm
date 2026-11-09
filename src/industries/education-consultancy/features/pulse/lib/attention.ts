@@ -83,7 +83,7 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
           ? { label: pt.label, href: untouchedHeldOfPersonHref(p.userId), primary: true }
           : { label: `See ${firstName(p.name)}'s day`, href: "", personId: p.userId, primary: true },
         why: `Calls, notes and stage moves dropped together: ${cur} against a usual ${Math.round(usual)}.` +
-          (stale > 0 ? ` ${stale} of the leads ${p.name} holds have had no touch or move in 3+ days.${pt.why}` : ""),
+          (stale > 0 ? ` ${stale} of the leads ${p.name} holds ${stale === 1 ? "has" : "have"} had no touch or move in 3+ days.${pt.why}` : ""),
         meta: [`${p.current.calls} calls vs usual ${Math.round(p.usual.calls)}`, `${p.notesNew + p.notesEdited} notes vs usual ${Math.round(p.usual.notes)}`, [p.positionLabel, p.branchName].filter(Boolean).join(", "), stale > 0 ? pt.meta : `no ${p.positionLabel} has spare capacity`].join(" · "),
         links: [{ label: stale > 0 ? `See the ${leadCount(stale)} →` : "See their leads →", href: stale > 0 ? untouchedHeldOfPersonHref(p.userId) : leadsOfPersonHref(p.userId) }, { label: `${p.name}'s activity →`, personId: p.userId }],
         drill: s.drill,
@@ -129,12 +129,12 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
       const reasons = input.leakReasons[f.listId] ?? [];
       out.push({
         id: s.id, category: "heads_up", tone: "info", icon: "archive", subject: f.name,
-        what: input.baselineCovered === false ? `${f.out} leads moved back or archived` : `${f.out} leads moved back or archived, up from ${f.previousOut}`,
+        what: input.baselineCovered === false ? `${leadCount(f.out)} moved back or archived` : `${leadCount(f.out)} moved back or archived, up from ${f.previousOut}`,
         figure: reasons[0] ? { text: "Top reason", strong: reasons[0].reason, textFirst: true } : null,
         suggested: false, action: null,
         why: `${f.out} of the ${f.base} leads that were in ${f.name} left it backwards or to Archive.`,
         meta: reasons.slice(0, 3).map((r) => `${r.reason} ${r.leads}`).join(" · ") || null,
-        links: [{ label: `See the ${f.out} leads →`, drill: s.drill }],
+        links: [{ label: `See the ${leadCount(f.out)} →`, drill: s.drill }],
         drill: s.drill,
       });
     } else if (s.kind === "biggest_drop") {
@@ -151,7 +151,7 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
       const above = compareToUsual(s.evidence.value, s.evidence.baseline) ? `, ${pctOf(s.evidence.value, s.evidence.baseline)}% above usual` : "";
       out.push({
         id: s.id, category: "wins", tone: "good", icon: "up", subject: p.name,
-        what: `delivered ${s.evidence.value} ${s.evidence.metric === "reached_applications" ? "students to Applications" : "leads to Prospects"}${above}`,
+        what: `delivered ${s.evidence.metric === "reached_applications" ? `${s.evidence.value} students to Applications` : `${leadCount(s.evidence.value)} to Prospects`}${above}`,
         figure: { text: `Top ${p.positionLabel.toLowerCase()} this period` },
         suggested: false, action: null, why: s.detail, meta: null,
         links: [{ label: "See the records →", drill: s.drill }, { label: `${p.name}'s activity →`, personId: p.userId }], drill: s.drill,

@@ -8,10 +8,11 @@ export type AssignResult =
   | { kind: "assigned"; ownerId: string }
   | { kind: "skipped"; reason: "already_assigned" | "lead_missing" | "no_owner" | "not_permitted" | "failed" };
 
-/** The tenant owner Smart assignment runs as: the earliest-created active owner (deterministic). */
-export async function findSystemOwner(tenantId: string): Promise<string | null> {
+/** The tenant owner Smart assignment runs as: the earliest-created active owner (deterministic). `strict`: a failed read throws instead of reading as "no owner". */
+export async function findSystemOwner(tenantId: string, opts: { strict?: boolean } = {}): Promise<string | null> {
   const db = await scopedClientForTenant(tenantId);
-  const { data } = await db.from("tenant_users").select("user_id, role, created_at, suspended_at").eq("role", "owner");
+  const { data, error } = await db.from("tenant_users").select("user_id, role, created_at, suspended_at").eq("role", "owner");
+  if (error && opts.strict) throw new Error(`smart assignment: owner read failed: ${error.message}`);
   return pickSystemOwner((data ?? []) as unknown as Array<{ user_id: string; role: string; created_at: string; suspended_at: string | null }>);
 }
 
@@ -26,7 +27,7 @@ export async function assignAsSmartAssignment(args: { tenantId: string; leadId: 
   const lead = await loadLeadForAssignment(db, args.leadId);
   if (!lead) return { kind: "skipped", reason: "lead_missing" };
   if (lead.assigned_to) return { kind: "skipped", reason: "already_assigned" };
-  const ownerId = await findSystemOwner(args.tenantId);
+  const ownerId = await findSystemOwner(args.tenantId, { strict: true });
   if (!ownerId) return { kind: "skipped", reason: "no_owner" };
   const auth = await buildUserAuthContext(ownerId, args.tenantId);
   if (!auth) return { kind: "skipped", reason: "no_owner" };

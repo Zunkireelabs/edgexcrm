@@ -33,7 +33,7 @@ async function ownerNameOf(db: PolicyDb, userId: string | null): Promise<string 
   }
 }
 
-async function load(db: PolicyDb, tenantId: string): Promise<ProcessPolicy> {
+async function load(db: PolicyDb, tenantId: string, strict = false): Promise<ProcessPolicy> {
   const officeHours = await loadOfficeHours(db, tenantId);
   try {
     const proc = (await db.from("processes").select("owner_user_id, live_version_id").eq("key", POLICY_PROCESS_KEY).maybeSingle()) as unknown as {
@@ -64,6 +64,7 @@ async function load(db: PolicyDb, tenantId: string): Promise<ProcessPolicy> {
     const approvedByName = !approver ? null : approver === proc.data.owner_user_id ? ownerName : await ownerNameOf(db, approver);
     return derivePolicy({ version: ver.data.version, approvedAt: ver.data.approved_at, ownerName, approvedByName, spec: parsed.spec }, officeHours);
   } catch (err) {
+    if (strict) throw new Error(`process policy: read failed: ${(err as { message?: string } | null)?.message ?? String(err)}`);
     logger.warn({ err, tenantId }, "process policy: read failed, running today's values");
     return defaultPolicy(officeHours);
   }
@@ -72,8 +73,12 @@ async function load(db: PolicyDb, tenantId: string): Promise<ProcessPolicy> {
 /** One Map per request: the first caller starts the read, every later caller in that request shares the same promise. */
 const perRequest = cache(() => new Map<string, Promise<ProcessPolicy>>());
 
-/** The live New-lead process as policy. NEVER throws: any failure falls back to today's values (`source: null`) and logs a warning. */
-export function loadProcessPolicy(db: PolicyDb, tenantId: string): Promise<ProcessPolicy> {
+/**
+ * The live New-lead process as policy. Any failure falls back to today's values (`source: null`) and logs a warning.
+ * `strict` (a stored assignment decision): a failed READ throws, unmemoized, so the run retries. A missing or unreadable process still gets today's values.
+ */
+export function loadProcessPolicy(db: PolicyDb, tenantId: string, opts: { strict?: boolean } = {}): Promise<ProcessPolicy> {
+  if (opts.strict) return load(db, tenantId, true);
   const memo = perRequest();
   let p = memo.get(tenantId);
   if (!p) {

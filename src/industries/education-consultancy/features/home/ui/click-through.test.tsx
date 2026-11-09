@@ -50,6 +50,12 @@ describe("manager Needs-you rows (click-through round 3, E)", () => {
     const b = render(<ManagerHome data={data("Oldest arrived 28 Oct.")} />);
     expect(b.container.querySelector(".eh-wh-wrap")).toBeNull();
   });
+  it("a person row flagged wrapWhy may wrap too (round 5, M)", () => {
+    const d = data("No touch or move on them for 3+ days · 3 actions, usual 22");
+    d.needsYou[0].wrapWhy = true;
+    const { container } = render(<ManagerHome data={d} />);
+    expect(container.querySelector(".eh-wh.eh-wh-wrap")).not.toBeNull();
+  });
   it("the title and the chip are siblings in .eh-tl so the stylesheet can let the chip shrink first", () => {
     const { container } = render(<ManagerHome data={data("x")} />);
     expect(container.querySelector(".eh-tl > .eh-nm")?.textContent).toBe("Assign 7 new leads");

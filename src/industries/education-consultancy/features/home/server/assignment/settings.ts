@@ -29,9 +29,13 @@ export async function loadAssignmentSettings(db: TenantDb, opts: { strict?: bool
   return { mode: r.mode, firstTouchPositions: saved ? (r.first_touch_positions as string[]) : DEFAULT_SETTINGS.firstTouchPositions, positionsSaved: saved };
 }
 
-/** What Admizz-style tenants actually do: the positions of the active members who received most new leads in the last 60 days. */
+/**
+ * What Admizz-style tenants actually do: the positions of the active members who received most new leads in the last 60 days.
+ * Throws on a failed read: an empty team would fall through to the old default positions and pick from the wrong people.
+ */
 export async function loadLearnedPositions(db: TenantDb, now: Date = new Date()): Promise<LearnedPositions> {
-  const { data } = await db.from("tenant_users").select("user_id, suspended_at, positions(slug, name)");
+  const { data, error } = await db.from("tenant_users").select("user_id, suspended_at, positions(slug, name)");
+  if (error) throw new Error(`learned positions: team read failed: ${error.message}`);
   const rows = (data ?? []) as unknown as Array<{ user_id: string; suspended_at: string | null; positions: { slug: string; name: string } | Array<{ slug: string; name: string }> | null }>;
   const members: LearnMember[] = rows.map((m) => {
     const pos = Array.isArray(m.positions) ? m.positions[0] : m.positions;
@@ -43,7 +47,8 @@ export async function loadLearnedPositions(db: TenantDb, now: Date = new Date())
     members
       .filter((m) => !m.suspended && m.slug)
       .map(async (m) => {
-        const { count } = await db.from("leads").select("id", { count: "exact", head: true }).eq("assigned_to", m.userId).is("deleted_at", null).gte("created_at", since);
+        const { count, error: countError } = await db.from("leads").select("id", { count: "exact", head: true }).eq("assigned_to", m.userId).is("deleted_at", null).gte("created_at", since);
+        if (countError) throw new Error(`learned positions: lead count failed: ${countError.message}`);
         received[m.userId] = count ?? 0;
       }),
   );

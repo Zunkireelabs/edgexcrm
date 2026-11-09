@@ -1,11 +1,11 @@
 import { logger } from "@/lib/logger";
 import { scopedClientForTenant } from "@/lib/supabase/scoped";
-import { assignAsSmartAssignment } from "./assign";
-import { decideForLead } from "./engine";
+import { assignAsSmartAssignment, findSystemOwner } from "./assign";
+import { decideForLead, loadLeadForAssignment } from "./engine";
 import { loadAssignmentSettings } from "./settings";
 
 export type RunResult =
-  | { status: "skipped"; reason: "off" | "already_decided" | "already_assigned" | "lead_missing" | "no_candidate" | "no_owner" | "not_permitted" | "failed" }
+  | { status: "skipped"; reason: "off" | "already_decided" | "already_assigned" | "lead_missing" | "no_candidate" | "no_owner" | "not_permitted" }
   | { status: "shadow"; decisionId: string; pickedUserId: string }
   | { status: "assigned"; decisionId: string; pickedUserId: string };
 
@@ -22,6 +22,8 @@ const UNIQUE_VIOLATION = "23505";
  *   shadow  compute and store the pick; assign nothing. A human's later assignment is matched against it.
  *   auto    store the pick, then assign through assignAsSmartAssignment (re-reads the lead inside; skips if assigned meanwhile).
  * A failed read or write THROWS, so Inngest retries instead of the lead being dropped in silence. Every skip is logged.
+ * A retry finishes an unapplied auto decision with its stored pick rather than stopping at "already decided". Undone, matched or
+ * overridden decisions (any outcome) and shadow picks never resume.
  */
 export async function runSmartAssignment(tenantId: string, leadId: string, now: Date = new Date()): Promise<RunResult> {
   const skip = (reason: SkipReason): RunResult => {
@@ -33,9 +35,33 @@ export async function runSmartAssignment(tenantId: string, leadId: string, now: 
   const settings = await loadAssignmentSettings(db, { strict: true });
   if (settings.mode === "off") return skip("off");
 
-  const { data: existing, error: existingError } = await db.from("lead_assignment_decisions").select("id").eq("lead_id", leadId).maybeSingle();
+  const markApplied = async (decisionId: string, actedAs: string | null) => {
+    const { error } = await db.from("lead_assignment_decisions").update({ applied: true, acted_as_user_id: actedAs }).eq("id", decisionId);
+    if (error) throw new Error(`smart assignment: applied update failed for lead ${leadId}: ${error.message}`);
+  };
+  const assignPick = async (decisionId: string, pickedUserId: string): Promise<RunResult> => {
+    const r = await assignAsSmartAssignment({ tenantId, leadId, targetUserId: pickedUserId, decisionId });
+    if (r.kind === "skipped") {
+      if (r.reason === "failed") throw new Error(`smart assignment: assign failed for lead ${leadId}`);
+      return skip(r.reason);
+    }
+    await markApplied(decisionId, r.ownerId);
+    return { status: "assigned", decisionId, pickedUserId };
+  };
+
+  const { data: existing, error: existingError } = await db.from("lead_assignment_decisions").select("id, mode, applied, outcome, picked_user_id").eq("lead_id", leadId).maybeSingle();
   if (existingError) throw new Error(`smart assignment: existing-decision read failed for lead ${leadId}: ${existingError.message}`);
-  if (existing) return skip("already_decided");
+  if (existing) {
+    const d = existing as unknown as { id: string; mode: string; applied: boolean; outcome: string | null; picked_user_id: string | null };
+    if (settings.mode !== "auto" || d.mode !== "auto" || d.applied !== false || d.outcome !== null || !d.picked_user_id) return skip("already_decided");
+    // The assign landed but the `applied` write did not: finish the bookkeeping. Assigning again would skip as "already assigned".
+    const lead = await loadLeadForAssignment(db, leadId);
+    if (lead?.assigned_to === d.picked_user_id) {
+      await markApplied(d.id, await findSystemOwner(tenantId, { strict: true }));
+      return { status: "assigned", decisionId: d.id, pickedUserId: d.picked_user_id };
+    }
+    return assignPick(d.id, d.picked_user_id);
+  }
 
   const decided = await decideForLead(tenantId, leadId, settings.mode, now);
   if (!decided) return skip("lead_missing");
@@ -65,8 +91,5 @@ export async function runSmartAssignment(tenantId: string, leadId: string, now: 
 
   if (settings.mode === "shadow") return { status: "shadow", decisionId, pickedUserId };
 
-  const r = await assignAsSmartAssignment({ tenantId, leadId, targetUserId: pickedUserId, decisionId });
-  if (r.kind === "skipped") return skip(r.reason);
-  await db.from("lead_assignment_decisions").update({ applied: true, acted_as_user_id: r.ownerId }).eq("id", decisionId);
-  return { status: "assigned", decisionId, pickedUserId };
+  return assignPick(decisionId, pickedUserId);
 }

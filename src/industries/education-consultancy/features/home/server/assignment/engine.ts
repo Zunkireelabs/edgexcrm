@@ -32,11 +32,12 @@ interface MemberRow {
  * Load the first-touch pool with everything the scorer needs, for ONE new lead. Reads only; the decision is pure
  * (lib/assignment/score.ts). Cost: a handful of tenant-wide queries plus two head counts per pool member (open leads, leads
  * received today); pools are a dozen people.
+ * `strict` (the stored decision): the policy, workable plan and names also throw on a failed read, so a decision is never stored on a guess.
  */
-export async function buildPool(db: TenantDb, tenantId: string, now: Date): Promise<{ pool: Candidate[]; team: ReturnType<typeof buildTeam>; tz: string }> {
+export async function buildPool(db: TenantDb, tenantId: string, now: Date, opts: { strict?: boolean } = {}): Promise<{ pool: Candidate[]; team: ReturnType<typeof buildTeam>; tz: string }> {
   const settings = await loadAssignmentSettings(db, { strict: true });
   // "Who takes new leads" comes from the live New-lead process (its First contact step); saved/learned only when none is live.
-  const policy = await loadProcessPolicy(db, tenantId);
+  const policy = await loadProcessPolicy(db, tenantId, opts);
   const keys = firstTouchKeys(await resolveFirstTouchPositions(db, settings, now, policy.firstTouchPositions));
   const { data: tenantRow } = readOk("tenant", await db.fromGlobal("tenants").select("timezone").eq("id", tenantId).maybeSingle());
   const tz = (tenantRow as unknown as { timezone: string | null } | null)?.timezone ?? "Asia/Kathmandu";
@@ -55,9 +56,9 @@ export async function buildPool(db: TenantDb, tenantId: string, now: Date): Prom
   const since14d = new Date(now.getTime() - DORMANT_DAYS * 86_400_000).toISOString();
   const since30d = new Date(now.getTime() - 30 * 86_400_000).toISOString().slice(0, 10);
   const [names, statsRes, workable, leaveRes, attRes, actRes, noteRes] = await Promise.all([
-    resolveUserNames(ids),
+    resolveUserNames(ids, opts),
     db.from("lead_assignment_stats").select("user_id, destination, received, progressed, speed_n, median_first_contact_min, flag_7d"),
-    loadWorkablePlan(db),
+    loadWorkablePlan(db, opts),
     db.from("leave_requests").select("user_id").eq("approval_status", "approved").lte("start_date", day).gte("end_date", day).in("user_id", ids),
     db.from("attendance_records").select("user_id, work_date, clock_in_at, status").gte("work_date", since30d).limit(5000),
     db.from("lead_activities").select("user_id").in("user_id", ids).gte("created_at", since2h).limit(2000),
@@ -150,7 +151,7 @@ export async function decideForLead(tenantId: string, leadId: string, mode: Assi
   const db = await scopedClientForTenant(tenantId);
   const lead = await loadLeadForAssignment(db, leadId);
   if (!lead) return null;
-  const { pool, team, tz } = await buildPool(db, tenantId, now);
+  const { pool, team, tz } = await buildPool(db, tenantId, now, { strict: true });
   // Here and not in buildPool: the suggestion seeds these same picks itself and must not count them twice.
   const picks = mode === "shadow" ? await openShadowPicksToday(db, tz, now) : null;
   const counted = picks ? pool.map((c) => ({ ...c, receivedToday: c.receivedToday + (picks.get(c.userId) ?? 0) })) : pool;

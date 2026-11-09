@@ -24,6 +24,8 @@ export interface NeedsYouRow {
   title: string;
   chip: { text: string; tone: Tone } | null;
   why: string;
+  /** The grey line may take two lines instead of being cut (a person's activity drop, whose numbers sit at the end). */
+  wrapWhy?: boolean;
   actions: NeedsAction[];
 }
 
@@ -93,7 +95,9 @@ export function attentionRows(
       let chip: NeedsYouRow["chip"] = a.figure ? { text: `${a.figure.strong ? `${a.figure.strong}` : ""}${a.figure.text}`.trim(), tone: TONE[a.tone] ?? "neutral" } : null;
       let title = a.subject;
       let why = a.what;
+      let wrapWhy = false;
       if (person && !nudge && a.activity && (a.staleHeld ?? 0) > 0) {
+        wrapWhy = true;
         title = `${a.subject} · ${leadCount(a.staleHeld as number)} untouched`;
         chip = { text: activityChip(a.activity), tone: "bad" };
         why = `No touch or move on them for 3+ days · ${activityCount(a.activity.current)}, usual ${a.activity.usual}`;
@@ -124,6 +128,7 @@ export function attentionRows(
         title,
         chip,
         why,
+        ...(wrapWhy ? { wrapWhy } : {}),
         actions,
       };
     });
