@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const { visibleMock, ctxMock, produceMock } = vi.hoisted(() => ({ visibleMock: vi.fn(), ctxMock: vi.fn(), produceMock: vi.fn() }));
 const inserts: unknown[] = [];
+const { warnMock } = vi.hoisted(() => ({ warnMock: vi.fn() }));
+vi.mock("@/lib/logger", () => ({ logger: { warn: warnMock, info: vi.fn(), error: vi.fn() } }));
 
 vi.mock("./visible-lead", () => ({ loadVisibleLead: visibleMock }));
 vi.mock("./draft-context", () => ({ loadDraftContext: ctxMock }));
@@ -54,6 +56,21 @@ describe("draftOneForBatch", () => {
     const c = await draftOneForBatch(P);
     expect(c.draft).toBeNull();
     expect(inserts).toEqual([]);
+  });
+  it("P2: a check that tripped is logged by NAME at warn (no text); a first-try pass logs nothing", async () => {
+    produceMock.mockResolvedValue({ raw: RAW, usages: [{}, {}], failed: [["pronoun", "length"], []] });
+    await draftOneForBatch(P);
+    expect(warnMock).toHaveBeenCalledTimes(1);
+    expect(warnMock.mock.calls[0][0]).toEqual({ rowKind: "going_quiet", attempts: [["pronoun", "length"], []], shown: true });
+    expect(JSON.stringify(warnMock.mock.calls[0])).not.toContain("Hi Sita");
+    warnMock.mockClear();
+    produceMock.mockResolvedValue({ raw: RAW, usages: [{}], failed: [[]] });
+    await draftOneForBatch(P);
+    expect(warnMock).not.toHaveBeenCalled();
+  });
+  it("P1: the row kind reaches the draft pipeline so check-ins get the short-and-specific rules", async () => {
+    await draftOneForBatch(P);
+    expect(produceMock.mock.calls[0][0].rowKind).toBe("going_quiet");
   });
   it("anything thrown is this card only: draft:null", async () => {
     ctxMock.mockRejectedValue(new Error("db"));

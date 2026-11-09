@@ -54,7 +54,7 @@ const TONE_RULE: Record<DraftTone, string> = {
   nepali: "Rewrite the previous message in Nepali (Devanagari script), natural and polite, keeping names, dates and numbers unchanged.",
 };
 
-export function buildDraftPrompt(p: { channel: DraftChannel; tone: DraftTone; kind: string; facts: string[]; previous: string | null; todayLabel: string; fix?: string[] }): { system: string; prompt: string } {
+export function buildDraftPrompt(p: { channel: DraftChannel; tone: DraftTone; kind: string; facts: string[]; previous: string | null; todayLabel: string; rowKind?: string; fix?: string[] }): { system: string; prompt: string } {
   const system =
     "You draft ONE message from a counsellor at an education consultancy to a student or lead. A human will read, edit and send it: you never send anything. " +
     "Be warm, plain and specific, and use only the facts given. Do not invent facts, dates, fees, scores or numbers: every number you write must appear in the facts. " +
@@ -63,6 +63,9 @@ export function buildDraftPrompt(p: { channel: DraftChannel; tone: DraftTone; ki
     "Never say when something happened (yesterday, last week, 'N days ago') unless a fact states that timing; use the timing in the facts exactly. " +
     (p.channel === "whatsapp" ? "Channel: WhatsApp. 2 to 4 short sentences, no subject (subject = null). " : "Channel: email. A subject and a short body. ") +
     `Reason for the message: ${p.kind}. ` +
+    (p.rowKind === "going_quiet"
+      ? "This is a check-in, so keep it short: AT MOST 2 sentences and under 280 characters. Mention ONE specific thing from this person's last counsellor note or message when there is one (their course, a question they asked, something they said), as a real detail, not a summary. End with ONE concrete question they can answer in a few words. Do NOT use stock closing lines such as 'just reply here', 'happy to help', 'if you have any questions', 'pick up where we left off' or 'feel free to reach out'. No two check-ins should sound alike. "
+      : "") +
     (TONE_RULE[p.tone] ? TONE_RULE[p.tone] + " " : "") +
     "Also give one sentence on why this message (why), and one follow-up task for the counsellor (followUp)." +
     (p.fix?.length ? ` Your previous attempt was rejected: ${p.fix.join("; ")}. Write it again without that.` : "");
@@ -85,7 +88,7 @@ function badNumbers(raw: Pick<DraftRaw, "text" | "subject" | "why">, facts: stri
 
 export interface CheckFailure {
   /** The name logged on the server (never any text). */
-  check: "number" | "time_word" | "pronoun";
+  check: "number" | "time_word" | "pronoun" | "length" | "stock_closing";
   /** What the retry tells the model, exactly. Contains the offending word/number, which is the model's own output, not lead data. */
   fix: string;
 }
@@ -94,22 +97,37 @@ export interface CheckFailure {
  * Everything a draft must pass before the person sees it, by name: numbers (C2: Devanagari too), time WORDS the facts don't back up
  * (S2), and no he/she/his/her in the text, the reason or the task (S4). Empty = fine.
  */
-export function draftChecks(raw: DraftRaw, facts: string[]): CheckFailure[] {
+/** P1: a check-in is short and specific. Over this many characters is refused (the prompt asks for under 280). */
+export const CHECK_IN_MAX_CHARS = 400;
+
+/** The stock closing lines that made 12 drafts read as one template. A check-in ending with any of them is refused. */
+const STOCK_CLOSINGS: RegExp[] = [/just reply here/i, /happy to help/i, /if you have any questions/i, /pick up where we left off/i, /feel free to (?:reach out|ask|contact)/i, /don'?t hesitate/i, /let me know if you (?:need|have|would)/i];
+
+export interface DraftCheckOpts {
+  /** The row kind. "going_quiet" holds the draft to the check-in rules (length, no stock closing). */
+  rowKind?: string;
+}
+
+export function draftChecks(raw: DraftRaw, facts: string[], opts: DraftCheckOpts = {}): CheckFailure[] {
   const texts = [raw.text, raw.subject ?? "", raw.why, raw.followUp.title];
   const out: CheckFailure[] = [];
   const nb = badNumbers(raw, facts);
   if (nb.length) out.push({ check: "number", fix: `the number ${nb.join(", ")} is not in the facts: do not write it, use only numbers from the facts` });
   const tw = unbackedTimeWords(texts, facts);
   if (tw.length) out.push({ check: "time_word", fix: `no '${tw.join("', '")}': no fact says when that happened, so do not say when` });
+  if (opts.rowKind === "going_quiet") {
+    if (raw.text.length > CHECK_IN_MAX_CHARS) out.push({ check: "length", fix: `it is too long (${raw.text.length} characters): at most 2 short sentences, under 280 characters` });
+    if (STOCK_CLOSINGS.some((re) => re.test(raw.text))) out.push({ check: "stock_closing", fix: "do not end with a stock line like 'just reply here', 'happy to help' or 'if you have any questions': end with one concrete question about something specific to this person" });
+  }
   if (hasGenderedPronoun(texts)) out.push({ check: "pronoun", fix: "do not use he, she, his, her or him anywhere, including the reason and the task: use the person's name instead" });
   return out;
 }
 
-export function draftOk(raw: DraftRaw, facts: string[]): boolean {
-  return draftChecks(raw, facts).length === 0;
+export function draftOk(raw: DraftRaw, facts: string[], opts: DraftCheckOpts = {}): boolean {
+  return draftChecks(raw, facts, opts).length === 0;
 }
 
-export interface WriteDraftInput { channel: DraftChannel; tone: DraftTone; kind: string; facts: string[]; previous: string | null; todayLabel: string; /** C1: what the previous attempt got wrong. */ fix?: string[] }
+export interface WriteDraftInput { channel: DraftChannel; tone: DraftTone; kind: string; facts: string[]; previous: string | null; todayLabel: string; /** The row kind (reply_waiting, going_quiet, …): check-ins get the short-and-specific rules. */ rowKind?: string; /** C1: what the previous attempt got wrong. */ fix?: string[] }
 
 export async function writeDraft(p: WriteDraftInput): Promise<{ raw: DraftRaw; usage: { inputTokens?: number; outputTokens?: number } }> {
   const { system, prompt } = buildDraftPrompt(p);
@@ -144,7 +162,7 @@ export async function produceDraft(p: WriteDraftInput, write: typeof writeDraft 
     try {
       const { raw, usage } = await write({ ...p, fix });
       out.usages.push(usage);
-      const fails = draftChecks(raw, p.facts);
+      const fails = draftChecks(raw, p.facts, { rowKind: p.rowKind });
       out.failed.push(fails.map((f) => f.check));
       if (fails.length === 0) {
         out.raw = raw;

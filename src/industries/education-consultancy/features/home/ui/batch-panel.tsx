@@ -7,7 +7,7 @@ import { PencilSimpleIcon, SparkleIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { sendToLead } from "../lib/send-to-lead";
-import { batchSummary, type BatchEntry } from "../lib/batch";
+import { batchSummary, channelChip, type BatchEntry } from "../lib/batch";
 import type { DraftChannel } from "../lib/draft";
 
 interface Card {
@@ -48,7 +48,10 @@ export function BatchPanel({ entries, open, onClose, onSent }: { entries: BatchE
   const [texts, setTexts] = useState<Record<string, string>>({});
   const [editing, setEditing] = useState<ReadonlySet<string>>(new Set());
   const [status, setStatus] = useState<Record<string, Status>>({});
-  const [walk, setWalk] = useState<{ queue: string[]; idx: number; phase: "ready" | "asking" } | null>(null);
+  const [walk, setWalk] = useState<{ queue: string[]; idx: number; phase: "ready" | "asking"; revisited: boolean } | null>(null);
+  // P4: who was answered Yes / No in this walk. A "No" stays ticked and comes round once more at the end.
+  const [walkSent, setWalkSent] = useState<ReadonlySet<string>>(new Set());
+  const [walkNo, setWalkNo] = useState<ReadonlySet<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const sentAny = useRef(false);
 
@@ -96,27 +99,29 @@ export function BatchPanel({ entries, open, onClose, onSent }: { entries: BatchE
     if (ok < emailCards.length) toast.error(`${emailCards.length - ok} didn't send. They are marked on their cards.`, { duration: 10_000 });
   };
 
-  const openWa = async (c: Card, queue: string[], idx: number) => {
+  const openWa = async (c: Card, queue: string[], idx: number, revisited: boolean) => {
     const r = await sendToLead("whatsapp", { leadId: c.leadId, text: texts[c.leadId], phone: c.phone });
     if (r.kind === "handoff") {
       window.open(r.url, "_blank", "noopener");
-      setWalk({ queue, idx, phase: "asking" });
+      setWalk({ queue, idx, phase: "asking", revisited });
     } else {
       setStatus((s) => ({ ...s, [c.leadId]: { state: "failed", message: r.kind === "failed" ? r.message : "Couldn't open WhatsApp" } }));
-      advance(queue, idx);
+      advance(queue, idx, revisited, walkNo);
     }
   };
   const startWalk = () => {
     const queue = waCards.map((c) => c.leadId);
-    if (queue.length) void openWa(byId.get(queue[0]) as Card, queue, 0);
+    setWalkSent(new Set());
+    setWalkNo(new Set());
+    if (queue.length) void openWa(byId.get(queue[0]) as Card, queue, 0, false);
   };
-  const advance = (queue: string[], idx: number) => {
-    if (idx + 1 >= queue.length) {
-      setWalk(null);
-      if (sentAny.current) onSent();
-      return;
-    }
-    setWalk({ queue, idx: idx + 1, phase: "ready" });
+  const advance = (queue: string[], idx: number, revisited: boolean, no: ReadonlySet<string>) => {
+    if (idx + 1 < queue.length) return setWalk({ queue, idx: idx + 1, phase: "ready", revisited });
+    // End of the round. Leads answered "No" stay ticked and come round once more at the end.
+    const again = [...no];
+    if (!revisited && again.length) return setWalk({ queue: [...queue, ...again], idx: queue.length, phase: "ready", revisited: true });
+    setWalk(null);
+    if (sentAny.current) onSent();
   };
   const answer = async (yes: boolean) => {
     if (!walk) return;
@@ -125,8 +130,14 @@ export function BatchPanel({ entries, open, onClose, onSent }: { entries: BatchE
     const r = await resolve(c, yes ? "sent" : "opened", "whatsapp"); // only Yes logs it on the timeline
     setBusy(false);
     if (yes && !r.ok) return toast.error("Couldn't log it on the timeline. Try again.");
-    if (yes) markSent(c.leadId);
-    advance(walk.queue, walk.idx);
+    const no = new Set(walkNo);
+    if (yes) {
+      markSent(c.leadId);
+      no.delete(c.leadId);
+      setWalkSent((x) => new Set(x).add(c.leadId));
+    } else no.add(c.leadId);
+    setWalkNo(no);
+    advance(walk.queue, walk.idx, walk.revisited, no);
   };
 
   const current = walk ? (byId.get(walk.queue[walk.idx]) ?? null) : null;
@@ -140,7 +151,7 @@ export function BatchPanel({ entries, open, onClose, onSent }: { entries: BatchE
           <SheetDescription className="sr-only">Orca drafted these. Nothing is sent until you press the button.</SheetDescription>
           <div className="eh-dp-chips">
             <span className="eh-chip">{batchSummary(entries)}</span>
-            <span className="eh-chip">Each on the channel they last replied on</span>
+            {channelChip((cards ?? []).map((c) => c.channel)) ? <span className="eh-chip">{channelChip((cards ?? []).map((c) => c.channel))}</span> : null}
           </div>
         </SheetHeader>
         <div className="eh-dp">
@@ -186,15 +197,15 @@ export function BatchPanel({ entries, open, onClose, onSent }: { entries: BatchE
           {walk && current ? (
             walk.phase === "asking" ? (
               <>
-                <span className="eh-dp-q">Sent? {current.leadName} ({walk.idx + 1} of {walk.queue.length})</span>
+                <span className="eh-dp-q">Sent? {current.leadName} ({walk.idx + 1} of {walk.queue.length}) · {walkSent.size} sent · {walkNo.size} not sent</span>
                 <Button look="v2" variant="secondary" size="sm" onClick={() => answer(false)} disabled={busy}>No</Button>
                 <Button look="v2" variant="primary" size="sm" onClick={() => answer(true)} disabled={busy}>Yes, I sent it</Button>
               </>
             ) : (
               <>
-                <span className="eh-dp-q">Next: {current.leadName} ({walk.idx + 1} of {walk.queue.length})</span>
+                <span className="eh-dp-q">Next: {current.leadName} ({walk.idx + 1} of {walk.queue.length}){walk.revisited && walk.idx >= walk.queue.length - walkNo.size ? " · asking again" : ""} · {walkSent.size} sent · {walkNo.size} not sent</span>
                 <Button look="v2" variant="secondary" size="sm" onClick={() => { setWalk(null); if (sentAny.current) onSent(); }}>Stop</Button>
-                <Button look="v2" variant="primary" size="sm" onClick={() => void openWa(current, walk.queue, walk.idx)}>Open in WhatsApp</Button>
+                <Button look="v2" variant="primary" size="sm" onClick={() => void openWa(current, walk.queue, walk.idx, walk.revisited)}>Open in WhatsApp</Button>
               </>
             )
           ) : (

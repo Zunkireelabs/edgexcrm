@@ -1,4 +1,5 @@
 import type { AuthContext } from "@/lib/api/auth";
+import { logger } from "@/lib/logger";
 import type { ScopedClient } from "@/lib/supabase/scoped";
 import { draftFacts, produceDraft } from "../ai/draft";
 import { recordHomeUsage } from "../ai/usage";
@@ -59,8 +60,10 @@ export async function draftOneForBatch(p: {
 
     const factLines = draftFacts(ctx, { counsellorFirstName: p.counsellorFirstName, company: p.company, now, tz });
     const today = localDate(now, tz);
-    const produced = await produceDraft({ channel, tone: "new", kind: DRAFT_REASONS[entry.kind], facts: factLines, previous: null, todayLabel: `${WEEKDAY[new Date(`${today}T00:00:00Z`).getUTCDay()]} ${today}` });
+    const produced = await produceDraft({ channel, tone: "new", kind: DRAFT_REASONS[entry.kind], rowKind: entry.kind, facts: factLines, previous: null, todayLabel: `${WEEKDAY[new Date(`${today}T00:00:00Z`).getUTCDay()]} ${today}` });
     for (const usage of produced.usages) await recordHomeUsage(db, { surface: "home_batch", kind: "fast", userId: auth.userId, runId: crypto.randomUUID(), usage }).catch(() => {});
+    // P2: which check tripped, by name only (no text), at warn so dev shows it; a first-try pass logs nothing.
+    if (produced.failed.some((f) => f.length)) logger.warn({ rowKind: entry.kind, attempts: produced.failed, shown: !!produced.raw }, "home batch draft checks failed");
     const raw = produced.raw;
     if (!raw) return { ...card, draft: null };
     const subject = channel === "email" ? raw.subject ?? "Following up" : null;

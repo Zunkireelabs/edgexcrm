@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BATCH_MAX, batchEntries, batchSummary } from "./batch";
+import { BATCH_MAX, batchEntries, batchSummary, channelChip } from "./batch";
 import type { DoNextItem } from "./types";
 
 const it_ = (o: Partial<DoNextItem> & { key: string; kind: DoNextItem["kind"] }): DoNextItem => ({
@@ -47,5 +47,20 @@ describe("batchEntries", () => {
     const k = (kind: string, n: number) => Array.from({ length: n }, () => ({ kind })) as never;
     expect(batchSummary([...k("going_quiet", 4), ...k("deadline_docs", 1), ...k("reply_waiting", 1)])).toBe("4 check-ins, 1 document request, 1 reply");
     expect(batchSummary([...k("reply_waiting", 2), ...k("callback_overdue", 1)])).toBe("2 replies, 1 call-back follow-up");
+  });
+});
+
+describe("P3: the channel chip says only what is true", () => {
+  it("all WhatsApp, all email, mixed, none", () => {
+    expect(channelChip(["whatsapp", "whatsapp"])).toBe("On WhatsApp");
+    expect(channelChip(["email", "email"])).toBe("On email");
+    expect(channelChip(["whatsapp", "email"])).toBe("WhatsApp and email");
+    expect(channelChip([null, null])).toBeNull();
+  });
+  it("cards with no way to send don't count", () => {
+    expect(channelChip(["whatsapp", null, "whatsapp"])).toBe("On WhatsApp");
+  });
+  it("never claims 'last replied on'", () => {
+    for (const c of [["whatsapp"], ["email"], ["whatsapp", "email"]] as const) expect(channelChip([...c])).not.toMatch(/replied/i);
   });
 });

@@ -122,3 +122,54 @@ describe("BatchPanel", () => {
     expect(screen.getByText(/Unticked ones are not sent; you can open them later from their row for 24 hours/)).toBeTruthy();
   });
 });
+
+describe("P3/P4 in the panel", () => {
+  it("P3: the chip is 'On WhatsApp' when every card is WhatsApp, 'WhatsApp and email' when mixed", async () => {
+    stub([card("a", "Ramesh Adhikari", "whatsapp"), card("c", "Saroj Karki", "whatsapp")]);
+    const { unmount } = mount();
+    await screen.findByText("Hi Ramesh, checking in.");
+    expect(screen.getByText("On WhatsApp")).toBeTruthy();
+    expect(screen.queryByText(/last replied on/)).toBeNull();
+    unmount();
+    stub([card("a", "Ramesh Adhikari", "whatsapp"), card("b", "Dipa Lama", "email")]);
+    mount();
+    await screen.findByText("Hi Ramesh, checking in.");
+    expect(screen.getByText("WhatsApp and email")).toBeTruthy();
+  });
+  it("P4: the footer counts sent and not sent, and the 'No' answers come round again at the end", async () => {
+    stub([card("a", "Ramesh Adhikari", "whatsapp"), card("c", "Saroj Karki", "whatsapp"), card("d", "Mina Gurung", "whatsapp")]);
+    mount();
+    await screen.findByText("Hi Ramesh, checking in.");
+    fireEvent.click(screen.getByText("Go through 3"));
+    await screen.findByText(/Sent\? Ramesh Adhikari \(1 of 3\) · 0 sent · 0 not sent/);
+    fireEvent.click(screen.getByText("No")); // Ramesh: not sent
+    await screen.findByText(/Next: Saroj Karki \(2 of 3\) · 0 sent · 1 not sent/);
+    fireEvent.click(screen.getByText("Open in WhatsApp"));
+    fireEvent.click(await screen.findByText("Yes, I sent it")); // Saroj: sent
+    await screen.findByText(/Next: Mina Gurung \(3 of 3\) · 1 sent · 1 not sent/);
+    fireEvent.click(screen.getByText("Open in WhatsApp"));
+    fireEvent.click(await screen.findByText("Yes, I sent it")); // Mina: sent
+    // end of the round: Ramesh (No) comes round again
+    await screen.findByText(/Next: Ramesh Adhikari \(4 of 4\)/);
+    expect(openSpy).toHaveBeenCalledTimes(3);
+    fireEvent.click(screen.getByText("Open in WhatsApp"));
+    await screen.findByText(/Sent\? Ramesh Adhikari \(4 of 4\)/);
+    expect(openSpy).toHaveBeenCalledTimes(4);
+    fireEvent.click(screen.getByText("Yes, I sent it"));
+    await waitFor(() => expect(screen.queryByText(/Sent\? Ramesh/)).toBeNull());
+    expect(calls.filter((c) => c.url === "/api/v1/home/draft-resolve" && c.body.action === "sent").map((c) => c.body.draftId)).toEqual(["dr-c", "dr-d", "dr-a"]);
+  });
+  it("P4: a second No on the same lead is not asked a third time", async () => {
+    stub([card("a", "Ramesh Adhikari", "whatsapp")]);
+    mount();
+    await screen.findByText("Hi Ramesh, checking in.");
+    fireEvent.click(screen.getByText("Go through 1"));
+    fireEvent.click(await screen.findByText("No"));
+    await screen.findByText(/Next: Ramesh Adhikari \(2 of 2\)/);
+    fireEvent.click(screen.getByText("Open in WhatsApp"));
+    fireEvent.click(await screen.findByText("No"));
+    await waitFor(() => expect(screen.queryByText(/Next: Ramesh/)).toBeNull());
+    expect(openSpy).toHaveBeenCalledTimes(2);
+    expect((screen.getByLabelText("Include Ramesh Adhikari") as HTMLInputElement).checked).toBe(true); // stays ticked
+  });
+});

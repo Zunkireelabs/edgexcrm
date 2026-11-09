@@ -168,3 +168,80 @@ describe("C1: one automatic retry that says exactly what failed", () => {
     expect(draftOk(good, facts)).toBe(true);
   });
 });
+
+describe("P1: check-ins are short, specific and don't end on a stock line", () => {
+  const facts = draftFacts(CTX, IN);
+  const good: DraftRaw = { text: "Hi Sita, Rita from Admizz. Did you get a chance to look at the Deakin checklist?", subject: null, why: "Quiet for 5 days.", followUp: { title: "Check back", inDays: 3 } };
+  const ci = { rowKind: "going_quiet" };
+  it("a short, specific check-in passes", () => {
+    expect(draftChecks(good, facts, ci)).toEqual([]);
+  });
+  it("over 400 characters is refused", () => {
+    const long = { ...good, text: "Hi Sita, " + "checking in on how your plans are coming along. ".repeat(10) };
+    expect(long.text.length).toBeGreaterThan(400);
+    expect(draftChecks(long, facts, ci).map((c) => c.check)).toEqual(["length"]);
+  });
+  it.each([
+    "If you have any questions or would like to pick up where we left off, just reply here and I'll be happy to help.",
+    "Feel free to reach out anytime.",
+    "Don't hesitate to message me.",
+    "Let me know if you need anything.",
+  ])("the stock closing '%s' is refused", (closing) => {
+    expect(draftChecks({ ...good, text: `Hi Sita, how is the IELTS prep going? ${closing}` }, facts, ci).map((c) => c.check)).toContain("stock_closing");
+  });
+  it("the rules apply to check-ins only: a reply may be longer and is not refused for a polite close", () => {
+    const reply = { ...good, text: "Hi Sita, " + "here is the answer to your question about the intake. ".repeat(9) + "Feel free to reach out." };
+    expect(draftChecks(reply, facts, { rowKind: "reply_waiting" })).toEqual([]);
+  });
+  it("a refused check-in is retried once with the reason, then shown", async () => {
+    const calls: Array<string[] | undefined> = [];
+    const write = async (p: { fix?: string[] }) => { calls.push(p.fix); return { raw: calls.length === 1 ? { ...good, text: "Hi Sita, how is it going? Just reply here and I'll be happy to help." } : good, usage: {} }; };
+    const r = await produceDraft({ channel: "whatsapp", tone: "new", kind: "x", rowKind: "going_quiet", facts, previous: null, todayLabel: "t" }, write as never);
+    expect(calls).toHaveLength(2);
+    expect(calls[1]?.join(" ")).toContain("do not end with a stock line");
+    expect(r.raw).toEqual(good);
+    expect(r.failed).toEqual([["stock_closing"], []]);
+  });
+  it("the prompt asks for at most 2 sentences, under 280 characters, one specific detail, one question, and names the stock lines", () => {
+    const { system } = buildDraftPrompt({ channel: "whatsapp", tone: "new", kind: "x", rowKind: "going_quiet", facts, previous: null, todayLabel: "t" });
+    for (const t of ["AT MOST 2 sentences", "under 280 characters", "ONE specific thing", "ONE concrete question", "just reply here"]) expect(system).toContain(t);
+    expect(buildDraftPrompt({ channel: "whatsapp", tone: "new", kind: "x", rowKind: "reply_waiting", facts, previous: null, todayLabel: "t" }).system).not.toContain("AT MOST 2 sentences");
+  });
+});
+
+describe("P2: first-try pass rate over 20 fixed outputs (a measure of the CHECKS on realistic outputs, not of the live model)", () => {
+  const facts = draftFacts(CTX, IN);
+  const mk = (text: string, why = "Quiet for 5 days."): DraftRaw => ({ text, subject: null, why, followUp: { title: "Check back", inDays: 3 } });
+  // 14 specific short check-ins of the kind the new prompt asks for, 6 of the old-template kind the checks must catch.
+  const specific = [
+    "Hi Sita, Rita from Admizz. Did you get a chance to look at the Deakin checklist?",
+    "Hi Sita, Rita here. How is the IELTS booking going, did you pick a date?",
+    "Hi Sita, Rita from Admizz. Shall I book a short call to go through the UK intake?",
+    "Hi Sita, did your parents get to read the fee sheet I sent?",
+    "Hi Sita, Rita from Admizz. Have you decided between Deakin and Federation?",
+    "Hi Sita, is the bank statement on its way?",
+    "Hi Sita, Rita here. Would Thursday suit you for a quick call about your course?",
+    "Hi Sita, did the scholarship details I sent make sense?",
+    "Hi Sita, Rita from Admizz. Are you still thinking about February intake?",
+    "Hi Sita, how are the transcripts coming along?",
+    "Hi Sita, Rita here. Did you hear back from your referee?",
+    "Hi Sita, did you get to look at the Australia partner list?",
+    "Hi Sita, Rita from Admizz. Can I help with the SOP draft?",
+    "Hi Sita, is your passport copy ready to upload?",
+  ].map((t) => mk(t));
+  const template = [
+    "Hi Sita, it's Rita from Admizz. I wanted to check in and see how things are going with your application. If you have any questions or would like to pick up where we left off, just reply here and I'll be happy to help.",
+    "Hi Sita, Rita here. Just checking in. Feel free to reach out anytime.",
+    "Hi Sita, I called yesterday about your file.",
+    "Hi Sita, tell her about the deadline.",
+    "Hi Sita, " + "I am following up on your enquiry and wanted to share more details. ".repeat(8),
+    "Hi Sita, the fee is 4500, just reply here and I'll be happy to help.",
+  ].map((t) => mk(t));
+  it("14 of 20 pass on the first try and the 6 template-style outputs are all caught by a named check", () => {
+    const results = [...specific, ...template].map((r) => draftChecks(r, facts, { rowKind: "going_quiet" }));
+    const passed = results.filter((r) => r.length === 0).length;
+    expect(passed).toBe(14);
+    expect(passed / results.length).toBe(0.7);
+    expect(results.slice(14).every((r) => r.length > 0)).toBe(true);
+  });
+});

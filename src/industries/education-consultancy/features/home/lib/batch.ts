@@ -55,3 +55,13 @@ export function batchSummary(entries: Pick<BatchEntry, "kind">[]): string {
   for (const e of entries) n.set(e.kind, (n.get(e.kind) ?? 0) + 1);
   return SUMMARY_ORDER.filter((k) => n.has(k)).map((k) => `${n.get(k)} ${NOUN[k][n.get(k) === 1 ? 0 : 1]}`).join(", ");
 }
+
+/**
+ * P3: the chip under the title says only what is TRUE of this batch: "On WhatsApp" when every card is WhatsApp, "On email" when every
+ * card is email, else "WhatsApp and email". Cards with no way to send don't count. Null when nothing can be sent.
+ */
+export function channelChip(channels: Array<"whatsapp" | "email" | null>): string | null {
+  const used = new Set(channels.filter((c): c is "whatsapp" | "email" => c !== null));
+  if (used.size === 0) return null;
+  return used.size === 2 ? "WhatsApp and email" : used.has("whatsapp") ? "On WhatsApp" : "On email";
+}
