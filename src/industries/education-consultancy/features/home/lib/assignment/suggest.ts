@@ -27,13 +27,21 @@ export interface NewLeadSuggestion {
 
 export const EMPTY_SUGGESTION: NewLeadSuggestion = { assignments: [], placed: 0, unplaced: 0, reason: null };
 
+/** Can a stored pick still stand? The person's own hard filters only: today's cap and the branch were settled when the pick was made. */
+const canStillTake = (c: Candidate) => c.active && !c.onLeave && !c.dormant && c.flag7d !== "red" && c.flag7d !== "amber";
+
 /**
  * Run the real decision (`decideAssignment`) lead by lead, oldest first. Each pick is added to that person's held and
  * received-today counts IN MEMORY before the next lead is decided, so the suggestion spreads the way the real run does
  * (Room shrinks, the daily share cap bites). `branchId` pins a branch manager to their own branch's people.
  * Leads nobody can take are left out of `assignments` and counted in `unplaced`.
+ *
+ * `storedPicks` (lead id → person) are the engine's open shadow picks. Those leads go to that person first, and count towards their
+ * load before the rest are spread, so pressing "Assign as suggested" agrees with what shadow recorded. A pick whose person is no
+ * longer in this pool or can no longer take leads is ignored and the lead is spread like the others.
+ * `assignments` come back biggest first; ties keep pick order.
  */
-export function suggestAssignments(leads: SuggestLead[], pool: Candidate[], team: Team, opts: { branchId?: string | null } = {}): NewLeadSuggestion {
+export function suggestAssignments(leads: SuggestLead[], pool: Candidate[], team: Team, opts: { branchId?: string | null; storedPicks?: ReadonlyMap<string, string> } = {}): NewLeadSuggestion {
   if (leads.length === 0) return EMPTY_SUGGESTION;
   // Own copies: the caller's pool is never mutated.
   const people = (opts.branchId ? pool.filter((c) => c.branchId === opts.branchId) : pool).map((c) => ({ ...c }));
@@ -43,7 +51,22 @@ export function suggestAssignments(leads: SuggestLead[], pool: Candidate[], team
   let unplaced = 0;
   let reason: string | null = null;
 
+  const give = (person: Candidate, leadId: string) => {
+    person.heldOpen += 1;
+    person.receivedToday += 1;
+    if (!picked.has(person.userId)) order.push(person.userId);
+    picked.set(person.userId, [...(picked.get(person.userId) ?? []), leadId]);
+  };
+
+  const rest: SuggestLead[] = [];
   for (const lead of [...leads].sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id))) {
+    const stored = opts.storedPicks?.get(lead.id);
+    const person = stored ? byId.get(stored) : undefined;
+    if (person && canStillTake(person)) give(person, lead.id);
+    else rest.push(lead);
+  }
+
+  for (const lead of rest) {
     const d = decideAssignment(deriveLeadSignals(lead), people, team);
     const winner = d.pickedUserId ? byId.get(d.pickedUserId) : undefined;
     if (!winner) {
@@ -51,13 +74,12 @@ export function suggestAssignments(leads: SuggestLead[], pool: Candidate[], team
       reason = d.candidates.length === 0 ? d.why : `${excludedSummary(d.candidates) || "nobody is available"}`;
       continue;
     }
-    winner.heldOpen += 1;
-    winner.receivedToday += 1;
-    if (!picked.has(winner.userId)) order.push(winner.userId);
-    picked.set(winner.userId, [...(picked.get(winner.userId) ?? []), lead.id]);
+    give(winner, lead.id);
   }
 
-  const assignments = order.map((userId) => ({ userId, name: (byId.get(userId) as Candidate).name, take: (picked.get(userId) as string[]).length, leadIds: picked.get(userId) as string[] }));
+  const assignments = order
+    .map((userId) => ({ userId, name: (byId.get(userId) as Candidate).name, take: (picked.get(userId) as string[]).length, leadIds: picked.get(userId) as string[] }))
+    .sort((a, b) => b.take - a.take);
   const placed = assignments.reduce((n, a) => n + a.take, 0);
   return { assignments, placed, unplaced, reason: unplaced > 0 ? reason : null };
 }

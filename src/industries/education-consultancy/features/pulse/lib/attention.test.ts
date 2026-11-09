@@ -20,6 +20,38 @@ const input = (o: Partial<AttentionInput> = {}): AttentionInput => ({
   untouched: { count: 63, listIds: ["intake"], byBranch: [{ name: "Butwal", count: 41 }, { name: "Pokhara", count: 22 }], byRole: [{ key: "telecaller", label: "TeleCaller", count: 50 }] }, ...o,
 });
 
+describe("one lead reads as one lead (click-through round 4, G)", () => {
+  const solo = (n: number) => buildAttention(input({ people: [people[0]], staleHeld: { a: n } })).find((i) => i.subject === "Asha")!;
+  it("at 1", () => {
+    expect(solo(1).figure).toEqual({ strong: "1", text: " lead untouched" });
+    expect(solo(1).action?.label).toBe("Review 1 lead");
+    expect(solo(1).links[0].label).toBe("See the 1 lead →");
+  });
+  it("at 2", () => {
+    expect(solo(2).figure).toEqual({ strong: "2", text: " leads untouched" });
+    expect(solo(2).action?.label).toBe("Review 2 leads");
+    expect(solo(2).links[0].label).toBe("See the 2 leads →");
+  });
+  it("the untouched-leads row's Review", () => {
+    const one = computeSignals({ people, stageFlows: [], untouched: { count: 1, byPerson: [] }, branchKpis: [], thresholds: T }).all;
+    const row = buildAttention(input({ signals: one, untouched: { count: 1, listIds: ["intake"], byBranch: [], byRole: [] } })).find((i) => i.id === "untouched_leads");
+    if (row) expect(row.action?.label).toBe("Review 1 lead");
+  });
+});
+
+describe("activity-drop numbers for Home's row (click-through round 4, L)", () => {
+  it("carried as data, the same percentage as Pulse's own sentence", () => {
+    const a = buildAttention(input()).find((i) => i.subject === "Asha")!;
+    expect(a.activity).toEqual({ current: 31, usual: 136, downPct: 77 });
+    expect(a.what).toContain(`${a.activity?.downPct}%`);
+  });
+  it("Pulse's row itself is unchanged", () => {
+    const a = buildAttention(input()).find((i) => i.subject === "Asha")!;
+    expect(a.subject).toBe("Asha");
+    expect(a.figure).toEqual({ strong: "34", text: " leads untouched" });
+  });
+});
+
 describe("activity-drop row text", () => {
   it("says since which day when a clean stop day exists", () => {
     const withDay = people.map((p) => (p.userId === "a" ? { ...p, quietSinceDay: "2025-11-06" } : p));

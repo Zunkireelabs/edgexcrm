@@ -52,6 +52,52 @@ describe("attentionRows (Pulse's own items, top 3)", () => {
   });
 });
 
+describe("the person row follows H5 (click-through round 4, L)", () => {
+  const drop = (staleHeld: number, over: Partial<AttentionItem> = {}) =>
+    attn({ subject: "Dikshya", what: "activity down 82% since Fri", staleHeld, activity: { current: 4, usual: 22, downPct: 82 }, figure: { strong: String(staleHeld), text: " leads untouched" }, action: { label: "Reassign 65 to Bikash", href: "/x", primary: true }, ...over });
+  it("the drop with leads: title, chip and why as drawn; buttons as before", () => {
+    const [r] = attentionRows([drop(65)], new Map(), "me");
+    expect(r.title).toBe("Dikshya · 65 leads untouched");
+    expect(r.chip).toEqual({ text: "Activity −82%", tone: "bad" });
+    expect(r.why).toBe("No touch or move on them for 3+ days · 4 calls, notes and moves, usual 22");
+    expect(r.actions.map((a) => a.label)).toEqual(["Nudge Dikshya", "Reassign 65 to Bikash"]);
+  });
+  it("1 lead", () => {
+    expect(attentionRows([drop(1)], new Map(), "me")[0].title).toBe("Dikshya · 1 lead untouched");
+  });
+  it("no untouched leads: the name, Pulse's figure and sentence, as now", () => {
+    const [r] = attentionRows([drop(0, { figure: { strong: "4", text: " vs usual 22" } })], new Map(), "me");
+    expect(r.title).toBe("Dikshya");
+    expect(r.chip?.text).toBe("4 vs usual 22");
+    expect(r.why).toBe("activity down 82% since Fri");
+  });
+  it("returned: unchanged", () => {
+    const [r] = attentionRows([drop(65)], new Map([["asha", { kind: "returned" as const, still: 9, when: "yesterday" }]]), "me");
+    expect(r.title).toBe("Dikshya · nudged yesterday, still 9");
+    expect(r.chip).toEqual({ text: "Still 9 untouched", tone: "bad" });
+    expect(r.why).toBe("activity down 82% since Fri");
+  });
+  it("nudged today: unchanged", () => {
+    const [r] = attentionRows([drop(65)], new Map([["asha", { kind: "today" as const }]]), "me");
+    expect(r.title).toBe("Dikshya");
+    expect(r.chip?.text).toBe("Nudged today");
+    expect(r.why).toBe("activity down 82% since Fri");
+  });
+  it("nothing at all is said in words, never as −100%", () => {
+    const [none] = attentionRows([drop(5, { activity: { current: 0, usual: 22, downPct: 100 } })], new Map(), "me");
+    expect(none.chip?.text).toBe("No activity");
+    expect(none.why).toBe("No touch or move on them for 3+ days · 0 calls, notes and moves, usual 22");
+    const [almost] = attentionRows([drop(5, { activity: { current: 1, usual: 400, downPct: 100 } })], new Map(), "me");
+    expect(almost.chip?.text).toBe("Almost no activity");
+    expect(almost.why).toContain("1 call, note or move, usual 400");
+  });
+  it("an item with no activity numbers keeps Pulse's wording", () => {
+    const [r] = attentionRows([attn()], new Map(), "me");
+    expect(r.title).toBe("Asha Tamang");
+    expect(r.chip?.text).toBe("14 leads untouched");
+  });
+});
+
 describe("the viewer is never a Needs-you subject", () => {
   const self = attn({ id: "self", subject: "Bijay Dahal", links: [{ label: "See", href: "/x" }, { label: "Bijay's activity", personId: "bijay" }] });
   it("drops the viewer's own item and never offers 'Nudge <self>'", () => {

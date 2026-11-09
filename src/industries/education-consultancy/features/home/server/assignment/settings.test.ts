@@ -44,6 +44,19 @@ describe("first-touch positions: saved, else learned", () => {
   });
 });
 
+describe("loadAssignmentSettings when the read fails", () => {
+  const failing = { from: () => ({ select: () => ({ maybeSingle: async () => ({ data: null, error: { message: "gateway" } }) }) }) } as unknown as TenantDb;
+  it("by default reads as off (Home's cards keep working)", async () => {
+    expect((await loadAssignmentSettings(failing)).mode).toBe("off");
+  });
+  it("strict throws (the assignment run must retry, not skip)", async () => {
+    await expect(loadAssignmentSettings(failing, { strict: true })).rejects.toThrow(/settings read failed/);
+  });
+  it("strict: a tenant with no settings row is still off", async () => {
+    expect((await loadAssignmentSettings(fakeDb(null, [], {}), { strict: true })).mode).toBe("off");
+  });
+});
+
 describe("engine: dormant filter input", () => {
   it("counts lead activity AND human notes in the last 14 days per pool member", () => {
     const src = fs.readFileSync(path.resolve(__dirname, "engine.ts"), "utf8");

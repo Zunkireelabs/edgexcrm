@@ -9,6 +9,11 @@ export type RunResult =
   | { status: "shadow"; decisionId: string; pickedUserId: string }
   | { status: "assigned"; decisionId: string; pickedUserId: string };
 
+type SkipReason = Extract<RunResult, { status: "skipped" }>["reason"];
+
+/** Postgres unique_violation: a concurrent run stored this lead's decision first. */
+const UNIQUE_VIOLATION = "23505";
+
 /**
  * The body of the assignment Inngest function, idempotent per lead (one decision row per lead: UNIQUE(tenant_id, lead_id)).
  *   off     nothing.
@@ -16,18 +21,25 @@ export type RunResult =
  *   unassigned for the owner's "Assign N new leads" row. There is no fallback pick.
  *   shadow  compute and store the pick; assign nothing. A human's later assignment is matched against it.
  *   auto    store the pick, then assign through assignAsSmartAssignment (re-reads the lead inside; skips if assigned meanwhile).
+ * A failed read or write THROWS, so Inngest retries instead of the lead being dropped in silence. Every skip is logged.
  */
 export async function runSmartAssignment(tenantId: string, leadId: string, now: Date = new Date()): Promise<RunResult> {
+  const skip = (reason: SkipReason): RunResult => {
+    logger.info({ tenantId, leadId, reason }, "smart assignment skipped");
+    return { status: "skipped", reason };
+  };
+
   const db = await scopedClientForTenant(tenantId);
-  const settings = await loadAssignmentSettings(db);
-  if (settings.mode === "off") return { status: "skipped", reason: "off" };
+  const settings = await loadAssignmentSettings(db, { strict: true });
+  if (settings.mode === "off") return skip("off");
 
-  const { data: existing } = await db.from("lead_assignment_decisions").select("id").eq("lead_id", leadId).maybeSingle();
-  if (existing) return { status: "skipped", reason: "already_decided" };
+  const { data: existing, error: existingError } = await db.from("lead_assignment_decisions").select("id").eq("lead_id", leadId).maybeSingle();
+  if (existingError) throw new Error(`smart assignment: existing-decision read failed for lead ${leadId}: ${existingError.message}`);
+  if (existing) return skip("already_decided");
 
-  const decided = await decideForLead(tenantId, leadId, now);
-  if (!decided) return { status: "skipped", reason: "lead_missing" };
-  if (decided.lead.assigned_to) return { status: "skipped", reason: "already_assigned" };
+  const decided = await decideForLead(tenantId, leadId, settings.mode, now);
+  if (!decided) return skip("lead_missing");
+  if (decided.lead.assigned_to) return skip("already_assigned");
   const { decision } = decided;
   const { data: row, error } = await db
     .from("lead_assignment_decisions")
@@ -44,21 +56,17 @@ export async function runSmartAssignment(tenantId: string, leadId: string, now: 
     })
     .select("id")
     .single();
-  if (error || !row) {
-    // A concurrent run won the unique constraint: this one is the duplicate.
-    return { status: "skipped", reason: "already_decided" };
-  }
+  // A concurrent run won the unique constraint: this one is the duplicate. Any other failure is not "already decided".
+  if (error?.code === UNIQUE_VIOLATION) return skip("already_decided");
+  if (error || !row) throw new Error(`smart assignment: decision insert failed for lead ${leadId}: ${error?.message ?? "no row returned"}`);
   const decisionId = (row as unknown as { id: string }).id;
   const pickedUserId = decision.pickedUserId;
-  if (!pickedUserId) return { status: "skipped", reason: "no_candidate" };
+  if (!pickedUserId) return skip("no_candidate");
 
   if (settings.mode === "shadow") return { status: "shadow", decisionId, pickedUserId };
 
   const r = await assignAsSmartAssignment({ tenantId, leadId, targetUserId: pickedUserId, decisionId });
-  if (r.kind === "skipped") {
-    logger.info({ tenantId, leadId, reason: r.reason }, "smart assignment skipped");
-    return { status: "skipped", reason: r.reason };
-  }
+  if (r.kind === "skipped") return skip(r.reason);
   await db.from("lead_assignment_decisions").update({ applied: true, acted_as_user_id: r.ownerId }).eq("id", decisionId);
   return { status: "assigned", decisionId, pickedUserId };
 }

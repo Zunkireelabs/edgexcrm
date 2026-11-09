@@ -231,7 +231,7 @@ export function ManagerHome({ data }: { data: ManagerData }) {
                     </div>
                     <div className={r.why.startsWith("Suggested:") ? "eh-wh eh-wh-wrap" : "eh-wh"}>{r.chip ? <span className="eh-ph">{r.chip.text}{r.why ? " \u00B7 " : ""}</span> : null}{r.why}</div>
                   </div>
-                  <div className={r.actions.length > 1 ? "eh-ac eh-ac-multi" : "eh-ac"}>
+                  <div className="eh-ac eh-ac-text">
                     {r.actions.map((a, i) => (
                       <NeedsAction
                         key={`${r.key}-${i}`}
@@ -258,7 +258,7 @@ export function ManagerHome({ data }: { data: ManagerData }) {
                   <div className="eh-tl"><span className="eh-nm">{data.leaveWaiting} leave {data.leaveWaiting === 1 ? "request" : "requests"} waiting on you</span></div>
                   <div className="eh-wh">Approve or decline so people can plan</div>
                 </div>
-                <div className="eh-ac"><Button look="v2" variant="secondary" size="sm" asChild><Link href="/leave">Review</Link></Button></div>
+                <div className="eh-ac eh-ac-text"><Button look="v2" variant="secondary" size="sm" asChild><Link href="/leave">Review</Link></Button></div>
               </div>
             ) : null}
             {ownShown.map((item) => (

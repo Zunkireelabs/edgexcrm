@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
@@ -52,5 +54,30 @@ describe("manager Needs-you rows (click-through round 3, E)", () => {
     const { container } = render(<ManagerHome data={data("x")} />);
     expect(container.querySelector(".eh-tl > .eh-nm")?.textContent).toBe("Assign 7 new leads");
     expect(container.querySelector(".eh-tl > .eh-chip")?.textContent).toBe("Waiting 2 h");
+  });
+  it("a one-button row is marked as holding a text button (round 4, H)", () => {
+    const d = data("x");
+    d.needsYou[0].actions = [{ type: "clear_stale", label: "Clear them", count: 551 }];
+    const { container } = render(<ManagerHome data={d} />);
+    expect(container.querySelector(".eh-it > .eh-ac.eh-ac-text")).not.toBeNull();
+  });
+});
+
+describe("phone: text buttons get their own line (round 4, H)", () => {
+  it("a grouped Do-next row ('Call through them') is marked", () => {
+    const { container } = render(<DoNextRow item={base} nextStage={null} tz="UTC" rows={rows()} />);
+    expect(container.querySelector(".eh-ac.eh-ac-text")).not.toBeNull();
+  });
+  it("an icon-only row (Call) stays beside the text, as H7 draws", () => {
+    const item: DoNextItem = { ...base, key: "c", primaryAction: { type: "call", leadId: "1", leadName: "Sita", phone: "98" } };
+    const { container } = render(<DoNextRow item={item} nextStage={null} tz="UTC" rows={rows()} />);
+    expect(container.querySelector(".eh-ac")).not.toBeNull();
+    expect(container.querySelector(".eh-ac-text")).toBeNull();
+  });
+  it("the rule lives only under the phone breakpoint", () => {
+    const css = readFileSync(resolve(__dirname, "home.css"), "utf8");
+    expect(css).toMatch(/@media \(max-width: 767px\) \{ \.eh-it > \.eh-ac\.eh-ac-text \{ grid-column: 2 \/ -1; justify-content: flex-start; \} \}/);
+    expect(css.match(/eh-ac-text/g)).toHaveLength(1);
+    expect(css).not.toContain("eh-ac-multi");
   });
 });

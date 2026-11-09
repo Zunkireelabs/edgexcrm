@@ -242,7 +242,8 @@ export function DoNextRow({ item, nextStage, tz, rows }: { item: DoNextItem; nex
           </div>
           <div className="eh-wh"><span className="eh-ph">{item.chip.text}{item.why ? " \u00B7 " : ""}</span>{item.why}</div>
         </div>
-        <div className="eh-ac">
+        {/* "sheet" and "open" keep their words on a phone; the other actions shrink to an icon (.eh-lbl). */}
+        <div className={item.primaryAction.type === "sheet" || item.primaryAction.type === "open" ? "eh-ac eh-ac-text" : "eh-ac"}>
           <RowAction item={item} busy={rows.busy === item.key} onCall={() => rows.setOpenLog(item.key)} onDone={() => rows.markDone(item)} onSheet={() => rows.setSheetKey(item.key)} />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

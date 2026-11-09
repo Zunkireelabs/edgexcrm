@@ -1,5 +1,6 @@
 import { encodeFilterTree } from "@/lib/filters/serialize";
 import type { AttentionItem } from "../../pulse/lib/types";
+import { leadCount } from "../../pulse/lib/activity-text";
 import { leadsOfPersonHref } from "../../pulse/lib/leads-links";
 import { noTakerSentence, suggestionNames, type NewLeadSuggestion } from "./assignment/suggest";
 import type { NudgeState } from "./nudge";
@@ -91,6 +92,12 @@ export function attentionRows(
       const reassign: NeedsAction | null = a.action && a.action.href ? { type: "link", label: a.action.label, href: a.action.href, primary: !person } : null;
       let chip: NeedsYouRow["chip"] = a.figure ? { text: `${a.figure.strong ? `${a.figure.strong}` : ""}${a.figure.text}`.trim(), tone: TONE[a.tone] ?? "neutral" } : null;
       let title = a.subject;
+      let why = a.what;
+      if (person && !nudge && a.activity && (a.staleHeld ?? 0) > 0) {
+        title = `${a.subject} · ${leadCount(a.staleHeld as number)} untouched`;
+        chip = { text: activityChip(a.activity), tone: "bad" };
+        why = `No touch or move on them for 3+ days · ${activityCount(a.activity.current)}, usual ${a.activity.usual}`;
+      }
       if (nudge?.kind === "returned") {
         title = `${a.subject} · nudged ${nudge.when}, still ${nudge.still}`;
         chip = { text: `Still ${nudge.still} untouched`, tone: "bad" };
@@ -116,11 +123,19 @@ export function attentionRows(
         icon: a.icon === "down" ? "trend-down" : a.icon === "clock" ? "user-plus" : "trend-down",
         title,
         chip,
-        why: a.what,
+        why,
         actions,
       };
     });
 }
+
+/** "Activity −82%". Nothing at all is said in words, as Pulse's sentence does: never "−100%". */
+function activityChip(a: NonNullable<AttentionItem["activity"]>): string {
+  if (a.current === 0) return "No activity";
+  return a.downPct >= 100 ? "Almost no activity" : `Activity −${a.downPct}%`;
+}
+
+const activityCount = (n: number) => (n === 1 ? "1 call, note or move" : `${n} calls, notes and moves`);
 
 /** Does this Pulse item name `userId` as its subject (any of its person links)? */
 export function isAboutPerson(a: AttentionItem, userId: string): boolean {

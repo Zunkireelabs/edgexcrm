@@ -3,7 +3,7 @@ import { planReassign, type ReassignPlan } from "./suggest";
 import { noTakerSentence, suggestionNames, type NewLeadSuggestion } from "../../home/lib/assignment/suggest";
 import { pluralLabel } from "./positions";
 import { compareToUsual } from "./compare";
-import { activityWhat } from "./activity-text";
+import { activityDownPct, activityWhat, leadCount } from "./activity-text";
 export { activityWhat };
 import { activityOf, type AttentionItem, type LeakReason, type PersonRow, type Signal, type StageFlow } from "./types";
 
@@ -37,12 +37,12 @@ export interface AttentionInput {
 const personOf = (people: PersonRow[], id: string) => people.find((p) => p.userId === id);
 /** "split across 2 TeleCallers" etc. — the label, meta and (when one person) the name for a plan. */
 function planText(plan: ReassignPlan, n: number, roleLabel: string, verb: "Reassign" | "Assign"): { label: string; meta: string; why: string; suggested: boolean } {
-  if (plan.kind === "one") return { label: `${verb} ${n} to ${plan.target.name}`, meta: `${plan.target.name} holds ${plan.held} open leads now`, why: ` ${plan.target.name} holds ${plan.held} open leads now, so ${n} more is within +50%.`, suggested: true };
+  if (plan.kind === "one") return { label: `${verb} ${n} to ${plan.target.name}`, meta: `${plan.target.name} holds ${plan.held} open ${plan.held === 1 ? "lead" : "leads"} now`, why: ` ${plan.target.name} holds ${plan.held} open ${plan.held === 1 ? "lead" : "leads"} now, so ${n} more is within +50%.`, suggested: true };
   if (plan.kind === "split") {
     const k = plan.targets.length;
     return { label: `${verb} ${n} · split across ${k} ${pluralLabel(roleLabel)}`, meta: plan.targets.map((t) => `${t.person.name} +${t.take}`).join(", "), why: ` No one ${roleLabel} can take all ${n} without their load rising over 50%, so it is split: ${plan.targets.map((t) => `${t.person.name} +${t.take}`).join(", ")}.`, suggested: true };
   }
-  return { label: `Review ${n} leads`, meta: `no ${roleLabel} has spare capacity`, why: ` No ${roleLabel} has room to take them without their load rising over 50%.`, suggested: false };
+  return { label: `Review ${leadCount(n)}`, meta: `no ${roleLabel} has spare capacity`, why: ` No ${roleLabel} has room to take them without their load rising over 50%.`, suggested: false };
 }
 /** The intake-alarm row's label / meta / why from the smart-assignment suggestion for its unassigned leads. */
 function untouchedPlanText(sug: NewLeadSuggestion | null, n: number): { label: string; meta: string; why: string; suggested: boolean } {
@@ -53,7 +53,7 @@ function untouchedPlanText(sug: NewLeadSuggestion | null, n: number): { label: s
     return { label, meta: names, why: ` Smart assignment would give the ${sug.placed} unassigned ones to: ${names}.${left}`, suggested: true };
   }
   const why = sug && sug.unplaced > 0 ? ` ${noTakerSentence(sug, sug.unplaced)}` : "";
-  return { label: `Review ${n} leads`, meta: "", why, suggested: false };
+  return { label: `Review ${leadCount(n)}`, meta: "", why, suggested: false };
 }
 
 const pctOf = (cur: number, base: number) => { const shown = Math.max(1, Math.round(base)); return Math.round(Math.abs((cur - shown) / shown) * 100); };
@@ -74,9 +74,10 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
       out.push({
         id: s.id, category: "needs_action", tone: "bad", icon: "down", subject: p.name,
         what: activityWhat(p, cur, usual, period),
-        figure: stale > 0 ? { strong: String(stale), text: " leads untouched" } : { strong: String(cur), text: ` vs usual ${Math.round(usual)}` },
+        figure: stale > 0 ? { strong: String(stale), text: ` ${stale === 1 ? "lead" : "leads"} untouched` } : { strong: String(cur), text: ` vs usual ${Math.round(usual)}` },
         suggested: stale > 0 && pt.suggested,
         staleHeld: stale,
+        activity: { current: cur, usual: Math.round(usual), downPct: activityDownPct(cur, usual) },
         // No untouched leads → no lead set to name: the button opens the person's day instead.
         action: stale > 0
           ? { label: pt.label, href: untouchedHeldOfPersonHref(p.userId), primary: true }
@@ -84,7 +85,7 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
         why: `Calls, notes and stage moves dropped together: ${cur} against a usual ${Math.round(usual)}.` +
           (stale > 0 ? ` ${stale} of the leads ${p.name} holds have had no touch or move in 3+ days.${pt.why}` : ""),
         meta: [`${p.current.calls} calls vs usual ${Math.round(p.usual.calls)}`, `${p.notesNew + p.notesEdited} notes vs usual ${Math.round(p.usual.notes)}`, [p.positionLabel, p.branchName].filter(Boolean).join(", "), stale > 0 ? pt.meta : `no ${p.positionLabel} has spare capacity`].join(" · "),
-        links: [{ label: stale > 0 ? `See the ${stale} leads →` : "See their leads →", href: stale > 0 ? untouchedHeldOfPersonHref(p.userId) : leadsOfPersonHref(p.userId) }, { label: `${p.name}'s activity →`, personId: p.userId }],
+        links: [{ label: stale > 0 ? `See the ${leadCount(stale)} →` : "See their leads →", href: stale > 0 ? untouchedHeldOfPersonHref(p.userId) : leadsOfPersonHref(p.userId) }, { label: `${p.name}'s activity →`, personId: p.userId }],
         drill: s.drill,
       });
     } else if (s.kind === "untouched_leads") {
@@ -100,7 +101,7 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
         action: { label: pt.label, href, primary: false },
         why: `No call, email, meeting or note since they arrived.` + (topR ? ` ${topR.count} of them are held by ${pluralLabel(topR.label)}.` : "") + pt.why,
         meta: [input.untouched.byBranch.slice(0, 3).map((b) => `${b.name} ${b.count}`).join(" · "), pt.meta].filter(Boolean).join(" · ") || null,
-        links: [{ label: `See the ${n} leads →`, href }],
+        links: [{ label: `See the ${leadCount(n)} →`, href }],
         drill: s.drill,
       });
     } else if (s.kind === "over_capacity") {
@@ -113,13 +114,13 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
       // The button's number is the set its link opens: every lead received this window (the evidence drawer lists exactly those).
       out.push({
         id: s.id, category: "needs_action", tone: "warn", icon: "alert", subject: p.name,
-        what: `received ${received} new leads, usual is ${Math.round(p.usual.received)}`,
+        what: `received ${received} new ${received === 1 ? "lead" : "leads"}, usual is ${Math.round(p.usual.received)}`,
         figure: { text: `${(Math.round((received / Math.round(p.usual.received)) * 10) / 10).toString()}× usual` },
         suggested: pt.suggested,
-        action: { label: `Review ${received} leads`, href: leadsOfPersonHref(p.userId), primary: false, drill: s.drill },
+        action: { label: `Review ${leadCount(received)}`, href: leadsOfPersonHref(p.userId), primary: false, drill: s.drill },
         why: `${excess} more than usual ${period}.${pt.why}`,
         meta: [[p.positionLabel, p.branchName].filter(Boolean).join(", "), pt.meta].filter(Boolean).join(" · ") || null,
-        links: [{ label: `See the ${received} leads →`, drill: s.drill }, { label: `${p.name}'s activity →`, personId: p.userId }],
+        links: [{ label: `See the ${leadCount(received)} →`, drill: s.drill }, { label: `${p.name}'s activity →`, personId: p.userId }],
         drill: s.drill,
       });
     } else if (s.kind === "stage_leak") {

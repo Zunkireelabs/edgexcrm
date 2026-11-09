@@ -19,8 +19,10 @@ export const DEFAULT_SETTINGS: AssignmentSettings = { mode: "off", firstTouchPos
 /** The normalized position KEYS (pulse positions.ts), so "tele-caller" and "lead-caller" slugs compare the way Pulse groups them. */
 export const firstTouchKeys = (positions: string[]) => positions.map((p) => normalizePosition(p).key);
 
-export async function loadAssignmentSettings(db: TenantDb): Promise<AssignmentSettings> {
+/** `strict`: a failed read throws instead of reading as "off" (the assignment run must retry, not skip). A tenant with no row is still "off". */
+export async function loadAssignmentSettings(db: TenantDb, opts: { strict?: boolean } = {}): Promise<AssignmentSettings> {
   const { data, error } = await db.from("lead_assignment_settings").select("mode, first_touch_positions").maybeSingle();
+  if (error && opts.strict) throw new Error(`smart assignment: settings read failed: ${error.message}`);
   if (error || !data) return DEFAULT_SETTINGS;
   const r = data as unknown as { mode: AssignmentMode; first_touch_positions: string[] | null };
   const saved = !!r.first_touch_positions?.length;
