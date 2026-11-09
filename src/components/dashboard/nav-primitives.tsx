@@ -210,11 +210,12 @@ export function NavExpandable({
     );
   }
 
+  // Colour is inherited (currentColor) so each host decides faint vs hover-ink.
   const chevron = (
     <CaretDownIcon
       size={14}
       aria-hidden
-      className={cn("shrink-0 text-ds-faint transition-transform", expanded && "rotate-180")}
+      className={cn("shrink-0 transition-transform", expanded && "rotate-180")}
     />
   );
 
@@ -227,13 +228,13 @@ export function NavExpandable({
             <span className="truncate">{label}</span>
           </Link>
           {canExpand && (
-            // Quiet 20px toggle: only on row hover/focus (always shown on touch, where there is no hover).
+            // Quiet 20px toggle, always visible so a collapsed group shows it has stages; ink on hover.
             <button
               type="button"
               aria-expanded={expanded}
               aria-label={`${expanded ? "Collapse" : "Expand"} ${label}`}
               onClick={() => setExpanded((v) => !v)}
-              className="mr-1 grid size-5 shrink-0 place-items-center rounded-md opacity-0 transition-opacity hover:bg-black/[.06] focus-visible:opacity-100 group-hover/row:opacity-100 [@media(hover:none)]:opacity-100"
+              className="mr-1 grid size-5 shrink-0 place-items-center rounded-md text-ds-faint transition-colors hover:bg-black/[.06] hover:text-ds-ink"
             >
               {chevron}
             </button>
@@ -248,7 +249,7 @@ export function NavExpandable({
         >
           <NavIcon icon={icon} active={highlighted} />
           <span className="flex-1 truncate text-left">{label}</span>
-          {chevron}
+          <span className="grid shrink-0 place-items-center text-ds-faint">{chevron}</span>
         </button>
       )}
       {expanded && canExpand && (

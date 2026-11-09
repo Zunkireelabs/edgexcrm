@@ -821,7 +821,7 @@ export function DashboardShell({
           onClick={() => { openSearch(); setMobileOpen(false); }}
           aria-label={rail ? "Search" : undefined}
           className={cn(
-            "flex h-7 w-full items-center gap-1.5 rounded-lg bg-white text-sm font-medium leading-5 tracking-[-0.07px] text-ds-ink shadow-[0_0_2px_rgba(28,40,64,0.18),0_1px_3px_rgba(0,0,0,0.04)] transition-colors hover:bg-white/80 dark:bg-white/10 dark:hover:bg-white/15",
+            "flex h-7 w-full items-center gap-1.5 rounded-[8px] bg-white text-sm font-medium leading-5 tracking-[-0.07px] text-ds-ink shadow-[0_0_2px_rgba(28,40,64,0.18),0_1px_3px_rgba(0,0,0,0.04)] transition-colors hover:bg-white/80 dark:bg-white/10 dark:hover:bg-white/15",
             rail ? "justify-center px-0" : "py-1 pl-1.5 pr-1",
           )}
         >
@@ -1026,7 +1026,7 @@ export function DashboardShell({
               className={`flex-1 min-h-0 overflow-y-scroll overflow-x-hidden [scrollbar-gutter:stable] bg-content-bg transition-all duration-500 ease-out print:overflow-visible print:h-auto print:p-0 print:m-0 print:border-0 print:rounded-none ${
                 isLeadsFullBleed ? "mr-3 mb-3" : "p-4 mr-3 mb-3"
               }`}
-              style={{ borderRadius: "var(--radius-lg)", border: "2px solid #00001d13" }}
+              style={{ borderRadius: "var(--radius-lg)", border: "1px solid #00001d13" }}
             >
               {children}
             </main>
