@@ -214,7 +214,7 @@ export async function loadMyApplications(db: HomeDb, userId: string, today: stri
  */
 export async function loadApplications(
   db: HomeDb,
-  opts: { userId?: string; branchId?: string | null },
+  opts: { userId?: string; branchId?: string | null; /** One lead's applications (Draft, B3): every one gets its document verdict, not only those near a deadline. */ leadId?: string },
   today: string,
 ): Promise<LoadedApplications> {
   let appsQuery = db
@@ -223,6 +223,7 @@ export async function loadApplications(
     .is("deleted_at", null);
   if (opts.userId) appsQuery = appsQuery.eq("assigned_to", opts.userId);
   if (opts.branchId) appsQuery = appsQuery.eq("leads.branch_id", opts.branchId);
+  if (opts.leadId) appsQuery = appsQuery.eq("lead_id", opts.leadId);
   const [appsRes, submitRes, settingsRes] = await Promise.all([
     appsQuery.limit(2000),
     db.from("application_stages").select("pipeline_id, position").eq("is_submit_stage", true),
@@ -244,7 +245,7 @@ export async function loadApplications(
 
   // Documents are only looked up for applications that can fire deadline_docs (deadline inside the window).
   const last = addDaysStr(today, DEADLINE_WINDOW_DAYS);
-  const near = rows.filter((r) => r.application_deadline && r.application_deadline >= today && r.application_deadline <= last);
+  const near = opts.leadId ? rows : rows.filter((r) => r.application_deadline && r.application_deadline >= today && r.application_deadline <= last);
   const uploaded = new Map<string, Set<string>>();
   if (required.length > 0) {
     for (const ids of chunk([...new Set(near.map((r) => r.lead_id))])) {

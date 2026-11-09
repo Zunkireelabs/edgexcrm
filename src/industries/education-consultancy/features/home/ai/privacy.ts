@@ -12,7 +12,17 @@ const PASSPORT = /\b(passport(?:\s*(?:no|number|num|#))?\.?\s*[:\-]?\s*)([A-Z]{0
 // A bare passport-shaped token: 1-2 letters then 6-8 digits (e.g. PA1234567).
 const PASSPORT_SHAPE = /\b[A-Z]{1,2}\d{6,8}\b/g;
 
+// A calendar date (2026-11-15, 15/11/2026) is not a phone number: it must survive the phone strip, or "deadline 2026-11-15"
+// reaches the model as "[phone removed]". Dates are set aside, the strip runs, then they are put back.
+const DATE_LIKE = /\b(?:\d{4}-\d{2}-\d{2}|\d{1,2}[/.]\d{1,2}[/.]\d{2,4})\b/g;
+
 export function stripPrivate(text: string): string {
+  const dates: string[] = [];
+  const shielded = text.replace(DATE_LIKE, (d) => `\u0000${dates.push(d) - 1}\u0000`);
+  return strip(shielded).replace(/\u0000(\d+)\u0000/g, (_m, i: string) => dates[Number(i)]);
+}
+
+function strip(text: string): string {
   return text
     .replace(EMAIL, "[email removed]")
     .replace(URL_LIKE, "[link removed]")

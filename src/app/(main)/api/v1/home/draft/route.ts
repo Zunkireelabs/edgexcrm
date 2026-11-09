@@ -1,0 +1,111 @@
+import { NextRequest } from "next/server";
+import { authenticateRequest } from "@/lib/api/auth";
+import { apiForbidden, apiNotFound, apiSuccess, apiUnauthorized, apiValidationError } from "@/lib/api/response";
+import { getCurrentUserTenant } from "@/lib/supabase/queries";
+import { scopedClient } from "@/lib/supabase/scoped";
+import { getFeatureAccess } from "@/industries/_loader";
+import { FEATURES } from "@/industries/_registry";
+import { homeAiEnabled } from "@/industries/education-consultancy/features/home/ai/gate";
+import { draftFacts, draftNumbersOk, writeDraft } from "@/industries/education-consultancy/features/home/ai/draft";
+import { homeOverBudget, recordHomeUsage } from "@/industries/education-consultancy/features/home/ai/usage";
+import { availableChannels, defaultChannel, type DraftChannel, type DraftTone } from "@/industries/education-consultancy/features/home/lib/draft";
+import { addDaysStr, localDate } from "@/industries/education-consultancy/features/home/lib/time";
+import { loadDraftContext } from "@/industries/education-consultancy/features/home/server/draft-context";
+import { loadVisibleLead } from "@/industries/education-consultancy/features/home/server/visible-lead";
+
+const KINDS: Record<string, string> = {
+  reply_waiting: "the lead wrote to the counsellor and is waiting for a reply",
+  deadline_docs: "an application deadline is close and a required document is still missing",
+  callback_overdue: "a call-back is overdue and the last call was not answered",
+};
+const TONES = ["new", "shorter", "formal", "nepali", "retry"] as const;
+const WEEKDAY = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+// POST /api/v1/home/draft  { leadId, kind, channel?, tone?, previous?, draftId? }
+// B3 (H3): Orca drafts ONE message when the panel opens (or when the person asks for a different tone). It reads only the lead's
+// record, its application and document checklist, the last 3 notes and the last 3 messages. Nothing is sent: the person edits and
+// sends through the sendToLead seam. A draft with a number the facts don't hold, a provider failure or a timeout answers
+// `draft: null` so the panel says "Couldn't draft, write your own" and the person can still write and send.
+export async function POST(request: NextRequest) {
+  const auth = await authenticateRequest();
+  if (!auth) return apiUnauthorized();
+  if (!getFeatureAccess(auth.industryId, FEATURES.EDU_HOME)) return apiForbidden();
+
+  let body: Record<string, unknown>;
+  try {
+    body = await request.json();
+  } catch {
+    return apiValidationError({ body: ["Invalid JSON body"] });
+  }
+  const leadId = typeof body.leadId === "string" ? body.leadId : "";
+  const kind = typeof body.kind === "string" && body.kind in KINDS ? body.kind : "";
+  const tone = (TONES as readonly string[]).includes(body.tone as string) ? (body.tone as DraftTone) : "new";
+  const previous = typeof body.previous === "string" ? body.previous.slice(0, 2000) : null;
+  if (!leadId) return apiValidationError({ leadId: ["Required"] });
+  if (!kind) return apiValidationError({ kind: ["Unknown row kind"] });
+  if (tone !== "new" && !previous) return apiValidationError({ previous: ["Required to change a draft"] });
+
+  const lead = await loadVisibleLead(auth, leadId);
+  if (!lead) return apiNotFound("Lead");
+  if (!(await homeAiEnabled(auth.tenantId))) return apiSuccess({ ai: false });
+
+  const tenantData = await getCurrentUserTenant();
+  const tz = tenantData?.tenant.timezone ?? "Asia/Kathmandu";
+  const now = new Date();
+  const ctx = await loadDraftContext(auth, leadId, tz, now);
+  if (!ctx) return apiNotFound("Lead");
+
+  const facts = { hasPhone: !!ctx.lead.phone, hasGmail: !!ctx.gmail, lastReplyChannel: ctx.lastReplyChannel };
+  const channels = availableChannels(facts);
+  const requested = body.channel === "whatsapp" || body.channel === "email" ? (body.channel as DraftChannel) : null;
+  const channel = requested && channels.includes(requested) ? requested : defaultChannel(facts);
+  const base = {
+    leadId,
+    channels,
+    channel,
+    phone: ctx.lead.phone,
+    email: ctx.gmail ? { accountId: ctx.gmail.accountId, to: ctx.lead.email } : null,
+    recordsRead: ctx.recordsRead,
+    leadName: ctx.lead.fullName,
+    chips: ctx.applications[0]
+      ? { application: `${ctx.applications[0].university} · ${ctx.applications[0].program}`, deadline: ctx.applications[0].deadline, missing: ctx.applications[0].docsAssessable ? ctx.applications[0].missing : [] }
+      : null,
+  };
+  // No tab at all: the panel shows the lead's details and "Copy" only; there is nothing to draft for.
+  const db = await scopedClient(auth);
+  if (!channel) return apiSuccess({ ai: true, ...base, draft: null });
+  if (await homeOverBudget(db, auth.tenantId)) return apiSuccess({ ai: true, paused: true, ...base, draft: null });
+
+  const runId = crypto.randomUUID();
+  const counsellor = auth.email.split("@")[0].split(/[._-]/)[0] || "your counsellor";
+  const factLines = draftFacts(ctx, counsellor);
+  try {
+    const today = localDate(now, tz);
+    const { raw, usage } = await writeDraft({
+      channel,
+      tone,
+      kind: KINDS[kind],
+      facts: factLines,
+      previous,
+      todayLabel: `${WEEKDAY[new Date(`${today}T00:00:00Z`).getUTCDay()]} ${today}`,
+    });
+    await recordHomeUsage(db, { surface: "home_draft", kind: "fast", userId: auth.userId, runId, usage }).catch(() => {});
+    if (!draftNumbersOk(raw, factLines)) return apiSuccess({ ai: true, ...base, draft: null });
+
+    let draftId = typeof body.draftId === "string" ? body.draftId : null;
+    if (draftId) {
+      // A different tone / try again: the same row, so "sent as is" is judged against the version the person actually saw last.
+      await db.from("ai_drafts").update({ draft_text: raw.text, channel }).eq("id", draftId).eq("user_id", auth.userId);
+    } else {
+      const { data } = await db.from("ai_drafts").insert({ user_id: auth.userId, lead_id: leadId, surface: "home_draft", channel, draft_text: raw.text, records_read: ctx.recordsRead }).select("id").single();
+      draftId = (data as unknown as { id: string } | null)?.id ?? null;
+    }
+    return apiSuccess({
+      ai: true,
+      ...base,
+      draft: { id: draftId, text: raw.text, subject: channel === "email" ? raw.subject ?? "Following up" : null, why: raw.why, followUp: { title: raw.followUp.title, dueDate: addDaysStr(today, raw.followUp.inDays) } },
+    });
+  } catch {
+    return apiSuccess({ ai: true, ...base, draft: null });
+  }
+}

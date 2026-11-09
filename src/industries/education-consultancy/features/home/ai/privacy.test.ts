@@ -16,6 +16,10 @@ describe("stripPrivate: nothing private reaches a prompt", () => {
   ])("%s", (text, secret) => {
     expect(stripPrivate(text)).not.toContain(secret);
   });
+  it("a calendar date is not a phone number: ISO and day/month/year dates survive", () => {
+    expect(stripPrivate("Application: Deakin, deadline 2026-11-15 (6 days from today)")).toBe("Application: Deakin, deadline 2026-11-15 (6 days from today)");
+    expect(stripPrivate("closes 15/11/2026, call 9841234567")).toBe("closes 15/11/2026, call [phone removed]");
+  });
   it("keeps what is fine: names, scores, years, intake, course", () => {
     const t = "Sita wants UK, +2 in 2020, GPA 3.2, IELTS 6.5, Sept 2027 intake, BBA";
     expect(stripPrivate(t)).toBe(t);
