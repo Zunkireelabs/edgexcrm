@@ -2,7 +2,8 @@
 
 import "./home.css";
 import Link from "next/link";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import { CalendarBlankIcon, CaretDownIcon, PulseIcon, SealCheckIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -30,6 +31,19 @@ const FILTER_LABELS: Array<[DoNextFilter, string]> = [
 
 export function EducationHome({ data }: { data: HomeData }) {
   const rows = useDoNextRows({ aiNote: data.aiOn });
+  const router = useRouter();
+  // R1: Orca's read links a grouped row to `/home?open=<item key>`: open that row's own sheet once, then clear the param.
+  const openKey = useSearchParams().get("open");
+  const [seenOpen, setSeenOpen] = useState<string | null>(null);
+  if (openKey && openKey !== seenOpen) {
+    setSeenOpen(openKey);
+    if (data.doNext.items.some((i) => i.key === openKey && i.children)) rows.setSheetKey(openKey);
+  } else if (!openKey && seenOpen) {
+    setSeenOpen(null);
+  }
+  useEffect(() => {
+    if (openKey) router.replace("/home", { scroll: false });
+  }, [openKey, router]);
   const [filter, setFilter] = useState<DoNextFilter>("all");
   const [showAll, setShowAll] = useState(false);
 
@@ -58,9 +72,9 @@ export function EducationHome({ data }: { data: HomeData }) {
         {data.lede}
         {data.nextUp ? <span className="eh-nextup"> · {data.nextUp}</span> : null}
       </p>
-      {data.aiOn ? <OrcaReadCard scope="me" initial={data.read} tz={data.tz} title="Orca's read on your day" /> : null}
+      {data.aiOn ? <OrcaReadCard scope="me" initial={data.read} tz={data.tz} title="Orca's read on your day" canAsk={data.canAskOrca} /> : null}
       <div className="eh-cols">
-        <section aria-label="Do next">
+        <section id="do-next" aria-label="Do next">
           <div className="eh-sh">
             <h2>Do next</h2>
             <span className="eh-count">{counts.all}</span>
@@ -135,7 +149,7 @@ export function EducationHome({ data }: { data: HomeData }) {
             ))}
           </div>
           {data.week.length > 0 ? (
-            <div className="eh-card">
+            <div className="eh-card" id="week">
               <div className="eh-ch"><PulseIcon size={16} aria-hidden /><h3>Your last 7 days</h3></div>
               {data.week.map((m) => (
                 <div key={m.key} className="eh-met">

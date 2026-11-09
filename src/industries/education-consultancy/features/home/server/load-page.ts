@@ -12,6 +12,7 @@ import { loadMyWeek } from "./load-week";
 import { loadProcessPolicy } from "../../processes/server/policy";
 import { toHomePolicy } from "../lib/rules/ctx";
 import { homeAiEnabled } from "../ai/gate";
+import { requireOrcaAccess } from "@/lib/ai/orca-access";
 import { loadStoredRead, type StoredRead } from "./stored-read";
 
 export interface HomeData {
@@ -34,6 +35,8 @@ export interface HomeData {
   firstCalls: { working: boolean; processHref: string | null };
   /** AI is on for this tenant (env switch + tenants.ai_enabled): the call log offers the note that fills the record. */
   aiOn: boolean;
+  /** Ask Orca is owner-only for now (requireOrcaAccess): without it the read shows no Ask box, which would do nothing. */
+  canAskOrca: boolean;
   /** Today's stored Orca read for this person (B2), if one was already made. Null: the card makes it on first open. */
   read: StoredRead | null;
 }
@@ -106,6 +109,7 @@ export async function loadHome(
     nextUp: nextTimed ? nextUpLine(nextTimed) : null,
     firstCalls: { working: policy.live && policy.firstContact.clock === "working", processHref: auth.role === "owner" || auth.role === "admin" ? "/processes/new_lead_first_call" : null },
     aiOn,
+    canAskOrca: requireOrcaAccess(auth.role),
     read,
   };
 }

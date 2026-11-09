@@ -4,7 +4,7 @@ import { buildReadPrompt } from "./orca-read";
 describe("the read prompt", () => {
   const facts = [
     { id: "item:a", text: "Sujan Rai (new lead): 38 min. Call 9841234567 or mail sujan@x.com", href: "/leads/a", linkLabel: "Open →" },
-    { id: "week:calls", text: "This week, calls: 46", href: null, linkLabel: null },
+    { id: "week:calls", text: "In the last 7 days, calls: 46", href: "/home#week", linkLabel: "See why →" },
   ];
   it("strips phone numbers and emails from every fact before it reaches the model", () => {
     const { prompt, system } = buildReadPrompt("me", facts, "2026-11-09");

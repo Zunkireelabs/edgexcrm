@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildFieldPatch, buildUndoPatch, callbackFromNextStep, captureUndo, intakeWithYear, matchCatalog, noteExtractSchema, sanitizeProposals, type NoteExtractRaw } from "./note-extract";
+import { isRoleOnly, buildFieldPatch, buildUndoPatch, callbackFromNextStep, captureUndo, intakeWithYear, matchCatalog, noteExtractSchema, sanitizeProposals, type NoteExtractRaw } from "./note-extract";
 
 const NOTE = "Planning UK, +2 in 2020, GPA 3.2. IELTS 6.5 booked for Dec. Father pays, budget NPR 25 lakh. Call him wed morning";
 const NOW = new Date("2026-11-09T08:00:00.000Z"); // Nov 2026
@@ -182,5 +182,27 @@ describe("F9: Undo restores only the fields Orca wrote", () => {
   it("only ticked fields are in the snapshot: an unticked one is never restored", () => {
     const partial = captureUndo([{ field: "ielts_score", to: "6.5" }], before, buildFieldPatch([{ field: "ielts_score", to: "6.5" }], before));
     expect(partial.map((i) => i.field)).toEqual(["ielts_score"]);
+  });
+});
+
+describe("R8: Decision maker is a name; a role alone fills Relationship only", () => {
+  it("isRoleOnly", () => {
+    for (const v of ["Dad", "his father", "the uncle", "Mother", "parents"]) expect(isRoleOnly(v)).toBe(true);
+    for (const v of ["Ram Thapa", "Sita", "Uncle Ram"]) expect(isRoleOnly(v)).toBe(false);
+  });
+  it("'dad decides' saved as a name becomes Relationship: Dad, and Decision maker is not proposed", () => {
+    const note = "dad decides";
+    const r = sanitizeProposals([{ field: "sponsor_name", to: "Dad", quote: "dad decides" }], { ...ctx, note });
+    expect(r.map((x) => [x.field, x.to])).toEqual([["sponsor_relationship", "Dad"]]);
+  });
+  it("a role AND a relationship from the model: the role-only name is dropped, the relationship kept", () => {
+    const note = "father pays";
+    const r = sanitizeProposals([{ field: "sponsor_name", to: "Father", quote: "father pays" }, { field: "sponsor_relationship", to: "Father", quote: "father pays" }], { ...ctx, note });
+    expect(r.map((x) => x.field)).toEqual(["sponsor_relationship"]);
+  });
+  it("a real name stays a name", () => {
+    const note = "Ram Thapa, his uncle, pays";
+    const r = sanitizeProposals([{ field: "sponsor_name", to: "Ram Thapa", quote: "Ram Thapa" }, { field: "sponsor_relationship", to: "Uncle", quote: "his uncle" }], { ...ctx, note });
+    expect(r.map((x) => [x.field, x.to])).toEqual([["sponsor_name", "Ram Thapa"], ["sponsor_relationship", "Uncle"]]);
   });
 });

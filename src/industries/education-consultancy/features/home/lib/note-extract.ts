@@ -95,6 +95,16 @@ export function matchCatalog(value: string, list: readonly string[]): string | n
   return list.find((x) => catalogKey(x) === k) ?? null;
 }
 
+const ROLE_WORDS = new Set([
+  "father", "mother", "dad", "mom", "mum", "papa", "mama", "parent", "parents", "uncle", "aunt", "aunty", "brother", "sister", "husband", "wife",
+  "guardian", "grandfather", "grandmother", "grandpa", "grandma", "family", "relative", "sponsor", "self", "himself", "herself", "student", "he", "she",
+]);
+/** R8: "Dad", "his father", "the uncle" name nobody: a role, not a name. */
+export function isRoleOnly(value: string): boolean {
+  const words = norm(value).replace(/[^a-z\s]/g, " ").split(/\s+/).filter((w) => w && !["my", "his", "her", "their", "the", "a", "an", "of"].includes(w));
+  return words.length > 0 && words.every((w) => ROLE_WORDS.has(w));
+}
+
 export interface SanitizeCtx {
   note: string;
   current: CurrentRecord;
@@ -128,6 +138,12 @@ export function sanitizeProposals(raw: NoteExtractRaw["fields"], ctx: SanitizeCt
     if (!numbersIn(f.to).every((n) => noteNumbers.has(n.replace(",", ".")))) continue;
     let to = f.to.trim();
     let additive = false;
+    let field: NoteField = f.field;
+    // R8: Decision maker is a NAME. A role alone ("dad decides") fills Relationship only.
+    if (f.field === "sponsor_name" && isRoleOnly(to)) {
+      if (raw.some((r) => r.field === "sponsor_relationship")) continue;
+      field = "sponsor_relationship";
+    }
     if (f.field === "stage") {
       if (!ctx.nextStageName) continue;
       to = ctx.nextStageName;
@@ -145,13 +161,14 @@ export function sanitizeProposals(raw: NoteExtractRaw["fields"], ctx: SanitizeCt
       if (!t) continue;
       to = t;
     }
-    const from = ctx.current[f.field] ?? "";
+    const from = ctx.current[field] ?? "";
     if (norm(from) === norm(to)) continue;
     if (additive && from && norm(from).split(", ").includes(norm(to))) continue;
-    seen.add(f.field);
+    if (seen.has(field)) continue;
+    seen.add(field);
     out.push({
-      field: f.field,
-      label: NOTE_FIELDS[f.field].label,
+      field,
+      label: NOTE_FIELDS[field].label,
       from,
       to,
       quote: f.quote.trim(),

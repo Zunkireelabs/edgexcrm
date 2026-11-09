@@ -28,6 +28,7 @@ export function buildNotePrompt(i: NoteExtractInput): { system: string; prompt: 
     "field_of_study: choose ONLY from this list, exactly as spelled: " + i.catalogs.fieldsOfStudy.map((c) => stripPrivate(c)).join("; ") + ". If the note's country or subject is not on its list, leave the field out. " +
     "intake_term: return only the month the note names (for example \"February\"); do not add a year unless the note says one. " +
     "sponsor_name and sponsor_relationship: only when the note says who decides or who pays (for example \"father pays\", \"his uncle is funding\"). A person merely being happy, present or mentioned is not a decision maker. " +
+    "sponsor_name is an actual NAME (for example \"Ram Thapa\"): never put a role such as father, dad or uncle in it; if the note gives only a role, fill sponsor_relationship and leave sponsor_name out. " +
     "plus_two_gpa, bachelor_gpa, masters_gpa: only when the note names BOTH the level and its percentage or GPA; if it gives scores for several levels, return only the highest level. " +
     (i.nextStageName ? `Use field "stage" with any value only if the note says the lead is ready to move on (it will move to "${i.nextStageName}"). ` : "") +
     "Also read the next step: a call-back (say when, as the person said it) or an office visit, else none. " +

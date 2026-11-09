@@ -47,7 +47,7 @@ describe("runMorningReadsForTenant", () => {
     vi.clearAllMocks();
     authMock.mockResolvedValue({ userId: "u1", tenantId: "t1" });
     scopeMock.mockResolvedValue({ scope: "me", home: { mode: "own" } });
-    factsMock.mockResolvedValue([{ id: "f", text: "x", href: null, linkLabel: null }]);
+    factsMock.mockResolvedValue([{ id: "f", text: "x", href: "/home", linkLabel: "Open →" }]);
     makeReadMock.mockResolvedValue({ kind: "made", read: {} });
   });
   const wire = (homeReads: unknown[]) =>

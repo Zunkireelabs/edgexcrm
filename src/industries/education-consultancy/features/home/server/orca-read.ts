@@ -6,6 +6,7 @@ import type { TenantConfig } from "@/types/database";
 import { homeOverBudget, recordHomeUsage } from "../ai/usage";
 import { writeRead } from "../ai/orca-read";
 import { counsellorFacts, managerFacts, validatePoints, type Fact, type ReadPoint, type ReadScope } from "../lib/orca-read";
+import { leadsOfPersonHref } from "../../pulse/lib/leads-links";
 import { resolveHomeScope, type HomeScope } from "../lib/scope";
 import { localDate } from "../lib/time";
 import type { StoredRead } from "./stored-read";
@@ -29,7 +30,7 @@ export async function buildReadFacts(
   const info = { timezone: tenant.timezone, config: tenant.config };
   if (home.mode === "manager") {
     const data = await loadManagerHome(auth, { name: tenant.name, ...info }, home, "", now);
-    return managerFacts(data.needsYou, data.needsALook, data.impact.status === "ready" ? data.impact.rows : [], data.canOpenPulse);
+    return managerFacts(data.needsYou, data.needsALook, data.impact.status === "ready" ? data.impact.rows : [], data.canOpenPulse, (id) => leadsOfPersonHref(id));
   }
   const data = await loadHome(auth, info, "", now, { withRead: false });
   return counsellorFacts(data.doNext.items, data.week);

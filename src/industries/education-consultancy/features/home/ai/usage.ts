@@ -4,6 +4,8 @@ import type { ScopedClient } from "@/lib/supabase/scoped";
 
 /** Every Home model call is bounded: past this it is abandoned and the rule-based Home stays. */
 export const HOME_AI_TIMEOUT_MS = 8_000;
+/** The read runs behind a skeleton and blocks nothing; it measured up to 7 s against 8 s, and a timeout hides the card and reruns next load. */
+export const HOME_READ_TIMEOUT_MS = 20_000;
 
 export async function homeOverBudget(db: ScopedClient, tenantId: string): Promise<boolean> {
   return (await checkDailyBudget(db, tenantId)).overBudget;

@@ -25,8 +25,9 @@ async function post(body: Record<string, unknown>): Promise<{ status: number; da
  * code from the ids. Home renders at once: with no read made yet the card shows a 3-line skeleton, then fills. With AI off or
  * failing the card never appears (the parent only renders it when AI is on, and a failed read hides it).
  */
-export function OrcaReadCard({ scope, initial, tz, title }: { scope: ReadScope; initial: StoredRead | null; tz: string; title: string }) {
+export function OrcaReadCard({ scope, initial, tz, title, canAsk }: { scope: ReadScope; initial: StoredRead | null; tz: string; title: string; canAsk: boolean }) {
   const { openAssistant } = useAIAssistant();
+  const source = scope === "me" ? "from your leads, calls and tasks" : "from Pulse, leads and applications";
   const [read, setRead] = useState<StoredRead | null>(initial);
   const [state, setState] = useState<"loading" | "ready" | "paused" | "off">(initial ? "ready" : "loading");
   const [busy, setBusy] = useState(false);
@@ -69,11 +70,11 @@ export function OrcaReadCard({ scope, initial, tz, title }: { scope: ReadScope; 
   };
 
   if (state === "off") return null;
-  if (state === "paused") return <section className="eh-orca" aria-label={title}><div className="eh-orca-h"><SparkleIcon size={14} aria-hidden /><b>{title}</b></div><div className="eh-orca-note">Orca is paused until tomorrow.</div></section>;
+  if (state === "paused") return <section className="eh-orca" aria-label={title}><div className="eh-orca-h"><span className="spk"><SparkleIcon size={14} aria-hidden /></span>{title}</div><div className="eh-orca-note">Orca is paused until tomorrow.</div></section>;
   if (state === "loading") {
     return (
       <section className="eh-orca" aria-label={title} aria-busy="true">
-        <div className="eh-orca-h"><SparkleIcon size={14} aria-hidden /><b>{title}</b></div>
+        <div className="eh-orca-h"><span className="spk"><SparkleIcon size={14} aria-hidden /></span>{title}</div>
         <div className="eh-orca-sk" aria-hidden><i /><i /><i /></div>
       </section>
     );
@@ -84,33 +85,41 @@ export function OrcaReadCard({ scope, initial, tz, title }: { scope: ReadScope; 
   return (
     <section className="eh-orca" aria-label={title}>
       <div className="eh-orca-h">
-        <SparkleIcon size={14} aria-hidden />
-        <b>{title}</b>
-        <span className="when">{madeAtLabel(new Date(read.madeAt), tz)}</span>
+        <span className="spk"><SparkleIcon size={14} aria-hidden /></span>
+        {title}
+        <span className="mt">· {madeAtLabel(new Date(read.madeAt), tz)} {source}</span>
         <span className="act">
-          <button type="button" className="eh-orca-ic" onClick={refresh} disabled={busy || left === 0} aria-label={left === 0 ? "Remade 3 times today" : "Remake Orca's read"} title={left === 0 ? "Remade 3 times today" : `Remake (${left} left today)`}>
+          <button type="button" className="eh-orca-ic" aria-pressed={read.feedback === 1} onClick={() => rate(1)} aria-label="Helpful" title="Useful"><ThumbsUpIcon size={14} aria-hidden /></button>
+          <button type="button" className="eh-orca-ic" aria-pressed={read.feedback === -1} onClick={() => rate(-1)} aria-label="Not helpful" title="Not useful"><ThumbsDownIcon size={14} aria-hidden /></button>
+          <button type="button" className="eh-orca-ic" onClick={refresh} disabled={busy || left === 0} aria-label={left === 0 ? "Remade 3 times today" : "Remake Orca's read"} title={left === 0 ? "Remade 3 times today" : `Refresh (${left} left today)`}>
             <ArrowsClockwiseIcon size={14} aria-hidden />
           </button>
-          <button type="button" className="eh-orca-ic" aria-pressed={read.feedback === 1} onClick={() => rate(1)} aria-label="Helpful"><ThumbsUpIcon size={14} aria-hidden /></button>
-          <button type="button" className="eh-orca-ic" aria-pressed={read.feedback === -1} onClick={() => rate(-1)} aria-label="Not helpful"><ThumbsDownIcon size={14} aria-hidden /></button>
         </span>
       </div>
-      <ul className="eh-orca-pts">
+      <ol className="eh-orca-pts">
         {read.points.map((p, i) => (
           <li key={i}>
-            <b>{p.claim}</b> <span>{p.reason}</span>
-            {p.link ? <> <Link href={p.link.href} className="lk">{p.link.label}</Link></> : null}
+            <span className="n" aria-hidden>{i + 1}</span>
+            <span>
+              <b>{p.claim}</b> {p.reason}
+              <Link href={p.link.href} className="lk">{p.link.label}</Link>
+            </span>
           </li>
         ))}
-      </ul>
+      </ol>
       {note ? <div className="eh-orca-note" role="status">{note}</div> : null}
-      <form className="eh-orca-ask" onSubmit={(e) => { e.preventDefault(); ask(q); setQ(""); }}>
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ask Orca about your day" aria-label="Ask Orca" />
-        <button type="submit" className="eh-orca-go" aria-label="Ask" disabled={!q.trim()}><ArrowUpIcon size={14} aria-hidden /></button>
-        {ASK_CHIPS[scope].map((c) => (
-          <button key={c} type="button" className="eh-opt" onClick={() => ask(c)}>{c}</button>
-        ))}
-      </form>
+      {canAsk ? (
+        <form className="eh-orca-ask" onSubmit={(e) => { e.preventDefault(); ask(q); setQ(""); }}>
+          <span className="eh-orca-in">
+            <SparkleIcon size={14} aria-hidden />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ask Orca about your day" aria-label="Ask Orca" />
+            <button type="submit" className="eh-orca-go" aria-label="Ask" disabled={!q.trim()}><ArrowUpIcon size={12} aria-hidden /></button>
+          </span>
+          {ASK_CHIPS[scope].map((c) => (
+            <button key={c} type="button" className="eh-orca-q" onClick={() => ask(c)}>{c}</button>
+          ))}
+        </form>
+      ) : null}
     </section>
   );
 }

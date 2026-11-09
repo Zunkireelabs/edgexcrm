@@ -2,7 +2,8 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
+const nav = vi.hoisted(() => ({ search: "", replace: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: nav.replace }), useSearchParams: () => new URLSearchParams(nav.search) }));
 vi.mock("next/link", () => ({ default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => <a href={href} {...rest}>{children}</a> }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -32,7 +33,7 @@ function homeData(firstCalls: HomeData["firstCalls"]): HomeData {
   return {
     tz: "Asia/Kathmandu", greeting: "Good morning, Kamana", lede: "Sunday 8 November", dateShort: "Sun 8 Nov", doNext, agenda: [],
     week: [{ key: "first_hour", label: "New leads called within 1 working hour", value: "0 of 3", note: null, tone: "neutral" }],
-    nextStageByLead: {}, nextUp: null, aiOn: false, read: null, firstCalls,
+    nextStageByLead: {}, nextUp: null, aiOn: false, canAskOrca: false, read: null, firstCalls,
   };
 }
 
@@ -94,5 +95,35 @@ describe("T2 owner Home: Rules from your processes", () => {
     const ph = container.querySelector(".eh-wh .eh-ph");
     expect(ph?.textContent).toBe("Waiting 11 days \u00B7 target 5 min \u00B7 ");
     expect(ph?.parentElement?.textContent).toBe("Waiting 11 days \u00B7 target 5 min \u00B7 Oldest arrived 28 Oct.");
+  });
+});
+
+describe("R1: Orca's read opens a grouped row's own sheet via /home?open=<key>, once", () => {
+  const child = { key: "callback_overdue:l1", kind: "callback_overdue", tier: "now", leadId: "l1", title: "Sujan Rai", why: "", chip: { text: "2 days", tone: "bad" }, tone: "bad", primaryAction: { type: "call", leadId: "l1", phone: null, leadName: "Sujan Rai" }, sortKey: { group: 0, at: 0 }, evidenceHref: "/leads/l1" };
+  const grouped = { key: "missed_callbacks:all", kind: "missed_callbacks", tier: "now", title: "1 missed call-back", why: "", chip: { text: "1", tone: "bad" }, tone: "bad", primaryAction: { type: "sheet", label: "Call through them" }, sortKey: { group: 9, at: 0 }, evidenceHref: "/leads", children: [child] };
+  const data = () => {
+    const base = homeData({ working: false, processHref: null });
+    return { ...base, doNext: { ...base.doNext, items: [grouped] } } as unknown as HomeData;
+  };
+  it("the param opens that row's sheet and is cleared with router.replace", () => {
+    nav.search = "open=missed_callbacks%3Aall";
+    nav.replace.mockClear();
+    render(<EducationHome data={data()} />);
+    expect(screen.getByText(/Log each call and it drops off this list/)).toBeTruthy();
+    expect(nav.replace).toHaveBeenCalledWith("/home", { scroll: false });
+    nav.search = "";
+  });
+  it("no param: no sheet, nothing replaced", () => {
+    nav.search = "";
+    nav.replace.mockClear();
+    render(<EducationHome data={data()} />);
+    expect(screen.queryByText(/Log each call and it drops off this list/)).toBeNull();
+    expect(nav.replace).not.toHaveBeenCalled();
+  });
+  it("an unknown key opens nothing", () => {
+    nav.search = "open=nope";
+    render(<EducationHome data={data()} />);
+    expect(screen.queryByText(/Log each call and it drops off this list/)).toBeNull();
+    nav.search = "";
   });
 });

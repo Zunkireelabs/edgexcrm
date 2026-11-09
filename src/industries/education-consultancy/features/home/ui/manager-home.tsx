@@ -207,7 +207,7 @@ export function ManagerHome({ data }: { data: ManagerData }) {
       ))}
       <h1 className="eh-h1">{data.greeting}</h1>
       <p className="eh-lede">{data.lede}</p>
-      {data.own.aiOn ? <OrcaReadCard scope="business" initial={data.read} tz={data.tz} title={`Orca's read on ${data.branchName ?? data.shortName}`} /> : null}
+      {data.own.aiOn ? <OrcaReadCard scope="business" initial={data.read} tz={data.tz} title={`Orca's read on ${data.branchName ?? data.shortName}`} canAsk={data.own.canAskOrca} /> : null}
       <div className="eh-cols">
         <section aria-label="Needs you">
           <div className="eh-sh">
@@ -224,7 +224,7 @@ export function ManagerHome({ data }: { data: ManagerData }) {
             {needs.map((r: NeedsYouRow, idx) => {
               const Icon = ICONS[r.icon];
               return (
-                <div key={r.key} className="eh-it">
+                <div key={r.key} id={`need-${r.key}`} className="eh-it">
                   <span className={`eh-ic ${r.tone === "neutral" ? "" : r.tone}`}><Icon size={18} aria-hidden /></span>
                   <div style={{ minWidth: 0 }}>
                     <div className="eh-tl">
@@ -282,7 +282,7 @@ export function ManagerHome({ data }: { data: ManagerData }) {
         </section>
 
         <aside className="eh-side" aria-label="Needs a look and impact">
-          <div className="eh-card">
+          <div className="eh-card" id="look">
             <div className="eh-ch">
               <UsersIcon size={16} aria-hidden />
               <h3>Needs a look</h3>
@@ -329,7 +329,7 @@ export function ManagerHome({ data }: { data: ManagerData }) {
             </div>
           ) : null}
 
-          <div className="eh-card">
+          <div className="eh-card" id="impact">
             <div className="eh-ch"><TrendUpIcon size={16} aria-hidden /><h3>Is the new Home helping?</h3></div>
             <ImpactBody data={data} />
           </div>

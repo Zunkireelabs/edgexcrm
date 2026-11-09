@@ -137,27 +137,29 @@
 /* phone: a row whose actions include a text button ("Assign as suggested", "Clear them", "Call through them") puts them on their own line
    under the text (column 2 to the end), so the text column keeps the width instead of being squeezed to a few letters. Icon-only actions stay beside the text (H7). */
 @media (max-width: 767px) { .eh-it > .eh-ac.eh-ac-text { grid-column: 2 / -1; justify-content: flex-start; } }
-/* B2: Orca's read on Home. */
-.eh-orca { border: 1px solid var(--ds-ai-line); background: var(--ds-ai-soft); border-radius: var(--ds-r-md); padding: 12px 14px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 8px; }
-.eh-orca-h { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ds-ai); }
-.eh-orca-h b { font-weight: 600; }
-.eh-orca-h .when { color: var(--ds-muted); font-size: 12px; margin-left: 4px; }
-.eh-orca-h .act { margin-left: auto; display: inline-flex; gap: 2px; }
-.eh-orca-ic { width: 26px; height: 26px; border-radius: var(--ds-r-sm); display: inline-flex; align-items: center; justify-content: center; color: var(--ds-muted); background: transparent; border: 0; cursor: pointer; }
+/* B2: Orca's read on Home (matches home-v2.html .oread, scenes H1 / H5). */
+.eh-orca { border: 1px solid var(--ds-ai-line); background: var(--ds-ai-wash); border-radius: 16px; padding: 16px 18px 12px; margin-top: 20px; margin-bottom: 20px; position: relative; }
+.eh-orca-h { display: flex; align-items: center; gap: 8px; color: var(--ds-ink); font-weight: 600; font-size: 13.5px; }
+.eh-orca-h .spk { width: 22px; height: 22px; border-radius: 7px; background: var(--ds-ai-grad); display: grid; place-items: center; color: #fff; flex-shrink: 0; }
+.eh-orca-h .mt { color: var(--ds-muted); font-weight: 400; font-size: 12.5px; }
+.eh-orca-h .act { margin-left: auto; display: flex; gap: 2px; color: var(--ds-faint); }
+.eh-orca-ic { width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; color: var(--ds-faint); background: transparent; border: 0; cursor: pointer; }
 .eh-orca-ic:hover:not(:disabled) { background: var(--ds-surface); color: var(--ds-ink); }
 .eh-orca-ic[aria-pressed="true"] { color: var(--ds-ai); background: var(--ds-surface); }
 .eh-orca-ic:disabled { opacity: 0.4; cursor: default; }
-.eh-orca-pts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.eh-orca-pts li { font-size: 13.5px; color: var(--ds-text); line-height: 1.45; }
-.eh-orca-pts li b { color: var(--ds-ink); font-weight: 600; }
-.eh-orca-pts li span { color: var(--ds-muted); }
-.eh-orca-pts .lk { color: var(--ds-ai); font-weight: 500; white-space: nowrap; }
-.eh-orca-note { font-size: 12.5px; color: var(--ds-muted); }
-.eh-orca-sk { display: flex; flex-direction: column; gap: 8px; }
+.eh-orca-pts { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.eh-orca-pts li { display: flex; gap: 10px; align-items: baseline; font-size: 14px; color: var(--ds-text); line-height: 1.5; }
+.eh-orca-pts li .n { flex-shrink: 0; width: 18px; height: 18px; border-radius: 50%; background: var(--ds-surface); border: 1px solid var(--ds-ai-line); color: var(--ds-ai); font-size: 11px; font-weight: 600; display: grid; place-items: center; transform: translateY(2px); }
+.eh-orca-pts li b { color: var(--ds-ink); font-weight: 500; }
+.eh-orca-pts .lk { color: var(--ds-accent); font-weight: 500; white-space: nowrap; margin-left: 4px; }
+.eh-orca-note { font-size: 12.5px; color: var(--ds-muted); margin-top: 8px; }
+.eh-orca-sk { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
 .eh-orca-sk i { display: block; height: 12px; border-radius: 6px; background: var(--ds-ai-line); opacity: 0.6; }
 .eh-orca-sk i:nth-child(2) { width: 85%; }
 .eh-orca-sk i:nth-child(3) { width: 60%; }
-.eh-orca-ask { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.eh-orca-ask input { flex: 1 1 200px; min-width: 0; height: 30px; border: 1px solid var(--ds-border); border-radius: var(--ds-r-sm); background: var(--ds-surface); padding: 0 10px; font-size: 12.5px; color: var(--ds-ink); }
-.eh-orca-go { width: 30px; height: 30px; border-radius: 999px; border: 0; background: var(--ds-ai); color: #fff; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.eh-orca-ask { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--ds-ai-line); }
+.eh-orca-in { flex: 1 1 220px; min-width: 0; display: flex; align-items: center; gap: 8px; height: 34px; border: 1px solid var(--ds-border); border-radius: 10px; background: var(--ds-surface); padding: 0 6px 0 10px; color: var(--ds-ai); }
+.eh-orca-in input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font-size: 13px; color: var(--ds-ink); }
+.eh-orca-go { width: 24px; height: 24px; border-radius: 999px; border: 0; background: var(--ds-ai); color: #fff; display: grid; place-items: center; cursor: pointer; }
 .eh-orca-go:disabled { opacity: 0.4; cursor: default; }
+.eh-orca-q { height: 28px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--ds-border); background: var(--ds-surface); color: var(--ds-text); font-size: 12.5px; display: inline-flex; align-items: center; white-space: nowrap; cursor: pointer; }

@@ -15,7 +15,7 @@ vi.mock("@/lib/supabase/queries", () => ({ getCurrentUserTenant: async () => ({ 
 vi.mock("@/industries/education-consultancy/features/home/server/stored-read", () => ({ loadStoredRead: storedMock }));
 vi.mock("@/industries/education-consultancy/features/home/server/orca-read", () => ({
   resolveReadScope: async () => ({ scope: "me", home: { mode: "own" } }),
-  buildReadFacts: async () => [{ id: "f", text: "x", href: null, linkLabel: null }],
+  buildReadFacts: async () => [{ id: "f", text: "x", href: "/home", linkLabel: "Open →" }],
   makeRead: makeReadMock,
 }));
 vi.mock("@/lib/supabase/scoped", () => ({
@@ -23,7 +23,7 @@ vi.mock("@/lib/supabase/scoped", () => ({
 }));
 
 const req = (body: unknown) => new NextRequest("http://x/api/v1/home/read", { method: "POST", body: JSON.stringify(body) });
-const READ = { points: [{ claim: "c", reason: "r", factIds: ["f"], link: null }], madeAt: "2026-11-09T01:15:00.000Z", refreshes: 0, feedback: null };
+const READ = { points: [{ claim: "c", reason: "r", factIds: ["f"], link: { href: "/home", label: "Open →" } }], madeAt: "2026-11-09T01:15:00.000Z", refreshes: 0, feedback: null };
 
 describe("POST /api/v1/home/read", () => {
   beforeEach(() => {
