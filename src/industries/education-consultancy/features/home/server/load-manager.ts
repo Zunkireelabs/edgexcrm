@@ -9,7 +9,7 @@ import { untouchedHeldOfPersonHref, untouchedLeadsHref } from "../../pulse/lib/l
 import type { PulseResponse } from "../../pulse/lib/types";
 import { loadPulse } from "../../pulse/server/load-pulse";
 import { greeting, shortDate } from "../lib/greeting";
-import { impactRows, impactStatus, measuringSince, type ImpactRaw, type ImpactRow } from "../lib/impact";
+import { impactRows, impactStatus, measuringSince, orcaDraftsRow, type ImpactRaw, type ImpactRow } from "../lib/impact";
 import { needsALook, type NeedsALook } from "../lib/needs-a-look";
 import {
   atRiskRow,
@@ -43,6 +43,9 @@ import { buildHomePulseContext } from "./pulse-ctx";
 import { canOpenNamedList } from "@/lib/leads/master-exclusion";
 import { loadIntakeListIds, loadWorkablePlan } from "./workable";
 import { loadStoredRead, type StoredRead } from "./stored-read";
+import { loadAgentDrafts, loadOrcaDraftCounts } from "./b6";
+import { requireOrcaAccess } from "@/lib/ai/orca-access";
+import { agentDraftsRow } from "../lib/agent-drafts";
 import { applyWorkable, type WorkablePlan } from "../lib/workable";
 
 /** Beyond this many unassigned leads "Assign as suggested" is not offered (the list view does that job). */
@@ -51,8 +54,12 @@ const CHUNK = 100;
 
 export interface ImpactCard {
   status: "unset" | "measuring" | "ready";
-  /** "25 Nov", for "Measuring since 25 Nov". */
+  /** "25 Nov": when measuring started (go-live). */
   since: string | null;
+  /** "2 Dec": for "Ready on 2 Dec" (7 days after go-live), only while measuring. */
+  readyOn: string | null;
+  /** Days in the "after" window (up to 21): the card's subtitle says "Last 3 weeks" only when it is 21. */
+  afterDays: number;
   rows: ImpactRow[];
 }
 
@@ -120,16 +127,18 @@ export async function loadManagerHome(
   const [leadScope, workable, policy, intakeListIds] = await Promise.all([makeLeadScope(db, auth, scope), loadWorkablePlan(db), loadProcessPolicy(db, auth.tenantId), loadIntakeListIds(db, (l) => canOpenNamedList(auth, l))]);
   // First-hour numbers follow the live clock: 60 office minutes when the process counts working hours.
   const workingClock = policy.source !== null && policy.firstContact.clock === "working";
-  const [unassigned, former, nudges, atRisk, onLeave, impact, staleCount, quiet, untouchedHeld] = await Promise.all([
+  const [unassigned, former, nudges, atRisk, onLeave, impact, staleCount, quiet, untouchedHeld, agentDrafts] = await Promise.all([
     loadUnassigned(db, scope.branchId, workable, intakeListIds),
     loadFormerHolders(db, scope.branchId, workable),
     loadNudgeStates(db, auth.userId, now, tz),
     loadAtRisk(db, scope.branchId, today, now, tz, pulse),
     loadOnLeaveToday(db, pulse.people.filter((p) => p.flag).map((p) => p.userId), today),
-    loadImpact(db, auth.tenantId, launchedAt, scope.branchId, now, tz, workingClock),
+    loadImpact(db, auth.tenantId, launchedAt, scope.branchId, now, tz, workingClock, own.aiOn),
     countStaleCallbacks(leadScope, now, tz),
     loadQuietOverTwoWeeks(leadScope, workable, pulse.people.map((p) => p.userId), now, tz),
     loadUntouchedHeld(db, scope.branchId, intakeListIds, now),
+    // H5 row 4: only with AI on (the follow-up agent is part of Orca), and only drafts in the viewer's scope.
+    own.aiOn ? loadAgentDrafts(db, leadScope).catch(() => null) : Promise.resolve(null),
   ]);
 
   const nudgeByPerson = new Map<string, NudgeState>(nudges.map((n) => [n.toUserId, n.state]));
@@ -189,6 +198,7 @@ export async function loadManagerHome(
     formerHolderRow({ ...former, href: formerHolderHref(former.holderIds, former.activeListIds) }),
     ...standalone,
     ...attention,
+    agentDraftsRow(agentDrafts, scopeLabel, requireOrcaAccess(auth.role)),
     atRiskRow(atRisk, "/applications"),
     staleCallbacksRow(staleCount, scopeLabel),
     quietOverRow(quiet.total, quiet.byPerson.map((p) => ({ name: nameOf.get(p.userId) ?? "Someone", count: p.count })), scopeLabel, quietOverHref(workable)),
@@ -393,10 +403,10 @@ async function loadOnLeaveToday(db: HomeDb, userIds: string[], today: string): P
   return new Set(((data ?? []) as unknown as Array<{ user_id: string }>).map((r) => r.user_id));
 }
 
-async function loadImpact(db: HomeDb, tenantId: string, launchedAt: string | null, branchId: string | null, now: Date, tz: string, working = false): Promise<ImpactCard> {
+async function loadImpact(db: HomeDb, tenantId: string, launchedAt: string | null, branchId: string | null, now: Date, tz: string, working = false, orcaOn = false): Promise<ImpactCard> {
   const status = impactStatus(launchedAt, now);
-  if (status.kind === "unset") return { status: "unset", since: null, rows: [] };
-  if (status.kind === "measuring") return { status: "measuring", since: measuringSince(status.since, tz), rows: [] };
+  if (status.kind === "unset") return { status: "unset", since: null, readyOn: null, afterDays: 0, rows: [] };
+  if (status.kind === "measuring") return { status: "measuring", since: measuringSince(status.since, tz), readyOn: measuringSince(status.readyOn, tz), afterDays: 0, rows: [] };
   const call = async (w: { from: Date; to: Date }): Promise<ImpactRaw | null> => {
     const { data, error } = await db.raw().rpc("education_home_impact", {
       p_tenant: tenantId,
@@ -408,9 +418,11 @@ async function loadImpact(db: HomeDb, tenantId: string, launchedAt: string | nul
     });
     return error ? null : (data as unknown as ImpactRaw);
   };
-  const [before, after] = await Promise.all([call(status.before), call(status.after)]);
-  if (!before || !after) return { status: "measuring", since: measuringSince(status.before.to.toISOString(), tz), rows: [] };
-  return { status: "ready", since: measuringSince(status.before.to.toISOString(), tz), rows: impactRows(before, after) };
+  const [before, after, orca] = await Promise.all([call(status.before), call(status.after), orcaOn ? loadOrcaDraftCounts(db, tenantId, status.after, branchId) : Promise.resolve(null)]);
+  const since = measuringSince(status.before.to.toISOString(), tz);
+  if (!before || !after) return { status: "measuring", since, readyOn: since, afterDays: 0, rows: [] };
+  // The three speed numbers are Pulse's own maths (education_home_impact, incl. the working-hour rule); the Orca row comes from ai_drafts.
+  return { status: "ready", since, readyOn: null, afterDays: status.afterDays, rows: [...impactRows(before, after, status.afterDays), ...(orca ? [orcaDraftsRow(orca)] : [])] };
 }
 
 

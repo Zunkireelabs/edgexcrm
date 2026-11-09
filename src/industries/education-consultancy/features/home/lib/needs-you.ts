@@ -20,7 +20,7 @@ export type NeedsAction =
 export interface NeedsYouRow {
   key: string;
   tone: Tone;
-  icon: "user-plus" | "trend-down" | "file-x" | "bell" | "list-checks" | "user-switch" | "phone-x" | "snowflake";
+  icon: "user-plus" | "trend-down" | "file-x" | "bell" | "list-checks" | "user-switch" | "phone-x" | "snowflake" | "sparkle";
   title: string;
   chip: { text: string; tone: Tone } | null;
   why: string;

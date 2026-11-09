@@ -127,3 +127,47 @@ describe("R1: Orca's read opens a grouped row's own sheet via /home?open=<key>, 
     nav.search = "";
   });
 });
+
+describe("B6 on the owner Home", () => {
+  const base = (over: Record<string, unknown>) => ({
+    tz: "Asia/Kathmandu", greeting: "Good morning, Sadin", lede: "x", dateShort: "Tue 10 Nov", needsYou: [],
+    needsALook: { rows: [], others: 0 }, canOpenPulse: true, canSetLaunch: true, own: homeData({ working: true, processHref: null }), leaveWaiting: 0,
+    branchName: null, shortName: "Admizz", shadow: null, rules: null, read: null, impact: { status: "unset", since: null, readyOn: null, afterDays: 0, rows: [] }, ...over,
+  }) as unknown as ManagerData;
+  const agentRow = { key: "agent_drafts", tone: "neutral", icon: "sparkle", title: "3 drafts from Orca to approve", chip: { text: "Follow-up agent", tone: "neutral" }, why: "Written for all branches · nothing is sent until someone approves", actions: [{ type: "link", label: "Review 3", href: "/orca/review" }] };
+
+  it("the Needs-you row: count, agent chip and 'Review 3' to the agent approvals page", () => {
+    render(<ManagerHome data={base({ needsYou: [agentRow] })} />);
+    expect(screen.getByText("3 drafts from Orca to approve")).toBeTruthy();
+    expect(screen.getAllByText("Follow-up agent").length).toBeGreaterThan(0);
+    expect(screen.getByText("Review 3").closest("a")?.getAttribute("href")).toBe("/orca/review");
+  });
+  it("with no drafts the row simply isn't there", () => {
+    render(<ManagerHome data={base({ needsYou: [] })} />);
+    expect(screen.queryByText(/drafts? from Orca to approve/)).toBeNull();
+  });
+  it("within 7 days of go-live the card says 'Ready on <date>', not numbers", () => {
+    render(<ManagerHome data={base({ impact: { status: "measuring", since: "5 Nov", readyOn: "12 Nov", afterDays: 0, rows: [] } })} />);
+    expect(screen.getByText(/Ready on 12 Nov\. Measuring since 5 Nov\./)).toBeTruthy();
+  });
+  it("no launch date: the existing 'Start measuring today' button stays", () => {
+    render(<ManagerHome data={base({})} />);
+    expect(screen.getByText("Start measuring today")).toBeTruthy();
+  });
+  it("ready: the four rows with the Orca drafts line, and the subtitle follows the real window", () => {
+    const rows = [
+      { key: "first_hour", label: "New leads contacted within 1 hour", value: "71%", was: "was 52%", tone: "good" },
+      { key: "callbacks", label: "Call-backs done on the day booked", value: "84%", was: "was 61%", tone: "good" },
+      { key: "deadlines", label: "Deadlines missed", value: "0", was: "was 3 in 4 weeks", tone: "good" },
+      { key: "orca_drafts", label: "Orca drafts sent as written", value: "64%", was: "28% edited · 8% thrown away", tone: "neutral" },
+    ];
+    const { unmount } = render(<ManagerHome data={base({ impact: { status: "ready", since: "5 Nov", readyOn: null, afterDays: 21, rows } })} />);
+    expect(screen.getByText("Last 3 weeks vs the 4 weeks before it went live")).toBeTruthy();
+    expect(screen.getByText("Orca drafts sent as written")).toBeTruthy();
+    expect(screen.getByText("64%")).toBeTruthy();
+    expect(screen.getByText("28% edited · 8% thrown away")).toBeTruthy();
+    unmount();
+    render(<ManagerHome data={base({ impact: { status: "ready", since: "5 Nov", readyOn: null, afterDays: 14, rows } })} />);
+    expect(screen.getByText("Since it went live vs the 4 weeks before it went live")).toBeTruthy();
+  });
+});

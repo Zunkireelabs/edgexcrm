@@ -13,6 +13,7 @@ import {
   SnowflakeIcon,
   ListChecksIcon,
   PulseIcon,
+  SparkleIcon,
   TrendDownIcon,
   TrendUpIcon,
   TreeStructureIcon,
@@ -39,6 +40,7 @@ const ICONS = {
   "user-switch": UserSwitchIcon,
   "phone-x": PhoneXIcon,
   snowflake: SnowflakeIcon,
+  sparkle: SparkleIcon,
 } as const;
 
 async function postJson(url: string, method: string, body?: unknown): Promise<{ ok: boolean; message?: string }> {
@@ -373,10 +375,10 @@ function ImpactBody({ data }: { data: ManagerData }) {
       </div>
     );
   }
-  if (impact.status === "measuring") return <div className="eh-note">Measuring since {impact.since}.</div>;
+  if (impact.status === "measuring") return <div className="eh-note">Ready on {impact.readyOn}. Measuring since {impact.since}.</div>;
   return (
     <>
-      <div className="eh-sub">Last 3 weeks vs the 4 weeks before it went live</div>
+      <div className="eh-sub">{impact.afterDays >= 21 ? "Last 3 weeks" : "Since it went live"} vs the 4 weeks before it went live</div>
       {impact.rows.map((r) => (
         <div key={r.key} className="eh-met">
           <span className="k">{r.label}</span>
