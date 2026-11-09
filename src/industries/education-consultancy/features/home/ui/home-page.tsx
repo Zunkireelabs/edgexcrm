@@ -11,6 +11,7 @@ import { VISIBLE_LIMIT } from "../lib/rank";
 import type { DoNextFilter, DoNextTier } from "../lib/types";
 import type { HomeData } from "../server/load-page";
 import { DoNextRow, MissedCallbacksSheet, useDoNextRows } from "./do-next-row";
+import { OrcaReadCard } from "./orca-read";
 
 const TIERS: Array<{ tier: DoNextTier; title: string; desc: string }> = [
   { tier: "now", title: "Now", desc: "new leads, replies waiting, anything overdue" },
@@ -57,6 +58,7 @@ export function EducationHome({ data }: { data: HomeData }) {
         {data.lede}
         {data.nextUp ? <span className="eh-nextup"> · {data.nextUp}</span> : null}
       </p>
+      {data.aiOn ? <OrcaReadCard scope="me" initial={data.read} tz={data.tz} title="Orca's read on your day" /> : null}
       <div className="eh-cols">
         <section aria-label="Do next">
           <div className="eh-sh">

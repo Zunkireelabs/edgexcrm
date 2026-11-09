@@ -12,6 +12,7 @@ import { loadMyWeek } from "./load-week";
 import { loadProcessPolicy } from "../../processes/server/policy";
 import { toHomePolicy } from "../lib/rules/ctx";
 import { homeAiEnabled } from "../ai/gate";
+import { loadStoredRead, type StoredRead } from "./stored-read";
 
 export interface HomeData {
   /** Tenant timezone: the call log reads the picked date/time in this zone, not the browser's. */
@@ -33,6 +34,8 @@ export interface HomeData {
   firstCalls: { working: boolean; processHref: string | null };
   /** AI is on for this tenant (env switch + tenants.ai_enabled): the call log offers the note that fills the record. */
   aiOn: boolean;
+  /** Today's stored Orca read for this person (B2), if one was already made. Null: the card makes it on first open. */
+  read: StoredRead | null;
 }
 
 /** Everything the education Home needs for one person. Reads only that person's own work. */
@@ -41,7 +44,7 @@ export async function loadHome(
   tenant: { timezone: string | null; config: TenantConfig | null },
   firstName: string,
   now: Date = new Date(),
-  opts: { withWeek?: boolean } = {},
+  opts: { withWeek?: boolean; withRead?: boolean } = {},
 ): Promise<HomeData> {
   const tz = tenant.timezone ?? "Asia/Kathmandu";
   const db = await scopedClient(auth);
@@ -58,6 +61,7 @@ export async function loadHome(
     opts.withWeek === false ? Promise.resolve([] as WeekMetric[]) : loadMyWeek(auth, db, tz, tenant.config, now, policy).catch(() => [] as WeekMetric[]),
     homeAiEnabled(auth.tenantId),
   ]);
+  const read = aiOn && opts.withRead !== false ? await loadStoredRead(db, auth.userId, "me", today).catch(() => null) : null;
   const leadNames = new Map(leads.map((l) => [l.id, l.name]));
   const conversations = await loadMyConversations(db, auth.userId, leadNames);
 
@@ -102,6 +106,7 @@ export async function loadHome(
     nextUp: nextTimed ? nextUpLine(nextTimed) : null,
     firstCalls: { working: policy.live && policy.firstContact.clock === "working", processHref: auth.role === "owner" || auth.role === "admin" ? "/processes/new_lead_first_call" : null },
     aiOn,
+    read,
   };
 }
 

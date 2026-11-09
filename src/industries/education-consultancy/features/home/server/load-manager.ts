@@ -42,6 +42,7 @@ import { loadHome } from "./load-page";
 import { buildHomePulseContext } from "./pulse-ctx";
 import { canOpenNamedList } from "@/lib/leads/master-exclusion";
 import { loadIntakeListIds, loadWorkablePlan } from "./workable";
+import { loadStoredRead, type StoredRead } from "./stored-read";
 import { applyWorkable, type WorkablePlan } from "../lib/workable";
 
 /** Beyond this many unassigned leads "Assign as suggested" is not offered (the list view does that job). */
@@ -67,8 +68,12 @@ export interface ManagerData {
   impact: ImpactCard;
   canSetLaunch: boolean;
   own: HomeData;
+  /** Today's stored Orca read on the business (B2), if already made. */
+  read: StoredRead | null;
   leaveWaiting: number;
   branchName: string | null;
+  /** The business's short name ("Admizz"), for "Orca's read on Admizz". */
+  shortName: string;
   /** Shadow mode: how often smart assignment agreed with the managers (owner/admin only). */
   shadow: ShadowCard | null;
   /** "Rules from your processes" (T2): owner/admin only. */
@@ -104,7 +109,7 @@ export async function loadManagerHome(
 
   const [pulse, own, leaveSummary, launchedAt] = await Promise.all([
     loadPulse(ctx),
-    loadHome(auth, { timezone: tenant.timezone, config: tenant.config }, firstName, now, { withWeek: false }),
+    loadHome(auth, { timezone: tenant.timezone, config: tenant.config }, firstName, now, { withWeek: false, withRead: false }),
     getLeaveForHome(auth.tenantId, auth.userId, canManageHR(auth.permissions)),
     loadLaunchDate(db),
   ]);
@@ -202,8 +207,10 @@ export async function loadManagerHome(
     impact,
     canSetLaunch: isAdmin,
     own,
+    read: own.aiOn ? await loadStoredRead(db, auth.userId, "business", today).catch(() => null) : null,
     leaveWaiting: leaveSummary.pendingLeaveApprovals,
     branchName,
+    shortName,
     shadow: assignment.shadow,
     rules: isAdmin ? buildRulesCard(policy, assignmentMode, tz) : null,
   };

@@ -26,6 +26,7 @@ import { sliceAssignments, type NeedsAction, type NeedsYouRow } from "../lib/nee
 import { rankItems } from "../lib/rank";
 import type { ManagerData } from "../server/load-manager";
 import { DoNextRow, MissedCallbacksSheet, useDoNextRows } from "./do-next-row";
+import { OrcaReadCard } from "./orca-read";
 
 const ICONS = {
   "user-plus": UserPlusIcon,
@@ -206,6 +207,7 @@ export function ManagerHome({ data }: { data: ManagerData }) {
       ))}
       <h1 className="eh-h1">{data.greeting}</h1>
       <p className="eh-lede">{data.lede}</p>
+      {data.own.aiOn ? <OrcaReadCard scope="business" initial={data.read} tz={data.tz} title={`Orca's read on ${data.branchName ?? data.shortName}`} /> : null}
       <div className="eh-cols">
         <section aria-label="Needs you">
           <div className="eh-sh">

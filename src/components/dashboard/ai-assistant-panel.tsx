@@ -17,7 +17,7 @@ interface AIAssistantPanelProps {
 }
 
 export function AIAssistantPanel({ userFirstName }: AIAssistantPanelProps) {
-  const { isOpen, closeAssistant } = useAIAssistant();
+  const { isOpen, closeAssistant, prefill } = useAIAssistant();
   const [isExpanded, setIsExpanded] = useState(false);
   // Lazy initializer — the id itself is never rendered, so an SSR/client
   // mismatch in its VALUE doesn't cause a hydration error.
@@ -97,6 +97,7 @@ export function AIAssistantPanel({ userFirstName }: AIAssistantPanelProps) {
             initialMessages={initialMessages}
             userFirstName={userFirstName}
             onConversationId={setConversationId}
+            prefill={prefill}
           />
         </div>
       </div>
@@ -109,9 +110,10 @@ interface AssistantPanelThreadProps {
   initialMessages: AssistantUIMessage[];
   userFirstName?: string;
   onConversationId: (id: string) => void;
+  prefill: { text: string; nonce: number } | null;
 }
 
-function AssistantPanelThread({ conversationId, initialMessages, userFirstName, onConversationId }: AssistantPanelThreadProps) {
+function AssistantPanelThread({ conversationId, initialMessages, userFirstName, onConversationId, prefill }: AssistantPanelThreadProps) {
   const { messages, status, error, disabled, hasPendingApproval, retry, send, approveTool, denyTool } = useAssistantChat({
     id: conversationId,
     initialMessages,
@@ -148,6 +150,7 @@ function AssistantPanelThread({ conversationId, initialMessages, userFirstName, 
       </div>
       <ChatInput
         onSend={send}
+        prefill={prefill}
         disabled={status === "submitted" || status === "streaming" || hasPendingApproval}
         disabledHint={hasPendingApproval ? "Approve or deny the pending action to continue" : undefined}
       />
