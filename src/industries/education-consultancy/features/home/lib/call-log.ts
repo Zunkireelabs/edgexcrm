@@ -30,6 +30,12 @@ const API_OUTCOME: Record<CallOutcomeChoice, "connected" | "no_answer" | "busy" 
   not_interested: "connected",
 };
 
+/** The fields the person ticked from Orca's suggestions (B1). Sent through /home/note-save so the edit is stamped ai_suggested. */
+export interface AiNoteSave {
+  draftId: string | null;
+  fields: Array<{ field: string; to: string }>;
+}
+
 export interface CallLogInput {
   leadId: string;
   outcome: CallOutcomeChoice;
@@ -38,6 +44,8 @@ export interface CallLogInput {
   /** Destination list id for "Move to next stage", or null. */
   nextListId: string | null;
   note: string;
+  /** Present only when AI is on and the person ticked at least one suggested field. */
+  ai?: AiNoteSave;
 }
 
 export interface PlannedRequest {
@@ -63,6 +71,16 @@ export function planCallLogSave(i: CallLogInput): PlannedRequest[] {
   const note = i.note.trim();
   if (note) {
     plan.push({ step: "note", method: "POST", url: `/api/v1/leads/${i.leadId}/notes`, body: { content: note } });
+  }
+  if (i.ai && i.ai.fields.length > 0) {
+    // One request carries the ticked fields, the call-back and the stage move; still AFTER the activity + note inserts.
+    plan.push({
+      step: "lead",
+      method: "POST",
+      url: "/api/v1/home/note-save",
+      body: { leadId: i.leadId, draftId: i.ai.draftId, fields: i.ai.fields, callbackAt: i.callbackAt, nextListId: i.nextListId },
+    });
+    return plan;
   }
   const patch: Record<string, unknown> = {};
   if (i.callbackAt) patch.callback_due_at = i.callbackAt;

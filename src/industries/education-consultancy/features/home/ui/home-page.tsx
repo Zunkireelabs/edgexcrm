@@ -28,7 +28,7 @@ const FILTER_LABELS: Array<[DoNextFilter, string]> = [
 ];
 
 export function EducationHome({ data }: { data: HomeData }) {
-  const rows = useDoNextRows();
+  const rows = useDoNextRows({ aiNote: data.aiOn });
   const [filter, setFilter] = useState<DoNextFilter>("all");
   const [showAll, setShowAll] = useState(false);
 

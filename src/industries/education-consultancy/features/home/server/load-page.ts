@@ -11,6 +11,7 @@ import { loadMyApplications, loadMyConversations, loadMyLeads, loadMyTasks, load
 import { loadMyWeek } from "./load-week";
 import { loadProcessPolicy } from "../../processes/server/policy";
 import { toHomePolicy } from "../lib/rules/ctx";
+import { homeAiEnabled } from "../ai/gate";
 
 export interface HomeData {
   /** Tenant timezone: the call log reads the picked date/time in this zone, not the browser's. */
@@ -30,6 +31,8 @@ export interface HomeData {
    * get it (a counsellor gets a 404 on /processes), so everyone else sees the text without the link.
    */
   firstCalls: { working: boolean; processHref: string | null };
+  /** AI is on for this tenant (env switch + tenants.ai_enabled): the call log offers the note that fills the record. */
+  aiOn: boolean;
 }
 
 /** Everything the education Home needs for one person. Reads only that person's own work. */
@@ -46,13 +49,14 @@ export async function loadHome(
 
   // The live New-lead process as numbers. Never throws: any failure is today's values (source null).
   const policy = toHomePolicy(await loadProcessPolicy(db, auth.tenantId));
-  const [{ leads, nextStageByLead }, tasks, apps, snoozed, schedule, week] = await Promise.all([
+  const [{ leads, nextStageByLead }, tasks, apps, snoozed, schedule, week, aiOn] = await Promise.all([
     loadMyLeads(db, auth.tenantId, auth.userId),
     loadMyTasks(db, auth.userId, today),
     loadMyApplications(db, auth.userId, today),
     loadSnoozedKeys(db, auth.userId, now),
     getMySchedule(auth.tenantId, auth.userId),
     opts.withWeek === false ? Promise.resolve([] as WeekMetric[]) : loadMyWeek(auth, db, tz, tenant.config, now, policy).catch(() => [] as WeekMetric[]),
+    homeAiEnabled(auth.tenantId),
   ]);
   const leadNames = new Map(leads.map((l) => [l.id, l.name]));
   const conversations = await loadMyConversations(db, auth.userId, leadNames);
@@ -97,6 +101,7 @@ export async function loadHome(
     nextStageByLead,
     nextUp: nextTimed ? nextUpLine(nextTimed) : null,
     firstCalls: { working: policy.live && policy.firstContact.clock === "working", processHref: auth.role === "owner" || auth.role === "admin" ? "/processes/new_lead_first_call" : null },
+    aiOn,
   };
 }
 

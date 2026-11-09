@@ -3,7 +3,7 @@
 import "./home.css";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   ArrowBendUpLeftIcon,
@@ -20,6 +20,7 @@ import {
   PhoneSlashIcon,
   PhoneXIcon,
   SnowflakeIcon,
+  SparkleIcon,
   UserPlusIcon,
   WhatsappLogoIcon,
 } from "@/components/icons";
@@ -64,31 +65,99 @@ async function send(req: PlannedRequest) {
   }
 }
 
-/** The inline call log (H4 without the note box). Writes through the existing endpoints, in a fixed order (see call-log.ts). */
-function CallLog({ item, nextStage, tz, onSaved }: { item: DoNextItem; nextStage: { id: string; name: string } | null; tz: string; onSaved: () => void }) {
+interface AiProposal { field: string; label: string; from: string; to: string; quote: string }
+interface AiState { status: "idle" | "loading" | "done"; draftId: string | null; proposals: AiProposal[]; nextKind: "call_back" | "office_visit" | "none" }
+const AI_IDLE: AiState = { status: "idle", draftId: null, proposals: [], nextKind: "none" };
+const NOTE_IDLE_MS = 1500;
+const NOTE_MIN_CHARS = 8;
+
+/** An instant as the `datetime-local` value in the tenant's zone (the inverse of tenantLocalToIso). */
+function isoToTenantLocal(iso: string, tz: string): string {
+  return new Date(iso).toLocaleString("sv-SE", { timeZone: tz }).slice(0, 16).replace(" ", "T");
+}
+
+/**
+ * The inline call log (H4). Writes through the existing endpoints, in a fixed order (see call-log.ts). With AI on, after
+ * "Talked" the note box reads the note and ticks the record fields Orca found; Save writes the note, the ticked fields, the
+ * stage move and the call-back. With AI off or failing it is exactly the two-click version.
+ */
+function CallLog({ item, nextStage, tz, aiNote, onSaved }: { item: DoNextItem; nextStage: { id: string; name: string } | null; tz: string; aiNote: boolean; onSaved: () => void }) {
   const [outcome, setOutcome] = useState<CallOutcomeChoice>("talked");
   const [wantCallback, setWantCallback] = useState(false);
   const [callbackAt, setCallbackAt] = useState("");
   const [moveNext, setMoveNext] = useState(false);
   const [wantNote, setWantNote] = useState(false);
   const [note, setNote] = useState("");
+  const [officeVisit, setOfficeVisit] = useState(false);
+  const [ai, setAi] = useState<AiState>(AI_IDLE);
+  const [ticked, setTicked] = useState<ReadonlySet<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  if (item.primaryAction.type !== "call") return null;
-  const { leadId, leadName } = item.primaryAction;
+  const reqId = useRef(0);
+  const lastRead = useRef("");
+  const idle = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const aiBox = aiNote && outcome === "talked";
+  const leadId = item.primaryAction.type === "call" ? item.primaryAction.leadId : "";
+
+  const readNote = async (text: string) => {
+    const t = text.trim();
+    if (!aiBox || t.length < NOTE_MIN_CHARS || t === lastRead.current) return;
+    lastRead.current = t;
+    const mine = ++reqId.current;
+    setAi({ ...AI_IDLE, status: "loading" });
+    try {
+      const res = await fetch("/api/v1/home/note-extract", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ leadId, note: t, nextStageName: nextStage?.name ?? null }) });
+      const j = (await res.json().catch(() => null)) as { data?: { ai: boolean; draftId?: string | null; proposals?: AiProposal[]; callbackAt?: string | null; nextKind?: AiState["nextKind"] } } | null;
+      if (mine !== reqId.current) return; // the note changed, or Save ran: this answer is stale
+      const d = j?.data;
+      if (!res.ok || !d?.ai) return setAi(AI_IDLE);
+      const proposals = d.proposals ?? [];
+      setAi({ status: "done", draftId: d.draftId ?? null, proposals, nextKind: d.nextKind ?? "none" });
+      setTicked(new Set(proposals.map((p) => p.field)));
+      setMoveNext(proposals.some((p) => p.field === "stage"));
+      if (d.callbackAt) {
+        setWantCallback(true);
+        setCallbackAt(isoToTenantLocal(d.callbackAt, tz));
+      }
+      setOfficeVisit(d.nextKind === "office_visit");
+    } catch {
+      if (mine === reqId.current) setAi(AI_IDLE);
+    }
+  };
+  useEffect(() => () => { if (idle.current) clearTimeout(idle.current); }, []);
+  const onNoteChange = (v: string) => {
+    setNote(v);
+    if (idle.current) clearTimeout(idle.current);
+    if (aiBox) idle.current = setTimeout(() => void readNote(v), NOTE_IDLE_MS);
+  };
+
+  const toggleTick = (field: string) => {
+    setTicked((cur) => {
+      const next = new Set(cur);
+      if (next.has(field)) next.delete(field);
+      else next.add(field);
+      return next;
+    });
+    if (field === "stage") setMoveNext((v) => !v);
+  };
 
   const save = async () => {
     setError(null);
     if (wantCallback && !callbackAt) return setError("Pick a date and time for the call-back.");
     const callbackIso = wantCallback ? tenantLocalToIso(callbackAt, tz) : null;
     if (wantCallback && !callbackIso) return setError("That date and time isn't valid.");
+    reqId.current++; // an answer still on its way is stale from here
+    if (idle.current) clearTimeout(idle.current);
     setSaving(true);
+    const noteText = aiBox || wantNote ? note.trim() : "";
+    const fields = ai.status === "done" ? ai.proposals.filter((p) => p.field !== "stage" && ticked.has(p.field)).map((p) => ({ field: p.field, to: p.to })) : [];
     const plan = planCallLogSave({
       leadId,
       outcome,
       callbackAt: callbackIso,
       nextListId: moveNext && nextStage ? nextStage.id : null,
-      note: wantNote ? note : "",
+      note: officeVisit && aiBox ? `${noteText}${noteText ? "\n\n" : ""}Next step: office visit.` : noteText,
+      ai: fields.length ? { draftId: ai.draftId, fields } : undefined,
     });
     const r = await runPlan(plan, send);
     setSaving(false);
@@ -101,6 +170,10 @@ function CallLog({ item, nextStage, tz, onSaved }: { item: DoNextItem; nextStage
     onSaved();
   };
 
+  if (item.primaryAction.type !== "call") return null;
+  const { leadName } = item.primaryAction;
+  const shown = ai.status === "done" ? ai.proposals : [];
+
   return (
     <div className="eh-log">
       <div className="q">How did the call with {leadName} go?</div>
@@ -112,6 +185,29 @@ function CallLog({ item, nextStage, tz, onSaved }: { item: DoNextItem; nextStage
           </button>
         ))}
       </div>
+      {aiBox ? (
+        <>
+          <div className="q">Your note (type it the way you&apos;d say it)</div>
+          <textarea aria-label="Your note" value={note} onChange={(e) => onNoteChange(e.target.value)} onBlur={() => { if (idle.current) clearTimeout(idle.current); void readNote(note); }} placeholder="Planning UK, +2 in 2020, IELTS in December, father pays, call back Wednesday morning" />
+          {ai.status === "loading" ? <div className="eh-ai-note" aria-live="polite">Orca is reading your note...</div> : null}
+          {shown.length > 0 ? (
+            <div className="eh-ai" role="group" aria-label="Orca's suggestions">
+              <div className="eh-ai-h"><SparkleIcon size={14} aria-hidden /> Orca filled in {leadName.split(" ")[0]}&apos;s record from your note <span>untick anything wrong</span></div>
+              {shown.map((p) => (
+                <label key={p.field} className="eh-ai-row">
+                  <input type="checkbox" checked={ticked.has(p.field)} onChange={() => toggleTick(p.field)} />
+                  <span className="k">{p.label}</span>
+                  <span className="v">
+                    {p.from ? <><s>{p.from}</s> {"\u2192"} </> : null}
+                    <b>{p.to}</b>
+                  </span>
+                  <span className="qt">&ldquo;{p.quote}&rdquo;</span>
+                </label>
+              ))}
+            </div>
+          ) : null}
+        </>
+      ) : null}
       <div className="q">Next step</div>
       <div className="eh-opts">
         <button type="button" className="eh-opt" aria-pressed={wantCallback} onClick={() => setWantCallback((v) => !v)}>
@@ -123,21 +219,28 @@ function CallLog({ item, nextStage, tz, onSaved }: { item: DoNextItem; nextStage
             <span className="eh-wh" style={{ margin: 0 }}>{tz.replace(/^.*\//, "").replace(/_/g, " ")} time</span>
           </>
         ) : null}
+        {aiBox ? (
+          <button type="button" className="eh-opt" aria-pressed={officeVisit} onClick={() => setOfficeVisit((v) => !v)}>
+            Book an office visit
+          </button>
+        ) : null}
         {nextStage ? (
-          <button type="button" className="eh-opt" aria-pressed={moveNext} onClick={() => setMoveNext((v) => !v)}>
+          <button type="button" className="eh-opt" aria-pressed={moveNext} onClick={() => { setMoveNext((v) => !v); if (shown.some((p) => p.field === "stage")) toggleTick("stage"); }}>
             Move to {nextStage.name}
           </button>
         ) : null}
-        <button type="button" className="eh-opt" aria-pressed={wantNote} onClick={() => setWantNote((v) => !v)}>
-          Add a note
-        </button>
+        {aiBox ? null : (
+          <button type="button" className="eh-opt" aria-pressed={wantNote} onClick={() => setWantNote((v) => !v)}>
+            Add a note
+          </button>
+        )}
         <span style={{ marginLeft: "auto" }}>
           <Button look="v2" variant="primary" size="sm" onClick={save} disabled={saving}>
             {saving ? "Saving" : "Save"}
           </Button>
         </span>
       </div>
-      {wantNote ? <textarea aria-label="Note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="What was said?" /> : null}
+      {!aiBox && wantNote ? <textarea aria-label="Note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="What was said?" /> : null}
       {error ? <div className="eh-err" role="alert">{error}</div> : null}
     </div>
   );
@@ -198,7 +301,7 @@ function RowAction({ item, onCall, onDone, onSheet, busy }: { item: DoNextItem; 
 
 
 /** Row state shared by every list that shows Do-next rows (the counsellor Home and a manager's own to-dos). */
-export function useDoNextRows() {
+export function useDoNextRows(opts: { aiNote?: boolean } = {}) {
   const router = useRouter();
   const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
   const [openLog, setOpenLog] = useState<string | null>(null);
@@ -221,7 +324,7 @@ export function useDoNextRows() {
     hide(item.key);
     router.refresh();
   };
-  return { router, hidden, openLog, setOpenLog, busy, snooze, markDone, sheetKey, setSheetKey };
+  return { router, hidden, openLog, setOpenLog, busy, snooze, markDone, sheetKey, setSheetKey, aiNote: opts.aiNote === true };
 }
 export type DoNextRows = ReturnType<typeof useDoNextRows>;
 
@@ -258,7 +361,7 @@ export function DoNextRow({ item, nextStage, tz, rows }: { item: DoNextItem; nex
         </div>
       </div>
       {rows.openLog === item.key && item.primaryAction.type === "call" ? (
-        <CallLog item={item} nextStage={nextStage} tz={tz} onSaved={() => { rows.setOpenLog(null); rows.router.refresh(); }} />
+        <CallLog item={item} nextStage={nextStage} tz={tz} aiNote={rows.aiNote} onSaved={() => { rows.setOpenLog(null); rows.router.refresh(); }} />
       ) : null}
     </div>
   );

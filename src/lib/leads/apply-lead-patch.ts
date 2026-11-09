@@ -120,6 +120,12 @@ export interface ApplyLeadPatchOpts {
    * (permissions, chain-of-custody, list routing, collaborators of the NEW assignee) is identical to a human edit.
    */
   systemActor?: { key: string; label: string; decisionId: string };
+  /**
+   * The values in this patch were proposed by Orca and the person ticked them (Home Part B, B1). Stamped on the AUDIT row only
+   * as `ai_suggested`, the same way `via` is, so the timeline can say so and undo's `previousValues` is untouched. Does not
+   * change permissions or who is notified.
+   */
+  aiSuggested?: boolean;
   /** Wording for the notification the PREVIOUS assignee gets when this patch takes the lead off them (default: "reassigned to someone else"). */
   previousHolderNotice?: (leadName: string) => { title: string; message: string };
 }
@@ -155,7 +161,7 @@ export async function applyLeadPatch(
   rawBody: Record<string, unknown>,
   opts: ApplyLeadPatchOpts,
 ): Promise<ApplyLeadPatchOutcome> {
-  const { requestId, ip, userAgent, systemActor } = opts;
+  const { requestId, ip, userAgent, systemActor, aiSuggested } = opts;
   const body: Record<string, unknown> = { ...rawBody };
 
   // Country-aware phone format check — education_consultancy only, format-only
@@ -1131,7 +1137,11 @@ export async function applyLeadPatch(
           entityType: "lead",
           entityId: leadId,
           // `via` / `decision_id` are added to the AUDIT row only (not to `changes`, which feeds undo's previousValues).
-          changes: systemActor ? { ...changes, via: { old: null, new: systemActor.key }, decision_id: { old: null, new: systemActor.decisionId } } : changes,
+          changes: {
+            ...changes,
+            ...(systemActor ? { via: { old: null, new: systemActor.key }, decision_id: { old: null, new: systemActor.decisionId } } : {}),
+            ...(aiSuggested ? { ai_suggested: { old: null, new: true } } : {}),
+          },
           ipAddress: ip,
           userAgent,
           requestId,

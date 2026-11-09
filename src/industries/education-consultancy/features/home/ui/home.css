@@ -49,6 +49,16 @@
 .eh-log input[type="datetime-local"], .eh-log textarea { border: 1px solid var(--ds-border); border-radius: var(--ds-r-sm); background: var(--ds-surface); font-size: 12.5px; color: var(--ds-ink); padding: 4px 8px; }
 .eh-log textarea { width: 100%; min-height: 60px; resize: vertical; }
 .eh-err { color: var(--ds-bad); font-size: 12.5px; }
+/* B1: the note that fills the record. */
+.eh-ai-note { font-size: 12.5px; color: var(--ds-ai); }
+.eh-ai { border: 1px solid var(--ds-ai-line); background: var(--ds-ai-soft); border-radius: var(--ds-r-md); padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.eh-ai-h { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--ds-ai); }
+.eh-ai-h span { margin-left: auto; font-weight: 400; color: var(--ds-muted); }
+.eh-ai-row { display: grid; grid-template-columns: auto 120px minmax(0, 1fr); gap: 2px 10px; align-items: baseline; font-size: 12.5px; cursor: pointer; }
+.eh-ai-row .k { color: var(--ds-muted); }
+.eh-ai-row .v { color: var(--ds-ink); }
+.eh-ai-row .v s { color: var(--ds-faint); }
+.eh-ai-row .qt { grid-column: 3; color: var(--ds-muted); font-size: 12px; font-style: italic; }
 /* right column */
 .eh-card { border: 1px solid var(--ds-border); border-radius: var(--ds-r-md); background: var(--ds-surface); padding: 14px 14px 10px; }
 .eh-card + .eh-card { margin-top: 16px; }

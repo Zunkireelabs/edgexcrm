@@ -21,6 +21,15 @@ describe("planCallLogSave", () => {
     const [a] = planCallLogSave({ ...base, outcome: "not_interested" });
     expect(a.body).toMatchObject({ call_outcome: "connected", subject: "Call: not interested" });
   });
+  it("ticked AI fields go in ONE note-save request, still AFTER the activity and the note", () => {
+    const plan = planCallLogSave({ ...base, note: "father pays", callbackAt: "2026-11-11T05:15:00.000Z", nextListId: "list-2", ai: { draftId: "d1", fields: [{ field: "sponsor_name", to: "Father" }] } });
+    expect(plan.map((p) => p.step)).toEqual(["activity", "note", "lead"]);
+    expect(plan[2]).toMatchObject({ method: "POST", url: "/api/v1/home/note-save", body: { leadId: "L1", draftId: "d1", fields: [{ field: "sponsor_name", to: "Father" }], callbackAt: "2026-11-11T05:15:00.000Z", nextListId: "list-2" } });
+  });
+  it("AI on but nothing ticked is today's plain PATCH", () => {
+    const plan = planCallLogSave({ ...base, callbackAt: "2026-11-11T05:15:00.000Z", ai: { draftId: "d1", fields: [] } });
+    expect(plan[1]).toMatchObject({ method: "PATCH", url: "/api/v1/leads/L1" });
+  });
   it("a blank note is not sent", () => {
     expect(planCallLogSave({ ...base, note: "   " }).map((p) => p.step)).toEqual(["activity"]);
   });

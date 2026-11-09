@@ -1192,3 +1192,34 @@ describe("applyLeadPatch — systemActor (smart assignment runs as the owner but
     expect((createNotificationsExceptMock.mock.calls[0] as unknown[])[0]).toBe("owner-1");
   });
 });
+
+describe("applyLeadPatch — aiSuggested (Orca proposed it, the person ticked it)", () => {
+  const LEAD = { id: "lead-1", pipeline_id: "pipe-1", assigned_to: null, branch_id: null, list_id: null, first_name: "Sujan", last_name: "Rai", email: null, ielts_score: null };
+  const ownerAuth = () => fixtureAuth({ userId: "owner-1", email: "owner@x.com", role: "owner", permissions: { baseTier: "owner", leadScope: "all", canAssignLeads: true } as ResolvedPermissions });
+
+  beforeEach(() => createAuditLogMock.mockClear());
+
+  it("stamps ai_suggested on the AUDIT row only: the returned changes and undo's previousValues do not carry it", async () => {
+    await setFakeDb({ leads: LEAD, tenantUsers: {} });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(ownerAuth(), "lead-1", { ielts_score: "6.5" }, { ...OPTS, aiSuggested: true });
+    expect(outcome.kind).toBe("ok");
+    await new Promise((r) => setTimeout(r, 0));
+    const audit = createAuditLogMock.mock.calls.map((c) => (c as unknown[])[0] as unknown as { changes: Record<string, unknown> }).find((a) => a.changes.ielts_score);
+    expect(audit?.changes.ai_suggested).toEqual({ old: null, new: true });
+    if (outcome.kind === "ok") {
+      expect(outcome.changes.ai_suggested).toBeUndefined();
+      expect(outcome.previousValues.ai_suggested).toBeUndefined();
+      expect(Object.keys(outcome.previousValues)).toEqual(["ielts_score"]);
+    }
+  });
+
+  it("a normal edit has no ai_suggested stamp", async () => {
+    await setFakeDb({ leads: LEAD, tenantUsers: {} });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    await applyLeadPatch(ownerAuth(), "lead-1", { ielts_score: "6.5" }, OPTS);
+    await new Promise((r) => setTimeout(r, 0));
+    const audit = createAuditLogMock.mock.calls.map((c) => (c as unknown[])[0] as unknown as { changes: Record<string, unknown> }).find((a) => a.changes.ielts_score);
+    expect(audit?.changes.ai_suggested).toBeUndefined();
+  });
+});

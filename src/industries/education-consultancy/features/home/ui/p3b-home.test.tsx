@@ -32,7 +32,7 @@ function homeData(firstCalls: HomeData["firstCalls"]): HomeData {
   return {
     tz: "Asia/Kathmandu", greeting: "Good morning, Kamana", lede: "Sunday 8 November", dateShort: "Sun 8 Nov", doNext, agenda: [],
     week: [{ key: "first_hour", label: "New leads called within 1 working hour", value: "0 of 3", note: null, tone: "neutral" }],
-    nextStageByLead: {}, nextUp: null, firstCalls,
+    nextStageByLead: {}, nextUp: null, aiOn: false, firstCalls,
   };
 }
 

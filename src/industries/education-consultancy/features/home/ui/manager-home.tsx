@@ -187,7 +187,7 @@ function ClearStale({ action, onDone }: { action: Extract<NeedsAction, { type: "
 
 export function ManagerHome({ data }: { data: ManagerData }) {
   const router = useRouter();
-  const rows = useDoNextRows();
+  const rows = useDoNextRows({ aiNote: data.own.aiOn });
   const [gone, setGone] = useState<ReadonlySet<string>>(new Set());
   const [ownOpen, setOwnOpen] = useState(false);
 
