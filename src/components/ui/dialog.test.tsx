@@ -70,6 +70,18 @@ describe("DialogContent size", () => {
   });
 });
 
+describe("header + footer only (no body blocks)", () => {
+  it("has a rule that puts the footer right under the header", () => {
+    open();
+    expect(document.querySelector("[data-slot=dialog-scroll]")!.className).toContain(
+      "[&>[data-slot=dialog-header]+[data-slot=dialog-footer]]:mt-0",
+    );
+  });
+  it("footer buttons force their radius (a consumer rounded-full cannot survive)", () => {
+    expect(DIALOG_FOOTER).toContain("[&_[data-slot=button]]:rounded-[9px]!");
+  });
+});
+
 describe("form size", () => {
   it("is 808 wide, anchored at 14vh, with a fixed 70vh card, a 44px header and a 44px footer with 28px buttons", () => {
     open({ size: "form" });

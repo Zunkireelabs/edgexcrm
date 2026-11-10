@@ -9,7 +9,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
 
@@ -73,7 +72,7 @@ function CommandInput({
       <CommandPrimitive.Input
         data-slot="command-input"
         // inline so no inherited input font rule can win: 14/20, weight 500
-        style={{ fontSize: 14, lineHeight: "20px", fontWeight: 500 }}
+        style={{ fontSize: 14, lineHeight: "20px", fontWeight: 500, caretColor: "var(--ds-accent)" }}
         className={cn(
           "flex h-5 w-full rounded-[8px] bg-transparent py-0 text-sm leading-5 font-medium text-ds-ink outline-hidden placeholder:text-black/50 disabled:cursor-not-allowed disabled:opacity-50",
           className

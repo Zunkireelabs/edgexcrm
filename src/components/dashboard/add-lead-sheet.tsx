@@ -16,13 +16,6 @@ import { Input } from "@/components/ui/input";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
@@ -561,23 +554,14 @@ export function AddLeadSheet({
           <Label htmlFor="branchId" className="text-xs text-gray-600">
             Branch
           </Label>
-          <Select
-            value={formData.branchId || "__none__"}
+          <SearchableSelect
+            options={[{ value: "__none__", label: "No branch" }, ...branches.map((b) => ({ value: b.id, label: b.name }))]}
+            value={formData.branchId}
             onValueChange={(v) => updateBranchId(v === "__none__" ? "" : v)}
+            placeholder="Select branch"
+            searchPlaceholder="Search branches…"
             disabled={isSubmitting}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select branch" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__none__">No branch</SelectItem>
-              {branches.map((b) => (
-                <SelectItem key={b.id} value={b.id}>
-                  {b.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          />
         </div>
       )}
 
@@ -615,24 +599,14 @@ export function AddLeadSheet({
               )}
             </>
           ) : (
-            <Select
+            <SearchableSelect
+              options={leadLists.filter((l) => !l.is_staging && !l.is_archive).map((list) => ({ value: list.id, label: list.name }))}
               value={formData.listId}
               onValueChange={updateListId}
+              placeholder="Select stage"
+              searchPlaceholder="Search stages…"
               disabled={isSubmitting}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select stage" />
-              </SelectTrigger>
-              <SelectContent>
-                {leadLists
-                  .filter((l) => !l.is_staging && !l.is_archive)
-                  .map((list) => (
-                    <SelectItem key={list.id} value={list.id}>
-                      {list.name}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
+            />
           )}
           {errors.listId && <p className="text-xs text-red-500">{errors.listId}</p>}
         </div>
@@ -679,23 +653,14 @@ export function AddLeadSheet({
               <span className="ml-1 text-gray-400">(auto)</span>
             )}
           </Label>
-          <Select
-            value={formData.branchId || "__none__"}
+          <SearchableSelect
+            options={[{ value: "__none__", label: "No branch" }, ...branches.map((b) => ({ value: b.id, label: b.name }))]}
+            value={formData.branchId}
             onValueChange={(v) => updateField("branchId", v === "__none__" ? "" : v)}
+            placeholder="No branch"
+            searchPlaceholder="Search branches…"
             disabled={isSubmitting || !!userBranchId}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="No branch" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__none__">No branch</SelectItem>
-              {branches.map((b) => (
-                <SelectItem key={b.id} value={b.id}>
-                  {b.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          />
         </div>
       )}
 
@@ -704,25 +669,14 @@ export function AddLeadSheet({
           <Label htmlFor="entity" className="text-xs text-gray-600">
             {entityLabel}
           </Label>
-          <Select
-            value={formData.entityId || "__none__"}
+          <SearchableSelect
+            options={[{ value: "__none__", label: "None" }, ...entities.filter((e) => e.is_active).map((entity) => ({ value: entity.id, label: entity.name }))]}
+            value={formData.entityId}
             onValueChange={(v) => updateField("entityId", v === "__none__" ? "" : v)}
+            placeholder={`Select ${entityLabel.toLowerCase()}`}
+            searchPlaceholder="Search…"
             disabled={isSubmitting}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder={`Select ${entityLabel.toLowerCase()}`} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__none__">None</SelectItem>
-              {entities
-                .filter((e) => e.is_active)
-                .map((entity) => (
-                  <SelectItem key={entity.id} value={entity.id}>
-                    {entity.name}
-                  </SelectItem>
-                ))}
-            </SelectContent>
-          </Select>
+          />
         </div>
       )}
     </div>
@@ -747,22 +701,14 @@ export function AddLeadSheet({
               <Label htmlFor="source" className="text-xs text-gray-600">
                 Source
               </Label>
-              <Select
+              <SearchableSelect
+                options={INTAKE_SOURCES.map((s) => ({ value: s.value, label: s.label }))}
                 value={formData.intakeSource}
                 onValueChange={(v) => updateField("intakeSource", v)}
+                placeholder="Select source"
+                searchPlaceholder="Search sources…"
                 disabled={isSubmitting}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {INTAKE_SOURCES.map((s) => (
-                    <SelectItem key={s.value} value={s.value}>
-                      {s.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              />
             </div>
             )}
             {/* The client dropped Preferred Contact for education (one less field for counselors to fill). */}
@@ -771,22 +717,14 @@ export function AddLeadSheet({
               <Label htmlFor="preferredContact" className="text-xs text-gray-600">
                 Preferred Contact
               </Label>
-              <Select
+              <SearchableSelect
+                options={CONTACT_METHODS.map((m) => ({ value: m.value, label: m.label }))}
                 value={formData.preferredContact}
                 onValueChange={(v) => updateField("preferredContact", v)}
+                placeholder="Select method"
+                searchPlaceholder="Search methods…"
                 disabled={isSubmitting}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select method" />
-                </SelectTrigger>
-                <SelectContent>
-                  {CONTACT_METHODS.map((m) => (
-                    <SelectItem key={m.value} value={m.value}>
-                      {m.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              />
             </div>
             )}
           </div>
@@ -917,23 +855,14 @@ export function AddLeadSheet({
                 <span className="ml-1 text-gray-400">(auto)</span>
               )}
             </Label>
-            <Select
+            <SearchableSelect
+              options={assignableMembers.map((member) => ({ value: member.user_id, label: member.name + (member.user_id === currentUserId ? " (You)" : "") }))}
               value={formData.ownerId || currentUserId}
               onValueChange={(v) => updateField("ownerId", v)}
+              placeholder="Select owner"
+              searchPlaceholder="Find someone…"
               disabled={isSubmitting || !isAdmin}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select owner" />
-              </SelectTrigger>
-              <SelectContent>
-                {assignableMembers.map((member) => (
-                  <SelectItem key={member.user_id} value={member.user_id}>
-                    {member.name}
-                    {member.user_id === currentUserId && " (You)"}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            />
           </div>
         </div>
       </div>
@@ -959,23 +888,14 @@ export function AddLeadSheet({
             <Label htmlFor="prospectIndustry" className="text-xs text-gray-600">
               Industry
             </Label>
-            <Select
-              value={formData.prospectIndustry || "__none__"}
+            <SearchableSelect
+              options={[{ value: "__none__", label: "None" }, ...PROSPECT_INDUSTRIES.map((ind) => ({ value: ind.value, label: ind.label }))]}
+              value={formData.prospectIndustry}
               onValueChange={(v) => updateField("prospectIndustry", v === "__none__" ? "" : v)}
+              placeholder="Select industry"
+              searchPlaceholder="Search industries…"
               disabled={isSubmitting}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select industry" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__">Select industry</SelectItem>
-                {PROSPECT_INDUSTRIES.map((ind) => (
-                  <SelectItem key={ind.value} value={ind.value}>
-                    {ind.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            />
           </div>
         </div>
 
@@ -1005,23 +925,15 @@ export function AddLeadSheet({
               First name
             </Label>
             <div className="flex gap-2">
-              <Select
-                value={formData.salutation || "__none__"}
+              <SearchableSelect
+                options={[{ value: "__none__", label: "—" }, ...SALUTATIONS.map((s) => ({ value: s, label: s }))]}
+                value={formData.salutation}
                 onValueChange={(v) => updateField("salutation", v === "__none__" ? "" : v)}
+                placeholder="—"
+                searchPlaceholder="Search…"
                 disabled={isSubmitting}
-              >
-                <SelectTrigger className="w-24 shrink-0">
-                  <SelectValue placeholder="—" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">—</SelectItem>
-                  {SALUTATIONS.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {s}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                className="w-24 shrink-0"
+              />
               <Input
                 id="firstName"
                 value={formData.firstName}

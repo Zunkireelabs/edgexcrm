@@ -38,14 +38,14 @@ describe("SearchableSelect", () => {
     expect(screen.getByText("No results for “zzz”")).toBeInTheDocument();
   });
 
-  it("shows the search row only for long lists (or when forced)", () => {
-    render(<Single options={many.slice(0, 5)} />);
-    fireEvent.click(screen.getByRole("combobox"));
-    expect(screen.queryByPlaceholderText("Search…")).toBeNull();
-    cleanup();
-    render(<Single options={many.slice(0, 5)} extra={{ searchable: true }} />);
+  it("always shows the search row, even for a 3-option list, unless searchable={false}", () => {
+    render(<Single options={many.slice(0, 3)} />);
     fireEvent.click(screen.getByRole("combobox"));
     expect(screen.getByPlaceholderText("Search…")).toBeInTheDocument();
+    cleanup();
+    render(<Single options={many.slice(0, 3)} extra={{ searchable: false }} />);
+    fireEvent.click(screen.getByRole("combobox"));
+    expect(screen.queryByPlaceholderText("Search…")).toBeNull();
   });
 
   it("starts the highlight on the first item, Enter picks the highlighted one and closes (single)", () => {

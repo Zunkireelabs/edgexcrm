@@ -195,7 +195,7 @@ export function CommandDialog({
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder={placeholder}
                 aria-label={placeholder}
-                className="w-full bg-transparent text-base font-medium text-ds-ink outline-none placeholder:text-ds-faint"
+                className="w-full bg-transparent text-base font-medium text-ds-ink caret-ds-accent outline-none placeholder:text-ds-faint"
               />
             </div>
             <div ref={listRef} className="max-h-[300px] overflow-y-auto p-2" role="listbox" aria-multiselectable={mode === "multi"}>

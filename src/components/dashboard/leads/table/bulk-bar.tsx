@@ -18,7 +18,10 @@ import {
   XIcon,
 } from "@/components/icons";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ITEM, POP } from "../toolbar/tokens";
+import { ITEM, POP, POP_SEP } from "../toolbar/tokens";
+
+// Destructive menu rows: red text + icon, red-tinted hover (the neutral ITEM colours swapped out, not stacked).
+const ITEM_DESTRUCTIVE = ITEM.replace("text-ds-ink", "text-ds-bad").replace("hover:bg-ds-hover focus-visible:bg-ds-hover data-[active=true]:bg-ds-hover", "hover:bg-ds-bad-soft focus-visible:bg-ds-bad-soft data-[active=true]:bg-ds-bad-soft");
 
 export type MoreAction = "enroll" | "branch" | "graduate" | "merge" | "delete";
 
@@ -134,7 +137,7 @@ export function BulkBar({
     <button
       key={action}
       type="button"
-      className={`${ITEM} ${destructive ? "text-ds-bad" : ""}`}
+      className={destructive ? ITEM_DESTRUCTIVE : ITEM}
       onClick={() => {
         setMoreOpen(false);
         onClick();
@@ -209,6 +212,9 @@ export function BulkBar({
             {actions.more.includes("branch") && moreItem("branch", "Share to branch", <BuildingsIcon className="size-4 text-ds-faint" />, handlers.onBranch)}
             {actions.more.includes("graduate") && moreItem("graduate", "Graduate → Sales Leads", <ArrowCircleUpIcon className="size-4 text-ds-faint" />, handlers.onGraduate)}
             {actions.more.includes("merge") && moreItem("merge", "Merge", <GitMergeIcon className="size-4 text-ds-faint" />, handlers.onMerge)}
+            {/* hairline above the destructive group (only when something neutral sits above it) */}
+            {(actions.more.includes("delete") || actions.archive) &&
+              (actions.more.some((m) => m !== "delete") ) && <div role="separator" className={POP_SEP} />}
             {actions.more.includes("delete") && moreItem("delete", "Delete", <TrashIcon className="size-4" />, handlers.onDelete, true)}
             {actions.archive && moreItem("archive", "Archive leads", <TrashIcon className="size-4" />, handlers.onArchive, true)}
           </PopoverContent>

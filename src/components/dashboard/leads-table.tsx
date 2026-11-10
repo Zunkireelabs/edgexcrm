@@ -88,6 +88,7 @@ import {
 } from "@/components/icons";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { BulkEnrollDialog } from "@/industries/_shared/features/outreach/ui/bulk-enroll-dialog";
 import {
   DropdownMenu,
@@ -3605,14 +3606,22 @@ export function LeadsTable({
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete {selectedCount} lead{selectedCount !== 1 ? "s" : ""}?</DialogTitle>
-            <DialogDescription>
-              This action cannot be undone. The selected leads will be permanently
-              removed from your workspace.
-            </DialogDescription>
-          </DialogHeader>
+        {/* EDGEX-145: destructive confirm layout (same as bulk Archive): red bin badge, named red primary with ↵,
+            focus on the red button so Enter confirms. Delete logic and permission gates are unchanged. */}
+        <DialogContent size="sm" showCloseButton={false}>
+          <div className="flex items-start gap-3.5 px-1 pt-1">
+            <span aria-hidden className="grid size-9 shrink-0 place-items-center rounded-full bg-ds-bad-soft text-ds-bad">
+              <TrashIcon className="size-[18px]" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <DialogTitle className="text-[15px] font-semibold">
+                Delete {selectedCount} lead{selectedCount !== 1 ? "s" : ""}?
+              </DialogTitle>
+              <DialogDescription className="mt-1 text-sm leading-[21px] text-ds-text">
+                This can&apos;t be undone. The selected leads are permanently removed from your workspace.
+              </DialogDescription>
+            </div>
+          </div>
           <DialogFooter>
             <Button
               variant="outline"
@@ -3623,10 +3632,12 @@ export function LeadsTable({
             </Button>
             <Button
               variant="destructive"
+              autoFocus
               onClick={handleBulkDelete}
               disabled={isDeleting}
             >
-              {isDeleting ? "Deleting..." : "Delete"}
+              {isDeleting ? "Deleting…" : `Delete ${selectedCount} lead${selectedCount !== 1 ? "s" : ""}`}
+              {!isDeleting && <DialogKeyHint>↵</DialogKeyHint>}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -3978,23 +3989,17 @@ export function LeadsTable({
             {moveTargetIsArchive && (
               <div className="space-y-1.5">
                 <p className="text-[13px] font-medium text-ds-muted">Archive reason</p>
-                <Select
+                <SearchableSelect
+                  options={["Not interested", "Wrong number", "Not reachable", "Already enrolled elsewhere", "Other"].map((r) => ({ value: r, label: r }))}
                   value={moveArchiveReason}
                   onValueChange={(v) => {
                     setMoveArchiveReason(v);
                     // plain archive confirm: hand focus to the red button so Enter (the hint) confirms
                     if (!isGraduateMove && !isStagingView) setTimeout(() => document.getElementById("bulk-archive-confirm")?.focus(), 60);
                   }}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select reason..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {["Not interested", "Wrong number", "Not reachable", "Already enrolled elsewhere", "Other"].map((r) => (
-                      <SelectItem key={r} value={r}>{r}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  placeholder="Select reason…"
+                  searchPlaceholder="Search reasons…"
+                />
               </div>
             )}
             {(isStagingView || isGraduateMove) && (

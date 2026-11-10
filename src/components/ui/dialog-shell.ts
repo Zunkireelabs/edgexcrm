@@ -32,7 +32,7 @@ export type DialogSize = keyof typeof DIALOG_SIZES;
 export const DIALOG_FOOTER =
   "sticky bottom-0 z-10 flex min-h-[52px] flex-col-reverse gap-2 border-t border-ds-divider bg-ds-surface px-4 py-2 sm:flex-row sm:items-center sm:justify-end sm:pl-4 sm:pr-3 " +
   // Buttons inside the footer take the mockup look without editing consumers.
-  "[&_[data-slot=button]]:h-8 [&_[data-slot=button]]:rounded-[9px] [&_[data-slot=button]]:px-3 [&_[data-slot=button]]:text-sm [&_[data-slot=button]]:font-medium [&_[data-slot=button]]:shadow-none " +
+  "[&_[data-slot=button]]:h-8 [&_[data-slot=button]]:rounded-[9px]! [&_[data-slot=button]]:px-3 [&_[data-slot=button]]:text-sm [&_[data-slot=button]]:font-medium [&_[data-slot=button]]:shadow-none " +
   "[&_[data-slot=button][data-variant=outline]]:border-transparent [&_[data-slot=button][data-variant=outline]]:bg-transparent [&_[data-slot=button][data-variant=outline]]:text-ds-muted [&_[data-slot=button][data-variant=outline]:hover]:bg-ds-hover [&_[data-slot=button][data-variant=outline]:hover]:text-ds-ink " +
   "[&_[data-slot=button][data-variant=secondary]]:border-transparent [&_[data-slot=button][data-variant=secondary]]:bg-transparent [&_[data-slot=button][data-variant=secondary]]:text-ds-muted [&_[data-slot=button][data-variant=secondary]:hover]:bg-ds-hover [&_[data-slot=button][data-variant=secondary]:hover]:text-ds-ink " +
   "[&_[data-slot=button][data-variant=ghost]]:text-ds-muted [&_[data-slot=button][data-variant=ghost]:hover]:bg-ds-hover [&_[data-slot=button][data-variant=ghost]:hover]:text-ds-ink " +
@@ -47,5 +47,5 @@ export const DIALOG_KEY_HINT =
 export const DIALOG_FOOTER_FORM = DIALOG_FOOTER.replace("min-h-[52px]", "min-h-11")
   .replace(" py-2 ", " py-0 ")
   .replaceAll("[&_[data-slot=button]]:h-8", "[&_[data-slot=button]]:h-7")
-  .replaceAll("[&_[data-slot=button]]:rounded-[9px]", "[&_[data-slot=button]]:rounded-[8px]")
+  .replaceAll("[&_[data-slot=button]]:rounded-[9px]!", "[&_[data-slot=button]]:rounded-[8px]!")
   .replaceAll("[&_[data-slot=button]]:px-3", "[&_[data-slot=button]]:px-2 [&_[data-slot=button]]:py-1 [&_[data-slot=button][data-variant=default]]:pr-1.5");

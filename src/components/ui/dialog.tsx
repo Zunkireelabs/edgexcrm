@@ -56,6 +56,8 @@ function DialogOverlay({
 const BODY_CHILD =
   "[&>:not([data-slot=dialog-header]):not([data-slot=dialog-footer])]:mx-4 " +
   "[&>[data-slot=dialog-header]+*]:mt-4 " +
+  // header directly followed by the footer (no body blocks): the footer sits right under the header
+  "[&>[data-slot=dialog-header]+[data-slot=dialog-footer]]:mt-0 " +
   "[&>:not([data-slot=dialog-header]):not([data-slot=dialog-footer])+*]:mt-5 " +
   "[&>:not([data-slot=dialog-header]):not([data-slot=dialog-footer])]:first:mt-4 " +
   "[&>:not([data-slot=dialog-header]):not([data-slot=dialog-footer])]:last:mb-5";

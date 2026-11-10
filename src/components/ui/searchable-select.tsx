@@ -2,7 +2,7 @@
 
 // EDGEX-145 Dialogs v1: ONE searchable dropdown (Popover + the shared cmdk Command), Attio behaviour and look.
 // API mirrors how Radix Select is used (value / onValueChange / options). Single or multiple, optional groups,
-// optional footer action ("Create …"), search row only for long lists (> 7 options, or `searchable`).
+// optional footer action ("Create …"), search row on by default (searchable={false} to hide).
 //
 // Keyboard: ↑/↓ move the highlight (starts on the selected item, else the first), Enter picks, Esc closes and
 // Radix returns focus to the trigger, Tab closes. Roles: trigger = combobox, list = listbox, rows = option.
@@ -36,7 +36,7 @@ interface CommonProps {
   options: SearchableOption[]
   placeholder?: string
   searchPlaceholder?: string
-  /** Force the search row on (default: only when there are more than 7 options). */
+  /** Search row on by default for every list; pass false to hide it. */
   searchable?: boolean
   footerAction?: SearchableFooterAction
   disabled?: boolean
@@ -60,8 +60,6 @@ type MultiProps = CommonProps & {
 }
 export type SearchableSelectProps = SingleProps | MultiProps
 
-const SEARCH_FROM = 7
-
 export function SearchableSelect(props: SearchableSelectProps) {
   const { options, placeholder = "Select…", searchPlaceholder = "Search…", footerAction, disabled, id, className, summarize } = props
   const multiple = props.multiple === true
@@ -71,7 +69,8 @@ export function SearchableSelect(props: SearchableSelectProps) {
   const [highlight, setHighlight] = React.useState("")
   const listRef = React.useRef<HTMLDivElement>(null)
   const triggerRef = React.useRef<HTMLButtonElement>(null)
-  const showSearch = props.searchable ?? options.length > SEARCH_FROM
+  // Attio-consistent: every dropdown searches, whatever the list length (pass searchable={false} to opt out).
+  const showSearch = props.searchable ?? true
 
   const needle = query.trim().toLowerCase()
   const filtered = React.useMemo(
@@ -172,7 +171,7 @@ export function SearchableSelect(props: SearchableSelectProps) {
       <PopoverContent
         align="start"
         sideOffset={4}
-        className="w-(--radix-popover-trigger-width) min-w-[200px] overflow-hidden p-0"
+        className="w-(--radix-popover-trigger-width) min-w-[200px] overflow-hidden p-0 outline-none ring-0 focus:outline-none focus-visible:outline-none"
         onOpenAutoFocus={(e) => {
           // Without a search input, focus the list root so the arrow keys work.
           if (!showSearch) {
@@ -193,7 +192,7 @@ export function SearchableSelect(props: SearchableSelectProps) {
           shouldFilter={false}
           value={highlight}
           onValueChange={setHighlight}
-          className="bg-transparent"
+          className="bg-transparent outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-0"
           ref={listRef as never}
           tabIndex={-1}
         >
