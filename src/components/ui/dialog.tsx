@@ -48,9 +48,17 @@ function DialogOverlay({
   )
 }
 
-/** Direct children that are not the header/footer bars: 16px side margin, 16px above the first / below the last. */
+/**
+ * Body spacing (deterministic, no gap): body children get 16px side margin; 16px under the header; 20px between
+ * body blocks and before the footer; 16px above the first block when there is no header; 20px at the scroll end
+ * when there is no footer. The "+" selectors are disjoint, so no rule fights another.
+ */
 const BODY_CHILD =
-  "[&>:not([data-slot=dialog-header]):not([data-slot=dialog-footer])]:mx-4 [&>:not([data-slot=dialog-header]):not([data-slot=dialog-footer])]:first:mt-4 [&>:not([data-slot=dialog-header]):not([data-slot=dialog-footer])]:last:mb-4";
+  "[&>:not([data-slot=dialog-header]):not([data-slot=dialog-footer])]:mx-4 " +
+  "[&>[data-slot=dialog-header]+*]:mt-4 " +
+  "[&>:not([data-slot=dialog-header]):not([data-slot=dialog-footer])+*]:mt-5 " +
+  "[&>:not([data-slot=dialog-header]):not([data-slot=dialog-footer])]:first:mt-4 " +
+  "[&>:not([data-slot=dialog-header]):not([data-slot=dialog-footer])]:last:mb-5";
 
 const DialogSizeContext = React.createContext<DialogSize>("md")
 
@@ -100,7 +108,7 @@ function DialogContent({
         >
           <div
             data-slot="dialog-scroll"
-            className={cn("flex min-h-0 flex-1 flex-col overflow-y-auto", isFlush ? "gap-0" : cn("gap-5 [&>*]:shrink-0", BODY_CHILD), bodyClassName)}
+            className={cn("flex min-h-0 flex-1 flex-col overflow-y-auto", isFlush ? "gap-0" : cn("gap-0 [&>*]:shrink-0", BODY_CHILD), bodyClassName)}
           >
             <DialogSizeContext.Provider value={size}>{children}</DialogSizeContext.Provider>
           </div>

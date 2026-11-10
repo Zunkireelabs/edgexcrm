@@ -500,7 +500,7 @@ export function AddLeadSheet({
   // ── Shared render helpers ────────────────────────────────────────────────
 
   const renderEmailPhoneRow = () => (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2">
       <div className="space-y-1.5">
         <Label htmlFor="email" className="text-xs text-gray-600">
           Email
@@ -510,7 +510,7 @@ export function AddLeadSheet({
           type="email"
           value={formData.email}
           onChange={(e) => updateField("email", e.target.value)}
-          placeholder="john@example.com"
+          placeholder="Set email"
           disabled={isSubmitting}
           className={errors.email ? "border-red-500" : ""}
         />
@@ -527,6 +527,7 @@ export function AddLeadSheet({
           onChange={(v) => updateField("phone", v)}
           disabled={isSubmitting}
           error={!!errors.phone}
+          placeholder="Set phone number"
         />
         {errors.phone && (
           <p className="text-xs text-red-500">{errors.phone}</p>
@@ -544,14 +545,14 @@ export function AddLeadSheet({
         id="city"
         value={formData.city}
         onChange={(e) => updateField("city", e.target.value)}
-        placeholder="Kathmandu"
+        placeholder="Set city"
         disabled={isSubmitting}
       />
     </div>
   );
 
   const renderAssignmentSection = () => (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-5 [&>h3]:-mb-2">
       <h3 className="pl-1 text-[13px] font-medium text-ds-ink">Assignment &amp; Status</h3>
 
       {/* Education admin: Branch is chosen first and scopes the assignee list */}
@@ -580,7 +581,7 @@ export function AddLeadSheet({
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="stage" className="text-xs text-gray-600">
             Stage
@@ -638,7 +639,7 @@ export function AddLeadSheet({
 
         <div className="space-y-1.5">
           <Label htmlFor="assignedTo" className="text-xs text-gray-600">
-            Assigned To
+            Assigned to
             {!canPickAssignee && (
               <span className="ml-1 text-gray-400">(auto)</span>
             )}
@@ -739,8 +740,8 @@ export function AddLeadSheet({
           {canSetLeadSource ? "Lead Source" : "Contact Preference"}
           <span className="text-xs text-gray-400 font-normal">(optional)</span>
         </CollapsibleTrigger>
-        <CollapsibleContent className="space-y-4 pt-2">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <CollapsibleContent className="space-y-5 pt-3">
+          <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2">
             {canSetLeadSource && (
             <div className="space-y-1.5">
               <Label htmlFor="source" className="text-xs text-gray-600">
@@ -906,9 +907,9 @@ export function AddLeadSheet({
   const renderItAgencyForm = () => (
     <>
       {/* 1. Lead Information */}
-      <div className="space-y-4">
+      <div className="flex flex-col gap-5 [&>h3]:-mb-2">
         <h3 className="pl-1 text-[13px] font-medium text-ds-ink">Lead Information</h3>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="ownerId" className="text-xs text-gray-600">
               Lead Owner
@@ -938,10 +939,10 @@ export function AddLeadSheet({
       </div>
 
       {/* 2. Company Information */}
-      <div className="space-y-4">
+      <div className="flex flex-col gap-5 [&>h3]:-mb-2">
         <h3 className="pl-1 text-[13px] font-medium text-ds-ink">Company Information</h3>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="companyName" className="text-xs text-gray-600">
               Company Name
@@ -994,14 +995,14 @@ export function AddLeadSheet({
       </div>
 
       {/* 3. Contact Details */}
-      <div className="space-y-4">
+      <div className="flex flex-col gap-5 [&>h3]:-mb-2">
         <h3 className="pl-1 text-[13px] font-medium text-ds-ink">Contact Details</h3>
 
         {/* [Salutation] First Name | Last Name */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="firstName" className="text-xs text-gray-600">
-              First Name
+              First name
             </Label>
             <div className="flex gap-2">
               <Select
@@ -1025,7 +1026,7 @@ export function AddLeadSheet({
                 id="firstName"
                 value={formData.firstName}
                 onChange={(e) => updateField("firstName", e.target.value)}
-                placeholder="John"
+                placeholder="Set first name"
                 disabled={isSubmitting}
                 className={`flex-1 ${errors.firstName ? "border-red-500" : ""}`}
               />
@@ -1033,20 +1034,20 @@ export function AddLeadSheet({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="lastName" className="text-xs text-gray-600">
-              Last Name
+              Last name
             </Label>
             <Input
               id="lastName"
               value={formData.lastName}
               onChange={(e) => updateField("lastName", e.target.value)}
-              placeholder="Doe"
+              placeholder="Set last name"
               disabled={isSubmitting}
             />
           </div>
         </div>
 
         {/* Designation | Email */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="designation" className="text-xs text-gray-600">
               Designation
@@ -1068,7 +1069,7 @@ export function AddLeadSheet({
               type="email"
               value={formData.email}
               onChange={(e) => updateField("email", e.target.value)}
-              placeholder="john@example.com"
+              placeholder="Set email"
               disabled={isSubmitting}
               className={errors.email ? "border-red-500" : ""}
             />
@@ -1079,7 +1080,7 @@ export function AddLeadSheet({
         </div>
 
         {/* Phone | City */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="phone" className="text-xs text-gray-600">
               Phone
@@ -1120,32 +1121,32 @@ export function AddLeadSheet({
   const renderDefaultForm = () => (
     <>
       {/* Contact Information */}
-      <div className="space-y-4">
+      <div className="flex flex-col gap-5 [&>h3]:-mb-2">
         <h3 className="pl-1 text-[13px] font-medium text-ds-ink">Contact Information</h3>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="firstName" className="text-xs text-gray-600">
-              First Name
+              First name
             </Label>
             <Input
               id="firstName"
               value={formData.firstName}
               onChange={(e) => updateField("firstName", e.target.value)}
-              placeholder="John"
+              placeholder="Set first name"
               disabled={isSubmitting}
               className={errors.firstName ? "border-red-500" : ""}
             />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="lastName" className="text-xs text-gray-600">
-              Last Name
+              Last name
             </Label>
             <Input
               id="lastName"
               value={formData.lastName}
               onChange={(e) => updateField("lastName", e.target.value)}
-              placeholder="Doe"
+              placeholder="Set last name"
               disabled={isSubmitting}
             />
           </div>
@@ -1161,9 +1162,9 @@ export function AddLeadSheet({
           />
         )}
         {industryId === "education_consultancy" && (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label className="text-xs text-gray-600">Field of Study</Label>
+              <Label className="text-xs text-gray-600">Field of study</Label>
               <SearchableSelect
                 options={[{ value: "__none__", label: "None" }, ...fieldsOfStudy.map((x) => ({ value: x, label: x }))]}
                 value={formData.fieldOfStudy}
@@ -1174,7 +1175,7 @@ export function AddLeadSheet({
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs text-gray-600">Interested Degree Level</Label>
+              <Label className="text-xs text-gray-600">Interested degree level</Label>
               <SearchableSelect
                 options={[{ value: "__none__", label: "None" }, ...studyLevels.map((x) => ({ value: x, label: x }))]}
                 value={formData.degreeLevel}
@@ -1187,9 +1188,9 @@ export function AddLeadSheet({
           </div>
         )}
         {industryId === "education_consultancy" && (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label className="text-xs text-gray-600">Intake Month</Label>
+              <Label className="text-xs text-gray-600">Intake month</Label>
               <SearchableSelect
                 options={[{ value: "__none__", label: "None" }, ...intakeMonths.map((x) => ({ value: x, label: x }))]}
                 value={formData.intakeMonth}
@@ -1200,7 +1201,7 @@ export function AddLeadSheet({
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs text-gray-600">Intake Year</Label>
+              <Label className="text-xs text-gray-600">Intake year</Label>
               <SearchableSelect
                 options={[{ value: "__none__", label: "None" }, ...intakeYears.map((x) => ({ value: x, label: x }))]}
                 value={formData.intakeYear}
@@ -1245,7 +1246,7 @@ export function AddLeadSheet({
           <DialogDescription className="sr-only">Manually add a lead from a phone call, walk-in, or referral.</DialogDescription>
         </DialogHeader>
 
-        <div ref={bodyRef} className="space-y-6">
+        <div ref={bodyRef} className="space-y-7">
           {errors.general && (
             <div className="flex items-start gap-2 rounded-[10px] bg-ds-bad-soft p-3 text-sm text-ds-bad">
               <WarningCircleIcon className="mt-0.5 h-4 w-4 shrink-0" />

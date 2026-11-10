@@ -16,7 +16,7 @@ export function DestinationsMultiSelect({
   onChange,
   disabled,
   options,
-  label = "Interested Destination",
+  label = "Interested destination",
   optional = true,
 }: {
   selected: string[];
@@ -40,8 +40,7 @@ export function DestinationsMultiSelect({
   return (
     <div className="space-y-1.5">
       <Label htmlFor={`${instanceId}-trigger`} className="text-xs text-gray-600">
-        {label}
-        {optional && <span className="ml-1 text-gray-400">(optional)</span>}
+        {optional ? `${label} (optional)` : label}
       </Label>
       {/* EDGEX-145: one shared searchable multi-select (was a checkbox grid). Same values, same onChange. */}
       <SearchableSelect

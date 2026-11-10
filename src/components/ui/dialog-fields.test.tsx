@@ -45,6 +45,9 @@ describe("dialog form fields", () => {
     expect(block).toContain("inset 0 0 0 1px var(--ds-bad)");
     expect(block).toContain("font-size: 12px"); // label + error text
     expect(block).toContain("opacity: 0.5"); // disabled
+    expect(block).toContain("margin-bottom: 4px"); // label -> field, deterministic (no negative margin)
+    expect(block).not.toContain("margin-bottom: -2px");
+    expect(block).toContain('[data-slot="phone-input"]'); // phone is one control
     // never leaks to page forms: the only selector roots in the block are the dialog / alert-dialog card
     const rootless = block.split("\n").filter((l) => /^\S.*\{$/.test(l) && !l.startsWith(":is([data-slot=\"dialog-card\"], [data-slot=\"alert-dialog-card\"])"));
     expect(rootless).toEqual([]);

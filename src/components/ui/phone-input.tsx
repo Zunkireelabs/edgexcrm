@@ -64,8 +64,12 @@ export function PhoneInput({
   };
 
   return (
-    <div className={`flex ${className || ""}`}>
-      {/* EDGEX-145: searchable country picker (same values as before; the trigger still shows only the dial code) */}
+    <div
+      data-slot="phone-input"
+      data-invalid={error || undefined}
+      className={`flex h-9 w-full items-center overflow-hidden rounded-[9px] border bg-transparent focus-within:ring-[3px] focus-within:ring-ring/50 ${error ? "border-red-500" : "border-input"} ${className || ""}`}
+    >
+      {/* EDGEX-145: searchable country picker; the trigger still shows only the dial code */}
       <SearchableSelect
         value={selectedCountry}
         onValueChange={handleCountryChange}
@@ -75,7 +79,7 @@ export function PhoneInput({
         aria-label="Country code"
         aria-invalid={error || undefined}
         disabled={disabled}
-        className={`h-9 w-[90px] rounded-r-none border-r-0 shrink-0 ${error ? "border-red-500" : ""}`}
+        className="h-full w-[90px] shrink-0 rounded-none border-0 border-r border-input focus-visible:ring-0"
       />
       <Input
         type="tel"
@@ -83,7 +87,7 @@ export function PhoneInput({
         onChange={(e) => handleNumberChange(e.target.value)}
         placeholder={placeholder}
         disabled={disabled}
-        className={`h-9 rounded-l-none ${error ? "border-red-500" : ""}`}
+        className="h-full min-w-0 flex-1 rounded-none border-0 focus-visible:ring-0"
       />
     </div>
   );
