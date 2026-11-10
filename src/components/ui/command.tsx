@@ -44,13 +44,11 @@ function CommandDialog({
     <Dialog {...props}>
       <DialogContent
         showCloseButton={false}
-        className="overflow-hidden p-0 shadow-lg"
-        overlayClassName="bg-[#0000004d] backdrop-blur-[2px]"
+        className="overflow-hidden"
       >
-        <DialogHeader className="sr-only">
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
-        </DialogHeader>
+        {/* EDGEX-145: screen-reader-only title/description, no header bar (a sr-only DialogHeader still reserves its 48px). */}
+        <DialogTitle className="sr-only">{title}</DialogTitle>
+        <DialogDescription className="sr-only">{description}</DialogDescription>
         <Command
           shouldFilter={false}
           className="[&_[cmdk-group-heading]]:text-muted-foreground **:[&_[cmdk-group-heading]]:px-2 **:[&_[cmdk-group-heading]]:font-medium [&_[cmdk-group]]:px-2 [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-input-wrapper]_svg]:h-5 [&_[cmdk-input-wrapper]_svg]:w-5 [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_svg]:h-5 [&_[cmdk-item]_svg]:w-5"

@@ -58,13 +58,23 @@ function DialogContent({
   showCloseButton = true,
   overlayClassName,
   size = "md",
+  flush,
+  bodyClassName,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
   overlayClassName?: string
   /** 440 / 560 / 720. Default md. A consumer `sm:max-w-*` class still overrides. */
   size?: DialogSize
+  /**
+   * The content owns its own padding and spacing (no body margins, no gap). Implied when the consumer's
+   * className already says `p-0` (those dialogs were built flush against the old rounded box).
+   */
+  flush?: boolean
+  /** Extra classes for the inner scroll area (e.g. `flex-row` for a sidebar + panel layout). */
+  bodyClassName?: string
 }) {
+  const isFlush = flush ?? /(^|\s)p-0(\s|$)/.test(className ?? "")
   return (
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay className={overlayClassName} />
@@ -85,7 +95,7 @@ function DialogContent({
         >
           <div
             data-slot="dialog-scroll"
-            className={cn("flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto [&>*]:shrink-0", BODY_CHILD)}
+            className={cn("flex min-h-0 flex-1 flex-col overflow-y-auto", isFlush ? "gap-0" : cn("gap-4 [&>*]:shrink-0", BODY_CHILD), bodyClassName)}
           >
             {children}
           </div>
