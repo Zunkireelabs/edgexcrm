@@ -1,15 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-  SheetFooter,
-} from "@/components/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogKeyHint,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PhoneInput } from "@/components/ui/phone-input";
@@ -210,6 +211,9 @@ export function AddLeadSheet({
   const [notesOpen, setNotesOpen] = useState(false);
   const [academicsOpen, setAcademicsOpen] = useState(false);
   const [academicsError, setAcademicsError] = useState(false);
+  // EDGEX-145: keep the dialog open and reset the form after a successful add.
+  const [addAnother, setAddAnother] = useState(false);
+  const bodyRef = useRef<HTMLDivElement>(null);
   const [academics, setAcademics] = useState<Record<string, string>>({});
   const [testScores, setTestScores] = useState<Record<string, string>>({});
   const updateAcademic = (col: string, value: string) =>
@@ -222,33 +226,40 @@ export function AddLeadSheet({
   const canSetLeadSource = isAdmin || industryId !== "education_consultancy";
   const defaultStage = stages.find((s) => s.is_default) || stages[0];
 
+  // Fresh form: used when the dialog opens and after a successful "Add another".
+  const resetForm = () => {
+    // Only pre-select a Stage the dropdown will actually offer (mirrors its own
+    // !is_staging && !is_archive filter) — an id from a hidden/archive list, or one
+    // that's since disappeared from leadLists, must fall back to blank, not a dead value.
+    const validDefaultListId =
+      defaultListId && leadLists.some((l) => l.id === defaultListId && !l.is_staging && !l.is_archive)
+        ? defaultListId
+        : "";
+    setFormData({
+      ...initialFormData,
+      stageId: defaultStage?.id || "",
+      listId: lockedList ? lockedList.id : validDefaultListId,
+      assignedTo: role === "staff" ? currentUserId : "",
+      ownerId: currentUserId,
+      // Always seed from creator's own branch first; fall back to active branch switcher
+      branchId: userBranchId || selectedBranchId || "",
+    });
+    setErrors({});
+    setIsDirty(false);
+    setSourceOpen(false);
+    setNotesOpen(false);
+    setAcademicsOpen(false);
+    setAcademicsError(false);
+    setAcademics({});
+    setTestScores({});
+  };
+
   useEffect(() => {
     if (open) {
-      // Only pre-select a Stage the dropdown will actually offer (mirrors its own
-      // !is_staging && !is_archive filter) — an id from a hidden/archive list, or one
-      // that's since disappeared from leadLists, must fall back to blank, not a dead value.
-      const validDefaultListId =
-        defaultListId && leadLists.some((l) => l.id === defaultListId && !l.is_staging && !l.is_archive)
-          ? defaultListId
-          : "";
-      setFormData({
-        ...initialFormData,
-        stageId: defaultStage?.id || "",
-        listId: lockedList ? lockedList.id : validDefaultListId,
-        assignedTo: role === "staff" ? currentUserId : "",
-        ownerId: currentUserId,
-        // Always seed from creator's own branch first; fall back to active branch switcher
-        branchId: userBranchId || selectedBranchId || "",
-      });
-      setErrors({});
-      setIsDirty(false);
-      setSourceOpen(false);
-      setNotesOpen(false);
-      setAcademicsOpen(false);
-      setAcademicsError(false);
-      setAcademics({});
-      setTestScores({});
+      resetForm();
+      setAddAnother(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, defaultStage?.id, role, currentUserId, isAdmin, userBranchId, selectedBranchId, defaultListId, leadLists]);
 
   const updateField = (field: keyof FormData, value: string) => {
@@ -380,7 +391,13 @@ export function AddLeadSheet({
         },
       });
 
-      onOpenChange(false);
+      if (addAnother) {
+        resetForm();
+        bodyRef.current?.closest("[data-slot=dialog-scroll]")?.scrollTo({ top: 0 });
+        setTimeout(() => document.getElementById("firstName")?.focus(), 0);
+      } else {
+        onOpenChange(false);
+      }
       router.refresh();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to create lead";
@@ -475,7 +492,7 @@ export function AddLeadSheet({
   // ── Shared render helpers ────────────────────────────────────────────────
 
   const renderEmailPhoneRow = () => (
-    <div className="grid grid-cols-2 gap-4">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       <div className="space-y-1.5">
         <Label htmlFor="email" className="text-xs text-gray-600">
           Email
@@ -555,7 +572,7 @@ export function AddLeadSheet({
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="stage" className="text-xs text-gray-600">
             Stage
@@ -714,7 +731,7 @@ export function AddLeadSheet({
           <span className="text-xs text-gray-400 font-normal">(optional)</span>
         </CollapsibleTrigger>
         <CollapsibleContent className="space-y-4 pt-2">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {canSetLeadSource && (
             <div className="space-y-1.5">
               <Label htmlFor="source" className="text-xs text-gray-600">
@@ -882,7 +899,7 @@ export function AddLeadSheet({
       {/* 1. Lead Information */}
       <div className="space-y-4">
         <h3 className="text-sm font-medium text-gray-900">Lead Information</h3>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="ownerId" className="text-xs text-gray-600">
               Lead Owner
@@ -915,7 +932,7 @@ export function AddLeadSheet({
       <div className="space-y-4">
         <h3 className="text-sm font-medium text-gray-900">Company Information</h3>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="companyName" className="text-xs text-gray-600">
               Company Name
@@ -972,7 +989,7 @@ export function AddLeadSheet({
         <h3 className="text-sm font-medium text-gray-900">Contact Details</h3>
 
         {/* [Salutation] First Name | Last Name */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="firstName" className="text-xs text-gray-600">
               First Name
@@ -1020,7 +1037,7 @@ export function AddLeadSheet({
         </div>
 
         {/* Designation | Email */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="designation" className="text-xs text-gray-600">
               Designation
@@ -1053,7 +1070,7 @@ export function AddLeadSheet({
         </div>
 
         {/* Phone | City */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="phone" className="text-xs text-gray-600">
               Phone
@@ -1097,7 +1114,7 @@ export function AddLeadSheet({
       <div className="space-y-4">
         <h3 className="text-sm font-medium text-gray-900">Contact Information</h3>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="firstName" className="text-xs text-gray-600">
               First Name
@@ -1135,7 +1152,7 @@ export function AddLeadSheet({
           />
         )}
         {industryId === "education_consultancy" && (
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label className="text-xs text-gray-600">Field of Study</Label>
               <Select
@@ -1175,7 +1192,7 @@ export function AddLeadSheet({
           </div>
         )}
         {industryId === "education_consultancy" && (
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label className="text-xs text-gray-600">Intake Month</Label>
               <Select
@@ -1225,27 +1242,35 @@ export function AddLeadSheet({
   );
 
   return (
-    <Sheet open={open} onOpenChange={handleClose} modal={false}>
-      <SheetContent
-        side="right"
-        className="w-full sm:max-w-xl flex flex-col shadow-2xl border-l"
+    <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
+      <DialogContent
+        size="lg"
         showCloseButton={!isSubmitting}
-        showOverlay={false}
+        aria-describedby={undefined}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !isSubmitting) {
+            e.preventDefault();
+            void handleSubmit();
+          }
+        }}
+        // Attio form look, scoped here so every field keeps its own logic: 13px muted labels, 34px hairline inputs,
+        // blue focus ring, red error text under the field.
+        bodyClassName={ADD_LEAD_FORM_LOOK}
       >
-        <SheetHeader className="shrink-0 border-b pb-4">
-          <SheetTitle className="flex items-center gap-2">
-            <PlusIcon className="h-5 w-5" />
-            Add New Lead
-          </SheetTitle>
-          <SheetDescription>
-            Manually add a lead from a phone call, walk-in, or referral.
-          </SheetDescription>
-        </SheetHeader>
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <span className="grid size-5 shrink-0 place-items-center rounded-md bg-ds-accent-soft text-ds-accent">
+              <PlusIcon className="size-[13px]" aria-hidden />
+            </span>
+            Add lead
+          </DialogTitle>
+          <DialogDescription>Manually add a lead from a phone call, walk-in, or referral.</DialogDescription>
+        </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto py-6 px-4 space-y-6">
+        <div ref={bodyRef} className="space-y-6">
           {errors.general && (
-            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-              <WarningCircleIcon className="h-4 w-4 mt-0.5 shrink-0" />
+            <div className="flex items-start gap-2 rounded-[10px] bg-ds-bad-soft p-3 text-sm text-ds-bad">
+              <WarningCircleIcon className="mt-0.5 h-4 w-4 shrink-0" />
               {errors.general}
             </div>
           )}
@@ -1253,33 +1278,40 @@ export function AddLeadSheet({
           {industryId === "it_agency" ? renderItAgencyForm() : renderDefaultForm()}
         </div>
 
-        <SheetFooter className="shrink-0 border-t pt-4">
-          <div className="flex w-full gap-4">
-            <Button
-              variant="outline"
-              onClick={handleClose}
-              disabled={isSubmitting}
-              className="flex-1"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={isSubmitting}
-              className="flex-1"
-            >
-              {isSubmitting ? (
-                <>
-                  <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />
-                  Creating...
-                </>
-              ) : (
-                "Create Lead"
-              )}
-            </Button>
-          </div>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        <DialogFooter>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={addAnother}
+            onClick={() => setAddAnother((v) => !v)}
+            disabled={isSubmitting}
+            className="mr-auto flex items-center gap-2 rounded-lg px-1 py-1 text-[13px] font-normal text-ds-muted"
+          >
+            <span className={`relative inline-block h-4 w-7 rounded-full transition-colors ${addAnother ? "bg-ds-accent" : "bg-[#d9dce0]"}`}>
+              <span className={`absolute top-0.5 size-3 rounded-full bg-white transition-all ${addAnother ? "left-[14px]" : "left-0.5"}`} />
+            </span>
+            Add another
+          </button>
+          <Button variant="outline" onClick={handleClose} disabled={isSubmitting}>
+            Cancel
+          </Button>
+          <Button onClick={handleSubmit} disabled={isSubmitting}>
+            {isSubmitting ? (
+              <>
+                <CircleNotchIcon className="size-4 animate-spin" />
+                Adding…
+              </>
+            ) : (
+              <>
+                Add lead <DialogKeyHint>⌘↵</DialogKeyHint>
+              </>
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
+
+const ADD_LEAD_FORM_LOOK =
+  "[&_label]:text-[13px] [&_label]:font-medium [&_label]:text-ds-muted [&_input]:h-[34px] [&_input]:rounded-lg [&_input]:text-sm [&_[data-slot=select-trigger]]:h-[34px] [&_[data-slot=select-trigger]]:rounded-lg [&_p.text-red-500]:text-[12px] [&_p.text-red-500]:text-ds-bad [&_input.border-red-500]:border-ds-bad";
