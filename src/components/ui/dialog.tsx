@@ -95,7 +95,7 @@ function DialogContent({
         >
           <div
             data-slot="dialog-scroll"
-            className={cn("flex min-h-0 flex-1 flex-col overflow-y-auto", isFlush ? "gap-0" : cn("gap-4 [&>*]:shrink-0", BODY_CHILD), bodyClassName)}
+            className={cn("flex min-h-0 flex-1 flex-col overflow-y-auto", isFlush ? "gap-0" : cn("gap-5 [&>*]:shrink-0", BODY_CHILD), bodyClassName)}
           >
             {children}
           </div>

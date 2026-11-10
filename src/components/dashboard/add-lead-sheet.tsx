@@ -1253,9 +1253,6 @@ export function AddLeadSheet({
             void handleSubmit();
           }
         }}
-        // Attio form look, scoped here so every field keeps its own logic: 13px muted labels, 34px hairline inputs,
-        // blue focus ring, red error text under the field.
-        bodyClassName={ADD_LEAD_FORM_LOOK}
       >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -1312,6 +1309,3 @@ export function AddLeadSheet({
     </Dialog>
   );
 }
-
-const ADD_LEAD_FORM_LOOK =
-  "[&_label]:text-[13px] [&_label]:font-medium [&_label]:text-ds-muted [&_input]:h-[34px] [&_input]:rounded-lg [&_input]:text-sm [&_[data-slot=select-trigger]]:h-[34px] [&_[data-slot=select-trigger]]:rounded-lg [&_p.text-red-500]:text-[12px] [&_p.text-red-500]:text-ds-bad [&_input.border-red-500]:border-ds-bad";

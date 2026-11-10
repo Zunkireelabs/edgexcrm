@@ -67,13 +67,13 @@ function CommandInput({
   return (
     <div
       data-slot="command-input-wrapper"
-      className="flex h-12 items-center gap-2 border-b px-3"
+      className="flex h-9 items-center gap-2 px-3 py-2 shadow-[inset_0_-1px_0_#eeeff1]"
     >
-      <MagnifyingGlassIcon className="size-4 shrink-0 opacity-50" />
+      <MagnifyingGlassIcon className="size-4 shrink-0 text-ds-faint" />
       <CommandPrimitive.Input
         data-slot="command-input"
         className={cn(
-          "placeholder:text-muted-foreground flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-hidden disabled:cursor-not-allowed disabled:opacity-50",
+          "flex h-5 w-full rounded-md bg-transparent py-0 text-sm leading-5 font-medium text-ds-ink outline-hidden placeholder:text-black/50 disabled:cursor-not-allowed disabled:opacity-50",
           className
         )}
         {...props}
@@ -118,7 +118,7 @@ function CommandGroup({
     <CommandPrimitive.Group
       data-slot="command-group"
       className={cn(
-        "text-foreground [&_[cmdk-group-heading]]:text-muted-foreground overflow-hidden p-1 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium",
+        "text-foreground [&_[cmdk-group-heading]]:text-ds-faint overflow-hidden p-1 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium",
         className
       )}
       {...props}
@@ -147,7 +147,7 @@ function CommandItem({
     <CommandPrimitive.Item
       data-slot="command-item"
       className={cn(
-        "data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground [&_svg:not([class*='text-'])]:text-muted-foreground relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "data-[selected=true]:bg-[#f6f7f7] data-[selected=true]:text-ds-ink [&_svg:not([class*='text-'])]:text-ds-muted relative flex min-h-8 cursor-default items-center gap-2 rounded-lg px-2 py-1.5 text-sm leading-5 font-medium text-ds-ink outline-hidden select-none data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className
       )}
       {...props}

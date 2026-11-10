@@ -73,7 +73,7 @@ describe("DialogContent size", () => {
 describe("flush", () => {
   it("applies body margins by default and drops them for p-0 / flush consumers", () => {
     open();
-    expect(document.querySelector("[data-slot=dialog-scroll]")?.className).toContain("gap-4");
+    expect(document.querySelector("[data-slot=dialog-scroll]")?.className).toContain("gap-5");
     cleanup();
     open({ className: "p-0" });
     expect(document.querySelector("[data-slot=dialog-scroll]")?.className).toContain("gap-0");
