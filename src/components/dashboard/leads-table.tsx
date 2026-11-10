@@ -1640,6 +1640,47 @@ export function LeadsTable({
     }
   }
 
+  // EDGEX-127 bulk Add tag. Same chunking + selection (incl. "select all N matching") as Assign; the API unions the tags
+  // into each lead and reports how many writes failed. Returns true when the picker may close.
+  async function handleBulkAddTags(tags: string[]): Promise<boolean> {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0 || tags.length === 0) return false;
+    let updated = 0;
+    let failed = 0;
+    let firstError = "";
+    for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+      const chunk = ids.slice(i, i + CHUNK_SIZE);
+      try {
+        const response = await fetch("/api/v1/leads/bulk", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids: chunk, add_tags: tags }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error?.message || "Failed to add tags");
+        updated += data.data.updated as number;
+        failed += (data.data.failed as number) + ((data.data.notFound as string[] | undefined)?.length ?? 0);
+      } catch (error) {
+        failed += chunk.length;
+        if (!firstError) firstError = error instanceof Error ? error.message : "Failed to add tags";
+      }
+    }
+    const what = tags.length === 1 ? `“${tags[0]}”` : `${tags.length} tags`;
+    if (failed === 0) {
+      toast.success("Tag added", { description: `${what} added to ${updated.toLocaleString()} ${updated === 1 ? "lead" : "leads"}` });
+    } else if (updated === 0) {
+      toast.error("Couldn’t add tags", { description: firstError || `${failed.toLocaleString()} leads could not be tagged.` });
+      return false;
+    } else {
+      toast.error(`Couldn’t tag ${failed.toLocaleString()} ${failed === 1 ? "lead" : "leads"}`, {
+        description: `${firstError || "You can only tag leads in your scope."} The other ${updated.toLocaleString()} were tagged with ${what}.`,
+      });
+    }
+    setSelectedIds(new Set());
+    router.refresh();
+    return true;
+  }
+
   async function handleBulkAssignBranch() {
     const idsToAssign = Array.from(selectedIds);
     if (idsToAssign.length === 0) {
@@ -3245,6 +3286,7 @@ export function LeadsTable({
             }}
           />
           <BulkBar
+            existingTags={Array.from(new Set(["student", ...localLeads.flatMap((l) => l.tags ?? [])]))}
             selectedCount={selectedCount}
             effectiveTotal={effectiveTotal}
             actions={getBulkBarActions({
@@ -3273,6 +3315,7 @@ export function LeadsTable({
                 setMoveListDialogOpen(true);
               },
               onAssign: () => setAssignDialogOpen(true),
+              onAddTags: handleBulkAddTags,
               onArchive: () => {
                 if (!archivedList) return;
                 setMoveArchiveReason("");

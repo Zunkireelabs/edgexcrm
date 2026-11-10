@@ -11,11 +11,13 @@ import {
   DotsThreeIcon,
   GitBranchIcon,
   GitMergeIcon,
+  TagIcon,
   TrashIcon,
   XIcon,
 } from "@/components/icons";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ITEM, POP } from "../toolbar/tokens";
+import { AddTagPicker } from "./add-tag-picker";
 
 export type MoreAction = "enroll" | "branch" | "graduate" | "merge" | "delete";
 
@@ -44,6 +46,8 @@ export interface BulkActions {
   deleteForever: boolean;
   moveStage: boolean;
   assign: boolean;
+  /** EDGEX-127 bulk Add tag (same write gate as Move stage / Assign). */
+  addTag: boolean;
   archive: boolean;
   more: MoreAction[];
   /** "select-all" = offer `Select all N`; "all-selected" = the count reads `All N selected`. */
@@ -60,6 +64,7 @@ export function getBulkBarActions(i: BulkGateInput): BulkActions {
       deleteForever: i.viewMode === "archived",
       moveStage: false,
       assign: false,
+      addTag: false,
       archive: false,
       more: [],
       selection,
@@ -77,6 +82,7 @@ export function getBulkBarActions(i: BulkGateInput): BulkActions {
     deleteForever: false,
     moveStage: canWrite,
     assign: canWrite && i.teamMemberCount > 0,
+    addTag: canWrite,
     archive: canWrite && i.hasArchiveList,
     more,
     selection,
@@ -96,6 +102,8 @@ export interface BulkBarHandlers {
   onDelete: () => void;
   onSelectAllMatching: () => void;
   onClear: () => void;
+  /** Add tags to every selected lead. Resolves true when the picker should close. */
+  onAddTags: (tags: string[]) => Promise<boolean>;
 }
 
 const BTN =
@@ -108,14 +116,19 @@ export function BulkBar({
   actions,
   handlers,
   stageLabel = "Move stage",
+  existingTags = [],
 }: {
   selectedCount: number;
   effectiveTotal: number;
   actions: BulkActions;
   handlers: BulkBarHandlers;
   stageLabel?: string;
+  /** Tags the picker offers (the same source as the Tag filter's values; no per-tag counts are available). */
+  existingTags?: string[];
 }) {
   const [moreOpen, setMoreOpen] = useState(false);
+  const [tagOpen, setTagOpen] = useState(false);
+  const [tagBusy, setTagBusy] = useState(false);
   if (selectedCount === 0) return null;
   const countText = actions.selection === "all-selected" ? `All ${effectiveTotal.toLocaleString()} selected` : `${selectedCount.toLocaleString()} selected`;
 
@@ -170,7 +183,33 @@ export function BulkBar({
           Assign
         </button>
       )}
-      {(actions.moveStage || actions.assign) && (actions.archive || actions.more.length > 0) && <span className={DIV} />}
+      {actions.addTag && (
+        <Popover open={tagOpen} onOpenChange={setTagOpen}>
+          <PopoverTrigger asChild>
+            <button type="button" className={`${BTN} text-white`} aria-label="Add tag">
+              <TagIcon className="size-4" aria-hidden />
+              Add tag
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="center" side="top" sideOffset={12} className={`${POP} w-[300px]`}>
+            <AddTagPicker
+              leadCount={selectedCount}
+              existingTags={existingTags}
+              busy={tagBusy}
+              onCancel={() => setTagOpen(false)}
+              onSubmit={async (tags) => {
+                setTagBusy(true);
+                try {
+                  if (await handlers.onAddTags(tags)) setTagOpen(false);
+                } finally {
+                  setTagBusy(false);
+                }
+              }}
+            />
+          </PopoverContent>
+        </Popover>
+      )}
+      {(actions.moveStage || actions.assign || actions.addTag) && (actions.archive || actions.more.length > 0) && <span className={DIV} />}
       {actions.archive && (
         <button type="button" className={`${BTN} text-[#ff9a8c]`} onClick={handlers.onArchive}>
           Archive
