@@ -31,11 +31,13 @@ export const NAME_DEFAULT_WIDTH = 210;
 // Mockup checkbox: 16px, 5px radius, 1.5px ghost inset border, accent fill when checked.
 const CHECKBOX_CLASS =
   "size-4 rounded-[5px] border-0 bg-ds-surface shadow-[inset_0_0_0_1.5px_var(--ds-ghost)] dark:bg-ds-surface data-[state=checked]:bg-ds-accent data-[state=checked]:text-white data-[state=checked]:shadow-none data-[state=indeterminate]:bg-ds-accent data-[state=indeterminate]:text-white data-[state=indeterminate]:shadow-none";
-// Name divider: the same 1px inset hairline every cell draws, plus an outer shadow that fades in
-// once the grid is scrolled sideways (scroller data-scrolled sets --grid-edge-shadow; EDGEX-148).
-// It is box-shadow on the cell itself so the cell's overflow-hidden cannot clip it.
+// Name column edge (EDGEX-148): the divider is the same 1px inset hairline every cell draws. When the
+// grid is scrolled sideways a 20px gradient ::after on each sticky Name cell fades in to the right
+// (scroller data-scrolled + group/grid). Uniform vertically, so rows join without seams.
 const NAME_EDGE =
-  "shadow-[inset_-1px_0_0_var(--ds-border),6px_0_16px_4px_var(--grid-edge-shadow,transparent)]! transition-shadow duration-200";
+  "after:pointer-events-none after:absolute after:top-0 after:-bottom-px after:left-full after:w-5 after:content-[''] after:bg-linear-to-r after:from-black/[.09] after:to-transparent after:opacity-0 after:transition-opacity after:duration-200 group-data-[scrolled=true]/grid:after:opacity-100";
+// Name cells stay overflow-visible so the pseudo isn't clipped; truncation moves to this inner wrapper.
+const NAME_CLIP = "overflow-hidden whitespace-nowrap";
 const MIN_WIDTH = 60;
 
 /** Counsellors summary: facet options with leads, excluding Unassigned. Null when the facet is not available. */
@@ -84,6 +86,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
 }
 
 const CELL_BASE = "h-9 overflow-hidden whitespace-nowrap px-3 align-middle shadow-[inset_-1px_0_0_var(--ds-border)] border-b border-ds-border";
+const CELL_BASE_NAME = CELL_BASE.replace("overflow-hidden ", "");
 const HEAD_BASE = "h-[38px] p-0 align-middle shadow-[inset_-1px_0_0_var(--ds-border)] border-b border-ds-border bg-ds-surface text-left";
 
 interface RowProps {
@@ -132,9 +135,9 @@ const Row = memo(function Row({ lead, nameColumn, columns, ctx, selected, anySel
             key={col.key}
             onClick={content.onClick}
             style={sticky ? ({ left } as CSSProperties) : undefined}
-            className={`${CELL_BASE} ${bg} ${isName ? `relative ${NAME_EDGE}` : ""} text-ds-ink ${sticky ? "sticky z-10" : ""}`}
+            className={`${isName ? CELL_BASE_NAME : CELL_BASE} ${bg} ${isName ? NAME_EDGE : ""} text-ds-ink ${sticky ? "sticky z-10" : ""}`}
           >
-            {content.content}
+            {isName ? <div className={NAME_CLIP}>{content.content}</div> : content.content}
           </td>
         );
       })}
@@ -286,7 +289,7 @@ export function LeadsGrid(props: LeadsGridProps) {
 
   return (
     <div
-      className="min-h-0 flex-1 overflow-auto border-t border-ds-border bg-ds-surface data-[scrolled=true]:[--grid-edge-shadow:rgba(0,0,0,0.12)]"
+      className="group/grid min-h-0 flex-1 overflow-auto border-t border-ds-border bg-ds-surface"
       data-testid="leads-grid-scroller"
       data-scrolled="false"
       onScroll={(e) => {
@@ -434,9 +437,9 @@ export function LeadsGrid(props: LeadsGridProps) {
                 <td
                   key={col.key}
                   style={sticky ? ({ left } as CSSProperties) : undefined}
-                  className={`sticky bottom-0 ${col.key === "name" ? NAME_EDGE : ""} ${sticky ? "z-30" : "z-20"} h-9 overflow-hidden whitespace-nowrap border-t border-ds-border bg-ds-sunken px-3 text-[13px] font-normal text-ds-faint shadow-[inset_-1px_0_0_var(--ds-border)]`}
+                  className={`sticky bottom-0 ${col.key === "name" ? NAME_EDGE : "overflow-hidden whitespace-nowrap"} ${sticky ? "z-30" : "z-20"} h-9 border-t border-ds-border bg-ds-sunken px-3 text-[13px] font-normal text-ds-faint shadow-[inset_-1px_0_0_var(--ds-border)]`}
                 >
-                  {summary}
+                  {col.key === "name" ? <div className={NAME_CLIP}>{summary}</div> : summary}
                 </td>
               );
             })}
