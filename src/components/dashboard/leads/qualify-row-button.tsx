@@ -10,13 +10,9 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import type { LeadList } from "@/types/database";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
@@ -123,47 +119,35 @@ export function QualifyRowButton({
             />
 
             <div className="space-y-1.5">
-              <p className="text-sm font-medium">Field of Study</p>
-              <Select value={fieldOfStudy || "__none__"} onValueChange={(v) => setFieldOfStudy(v === "__none__" ? "" : v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select field" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">
-                    <span className="text-muted-foreground">Not specified</span>
-                  </SelectItem>
-                  {fieldsOfStudy.map((f) => (
-                    <SelectItem key={f} value={f}>{f}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>Field of Study</Label>
+              <SearchableSelect
+                options={[{ value: "__none__", label: "Not specified" }, ...fieldsOfStudy.map((x) => ({ value: x, label: x }))]}
+                value={fieldOfStudy}
+                onValueChange={(v) => setFieldOfStudy(v === "__none__" ? "" : v)}
+                placeholder="Select field"
+                searchPlaceholder="Search…"
+              />
             </div>
 
             <div className="space-y-1.5">
-              <p className="text-sm font-medium">Degree Level</p>
-              <Select value={degreeLevel || "__none__"} onValueChange={(v) => setDegreeLevel(v === "__none__" ? "" : v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select level" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">
-                    <span className="text-muted-foreground">Not specified</span>
-                  </SelectItem>
-                  {studyLevels.map((lvl) => (
-                    <SelectItem key={lvl} value={lvl}>{lvl}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>Degree Level</Label>
+              <SearchableSelect
+                options={[{ value: "__none__", label: "Not specified" }, ...studyLevels.map((x) => ({ value: x, label: x }))]}
+                value={degreeLevel}
+                onValueChange={(v) => setDegreeLevel(v === "__none__" ? "" : v)}
+                placeholder="Select level"
+                searchPlaceholder="Search…"
+              />
             </div>
 
             <div className="space-y-1.5">
-              <p className="text-sm font-medium">Note <span className="text-muted-foreground font-normal">(optional)</span></p>
-              <textarea
+              <Label>Note <span className="font-normal">(optional)</span></Label>
+              <Textarea
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 placeholder="Add a note about this qualification…"
                 rows={3}
-                className="w-full px-3 py-2 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                className="resize-none"
               />
             </div>
           </div>

@@ -43,6 +43,7 @@ import {
   INTAKE_SOURCES,
 } from "@/industries/_shared/features/lead-lists/taxonomies";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { DestinationsMultiSelect } from "@/components/dashboard/destinations-multi-select";
 import { positionsForStage } from "@/industries/education-consultancy/lead-assignment-by-stage";
 import { validateLeadIdentity } from "@/lib/leads/lead-validation";
@@ -465,6 +466,13 @@ export function AddLeadSheet({
       : eduAssignableMembersScoped;
 
   const assigneeOptions = isEducation ? eduAssignableMembers : assignableMembers;
+  // "Role · Branch" secondary text for the people picker.
+  const assigneeSecondary = (m: TeamMember) => {
+    const role = (m.position_slug || m.role || "").replace(/[-_]/g, " ");
+    const roleLabel = role ? role.charAt(0).toUpperCase() + role.slice(1) : "";
+    const branch = m.branch_id ? branches.find((b) => b.id === m.branch_id)?.name : "";
+    return [roleLabel, branch].filter(Boolean).join(" · ") || undefined;
+  };
   const assigneeDisabled =
     isSubmitting || !canPickAssignee || (isEducation && !formData.listId);
 
@@ -635,28 +643,29 @@ export function AddLeadSheet({
               <span className="ml-1 text-gray-400">(auto)</span>
             )}
           </Label>
-          <Select
-            value={formData.assignedTo || "__none__"}
+          <SearchableSelect
+            options={[
+              { value: "__none__", label: "Unassigned" },
+              ...assigneeOptions.map((member) => ({
+                value: member.user_id,
+                label: member.name + (member.user_id === currentUserId ? " (You)" : ""),
+                secondary: assigneeSecondary(member),
+                icon: (
+                  <span
+                    aria-hidden
+                    className="grid size-4 shrink-0 place-items-center rounded-full bg-ds-hover text-[9px] font-semibold text-ds-muted"
+                  >
+                    {member.name.trim().slice(0, 1).toUpperCase()}
+                  </span>
+                ),
+              })),
+            ]}
+            value={formData.assignedTo}
             onValueChange={(v) => updateField("assignedTo", v === "__none__" ? "" : v)}
+            placeholder={isEducation && !formData.listId ? "Select a stage first" : "Select team member"}
+            searchPlaceholder="Search people…"
             disabled={assigneeDisabled}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue
-                placeholder={
-                  isEducation && !formData.listId ? "Select a stage first" : "Select team member"
-                }
-              />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__none__">Unassigned</SelectItem>
-              {assigneeOptions.map((member) => (
-                <SelectItem key={member.user_id} value={member.user_id}>
-                  {member.name}
-                  {member.user_id === currentUserId && " (You)"}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          />
         </div>
       </div>
 
@@ -1155,39 +1164,25 @@ export function AddLeadSheet({
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label className="text-xs text-gray-600">Field of Study</Label>
-              <Select
-                value={formData.fieldOfStudy || "__none__"}
+              <SearchableSelect
+                options={[{ value: "__none__", label: "None" }, ...fieldsOfStudy.map((x) => ({ value: x, label: x }))]}
+                value={formData.fieldOfStudy}
                 onValueChange={(v) => updateField("fieldOfStudy", v === "__none__" ? "" : v)}
+                placeholder="Select field"
+                searchPlaceholder="Search…"
                 disabled={isSubmitting}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select field" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Select field</SelectItem>
-                  {fieldsOfStudy.map((f) => (
-                    <SelectItem key={f} value={f}>{f}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs text-gray-600">Interested Degree Level</Label>
-              <Select
-                value={formData.degreeLevel || "__none__"}
+              <SearchableSelect
+                options={[{ value: "__none__", label: "None" }, ...studyLevels.map((x) => ({ value: x, label: x }))]}
+                value={formData.degreeLevel}
                 onValueChange={(v) => updateField("degreeLevel", v === "__none__" ? "" : v)}
+                placeholder="Select level"
+                searchPlaceholder="Search…"
                 disabled={isSubmitting}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select level" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Select level</SelectItem>
-                  {studyLevels.map((lvl) => (
-                    <SelectItem key={lvl} value={lvl}>{lvl}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              />
             </div>
           </div>
         )}
@@ -1195,39 +1190,25 @@ export function AddLeadSheet({
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label className="text-xs text-gray-600">Intake Month</Label>
-              <Select
-                value={formData.intakeMonth || "__none__"}
+              <SearchableSelect
+                options={[{ value: "__none__", label: "None" }, ...intakeMonths.map((x) => ({ value: x, label: x }))]}
+                value={formData.intakeMonth}
                 onValueChange={(v) => updateField("intakeMonth", v === "__none__" ? "" : v)}
+                placeholder="Select month"
+                searchPlaceholder="Search…"
                 disabled={isSubmitting}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select month" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Select month</SelectItem>
-                  {intakeMonths.map((m) => (
-                    <SelectItem key={m} value={m}>{m}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs text-gray-600">Intake Year</Label>
-              <Select
-                value={formData.intakeYear || "__none__"}
+              <SearchableSelect
+                options={[{ value: "__none__", label: "None" }, ...intakeYears.map((x) => ({ value: x, label: x }))]}
+                value={formData.intakeYear}
                 onValueChange={(v) => updateField("intakeYear", v === "__none__" ? "" : v)}
+                placeholder="Select year"
+                searchPlaceholder="Search…"
                 disabled={isSubmitting}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select year" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Select year</SelectItem>
-                  {intakeYears.map((y) => (
-                    <SelectItem key={y} value={y}>{y}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              />
             </div>
           </div>
         )}
