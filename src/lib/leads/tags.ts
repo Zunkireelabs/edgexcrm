@@ -44,3 +44,20 @@ export function parseAddTags(input: unknown): AddTagsResult {
   }
   return { ok: true, tags };
 }
+
+/** Distinct tags with lead counts from rows of `tags` arrays (case-insensitive key, first spelling kept), biggest first. */
+export function countTags(rows: ReadonlyArray<{ tags: string[] | null }>): Array<{ tag: string; count: number }> {
+  const byKey = new Map<string, { tag: string; count: number }>();
+  for (const r of rows) {
+    const seen = new Set<string>();
+    for (const t of r.tags ?? []) {
+      const key = t.toLowerCase();
+      if (!t || seen.has(key)) continue;
+      seen.add(key);
+      const e = byKey.get(key);
+      if (e) e.count += 1;
+      else byKey.set(key, { tag: t, count: 1 });
+    }
+  }
+  return [...byKey.values()].sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+}

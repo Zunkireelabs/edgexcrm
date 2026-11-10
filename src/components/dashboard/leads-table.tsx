@@ -119,6 +119,8 @@ import { ColumnManagerDialog } from "@/components/dashboard/leads/column-manager
 import { LeadsGrid, countCounsellors } from "@/components/dashboard/leads/table/leads-grid";
 import { ColumnsPopover } from "@/components/dashboard/leads/table/columns-popover";
 import { BulkBar, getBulkBarActions } from "@/components/dashboard/leads/table/bulk-bar";
+import { CommandDialog, type CommandItem } from "@/components/dashboard/leads/table/command-dialog";
+import { normaliseLeadTag } from "@/lib/leads/tags";
 import { GridEmptyState, emptyVariant } from "@/components/dashboard/leads/table/grid-empty-state";
 import { GridPagination } from "@/components/dashboard/leads/table/grid-pagination";
 import { attachV2, V2_DEFAULT_KEYS } from "@/components/dashboard/leads/table/v2-columns";
@@ -605,6 +607,10 @@ export function LeadsTable({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  // EDGEX-127: the three bulk actions share one command dialog; which one is open (null = none).
+  const [bulkPalette, setBulkPalette] = useState<null | "stage" | "assign" | "tag">(null);
+  const [tagOptions, setTagOptions] = useState<Array<{ tag: string; count: number | null }> | null>(null);
+  const [tagBusy, setTagBusy] = useState(false);
   const [mergeDialogOpen, setMergeDialogOpen] = useState(false);
   // Outreach bulk enroll (OUTREACH-BULK-ENROLL-BRIEF.md): the selected leads (or "all matching" via selectAllMatching) -> a sequence.
   const [bulkEnrollOpen, setBulkEnrollOpen] = useState(false);
@@ -1590,16 +1596,25 @@ export function LeadsTable({
     }
   }
 
-  async function handleBulkAssign() {
+  // `targetOverride` is the command dialog's pick (state would not be updated yet); the legacy dialog passes nothing.
+  async function handleBulkAssign(targetOverride?: string): Promise<boolean> {
     const idsToAssign = Array.from(selectedIds);
+    const target = targetOverride ?? assignTo;
+    const autoListId = (() => {
+      if (!target || target === "unassign") return null;
+      const posSlug = positionSlugMap?.[target] ?? null;
+      const listSlug = posSlug ? (POSITION_ROUTE_MAP[posSlug] ?? null) : null;
+      const listPool = allLeadLists ?? leadLists;
+      return listSlug ? (listPool.find((l) => l.slug === listSlug)?.id ?? null) : null;
+    })();
 
     if (idsToAssign.length === 0) {
       toast.error("No leads selected");
-      return;
+      return false;
     }
-    if (assignBranchRequired && (!assignBranchId || !assignListId || !assignTo)) {
+    if (assignBranchRequired && (!assignBranchId || !assignListId || !target)) {
       toast.error("Please select a branch, stage, and assignee");
-      return;
+      return false;
     }
 
     setIsAssigning(true);
@@ -1612,10 +1627,10 @@ export function LeadsTable({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             ids: chunk,
-            ...(assignTo && { assigned_to: assignTo === "unassign" ? null : assignTo }),
+            ...(target && { assigned_to: target === "unassign" ? null : target }),
             ...(assignBranchRequired
               ? { branch_id: assignBranchId, list_id: assignListId }
-              : (assignAutoListId ? { list_id: assignAutoListId } : {})),
+              : (autoListId ? { list_id: autoListId } : {})),
           }),
         });
         const data = await response.json();
@@ -1625,20 +1640,38 @@ export function LeadsTable({
         updated += data.data.updated as number;
       }
 
-      const action = assignTo === "unassign" ? "Unassigned" : "Assigned";
-      toast.success(`${action} ${updated} lead${updated !== 1 ? "s" : ""}`);
+      const who = teamMembers.find((m) => m.user_id === target)?.name;
+      toast.success(target === "unassign" ? "Unassigned" : who ? `Assigned to ${who}` : "Assigned", {
+        description: `${updated.toLocaleString()} lead${updated !== 1 ? "s" : ""} ${target === "unassign" ? "unassigned" : "assigned"}`,
+      });
       setSelectedIds(new Set());
       setAssignDialogOpen(false);
       setAssignTo("");
       setAssignBranchId("");
       setAssignListId("");
       router.refresh();
+      return true;
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to assign leads");
+      return false;
     } finally {
       setIsAssigning(false);
     }
   }
+
+  // Tag list (with lead counts) for the Add tag dialog: loaded when it opens, from the scoped endpoint. If it fails the dialog
+  // falls back to the tags on the loaded rows (no counts).
+  useEffect(() => {
+    if (bulkPalette !== "tag") return;
+    const controller = new AbortController();
+    fetch("/api/v1/leads/tags", { signal: controller.signal })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((b: { data?: { tags: Array<{ tag: string; count: number | null }> } } | null) => {
+        if (!controller.signal.aborted) setTagOptions(b?.data?.tags ?? null);
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [bulkPalette]);
 
   // EDGEX-127 bulk Add tag. Same chunking + selection (incl. "select all N matching") as Assign; the API unions the tags
   // into each lead and reports how many writes failed. Returns true when the picker may close.
@@ -1861,19 +1894,20 @@ export function LeadsTable({
     }
   }
 
-  async function handleBulkMove() {
+  async function handleBulkMove(listIdOverride?: string): Promise<boolean> {
     const idsToMove = Array.from(selectedIds);
+    const targetListId = listIdOverride ?? moveListId;
     if (idsToMove.length === 0) {
       toast.error("No leads selected");
-      return;
+      return false;
     }
-    if (!moveListId) {
+    if (!targetListId) {
       toast.error("Please select a target list");
-      return;
+      return false;
     }
-    if (moveTargetIsArchive && !moveArchiveReason.trim()) {
+    if (!listIdOverride && moveTargetIsArchive && !moveArchiveReason.trim()) {
       toast.error("Archive reason is required");
-      return;
+      return false;
     }
 
     setIsMoveList(true);
@@ -1893,7 +1927,7 @@ export function LeadsTable({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             ids: chunks[i],
-            list_id: moveListId,
+            list_id: targetListId,
             ...(moveArchiveReason.trim() && { archive_reason: moveArchiveReason.trim() }),
             ...(moveAssignTo !== "keep" && {
               assigned_to: moveAssignTo === "unassign" ? null : moveAssignTo,
@@ -1914,7 +1948,7 @@ export function LeadsTable({
             window.localStorage.setItem(
               routeMemoryKey,
               JSON.stringify({
-                list_id: moveListId,
+                list_id: targetListId,
                 assigned_to: moveAssignTo === "keep" ? null : moveAssignTo === "unassign" ? null : moveAssignTo,
               }),
             );
@@ -1936,7 +1970,12 @@ export function LeadsTable({
         .filter(Boolean)
         .join(" ");
       toast.dismiss("bulk-move");
-      toast.success(toastMsg);
+      const movedTo = leadLists.find((l) => l.id === targetListId)?.name;
+      if (!isGraduateMove && !assignedName && movedTo) {
+        toast.success(`Moved to ${movedTo}`, { description: `${totalMoved.toLocaleString()} lead${totalMoved !== 1 ? "s" : ""} moved` });
+      } else {
+        toast.success(toastMsg);
+      }
       setSelectedIds(new Set());
       setMoveListDialogOpen(false);
       setMoveListId("");
@@ -1944,9 +1983,11 @@ export function LeadsTable({
       setMoveAssignTo("keep");
       setIsGraduateMove(false);
       router.refresh();
+      return true;
     } catch (error) {
       toast.dismiss("bulk-move");
       toast.error(error instanceof Error ? error.message : "Failed to move leads");
+      return false;
     } finally {
       setIsMoveList(false);
     }
@@ -3286,7 +3327,6 @@ export function LeadsTable({
             }}
           />
           <BulkBar
-            existingTags={Array.from(new Set(["student", ...localLeads.flatMap((l) => l.tags ?? [])]))}
             selectedCount={selectedCount}
             effectiveTotal={effectiveTotal}
             actions={getBulkBarActions({
@@ -3312,10 +3352,13 @@ export function LeadsTable({
                 setMoveAssignTo("keep");
                 setIsGraduateMove(false);
                 setMoveListId("");
-                setMoveListDialogOpen(true);
+                // Staging views route leads with an assignee in the same step: keep the full dialog there.
+                if (isStagingView) setMoveListDialogOpen(true);
+                else setBulkPalette("stage");
               },
-              onAssign: () => setAssignDialogOpen(true),
-              onAddTags: handleBulkAddTags,
+              // Branch-required staging assigns (branch + stage + assignee) keep the full dialog.
+              onAssign: () => (assignBranchRequired ? setAssignDialogOpen(true) : setBulkPalette("assign")),
+              onAddTag: () => setBulkPalette("tag"),
               onArchive: () => {
                 if (!archivedList) return;
                 setMoveArchiveReason("");
@@ -3678,7 +3721,7 @@ export function LeadsTable({
               Cancel
             </Button>
             <Button
-              onClick={handleBulkAssign}
+              onClick={() => void handleBulkAssign()}
               disabled={
                 isAssigning ||
                 (assignBranchRequired ? (!assignBranchId || !assignListId || !assignTo) : !assignTo)
@@ -3738,6 +3781,113 @@ export function LeadsTable({
       </Dialog>
 
       {/* Bulk Move to List Dialog */}
+      {/* EDGEX-127: Move stage / Assign / Add tag — one command dialog, three configs. */}
+      {(() => {
+        const n = selectedCount;
+        const leadsWord = `${n.toLocaleString()} lead${n !== 1 ? "s" : ""}`;
+        const close = () => setBulkPalette(null);
+        const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("");
+
+        // Move stage: same list rules as the old dialog (admins also see staging/archive lists).
+        const visibleLists = isAdmin ? leadLists : leadLists.filter((l) => !l.is_staging && !l.is_archive);
+        const selectedRows = localLeads.filter((l) => selectedIds.has(l.id));
+        const allSelectedLoaded = selectedRows.length === selectedIds.size;
+        const stageItems: CommandItem[] = visibleLists.map((l) => {
+          const current = allSelectedLoaded && selectedRows.length > 0 && selectedRows.every((r) => r.list_id === l.id);
+          return {
+            id: l.id,
+            label: l.name,
+            sub: current ? "current stage" : undefined,
+            disabled: current,
+            group: l.is_archive ? "Archived" : l.is_staging ? "Staging" : "Pipeline",
+            lead: <span aria-hidden className="size-2.5 shrink-0 rounded-full" style={{ background: stageDotColor(l) }} />,
+          };
+        }).sort((a, b) => ["Pipeline", "Staging", "Archived"].indexOf(a.group!) - ["Pipeline", "Staging", "Archived"].indexOf(b.group!));
+
+        // Assign: the same pool the old dialog offered (non-branch-required case), plus Unassign.
+        const pool = Array.from(new Map((assignableMembers ?? teamMembers.filter((m) => m.canEditLeads !== false)).map((m) => [m.user_id, m])).values());
+        const assignItems: CommandItem[] = [
+          ...pool.map((m) => ({
+            id: m.user_id,
+            label: m.name,
+            sub: memberMeta(m.user_id, m.role) || undefined,
+            group: "People",
+            lead: (
+              <span aria-hidden className="grid size-[22px] shrink-0 place-items-center rounded-full bg-ds-hover text-[9px] font-semibold text-ds-muted">
+                {initials(m.name)}
+              </span>
+            ),
+          })),
+          { id: "unassign", label: "Unassign", sub: "remove the assignment", group: "Other" },
+        ];
+
+        // Add tag: the scoped endpoint (with counts) when it answered, else the tags on the loaded rows.
+        const fallbackTags = Array.from(new Set(["student", ...localLeads.flatMap((l) => l.tags ?? [])])).map((tag) => ({ tag, count: null as number | null }));
+        const tagItems: CommandItem[] = (tagOptions ?? fallbackTags).map((t) => ({
+          id: t.tag,
+          label: t.tag,
+          right: t.count != null ? t.count.toLocaleString() : undefined,
+          group: `Add to ${leadsWord}`,
+        }));
+
+        return (
+          <>
+            <CommandDialog
+              open={bulkPalette === "stage"}
+              onClose={close}
+              title={`Move ${leadsWord} to stage`}
+              placeholder="Search stages…"
+              items={stageItems}
+              mode="single"
+              busy={isMoveList}
+              primaryLabel={(c) => (c[0] ? `Move to ${c[0].label}` : "Move")}
+              onSubmit={async ([id]) => {
+                // An archive target needs a reason: hand off to the full dialog, pre-targeted.
+                if (leadLists.find((l) => l.id === id)?.is_archive) {
+                  setMoveListId(id);
+                  setMoveArchiveReason("");
+                  setMoveAssignTo("keep");
+                  setIsGraduateMove(false);
+                  setMoveListDialogOpen(true);
+                  return true;
+                }
+                return handleBulkMove(id);
+              }}
+            />
+            <CommandDialog
+              open={bulkPalette === "assign"}
+              onClose={close}
+              title={`Assign ${leadsWord}`}
+              placeholder="Find someone…"
+              items={assignItems}
+              mode="single"
+              busy={isAssigning}
+              primaryLabel={(c) => (c[0] ? (c[0].id === "unassign" ? "Unassign" : `Assign to ${c[0].label}`) : "Assign")}
+              onSubmit={([id]) => handleBulkAssign(id)}
+            />
+            <CommandDialog
+              open={bulkPalette === "tag"}
+              onClose={close}
+              title={`Add tag to ${leadsWord}`}
+              placeholder="Search or create a tag…"
+              items={tagItems}
+              mode="multi"
+              busy={tagBusy}
+              create={{ normalise: normaliseLeadTag, label: (t) => `Create tag “${t}”` }}
+              primaryLabel={(c) => (c.length ? `Add ${c.length} tag${c.length !== 1 ? "s" : ""}` : "Add tags")}
+              onSubmit={async (tags) => {
+                setTagBusy(true);
+                try {
+                  return await handleBulkAddTags(tags);
+                } finally {
+                  setTagBusy(false);
+                }
+              }}
+            />
+          </>
+        );
+      })()}
+
       <Dialog open={moveListDialogOpen} onOpenChange={(open) => {
         setMoveListDialogOpen(open);
         if (!open) { setMoveListId(""); setMoveArchiveReason(""); setMoveAssignTo("keep"); setIsGraduateMove(false); }
@@ -3867,7 +4017,7 @@ export function LeadsTable({
               Cancel
             </Button>
             <Button
-              onClick={handleBulkMove}
+              onClick={() => void handleBulkMove()}
               disabled={isMoveList || !moveListId || (moveTargetIsArchive && !moveArchiveReason)}
             >
               {isMoveList

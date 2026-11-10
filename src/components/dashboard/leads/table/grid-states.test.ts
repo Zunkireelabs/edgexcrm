@@ -29,6 +29,13 @@ describe("getBulkBarActions", () => {
     expect(a).toMatchObject({ moveStage: true, assign: true, archive: true, restore: false });
     expect(a.more).toEqual(["enroll", "branch", "delete"]);
   });
+  it("Add tag follows the same write gate as Move stage / Assign (EDGEX-127)", () => {
+    expect(getBulkBarActions(base).addTag).toBe(true);
+    expect(getBulkBarActions({ ...base, isAdmin: false, isTeamScoped: true }).addTag).toBe(true);
+    expect(getBulkBarActions({ ...base, isAdmin: false }).addTag).toBe(false); // counselor
+    expect(getBulkBarActions({ ...base, viewMode: "trash" }).addTag).toBe(false);
+    expect(getBulkBarActions({ ...base, viewMode: "archived" }).addTag).toBe(false);
+  });
   it("Merge appears only when exactly 2 are selected", () => {
     expect(getBulkBarActions({ ...base, selectedCount: 2 }).more).toContain("merge");
     expect(getBulkBarActions({ ...base, selectedCount: 3 }).more).not.toContain("merge");

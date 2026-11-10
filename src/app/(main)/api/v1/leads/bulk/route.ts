@@ -26,6 +26,7 @@ import { sendBulkAssignedEmail } from "@/lib/email/send-lead-assigned";
 import { hasProspectQualification, canBypassProspectQualification } from "@/lib/leads/prospect-qualification";
 import { BULK_VIA, holderChange, listIdsChange } from "@/lib/leads/stage-move-audit";
 import { parseAddTags, unionTags } from "@/lib/leads/tags";
+import { clearTagsCacheForTenant } from "@/lib/leads/tags-cache";
 import { checkApplicationsReadiness, applicationsGateMessage, applicationsGateApplies } from "@/lib/leads/applications-readiness";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -317,6 +318,7 @@ export async function PATCH(request: NextRequest) {
         }
       }),
     );
+    clearTagsCacheForTenant(auth.tenantId);
     const failedSet = new Set(failedIds);
     Promise.all(
       changed

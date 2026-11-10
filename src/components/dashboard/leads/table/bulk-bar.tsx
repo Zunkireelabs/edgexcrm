@@ -8,16 +8,17 @@ import { useState } from "react";
 import {
   ArrowCircleUpIcon,
   BuildingsIcon,
-  DotsThreeIcon,
+  CaretDownIcon,
+  CircleDashedIcon,
   GitBranchIcon,
   GitMergeIcon,
   TagIcon,
   TrashIcon,
+  UserIcon,
   XIcon,
 } from "@/components/icons";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ITEM, POP } from "../toolbar/tokens";
-import { AddTagPicker } from "./add-tag-picker";
 
 export type MoreAction = "enroll" | "branch" | "graduate" | "merge" | "delete";
 
@@ -92,6 +93,8 @@ export function getBulkBarActions(i: BulkGateInput): BulkActions {
 export interface BulkBarHandlers {
   onMoveStage: () => void;
   onAssign: () => void;
+  /** EDGEX-127: opens the Add tag command dialog. */
+  onAddTag: () => void;
   onArchive: () => void;
   onRestore: () => void;
   onDeleteForever: () => void;
@@ -102,13 +105,13 @@ export interface BulkBarHandlers {
   onDelete: () => void;
   onSelectAllMatching: () => void;
   onClear: () => void;
-  /** Add tags to every selected lead. Resolves true when the picker should close. */
-  onAddTags: (tags: string[]) => Promise<boolean>;
 }
 
+// Approved bulk bar v2 (mockup "leads-table-v2-bulk"): white floating bar, raised 32px buttons.
+const BAR_SHADOW = "shadow-[0_0_0_1px_rgba(28,40,64,.04),0_4px_8px_-4px_rgba(28,40,64,.12),0_4px_12px_-2px_rgba(24,41,75,.16)]";
 const BTN =
-  "inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-ds-xs px-2 text-sm font-medium transition-colors hover:bg-white/15 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/60";
-const DIV = "mx-1 h-4 w-px bg-white/20";
+  "inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[9px] bg-ds-surface pl-2 pr-2.5 text-sm font-medium text-ds-ink shadow-[0_0_2px_rgba(28,40,64,.18),0_1px_3px_rgba(0,0,0,.04)] transition-colors hover:bg-ds-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ds-ghost data-[state=open]:bg-ds-hover [&>svg]:size-4 [&>svg]:text-ds-muted";
+const DIV = "mx-0.5 h-5 w-px bg-ds-border";
 
 export function BulkBar({
   selectedCount,
@@ -116,23 +119,18 @@ export function BulkBar({
   actions,
   handlers,
   stageLabel = "Move stage",
-  existingTags = [],
 }: {
   selectedCount: number;
   effectiveTotal: number;
   actions: BulkActions;
   handlers: BulkBarHandlers;
   stageLabel?: string;
-  /** Tags the picker offers (the same source as the Tag filter's values; no per-tag counts are available). */
-  existingTags?: string[];
 }) {
   const [moreOpen, setMoreOpen] = useState(false);
-  const [tagOpen, setTagOpen] = useState(false);
-  const [tagBusy, setTagBusy] = useState(false);
   if (selectedCount === 0) return null;
-  const countText = actions.selection === "all-selected" ? `All ${effectiveTotal.toLocaleString()} selected` : `${selectedCount.toLocaleString()} selected`;
+  const countText = actions.selection === "all-selected" ? effectiveTotal.toLocaleString() : selectedCount.toLocaleString();
 
-  const moreItem = (action: MoreAction, label: string, icon: React.ReactNode, onClick: () => void, destructive = false) => (
+  const moreItem = (action: string, label: string, icon: React.ReactNode, onClick: () => void, destructive = false) => (
     <button
       key={action}
       type="button"
@@ -146,95 +144,76 @@ export function BulkBar({
       {label}
     </button>
   );
+  const hasMore = actions.more.length > 0 || actions.archive;
 
   return (
     <div
       role="toolbar"
       aria-label="Bulk actions"
       data-testid="bulk-bar"
-      className="pointer-events-auto absolute bottom-16 left-1/2 z-30 flex -translate-x-1/2 items-center gap-0.5 rounded-xl bg-ds-ink p-1 text-white shadow-[0_0_0_1px_rgba(16,17,18,.06),0_8px_24px_-4px_rgba(16,17,18,.14),0_2px_6px_rgba(16,17,18,.06)]"
+      className={`pointer-events-auto absolute bottom-7 left-1/2 z-30 flex h-12 -translate-x-1/2 items-center gap-1.5 rounded-[14px] bg-ds-surface p-2 text-ds-ink ${BAR_SHADOW}`}
     >
-      <span className="whitespace-nowrap px-2 text-sm font-medium tabular-nums" aria-live="polite">
-        {countText}
+      <span className="flex h-8 items-center gap-2 rounded-[9px] bg-ds-hover pl-1.5 pr-2 text-sm text-ds-muted">
+        <span className="grid h-5 min-w-5 place-items-center rounded-[6px] bg-ds-accent px-1.5 text-xs font-semibold tabular-nums text-white" aria-live="polite">
+          {countText}
+        </span>
+        Selected
+        <button type="button" onClick={handlers.onClear} aria-label="Deselect all" className="grid size-4 place-items-center text-ds-faint hover:text-ds-ink">
+          <XIcon className="size-3.5" />
+        </button>
       </span>
       {actions.selection === "select-all" && (
-        <button type="button" className={`${BTN} text-white/90 underline underline-offset-2`} onClick={handlers.onSelectAllMatching}>
+        <button type="button" className="whitespace-nowrap px-1.5 text-sm text-ds-accent hover:underline" onClick={handlers.onSelectAllMatching}>
           Select all {effectiveTotal.toLocaleString()}
         </button>
       )}
       <span className={DIV} />
       {actions.restore && (
-        <button type="button" className={`${BTN} text-white`} onClick={handlers.onRestore}>
+        <button type="button" className={BTN} onClick={handlers.onRestore}>
           Restore
         </button>
       )}
       {actions.deleteForever && (
-        <button type="button" className={`${BTN} text-[#ff9a8c]`} onClick={handlers.onDeleteForever}>
+        <button type="button" className={`${BTN} !text-ds-bad`} onClick={handlers.onDeleteForever}>
           Delete
         </button>
       )}
       {actions.moveStage && (
-        <button type="button" className={`${BTN} text-white`} onClick={handlers.onMoveStage}>
+        <button type="button" className={BTN} onClick={handlers.onMoveStage}>
+          <CircleDashedIcon aria-hidden />
           {stageLabel}
         </button>
       )}
       {actions.assign && (
-        <button type="button" className={`${BTN} text-white`} onClick={handlers.onAssign}>
+        <button type="button" className={BTN} onClick={handlers.onAssign}>
+          <UserIcon aria-hidden />
           Assign
         </button>
       )}
       {actions.addTag && (
-        <Popover open={tagOpen} onOpenChange={setTagOpen}>
-          <PopoverTrigger asChild>
-            <button type="button" className={`${BTN} text-white`} aria-label="Add tag">
-              <TagIcon className="size-4" aria-hidden />
-              Add tag
-            </button>
-          </PopoverTrigger>
-          <PopoverContent align="center" side="top" sideOffset={12} className={`${POP} w-[300px]`}>
-            <AddTagPicker
-              leadCount={selectedCount}
-              existingTags={existingTags}
-              busy={tagBusy}
-              onCancel={() => setTagOpen(false)}
-              onSubmit={async (tags) => {
-                setTagBusy(true);
-                try {
-                  if (await handlers.onAddTags(tags)) setTagOpen(false);
-                } finally {
-                  setTagBusy(false);
-                }
-              }}
-            />
-          </PopoverContent>
-        </Popover>
-      )}
-      {(actions.moveStage || actions.assign || actions.addTag) && (actions.archive || actions.more.length > 0) && <span className={DIV} />}
-      {actions.archive && (
-        <button type="button" className={`${BTN} text-[#ff9a8c]`} onClick={handlers.onArchive}>
-          Archive
+        <button type="button" className={BTN} onClick={handlers.onAddTag}>
+          <TagIcon aria-hidden />
+          Add tag
         </button>
       )}
-      {actions.more.length > 0 && (
+      {hasMore && (
         <Popover open={moreOpen} onOpenChange={setMoreOpen}>
           <PopoverTrigger asChild>
-            <button type="button" className={`${BTN} text-white`} aria-label="More actions">
-              <DotsThreeIcon className="size-4" />
+            <button type="button" className={BTN} aria-label="More actions">
+              More
+              <CaretDownIcon aria-hidden />
             </button>
           </PopoverTrigger>
-          <PopoverContent align="center" side="top" sideOffset={8} className={`${POP} w-[220px]`}>
+          <PopoverContent align="end" side="top" sideOffset={12} className={`${POP} w-[220px] rounded-[12px]`}>
             {actions.more.includes("enroll") && moreItem("enroll", "Enroll in sequence", <GitBranchIcon className="size-4 text-ds-faint" />, handlers.onEnroll)}
             {actions.more.includes("branch") && moreItem("branch", "Share to branch", <BuildingsIcon className="size-4 text-ds-faint" />, handlers.onBranch)}
             {actions.more.includes("graduate") && moreItem("graduate", "Graduate → Sales Leads", <ArrowCircleUpIcon className="size-4 text-ds-faint" />, handlers.onGraduate)}
             {actions.more.includes("merge") && moreItem("merge", "Merge", <GitMergeIcon className="size-4 text-ds-faint" />, handlers.onMerge)}
             {actions.more.includes("delete") && moreItem("delete", "Delete", <TrashIcon className="size-4" />, handlers.onDelete, true)}
+            {actions.archive && moreItem("archive", "Archive leads", <TrashIcon className="size-4" />, handlers.onArchive, true)}
           </PopoverContent>
         </Popover>
       )}
-      <span className={DIV} />
-      <button type="button" className={`${BTN} w-7 justify-center px-0 text-white`} onClick={handlers.onClear} aria-label="Deselect all">
-        <XIcon className="size-4" />
-      </button>
     </div>
   );
 }
