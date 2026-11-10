@@ -20,6 +20,7 @@ import {
   moveColumn,
   pinColumn,
   stickyOffsets,
+  isScrolledSideways,
   unpinColumn,
   type ColumnLayout,
 } from "./grid-layout";
@@ -30,8 +31,11 @@ export const NAME_DEFAULT_WIDTH = 210;
 // Mockup checkbox: 16px, 5px radius, 1.5px ghost inset border, accent fill when checked.
 const CHECKBOX_CLASS =
   "size-4 rounded-[5px] border-0 bg-ds-surface shadow-[inset_0_0_0_1.5px_var(--ds-ghost)] dark:bg-ds-surface data-[state=checked]:bg-ds-accent data-[state=checked]:text-white data-[state=checked]:shadow-none data-[state=indeterminate]:bg-ds-accent data-[state=indeterminate]:text-white data-[state=indeterminate]:shadow-none";
-// Stronger divider after Name (border plus inset shadow, as .sn in the mockup).
-const NAME_EDGE = "border-r border-ds-border";
+// Name divider: the same 1px inset hairline every cell draws, plus an outer shadow that fades in
+// once the grid is scrolled sideways (scroller data-scrolled sets --grid-edge-shadow; EDGEX-148).
+// It is box-shadow on the cell itself so the cell's overflow-hidden cannot clip it.
+const NAME_EDGE =
+  "shadow-[inset_-1px_0_0_var(--ds-border),6px_0_16px_4px_var(--grid-edge-shadow,transparent)]! transition-shadow duration-200";
 const MIN_WIDTH = 60;
 
 /** Counsellors summary: facet options with leads, excluding Unassigned. Null when the facet is not available. */
@@ -281,7 +285,17 @@ export function LeadsGrid(props: LeadsGridProps) {
   const sortedKey = (col: LeadColumn) => !!col.v2?.sort && sort.field === col.v2.sort;
 
   return (
-    <div className="min-h-0 flex-1 overflow-auto border-t border-ds-border bg-ds-surface" data-testid="leads-grid-scroller">
+    <div
+      className="min-h-0 flex-1 overflow-auto border-t border-ds-border bg-ds-surface data-[scrolled=true]:[--grid-edge-shadow:rgba(0,0,0,0.12)]"
+      data-testid="leads-grid-scroller"
+      data-scrolled="false"
+      onScroll={(e) => {
+        // Attribute toggle only: no React state, so no re-render per scrolled pixel.
+        const el = e.currentTarget;
+        const next = String(isScrolledSideways(el.scrollLeft));
+        if (el.dataset.scrolled !== next) el.dataset.scrolled = next;
+      }}
+    >
       <table
         className="border-separate border-spacing-0 text-sm font-medium"
         style={{ tableLayout: "fixed", width: "100%", minWidth: totalWidth }}

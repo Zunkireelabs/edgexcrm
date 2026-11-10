@@ -94,3 +94,8 @@ export function stickyOffsets({ nameWidth, pinnedWidths }: StickyInput): number[
   }
   return offsets;
 }
+
+/** True once the grid has been scrolled sideways: the Name column's edge shadow fades in (EDGEX-148). */
+export function isScrolledSideways(scrollLeft: number): boolean {
+  return scrollLeft > 0;
+}

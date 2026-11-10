@@ -85,3 +85,13 @@ describe("sticky offsets", () => {
     expect(stickyOffsets({ nameWidth: 200, pinnedWidths: [] })).toEqual([CHECKBOX_WIDTH]);
   });
 });
+
+import { isScrolledSideways } from "./grid-layout";
+
+describe("isScrolledSideways", () => {
+  it("is false at the left edge and true once scrolled", () => {
+    expect(isScrolledSideways(0)).toBe(false);
+    expect(isScrolledSideways(1)).toBe(true);
+    expect(isScrolledSideways(240)).toBe(true);
+  });
+});
