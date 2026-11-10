@@ -13,11 +13,15 @@ export const DIALOG_SHELL =
 export const DIALOG_CARD =
   "flex flex-col overflow-hidden rounded-[12px] bg-ds-surface shadow-[0_0_0_1px_rgba(28,40,64,.08),0_1px_2px_rgba(28,40,64,.04)]";
 
-/** Dialog widths: sm 440, md 560, lg 720. Max-widths (the dialog is `w-full`) so a consumer's own `sm:max-w-*` still wins. */
+/**
+ * Dialog widths: sm 440, md 560, lg 720, each capped to the viewport minus 1rem gutters. Plain (unprefixed)
+ * max-w so tailwind-merge drops it whenever a consumer passes ANY `max-w-*` (e.g. `max-w-md`); a consumer
+ * `sm:max-w-*` still wins at sm and up.
+ */
 export const DIALOG_SIZES = {
-  sm: "sm:max-w-[440px]",
-  md: "sm:max-w-[560px]",
-  lg: "sm:max-w-[720px]",
+  sm: "max-w-[min(440px,calc(100%-2rem))]",
+  md: "max-w-[min(560px,calc(100%-2rem))]",
+  lg: "max-w-[min(720px,calc(100%-2rem))]",
 } as const;
 
 export type DialogSize = keyof typeof DIALOG_SIZES;

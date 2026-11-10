@@ -35,13 +35,25 @@ describe("DialogContent size", () => {
   it("defaults to md (560) and honours sm / lg (440 / 720)", () => {
     open();
     expect(screen.getByRole("dialog")).toHaveAttribute("data-size", "md");
-    expect(screen.getByRole("dialog").className).toContain("sm:max-w-[560px]");
+    expect(screen.getByRole("dialog").className).toContain("max-w-[min(560px,calc(100%-2rem))]");
     cleanup();
     open({ size: "sm" });
-    expect(screen.getByRole("dialog").className).toContain("sm:max-w-[440px]");
+    expect(screen.getByRole("dialog").className).toContain("max-w-[min(440px,calc(100%-2rem))]");
     cleanup();
     open({ size: "lg" });
-    expect(screen.getByRole("dialog").className).toContain("sm:max-w-[720px]");
+    expect(screen.getByRole("dialog").className).toContain("max-w-[min(720px,calc(100%-2rem))]");
+  });
+
+  it("drops the size default when a consumer passes any plain max-w-*, and keeps a consumer sm:max-w-*", () => {
+    open({ className: "max-w-md" });
+    expect(screen.getByRole("dialog").className).not.toContain("560px");
+    expect(screen.getByRole("dialog").className).toContain("max-w-md");
+    cleanup();
+    open({ className: "sm:max-w-[425px]" });
+    expect(screen.getByRole("dialog").className).toContain("sm:max-w-[425px]");
+    cleanup();
+    open();
+    expect(screen.getByRole("dialog").className).toContain("560px");
   });
 
   it("lets a consumer className still land on the OUTER element", () => {
