@@ -47,5 +47,5 @@ export const DIALOG_KEY_HINT =
 export const DIALOG_FOOTER_FORM = DIALOG_FOOTER.replace("min-h-[52px]", "min-h-11")
   .replace(" py-2 ", " py-0 ")
   .replaceAll("[&_[data-slot=button]]:h-8", "[&_[data-slot=button]]:h-7")
-  .replaceAll("[&_[data-slot=button]]:rounded-[9px]", "[&_[data-slot=button]]:rounded-lg")
+  .replaceAll("[&_[data-slot=button]]:rounded-[9px]", "[&_[data-slot=button]]:rounded-[8px]")
   .replaceAll("[&_[data-slot=button]]:px-3", "[&_[data-slot=button]]:px-2 [&_[data-slot=button]]:py-1 [&_[data-slot=button][data-variant=default]]:pr-1.5");

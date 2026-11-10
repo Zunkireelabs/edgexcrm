@@ -664,7 +664,7 @@ export function AddLeadSheet({
             value={formData.assignedTo}
             onValueChange={(v) => updateField("assignedTo", v === "__none__" ? "" : v)}
             placeholder={isEducation && !formData.listId ? "Select a stage first" : "Select team member"}
-            searchPlaceholder="Search people…"
+            searchPlaceholder="Find someone…"
             disabled={assigneeDisabled}
           />
         </div>
@@ -1170,7 +1170,7 @@ export function AddLeadSheet({
                 value={formData.fieldOfStudy}
                 onValueChange={(v) => updateField("fieldOfStudy", v === "__none__" ? "" : v)}
                 placeholder="Select field"
-                searchPlaceholder="Search…"
+                searchPlaceholder="Search fields…"
                 disabled={isSubmitting}
               />
             </div>
@@ -1181,7 +1181,7 @@ export function AddLeadSheet({
                 value={formData.degreeLevel}
                 onValueChange={(v) => updateField("degreeLevel", v === "__none__" ? "" : v)}
                 placeholder="Select level"
-                searchPlaceholder="Search…"
+                searchPlaceholder="Search levels…"
                 disabled={isSubmitting}
               />
             </div>
@@ -1196,7 +1196,7 @@ export function AddLeadSheet({
                 value={formData.intakeMonth}
                 onValueChange={(v) => updateField("intakeMonth", v === "__none__" ? "" : v)}
                 placeholder="Select month"
-                searchPlaceholder="Search…"
+                searchPlaceholder="Search months…"
                 disabled={isSubmitting}
               />
             </div>
@@ -1207,7 +1207,7 @@ export function AddLeadSheet({
                 value={formData.intakeYear}
                 onValueChange={(v) => updateField("intakeYear", v === "__none__" ? "" : v)}
                 placeholder="Select year"
-                searchPlaceholder="Search…"
+                searchPlaceholder="Search years…"
                 disabled={isSubmitting}
               />
             </div>

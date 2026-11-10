@@ -114,29 +114,29 @@ export function QualifyRowButton({
               selected={dests}
               onChange={setDests}
               options={destOptions}
-              label="Interested Destinations"
+              label="Interested destinations"
               optional={false}
             />
 
             <div className="space-y-1.5">
-              <Label>Field of Study</Label>
+              <Label>Field of study</Label>
               <SearchableSelect
                 options={[{ value: "__none__", label: "Not specified" }, ...fieldsOfStudy.map((x) => ({ value: x, label: x }))]}
                 value={fieldOfStudy}
                 onValueChange={(v) => setFieldOfStudy(v === "__none__" ? "" : v)}
                 placeholder="Select field"
-                searchPlaceholder="Search…"
+                searchPlaceholder="Search fields…"
               />
             </div>
 
             <div className="space-y-1.5">
-              <Label>Degree Level</Label>
+              <Label>Degree level</Label>
               <SearchableSelect
                 options={[{ value: "__none__", label: "Not specified" }, ...studyLevels.map((x) => ({ value: x, label: x }))]}
                 value={degreeLevel}
                 onValueChange={(v) => setDegreeLevel(v === "__none__" ? "" : v)}
                 placeholder="Select level"
-                searchPlaceholder="Search…"
+                searchPlaceholder="Search levels…"
               />
             </div>
 

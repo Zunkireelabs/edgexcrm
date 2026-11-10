@@ -116,7 +116,7 @@ function DialogContent({
             <DialogPrimitive.Close
               data-slot="dialog-close"
               className={cn(
-                "absolute right-3 z-20 grid size-7 place-items-center rounded-lg text-ds-faint transition-colors outline-none hover:bg-ds-hover hover:text-ds-ink focus-visible:ring-2 focus-visible:ring-ds-accent/30 disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+                "absolute right-3 z-20 grid size-7 place-items-center rounded-[8px] text-ds-faint transition-colors outline-none hover:bg-ds-hover hover:text-ds-ink focus-visible:ring-2 focus-visible:ring-ds-accent/30 disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
                 isForm ? "top-2" : "top-[10px]"
               )}
             >

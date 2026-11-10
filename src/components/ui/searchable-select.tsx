@@ -243,7 +243,7 @@ export function SearchableSelect(props: SearchableSelectProps) {
                   setOpen(false)
                   footerAction.onSelect()
                 }}
-                className="flex h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-sm leading-5 font-medium text-ds-ink outline-none hover:bg-[#f6f7f7] focus-visible:bg-[#f6f7f7] [&_svg]:size-4 [&_svg]:text-ds-muted"
+                className="flex h-8 w-full items-center gap-2 rounded-[8px] px-2 text-left text-sm leading-5 font-medium text-ds-ink outline-none hover:bg-[#f6f7f7] focus-visible:bg-[#f6f7f7] [&_svg]:size-4 [&_svg]:text-ds-muted"
               >
                 {footerAction.icon}
                 {footerAction.label}
