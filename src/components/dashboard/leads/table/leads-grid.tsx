@@ -32,10 +32,10 @@ export const NAME_DEFAULT_WIDTH = 210;
 const CHECKBOX_CLASS =
   "size-4 rounded-[5px] border-0 bg-ds-surface shadow-[inset_0_0_0_1.5px_var(--ds-ghost)] dark:bg-ds-surface data-[state=checked]:bg-ds-accent data-[state=checked]:text-white data-[state=checked]:shadow-none data-[state=indeterminate]:bg-ds-accent data-[state=indeterminate]:text-white data-[state=indeterminate]:shadow-none";
 // Name column edge (EDGEX-148): the divider is the same 1px inset hairline every cell draws. When the
-// grid is scrolled sideways a 20px gradient ::after on each sticky Name cell fades in to the right
+// grid is scrolled sideways a 28px gradient ::after on each sticky Name cell fades in to the right
 // (scroller data-scrolled + group/grid). Uniform vertically, so rows join without seams.
 const NAME_EDGE =
-  "after:pointer-events-none after:absolute after:top-0 after:-bottom-px after:left-full after:w-5 after:content-[''] after:bg-linear-to-r after:from-black/[.09] after:to-transparent after:opacity-0 after:transition-opacity after:duration-200 group-data-[scrolled=true]/grid:after:opacity-100";
+  "after:pointer-events-none after:absolute after:top-0 after:-bottom-px after:left-full after:w-7 after:content-[''] after:bg-[linear-gradient(to_right,rgba(0,0,0,.06)_0%,rgba(0,0,0,.035)_25%,rgba(0,0,0,.014)_55%,rgba(0,0,0,0)_100%)] after:opacity-0 after:transition-opacity after:duration-200 group-data-[scrolled=true]/grid:after:opacity-100";
 // Name cells stay overflow-visible so the pseudo isn't clipped; truncation moves to this inner wrapper.
 const NAME_CLIP = "overflow-hidden whitespace-nowrap";
 const MIN_WIDTH = 60;
