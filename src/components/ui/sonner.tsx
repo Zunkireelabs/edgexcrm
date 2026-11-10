@@ -21,10 +21,10 @@ const Toaster = ({ ...props }: ToasterProps) => {
       duration={TOAST_DURATION_MS}
       className="toaster group"
       icons={{
-        success: <CheckIcon className="size-3.5" weight="bold" />,
-        info: <InfoIcon className="size-3.5" weight="bold" />,
-        warning: <WarningIcon className="size-3.5" weight="bold" />,
-        error: <WarningIcon className="size-3.5" weight="bold" />,
+        success: <CheckIcon className="size-3.5" />,
+        info: <InfoIcon className="size-3.5" />,
+        warning: <WarningIcon className="size-3.5" />,
+        error: <WarningIcon className="size-3.5" />,
         loading: <CircleNotchIcon className="size-3.5 animate-spin" />,
         close: <XIcon className="size-3.5" />,
       }}
