@@ -84,7 +84,9 @@ describe("phone: text buttons get their own line (round 4, H)", () => {
   it("the rule lives only under the phone breakpoint", () => {
     const css = readFileSync(resolve(__dirname, "home.css"), "utf8");
     expect(css).toMatch(/@media \(max-width: 767px\) \{ \.eh-it > \.eh-ac\.eh-ac-text \{ grid-column: 2 \/ -1; justify-content: flex-start; \} \}/);
-    expect(css.match(/eh-ac-text/g)).toHaveLength(1);
+    // The same rule also lives in a container query (Q5), so a wide screen with a narrow column drops the buttons under the text too.
+    expect(css).toMatch(/@container \(max-width: 700px\) \{\s*\.eh-list-needs \.eh-it > \.eh-ac\.eh-ac-text \{ grid-column: 2 \/ -1;/);
+    expect(css.match(/eh-ac-text/g)).toHaveLength(2);
     expect(css).not.toContain("eh-ac-multi");
   });
 });

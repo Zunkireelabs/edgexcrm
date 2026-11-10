@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
+import { StrictMode, useState } from "react";
 import { cleanup, render, screen, waitFor, fireEvent } from "@testing-library/react";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
-import { BatchPanel } from "./batch-panel";
+import { BatchPanel, useBatchRun } from "./batch-panel";
 import { PrepareAllCard } from "./prepare-all-card";
 import type { BatchEntry } from "../lib/batch";
 
@@ -27,7 +28,23 @@ function stub(cards: unknown[]) {
 }
 const openSpy = vi.fn();
 beforeEach(() => { vi.stubGlobal("open", openSpy); openSpy.mockClear(); });
-const mount = (onSent = () => {}) => render(<BatchPanel key="x" entries={ENTRIES} open onClose={() => {}} onSent={onSent} />);
+// Like Home: the press starts the request (never an effect), and the panel only shows what came back.
+function Host({ onSent }: { onSent: () => void }) {
+  const run = useBatchRun(ENTRIES);
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button type="button" onClick={() => { setOpen(true); run.start(); }}>Prepare</button>
+      <BatchPanel entries={ENTRIES} open={open} onClose={() => { setOpen(false); run.reset(); }} onSent={onSent} run={run} />
+    </>
+  );
+}
+const mount = (onSent = () => {}) => {
+  const r = render(<Host onSent={onSent} />);
+  fireEvent.click(screen.getByText("Prepare"));
+  return r;
+};
+const batchPosts = () => calls.filter((c) => c.url === "/api/v1/home/draft-batch");
 
 describe("PrepareAllCard", () => {
   it("'Orca can prepare N of these' with the summary and the button; nothing for a single message", () => {
@@ -150,10 +167,10 @@ describe("P3/P4 in the panel", () => {
     fireEvent.click(screen.getByText("Open in WhatsApp"));
     fireEvent.click(await screen.findByText("Yes, I sent it")); // Mina: sent
     // end of the round: Ramesh (No) comes round again
-    await screen.findByText(/Next: Ramesh Adhikari \(4 of 4\)/);
+    await screen.findByText(/Asking again: Ramesh Adhikari \(1 of 1\) · 2 sent · 1 not sent/);
     expect(openSpy).toHaveBeenCalledTimes(3);
     fireEvent.click(screen.getByText("Open in WhatsApp"));
-    await screen.findByText(/Sent\? Ramesh Adhikari \(4 of 4\)/);
+    await screen.findByText(/Sent\? Ramesh Adhikari \(1 of 1\)/);
     expect(openSpy).toHaveBeenCalledTimes(4);
     fireEvent.click(screen.getByText("Yes, I sent it"));
     await waitFor(() => expect(screen.queryByText(/Sent\? Ramesh/)).toBeNull());
@@ -165,11 +182,69 @@ describe("P3/P4 in the panel", () => {
     await screen.findByText("Hi Ramesh, checking in.");
     fireEvent.click(screen.getByText("Go through 1"));
     fireEvent.click(await screen.findByText("No"));
-    await screen.findByText(/Next: Ramesh Adhikari \(2 of 2\)/);
+    await screen.findByText(/Asking again: Ramesh Adhikari \(1 of 1\)/);
     fireEvent.click(screen.getByText("Open in WhatsApp"));
     fireEvent.click(await screen.findByText("No"));
-    await waitFor(() => expect(screen.queryByText(/Next: Ramesh/)).toBeNull());
+    await waitFor(() => expect(screen.queryByText(/Asking again: Ramesh/)).toBeNull());
     expect(openSpy).toHaveBeenCalledTimes(2);
     expect((screen.getByLabelText("Include Ramesh Adhikari") as HTMLInputElement).checked).toBe(true); // stays ticked
+  });
+});
+
+describe("Q2: one press is one request", () => {
+  it("a press sends exactly one draft-batch POST, even in StrictMode (which runs effects twice) and across re-renders", async () => {
+    stub([card("a", "Ramesh Adhikari", "whatsapp")]);
+    const { rerender } = render(<StrictMode><Host onSent={() => {}} /></StrictMode>);
+    fireEvent.click(screen.getByText("Prepare"));
+    fireEvent.click(screen.getByText("Prepare")); // a double click is still one request
+    await screen.findByText("Hi Ramesh, checking in.");
+    rerender(<StrictMode><Host onSent={() => {}} /></StrictMode>);
+    expect(batchPosts()).toHaveLength(1);
+  });
+  it("closing and pressing again asks again (one more request)", async () => {
+    stub([card("a", "Ramesh Adhikari", "whatsapp")]);
+    mount();
+    await screen.findByText("Hi Ramesh, checking in.");
+    fireEvent.click(screen.getByText("Cancel"));
+    fireEvent.click(screen.getByText("Prepare"));
+    await waitFor(() => expect(batchPosts()).toHaveLength(2));
+  });
+});
+
+describe("Q3: the second round counts on its own", () => {
+  it("'Asking again: X (1 of 3)': the total never grows, and the sent / not sent counts carry on", async () => {
+    const names = ["Ramesh Adhikari", "Saroj Karki", "Mina Gurung", "Dipa Lama"];
+    stub(names.map((n, i) => card(`l${i}`, n, "whatsapp")));
+    mount();
+    await screen.findByText("Hi Ramesh, checking in.");
+    fireEvent.click(screen.getByText("Go through 4"));
+    fireEvent.click(await screen.findByText("Yes, I sent it")); // Ramesh sent
+    await screen.findByText(/Next: Saroj Karki \(2 of 4\) · 1 sent · 0 not sent/);
+    for (let i = 0; i < 3; i++) {
+      fireEvent.click(screen.getByText("Open in WhatsApp"));
+      fireEvent.click(await screen.findByText("No"));
+      if (i < 2) await screen.findByText(new RegExp(`Next: .* \\(${i + 3} of 4\\)`));
+    }
+    await screen.findByText(/Asking again: Saroj Karki \(1 of 3\) · 1 sent · 3 not sent/);
+    expect(screen.queryByText(/of 4\) · 1 sent · 3 not sent/)).toBeNull();
+  });
+});
+
+describe("Q1: Orca suggests not sending", () => {
+  const skipCard = { ...card("c", "Saroj Karki", "whatsapp", null), skip: { reason: "Already abroad, so asking about studying there is pointless.", quote: "he is already in Korea", source: "note, 7 Sep" } };
+  it("shows the counsellor's own words, unticked and disabled, with Open lead; it is not in 'Go through N' and not in the message count", async () => {
+    stub([card("a", "Ramesh Adhikari", "whatsapp"), skipCard]);
+    mount();
+    await screen.findByText("Hi Ramesh, checking in.");
+    expect(screen.getByText(/Orca suggests not sending:/)).toBeTruthy();
+    expect(screen.getByText(/he is already in Korea/).textContent).toContain("(note, 7 Sep)");
+    const box = screen.getByLabelText("Include Saroj Karki") as HTMLInputElement;
+    expect(box.checked).toBe(false);
+    expect(box.disabled).toBe(true);
+    expect(screen.getByText("Open lead").getAttribute("href")).toBe("/leads/c");
+    expect(screen.getByText("Go through 1")).toBeTruthy();
+    expect(screen.getByText("Check before sending · 1 message")).toBeTruthy();
+    expect(screen.queryByText("Couldn't draft, write your own.")).toBeNull();
+    expect(screen.queryByLabelText("Message to Saroj Karki")).toBeNull();
   });
 });

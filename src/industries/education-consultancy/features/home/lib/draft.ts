@@ -106,6 +106,40 @@ export function unbackedTimeWords(texts: string[], facts: string[]): string[] {
   return [...new Set(out)];
 }
 
+const NOTE_PRONOUN = /\b(he|she|him|himself|herself|his|hers|her)\b/gi;
+
+/**
+ * What the model reads of a counsellor's note: he / she / him / his / her become the lead's first name ("He is already in Korea" ->
+ * "Bishal is already in Korea", "her results" -> "Bishal's results"). The model copies what it reads, so this is what stops he / she
+ * reaching its message, reason and task: Orca never sees a gendered pronoun it could copy (and never guesses one). "her" is possessive
+ * unless it ends the clause. The note on the lead's record is untouched; only this copy is changed.
+ */
+export function neutralizePronouns(text: string, name: string): string {
+  return text.replace(NOTE_PRONOUN, (m, w: string, at: number) => {
+    const word = w.toLowerCase();
+    if (word === "his" || word === "hers") return `${name}'s`;
+    if (word === "her") return /^\s*(?:[.,;:!?)]|$)/.test(text.slice(at + m.length)) ? name : `${name}'s`;
+    return name;
+  });
+}
+
+/**
+ * The reverse, for showing the counsellor their OWN words: find, in the original notes, the sentence that `quote` (read from the
+ * neutralized copy) was copied from. Null when it can't be found, and the caller shows the quote as given.
+ */
+export function originalWords(quote: string, name: string, originals: string[]): string | null {
+  const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const q = quote.trim().replace(/[.!?]+$/, "");
+  if (!q || !name) return null;
+  const pieces = q.split(new RegExp(`${esc(name)}(?:'s)?`, "g")).map(esc);
+  const re = new RegExp(pieces.join("(?:he|she|him|his|hers|her|himself|herself)(?:'s)?").replace(/\s+/g, "\\s+"), "i");
+  for (const o of originals) {
+    const m = re.exec(o);
+    if (m) return m[0];
+  }
+  return null;
+}
+
 const PRONOUN = /\b(he|she|his|her|hers|him|himself|herself)\b/i;
 /** Gender is never guessed from a name: a draft (or its reason or task) using he/she/his/her is refused. Names only. */
 export function hasGenderedPronoun(texts: string[]): boolean {

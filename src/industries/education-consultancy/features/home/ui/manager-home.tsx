@@ -225,13 +225,13 @@ export function ManagerHome({ data }: { data: ManagerData }) {
               </Button>
             ) : null}
           </div>
-          <div className="eh-list">
+          <div className="eh-list eh-list-needs">
             {needs.length === 0 ? <div className="eh-note" style={{ padding: "16px 14px" }}>Nothing needs you right now.</div> : null}
             {needs.map((r: NeedsYouRow, idx) => {
               const Icon = ICONS[r.icon];
               return (
                 <div key={r.key} id={`need-${r.key}`} className="eh-it">
-                  <span className={`eh-ic ${r.tone === "neutral" ? "" : r.tone}`}><Icon size={18} aria-hidden /></span>
+                  <span className={`eh-ic ${r.icon === "sparkle" ? "ai" : r.tone === "neutral" ? "" : r.tone}`}><Icon size={18} aria-hidden /></span>
                   <div style={{ minWidth: 0 }}>
                     <div className="eh-tl">
                       <span className="eh-nm">{r.title}</span>
@@ -287,7 +287,7 @@ export function ManagerHome({ data }: { data: ManagerData }) {
           </div>
         </section>
 
-        <aside className="eh-side" aria-label="Needs a look and impact">
+        <aside className="eh-side eh-side-mgr" aria-label="Needs a look and impact">
           <div className="eh-card" id="look">
             <div className="eh-ch">
               <UsersIcon size={16} aria-hidden />
@@ -305,7 +305,7 @@ export function ManagerHome({ data }: { data: ManagerData }) {
           </div>
 
           {data.shadow ? (
-            <div className="eh-card">
+            <div className="eh-card eh-ph-hide">
               <div className="eh-ch"><UserSwitchIcon size={16} aria-hidden /><h3>Smart assignment</h3></div>
               <div className="eh-note">
                 {data.shadow.total === 0
@@ -319,7 +319,7 @@ export function ManagerHome({ data }: { data: ManagerData }) {
           ) : null}
 
           {data.rules ? (
-            <div className="eh-card">
+            <div className="eh-card eh-ph-hide">
               <div className="eh-ch">
                 <TreeStructureIcon size={16} aria-hidden />
                 <h3>Rules from your processes</h3>
@@ -378,7 +378,7 @@ function ImpactBody({ data }: { data: ManagerData }) {
   if (impact.status === "measuring") return <div className="eh-note">Ready on {impact.readyOn}. Measuring since {impact.since}.</div>;
   return (
     <>
-      <div className="eh-sub">{impact.afterDays >= 21 ? "Last 3 weeks" : "Since it went live"} vs the 4 weeks before it went live</div>
+      <div className="eh-sub">{impact.afterDays >= 21 ? "Last 3 weeks" : `First ${impact.afterDays} days`} vs the 4 weeks before it went live</div>
       {impact.rows.map((r) => (
         <div key={r.key} className="eh-met">
           <span className="k">{r.label}</span>

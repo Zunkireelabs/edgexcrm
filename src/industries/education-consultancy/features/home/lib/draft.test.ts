@@ -123,3 +123,22 @@ describe("S4 pronouns", () => {
     for (const t of ["Sita's Australia interest", "other here", "there is the file"]) expect(hasGenderedPronoun([t])).toBe(false);
   });
 });
+
+describe("Q1(c): the model reads notes without he / she", () => {
+  it("he / she / him become the name, his / hers the name's, and her follows its use", async () => {
+    const { neutralizePronouns } = await import("./draft");
+    expect(neutralizePronouns("He is already in Korea.", "Bishal")).toBe("Bishal is already in Korea.");
+    expect(neutralizePronouns("She said her results come out next month, so call her.", "Nisha")).toBe("Nisha said Nisha's results come out next month, so call Nisha.");
+    expect(neutralizePronouns("Wants his brother's city; the fee is hers.", "Aman")).toBe("Wants Aman's brother's city; the fee is Aman's.");
+    expect(neutralizePronouns("Asked about the other option (not her)", "Sita")).toBe("Asked about the other option (not Sita)");
+    expect(neutralizePronouns("The shelf and the other were checked", "Sita")).toBe("The shelf and the other were checked"); // words that merely contain he / her
+  });
+  it("originalWords finds the counsellor's own sentence for a quote read from the neutral copy", async () => {
+    const { originalWords } = await import("./draft");
+    const notes = ["Call at 4pm. He is already in Korea, working there.", "She doesn't have any plans regarding abroad."];
+    expect(originalWords("Bishal is already in Korea", "Bishal", notes)).toBe("He is already in Korea");
+    expect(originalWords("Nisha doesn't have any plans regarding abroad.", "Nisha", notes)).toBe("She doesn't have any plans regarding abroad");
+    expect(originalWords("Bishal's visa was refused", "Bishal", notes)).toBeNull();
+    expect(originalWords("Number is not registered on WhatsApp", "Kamal", ["Number is not registered on WhatsApp."])).toBe("Number is not registered on WhatsApp");
+  });
+});

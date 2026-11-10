@@ -70,11 +70,11 @@ export function OrcaReadCard({ scope, initial, tz, title, canAsk }: { scope: Rea
   };
 
   if (state === "off") return null;
-  if (state === "paused") return <section className="eh-orca" aria-label={title}><div className="eh-orca-h"><span className="spk"><SparkleIcon size={14} aria-hidden /></span>{title}</div><div className="eh-orca-note">Orca is paused until tomorrow.</div></section>;
+  if (state === "paused") return <section className="eh-orca" aria-label={title}><div className="eh-orca-h"><span className="spk"><SparkleIcon size={14} aria-hidden /></span><span className="ti">{title}</span></div><div className="eh-orca-note">Orca is paused until tomorrow.</div></section>;
   if (state === "loading") {
     return (
       <section className="eh-orca" aria-label={title} aria-busy="true">
-        <div className="eh-orca-h"><span className="spk"><SparkleIcon size={14} aria-hidden /></span>{title}</div>
+        <div className="eh-orca-h"><span className="spk"><SparkleIcon size={14} aria-hidden /></span><span className="ti">{title}</span></div>
         <div className="eh-orca-sk" aria-hidden><i /><i /><i /></div>
       </section>
     );
@@ -86,7 +86,7 @@ export function OrcaReadCard({ scope, initial, tz, title, canAsk }: { scope: Rea
     <section className="eh-orca" aria-label={title}>
       <div className="eh-orca-h">
         <span className="spk"><SparkleIcon size={14} aria-hidden /></span>
-        {title}
+        <span className="ti">{title}</span>
         <span className="mt">· {madeAtLabel(new Date(read.madeAt), tz)} {source}</span>
         <span className="act">
           <button type="button" className="eh-orca-ic" aria-pressed={read.feedback === 1} onClick={() => rate(1)} aria-label="Helpful" title="Useful"><ThumbsUpIcon size={14} aria-hidden /></button>

@@ -201,3 +201,36 @@
 .eh-bp-edit { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; color: var(--ds-muted); background: transparent; border: 0; cursor: pointer; }
 .eh-bp-card textarea { width: 100%; min-height: 90px; border: 1px solid var(--ds-border); border-radius: var(--ds-r-sm); background: var(--ds-surface); font-size: 14px; color: var(--ds-ink); padding: 8px 10px; resize: vertical; }
 
+
+/* EDGEX-87 B6 fixes. */
+/* Q1: "Orca suggests not sending" card in Prepare all. */
+.eh-bp-skip { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.eh-bp-open { color: var(--ds-accent); font-weight: 500; font-size: 12.5px; }
+.eh-bp-open:hover { text-decoration: underline; }
+/* Q6: the "drafts from Orca" row icon is violet (H5). */
+.eh-ic.ai { background: var(--ds-ai-soft); border-color: var(--ds-ai-line); color: var(--ds-ai); }
+/* Q4: Orca's read on a phone: title + icons on line one, "made at ..." under; long links wrap like text instead of running off the edge. */
+.eh-orca-h .ti { min-width: 0; overflow-wrap: anywhere; }
+.eh-orca-pts li > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 767px) {
+  .eh-orca-h { flex-wrap: wrap; row-gap: 2px; }
+  .eh-orca-h .ti { flex: 1 1 0; }
+  .eh-orca-h .act { order: 2; }
+  .eh-orca-h .mt { order: 3; flex: 0 0 100%; padding-left: 30px; }
+  .eh-orca-pts .lk { white-space: normal; }
+}
+/* Q5 / Q5b: Needs you rows. A chip never shrinks; a title, chip or why line is never cut with "..." (it wraps); and when the buttons do not fit
+   beside the text they drop under it, as on the phone. The list is the container, so this follows the real width of the column. */
+.eh-list-needs { container-type: inline-size; }
+.eh-list-needs .eh-tl { flex-wrap: wrap; row-gap: 2px; }
+.eh-list-needs .eh-tl > .eh-nm { flex: 0 1 auto; white-space: normal; display: block; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; -webkit-line-clamp: unset; }
+.eh-list-needs .eh-tl > .eh-chip { flex: 0 0 auto; max-width: none; overflow: visible; text-overflow: clip; }
+.eh-list-needs .eh-wh, .eh-list-needs .eh-wh.eh-wh-wrap { white-space: normal; display: block; overflow: visible; text-overflow: clip; -webkit-line-clamp: unset; overflow-wrap: anywhere; }
+@container (max-width: 700px) {
+  .eh-list-needs .eh-it > .eh-ac.eh-ac-text { grid-column: 2 / -1; justify-content: flex-start; flex-wrap: wrap; }
+}
+/* Q8: on a phone the owner / branch manager still sees "Needs a look" and "Is the new Home helping?" (under Needs you); the rest of the side column stays hidden. */
+@media (max-width: 767px) {
+  .eh-side.eh-side-mgr { display: block; }
+  .eh-side-mgr .eh-ph-hide { display: none; }
+}

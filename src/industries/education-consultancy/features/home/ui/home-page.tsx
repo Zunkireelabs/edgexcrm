@@ -13,7 +13,7 @@ import type { DoNextFilter, DoNextTier } from "../lib/types";
 import type { HomeData } from "../server/load-page";
 import { DoNextRow, MissedCallbacksSheet, useDoNextRows } from "./do-next-row";
 import { OrcaReadCard } from "./orca-read";
-import { BatchPanel } from "./batch-panel";
+import { BatchPanel, useBatchRun } from "./batch-panel";
 import { CallPrepPanel } from "./call-prep-panel";
 import { PrepareAllCard } from "./prepare-all-card";
 import { batchEntries } from "../lib/batch";
@@ -54,6 +54,7 @@ export function EducationHome({ data }: { data: HomeData }) {
 
   const visibleAll = data.doNext.items.filter((i) => !rows.hidden.has(i.key));
   const batch = rows.aiNote ? batchEntries(data.doNext.items, rows.hidden) : { entries: [], total: 0 };
+  const run = useBatchRun(batch.entries);
   const filtered = filterItems(visibleAll, filter);
   const shown = showAll ? filtered : filtered.slice(0, VISIBLE_LIMIT);
   const hiddenCount = filtered.length - shown.length;
@@ -74,7 +75,7 @@ export function EducationHome({ data }: { data: HomeData }) {
         <MissedCallbacksSheet key={i.key} item={i} nextStageByLead={data.nextStageByLead} tz={data.tz} rows={rows} />
       ))}
       <CallPrepPanel key={rows.prepItem?.key ?? "none"} item={rows.prepItem} onClose={() => rows.setPrepItem(null)} onCall={(it) => { rows.setPrepItem(null); rows.setOpenLog(it.key); }} />
-      <BatchPanel key={rows.batchOpen ? "open" : "closed"} entries={batch.entries} open={rows.batchOpen} onClose={() => rows.setBatchOpen(false)} onSent={() => rows.router.refresh()} />
+      <BatchPanel key={rows.batchOpen ? "open" : "closed"} entries={batch.entries} open={rows.batchOpen} onClose={() => { rows.setBatchOpen(false); run.reset(); }} run={run} onSent={() => rows.router.refresh()} />
       <DraftPanel key={rows.draftItem?.key ?? "none"} item={rows.draftItem} onClose={() => rows.setDraftItem(null)} onSent={() => rows.router.refresh()} />
       <h1 className="eh-h1">{data.greeting}</h1>
       <p className="eh-lede">
@@ -108,7 +109,7 @@ export function EducationHome({ data }: { data: HomeData }) {
             </div>
           ) : (
             <>
-            <PrepareAllCard entries={batch.entries} total={batch.total} onPrepare={() => rows.setBatchOpen(true)} />
+            <PrepareAllCard entries={batch.entries} total={batch.total} onPrepare={() => { rows.setBatchOpen(true); run.start(); }} />
             {TIERS.map(({ tier, title, desc }) => {
               const tierRows = shown.filter((i) => i.tier === tier);
               if (tierRows.length === 0) return null;

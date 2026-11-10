@@ -80,6 +80,22 @@ export function validatePoints(raw: RawReadPoint[], facts: Fact[]): ReadPoint[] 
   return out;
 }
 
+/**
+ * Q11: a count with the wrong number: "1 leads", "2 lead". The model is told the rule; this is the check behind it (retry once, then the
+ * point is dropped, never repaired). Returns the offending phrases ("1 leads"), empty = fine.
+ */
+const COUNTED = "lead|call|task|day|hour|week|minute|application|student|counsellor|reminder|document|deadline|note|message|appointment|call-back|follow-up";
+// Nouns that are never a compound adjective ("a 3 week plan"), so "2 lead" is always a mistake.
+const NEVER_ADJ = "lead|call|task|application|student|counsellor|reminder|document|deadline|note|message|appointment|call-back";
+export function pluralFlaws(...texts: string[]): string[] {
+  const out: string[] = [];
+  for (const t of texts) {
+    for (const m of t.matchAll(new RegExp(`\\b1 (?:${COUNTED})s\\b|\\b1 (?:people|replies)\\b`, "gi"))) out.push(m[0]);
+    for (const m of t.matchAll(new RegExp(`\\b(?!1\\b)\\d+ (?:${NEVER_ADJ})\\b(?!-)`, "gi"))) out.push(m[0]);
+  }
+  return [...new Set(out)];
+}
+
 /** "made at 7:00 am": the real time it was made, in the tenant's zone. */
 export function madeAtLabel(madeAt: Date, tz: string): string {
   return `made at ${clock12(madeAt, tz)}`;
@@ -124,6 +140,7 @@ export function counsellorFacts(items: DoNextItem[], week: WeekMetric[]): Fact[]
   for (const i of items) if (!grouped(i)) byKind.set(i.kind, (byKind.get(i.kind) ?? 0) + 1);
   const weekFacts = week.filter((w) => {
     const m = /^(\d+) of (\d+)$/.exec(w.value.trim());
+    if (w.key === "first_hour" && !m) return false; // "No new leads this week" is not a rate, and not a fact worth a point
     return !m || Number(m[2]) >= MIN_RATE_COUNT;
   });
   for (const [kind, n] of byKind) {

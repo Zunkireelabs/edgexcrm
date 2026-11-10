@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ASK_CHIPS, counsellorFacts, linkWords, managerFacts, madeAtLabel, READ_MAX_REFRESHES, refreshesLeft, validatePoints, type Fact } from "./orca-read";
+import { ASK_CHIPS, counsellorFacts, linkWords, managerFacts, madeAtLabel, pluralFlaws, READ_MAX_REFRESHES, refreshesLeft, validatePoints, type Fact } from "./orca-read";
 import type { DoNextItem } from "./types";
 import type { NeedsYouRow } from "./needs-you";
 
@@ -184,5 +184,25 @@ describe("S7: manager link words come from the row", () => {
   it("a person row for a branch manager says 'See their leads →'", () => {
     const row = { key: "drop", tone: "warn", icon: "trend-down", title: "Asha's activity dropped", chip: null, why: "x", actions: [{ type: "link", label: "See their leads", href: "/leads?f=asha" }] } as unknown as NeedsYouRow;
     expect(managerFacts([row], { rows: [], others: 0 }, [], false, (id) => id)[0]).toMatchObject({ linkLabel: "See their leads →" });
+  });
+});
+
+describe("Q11: wrong counts", () => {
+  it("'1 leads', '1 calls', '1 people' are flagged", () => {
+    expect(pluralFlaws("Manish is leaving 120, 70 and 1 leads untouched")).toEqual(["1 leads"]);
+    expect(pluralFlaws("1 calls was made", "1 people waited", "1 replies")).toEqual(["1 calls", "1 people", "1 replies"]);
+  });
+  it("'2 lead' and '0 call' are flagged too", () => {
+    expect(pluralFlaws("2 lead are waiting", "0 call today")).toEqual(["2 lead", "0 call"]);
+  });
+  it("right counts and compounds pass", () => {
+    expect(pluralFlaws("1 lead, 2 leads, 1 call, 11 calls, 21 leads", "a 3 week plan", "1 hour", "30 days", "1 call-back and 3 call-backs")).toEqual([]);
+  });
+});
+
+describe("Q9: no first-hour fact when nothing arrived", () => {
+  it("a 'No new leads this week' metric is not offered to the model as a fact", () => {
+    const facts = counsellorFacts([], [{ key: "first_hour", label: "New leads called within 1 working hour", value: "\u2014", note: "No new leads this week", tone: "neutral" }]);
+    expect(facts).toEqual([]);
   });
 });

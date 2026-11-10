@@ -1,7 +1,7 @@
 "use client";
 
 import "./home.css";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import { PencilSimpleIcon, SparkleIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,8 @@ interface Card {
   phone: string | null;
   email: { accountId: string; to: string | null } | null;
   draft: { id: string | null; text: string; subject: string | null; why: string } | null;
+  /** Orca suggests not sending: the counsellor's own words and where they were written. Shown unticked with "Open lead". */
+  skip?: { reason: string; quote: string; source: string };
   error?: "not_visible" | "no_channel";
 }
 type Status = { state: "sent" } | { state: "failed"; message: string };
@@ -35,42 +37,70 @@ async function post<T>(url: string, body: unknown): Promise<{ ok: boolean; data:
   }
 }
 
+
+export interface BatchRun {
+  cards: Card[] | null;
+  failed: boolean;
+  paused: boolean;
+  /** True from the press until the drafts are back. */
+  loading: boolean;
+  /** Ask for the drafts. Called from the click on "Prepare all": a second call while one is out (or after it answered) does nothing. */
+  start: () => void;
+  /** Forget the answer, so the next press asks again (called when the panel is closed). */
+  reset: () => void;
+}
+
+/**
+ * The request for "Prepare all" lives here, started by the press itself (never by an effect: React runs effects twice in dev, which
+ * sent two requests and wrote 12 orphan drafts). `started` is a ref, so a re-render between press and answer can't send another.
+ */
+export function useBatchRun(entries: BatchEntry[]): BatchRun {
+  const [state, setState] = useState<{ cards: Card[] | null; failed: boolean; paused: boolean; loading: boolean }>({ cards: null, failed: false, paused: false, loading: false });
+  const started = useRef(false);
+  const start = useCallback(() => {
+    if (started.current) return;
+    started.current = true;
+    setState({ cards: null, failed: false, paused: false, loading: true });
+    void (async () => {
+      const r = await post<{ ai: boolean; paused?: boolean; cards?: Card[] }>("/api/v1/home/draft-batch", { items: entries.map((e) => ({ leadId: e.leadId, kind: e.kind })) });
+      if (!r.ok || !r.data?.ai) return setState({ cards: null, failed: true, paused: false, loading: false });
+      setState({ cards: r.data.cards ?? [], failed: false, paused: !!r.data.paused, loading: false });
+    })();
+  }, [entries]);
+  const reset = useCallback(() => {
+    started.current = false;
+    setState({ cards: null, failed: false, paused: false, loading: false });
+  }, []);
+  return { ...state, start, reset };
+}
+
 /**
  * H3b: every message drafted on one screen. Untick what you don't want, edit what you do, then send. Email goes out together on
  * "Send N". WhatsApp can't be sent from EdgeX yet, so "Go through N" opens each one in WhatsApp, asks "Sent?" on return, then moves on:
  * the counsellor never retypes, and only a Yes logs it. All sending goes through sendToLead. Render with `key` so each open is fresh.
  */
-export function BatchPanel({ entries, open, onClose, onSent }: { entries: BatchEntry[]; open: boolean; onClose: () => void; onSent: () => void }) {
-  const [cards, setCards] = useState<Card[] | null>(null);
-  const [failed, setFailed] = useState(false);
-  const [paused, setPaused] = useState(false);
+export function BatchPanel({ entries, open, onClose, onSent, run }: { entries: BatchEntry[]; open: boolean; onClose: () => void; onSent: () => void; run: BatchRun }) {
+  const { cards, failed, paused } = run;
+  const [seen, setSeen] = useState<Card[] | null>(null);
   const [ticked, setTicked] = useState<ReadonlySet<string>>(new Set());
   const [texts, setTexts] = useState<Record<string, string>>({});
   const [editing, setEditing] = useState<ReadonlySet<string>>(new Set());
   const [status, setStatus] = useState<Record<string, Status>>({});
-  const [walk, setWalk] = useState<{ queue: string[]; idx: number; phase: "ready" | "asking"; revisited: boolean } | null>(null);
+  const [walk, setWalk] = useState<{ queue: string[]; idx: number; phase: "ready" | "asking"; revisited: boolean; base: number } | null>(null);
   // P4: who was answered Yes / No in this walk. A "No" stays ticked and comes round once more at the end.
   const [walkSent, setWalkSent] = useState<ReadonlySet<string>>(new Set());
   const [walkNo, setWalkNo] = useState<ReadonlySet<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const sentAny = useRef(false);
 
-  useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    void (async () => {
-      const r = await post<{ ai: boolean; paused?: boolean; cards?: Card[] }>("/api/v1/home/draft-batch", { items: entries.map((e) => ({ leadId: e.leadId, kind: e.kind })) });
-      if (cancelled) return;
-      if (!r.ok || !r.data?.ai) return setFailed(true);
-      if (r.data.paused) setPaused(true);
-      const cs = r.data.cards ?? [];
-      setCards(cs);
-      setTicked(new Set(cs.filter((c) => c.draft && c.channel).map((c) => c.leadId)));
-      setTexts(Object.fromEntries(cs.map((c) => [c.leadId, c.draft?.text ?? ""])));
-    })();
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  // The drafts arrive once per press: tick what can be sent (a "don't send" card stays unticked) and fill the text boxes.
+  if (cards !== seen) {
+    setSeen(cards);
+    if (cards) {
+      setTicked(new Set(cards.filter((c) => c.draft && c.channel).map((c) => c.leadId)));
+      setTexts(Object.fromEntries(cards.map((c) => [c.leadId, c.draft?.text ?? ""])));
+    }
+  }
 
   const meta = new Map(entries.map((e) => [e.leadId, e]));
   const byId = new Map((cards ?? []).map((c) => [c.leadId, c]));
@@ -99,27 +129,27 @@ export function BatchPanel({ entries, open, onClose, onSent }: { entries: BatchE
     if (ok < emailCards.length) toast.error(`${emailCards.length - ok} didn't send. They are marked on their cards.`, { duration: 10_000 });
   };
 
-  const openWa = async (c: Card, queue: string[], idx: number, revisited: boolean) => {
+  const openWa = async (c: Card, queue: string[], idx: number, revisited: boolean, base: number) => {
     const r = await sendToLead("whatsapp", { leadId: c.leadId, text: texts[c.leadId], phone: c.phone });
     if (r.kind === "handoff") {
       window.open(r.url, "_blank", "noopener");
-      setWalk({ queue, idx, phase: "asking", revisited });
+      setWalk({ queue, idx, phase: "asking", revisited, base });
     } else {
       setStatus((s) => ({ ...s, [c.leadId]: { state: "failed", message: r.kind === "failed" ? r.message : "Couldn't open WhatsApp" } }));
-      advance(queue, idx, revisited, walkNo);
+      advance(queue, idx, revisited, walkNo, base);
     }
   };
   const startWalk = () => {
     const queue = waCards.map((c) => c.leadId);
     setWalkSent(new Set());
     setWalkNo(new Set());
-    if (queue.length) void openWa(byId.get(queue[0]) as Card, queue, 0, false);
+    if (queue.length) void openWa(byId.get(queue[0]) as Card, queue, 0, false, queue.length);
   };
-  const advance = (queue: string[], idx: number, revisited: boolean, no: ReadonlySet<string>) => {
-    if (idx + 1 < queue.length) return setWalk({ queue, idx: idx + 1, phase: "ready", revisited });
-    // End of the round. Leads answered "No" stay ticked and come round once more at the end.
+  const advance = (queue: string[], idx: number, revisited: boolean, no: ReadonlySet<string>, base: number) => {
+    if (idx + 1 < queue.length) return setWalk({ queue, idx: idx + 1, phase: "ready", revisited, base });
+    // End of the round. Leads answered "No" stay ticked and come round once more at the end, counted as their own round (1 of 9), so the total never grows.
     const again = [...no];
-    if (!revisited && again.length) return setWalk({ queue: [...queue, ...again], idx: queue.length, phase: "ready", revisited: true });
+    if (!revisited && again.length) return setWalk({ queue: [...queue, ...again], idx: queue.length, phase: "ready", revisited: true, base: queue.length });
     setWalk(null);
     if (sentAny.current) onSent();
   };
@@ -137,11 +167,13 @@ export function BatchPanel({ entries, open, onClose, onSent }: { entries: BatchE
       setWalkSent((x) => new Set(x).add(c.leadId));
     } else no.add(c.leadId);
     setWalkNo(no);
-    advance(walk.queue, walk.idx, walk.revisited, no);
+    advance(walk.queue, walk.idx, walk.revisited, no, walk.base);
   };
 
   const current = walk ? (byId.get(walk.queue[walk.idx]) ?? null) : null;
-  const total = cards?.length ?? entries.length;
+  const total = cards ? cards.filter((c) => !c.skip).length : entries.length;
+  // Position in the current round: the second round ("asking again") counts from 1 of however many were answered No.
+  const pos = walk ? { i: walk.revisited ? walk.idx - walk.base + 1 : walk.idx + 1, n: walk.revisited ? walk.queue.length - walk.base : walk.queue.length } : null;
 
   return (
     <Sheet open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -161,12 +193,12 @@ export function BatchPanel({ entries, open, onClose, onSent }: { entries: BatchE
           {(cards ?? []).map((c) => {
             const m = meta.get(c.leadId);
             const st = status[c.leadId];
-            const isEditing = editing.has(c.leadId) || !c.draft;
+            const isEditing = editing.has(c.leadId) || (!c.draft && !c.skip);
             return (
               <div key={c.leadId} className="eh-bp-card" data-state={st?.state}>
                 <div className="eh-bp-top">
                   <label className="eh-bp-name">
-                    <input type="checkbox" checked={ticked.has(c.leadId)} disabled={!c.channel || st?.state === "sent"} onChange={() => toggle(c.leadId)} aria-label={`Include ${c.leadName || m?.name}`} />
+                    <input type="checkbox" checked={ticked.has(c.leadId)} disabled={!c.channel || !!c.skip || st?.state === "sent"} onChange={() => toggle(c.leadId)} aria-label={`Include ${c.leadName || m?.name}`} />
                     <b>{c.leadName || m?.name}</b>
                   </label>
                   <span className="eh-chip">{c.channel ? CH[c.channel] : "No channel"}{m ? ` · ${m.label}` : ""}</span>
@@ -178,10 +210,16 @@ export function BatchPanel({ entries, open, onClose, onSent }: { entries: BatchE
                 </div>
                 {st?.state === "sent" ? <p className="eh-dp-why">Sent{c.channel === "whatsapp" ? " from your phone and logged on the timeline" : " and logged on the timeline"}.</p> : null}
                 {st?.state === "failed" ? <div className="eh-err" role="alert">{st.message}</div> : null}
+                {c.skip ? (
+                  <div className="eh-bp-skip">
+                    <p className="eh-dp-why"><b>Orca suggests not sending:</b> &ldquo;{c.skip.quote}&rdquo; ({c.skip.source}). {c.skip.reason}</p>
+                    <a className="eh-bp-open" href={`/leads/${c.leadId}`} target="_blank" rel="noopener noreferrer">Open lead</a>
+                  </div>
+                ) : null}
                 {c.error === "no_channel" ? <p className="eh-dp-why">No WhatsApp number, and no Gmail for their address: nothing to send from here.</p> : null}
                 {c.error === "not_visible" ? <p className="eh-dp-why">You can&apos;t open this lead.</p> : null}
-                {!c.draft && !c.error ? <p className="eh-dp-why">Couldn&apos;t draft, write your own.</p> : null}
-                {st?.state !== "sent" && c.channel ? (
+                {!c.draft && !c.error && !c.skip ? <p className="eh-dp-why">Couldn&apos;t draft, write your own.</p> : null}
+                {st?.state !== "sent" && c.channel && !c.skip ? (
                   isEditing ? (
                     <textarea aria-label={`Message to ${c.leadName}`} value={texts[c.leadId] ?? ""} onChange={(e) => setTexts((t) => ({ ...t, [c.leadId]: e.target.value }))} placeholder="Write your message" />
                   ) : (
@@ -197,15 +235,15 @@ export function BatchPanel({ entries, open, onClose, onSent }: { entries: BatchE
           {walk && current ? (
             walk.phase === "asking" ? (
               <>
-                <span className="eh-dp-q">Sent? {current.leadName} ({walk.idx + 1} of {walk.queue.length}) · {walkSent.size} sent · {walkNo.size} not sent</span>
+                <span className="eh-dp-q">Sent? {current.leadName} ({pos?.i} of {pos?.n}) · {walkSent.size} sent · {walkNo.size} not sent</span>
                 <Button look="v2" variant="secondary" size="sm" onClick={() => answer(false)} disabled={busy}>No</Button>
                 <Button look="v2" variant="primary" size="sm" onClick={() => answer(true)} disabled={busy}>Yes, I sent it</Button>
               </>
             ) : (
               <>
-                <span className="eh-dp-q">Next: {current.leadName} ({walk.idx + 1} of {walk.queue.length}){walk.revisited && walk.idx >= walk.queue.length - walkNo.size ? " · asking again" : ""} · {walkSent.size} sent · {walkNo.size} not sent</span>
+                <span className="eh-dp-q">{walk.revisited ? "Asking again" : "Next"}: {current.leadName} ({pos?.i} of {pos?.n}) · {walkSent.size} sent · {walkNo.size} not sent</span>
                 <Button look="v2" variant="secondary" size="sm" onClick={() => { setWalk(null); if (sentAny.current) onSent(); }}>Stop</Button>
-                <Button look="v2" variant="primary" size="sm" onClick={() => void openWa(current, walk.queue, walk.idx, walk.revisited)}>Open in WhatsApp</Button>
+                <Button look="v2" variant="primary" size="sm" onClick={() => void openWa(current, walk.queue, walk.idx, walk.revisited, walk.base)}>Open in WhatsApp</Button>
               </>
             )
           ) : (

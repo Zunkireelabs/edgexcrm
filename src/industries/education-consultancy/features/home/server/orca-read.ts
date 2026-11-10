@@ -5,7 +5,7 @@ import { MODELS, ACTIVE_PROVIDER } from "@/lib/ai/models";
 import type { TenantConfig } from "@/types/database";
 import { homeOverBudget, recordHomeUsage } from "../ai/usage";
 import { writeRead } from "../ai/orca-read";
-import { counsellorFacts, managerFacts, validatePoints, type Fact, type ReadPoint, type ReadScope } from "../lib/orca-read";
+import { counsellorFacts, managerFacts, pluralFlaws, validatePoints, type Fact, type ReadPoint, type ReadScope } from "../lib/orca-read";
 import { leadsOfPersonHref } from "../../pulse/lib/leads-links";
 import { resolveHomeScope, type HomeScope } from "../lib/scope";
 import { localDate } from "../lib/time";
@@ -61,9 +61,17 @@ export async function makeRead(p: {
   let points: ReadPoint[] = [];
   if (p.facts.length > 0) {
     try {
-      const { points: raw, usage } = await writeRead(p.scope, p.facts, forDate);
-      await recordHomeUsage(db, { surface: "home_read", kind: "agent", userId: p.auth.userId, runId, usage }).catch(() => {});
-      points = validatePoints(raw, p.facts);
+      const first = await writeRead(p.scope, p.facts, forDate);
+      await recordHomeUsage(db, { surface: "home_read", kind: "agent", userId: p.auth.userId, runId, usage: first.usage }).catch(() => {});
+      points = validatePoints(first.points, p.facts);
+      // Q11: "1 leads" is a wrong count. Retry ONCE telling the model exactly what was wrong (as the drafts do); a point that is still wrong is dropped, never repaired.
+      const flawed = pluralFlaws(...points.flatMap((x) => [x.claim, x.reason]));
+      if (flawed.length) {
+        const again = await writeRead(p.scope, p.facts, forDate, [`wrong count words: ${flawed.map((f) => `'${f}'`).join(", ")}; write '1 lead', '2 leads', '1 call', '3 calls'`]);
+        await recordHomeUsage(db, { surface: "home_read", kind: "agent", userId: p.auth.userId, runId, usage: again.usage }).catch(() => {});
+        points = validatePoints(again.points, p.facts);
+      }
+      points = points.filter((x) => pluralFlaws(x.claim, x.reason).length === 0);
     } catch {
       return { kind: "failed" };
     }

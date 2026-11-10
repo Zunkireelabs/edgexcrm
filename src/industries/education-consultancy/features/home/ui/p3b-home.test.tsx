@@ -168,6 +168,6 @@ describe("B6 on the owner Home", () => {
     expect(screen.getByText("28% edited · 8% thrown away")).toBeTruthy();
     unmount();
     render(<ManagerHome data={base({ impact: { status: "ready", since: "5 Nov", readyOn: null, afterDays: 14, rows } })} />);
-    expect(screen.getByText("Since it went live vs the 4 weeks before it went live")).toBeTruthy();
+    expect(screen.getByText("First 14 days vs the 4 weeks before it went live")).toBeTruthy();
   });
 });

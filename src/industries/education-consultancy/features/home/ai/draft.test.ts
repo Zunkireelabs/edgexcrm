@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDraftPrompt, draftChecks, draftFacts, draftNumbersOk, draftOk, draftSchema, produceDraft, type DraftRaw } from "./draft";
+import { buildDraftPrompt, draftChecks, draftFacts, draftNumbersOk, draftOk, draftSchema, produceDraft, quoteIsInNotes, type DraftRaw } from "./draft";
 import type { DraftContext } from "../server/draft-context";
 
 const CTX: DraftContext = {
@@ -53,7 +53,7 @@ describe("draftNumbersOk", () => {
     expect(draftNumbersOk(raw("Send the last 3 months of statements."), facts)).toBe(false);
   });
   it("the schema bounds the follow-up task", () => {
-    const ok = { text: "Hi", subject: null, why: "w", followUp: { title: "Check", inDays: 3 } };
+    const ok = { skip: null, text: "Hi", subject: null, why: "w", followUp: { title: "Check", inDays: 3 } };
     expect(draftSchema.safeParse(ok).success).toBe(true);
     expect(draftSchema.safeParse({ ...ok, followUp: { title: "Check", inDays: 30 } }).success).toBe(false);
   });
@@ -177,7 +177,7 @@ describe("P1: check-ins are short, specific and don't end on a stock line", () =
     expect(draftChecks(good, facts, ci)).toEqual([]);
   });
   it("over 400 characters is refused", () => {
-    const long = { ...good, text: "Hi Sita, " + "checking in on how your plans are coming along. ".repeat(10) };
+    const long = { ...good, text: "Hi Sita, " + "asking how your plans are coming along. ".repeat(10) };
     expect(long.text.length).toBeGreaterThan(400);
     expect(draftChecks(long, facts, ci).map((c) => c.check)).toEqual(["length"]);
   });
@@ -204,7 +204,7 @@ describe("P1: check-ins are short, specific and don't end on a stock line", () =
   });
   it("the prompt asks for at most 2 sentences, under 280 characters, one specific detail, one question, and names the stock lines", () => {
     const { system } = buildDraftPrompt({ channel: "whatsapp", tone: "new", kind: "x", rowKind: "going_quiet", facts, previous: null, todayLabel: "t" });
-    for (const t of ["AT MOST 2 sentences", "under 280 characters", "ONE specific thing", "ONE concrete question", "just reply here"]) expect(system).toContain(t);
+    for (const t of ["AT MOST 2 sentences", "under 280 characters", "ONE specific detail", "single question you end with", "just reply here", "Never write 'check in'"]) expect(system).toContain(t);
     expect(buildDraftPrompt({ channel: "whatsapp", tone: "new", kind: "x", rowKind: "reply_waiting", facts, previous: null, todayLabel: "t" }).system).not.toContain("AT MOST 2 sentences");
   });
 });
@@ -243,5 +243,85 @@ describe("P2: first-try pass rate over 20 fixed outputs (a measure of the CHECKS
     expect(passed).toBe(14);
     expect(passed / results.length).toBe(0.7);
     expect(results.slice(14).every((r) => r.length > 0)).toBe(true);
+  });
+});
+
+
+describe("Q1: Orca may answer 'don't send', with the counsellor's own words", () => {
+  const ctx: DraftContext = { ...CTX, notes: [{ text: "He is already in Korea, studying there. Number is not registered on WhatsApp.", at: "2026-11-02T05:00:00Z" }], messages: [] };
+  const facts = draftFacts(ctx, IN);
+  const base: DraftRaw = { skip: null, text: "", subject: null, why: "", followUp: { title: "", inDays: 3 } };
+  const skip = (quote: string, reason = "Bishal is already abroad, so asking about studying in the UK is pointless."): DraftRaw => ({ ...base, skip: { reason, quote } });
+
+  it("a skip whose quote is word for word in a note passes (only in a batch)", () => {
+    expect(draftChecks(skip("is already in Korea"), facts, { allowSkip: true, rowKind: "going_quiet" })).toEqual([]);
+    expect(draftChecks(skip("Number is not registered on WhatsApp."), facts, { allowSkip: true })).toEqual([]);
+  });
+  it("the quote must really be in a counsellor note or message: an invented or rephrased quote is refused", () => {
+    expect(draftChecks(skip("he moved abroad"), facts, { allowSkip: true }).map((c) => c.check)).toEqual(["skip_quote"]);
+  });
+  it("the lead's own record (destinations, intake) is not a place a quote can come from", () => {
+    expect(quoteIsInNotes("Interested in studying in: UK", facts)).toBe(false);
+    expect(quoteIsInNotes("studying there", facts)).toBe(true);
+  });
+  it("the reason follows the rules of a draft: no he / she, no number the facts don't hold", () => {
+    expect(draftChecks(skip("is already in Korea", "He is already abroad."), facts, { allowSkip: true }).map((c) => c.check)).toEqual(["pronoun"]);
+    expect(draftChecks(skip("is already in Korea", "Already abroad for 9 months."), facts, { allowSkip: true }).map((c) => c.check)).toEqual(["number"]);
+  });
+  it("the single Draft button never skips: a skip there is a refused attempt, and the retry says to write the message", () => {
+    expect(draftChecks(skip("is already in Korea"), facts).map((c) => c.check)).toEqual(["empty"]);
+    expect(buildDraftPrompt({ channel: "whatsapp", tone: "new", kind: "x", facts, previous: null, todayLabel: "t" }).system).toContain("Always write the message and set skip to null");
+  });
+  it("an empty message with no skip is refused", () => {
+    expect(draftChecks(base, facts, { allowSkip: true }).map((c) => c.check)).toContain("empty");
+  });
+  it("the batch prompt tells the model when to skip, to copy the words exactly, and never to skip for a quiet lead", () => {
+    const { system } = buildDraftPrompt({ channel: "whatsapp", tone: "new", kind: "x", rowKind: "going_quiet", allowSkip: true, facts, previous: null, todayLabel: "t" });
+    for (const t of ["READ THE NOTES BEFORE WRITING", "EXACT words", "already abroad", "not on WhatsApp", "Skip ONLY when the note or message itself says so"]) expect(system).toContain(t);
+  });
+  it("the prompt says notes may say he or she and never to copy it (Q1c)", () => {
+    const { system } = buildDraftPrompt({ channel: "whatsapp", tone: "new", kind: "x", facts, previous: null, todayLabel: "t" });
+    expect(system).toContain("may say he or she. Never copy that");
+  });
+  it("a skip is accepted on the first try and not retried", async () => {
+    let n = 0;
+    const r = await produceDraft({ channel: "whatsapp", tone: "new", kind: "x", rowKind: "going_quiet", allowSkip: true, facts, previous: null, todayLabel: "t" }, (async () => (n++, { raw: skip("is already in Korea"), usage: {} })) as never);
+    expect(n).toBe(1);
+    expect(r.raw?.skip?.quote).toBe("is already in Korea");
+  });
+});
+
+describe("Q1b: check-ins stop sounding alike", () => {
+  const facts = draftFacts(CTX, IN);
+  const mk = (text: string): DraftRaw => ({ skip: null, text, subject: null, why: "Quiet for 5 days.", followUp: { title: "Check back", inDays: 3 } });
+  it.each(["Hi Sita, it's Rita from Admizz. I wanted to check in on your file.", "Hi Sita, just checking in.", "Hi Sita, Rita here. Just wanted to see how the IELTS prep is going?"])("'%s' is refused as a stock opening", (text) => {
+    expect(draftChecks(mk(text), facts, { rowKind: "going_quiet" }).map((c) => c.check)).toContain("stock_opening");
+  });
+  it("only check-ins are held to it", () => {
+    expect(draftChecks(mk("Hi Sita, I wanted to check in on the checklist."), facts, { rowKind: "reply_waiting" })).toEqual([]);
+  });
+  it("the prompt bans the openers and ties the single question to the one detail", () => {
+    const { system } = buildDraftPrompt({ channel: "whatsapp", tone: "new", kind: "x", rowKind: "going_quiet", facts, previous: null, todayLabel: "t" });
+    expect(system).toContain("Never write 'check in', 'checking in', 'wanted to'");
+    expect(system).toContain("Open with just 'Hi <name>, <counsellor> here.'");
+    expect(system).toContain("must be about that detail");
+  });
+});
+
+describe("Q1(c): the facts carry the lead's name where the note said he / she, and the prompt ends on the rule", () => {
+  const ctx: DraftContext = { ...CTX, notes: [{ text: "She is waiting for her results. Her father said he will pay.", at: "2026-11-02T05:00:00Z" }], messages: [] };
+  const facts = draftFacts(ctx, IN);
+  it("a note's pronouns are swapped for the first name in what the model reads", () => {
+    expect(facts.find((f) => f.startsWith("Counsellor note 1"))).toContain("Sita is waiting for Sita's results. Sita's father said Sita will pay.");
+    expect(ctx.notes[0].text).toContain("She is waiting"); // the record itself is untouched
+  });
+  it("the last thing the model reads is the lead's name and the rule, including for family and the skip reason", () => {
+    const { prompt } = buildDraftPrompt({ channel: "whatsapp", tone: "new", kind: "x", rowKind: "going_quiet", facts, previous: null, todayLabel: "t" });
+    const tail = prompt.slice(prompt.lastIndexOf("Reminder:"));
+    expect(tail).toContain("write Sita or Sita's. Never he, she, his, her or him");
+    expect(tail).toContain("\"Sita's father\", not \"her father\"");
+    expect(tail).toContain("skip reason");
+    expect(tail).toContain("Do not write 'check in'");
+    expect(buildDraftPrompt({ channel: "whatsapp", tone: "new", kind: "x", rowKind: "reply_waiting", facts, previous: null, todayLabel: "t" }).prompt).not.toContain("Do not write 'check in'");
   });
 });

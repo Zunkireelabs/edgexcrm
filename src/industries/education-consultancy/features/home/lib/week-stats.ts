@@ -48,9 +48,11 @@ export const firstHourLabel = (clock: "clock" | "working", minutes = 60): string
 
 export function firstHourMetric(f: FirstHourInput, label: string = firstHourLabel("clock")): WeekMetric {
   const { called, total } = f.current;
+  // Nothing arrived this week: "0 of 0" reads like a failure. Say what is true.
+  if (total === 0) return { key: "first_hour", label, value: "\u2014", note: "No new leads this week", tone: "neutral" };
   const value = `${called} of ${total}`;
   const u = f.usual;
-  if (total === 0 || !u || u.total < MIN_FIRST_HOUR_USUAL_LEADS) {
+  if (!u || u.total < MIN_FIRST_HOUR_USUAL_LEADS) {
     return { key: "first_hour", label, value, note: null, tone: "neutral" };
   }
   const usualCalled = Math.round(u.called);

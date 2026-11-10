@@ -29,7 +29,11 @@ describe("first hour", () => {
   it("compares with the usual only with enough history", () => {
     expect(firstHourMetric({ current: { called: 5, total: 7 }, usual: { called: 4, total: 7 } }).note).toBe("better than your usual 4 of 7");
     expect(firstHourMetric({ current: { called: 5, total: 7 }, usual: { called: 1, total: 2 } }).note).toBeNull();
-    expect(firstHourMetric({ current: { called: 0, total: 0 }, usual: null }).value).toBe("0 of 0");
+    // Q9: nothing arrived this week: never "0 of 0".
+    const none = firstHourMetric({ current: { called: 0, total: 0 }, usual: null });
+    expect(none.value).toBe("\u2014");
+    expect(none.note).toBe("No new leads this week");
+    expect(none.tone).toBe("neutral");
   });
 });
 

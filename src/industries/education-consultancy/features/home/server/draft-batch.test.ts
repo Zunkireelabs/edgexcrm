@@ -10,7 +10,7 @@ vi.mock("./draft-context", () => ({ loadDraftContext: ctxMock }));
 vi.mock("../ai/usage", () => ({ recordHomeUsage: async () => {} }));
 vi.mock("../ai/draft", async (orig) => ({ ...(await orig<typeof import("../ai/draft")>()), produceDraft: produceMock }));
 
-import { draftOneForBatch, mapLimit } from "./draft-batch";
+import { draftOneForBatch, mapLimit, notOnWhatsApp, skipSource } from "./draft-batch";
 
 const db = { from: () => ({ insert: (v: unknown) => (inserts.push(v), { select: () => ({ single: async () => ({ data: { id: "d1" } }) }) }) }) } as never;
 const CTX = (o: Record<string, unknown> = {}) => ({
@@ -85,4 +85,46 @@ describe("mapLimit", () => {
     expect(r).toEqual([2, 4, 6, 8, 10, 12]);
     expect(peak).toBeLessThanOrEqual(2);
   });
+});
+
+describe("Q1: 'don't send' cards", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    inserts.length = 0;
+    visibleMock.mockResolvedValue({ id: "L1" });
+    ctxMock.mockResolvedValue(CTX());
+    produceMock.mockResolvedValue({ raw: RAW, usages: [{}], failed: [[]] });
+  });
+  {
+    const NOTE = { text: "Already in Korea. Number is not registered on WhatsApp.", at: "2026-09-07T05:00:00Z" };
+    it("the model's skip becomes a skip card with the note's date: no draft, nothing written to ai_drafts", async () => {
+      ctxMock.mockResolvedValue(CTX({ notes: [{ text: "He is already in Korea", at: "2026-09-07T05:00:00Z" }] }));
+      produceMock.mockResolvedValue({ raw: { skip: { reason: "Already abroad.", quote: "already in Korea" }, text: "", subject: null, why: "", followUp: { title: "", inDays: 3 } }, usages: [{}], failed: [[]] });
+      const c = await draftOneForBatch(P);
+      expect(c.draft).toBeNull();
+      expect(c.skip).toEqual({ reason: "Already abroad.", quote: "already in Korea", source: "note, 7 Sep" });
+      expect(inserts).toEqual([]);
+      expect(produceMock.mock.calls[0][0].allowSkip).toBe(true);
+    });
+    it("a note that says the number is not on WhatsApp skips a WhatsApp card by code: no model call", async () => {
+      ctxMock.mockResolvedValue(CTX({ notes: [NOTE] }));
+      const c = await draftOneForBatch(P);
+      expect(produceMock).not.toHaveBeenCalled();
+      expect(c.skip).toEqual({ reason: "Call or email instead.", quote: "Number is not registered on WhatsApp", source: "note, 7 Sep" });
+      expect(c.draft).toBeNull();
+    });
+    it("notOnWhatsApp: only on the WhatsApp channel, and not when the lead has written to us on WhatsApp", () => {
+      const ctx = { notes: [NOTE], lastReplyChannel: null } as never;
+      expect(notOnWhatsApp(ctx, "email")).toBeNull();
+      expect(notOnWhatsApp({ notes: [NOTE], lastReplyChannel: "whatsapp" } as never, "whatsapp")).toBeNull();
+      expect(notOnWhatsApp(ctx, "whatsapp")?.quote).toBe("Number is not registered on WhatsApp");
+      expect(notOnWhatsApp({ notes: [{ text: "Asked about WhatsApp updates", at: "2026-09-07T05:00:00Z" }], lastReplyChannel: null } as never, "whatsapp")).toBeNull();
+    });
+    it("skipSource names a note or a message with its date, in the tenant's zone, and never invents one", () => {
+      const ctx = { notes: [{ text: "Already in Korea", at: "2026-09-07T20:00:00Z" }], messages: [{ text: "I will study in Canada", at: "2026-09-02T05:00:00Z" }] };
+      expect(skipSource("already in korea", ctx, "Asia/Kathmandu")).toBe("note, 8 Sep");
+      expect(skipSource("study in Canada", ctx, "UTC")).toBe("message, 2 Sep");
+      expect(skipSource("nothing like it", ctx, "UTC")).toBe("note");
+    });
+  }
 });
