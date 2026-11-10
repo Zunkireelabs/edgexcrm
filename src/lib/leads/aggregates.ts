@@ -387,6 +387,16 @@ export async function getAssigneeFacet(params: SourceFacetParams): Promise<Assig
     .sort((a, b) => b.count - a.count);
 }
 
+/** EDGEX-126 footer "N stages": the `list` dimension of the same lead_aggregates() call the other
+ * facets use. In the education UI a lead's list IS its Stage. Leads with no list ("(none)") are not a stage. */
+export async function getListFacet(params: SourceFacetParams): Promise<{ listId: string; count: number }[]> {
+  const rows = await fetchFacetRows(params);
+  return rows
+    .filter((row) => row.dimension === "list" && row.key !== "(none)")
+    .map((row) => ({ listId: row.key, count: Number(row.cnt) }))
+    .filter((r) => r.count > 0);
+}
+
 export interface CollaboratorFacetOption {
   /** A tenant_users.user_id — no "unassigned" sentinel; the join is inner (mig 207). */
   name: string;

@@ -36,9 +36,9 @@ import { POSITION_ROUTE_MAP } from "@/industries/education-consultancy/features/
 import { addLeadCollaborator } from "@/lib/leads/collaborators";
 import { visibleLeadsBase } from "@/lib/leads/visibility-query";
 import { splitCollaboratorAnyOf } from "@/lib/filters/collaborator-split";
-import { getSourceFacet, getDestinationFacet, getCollaboratorFacet } from "@/lib/leads/aggregates";
+import { getSourceFacet, getDestinationFacet, getCollaboratorFacet, getListFacet } from "@/lib/leads/aggregates";
 import { countFacetOptions, type FacetOption } from "@/lib/leads/facet-counts";
-import { treeForFacetOption } from "@/lib/filters/facet-tree";
+import { treeForFacetOption, treeWithCondition } from "@/lib/filters/facet-tree";
 import { compileFilter, planFilter } from "@/lib/filters/compile";
 import { decodeFilterTree, FILTER_PARAM } from "@/lib/filters/serialize";
 import { legacyLeadsParamsToTree } from "@/lib/filters/legacy-leads-params";
@@ -591,7 +591,7 @@ export async function GET(request: NextRequest) {
   // fetch source + assignee counts in one round-trip.
   const facetsParam = searchParams.get("facets");
   const requestedFacets = facetsParam
-    ? (facetsParam.split(",").map((s) => s.trim()).filter(Boolean) as Array<"source" | "assignee" | "collaborator" | "destination">)
+    ? (facetsParam.split(",").map((s) => s.trim()).filter(Boolean) as Array<"source" | "assignee" | "collaborator" | "destination" | "summary">)
     : [];
   const legacySingleSourceFacet = requestedFacets.length === 1 && requestedFacets[0] === "source";
 
@@ -638,7 +638,9 @@ export async function GET(request: NextRequest) {
       return legacySingleSourceFacet
         ? apiSuccess({ facet: "source", options: [] })
         : apiSuccess({
-            facets: Object.fromEntries(requestedFacets.map((f) => [f, { options: [] }])),
+            facets: Object.fromEntries(
+              requestedFacets.map((f) => [f, f === "summary" ? { stages: 0, needFollowUp: 0 } : { options: [] }]),
+            ),
           });
     }
 
@@ -716,7 +718,35 @@ export async function GET(request: NextRequest) {
     let assigneeOptions: FacetOption[] | null | undefined;
     let collaboratorOptions: FacetOption[] | null | undefined;
     let destinationOptions: Awaited<ReturnType<typeof getDestinationFacet>> | null | undefined;
+    // EDGEX-126 footer summary: numbers over the WHOLE filtered set (never the page). Each is null = "no number".
+    let summary: { stages: number | null; needFollowUp: number | null } | undefined;
     try {
+      if (requestedFacets.includes("summary")) {
+        // Stages: the `list` dimension of lead_aggregates() — same scope + filters as every other facet, ONE RPC.
+        // Not expressible (?f= tree the RPC can't take) -> null, never a page-scoped guess.
+        const stages = aggregateFacetsAvailable
+          ? (
+              await getListFacet({
+                ...baseFacetParams,
+                assigneesAny: effectiveAssigneesAny,
+                includeUnassigned: effectiveIncludeUnassigned,
+              })
+            ).length
+          : null;
+        // Need follow-up: ONE head:true count from the list's own buildScopedQuery with the EXISTING
+        // `follow_up_needed` registry condition AND-ed on (COUNT-SPLIT rule). Equals adding the
+        // "Follow-up needed" filter. Only education offers the field; a top-level OR tree -> null.
+        let needFollowUp: number | null = null;
+        const followTree = filterRegistry.follow_up_needed
+          ? treeWithCondition(filterTree, { id: "summary:follow_up", field: "follow_up_needed", op: "is_true" })
+          : null;
+        if (followTree) {
+          const { count, error: followErr } = await buildScopedQuery({ head: true, count: "exact" }, { tree: followTree });
+          if (followErr) throw new Error(`summary follow-up count failed: ${followErr.message}`);
+          needFollowUp = count ?? 0;
+        }
+        summary = { stages, needFollowUp };
+      }
       if (requestedFacets.includes("source")) {
         // Source facet: cross-filtered by the current assignee selection (there's no
         // "source" axis to exclude — it has no p_source param at all).
@@ -833,6 +863,7 @@ export async function GET(request: NextRequest) {
         ...(assigneeOptions !== undefined ? { assignee: facetEntry(assigneeOptions) } : {}),
         ...(collaboratorOptions !== undefined ? { collaborator: facetEntry(collaboratorOptions) } : {}),
         ...(destinationOptions !== undefined ? { destination: facetEntry(destinationOptions) } : {}),
+        ...(summary !== undefined ? { summary } : {}),
       },
     });
   }

@@ -1470,3 +1470,135 @@ describe("GET /api/v1/leads — ?f= compiles through the SAME compileFilter() as
     expect(body.data).toEqual({ facet: "source", options: [] });
   });
 });
+
+// EDGEX-126 footer summary: ?facets=summary -> { stages, needFollowUp } over the WHOLE filtered set.
+describe("GET /api/v1/leads — facets=summary (EDGEX-126 footer)", () => {
+  beforeEach(() => {
+    authenticateRequestMock.mockReset();
+    createServiceClientMock.mockReset();
+    createClientMock.mockReset();
+    getFeatureAccessMock.mockReset();
+    branchMemberIdsMock.mockReset();
+    getFeatureAccessMock.mockReturnValue(false);
+    branchMemberIdsMock.mockResolvedValue([]);
+  });
+
+  const LIST_ROWS = [
+    { dimension: "list", key: "list-a", bucket: "all", cnt: 3 },
+    { dimension: "list", key: "list-b", bucket: "all", cnt: 2 },
+    { dimension: "list", key: "(none)", bucket: "all", cnt: 4 },
+    { dimension: "intake_source", key: "Facebook", bucket: "all", cnt: 9 },
+  ];
+
+  // Any chained builder call returns the chain; awaiting it resolves a head count. lead_aggregates resolves rows.
+  function summaryClient(rpcCalls: RpcCall[], headCount: number) {
+    return {
+      rpc: (name: string, params: unknown, opts: unknown) => {
+        rpcCalls.push([name, params, opts]);
+        if (name === "lead_aggregates") return Promise.resolve({ data: LIST_ROWS, error: null });
+        const chain: Record<string, unknown> = new Proxy(
+          {},
+          {
+            get: (_t, prop) =>
+              prop === "then"
+                ? (resolve: (v: unknown) => void) => resolve({ data: null, error: null, count: headCount })
+                : () => chain,
+          },
+        );
+        return chain;
+      },
+    };
+  }
+
+  function eduDb(countChains: Call[][], headCount: number) {
+    return {
+      from: (table: string) => {
+        if (table === "tenants") {
+          return { select: () => ({ eq: () => ({ single: () => Promise.resolve({ data: { config: null }, error: null }) }) }) };
+        }
+        if (table === "leads") {
+          const calls: Call[] = [];
+          countChains.push(calls);
+          const chain = makeLeadsChain(calls) as Record<string, unknown>;
+          chain.then = (resolve: (v: unknown) => void) => resolve({ data: null, error: null, count: headCount });
+          return chain;
+        }
+        throw new Error(`unexpected table ${table}`);
+      },
+    };
+  }
+
+  it("admin: stages = distinct non-empty lists from ONE lead_aggregates call; needFollowUp = ONE head count carrying the follow_up_needed predicate", async () => {
+    const rpcCalls: RpcCall[] = [];
+    const countChains: Call[][] = [];
+    authenticateRequestMock.mockResolvedValue(
+      authFixture({ role: "owner", industryId: "education_consultancy", permissions: permissions({ leadScope: "all" }) }),
+    );
+    createClientMock.mockResolvedValue(summaryClient(rpcCalls, 0));
+    createServiceClientMock.mockResolvedValue(eduDb(countChains, 7));
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ facets: "summary" }));
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data).toEqual({ facets: { summary: { stages: 2, needFollowUp: 7 } } });
+    expect(rpcCalls.filter(([n]) => n === "lead_aggregates")).toHaveLength(1);
+    expect((rpcCalls[0][1] as { p_tenant: string }).p_tenant).toBe("tenant-1");
+    expect(countChains).toHaveLength(1);
+    expect(callsMention(countChains[0], "on_hold.eq.false")).toBe(true);
+    expect(callsMention(countChains[0], "last_touched_at")).toBe(true);
+  });
+
+  it("counselor (own scope): the aggregate runs with p_scope 'own' + their user id, and the follow-up count goes through the visibility RPC — never the whole tenant", async () => {
+    const rpcCalls: RpcCall[] = [];
+    authenticateRequestMock.mockResolvedValue(
+      authFixture({ userId: "counselor-1", industryId: "education_consultancy", permissions: permissions({ leadScope: "own" }) }),
+    );
+    createClientMock.mockResolvedValue(summaryClient(rpcCalls, 4));
+    createServiceClientMock.mockResolvedValue(eduDb([], 0));
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ facets: "summary" }));
+    const body = await res.json();
+    expect(body.data.facets.summary).toEqual({ stages: 2, needFollowUp: 4 });
+    const agg = rpcCalls.find(([n]) => n === "lead_aggregates")!;
+    expect(agg[1]).toMatchObject({ p_scope: "own", p_user: "counselor-1", p_tenant: "tenant-1" });
+    expect(rpcCalls.some(([n]) => n.startsWith("leads_visible_to_user"))).toBe(true);
+  });
+
+  it("an OR tree yields null for both numbers — never a partial or page-scoped guess", async () => {
+    const rpcCalls: RpcCall[] = [];
+    const countChains: Call[][] = [];
+    authenticateRequestMock.mockResolvedValue(
+      authFixture({ role: "owner", industryId: "education_consultancy", permissions: permissions({ leadScope: "all" }) }),
+    );
+    createClientMock.mockResolvedValue(summaryClient(rpcCalls, 0));
+    createServiceClientMock.mockResolvedValue(eduDb(countChains, 7));
+    const orTree = {
+      conjunction: "or" as const,
+      conditions: [
+        { id: "a", field: "status", op: "is" as const, value: "new" },
+        { id: "b", field: "status", op: "is" as const, value: "contacted" },
+      ],
+    };
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ facets: "summary", [FILTER_PARAM]: encodeFilterTree(orTree) }));
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data.facets.summary).toEqual({ stages: null, needFollowUp: null });
+    expect(rpcCalls.filter(([n]) => n === "lead_aggregates")).toHaveLength(0);
+    expect(countChains).toHaveLength(0);
+  });
+
+  it("an empty pipeline allowlist returns zeros without touching the aggregate", async () => {
+    const rpcCalls: RpcCall[] = [];
+    authenticateRequestMock.mockResolvedValue(
+      authFixture({ role: "owner", industryId: "education_consultancy", permissions: permissions({ leadScope: "all", pipelineAccess: { ids: new Set() } }) }),
+    );
+    createClientMock.mockResolvedValue(summaryClient(rpcCalls, 0));
+    createServiceClientMock.mockResolvedValue(eduDb([], 0));
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ facets: "summary" }));
+    const body = await res.json();
+    expect(body.data.facets.summary).toEqual({ stages: 0, needFollowUp: 0 });
+    expect(rpcCalls).toEqual([]);
+  });
+});

@@ -66,6 +66,9 @@ export interface LeadsGridProps {
   /** Total matching leads (server total) and the counsellor count, for the footer. */
   total: number;
   counsellors: number | null;
+  /** EDGEX-126: stages with >=1 lead and leads needing follow-up, over ALL filtered leads. null = no number. */
+  stages?: number | null;
+  needFollowUp?: number | null;
   loading: boolean;
   /** Rendered instead of the table + footer when there are no rows and nothing is loading. */
   emptyState: ReactNode;
@@ -160,6 +163,8 @@ export function LeadsGrid(props: LeadsGridProps) {
     onFilterRequest,
     total,
     counsellors,
+    stages = null,
+    needFollowUp = null,
     loading,
     emptyState,
   } = props;
@@ -390,6 +395,18 @@ export function LeadsGrid(props: LeadsGridProps) {
                 summary = (
                   <>
                     <span className="font-medium text-ds-ink tabular-nums">{total.toLocaleString()}</span> {total === 1 ? "lead" : "leads"}
+                  </>
+                );
+              } else if (col.key === "lead_type" && stages !== null) {
+                summary = (
+                  <>
+                    <span className="font-medium text-ds-ink tabular-nums">{stages.toLocaleString()}</span> {stages === 1 ? "stage" : "stages"}
+                  </>
+                );
+              } else if (col.key === "last_activity" && needFollowUp !== null) {
+                summary = (
+                  <>
+                    <span className="font-medium text-ds-ink tabular-nums">{needFollowUp.toLocaleString()}</span> need follow-up
                   </>
                 );
               } else if (col.key === "assigned" && counsellors !== null) {

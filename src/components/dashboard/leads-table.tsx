@@ -940,6 +940,8 @@ export function LeadsTable({
   const [serverAssigneeFacet, setServerAssigneeFacet] = useState<FacetOptionLike[] | null>(null);
   const [serverCollaboratorFacet, setServerCollaboratorFacet] = useState<FacetOptionLike[] | null>(null);
   const [serverDestinationFacet, setServerDestinationFacet] = useState<FacetOptionLike[] | null>(null);
+  // EDGEX-126 footer: { stages, needFollowUp } over ALL filtered leads, from the SAME facets request (no extra HTTP call).
+  const [serverSummary, setServerSummary] = useState<{ stages: number | null; needFollowUp: number | null } | null>(null);
   const facetFetchParams = useMemo(() => {
     if (!serverPaginated || isStagingView) return null; // staging view isn't serverPaginated today
     const params = buildFetchParams(1, itemsPerPage, false);
@@ -956,10 +958,11 @@ export function LeadsTable({
       wantsAssigneeFacet && "assignee",
       wantsCollaboratorFacet && "collaborator",
       wantsDestinationFacet && "destination",
+      useToolbarV2 && "summary",
     ].filter(Boolean);
     params.set("facets", dims.join(","));
     return params;
-  }, [serverPaginated, isStagingView, buildFetchParams, itemsPerPage, wantsAssigneeFacet, wantsCollaboratorFacet, wantsDestinationFacet]);
+  }, [serverPaginated, isStagingView, buildFetchParams, itemsPerPage, wantsAssigneeFacet, wantsCollaboratorFacet, wantsDestinationFacet, useToolbarV2]);
 
   const serverFacetsActive = !!facetFetchParams;
   // Option NAMES survive a facet the server can't count (null): Source/Destination values
@@ -974,6 +977,7 @@ export function LeadsTable({
       setServerAssigneeFacet(null);
       setServerCollaboratorFacet(null);
       setServerDestinationFacet(null);
+      setServerSummary(null);
       return;
     }
     const controller = new AbortController();
@@ -990,6 +994,7 @@ export function LeadsTable({
             assignee?: { options: FacetOptionLike[] } | null;
             collaborator?: { options: FacetOptionLike[] } | null;
             destination?: { options: FacetOptionLike[] } | null;
+            summary?: { stages: number | null; needFollowUp: number | null } | null;
           } | null;
         };
       }) => {
@@ -1001,6 +1006,7 @@ export function LeadsTable({
           setServerAssigneeFacet(null);
           setServerCollaboratorFacet(null);
           setServerDestinationFacet(null);
+          setServerSummary(null);
         } else if (body.data?.facets === null || body.data?.facets === undefined) {
           // route.ts returns `facets: null` when the active ?f= tree isn't losslessly
           // expressible into lead_aggregates() (treeToAggregateParams §E — e.g. any
@@ -1018,6 +1024,7 @@ export function LeadsTable({
           setServerAssigneeFacet(null);
           setServerCollaboratorFacet(null);
           setServerDestinationFacet(null);
+          setServerSummary(null);
         } else {
           // Per-facet `null` from the server means "no faithful number for this facet
           // under the active filters" (e.g. a Stage filter on Source/Destination, or a
@@ -1033,6 +1040,7 @@ export function LeadsTable({
           setServerAssigneeFacet(pick(f.assignee, wantsAssigneeFacet));
           setServerCollaboratorFacet(pick(f.collaborator, wantsCollaboratorFacet));
           setServerDestinationFacet(pick(f.destination, wantsDestinationFacet));
+          setServerSummary(f.summary ?? null);
         }
       })
       .catch((err: unknown) => {
@@ -3204,6 +3212,8 @@ export function LeadsTable({
             onFilterRequest={(fieldKey) => setFilterRequest({ fieldKey, nonce: Date.now() })}
             total={effectiveTotal}
             counsellors={countCounsellors(serverAssigneeFacet)}
+            stages={serverSummary?.stages ?? null}
+            needFollowUp={serverSummary?.needFollowUp ?? null}
             loading={tableLoading}
             emptyState={
               <GridEmptyState
