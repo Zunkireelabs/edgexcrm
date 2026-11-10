@@ -179,19 +179,19 @@ export function BulkBar({
         </button>
       )}
       {actions.moveStage && (
-        <button type="button" className={BTN} onClick={handlers.onMoveStage}>
+        <button type="button" data-bulk="stage" className={BTN} onClick={handlers.onMoveStage}>
           <CircleDashedIcon aria-hidden />
           {stageLabel}
         </button>
       )}
       {actions.assign && (
-        <button type="button" className={BTN} onClick={handlers.onAssign}>
+        <button type="button" data-bulk="assign" className={BTN} onClick={handlers.onAssign}>
           <UserIcon aria-hidden />
           Assign
         </button>
       )}
       {actions.addTag && (
-        <button type="button" className={BTN} onClick={handlers.onAddTag}>
+        <button type="button" data-bulk="tag" className={BTN} onClick={handlers.onAddTag}>
           <TagIcon aria-hidden />
           Add tag
         </button>

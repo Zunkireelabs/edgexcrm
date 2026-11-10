@@ -3786,6 +3786,7 @@ export function LeadsTable({
         const n = selectedCount;
         const leadsWord = `${n.toLocaleString()} lead${n !== 1 ? "s" : ""}`;
         const close = () => setBulkPalette(null);
+        const cap = (t: string) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : t);
         const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("");
 
         // Move stage: same list rules as the old dialog (admins also see staging/archive lists).
@@ -3810,8 +3811,8 @@ export function LeadsTable({
           ...pool.map((m) => ({
             id: m.user_id,
             label: m.name,
-            sub: memberMeta(m.user_id, m.role) || undefined,
-            group: "People",
+            sub: cap(memberMeta(m.user_id, m.role)) || undefined,
+            group: cap(roleMap?.[m.user_id] ?? m.role) || "People",
             lead: (
               <span aria-hidden className="grid size-[22px] shrink-0 place-items-center rounded-full bg-ds-hover text-[9px] font-semibold text-ds-muted">
                 {initials(m.name)}
@@ -3819,7 +3820,7 @@ export function LeadsTable({
             ),
           })),
           { id: "unassign", label: "Unassign", sub: "remove the assignment", group: "Other" },
-        ];
+        ].sort((a, b) => (a.group === "Other" ? 1 : b.group === "Other" ? -1 : a.group!.localeCompare(b.group!)));
 
         // Add tag: the scoped endpoint (with counts) when it answered, else the tags on the loaded rows.
         const fallbackTags = Array.from(new Set(["student", ...localLeads.flatMap((l) => l.tags ?? [])])).map((tag) => ({ tag, count: null as number | null }));
@@ -3834,6 +3835,7 @@ export function LeadsTable({
           <>
             <CommandDialog
               open={bulkPalette === "stage"}
+              returnFocusTo='[data-bulk="stage"]'
               onClose={close}
               title={`Move ${leadsWord} to stage`}
               placeholder="Search stages…"
@@ -3856,6 +3858,7 @@ export function LeadsTable({
             />
             <CommandDialog
               open={bulkPalette === "assign"}
+              returnFocusTo='[data-bulk="assign"]'
               onClose={close}
               title={`Assign ${leadsWord}`}
               placeholder="Find someone…"
@@ -3867,6 +3870,7 @@ export function LeadsTable({
             />
             <CommandDialog
               open={bulkPalette === "tag"}
+              returnFocusTo='[data-bulk="tag"]'
               onClose={close}
               title={`Add tag to ${leadsWord}`}
               placeholder="Search or create a tag…"

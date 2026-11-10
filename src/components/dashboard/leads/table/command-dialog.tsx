@@ -61,6 +61,7 @@ export function CommandDialog({
   busy = false,
   create,
   emptyLabel = (q: string) => `No results found for “${q}”`,
+  returnFocusTo,
 }: {
   open: boolean;
   onClose: () => void;
@@ -75,6 +76,8 @@ export function CommandDialog({
   busy?: boolean;
   create?: CommandCreate;
   emptyLabel?: (q: string) => string;
+  /** CSS selector of the control that opened the dialog; focus goes back to it on close (a11y). */
+  returnFocusTo?: string;
 }) {
   const [query, setQuery] = useState("");
   const [chosen, setChosen] = useState<string[]>([]);
@@ -147,8 +150,13 @@ export function CommandDialog({
     }
   };
 
-  const primary = primaryLabel(chosenItems);
-  const disabled = chosen.length === 0 || busy;
+  // single mode: the primary names the chosen row, else the highlighted one (so it reads "Move to Qualified" before any click).
+  const highlighted = rows[active];
+  const highlightItem = mode === "single" && highlighted && highlighted !== "create" && !highlighted.disabled ? highlighted : null;
+  const target = mode === "single" ? (chosenItems[0] ?? highlightItem) : null;
+  const primary = primaryLabel(mode === "single" ? (target ? [target] : []) : chosenItems);
+  const submitIds = mode === "single" ? (target ? [target.id] : []) : chosen;
+  const disabled = submitIds.length === 0 || busy;
 
   let lastGroup: string | undefined;
   return (
@@ -156,7 +164,19 @@ export function CommandDialog({
       <DialogPrimitive.Portal>
         {/* Transparent overlay: click outside closes, but the page is not greyed. */}
         <DialogPrimitive.Overlay className="fixed inset-0 z-[99]" />
-        <DialogPrimitive.Content className={SHELL} aria-describedby={undefined} onKeyDown={onKeyDown} data-testid="command-dialog">
+        <DialogPrimitive.Content
+          className={SHELL}
+          aria-describedby={undefined}
+          onKeyDown={onKeyDown}
+          data-testid="command-dialog"
+          onCloseAutoFocus={(e) => {
+            const el = returnFocusTo ? document.querySelector<HTMLElement>(returnFocusTo) : null;
+            if (el) {
+              e.preventDefault();
+              el.focus();
+            }
+          }}
+        >
           <div className={CARD}>
             <div className="flex h-12 items-center border-b border-ds-divider px-4">
               <DialogPrimitive.Title className="text-sm font-medium text-ds-ink">{title}</DialogPrimitive.Title>
@@ -253,7 +273,7 @@ export function CommandDialog({
               <button
                 type="button"
                 disabled={disabled}
-                onClick={() => void submit(chosen)}
+                onClick={() => void submit(submitIds)}
                 className="inline-flex h-8 items-center gap-2 rounded-[9px] bg-ds-accent pl-3 pr-1.5 text-sm font-medium text-white disabled:opacity-45"
               >
                 {busy ? "Working…" : primary}
