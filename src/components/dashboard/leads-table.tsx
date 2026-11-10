@@ -27,6 +27,7 @@ import { LeadsToolbar } from "@/components/dashboard/leads/toolbar/leads-toolbar
 import type { CountLoader, OptionContext } from "@/components/dashboard/leads/toolbar/condition-body";
 import { fetchLeadCount, treeWithoutField } from "@/components/dashboard/leads/toolbar/lead-count";
 import { CTRL, CTRL_BORDERED, CTRL_PRIMARY } from "@/components/dashboard/leads/toolbar/tokens";
+import { LEADS_V2_DEFAULT_SORT } from "@/lib/leads/default-sort";
 import { SortControl } from "@/components/dashboard/leads/toolbar/sort-control";
 import { AddFilterButton } from "@/components/filters/add-filter-button";
 import { SavedFiltersMenu } from "@/industries/education-consultancy/features/saved-lead-filters/components/saved-filters-menu";
@@ -595,8 +596,11 @@ export function LeadsTable({
     setTotal(initialTotal ?? leads.length);
   }, [leads, initialTotal, advancedFilterActive]);
 
-  const [sortField, setSortField] = useState<SortField>("activity");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  // EDGEX-122: initial sort comes from the shared constant the server first page also uses.
+  const [sortField, setSortField] = useState<SortField>(
+    () => (Object.keys(SORT_FIELD_TO_API) as SortField[]).find((f) => SORT_FIELD_TO_API[f] === LEADS_V2_DEFAULT_SORT.key) ?? "activity",
+  );
+  const [sortDirection, setSortDirection] = useState<SortDirection>(LEADS_V2_DEFAULT_SORT.direction);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);

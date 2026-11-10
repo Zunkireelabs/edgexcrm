@@ -132,7 +132,7 @@ function NameCell({ lead, ctx }: { lead: Lead; ctx: LeadColumnCtx }) {
         {name}
       </Link>
       {/* Hover cluster (pointer devices). bg-inherit: the sticky Name cell is opaque in every state. */}
-      <span className="absolute right-1.5 top-1/2 hidden -translate-y-1/2 items-center gap-1 bg-inherit opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100 [@media(hover:hover)]:flex">
+      <span className="absolute right-1.5 top-1/2 hidden -translate-y-1/2 items-center gap-1 bg-inherit opacity-0 transition-opacity group-hover/row:opacity-100 group-has-[:focus-visible]/row:opacity-100 [@media(hover:hover)]:flex">
         <button type="button" onClick={open} className={`inline-flex ${HOVER_BTN}`} aria-label={`Open ${name} in preview`}>
           Open
           <kbd className="font-sans text-[11px] font-medium text-ds-faint">⌘↵</kbd>

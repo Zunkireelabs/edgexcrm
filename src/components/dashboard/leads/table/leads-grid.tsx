@@ -106,7 +106,7 @@ const Row = memo(function Row({ lead, nameColumn, columns, ctx, selected, anySel
       data-state={selected ? "selected" : undefined}
     >
       <td className={`${CELL_BASE} sticky left-0 z-10 px-0 ${bg}`} onClick={(e) => e.stopPropagation()}>
-        <span className={`flex h-full items-center justify-center transition-opacity ${anySelected || selected ? "opacity-100" : "opacity-55 group-hover/row:opacity-100 focus-within:opacity-100"}`}>
+        <span className={`flex h-full items-center justify-center transition-opacity ${anySelected || selected ? "opacity-100" : "opacity-55 group-hover/row:opacity-100 has-[:focus-visible]:opacity-100"}`}>
           <Checkbox
             className={CHECKBOX_CLASS}
             checked={selected}

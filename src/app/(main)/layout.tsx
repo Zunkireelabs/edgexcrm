@@ -25,8 +25,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${inter.variable} ${geistMono.variable}`}>
+      {/* suppressHydrationWarning: browser extensions (e.g. Grammarly/ColorZilla's cz-shortcut-listen) inject
+          attributes on <body> before React hydrates. One level only; it cannot mask mismatches in children. */}
       <body
         className="antialiased h-screen overflow-hidden"
+        suppressHydrationWarning
       >
         {children}
         <Toaster />

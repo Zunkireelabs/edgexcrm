@@ -7,6 +7,9 @@ import { branchMemberIds, getLeadMembership } from "@/lib/leads/branch-membershi
 import { isLeadCollaborator } from "@/lib/leads/collaborators";
 import type { LeadSubmissionSnapshot } from "@/lib/leads/submission-history";
 import { visibleLeadsBase } from "@/lib/leads/visibility-query";
+import { resolveLeadsSort, LEADS_V2_DEFAULT_SORT } from "@/lib/leads/default-sort";
+import { leadFields } from "@/lib/filters/registry/leads";
+import type { CompileCtx } from "@/lib/filters/types";
 
 export async function getCurrentUserTenant(): Promise<{
   tenant: Tenant;
@@ -303,17 +306,34 @@ export async function getLeadsPage(
    * total from lead_aggregates (KANBAN-PAGINATION-BRIEF §2b) — used for per-column
    * Kanban first pages, where an exact count per column would be N extra round
    * trips the aggregate already made unnecessary. Returned `total` is -1 then. */
-  opts?: { skipCount?: boolean },
+  opts?: {
+    skipCount?: boolean;
+    /** EDGEX-122: order by the v2 table's default sort (LEADS_V2_DEFAULT_SORT, mapped through
+     * the same registry sortColumns/sortNullsFirst as GET /api/v1/leads) instead of the
+     * legacy created_at desc. Omitted = legacy order, unchanged. */
+    v2DefaultSort?: boolean;
+  },
 ): Promise<{ leads: Lead[]; total: number }> {
   const userClient = await createClient(); // RLS-context client — leads_visible_to_user() needs a real auth.uid()
   const serviceClient = await createServiceClient();
   const wantCount = !opts?.skipCount;
+  const v2Sort = opts?.v2DefaultSort
+    ? resolveLeadsSort(
+        // leadFields ignores ctx today (see its `void ctx`); sort columns do not depend on it.
+        leadFields({} as CompileCtx),
+        LEADS_V2_DEFAULT_SORT.key,
+        LEADS_V2_DEFAULT_SORT.direction,
+      )
+    : null;
 
   const applyFilters = (q: ReturnType<typeof visibleLeadsBase>) => {
-    q = q
-      .is("converted_at", null)
-      .order("created_at", { ascending: false })
-      .order("id", { ascending: false });
+    q = q.is("converted_at", null);
+    if (v2Sort) {
+      for (const col of v2Sort.columns) q = q.order(col, { ascending: v2Sort.ascending, nullsFirst: v2Sort.nullsFirst });
+    } else {
+      q = q.order("created_at", { ascending: false });
+    }
+    q = q.order("id", { ascending: false });
 
     if (scope?.onlyDeleted) {
       q = q.not("deleted_at", "is", null);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -80,6 +80,39 @@ export function UserMenu(p: UserMenuProps) {
     </span>
   );
 
+  // Radix Popover derives its ids from React.useId, which encodes the component's tree position. In this
+  // deeply nested shell the server-vs-client tree id overflows its 30-bit chunk and the two disagree, so the
+  // trigger's aria-controls mismatched on every dev page (EDGEX-124). The plain button below renders
+  // identically on both sides; the Popover (and its ids) only mounts once hydration is done.
+  const hydrated = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
+
+  const trigger = (
+    <button
+      type="button"
+      aria-label="Your menu"
+      title={p.ring ? ringTitle(p.ring) : undefined}
+      className="inline-flex h-[30px] items-center gap-1.5 rounded-ds-sm border border-ds-border bg-ds-surface pl-0.5 pr-2 text-[12.5px] font-medium text-ds-ink outline-none transition-colors hover:bg-ds-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ds-accent data-[state=open]:bg-ds-hover max-md:pr-1.5"
+    >
+      {p.ring ? (
+        <UsageRing pct={p.ring.pct} size={26}>
+          {avatar(18, "text-[8.5px]")}
+        </UsageRing>
+      ) : (
+        <span className="ml-0.5">{avatar(22, "text-[9.5px]")}</span>
+      )}
+      <span className="max-w-[120px] truncate max-md:hidden" title={p.userName}>
+        {firstName}
+      </span>
+      <CaretDownIcon size={14} aria-hidden className="text-ds-muted" />
+    </button>
+  );
+
+  if (!hydrated) return trigger;
+
   return (
     <Popover
       open={open}
@@ -89,24 +122,7 @@ export function UserMenu(p: UserMenuProps) {
       }}
     >
       <PopoverTrigger asChild>
-        <button
-          type="button"
-          aria-label="Your menu"
-          title={p.ring ? ringTitle(p.ring) : undefined}
-          className="inline-flex h-[30px] items-center gap-1.5 rounded-ds-sm border border-ds-border bg-ds-surface pl-0.5 pr-2 text-[12.5px] font-medium text-ds-ink outline-none transition-colors hover:bg-ds-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ds-accent data-[state=open]:bg-ds-hover max-md:pr-1.5"
-        >
-          {p.ring ? (
-            <UsageRing pct={p.ring.pct} size={26}>
-              {avatar(18, "text-[8.5px]")}
-            </UsageRing>
-          ) : (
-            <span className="ml-0.5">{avatar(22, "text-[9.5px]")}</span>
-          )}
-          <span className="max-w-[120px] truncate max-md:hidden" title={p.userName}>
-            {firstName}
-          </span>
-          <CaretDownIcon size={14} aria-hidden className="text-ds-muted" />
-        </button>
+        {trigger}
       </PopoverTrigger>
       <PopoverContent
         align="end"

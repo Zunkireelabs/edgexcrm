@@ -242,7 +242,12 @@ export default async function LeadsPage({
     await Promise.all([
       isKanban
         ? Promise.resolve({ leads: [] as Lead[], total: 0 })
-        : getLeadsPage(tenantData.tenant.id, { ...scope, excludeOtherType }, 1, LIST_PAGE_SIZE),
+        : getLeadsPage(tenantData.tenant.id, { ...scope, excludeOtherType }, 1, LIST_PAGE_SIZE, {
+            // EDGEX-122: v2 table (same condition as leads-table.tsx useToolbarV2) paints in its own default sort.
+            v2DefaultSort:
+              process.env.NEXT_PUBLIC_ADVANCED_FILTERS === "1" &&
+              tenantData.tenant.industry_id === "education_consultancy",
+          }),
       getTeamMembers(tenantData.tenant.id),
       getPipelineStages(tenantData.tenant.id),
       getFormConfigsForTenant(tenantData.tenant.id),
