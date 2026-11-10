@@ -1510,17 +1510,21 @@ describe("GET /api/v1/leads — facets=summary (EDGEX-126 footer)", () => {
     };
   }
 
-  function eduDb(countChains: Call[][], headCount: number) {
+  function eduDb(countChains: Call[][], headCount: number, opts?: { countFor?: (calls: Call[]) => number }) {
     return {
       from: (table: string) => {
         if (table === "tenants") {
           return { select: () => ({ eq: () => ({ single: () => Promise.resolve({ data: { config: null }, error: null }) }) }) };
         }
+        if (table === "lead_lists") {
+          return { select: () => ({ eq: () => Promise.resolve({ data: [{ id: "aaaaaaaa-0000-4000-8000-00000000000a" }, { id: "bbbbbbbb-0000-4000-8000-00000000000b" }, { id: "cccccccc-0000-4000-8000-00000000000c" }], error: null }) }) };
+        }
         if (table === "leads") {
           const calls: Call[] = [];
           countChains.push(calls);
           const chain = makeLeadsChain(calls) as Record<string, unknown>;
-          chain.then = (resolve: (v: unknown) => void) => resolve({ data: null, error: null, count: headCount });
+          chain.then = (resolve: (v: unknown) => void) =>
+            resolve({ data: null, error: null, count: opts?.countFor ? opts.countFor(calls) : headCount });
           return chain;
         }
         throw new Error(`unexpected table ${table}`);
@@ -1586,6 +1590,27 @@ describe("GET /api/v1/leads — facets=summary (EDGEX-126 footer)", () => {
     expect(body.data.facets.summary).toEqual({ stages: null, needFollowUp: null });
     expect(rpcCalls.filter(([n]) => n === "lead_aggregates")).toHaveLength(0);
     expect(countChains).toHaveLength(0);
+  });
+
+  it("with a search term the stage count is exact per list (the RPC's p_search has no display-id match): one head count per lead list with that list ANDed on, lists with 0 not counted", async () => {
+    const rpcCalls: RpcCall[] = [];
+    const countChains: Call[][] = [];
+    authenticateRequestMock.mockResolvedValue(
+      authFixture({ role: "owner", industryId: "education_consultancy", permissions: permissions({ leadScope: "all" }) }),
+    );
+    createClientMock.mockResolvedValue(summaryClient(rpcCalls, 0));
+    createServiceClientMock.mockResolvedValue(
+      eduDb(countChains, 0, { countFor: (calls) => (callsMention(calls, "aaaaaaaa-0000-4000-8000-00000000000a") ? 5 : callsMention(calls, "bbbbbbbb-0000-4000-8000-00000000000b") ? 2 : 0) }),
+    );
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ facets: "summary", search: "LOC-ADM" }));
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data.facets.summary.stages).toBe(2);
+    expect(rpcCalls.filter(([n]) => n === "lead_aggregates")).toHaveLength(0);
+    // 3 lists + 1 follow-up count, every one through the list's own chain
+    expect(countChains).toHaveLength(4);
+    for (const c of countChains) expect(callsMention(c, "LOC-ADM")).toBe(true);
   });
 
   it("an empty pipeline allowlist returns zeros without touching the aggregate", async () => {

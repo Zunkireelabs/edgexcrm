@@ -722,17 +722,35 @@ export async function GET(request: NextRequest) {
     let summary: { stages: number | null; needFollowUp: number | null } | undefined;
     try {
       if (requestedFacets.includes("summary")) {
-        // Stages: the `list` dimension of lead_aggregates() — same scope + filters as every other facet, ONE RPC.
-        // Not expressible (?f= tree the RPC can't take) -> null, never a page-scoped guess.
-        const stages = aggregateFacetsAvailable
-          ? (
-              await getListFacet({
-                ...baseFacetParams,
-                assigneesAny: effectiveAssigneesAny,
-                includeUnassigned: effectiveIncludeUnassigned,
-              })
-            ).length
-          : null;
+        // Stages: number of Stage (lead list) values with >=1 lead in the filtered set.
+        //  - Normal case: the `list` dimension of lead_aggregates() — same scope + filters as every other facet, ONE RPC.
+        //  - With a search box term (or a tree lead_aggregates() cannot take): the RPC cannot answer faithfully
+        //    (its p_search has no display-id match, unlike the list's search), so count each list with the
+        //    list's OWN query (buildScopedQuery + `stage` = that list, head:true) and tally the non-empty ones.
+        //    Bounded by the tenant's number of lead lists (~10), run in parallel.
+        let stages: number | null = null;
+        if (aggregateFacetsAvailable && !effectiveSearch) {
+          stages = (
+            await getListFacet({
+              ...baseFacetParams,
+              assigneesAny: effectiveAssigneesAny,
+              includeUnassigned: effectiveIncludeUnassigned,
+            })
+          ).length;
+        } else if (filterRegistry.stage) {
+          const { data: listRows, error: listErr } = await supabase.from("lead_lists").select("id").eq("tenant_id", auth.tenantId);
+          if (listErr) throw new Error(`summary stage lists failed: ${listErr.message}`);
+          const perList = await Promise.all(
+            (listRows ?? []).map(async (l) => {
+              const t = treeWithCondition(filterTree, { id: `summary:stage:${l.id}`, field: "stage", op: "is_any_of", value: [l.id as string] });
+              if (!t) return null;
+              const { count, error: cErr } = await buildScopedQuery({ head: true, count: "exact" }, { tree: t });
+              if (cErr) throw new Error(`summary stage count failed: ${cErr.message}`);
+              return count ?? 0;
+            }),
+          );
+          stages = perList.some((c) => c === null) ? null : perList.filter((c) => (c ?? 0) > 0).length;
+        }
         // Need follow-up: ONE head:true count from the list's own buildScopedQuery with the EXISTING
         // `follow_up_needed` registry condition AND-ed on (COUNT-SPLIT rule). Equals adding the
         // "Follow-up needed" filter. Only education offers the field; a top-level OR tree -> null.
