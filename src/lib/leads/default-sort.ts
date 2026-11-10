@@ -14,8 +14,9 @@ export interface ResolvedLeadsSort {
   nullsFirst: boolean | undefined;
 }
 
-/** Registry key + direction -> the exact .order() inputs. Shared by the API route and
- *  the SSR first page so both map through the same `sortColumns` / `sortNullsFirst`. */
+/** Registry key + direction -> the exact .order() inputs. Used by the SSR first page
+ *  (getLeadsPage). The API route reads the same registry's `sortColumns` / `sortNullsFirst`
+ *  directly (route.ts), so both resolve the sort from one registry. */
 export function resolveLeadsSort(
   registry: FieldRegistry,
   key: string,
