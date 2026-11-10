@@ -49,6 +49,7 @@ import {
   DialogDescription,
   DialogFooter,
   DialogHeader,
+  DialogKeyHint,
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
@@ -3897,7 +3898,24 @@ export function LeadsTable({
         setMoveListDialogOpen(open);
         if (!open) { setMoveListId(""); setMoveArchiveReason(""); setMoveAssignTo("keep"); setIsGraduateMove(false); }
       }}>
-        <DialogContent>
+        {/* EDGEX-145: a plain bulk Archive (pre-targeted to the archive list, not the staging cockpit) is a destructive
+            confirm: no header bar, red bin badge, the reason picker, and a red primary that names the action. */}
+        <DialogContent size={moveTargetIsArchive && !isGraduateMove && !isStagingView ? "sm" : "md"} showCloseButton={!(moveTargetIsArchive && !isGraduateMove && !isStagingView)}>
+          {moveTargetIsArchive && !isGraduateMove && !isStagingView ? (
+            <div className="flex items-start gap-3.5 px-1 pt-1">
+              <span aria-hidden className="grid size-9 shrink-0 place-items-center rounded-full bg-ds-bad-soft text-ds-bad">
+                <TrashIcon className="size-[18px]" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <DialogTitle className="text-[15px] font-semibold">
+                  {`Archive ${selectedCount} lead${selectedCount !== 1 ? "s" : ""}?`}
+                </DialogTitle>
+                <DialogDescription className="mt-1 text-sm leading-[21px] text-ds-text">
+                  They leave every stage and list. You can bring them back from <b className="font-medium text-ds-ink">Archive</b> at any time.
+                </DialogDescription>
+              </div>
+            </div>
+          ) : (
           <DialogHeader>
             <DialogTitle>
               {isGraduateMove
@@ -3912,7 +3930,9 @@ export function LeadsTable({
                 : "Select a target stage. Leads will be moved out of their current stage."}
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4 space-y-3">
+          )}
+          <div className="space-y-3">
+            {!(moveTargetIsArchive && !isGraduateMove && !isStagingView) && (
             <Select value={moveListId} onValueChange={(v) => { setMoveListId(v); setMoveArchiveReason(""); }} disabled={isGraduateMove}>
               <SelectTrigger className="w-full">
                 <SelectValue placeholder={industryId === "education_consultancy" ? "Select stage..." : "Select list..."} />
@@ -3954,10 +3974,18 @@ export function LeadsTable({
                 })()}
               </SelectContent>
             </Select>
+            )}
             {moveTargetIsArchive && (
               <div className="space-y-1.5">
-                <p className="text-sm font-medium text-gray-700">Archive reason</p>
-                <Select value={moveArchiveReason} onValueChange={setMoveArchiveReason}>
+                <p className="text-[13px] font-medium text-ds-muted">Archive reason</p>
+                <Select
+                  value={moveArchiveReason}
+                  onValueChange={(v) => {
+                    setMoveArchiveReason(v);
+                    // plain archive confirm: hand focus to the red button so Enter (the hint) confirms
+                    if (!isGraduateMove && !isStagingView) setTimeout(() => document.getElementById("bulk-archive-confirm")?.focus(), 60);
+                  }}
+                >
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select reason..." />
                   </SelectTrigger>
@@ -4024,10 +4052,13 @@ export function LeadsTable({
             <Button
               onClick={() => void handleBulkMove()}
               disabled={isMoveList || !moveListId || (moveTargetIsArchive && !moveArchiveReason)}
+              id="bulk-archive-confirm"
+              variant={moveTargetIsArchive && !isGraduateMove && !isStagingView ? "destructive" : "default"}
             >
               {isMoveList
                 ? (isGraduateMove ? "Graduating…" : moveTargetIsArchive ? "Archiving…" : "Moving…")
-                : (isGraduateMove ? "Graduate" : moveTargetIsArchive ? "Archive" : "Move")}
+                : (isGraduateMove ? "Graduate" : moveTargetIsArchive ? (isStagingView ? "Archive" : `Archive ${selectedCount} lead${selectedCount !== 1 ? "s" : ""}`) : "Move")}
+              {!isMoveList && moveTargetIsArchive && !isGraduateMove && !isStagingView && <DialogKeyHint>↵</DialogKeyHint>}
             </Button>
           </DialogFooter>
         </DialogContent>
