@@ -11,6 +11,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import { CheckIcon, PlusIcon, XIcon } from "@/components/icons";
+import { cn } from "@/lib/utils";
+import { DIALOG_CARD, DIALOG_SHELL } from "@/components/ui/dialog-shell";
 
 export interface CommandItem {
   id: string;
@@ -31,9 +33,11 @@ export interface CommandCreate {
   label: (text: string) => string;
 }
 
-const SHELL =
-  "fixed left-1/2 top-[110px] z-[100] flex w-[720px] max-w-[calc(100vw-24px)] -translate-x-1/2 flex-col rounded-[16px] bg-[rgba(255,255,255,.6)] p-1 backdrop-blur-[16px] shadow-[0_8px_28px_-6px_rgba(28,40,64,.12),0_18px_88px_-4px_rgba(28,40,64,.16),0_0_1px_rgba(28,40,64,.16)] outline-none";
-const CARD = "flex flex-col overflow-hidden rounded-[12px] bg-ds-surface shadow-[0_0_0_1px_rgba(28,40,64,.08),0_1px_2px_rgba(28,40,64,.04)]";
+const SHELL = cn(
+  DIALOG_SHELL,
+  "fixed left-1/2 top-[110px] z-[100] w-[720px] max-w-[calc(100vw-24px)] -translate-x-1/2",
+);
+const CARD = DIALOG_CARD;
 const RAISED = "shadow-[0_0_2px_rgba(28,40,64,.18),0_1px_3px_rgba(0,0,0,.04)]";
 
 function EmptyIllustration() {
