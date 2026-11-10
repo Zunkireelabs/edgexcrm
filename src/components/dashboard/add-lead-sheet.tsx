@@ -493,7 +493,7 @@ export function AddLeadSheet({
   // ── Shared render helpers ────────────────────────────────────────────────
 
   const renderEmailPhoneRow = () => (
-    <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2">
+    <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2 [&>div>*:not([data-slot=label])]:mb-0">
       <div className="space-y-1.5">
         <Label htmlFor="email" className="text-xs text-gray-600">
           Email
@@ -565,7 +565,7 @@ export function AddLeadSheet({
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2 [&>div>*:not([data-slot=label])]:mb-0">
         <div className="space-y-1.5">
           <Label htmlFor="stage" className="text-xs text-gray-600">
             Stage
@@ -695,7 +695,7 @@ export function AddLeadSheet({
           <span className="text-xs text-gray-400 font-normal">(optional)</span>
         </CollapsibleTrigger>
         <CollapsibleContent className="space-y-5 pt-3">
-          <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2 [&>div>*:not([data-slot=label])]:mb-0">
             {canSetLeadSource && (
             <div className="space-y-1.5">
               <Label htmlFor="source" className="text-xs text-gray-600">
@@ -847,7 +847,7 @@ export function AddLeadSheet({
       {/* 1. Lead Information */}
       <div className="flex flex-col gap-5 [&>h3]:-mb-2">
         <h3 className="pl-1 text-[13px] font-medium text-ds-ink">Lead Information</h3>
-        <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2 [&>div>*:not([data-slot=label])]:mb-0">
           <div className="space-y-1.5">
             <Label htmlFor="ownerId" className="text-xs text-gray-600">
               Lead Owner
@@ -871,7 +871,7 @@ export function AddLeadSheet({
       <div className="flex flex-col gap-5 [&>h3]:-mb-2">
         <h3 className="pl-1 text-[13px] font-medium text-ds-ink">Company Information</h3>
 
-        <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2 [&>div>*:not([data-slot=label])]:mb-0">
           <div className="space-y-1.5">
             <Label htmlFor="companyName" className="text-xs text-gray-600">
               Company Name
@@ -919,7 +919,7 @@ export function AddLeadSheet({
         <h3 className="pl-1 text-[13px] font-medium text-ds-ink">Contact Details</h3>
 
         {/* [Salutation] First Name | Last Name */}
-        <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2 [&>div>*:not([data-slot=label])]:mb-0">
           <div className="space-y-1.5">
             <Label htmlFor="firstName" className="text-xs text-gray-600">
               First name
@@ -959,7 +959,7 @@ export function AddLeadSheet({
         </div>
 
         {/* Designation | Email */}
-        <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2 [&>div>*:not([data-slot=label])]:mb-0">
           <div className="space-y-1.5">
             <Label htmlFor="designation" className="text-xs text-gray-600">
               Designation
@@ -992,7 +992,7 @@ export function AddLeadSheet({
         </div>
 
         {/* Phone | City */}
-        <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2 [&>div>*:not([data-slot=label])]:mb-0">
           <div className="space-y-1.5">
             <Label htmlFor="phone" className="text-xs text-gray-600">
               Phone
@@ -1036,7 +1036,7 @@ export function AddLeadSheet({
       <div className="flex flex-col gap-5 [&>h3]:-mb-2">
         <h3 className="pl-1 text-[13px] font-medium text-ds-ink">Contact Information</h3>
 
-        <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2 [&>div>*:not([data-slot=label])]:mb-0">
           <div className="space-y-1.5">
             <Label htmlFor="firstName" className="text-xs text-gray-600">
               First name
@@ -1074,7 +1074,7 @@ export function AddLeadSheet({
           />
         )}
         {industryId === "education_consultancy" && (
-          <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2 [&>div>*:not([data-slot=label])]:mb-0">
             <div className="space-y-1.5">
               <Label className="text-xs text-gray-600">Field of study</Label>
               <SearchableSelect
@@ -1100,7 +1100,7 @@ export function AddLeadSheet({
           </div>
         )}
         {industryId === "education_consultancy" && (
-          <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2 [&>div>*:not([data-slot=label])]:mb-0">
             <div className="space-y-1.5">
               <Label className="text-xs text-gray-600">Intake month</Label>
               <SearchableSelect

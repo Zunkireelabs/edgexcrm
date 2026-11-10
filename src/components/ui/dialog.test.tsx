@@ -82,6 +82,13 @@ describe("header + footer only (no body blocks)", () => {
   });
 });
 
+describe("footer layout", () => {
+  it("stays one row (wrapping only when it cannot fit), never a column stack", () => {
+    expect(DIALOG_FOOTER).toContain("flex-row flex-wrap");
+    expect(DIALOG_FOOTER).not.toContain("flex-col-reverse");
+  });
+});
+
 describe("form size", () => {
   it("is 808 wide, anchored at 14vh, with a fixed 70vh card, a 44px header and a 44px footer with 28px buttons", () => {
     open({ size: "form" });

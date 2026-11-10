@@ -30,7 +30,7 @@ export type DialogSize = keyof typeof DIALOG_SIZES;
 
 /** Footer bar: 52px, hairline above, buttons on the right. Shared by DialogFooter and AlertDialogFooter. */
 export const DIALOG_FOOTER =
-  "sticky bottom-0 z-10 flex min-h-[52px] flex-col-reverse gap-2 border-t border-ds-divider bg-ds-surface px-4 py-2 sm:flex-row sm:items-center sm:justify-end sm:pl-4 sm:pr-3 " +
+  "sticky bottom-0 z-10 flex min-h-[52px] flex-row flex-wrap items-center justify-end gap-2 border-t border-ds-divider bg-ds-surface py-2 pr-3 pl-4 " +
   // Buttons inside the footer take the mockup look without editing consumers.
   "[&_[data-slot=button]]:h-8 [&_[data-slot=button]]:rounded-[9px]! [&_[data-slot=button]]:px-3 [&_[data-slot=button]]:text-sm [&_[data-slot=button]]:font-medium [&_[data-slot=button]]:shadow-none " +
   "[&_[data-slot=button][data-variant=outline]]:border-transparent [&_[data-slot=button][data-variant=outline]]:bg-transparent [&_[data-slot=button][data-variant=outline]]:text-ds-muted [&_[data-slot=button][data-variant=outline]:hover]:bg-ds-hover [&_[data-slot=button][data-variant=outline]:hover]:text-ds-ink " +
