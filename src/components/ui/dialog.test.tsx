@@ -82,6 +82,9 @@ describe("form size", () => {
     expect(card.className).toContain("h-[70vh]");
     expect(card.className).toContain("max-sm:h-[calc(100dvh-32px)]");
     expect(card.className).not.toContain("max-h-");
+    // flex-basis would beat height inside the auto-height flex-col content: the form card must be flex-none, never flex-1
+    expect(card.className).toContain("flex-none");
+    expect(card.className).not.toMatch(/(^|\s)flex-1(\s|$)/);
     expect(document.querySelector("[data-slot=dialog-header]")!.className).toContain("min-h-11");
     const footer = document.querySelector("[data-slot=dialog-footer]")!;
     expect(footer.className).toContain("min-h-11");

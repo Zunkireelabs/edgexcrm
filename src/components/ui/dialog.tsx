@@ -104,7 +104,7 @@ function DialogContent({
       >
         <div
           data-slot="dialog-card"
-          className={cn(DIALOG_CARD, "relative min-h-0 flex-1", isForm ? "h-[70vh] max-sm:h-[calc(100dvh-32px)]" : "max-h-[calc(100vh-48px)]")}
+          className={cn(DIALOG_CARD, "relative min-h-0", isForm ? "h-[70vh] max-sm:h-[calc(100dvh-32px)] flex-none" : "flex-1 max-h-[calc(100vh-48px)]")}
         >
           <div
             data-slot="dialog-scroll"
