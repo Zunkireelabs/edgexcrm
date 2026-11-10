@@ -116,6 +116,7 @@ import { loadColumnPrefs, saveColumnPrefs, clearColumnPrefs } from "@/lib/leads/
 import { STAGE_FRONTLINE, allowedAssigneePositionsForStage } from "@/lib/leads/stage-assignee-positions";
 import { buildIntakeTermOptions } from "@/lib/intake-options";
 import { ColumnManagerDialog } from "@/components/dashboard/leads/column-manager-dialog";
+import { assignGroup, roleLabel } from "@/components/dashboard/leads/table/assign-groups";
 import { LeadsGrid, countCounsellors } from "@/components/dashboard/leads/table/leads-grid";
 import { ColumnsPopover } from "@/components/dashboard/leads/table/columns-popover";
 import { BulkBar, getBulkBarActions } from "@/components/dashboard/leads/table/bulk-bar";
@@ -2267,7 +2268,7 @@ export function LeadsTable({
   // Position · Branch label for member pickers — education-gated so non-education
   // tenants keep the position-only label unchanged.
   const memberMeta = (userId: string, fallbackRole?: string | null) => {
-    const pos = roleMap?.[userId] ?? fallbackRole ?? "";
+    const pos = roleLabel(roleMap?.[userId] ?? fallbackRole);
     const branch = industryId === "education_consultancy" ? branchMap[memberBranchMap[userId] ?? ""] : undefined;
     return [pos, branch].filter(Boolean).join(" · ");
   };
@@ -3812,7 +3813,7 @@ export function LeadsTable({
             id: m.user_id,
             label: m.name,
             sub: cap(memberMeta(m.user_id, m.role)) || undefined,
-            group: cap(roleMap?.[m.user_id] ?? m.role) || "People",
+            group: assignGroup(roleMap?.[m.user_id], m.role),
             lead: (
               <span aria-hidden className="grid size-[22px] shrink-0 place-items-center rounded-full bg-ds-hover text-[9px] font-semibold text-ds-muted">
                 {initials(m.name)}
