@@ -6,7 +6,7 @@ import { Dialog as DialogPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { DIALOG_CARD, DIALOG_FOOTER, DIALOG_KEY_HINT, DIALOG_SHELL, DIALOG_SIZES, type DialogSize } from "@/components/ui/dialog-shell"
+import { DIALOG_CARD, DIALOG_FOOTER, DIALOG_FOOTER_FORM, DIALOG_KEY_HINT, DIALOG_SHELL, DIALOG_SIZES, type DialogSize } from "@/components/ui/dialog-shell"
 
 function Dialog({
   ...props
@@ -52,6 +52,8 @@ function DialogOverlay({
 const BODY_CHILD =
   "[&>:not([data-slot=dialog-header]):not([data-slot=dialog-footer])]:mx-4 [&>:not([data-slot=dialog-header]):not([data-slot=dialog-footer])]:first:mt-4 [&>:not([data-slot=dialog-header]):not([data-slot=dialog-footer])]:last:mb-4";
 
+const DialogSizeContext = React.createContext<DialogSize>("md")
+
 function DialogContent({
   className,
   children,
@@ -75,6 +77,7 @@ function DialogContent({
   bodyClassName?: string
 }) {
   const isFlush = flush ?? /(^|\s)p-0(\s|$)/.test(className ?? "")
+  const isForm = size === "form"
   return (
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay className={overlayClassName} />
@@ -83,7 +86,9 @@ function DialogContent({
         data-size={size}
         className={cn(
           DIALOG_SHELL,
-          "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 w-full translate-x-[-50%] translate-y-[-50%] duration-200",
+          "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed left-[50%] z-50 w-full translate-x-[-50%] duration-200",
+          // form: anchored at 14vh (never re-centres as content changes); under sm, 16px from the top
+          isForm ? "top-[14vh] max-sm:top-4" : "top-[50%] translate-y-[-50%]",
           DIALOG_SIZES[size],
           className
         )}
@@ -91,18 +96,21 @@ function DialogContent({
       >
         <div
           data-slot="dialog-card"
-          className={cn(DIALOG_CARD, "relative max-h-[calc(100vh-48px)] min-h-0 flex-1")}
+          className={cn(DIALOG_CARD, "relative min-h-0 flex-1", isForm ? "h-[70vh] max-sm:h-[calc(100dvh-32px)]" : "max-h-[calc(100vh-48px)]")}
         >
           <div
             data-slot="dialog-scroll"
             className={cn("flex min-h-0 flex-1 flex-col overflow-y-auto", isFlush ? "gap-0" : cn("gap-5 [&>*]:shrink-0", BODY_CHILD), bodyClassName)}
           >
-            {children}
+            <DialogSizeContext.Provider value={size}>{children}</DialogSizeContext.Provider>
           </div>
           {showCloseButton && (
             <DialogPrimitive.Close
               data-slot="dialog-close"
-              className="absolute top-[10px] right-3 z-20 grid size-7 place-items-center rounded-lg text-ds-faint transition-colors outline-none hover:bg-ds-hover hover:text-ds-ink focus-visible:ring-2 focus-visible:ring-ds-accent/30 disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+              className={cn(
+                "absolute right-3 z-20 grid size-7 place-items-center rounded-lg text-ds-faint transition-colors outline-none hover:bg-ds-hover hover:text-ds-ink focus-visible:ring-2 focus-visible:ring-ds-accent/30 disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+                isForm ? "top-2" : "top-[10px]"
+              )}
             >
               <XIcon />
               <span className="sr-only">Close</span>
@@ -115,11 +123,12 @@ function DialogContent({
 }
 
 function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
+  const isForm = React.useContext(DialogSizeContext) === "form"
   return (
     <div
       data-slot="dialog-header"
       className={cn(
-        "sticky top-0 z-10 flex min-h-12 flex-col justify-center gap-0.5 border-b border-ds-divider bg-ds-surface py-2.5 pr-14 pl-4 text-left [&_[data-slot=dialog-description]]:text-[13px] [&_[data-slot=dialog-description]]:leading-[18px] [&_[data-slot=dialog-description]]:text-ds-faint",
+        "sticky top-0 z-10 flex flex-col justify-center gap-0.5 border-b border-ds-divider bg-ds-surface pr-14 pl-4 text-left", isForm ? "min-h-11 py-0" : "min-h-12 py-2.5", " [&_[data-slot=dialog-description]]:text-[13px] [&_[data-slot=dialog-description]]:leading-[18px] [&_[data-slot=dialog-description]]:text-ds-faint",
         className
       )}
       {...props}
@@ -135,8 +144,9 @@ function DialogFooter({
 }: React.ComponentProps<"div"> & {
   showCloseButton?: boolean
 }) {
+  const isForm = React.useContext(DialogSizeContext) === "form"
   return (
-    <div data-slot="dialog-footer" className={cn(DIALOG_FOOTER, className)} {...props}>
+    <div data-slot="dialog-footer" className={cn(isForm ? DIALOG_FOOTER_FORM : DIALOG_FOOTER, className)} {...props}>
       {children}
       {showCloseButton && (
         <DialogPrimitive.Close asChild>

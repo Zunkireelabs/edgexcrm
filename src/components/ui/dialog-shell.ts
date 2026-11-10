@@ -22,6 +22,8 @@ export const DIALOG_SIZES = {
   sm: "max-w-[min(440px,calc(100%-2rem))]",
   md: "max-w-[min(560px,calc(100%-2rem))]",
   lg: "max-w-[min(720px,calc(100%-2rem))]",
+  /** Attio create-record form: 800px card + the 4px frame. Fixed height, top-anchored (see DialogContent). */
+  form: "max-w-[min(808px,calc(100%-2rem))]",
 } as const;
 
 export type DialogSize = keyof typeof DIALOG_SIZES;
@@ -40,3 +42,10 @@ export const DIALOG_FOOTER =
 /** The small translucent key hint inside a primary button ("↵", "⌘↵"). */
 export const DIALOG_KEY_HINT =
   "ml-1 -mr-1 inline-grid h-5 min-w-5 place-items-center rounded-[5px] bg-white/20 px-1 text-[11px] font-medium";
+
+/** Form size: the 44px footer with 28px buttons (Attio create record); other sizes keep DIALOG_FOOTER. */
+export const DIALOG_FOOTER_FORM = DIALOG_FOOTER.replace("min-h-[52px]", "min-h-11")
+  .replace(" py-2 ", " py-0 ")
+  .replaceAll("[&_[data-slot=button]]:h-8", "[&_[data-slot=button]]:h-7")
+  .replaceAll("[&_[data-slot=button]]:rounded-[9px]", "[&_[data-slot=button]]:rounded-lg")
+  .replaceAll("[&_[data-slot=button]]:px-3", "[&_[data-slot=button]]:px-2 [&_[data-slot=button]]:py-1 [&_[data-slot=button][data-variant=default]]:pr-1.5");

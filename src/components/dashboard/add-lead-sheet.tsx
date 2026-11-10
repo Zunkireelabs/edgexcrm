@@ -552,7 +552,7 @@ export function AddLeadSheet({
 
   const renderAssignmentSection = () => (
     <div className="space-y-4">
-      <h3 className="text-sm font-medium text-gray-900">Assignment &amp; Status</h3>
+      <h3 className="pl-1 text-[13px] font-medium text-ds-ink">Assignment &amp; Status</h3>
 
       {/* Education admin: Branch is chosen first and scopes the assignee list */}
       {showEduBranchField && (
@@ -730,7 +730,7 @@ export function AddLeadSheet({
   const renderCollapsibles = () => (
     <>
       <Collapsible open={sourceOpen} onOpenChange={setSourceOpen}>
-        <CollapsibleTrigger className="flex items-center gap-2 w-full py-2 text-sm font-medium text-gray-700 hover:text-gray-900">
+        <CollapsibleTrigger className="flex items-center gap-2 w-full py-2 pl-1 text-[13px] font-medium text-ds-ink">
           <CaretRightIcon
             className={`h-4 w-4 transition-transform ${
               sourceOpen ? "rotate-90" : ""
@@ -807,7 +807,7 @@ export function AddLeadSheet({
       </Collapsible>
 
       <Collapsible open={notesOpen} onOpenChange={setNotesOpen}>
-        <CollapsibleTrigger className="flex items-center gap-2 w-full py-2 text-sm font-medium text-gray-700 hover:text-gray-900">
+        <CollapsibleTrigger className="flex items-center gap-2 w-full py-2 pl-1 text-[13px] font-medium text-ds-ink">
           <CaretRightIcon
             className={`h-4 w-4 transition-transform ${
               notesOpen ? "rotate-90" : ""
@@ -830,7 +830,7 @@ export function AddLeadSheet({
 
       {industryId === "education_consultancy" && (
         <Collapsible open={academicsOpen} onOpenChange={setAcademicsOpen}>
-          <CollapsibleTrigger className="flex items-center gap-2 w-full py-2 text-sm font-medium text-gray-700 hover:text-gray-900">
+          <CollapsibleTrigger className="flex items-center gap-2 w-full py-2 pl-1 text-[13px] font-medium text-ds-ink">
             <CaretRightIcon
               className={`h-4 w-4 transition-transform ${
                 academicsOpen ? "rotate-90" : ""
@@ -907,7 +907,7 @@ export function AddLeadSheet({
     <>
       {/* 1. Lead Information */}
       <div className="space-y-4">
-        <h3 className="text-sm font-medium text-gray-900">Lead Information</h3>
+        <h3 className="pl-1 text-[13px] font-medium text-ds-ink">Lead Information</h3>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="ownerId" className="text-xs text-gray-600">
@@ -939,7 +939,7 @@ export function AddLeadSheet({
 
       {/* 2. Company Information */}
       <div className="space-y-4">
-        <h3 className="text-sm font-medium text-gray-900">Company Information</h3>
+        <h3 className="pl-1 text-[13px] font-medium text-ds-ink">Company Information</h3>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
@@ -995,7 +995,7 @@ export function AddLeadSheet({
 
       {/* 3. Contact Details */}
       <div className="space-y-4">
-        <h3 className="text-sm font-medium text-gray-900">Contact Details</h3>
+        <h3 className="pl-1 text-[13px] font-medium text-ds-ink">Contact Details</h3>
 
         {/* [Salutation] First Name | Last Name */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -1121,7 +1121,7 @@ export function AddLeadSheet({
     <>
       {/* Contact Information */}
       <div className="space-y-4">
-        <h3 className="text-sm font-medium text-gray-900">Contact Information</h3>
+        <h3 className="pl-1 text-[13px] font-medium text-ds-ink">Contact Information</h3>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
@@ -1225,7 +1225,7 @@ export function AddLeadSheet({
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
       <DialogContent
-        size="lg"
+        size="form"
         showCloseButton={!isSubmitting}
         aria-describedby={undefined}
         onKeyDown={(e) => {
@@ -1242,7 +1242,7 @@ export function AddLeadSheet({
             </span>
             Add lead
           </DialogTitle>
-          <DialogDescription>Manually add a lead from a phone call, walk-in, or referral.</DialogDescription>
+          <DialogDescription className="sr-only">Manually add a lead from a phone call, walk-in, or referral.</DialogDescription>
         </DialogHeader>
 
         <div ref={bodyRef} className="space-y-6">

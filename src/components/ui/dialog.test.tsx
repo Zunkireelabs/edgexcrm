@@ -70,6 +70,33 @@ describe("DialogContent size", () => {
   });
 });
 
+describe("form size", () => {
+  it("is 808 wide, anchored at 14vh, with a fixed 70vh card, a 44px header and a 44px footer with 28px buttons", () => {
+    open({ size: "form" });
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.className).toContain("max-w-[min(808px,calc(100%-2rem))]");
+    expect(dialog.className).toContain("top-[14vh]");
+    expect(dialog.className).toContain("max-sm:top-4");
+    expect(dialog.className).not.toContain("top-[50%]");
+    const card = document.querySelector("[data-slot=dialog-card]")!;
+    expect(card.className).toContain("h-[70vh]");
+    expect(card.className).toContain("max-sm:h-[calc(100dvh-32px)]");
+    expect(card.className).not.toContain("max-h-");
+    expect(document.querySelector("[data-slot=dialog-header]")!.className).toContain("min-h-11");
+    const footer = document.querySelector("[data-slot=dialog-footer]")!;
+    expect(footer.className).toContain("min-h-11");
+    expect(footer.className).toContain("[&_[data-slot=button]]:h-7");
+    expect(footer.className).not.toContain("min-h-[52px]");
+  });
+
+  it("other sizes keep the 52px footer, 32px buttons and a centred position", () => {
+    open({ size: "lg" });
+    expect(document.querySelector("[data-slot=dialog-footer]")!.className).toContain("min-h-[52px]");
+    expect(document.querySelector("[data-slot=dialog-footer]")!.className).toContain("[&_[data-slot=button]]:h-8");
+    expect(screen.getByRole("dialog").className).toContain("top-[50%]");
+  });
+});
+
 describe("flush", () => {
   it("applies body margins by default and drops them for p-0 / flush consumers", () => {
     open();
