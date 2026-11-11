@@ -49,10 +49,10 @@ describe("intake + study plan", () => {
   });
   it("study plan strings", () => {
     expect(studyPlanCard({ destinations: ["Australia", "UK"], intake: "2027-02", degreeLevel: "Master's", fieldOfStudy: "IT", test: "IELTS 6.5" }))
-      .toEqual({ value: "Australia, UK · Feb 2027", sub: "Master's · IT · IELTS 6.5" });
+      .toEqual({ value: "Australia, UK · Feb 2027", sub: "Master's · IT · IELTS 6.5", empty: false });
     expect(studyPlanCard({ destinations: ["Japan"], intake: null, degreeLevel: "Language course", test: null }))
-      .toEqual({ value: "Japan · intake not set", sub: "Language course · no test yet" });
-    expect(studyPlanCard({ destinations: [], intake: null, test: null })).toEqual({ value: "Destination not set", sub: "Not set" });
+      .toEqual({ value: "Japan · intake not set", sub: "Language course · no test yet", empty: false });
+    expect(studyPlanCard({ destinations: [], intake: null, test: null })).toEqual({ value: "Destination and intake not set", sub: "Not set", empty: true });
     expect(studyPlanCard({ destinations: ["UK"], intake: null, fieldOfStudy: "Law", test: null }).sub).toBe("Law · no test yet");
   });
 });

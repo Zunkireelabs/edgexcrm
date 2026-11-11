@@ -9,6 +9,8 @@ export interface PreviewActivity {
   actor_id: string | null;
   actor_name: string | null;
   source: string | null;
+  /** call | email | meeting | note, or an audit kind (stage, assigned, submission, consent, created, …). */
+  kind: string;
   verb: string;
   object: string | null;
   snippet: string | null;

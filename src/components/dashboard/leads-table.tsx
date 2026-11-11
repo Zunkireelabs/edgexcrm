@@ -100,7 +100,7 @@ import { PROSPECT_INDUSTRIES } from "@/industries/it-agency/leads/prospect-indus
 import { toast } from "sonner";
 import { moveErrorMessage } from "@/lib/leads/gate-error";
 import { AddLeadSheet } from "@/components/dashboard/add-lead-sheet";
-import { LeadPreviewPanel } from "@/components/dashboard/lead-preview-panel";
+import { LeadPreviewSlot } from "@/components/dashboard/leads/preview-slot";
 import { RecordPreview } from "@/industries/education-consultancy/features/record-preview/record-preview";
 import type { StageChoice } from "@/industries/education-consultancy/features/record-preview/stage-picker";
 import { navState } from "@/industries/education-consultancy/features/record-preview/lib/nav";
@@ -633,6 +633,8 @@ export function LeadsTable({
   // EDGEX-149 record preview: tab/view name for "n of N in <view>", J/K across pages, refetch after a reassignment.
   const [activeViewLabel, setActiveViewLabel] = useState("All leads");
   const [previewRefresh, setPreviewRefresh] = useState(0);
+  // Assign target when opened from the preview's Counsellor card: that one lead, WITHOUT touching the table selection.
+  const [assignTargetIds, setAssignTargetIds] = useState<string[] | null>(null);
   const pendingPreviewEdge = useRef<{ edge: "first" | "last"; page: number; fromFirstId: string | null } | null>(null);
   const [stickyPreviewLead, setStickyPreviewLead] = useState<Lead | null>(null);
   const [branchAssignDialogOpen, setBranchAssignDialogOpen] = useState(false);
@@ -1609,7 +1611,7 @@ export function LeadsTable({
 
   // `targetOverride` is the command dialog's pick (state would not be updated yet); the legacy dialog passes nothing.
   async function handleBulkAssign(targetOverride?: string): Promise<boolean> {
-    const idsToAssign = Array.from(selectedIds);
+    const idsToAssign = assignTargetIds ?? Array.from(selectedIds);
     const target = targetOverride ?? assignTo;
     const autoListId = (() => {
       if (!target || target === "unassign") return null;
@@ -1655,7 +1657,8 @@ export function LeadsTable({
       toast.success(target === "unassign" ? "Unassigned" : who ? `Assigned to ${who}` : "Assigned", {
         description: `${updated.toLocaleString()} lead${updated !== 1 ? "s" : ""} ${target === "unassign" ? "unassigned" : "assigned"}`,
       });
-      setSelectedIds(new Set());
+      if (!assignTargetIds) setSelectedIds(new Set());
+      setAssignTargetIds(null);
       setPreviewRefresh((n) => n + 1);
       setAssignDialogOpen(false);
       setAssignTo("");
@@ -2157,7 +2160,9 @@ export function LeadsTable({
     setPreviewLeadId((p.edge === "first" ? displayLeads[0] : displayLeads[displayLeads.length - 1]).id);
   }, [tableLoading, currentPage, displayLeads]);
 
-  const previewStageLists = leadLists.filter((l) => !l.is_staging && !l.is_archive);
+  // Same list set the table's own Stage control offers this role (admins: all lists; others: no staging/archive),
+  // minus staging/archived for the preview (never a destination from here).
+  const previewStageLists = (isAdmin ? leadLists : leadLists.filter((l) => !l.is_staging && !l.is_archive)).filter((l) => !l.is_staging && !l.is_archive);
   const handlePreviewStageChange = async (lead: Lead, c: StageChoice) => {
     const before = leads.find((l) => l.id === lead.id) ?? lead;
     const targetList = leadLists.find((l) => l.id === c.listId);
@@ -2196,7 +2201,7 @@ export function LeadsTable({
 
   const handlePreviewAssign = (lead: Lead) => {
     // Same assign flow as the bulk bar, for this one lead (branch-required staging keeps the full dialog).
-    setSelectedIds(new Set([lead.id]));
+    setAssignTargetIds([lead.id]);
     if (assignBranchRequired) setAssignDialogOpen(true);
     else setBulkPalette("assign");
   };
@@ -3657,10 +3662,17 @@ export function LeadsTable({
       {/* End of Main Table Section */}
 
       {/* Lead Preview Panel. Education: the EDGEX-149 record preview floats over the table (no squeeze). Everyone else: today's side panel. */}
-      {eduPreview ? (
-        shownPreviewLead && (
+      <LeadPreviewSlot
+        education={eduPreview}
+        previewLead={previewLead}
+        educationLead={shownPreviewLead}
+        onClose={() => setPreviewLeadId(null)}
+        stages={stages}
+        memberMap={memberMap}
+        memberNames={memberNames}
+        renderEducation={(lead) => (
           <RecordPreview
-            lead={shownPreviewLead}
+            lead={lead}
             rowIndex={Math.max(previewRowIndex, 0)}
             rowCount={displayLeads.length}
             page={currentPage}
@@ -3684,31 +3696,8 @@ export function LeadsTable({
             onAssign={handlePreviewAssign}
             refreshToken={previewRefresh}
           />
-        )
-      ) : (
-      <div
-        className={`h-full transition-all duration-500 ease-out overflow-hidden ${
-          previewLead ? 'w-[380px] opacity-100' : 'w-0 opacity-0'
-        }`}
-      >
-        <div
-          className={`h-full transition-transform duration-500 ease-out ${
-            previewLead ? 'translate-x-0' : 'translate-x-8'
-          }`}
-        >
-          {previewLead && (
-            <LeadPreviewPanel
-              lead={previewLead}
-              onClose={() => setPreviewLeadId(null)}
-              stages={stages}
-              memberMap={memberMap}
-              memberNames={memberNames}
-            />
-          )}
-        </div>
-      </div>
-
-      )}
+        )}
+      />
 
       {/* Mounted only while open: it holds the selected ids (up to 10,000) and a polling loop, so keep it off every table render. */}
       {hasOutreach && bulkEnrollOpen && (
@@ -3762,6 +3751,7 @@ export function LeadsTable({
       {/* Bulk Assign Dialog */}
       <Dialog open={assignDialogOpen} onOpenChange={(open) => {
         setAssignDialogOpen(open);
+        if (!open) setAssignTargetIds(null);
         if (!open) { setAssignTo(""); setAssignBranchId(""); setAssignListId(""); }
       }}>
         <DialogContent>
@@ -3912,9 +3902,9 @@ export function LeadsTable({
       {/* Bulk Move to List Dialog */}
       {/* EDGEX-127: Move stage / Assign / Add tag — one command dialog, three configs. */}
       {(() => {
-        const n = selectedCount;
+        const n = bulkPalette === "assign" && assignTargetIds ? assignTargetIds.length : selectedCount;
         const leadsWord = `${n.toLocaleString()} lead${n !== 1 ? "s" : ""}`;
-        const close = () => setBulkPalette(null);
+        const close = () => { setBulkPalette(null); setAssignTargetIds(null); };
         const cap = (t: string) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : t);
         const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("");
 

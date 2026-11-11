@@ -1,6 +1,6 @@
 "use client";
 
-import { describeSubmission } from "./activities/lead-activity-labels";
+import { describeAuditEvent, type AuditKind } from "./activities/describe-audit-event";
 import {
   GitBranchIcon,
   UserPlusIcon,
@@ -152,117 +152,25 @@ function getActivityDisplay(
   color: string;
   description: string;
 } {
-  const action = activity.action.toLowerCase();
-  const changes = activity.changes || {};
-
-  // Stage change
-  if (changes.status || changes.stage_id) {
-    const newStatus = changes.status?.new || changes.stage_id?.new;
-    return {
-      icon: <GitBranchIcon className="h-4 w-4" />,
-      color: "bg-blue-100 text-blue-600",
-      description: `Stage changed to "${formatValue(newStatus)}"`,
-    };
-  }
-
-  // Assignment change
-  if (changes.assigned_to) {
-    const newAssignee = changes.assigned_to.new;
-    const assigneeEmail = newAssignee ? teamMemberEmails[String(newAssignee)] : null;
-    if (newAssignee) {
-      return {
-        icon: <UserPlusIcon className="h-4 w-4" />,
-        color: "bg-purple-100 text-purple-600",
-        description: `Assigned to ${assigneeEmail || "a team member"}`,
-      };
-    } else {
-      return {
-        icon: <UserPlusIcon className="h-4 w-4" />,
-        color: "bg-gray-100 text-gray-600",
-        description: "Unassigned",
-      };
-    }
-  }
-
-  // it_agency: Lead Processing → Sales Leads graduation
-  if (action === "lead.graduated") {
-    const newListName = changes.list?.new;
-    return {
-      icon: <ArrowCircleUpIcon className="h-4 w-4" />,
-      color: "bg-emerald-100 text-emerald-600",
-      description: `Graduated to Sales Leads${newListName ? ` · ${formatValue(newListName)}` : ""}`,
-    };
-  }
-
-  // Moved between stage-lists (bulk move-to-list, outside of graduation)
-  if (changes.list) {
-    return {
-      icon: <GitBranchIcon className="h-4 w-4" />,
-      color: "bg-blue-100 text-blue-600",
-      description: `Moved to ${formatValue(changes.list.new)}`,
-    };
-  }
-
-  // Submission (dedup-aware: first = created, subsequent = resubmission)
-  if (action === "lead.submission") {
-    return {
-      icon: <FileTextIcon className="h-4 w-4" />,
-      color: "bg-emerald-100 text-emerald-600",
-      description: describeSubmission(changes),
-    };
-  }
-
-  // Lead created
-  if (action === "create" || action === "created") {
-    return {
-      icon: <PlusIcon className="h-4 w-4" />,
-      color: "bg-green-100 text-green-600",
-      description: "Lead created",
-    };
-  }
-
-  // Lead updated
-  if (action === "update" || action === "updated") {
-    return {
-      icon: <PencilSimpleIcon className="h-4 w-4" />,
-      color: "bg-amber-100 text-amber-600",
-      description: "Lead updated",
-    };
-  }
-
-  // Lead deleted
-  if (action === "delete" || action === "deleted") {
-    return {
-      icon: <TrashIcon className="h-4 w-4" />,
-      color: "bg-red-100 text-red-600",
-      description: "Lead deleted",
-    };
-  }
-
-  // Checklist related
-  if (activity.entity_type === "checklist" || action.includes("checklist")) {
-    return {
-      icon: <CheckSquareIcon className="h-4 w-4" />,
-      color: "bg-teal-100 text-teal-600",
-      description: `Checklist ${action}`,
-    };
-  }
-
-  // Note related
-  if (activity.entity_type === "note" || action.includes("note")) {
-    return {
-      icon: <FileTextIcon className="h-4 w-4" />,
-      color: "bg-indigo-100 text-indigo-600",
-      description: action === "lead.note_added" ? "Note added" : `Note ${action}`,
-    };
-  }
-
-  // Default
-  return {
-    icon: <ClockIcon className="h-4 w-4" />,
-    color: "bg-gray-100 text-gray-600",
-    description: `${activity.action} ${activity.entity_type}`,
+  // Wording lives in describeAuditEvent (shared with the record preview); this only picks the icon + colour.
+  const e = describeAuditEvent(activity, (id) => teamMemberEmails[id]);
+  const description = e.object ? `${e.verb} ${e.object}` : e.verb;
+  const ICONS: Record<AuditKind, { icon: React.ReactNode; color: string }> = {
+    stage: { icon: <GitBranchIcon className="h-4 w-4" />, color: "bg-blue-100 text-blue-600" },
+    assigned: { icon: <UserPlusIcon className="h-4 w-4" />, color: "bg-purple-100 text-purple-600" },
+    unassigned: { icon: <UserPlusIcon className="h-4 w-4" />, color: "bg-gray-100 text-gray-600" },
+    graduated: { icon: <ArrowCircleUpIcon className="h-4 w-4" />, color: "bg-emerald-100 text-emerald-600" },
+    list: { icon: <GitBranchIcon className="h-4 w-4" />, color: "bg-blue-100 text-blue-600" },
+    submission: { icon: <FileTextIcon className="h-4 w-4" />, color: "bg-emerald-100 text-emerald-600" },
+    consent: { icon: <FileTextIcon className="h-4 w-4" />, color: "bg-emerald-100 text-emerald-600" },
+    created: { icon: <PlusIcon className="h-4 w-4" />, color: "bg-green-100 text-green-600" },
+    updated: { icon: <PencilSimpleIcon className="h-4 w-4" />, color: "bg-amber-100 text-amber-600" },
+    deleted: { icon: <TrashIcon className="h-4 w-4" />, color: "bg-red-100 text-red-600" },
+    checklist: { icon: <CheckSquareIcon className="h-4 w-4" />, color: "bg-teal-100 text-teal-600" },
+    note: { icon: <FileTextIcon className="h-4 w-4" />, color: "bg-indigo-100 text-indigo-600" },
+    default: { icon: <ClockIcon className="h-4 w-4" />, color: "bg-gray-100 text-gray-600" },
   };
+  return { ...ICONS[e.kind], description };
 }
 
 function groupByDate(

@@ -4,9 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  XIcon, CaretUpIcon, CaretDownIcon, ArrowsOutIcon, CopyIcon, EnvelopeSimpleIcon, PhoneIcon, ChatCircleIcon,
+  XIcon, CaretUpIcon, CaretDownIcon, ArrowsOutIcon, CopyIcon, EnvelopeSimpleIcon, PhoneIcon,
   CheckSquareIcon, NotePencilIcon, CircleDashedIcon, ArrowRightIcon, ClockIcon, UserIcon, GraduationCapIcon,
-  ShieldCheckIcon, PlusIcon, CheckIcon,
+  ShieldCheckIcon, PlusIcon, CheckIcon, SquaresFourIcon, PulseIcon, NoteIcon, DotsThreeIcon, WhatsappLogoIcon,
 } from "@/components/icons";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
@@ -16,10 +16,11 @@ import { TaskList, type TaskListRef } from "@/components/dashboard/tasks/task-li
 import { NotesTab, type NotesTabRef } from "@/components/dashboard/lead/notes-tab";
 import { notifyTaskChanged } from "@/lib/tasks/task-events";
 import type { Lead, LeadList, LeadNote, PipelineStage } from "@/types/database";
-import { Avatar, CountChip, Dot, HighlightCard, ListBox, ListRow, Section, SkeletonRows, ValueText, ViewAll, initialsOf } from "./parts";
+import { Avatar, CountChip, Dot, HighlightCard, ListBox, ListRow, Section, ValueText, ViewAll, initialsOf } from "./parts";
+import { Timeline, TimelineSkeleton } from "./timeline";
 import { StagePicker, type StageChoice } from "./stage-picker";
-import { usePreviewData, type PreviewActivity } from "./use-preview-data";
-import { activityTime, daysInStage, dueLabel, lastTouchCard, pickNextTask, relativeDays } from "./lib/labels";
+import { usePreviewData } from "./use-preview-data";
+import { daysInStage, dueLabel, lastTouchCard, pickNextTask, relativeDays } from "./lib/labels";
 import { navState, shouldHandleNavKey } from "./lib/nav";
 import { readyCard, shortDate } from "./lib/readiness";
 import { pickIntake, pickTestScore, studyPlanCard } from "./lib/study-plan";
@@ -57,7 +58,7 @@ export interface RecordPreviewProps {
   refreshToken?: number;
 }
 
-const BTN = "inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-[14px] font-medium leading-5 text-[#101112] shadow-[inset_0_0_0_1px_#e8e9eb] hover:bg-[#f6f7f9] disabled:cursor-not-allowed disabled:opacity-40";
+const BTN = "inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-[8px] px-2 text-[14px] font-medium leading-5 text-[#101112] shadow-[inset_0_0_0_1px_#e8e9eb] hover:bg-[#f6f7f9] disabled:cursor-not-allowed disabled:opacity-40";
 
 export function RecordPreview(props: RecordPreviewProps) {
   const { lead, currentUserId, memberNames, canEditRows, canAssign } = props;
@@ -195,16 +196,12 @@ export function RecordPreview(props: RecordPreviewProps) {
 
   const openFull = () => router.push(`/leads/${lead.id}`);
 
-  const tabBtn = (t: Tab, label: string, count?: React.ReactNode) => (
-    <button
-      type="button"
-      key={t}
-      onClick={() => setTab(t)}
-      className={cn(
-        "relative flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-2 text-[14px] font-medium leading-5 hover:bg-[#f6f7f9] hover:text-[#101112]",
-        tab === t ? "text-[#101112] after:absolute after:inset-x-2 after:-bottom-[7px] after:h-0.5 after:rounded-sm after:bg-[#101112]" : "text-[#6b6f76]",
-      )}
-    >
+  const TAB = "relative flex h-7 shrink-0 items-center gap-1.5 rounded-[8px] px-2 py-1 text-[14px] font-medium leading-5 shadow-[inset_0_0_0_1px_transparent] transition-[box-shadow,background-color] duration-[140ms] [&_svg]:size-4";
+  const TAB_IDLE = "text-black/[.63] hover:text-[#101112] hover:shadow-[inset_0_0_0_1px_#eeeff1]";
+  const TAB_ON = "bg-[#fbfbfb] text-[#101112] shadow-[inset_0_0_0_1px_#eeeff1] after:absolute after:inset-x-0 after:-bottom-[9px] after:h-px after:bg-[#101112]";
+  const tabBtn = (t: Tab, label: string, icon: React.ReactNode, count?: React.ReactNode) => (
+    <button type="button" key={t} onClick={() => setTab(t)} className={cn(TAB, tab === t ? TAB_ON : TAB_IDLE)}>
+      {icon}
       {label}
       {count !== undefined && <CountChip>{count}</CountChip>}
     </button>
@@ -213,18 +210,18 @@ export function RecordPreview(props: RecordPreviewProps) {
   return (
     <aside
       aria-label="Record preview"
-      className="absolute bottom-2 right-2 top-2 z-40 flex w-[497px] flex-col overflow-hidden rounded-xl bg-white font-medium shadow-[0_0_0_1px_rgba(28,40,64,.04),0_4px_8px_-4px_rgba(28,40,64,.12),0_4px_12px_-2px_rgba(24,41,75,.16)] max-[430px]:fixed max-[430px]:inset-0 max-[430px]:w-auto max-[430px]:rounded-none max-[430px]:shadow-none"
+      className="absolute bottom-2 right-2 top-2 z-40 flex w-[497px] flex-col overflow-hidden rounded-[12px] bg-white font-medium shadow-[0_0_0_1px_rgba(28,40,64,.04),0_4px_8px_-4px_rgba(28,40,64,.12),0_4px_12px_-2px_rgba(24,41,75,.16)] max-[430px]:fixed max-[430px]:inset-0 max-[430px]:w-auto max-[430px]:rounded-none max-[430px]:shadow-none"
     >
       {/* Header (48px) */}
       <div className="flex h-12 flex-none items-center gap-1 border-b border-[#f0f1f2] pl-3 pr-2.5">
-        <button type="button" aria-label="Close (Esc)" title="Close (Esc)" onClick={props.onClose} className="inline-flex size-7 items-center justify-center rounded-lg text-[#6b6f76] hover:bg-[#f6f7f9] hover:text-[#101112]">
+        <button type="button" aria-label="Close (Esc)" title="Close (Esc)" onClick={props.onClose} className="inline-flex size-7 items-center justify-center rounded-[8px] text-[#6b6f76] hover:bg-[#f6f7f9] hover:text-[#101112]">
           <XIcon className="size-4" />
         </button>
         <NavButton label="Previous lead" kbd="K" disabled={!nav.hasPrev} onClick={() => props.onNavigate("prev")}><CaretUpIcon className="size-[14px]" /></NavButton>
         <NavButton label="Next lead" kbd="J" disabled={!nav.hasNext} onClick={() => props.onNavigate("next")}><CaretDownIcon className="size-[14px]" /></NavButton>
         <span className="ml-2 text-[12px] font-medium leading-4 text-black/[.63]">{nav.position.toLocaleString()} of {nav.total.toLocaleString()} in {props.viewName}</span>
         <span className="flex-1" />
-        <button type="button" aria-label="Open full record" title="Open full record" onClick={openFull} className="inline-flex size-7 items-center justify-center rounded-lg text-[#6b6f76] hover:bg-[#f6f7f9] hover:text-[#101112]">
+        <button type="button" aria-label="Open full record" title="Open full record" onClick={openFull} className="inline-flex size-7 items-center justify-center rounded-[8px] text-[#6b6f76] hover:bg-[#f6f7f9] hover:text-[#101112]">
           <ArrowsOutIcon className="size-[14px]" />
         </button>
       </div>
@@ -253,27 +250,27 @@ export function RecordPreview(props: RecordPreviewProps) {
         <div className="mt-3 flex gap-1.5 pb-3">
           {lead.email ? <a className={BTN} href={`mailto:${lead.email}`}><EnvelopeSimpleIcon className="size-[14px]" />Email</a> : <button type="button" className={BTN} disabled><EnvelopeSimpleIcon className="size-[14px]" />Email</button>}
           {lead.phone ? <a className={BTN} href={`tel:${formatPhoneForTel(lead.phone)}`}><PhoneIcon className="size-[14px]" />Call</a> : <button type="button" className={BTN} disabled><PhoneIcon className="size-[14px]" />Call</button>}
-          <button type="button" className={BTN} disabled={!lead.phone} onClick={() => window.open(`https://wa.me/${formatPhoneForWhatsApp(lead.phone as string)}`, "_blank")}><ChatCircleIcon className="size-[14px]" />WhatsApp</button>
+          <button type="button" className={BTN} disabled={!lead.phone} onClick={() => window.open(`https://wa.me/${formatPhoneForWhatsApp(lead.phone as string)}`, "_blank")}><WhatsappLogoIcon className="size-[14px]" />WhatsApp</button>
           <button type="button" title="Add task" aria-label="Add task" className={cn(BTN, "max-[430px]:w-7 max-[430px]:justify-center max-[430px]:px-0")} onClick={goTask}><CheckSquareIcon className="size-[14px]" /><span className="max-[430px]:hidden">Task</span></button>
           <button type="button" title="Add note" aria-label="Add note" className={cn(BTN, "max-[430px]:w-7 max-[430px]:justify-center max-[430px]:px-0")} onClick={goNote}><NotePencilIcon className="size-[14px]" /><span className="max-[430px]:hidden">Note</span></button>
         </div>
       </div>
 
       {/* Tabs (40px) */}
-      <nav className="flex h-10 flex-none items-center gap-0.5 overflow-x-auto border-b border-[#e8e9eb] px-2.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {tabBtn("overview", "Overview")}
-        <span aria-hidden className="mx-1 h-4 w-px shrink-0 bg-[#e8e9eb]" />
-        {tabBtn("activity", "Activity")}
-        {tabBtn("tasks", "Tasks", openCount ?? "–")}
-        {tabBtn("notes", "Notes", data ? data.notes.count : "–")}
+      <nav className="flex h-11 flex-none items-center gap-1 overflow-x-auto border-b border-[#e8e9eb] px-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {tabBtn("overview", "Overview", <SquaresFourIcon />)}
+        <span aria-hidden className="mx-2 h-4 w-px shrink-0 bg-[#eeeff1]" />
+        {tabBtn("activity", "Activity", <PulseIcon />)}
+        {tabBtn("tasks", "Tasks", <CheckSquareIcon />, openCount ?? "–")}
+        {tabBtn("notes", "Notes", <NoteIcon />, data ? data.notes.count : "–")}
         <DropdownMenu>
-          <DropdownMenuTrigger className="flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-2 text-[14px] font-medium leading-5 text-[#6b6f76] outline-none hover:bg-[#f6f7f9] hover:text-[#101112]">
-            More <CaretDownIcon className="size-[14px]" />
+          <DropdownMenuTrigger title="More" aria-label="More" className={cn(TAB, TAB_IDLE, "w-7 justify-center px-0 outline-none data-[state=open]:bg-[#fbfbfb] data-[state=open]:text-[#101112] data-[state=open]:shadow-[inset_0_0_0_1px_#eeeff1]")}>
+            <DotsThreeIcon />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={openFull}>Applications{data ? ` (${data.applications.count})` : ""}</DropdownMenuItem>
-            <DropdownMenuItem onClick={openFull}>Documents</DropdownMenuItem>
-            <DropdownMenuItem onClick={openFull}>Check-ins</DropdownMenuItem>
+          <DropdownMenuContent align="end" className="rounded-[12px]">
+            <DropdownMenuItem className="rounded-[8px]" onClick={openFull}>Applications{data ? ` (${data.applications.count})` : ""}</DropdownMenuItem>
+            <DropdownMenuItem className="rounded-[8px]" onClick={openFull}>Documents</DropdownMenuItem>
+            <DropdownMenuItem className="rounded-[8px]" onClick={openFull}>Check-ins</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </nav>
@@ -288,6 +285,7 @@ export function RecordPreview(props: RecordPreviewProps) {
                 <div>
                   <HighlightCard
                     label="Stage" icon={<CircleDashedIcon />} editable={stageEditable} open={stageOpen} onClick={() => setStageOpen((o) => !o)}
+                    valueTitle={stageLabel}
                     value={<>{stage && <Dot color={stage.color} />}<ValueText>{stageLabel}</ValueText></>}
                     sub={daysInStage(lead.stage_changed_at)}
                   />
@@ -299,6 +297,7 @@ export function RecordPreview(props: RecordPreviewProps) {
                   <HighlightCard
                     label="Next step" icon={<ArrowRightIcon />} editable onClick={() => router.push(`/tasks/${next.id}`)}
                     tone={nextDue?.overdue ? "warn" : "ink"} subTone={nextDue?.overdue ? "warn" : "muted"}
+                    valueTitle={next.title}
                     value={<ValueText>{next.title}</ValueText>}
                     sub={[nextDue?.text, next.assignee_name ? (next.assignee_name === memberNames[currentUserId] ? "You" : next.assignee_name) : null].filter(Boolean).join(" · ")}
                   />
@@ -311,6 +310,7 @@ export function RecordPreview(props: RecordPreviewProps) {
 
               <HighlightCard
                 label="Last touch" icon={<ClockIcon />} tone={touch.amber ? "warn" : "ink"}
+                valueTitle={touch.value}
                 value={<ValueText>{touch.value}</ValueText>}
                 {...(data ? { sub: touch.sub } : { loadingSub: 110 })}
               />
@@ -318,12 +318,13 @@ export function RecordPreview(props: RecordPreviewProps) {
               <HighlightCard
                 label="Counsellor" icon={<UserIcon />} editable={canAssign} onClick={() => props.onAssign(lead)}
                 lockedTitle={canAssign ? undefined : "Only managers can reassign"}
+                valueTitle={assigneeName ?? "Unassigned"}
                 tone={assigneeName ? "ink" : "empty"}
                 value={assigneeName ? <><Avatar initials={initialsOf(assigneeReal ?? assigneeName)} /><ValueText>{assigneeName}</ValueText></> : <ValueText>Unassigned</ValueText>}
                 sub={branchName ?? ""}
               />
 
-              <HighlightCard label="Study plan" icon={<GraduationCapIcon />} value={<ValueText>{plan.value}</ValueText>} sub={plan.sub} />
+              <HighlightCard label="Study plan" icon={<GraduationCapIcon />} tone={plan.empty ? "empty" : "ink"} valueTitle={plan.value} value={<ValueText>{plan.value}</ValueText>} sub={plan.sub} />
 
               {ready ? (
                 <HighlightCard
@@ -351,7 +352,7 @@ export function RecordPreview(props: RecordPreviewProps) {
             )}
 
             <Section title="Activity" right={<ViewAll onClick={() => setTab("activity")} />} />
-            {data ? <ActivityBox rows={data.activity} currentUserId={currentUserId} /> : <SkeletonRows widths={["60%", "45%", "52%"]} />}
+            {data ? <Timeline rows={data.activity} currentUserId={currentUserId} /> : <TimelineSkeleton widths={["60%", "45%", "52%"]} />}
 
             {data && openCount !== null && openCount > 0 && (
               <>
@@ -394,7 +395,7 @@ export function RecordPreview(props: RecordPreviewProps) {
         {tab === "activity" && (
           <>
             <Section title="Activity" />
-            {full ? (full.activity.length ? <ActivityBox rows={full.activity} currentUserId={currentUserId} /> : <p className="px-1 text-[13px] text-[#6b6f76]">No activity yet</p>) : <SkeletonRows widths={["60%", "45%", "52%", "40%"]} />}
+            {full ? (full.activity.length ? <Timeline rows={full.activity} currentUserId={currentUserId} /> : <p className="px-1 text-[13px] text-[#6b6f76]">No activity yet</p>) : <TimelineSkeleton widths={["60%", "45%", "52%", "40%"]} />}
           </>
         )}
 
@@ -433,10 +434,10 @@ function NavButton({ label, kbd, disabled, onClick, children }: { label: string;
   return (
     <button
       type="button" aria-label={label} disabled={disabled} onClick={onClick}
-      className={cn("group/nav relative inline-flex size-7 items-center justify-center rounded-lg text-[#6b6f76] shadow-[inset_0_0_0_1px_#e8e9eb] hover:bg-[#f6f7f9] hover:text-[#101112]", disabled && "opacity-40 hover:bg-transparent")}
+      className={cn("group/nav relative inline-flex size-7 items-center justify-center rounded-[8px] text-[#6b6f76] shadow-[inset_0_0_0_1px_#e8e9eb] hover:bg-[#f6f7f9] hover:text-[#101112]", disabled && "opacity-40 hover:bg-transparent")}
     >
       {children}
-      <span className="pointer-events-none absolute left-1/2 top-[34px] z-10 hidden -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-md bg-[#101112] py-1 pl-2 pr-1.5 text-[12px] font-medium leading-4 text-white group-hover/nav:flex">
+      <span className="pointer-events-none absolute left-1/2 top-[34px] z-10 hidden -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-[6px] bg-[#101112] py-1 pl-2 pr-1.5 text-[12px] font-medium leading-4 text-white group-hover/nav:flex">
         {label}<kbd className="rounded-[4px] border border-[#3a3d41] px-1 font-[inherit] text-[11px] font-medium text-[#cfd2d6]">{kbd}</kbd>
       </span>
     </button>
@@ -448,28 +449,5 @@ function StatusChip({ status, terminal }: { status: string; terminal: string | n
   const won = terminal === "won" || /offer/i.test(status);
   const lost = terminal === "lost";
   const cls = won ? "bg-[#e7f6ef] text-[#12805c]" : lost ? "bg-[#f6f7f9] text-[#6b6f76]" : "bg-[#eaf1ff] text-[#266df0]";
-  return <span className={cn("flex-none rounded-md px-1.5 text-[12px] font-medium leading-[18px]", cls)}>{status}</span>;
+  return <span className={cn("flex-none rounded-[6px] px-1.5 text-[12px] font-medium leading-[18px]", cls)}>{status}</span>;
 }
-
-function ActivityBox({ rows, currentUserId }: { rows: PreviewActivity[]; currentUserId: string }) {
-  return (
-    <ListBox>
-      {rows.map((a) => {
-        const actor = a.actor_id ? (a.actor_id === currentUserId ? "You" : a.actor_name ?? "Someone") : a.source ?? "System";
-        return (
-          <ListRow key={a.id}>
-            <Avatar initials={initialsOf(a.actor_id ? a.actor_name ?? actor : a.source ?? actor)} size={18} />
-            <span className="min-w-0 flex-1 overflow-hidden text-ellipsis">
-              <b className="font-medium">{actor}</b>{" "}
-              <em className="not-italic text-black/50">{a.verb}{a.snippet ? ` · “${a.snippet}”` : ""}</em>
-              {a.object ? <> {a.object}</> : null}
-            </span>
-            <span className="flex-none text-[12px] text-black/50">{activityTime(a.at)}</span>
-          </ListRow>
-        );
-      })}
-    </ListBox>
-  );
-}
-
-

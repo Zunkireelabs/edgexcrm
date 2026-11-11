@@ -55,13 +55,12 @@ export function studyPlanCard(input: {
   degreeLevel?: string | null;
   fieldOfStudy?: string | null;
   test: string | null;
-}): { value: string; sub: string } {
+}): { value: string; sub: string; empty: boolean } {
   const destList = input.destinations.filter(Boolean).join(", ");
   const dest = destList || "Destination not set";
+  if (!destList && !input.intake) return { value: "Destination and intake not set", sub: studyPlanSub(input), empty: true };
   const intake = input.intake ? formatIntake(input.intake) : "intake not set";
-  // Nothing known about either: one short phrase instead of two "not set"s (keeps the value on one line).
-  if (!destList && !input.intake) return { value: dest, sub: studyPlanSub(input) };
-  return { value: `${dest} · ${intake}`, sub: studyPlanSub(input) };
+  return { value: `${dest} · ${intake}`, sub: studyPlanSub(input), empty: false };
 }
 
 function studyPlanSub(input: { degreeLevel?: string | null; fieldOfStudy?: string | null; test: string | null }): string {

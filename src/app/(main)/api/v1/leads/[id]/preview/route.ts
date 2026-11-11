@@ -11,7 +11,18 @@ import { apiSuccess, apiUnauthorized, apiForbidden, apiNotFound, apiError } from
 import { humanizeIntakeValue } from "@/components/dashboard/lead/activities/lead-activity-labels";
 import { flattenReadiness } from "@/industries/education-consultancy/features/record-preview/lib/readiness";
 import { pickIntake } from "@/industries/education-consultancy/features/record-preview/lib/study-plan";
-import { describeAudit, type AuditRow } from "@/industries/education-consultancy/features/record-preview/lib/audit-labels";
+import { describeAuditEvent } from "@/components/dashboard/lead/activities/describe-audit-event";
+
+interface AuditRow {
+  id: string;
+  action: string;
+  entity_type: string;
+  changes: Record<string, { old: unknown; new: unknown }> | null;
+  user_id: string | null;
+  created_at: string;
+}
+
+const SHOWN_AUDIT_KINDS = new Set(["stage", "assigned", "unassigned", "graduated", "list", "submission", "consent", "created"]);
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -111,21 +122,21 @@ export async function GET(request: NextRequest, context: RouteContext) {
   // Merged feed: activities + notes + audit events, newest first.
   const feed = [
     ...actRows.map((a) => ({
-      id: `a-${a.id}`, at: a.created_at, actor_id: a.user_id, actor_name: nameOf(a.user_id), source: null as string | null,
+      id: `a-${a.id}`, at: a.created_at, actor_id: a.user_id, actor_name: nameOf(a.user_id), source: null as string | null, kind: a.activity_type as string,
       verb: a.activity_type === "call" ? "logged a call" : a.activity_type === "email" ? "emailed" : "logged a meeting",
       object: null as string | null, snippet: a.activity_type === "email" ? a.email_subject ?? a.subject : a.subject ?? a.description,
     })),
     ...noteRows.map((n) => ({
-      id: `n-${n.id}`, at: n.created_at, actor_id: n.user_id, actor_name: nameOf(n.user_id), source: null as string | null,
+      id: `n-${n.id}`, at: n.created_at, actor_id: n.user_id, actor_name: nameOf(n.user_id), source: null as string | null, kind: "note" as string,
       verb: "added a note", object: null as string | null, snippet: n.content,
     })),
     ...auditRows.flatMap((r) => {
-      const d = describeAudit(r, (uid) => nameOf(uid));
-      if (!d) return [];
-      const submission = r.action.toLowerCase() === "lead.submission" || r.action.toLowerCase().startsWith("create");
+      const d = describeAuditEvent(r, (uid) => nameOf(uid));
+      if (!SHOWN_AUDIT_KINDS.has(d.kind)) return [];
+      const fromForm = (d.kind === "submission" || d.kind === "created") && !r.user_id;
       return [{
-        id: `l-${r.id}`, at: r.created_at, actor_id: r.user_id, actor_name: nameOf(r.user_id),
-        source: submission && !r.user_id ? ((form.data as { name?: string } | null)?.name ?? humanizeIntakeValue(leadRow.intake_source as string | null)) || null : null,
+        id: `l-${r.id}`, at: r.created_at, actor_id: r.user_id, actor_name: nameOf(r.user_id), kind: d.kind as string,
+        source: fromForm ? ((form.data as { name?: string } | null)?.name ?? humanizeIntakeValue(leadRow.intake_source as string | null)) || "Form" : null,
         verb: d.verb, object: d.object, snippet: null as string | null,
       }];
     }),

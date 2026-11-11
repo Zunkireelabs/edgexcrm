@@ -53,11 +53,11 @@ export function ViewAll({ onClick }: { onClick: () => void }) {
 }
 
 export function ListBox({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("rounded-xl p-1 shadow-[inset_0_0_0_1px_#eeeff1]", className)}>{children}</div>;
+  return <div className={cn("rounded-[12px] p-1 shadow-[inset_0_0_0_1px_#eeeff1]", className)}>{children}</div>;
 }
 
 export function ListRow({ children, onClick }: { children: ReactNode; onClick?: () => void }) {
-  const cls = "flex h-8 items-center gap-2 whitespace-nowrap rounded-lg px-2 text-[14px] font-medium leading-5 hover:bg-[#f6f7f9]";
+  const cls = "flex h-8 items-center gap-2 whitespace-nowrap rounded-[8px] px-2 text-[14px] font-medium leading-5 hover:bg-[#f6f7f9]";
   return onClick ? (
     <button type="button" onClick={onClick} className={cn(cls, "w-full text-left")}>{children}</button>
   ) : (
@@ -84,6 +84,9 @@ interface CardProps {
   label: string;
   icon: ReactNode;
   value?: ReactNode;
+  /** Full text for a hover title (values/subs can ellipsize). */
+  valueTitle?: string;
+  subTitle?: string;
   tone?: Tone;
   sub?: ReactNode;
   subTone?: "muted" | "warn" | "add";
@@ -109,7 +112,7 @@ export function HighlightCard(p: CardProps) {
       onClick={interactive ? p.onClick : undefined}
       onKeyDown={interactive ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); p.onClick?.(); } } : undefined}
       className={cn(
-        "group/card relative flex h-[86px] flex-col rounded-xl px-3 py-2.5 shadow-[inset_0_0_0_1px_#eeeff1] max-[430px]:h-[74px]",
+        "group/card relative flex h-[86px] flex-col rounded-[12px] px-3 py-2.5 shadow-[inset_0_0_0_1px_#eeeff1] max-[430px]:h-[74px]",
         interactive ? "cursor-pointer hover:bg-[#faf9f7]" : "cursor-default",
         p.open && "bg-[#faf9f7]",
       )}
@@ -118,10 +121,11 @@ export function HighlightCard(p: CardProps) {
         {p.label}
         <span className="ml-auto flex text-[#9a9ea5] [&>svg]:size-[14px]">{p.icon}</span>
       </div>
-      <div className={cn("mt-auto flex items-center gap-1.5 overflow-hidden whitespace-nowrap text-[14px] font-medium leading-5", TONE[p.tone ?? "ink"])}>
+      <div title={p.valueTitle} className={cn("mt-auto flex items-center gap-1.5 overflow-hidden whitespace-nowrap text-[14px] font-medium leading-5", TONE[p.tone ?? "ink"])}>
         {p.loadingValue ? <Skeleton className="h-2.5 rounded-[5px]" style={{ width: p.loadingValue }} /> : p.value}
       </div>
       <div
+        title={p.subTitle ?? (typeof p.sub === "string" ? p.sub : undefined)}
         className={cn(
           "min-h-4 overflow-hidden text-ellipsis whitespace-nowrap text-[12px] font-medium leading-4",
           p.subTone === "warn" ? "text-[#b25e09]" : p.subTone === "add" ? "text-[#266df0]" : "text-black/50",
