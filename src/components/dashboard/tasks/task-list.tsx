@@ -87,6 +87,7 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(function TaskList
     });
     if (res.ok) {
       setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, status: "done" } : t)));
+      onChangeRef.current?.();
     }
   }, []);
 
