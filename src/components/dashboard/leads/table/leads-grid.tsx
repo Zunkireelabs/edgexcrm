@@ -60,6 +60,8 @@ export interface LeadsGridProps {
   onLayoutChange: (next: ColumnLayout) => void;
   onRename: (key: string, label: string | null) => void;
   selectedIds: Set<string>;
+  /** EDGEX-149: the row open in the record preview gets the same tint as a checked row. */
+  previewedId?: string | null;
   allSelected: boolean;
   someSelected: boolean;
   onToggleSelect: (id: string) => void;
@@ -95,14 +97,15 @@ interface RowProps {
   columns: LeadColumn[];
   ctx: LeadColumnCtx;
   selected: boolean;
+  previewed?: boolean;
   anySelected: boolean;
   stickyLeft: Map<string, number>;
   onToggleSelect: (id: string) => void;
   hoveredRowRef: React.MutableRefObject<string | null>;
 }
 
-const Row = memo(function Row({ lead, nameColumn, columns, ctx, selected, anySelected, stickyLeft, onToggleSelect, hoveredRowRef }: RowProps) {
-  const bg = selected ? "bg-ds-accent-soft" : "bg-ds-surface group-hover/row:bg-ds-hover";
+const Row = memo(function Row({ lead, nameColumn, columns, ctx, selected, previewed, anySelected, stickyLeft, onToggleSelect, hoveredRowRef }: RowProps) {
+  const bg = selected || previewed ? "bg-ds-accent-soft" : "bg-ds-surface group-hover/row:bg-ds-hover";
   const all = [nameColumn, ...columns];
   return (
     <tr
@@ -160,6 +163,7 @@ export function LeadsGrid(props: LeadsGridProps) {
     onLayoutChange,
     onRename,
     selectedIds,
+    previewedId,
     allSelected,
     someSelected,
     onToggleSelect,
@@ -394,6 +398,7 @@ export function LeadsGrid(props: LeadsGridProps) {
                   columns={columns}
                   ctx={ctx}
                   selected={selectedIds.has(lead.id)}
+                  previewed={previewedId === lead.id}
                   anySelected={anySelected}
                   stickyLeft={stickyLeft}
                   onToggleSelect={onToggleSelect}

@@ -29,6 +29,8 @@ import { DEFAULT_SORT, baselineFromState, discardToBaseline, isViewDirty, type S
 export const MOST_USED_FILTER_KEYS = ["stage", "assignees", "last_activity_at"];
 
 export interface LeadsToolbarProps {
+  /** EDGEX-149: reports the active tab / saved-view name (the record preview's "n of N in <view>"). */
+  onActiveViewLabel?: (label: string) => void;
   title: string;
   total: number;
   /** Row 1, right: Export, Add lead … */
@@ -74,6 +76,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
 }
 
 export function LeadsToolbar({
+  onActiveViewLabel,
   title,
   total,
   titleActions,
@@ -120,6 +123,10 @@ export function LeadsToolbar({
     return savedMatch ?? { id: "all", tree: scopeTree, sort: DEFAULT_SORT };
   }, [builtin, current, scopeTree, saved.filters]);
   const baseline = explicit ?? implicit;
+  const activeViewLabel = activeSaved?.name ?? builtin.find((v) => v.id === baseline.id)?.label ?? saved.filters.find((f) => f.id === baseline.id)?.name ?? null;
+  useEffect(() => {
+    if (activeViewLabel) onActiveViewLabel?.(activeViewLabel);
+  }, [activeViewLabel, onActiveViewLabel]);
 
   // A restored filter might equal a saved view: load the list once so it can read as clean.
   const savedLoad = saved.load;

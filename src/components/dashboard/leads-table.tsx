@@ -101,6 +101,9 @@ import { toast } from "sonner";
 import { moveErrorMessage } from "@/lib/leads/gate-error";
 import { AddLeadSheet } from "@/components/dashboard/add-lead-sheet";
 import { LeadPreviewPanel } from "@/components/dashboard/lead-preview-panel";
+import { RecordPreview } from "@/industries/education-consultancy/features/record-preview/record-preview";
+import type { StageChoice } from "@/industries/education-consultancy/features/record-preview/stage-picker";
+import { navState } from "@/industries/education-consultancy/features/record-preview/lib/nav";
 import { MergeDialog } from "@/components/dashboard/lead/merge-dialog";
 import { getLeadFullName, getLeadInitials } from "@/components/dashboard/lead/lead-name";
 import type { Lead, LeadList, PipelineStage, UserRole, TenantEntity, Branch } from "@/types/database";
@@ -627,6 +630,11 @@ export function LeadsTable({
   const [assignListId, setAssignListId] = useState<string>("");
   const [addLeadOpen, setAddLeadOpen] = useState(false);
   const [previewLeadId, setPreviewLeadId] = useState<string | null>(null);
+  // EDGEX-149 record preview: tab/view name for "n of N in <view>", J/K across pages, refetch after a reassignment.
+  const [activeViewLabel, setActiveViewLabel] = useState("All leads");
+  const [previewRefresh, setPreviewRefresh] = useState(0);
+  const pendingPreviewEdge = useRef<{ edge: "first" | "last"; page: number; fromFirstId: string | null } | null>(null);
+  const [stickyPreviewLead, setStickyPreviewLead] = useState<Lead | null>(null);
   const [branchAssignDialogOpen, setBranchAssignDialogOpen] = useState(false);
   const [assignToBranch, setAssignToBranch] = useState<string>("");
   const [isAssigningBranch, setIsAssigningBranch] = useState(false);
@@ -1648,6 +1656,7 @@ export function LeadsTable({
         description: `${updated.toLocaleString()} lead${updated !== 1 ? "s" : ""} ${target === "unassign" ? "unassigned" : "assigned"}`,
       });
       setSelectedIds(new Set());
+      setPreviewRefresh((n) => n + 1);
       setAssignDialogOpen(false);
       setAssignTo("");
       setAssignBranchId("");
@@ -2118,6 +2127,80 @@ export function LeadsTable({
   }
 
   const previewLead = localLeads.find((l) => l.id === previewLeadId) || null;
+  const eduPreview = industryId === "education_consultancy";
+  const previewRowIndex = previewLeadId ? displayLeads.findIndex((l) => l.id === previewLeadId) : -1;
+  // Keep showing the last record while J/K waits for the neighbouring page to arrive (no unmount flicker).
+  const shownPreviewLead = previewLead ?? (pendingPreviewEdge.current ? stickyPreviewLead : null);
+  useEffect(() => {
+    if (previewLead) setStickyPreviewLead(previewLead);
+  }, [previewLead]);
+
+  const handlePreviewNavigate = (dir: "next" | "prev") => {
+    if (previewRowIndex < 0) return;
+    const st = navState({ rowIndex: previewRowIndex, rowCount: displayLeads.length, page: currentPage, pageSize: itemsPerPage, total: effectiveTotal });
+    const step = dir === "next" ? st.next : st.prev;
+    if (!step) return;
+    if (step.kind === "row") {
+      setPreviewLeadId(displayLeads[step.index].id);
+    } else {
+      // End of the loaded page: fetch the neighbouring page, then open its first (J) / last (K) row.
+      pendingPreviewEdge.current = { edge: dir === "next" ? "first" : "last", page: step.page, fromFirstId: displayLeads[0]?.id ?? null };
+      setCurrentPage(step.page);
+    }
+  };
+
+  useEffect(() => {
+    const p = pendingPreviewEdge.current;
+    if (!p || tableLoading || currentPage !== p.page || displayLeads.length === 0) return;
+    if (displayLeads[0].id === p.fromFirstId) return; // still the old page
+    pendingPreviewEdge.current = null;
+    setPreviewLeadId((p.edge === "first" ? displayLeads[0] : displayLeads[displayLeads.length - 1]).id);
+  }, [tableLoading, currentPage, displayLeads]);
+
+  const previewStageLists = leadLists.filter((l) => !l.is_staging && !l.is_archive);
+  const handlePreviewStageChange = async (lead: Lead, c: StageChoice) => {
+    const before = leads.find((l) => l.id === lead.id) ?? lead;
+    const targetList = leadLists.find((l) => l.id === c.listId);
+    const stageSlug = stages.find((s) => s.id === c.stageId)?.slug;
+    setLocalLeads((prev) =>
+      prev.map((l) =>
+        l.id === lead.id
+          ? {
+              ...l,
+              list_id: c.listId,
+              stage_id: c.stageId,
+              ...(c.pipelineId ? { pipeline_id: c.pipelineId } : {}),
+              ...(stageSlug ? { status: stageSlug } : {}),
+              lead_type: targetList?.slug === "prospects" ? "prospect" : l.lead_type,
+              stage_changed_at: new Date().toISOString(),
+            }
+          : l,
+      ),
+    );
+    try {
+      // The route validates stage_id against the lead's CURRENT pipeline unless pipeline_id rides along (cross-list move).
+      const res = await fetch(`/api/v1/leads/${lead.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ list_id: c.listId, stage_id: c.stageId, ...(c.pipelineId ? { pipeline_id: c.pipelineId } : {}) }),
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        throw new Error(moveErrorMessage(errJson, "Failed to change stage"));
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to change stage");
+      setLocalLeads((prev) => prev.map((l) => (l.id === lead.id ? { ...before } : l)));
+    }
+  };
+
+  const handlePreviewAssign = (lead: Lead) => {
+    // Same assign flow as the bulk bar, for this one lead (branch-required staging keeps the full dialog).
+    setSelectedIds(new Set([lead.id]));
+    if (assignBranchRequired) setAssignDialogOpen(true);
+    else setBulkPalette("assign");
+  };
+  const canAssignFromPreview = viewMode === "normal" && (isAdmin || isTeamScoped) && teamMembers.length > 0;
 
   // ── Column registry (Phase 2) ─────────────────────────────────────────────
   // Discover custom-field keys across loaded leads.
@@ -2844,8 +2927,8 @@ export function LeadsTable({
   );
 
   return (
-    <div className="flex flex-1 min-h-0 gap-0">
-      {/* Main Table Section - shrinks when preview is open */}
+    <div className="relative flex flex-1 min-h-0 gap-0">
+      {/* Main Table Section - shrinks when preview is open (non-education); education's record preview floats over it */}
       <div className="flex flex-col flex-1 min-h-0 min-w-0 gap-1 overflow-hidden">
         {pageHeading && !useToolbarV2 && <h1 className={pageHeadingClassName}>{pageHeading}</h1>}
         {pageSubheading && (
@@ -2856,6 +2939,7 @@ export function LeadsTable({
       {useToolbarV2 && (
         <LeadsToolbar
           key={`${activeListSlug ?? activeFunnelKey ?? "all"}:${viewMode}`}
+          onActiveViewLabel={setActiveViewLabel}
           title={!pageHeading || pageHeading === "All Leads" ? "Leads" : pageHeading}
           total={effectiveTotal}
           titleActions={
@@ -3284,6 +3368,7 @@ export function LeadsTable({
               })
             }
             selectedIds={selectedIds}
+            previewedId={eduPreview ? previewLeadId : null}
             allSelected={allSelected}
             someSelected={someSelected}
             onToggleSelect={toggleSelect}
@@ -3454,7 +3539,7 @@ export function LeadsTable({
                 return (
                   <tr
                     key={lead.id}
-                    className={`group relative hover:bg-gray-50 transition-colors ${isSelected ? "bg-blue-50" : ""}`}
+                    className={`group relative hover:bg-gray-50 transition-colors ${isSelected || (eduPreview && lead.id === previewLeadId) ? "bg-blue-50" : ""}`}
                   >
                     {/* Anchor: follow-up/callback-due row-signal bar */}
                     <td className="p-0 w-1 relative" onClick={(e) => e.stopPropagation()}>
@@ -3571,7 +3656,36 @@ export function LeadsTable({
       </div>
       {/* End of Main Table Section */}
 
-      {/* Lead Preview Panel - side by side with animation */}
+      {/* Lead Preview Panel. Education: the EDGEX-149 record preview floats over the table (no squeeze). Everyone else: today's side panel. */}
+      {eduPreview ? (
+        shownPreviewLead && (
+          <RecordPreview
+            lead={shownPreviewLead}
+            rowIndex={Math.max(previewRowIndex, 0)}
+            rowCount={displayLeads.length}
+            page={currentPage}
+            pageSize={itemsPerPage}
+            total={effectiveTotal}
+            viewName={activeViewLabel}
+            nextLeadId={previewRowIndex >= 0 ? displayLeads[previewRowIndex + 1]?.id ?? null : null}
+            onNavigate={handlePreviewNavigate}
+            onClose={() => setPreviewLeadId(null)}
+            currentUserId={currentUserId}
+            memberNames={memberNames}
+            memberEmails={memberMap}
+            branchMap={branchMap}
+            formMap={formMap}
+            stageLists={previewStageLists}
+            stages={stages}
+            canEditRows={canEditRows}
+            canAssign={canAssignFromPreview}
+            followUpStaleDays={followUpStaleDays ?? FALLBACK_FOLLOW_UP_STALE_DAYS}
+            onStageChange={handlePreviewStageChange}
+            onAssign={handlePreviewAssign}
+            refreshToken={previewRefresh}
+          />
+        )
+      ) : (
       <div
         className={`h-full transition-all duration-500 ease-out overflow-hidden ${
           previewLead ? 'w-[380px] opacity-100' : 'w-0 opacity-0'
@@ -3593,6 +3707,8 @@ export function LeadsTable({
           )}
         </div>
       </div>
+
+      )}
 
       {/* Mounted only while open: it holds the selected ids (up to 10,000) and a polling loop, so keep it off every table render. */}
       {hasOutreach && bulkEnrollOpen && (
