@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { TASK_CHANGED_EVENT } from "@/lib/tasks/task-events";
 import type { TouchKind } from "./lib/labels";
 
 export interface PreviewActivity {
@@ -87,4 +88,13 @@ export function usePreviewData(leadId: string, prefetchId: string | null, feed: 
     error,
     invalidate,
   };
+}
+
+/** Task edits made elsewhere (the /tasks/<id> drawer, email composer, Overview checkbox) refresh the open preview. */
+export function useTaskChangedRefresh(leadId: string, invalidate: (id: string) => void) {
+  useEffect(() => {
+    const onTaskChanged = () => invalidate(leadId);
+    window.addEventListener(TASK_CHANGED_EVENT, onTaskChanged);
+    return () => window.removeEventListener(TASK_CHANGED_EVENT, onTaskChanged);
+  }, [invalidate, leadId]);
 }

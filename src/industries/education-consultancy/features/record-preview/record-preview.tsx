@@ -20,7 +20,7 @@ import { Avatar, CountChip, Dot, HighlightCard, ListBox, ListRow, Section, Value
 import { Timeline, TimelineSkeleton } from "./timeline";
 import { TasksSection } from "./tasks-section";
 import { StagePicker, type StageChoice } from "./stage-picker";
-import { usePreviewData } from "./use-preview-data";
+import { usePreviewData, useTaskChangedRefresh } from "./use-preview-data";
 import { daysInStage, dueLabel, lastTouchCard, pickNextTask, relativeDays } from "./lib/labels";
 import { navState, shouldHandleNavKey } from "./lib/nav";
 import { readyCard, shortDate } from "./lib/readiness";
@@ -129,6 +129,8 @@ export function RecordPreview(props: RecordPreviewProps) {
   const stageLabel = [list?.name, stage?.name].filter(Boolean).join(" · ") || "No stage";
   const stageEditable = canEditRows;
 
+  useTaskChangedRefresh(lead.id, invalidate);
+
   const pickStage = async (c: StageChoice) => {
     setStageOpen(false);
     await props.onStageChange(lead, c);
@@ -173,8 +175,7 @@ export function RecordPreview(props: RecordPreviewProps) {
     try {
       const res = await fetch(`/api/v1/my-tasks/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "done" }) });
       if (!res.ok) throw new Error();
-      notifyTaskChanged();
-      invalidate(lead.id);
+      notifyTaskChanged(); // our TASK_CHANGED_EVENT listener below does the invalidate
     } catch {
       setLocalTasks((s) => { const n = new Set(s); n.delete(id); return n; });
       toast.error("Couldn't complete the task");
@@ -400,6 +401,7 @@ export function RecordPreview(props: RecordPreviewProps) {
               currentUserId={currentUserId}
               context={{ leadId: lead.id }}
               emptyLabel="No tasks yet."
+              onChange={() => invalidate(lead.id)}
             />
           </div>
         )}

@@ -16,6 +16,8 @@ interface TaskListProps {
   emptyLabel?: string;
   /** Gates whether a project-linked task's chip links to the cockpit — see TaskContextChip. Resolve via getFeatureAccess at the page shell; never re-derive client-side. */
   projectBoardEnabled?: boolean;
+  /** Optional: called after this list successfully creates / completes / deletes a task, so a host surface (e.g. the record preview) can refresh its own derived data. Does NOT emit TASK_CHANGED_EVENT, so there is no refetch loop. */
+  onChange?: () => void;
 }
 
 export interface TaskListRef {
@@ -24,7 +26,7 @@ export interface TaskListRef {
 }
 
 export const TaskList = forwardRef<TaskListRef, TaskListProps>(function TaskList(
-  { fetchUrl, currentUserId, context, emptyLabel = "No tasks yet.", projectBoardEnabled = false },
+  { fetchUrl, currentUserId, context, emptyLabel = "No tasks yet.", projectBoardEnabled = false, onChange },
   ref
 ) {
   const router = useRouter();
@@ -72,6 +74,11 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(function TaskList
     return () => window.removeEventListener(TASK_CHANGED_EVENT, onChanged);
   }, [fetchTasks]);
 
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+
   const handleComplete = useCallback(async (id: string) => {
     const res = await fetch(`/api/v1/my-tasks/${id}`, {
       method: "PATCH",
@@ -87,11 +94,13 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(function TaskList
     const res = await fetch(`/api/v1/my-tasks/${id}`, { method: "DELETE" });
     if (res.ok) {
       setTasks((prev) => prev.filter((t) => t.id !== id));
+      onChangeRef.current?.();
     }
   }, []);
 
   function handleCreated(task: Record<string, unknown>) {
     setTasks((prev) => [task as unknown as TaskRowItem, ...prev]);
+    onChangeRef.current?.();
   }
 
   const today = toLocalDateString(new Date());
