@@ -586,23 +586,8 @@ export function LeadsTable({
     advancedFilters.setTree(persisted, { deleteParams: ["list"] });
   }
 
-  // Re-sync when the server sends a fresh lead set via a real navigation (list/funnel
-  // switch, router.refresh() after a bulk action) — the page's own SSR query already
-  // did the work; this is a prop sync, not a client fetch.
-  //
-  // Skipped while an advanced filter is active: writing `?f=` to the URL (via
-  // advancedFilters.setTree -> router.replace) triggers Next.js to re-run this
-  // route's Server Component (page.tsx), which does NOT parse `f` (that's Phase
-  // 2b's getLeadsPage mirror, out of scope here) — its SSR props are always the
-  // unfiltered first page. Resyncing from them here would silently revert the
-  // client-fetched filtered result out from under the user right after Apply.
-  // The client fetch effect below is the sole source of truth for localLeads
-  // while an advanced filter is active.
-  useEffect(() => {
-    if (advancedFilterActive) return;
-    setLocalLeads(leads);
-    setTotal(initialTotal ?? leads.length);
-  }, [leads, initialTotal, advancedFilterActive]);
+  // EDGEX-146: the SSR `leads` prop -> localLeads sync lives below the fetch effect (it needs the
+  // client view state: search/status/sort/page/filters).
 
   // EDGEX-122: initial sort comes from the shared constant the server first page also uses.
   const [sortField, setSortField] = useState<SortField>(
@@ -741,6 +726,14 @@ export function LeadsTable({
   const isFirstFetchRef = useRef(true);
   const prevSignatureRef = useRef("");
   const needsCountRef = useRef(false);
+  // EDGEX-146: bumped after a successful bulk action to refetch the CURRENT view (same page/filters,
+  // fresh exact count) — unlike a signature change, it never resets to page 1.
+  const [reloadNonce, setReloadNonce] = useState(0);
+  const reloadCurrentView = useCallback(() => {
+    if (!serverPaginated) return;
+    needsCountRef.current = true;
+    setReloadNonce((n) => n + 1);
+  }, [serverPaginated]);
   const fetchAbortRef = useRef<AbortController | null>(null);
 
   const buildFetchParams = useCallback(
@@ -835,11 +828,18 @@ export function LeadsTable({
       .then((body: { data?: Lead[]; meta?: { total: number }; error?: { message?: string } }) => {
         if (controller.signal.aborted) return;
         if (!body.data) throw new Error(body.error?.message || "Failed to load leads");
-        setLocalLeads(body.data);
         if (wantCount && body.meta) {
           setTotal(body.meta.total);
           needsCountRef.current = false;
+          // EDGEX-146: a bulk action can empty the page we're on (delete/archive/move) — step back to
+          // the last non-empty page (total 0 -> page 1) instead of showing a blank "Page 3".
+          const lastPage = Math.max(1, Math.ceil(body.meta.total / itemsPerPage));
+          if (currentPage > lastPage) {
+            setCurrentPage(lastPage); // re-triggers this effect; the refetch loads that page
+            return;
+          }
         }
+        setLocalLeads(body.data);
       })
       .catch((err: unknown) => {
         if (controller.signal.aborted) return;
@@ -850,7 +850,40 @@ export function LeadsTable({
       });
 
     return () => controller.abort();
-  }, [serverPaginated, fetchSignature, currentPage, itemsPerPage, buildFetchParams, advancedFilterActive]);
+  }, [serverPaginated, fetchSignature, currentPage, itemsPerPage, buildFetchParams, advancedFilterActive, reloadNonce]);
+
+  // EDGEX-146: SSR prop -> client sync. The `leads`/`initialTotal` props are ALWAYS the default first
+  // page (page.tsx), so they may only overwrite the client view when they describe what the user is
+  // looking at: on mount / a real scope navigation (list or funnel switch), or when the client view IS
+  // the SSR default (no search, status "all", default sort, page 1, default page size, no filters).
+  // Otherwise a router.refresh() after a bulk action would clobber search/sort/page/status with page 1.
+  // Still skipped while an advanced filter is active (page.tsx doesn't parse `?f=`; the client fetch is
+  // the sole source of truth then). Legacy (non-serverPaginated) consumers keep the old always-sync.
+  const syncViewRef = useRef({ serverPaginated, advancedFilterActive, scopeKey: "", isDefaultView: true });
+  syncViewRef.current = {
+    serverPaginated,
+    advancedFilterActive,
+    scopeKey: `${activeListSlug ?? ""}|${activeFunnelKey ?? ""}`,
+    isDefaultView:
+      !debouncedSearch &&
+      statusFilter === "all" &&
+      sortField === ((Object.keys(SORT_FIELD_TO_API) as SortField[]).find((f) => SORT_FIELD_TO_API[f] === LEADS_V2_DEFAULT_SORT.key) ?? "activity") &&
+      sortDirection === LEADS_V2_DEFAULT_SORT.direction &&
+      currentPage === 1 &&
+      itemsPerPage === 25 &&
+      formFilter === "all" && counselorFilter.length === 0 && collaboratorFilter.length === 0 &&
+      sourceFilter.length === 0 && tagFilter === "all" && createdFilter === "all" && prospectIndustryFilter === "all",
+  };
+  const prevScopeKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    const v = syncViewRef.current;
+    const scopeChanged = prevScopeKeyRef.current !== v.scopeKey;
+    prevScopeKeyRef.current = v.scopeKey;
+    if (v.advancedFilterActive) return;
+    if (v.serverPaginated && !scopeChanged && !v.isDefaultView) return;
+    setLocalLeads(leads);
+    setTotal(initialTotal ?? leads.length);
+  }, [leads, initialTotal]);
 
   const { counts } = useBadgeCounts();
   const unreadLeadIds = useMemo(() => new Set(counts.unread_lead_ids), [counts.unread_lead_ids]);
@@ -1602,6 +1635,7 @@ export function LeadsTable({
       setSelectedIds(new Set());
       setDeleteDialogOpen(false);
       router.refresh();
+      reloadCurrentView(); // EDGEX-146: keep the current view
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to delete leads");
     } finally {
@@ -1665,6 +1699,7 @@ export function LeadsTable({
       setAssignBranchId("");
       setAssignListId("");
       router.refresh();
+      reloadCurrentView(); // EDGEX-146: keep the current view
       return true;
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to assign leads");
@@ -1726,6 +1761,7 @@ export function LeadsTable({
     }
     setSelectedIds(new Set());
     router.refresh();
+    reloadCurrentView(); // EDGEX-146: keep the current view
     return true;
   }
 
@@ -1760,6 +1796,7 @@ export function LeadsTable({
       setBranchAssignDialogOpen(false);
       setAssignToBranch("");
       router.refresh();
+      reloadCurrentView(); // EDGEX-146: keep the current view
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to share leads");
     } finally {
@@ -1795,6 +1832,7 @@ export function LeadsTable({
       toast.success(`Restored ${restored} lead${restored !== 1 ? "s" : ""}`);
       setSelectedIds(new Set());
       router.refresh();
+      reloadCurrentView(); // EDGEX-146: keep the current view
     } catch {
       toast.error("Failed to restore");
     }
@@ -1902,6 +1940,7 @@ export function LeadsTable({
       setRestoreStageId("");
       setRestoreAssignTo("keep");
       router.refresh();
+      reloadCurrentView(); // EDGEX-146: keep the current view
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to restore leads");
     } finally {
@@ -1998,6 +2037,7 @@ export function LeadsTable({
       setMoveAssignTo("keep");
       setIsGraduateMove(false);
       router.refresh();
+      reloadCurrentView(); // EDGEX-146: keep the current view
       return true;
     } catch (error) {
       toast.dismiss("bulk-move");
@@ -4352,6 +4392,7 @@ export function LeadsTable({
             onMerged={() => {
               setSelectedIds(new Set());
               setMergeDialogOpen(false);
+              reloadCurrentView(); // EDGEX-146: MergeDialog calls router.refresh() itself
             }}
           />
         );
