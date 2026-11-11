@@ -3,10 +3,16 @@
 // sort/page), and a router.refresh()-style new `leads` prop (always the SSR default first page) must not
 // clobber a non-default view. fetch is mocked; no DB.
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { render, screen, waitFor, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, cleanup, fireEvent, configure } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import type { Lead } from "@/types/database";
 import { LeadsTable } from "./leads-table";
+
+// Under the full parallel suite this big render + the real 300ms search debounce can exceed the default
+// 1000ms waitFor / 5000ms test timeout. Every wait below is condition-based (no sleeps), so generous
+// ceilings only matter when the machine is loaded.
+configure({ asyncUtilTimeout: 20000 });
+vi.setConfig({ testTimeout: 60000 });
 
 const refresh = vi.fn();
 vi.mock("next/navigation", () => ({
@@ -85,7 +91,7 @@ describe("EDGEX-146 leads table keeps its view after a bulk action", () => {
     render(<LeadsTable leads={firstPage()} initialTotal={60} {...props} />);
     const box = screen.getByPlaceholderText("Search leads...");
     fireEvent.change(box, { target: { value: "loc" } });
-    await waitFor(() => expect(server.last()?.get("search")).toBe("loc"), { timeout: 3000 });
+    await waitFor(() => expect(server.last()?.get("search")).toBe("loc"), { timeout: 20000 });
     await waitFor(() => expect(pageText()).toBe("1/2"));
     const before = server.gets.length;
     await deleteSelectedOnPage();
@@ -156,11 +162,11 @@ describe("EDGEX-146 SSR `leads` prop sync", () => {
 
     // searched view: ignored
     fireEvent.change(screen.getByPlaceholderText("Search leads..."), { target: { value: "loc" } });
-    await waitFor(() => expect(server.last()?.get("search")).toBe("loc"), { timeout: 3000 });
+    await waitFor(() => expect(server.last()?.get("search")).toBe("loc"), { timeout: 20000 });
     await waitFor(() => expect(screen.queryAllByText(/Fresh100/).length).toBe(0));
     const stale = Array.from({ length: 25 }, (_, i) => mk(i + 200, "Stale"));
     rerender(<LeadsTable leads={stale} initialTotal={999} {...props} />);
-    await new Promise((r) => setTimeout(r, 50));
+    await waitFor(() => expect(server.fn).toHaveBeenCalled());
     expect(screen.queryAllByText(/Stale200/).length).toBe(0);
     expect(pageText()).toBe("1/2");
 
