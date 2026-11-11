@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import {
   XIcon, CaretUpIcon, CaretDownIcon, ArrowsOutIcon, CopyIcon, EnvelopeSimpleIcon, PhoneIcon,
   CheckSquareIcon, NotePencilIcon, CircleDashedIcon, ArrowRightIcon, ClockIcon, UserIcon, GraduationCapIcon,
-  ShieldCheckIcon, PlusIcon, CheckIcon, SquaresFourIcon, PulseIcon, NoteIcon, DotsThreeIcon, WhatsappLogoIcon,
+  ShieldCheckIcon, CheckIcon, SquaresFourIcon, PulseIcon, NoteIcon, DotsThreeIcon, WhatsappLogoIcon,
 } from "@/components/icons";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
@@ -18,6 +18,7 @@ import { notifyTaskChanged } from "@/lib/tasks/task-events";
 import type { Lead, LeadList, LeadNote, PipelineStage } from "@/types/database";
 import { Avatar, CountChip, Dot, HighlightCard, ListBox, ListRow, Section, ValueText, ViewAll, initialsOf } from "./parts";
 import { Timeline, TimelineSkeleton } from "./timeline";
+import { TasksSection } from "./tasks-section";
 import { StagePicker, type StageChoice } from "./stage-picker";
 import { usePreviewData } from "./use-preview-data";
 import { daysInStage, dueLabel, lastTouchCard, pickNextTask, relativeDays } from "./lib/labels";
@@ -354,22 +355,14 @@ export function RecordPreview(props: RecordPreviewProps) {
             <Section title="Activity" right={<ViewAll onClick={() => setTab("activity")} />} />
             {data ? <Timeline rows={data.activity} currentUserId={currentUserId} /> : <TimelineSkeleton widths={["60%", "45%", "52%"]} />}
 
-            {data && openCount !== null && openCount > 0 && (
-              <>
-                <Section title="Tasks" count={openCount} right={<button type="button" aria-label="Add task" onClick={goTask} className="flex hover:text-[#101112]"><PlusIcon className="size-[14px]" /></button>} />
-                <ListBox>
-                  {openTasks.slice(0, 3).map((t) => {
-                    const d = dueLabel(t.due_date);
-                    return (
-                      <ListRow key={t.id}>
-                        <button type="button" aria-label={`Complete ${t.title}`} onClick={() => void completeTask(t.id)} className="size-[14px] flex-none cursor-pointer rounded-[4px] shadow-[inset_0_0_0_1.5px_#d0d3d7] hover:shadow-[inset_0_0_0_1.5px_#12805c]" />
-                        <button type="button" onClick={() => router.push(`/tasks/${t.id}`)} className="min-w-0 flex-1 overflow-hidden text-ellipsis text-left">{t.title}</button>
-                        {d && <span className={cn("flex-none text-[12px]", d.overdue ? "text-[#b25e09]" : "text-black/50")}>{d.text}</span>}
-                      </ListRow>
-                    );
-                  })}
-                </ListBox>
-              </>
+            {data && openCount !== null && (
+              <TasksSection
+                count={openCount}
+                items={openTasks}
+                onAdd={goTask}
+                onComplete={(id) => void completeTask(id)}
+                onOpen={(id) => router.push(`/tasks/${id}`)}
+              />
             )}
 
             {data?.notes.latest && (

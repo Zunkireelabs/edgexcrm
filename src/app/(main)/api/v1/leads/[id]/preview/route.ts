@@ -10,7 +10,9 @@ import { checkApplicationsReadiness, applicationsGateApplies } from "@/lib/leads
 import { apiSuccess, apiUnauthorized, apiForbidden, apiNotFound, apiError } from "@/lib/api/response";
 import { humanizeIntakeValue } from "@/components/dashboard/lead/activities/lead-activity-labels";
 import { flattenReadiness } from "@/industries/education-consultancy/features/record-preview/lib/readiness";
+import { ensureCreationEvent, isCreationAudit } from "@/industries/education-consultancy/features/record-preview/lib/creation-event";
 import { pickIntake } from "@/industries/education-consultancy/features/record-preview/lib/study-plan";
+import type { PreviewActivity } from "@/industries/education-consultancy/features/record-preview/use-preview-data";
 import { describeAuditEvent } from "@/components/dashboard/lead/activities/describe-audit-event";
 
 interface AuditRow {
@@ -71,13 +73,14 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
   // lead_notes has no tenant_id column (scopedClient would inject one): it is keyed by lead_id, and the lead was
   // verified in this tenant above, so fromGlobal is the right door.
-  const [openTasks, notes, latestNote, acts, audits, apps, readiness, tpl, consent, branch, form] = await Promise.all([
+  const [openTasks, notes, latestNote, acts, audits, firstAudit, apps, readiness, tpl, consent, branch, form] = await Promise.all([
     db.from("tasks").select("id, title, due_date, assignee_id", { count: "exact" }).eq("lead_id", id).neq("status", "done")
       .order("due_date", { ascending: true, nullsFirst: false }).limit(3),
     db.fromGlobal("lead_notes").select("id", { count: "exact", head: true }).eq("lead_id", id),
     db.fromGlobal("lead_notes").select("id, content, user_id, user_email, created_at").eq("lead_id", id).order("created_at", { ascending: false }).limit(feedLimit),
     db.from("lead_activities").select("id, user_id, activity_type, subject, description, email_subject, created_at").eq("lead_id", id).order("created_at", { ascending: false }).limit(feedLimit),
     db.from("audit_logs").select("id, action, entity_type, changes, user_id, created_at").eq("entity_id", id).eq("entity_type", "lead").order("created_at", { ascending: false }).limit(feedLimit),
+    db.from("audit_logs").select("id, action, entity_type, changes, user_id, created_at").eq("entity_id", id).eq("entity_type", "lead").order("created_at", { ascending: true }).limit(1),
     db.from("applications").select("id, university_name, program_name, intake_term, status, stage_id, stage_changed_at", { count: "exact" }).eq("lead_id", id).is("deleted_at", null).order("created_at", { ascending: false }),
     checkApplicationsReadiness(raw, auth.tenantId, id),
     db.from("consent_templates").select("is_active").maybeSingle(),
@@ -91,6 +94,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
   const noteRows = (latestNote.data ?? []) as unknown as Array<{ id: string; content: string; user_id: string; created_at: string }>;
   const actRows = (acts.data ?? []) as unknown as Array<{ id: string; user_id: string; activity_type: string; subject: string | null; description: string | null; email_subject: string | null; created_at: string }>;
   const auditRows = (audits.data ?? []) as unknown as AuditRow[];
+  const firstAuditRows = (firstAudit.data ?? []) as unknown as AuditRow[];
   const appRows = (apps.data ?? []) as unknown as Array<{ id: string; university_name: string; program_name: string; intake_term: string | null; status: string; stage_id: string }>;
 
   // Application stage names/colours (the app's existing mapping lives on application_stages).
@@ -103,7 +107,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
   const userIds = [
     ...taskRows.map((t) => t.assignee_id), ...noteRows.map((n) => n.user_id), ...actRows.map((a) => a.user_id),
-    ...auditRows.map((a) => a.user_id), leadRow.assigned_to,
+    ...auditRows.map((a) => a.user_id), ...firstAuditRows.map((a) => a.user_id), leadRow.assigned_to,
     ...auditRows.map((a) => (a.changes?.assigned_to?.new ? String(a.changes.assigned_to.new) : null)),
   ].filter((x): x is string => !!x);
   const names = await resolveUserNames(userIds);
@@ -120,7 +124,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
   }
 
   // Merged feed: activities + notes + audit events, newest first.
-  const feed = [
+  const sourceLabel =
+    (form.data as { name?: string } | null)?.name ?? (leadRow.intake_source ? humanizeIntakeValue(leadRow.intake_source as string) : null);
+  const feedCandidates: PreviewActivity[] = [
     ...actRows.map((a) => ({
       id: `a-${a.id}`, at: a.created_at, actor_id: a.user_id, actor_name: nameOf(a.user_id), source: null as string | null, kind: a.activity_type as string,
       verb: a.activity_type === "call" ? "logged a call" : a.activity_type === "email" ? "emailed" : "logged a meeting",
@@ -130,17 +136,20 @@ export async function GET(request: NextRequest, context: RouteContext) {
       id: `n-${n.id}`, at: n.created_at, actor_id: n.user_id, actor_name: nameOf(n.user_id), source: null as string | null, kind: "note" as string,
       verb: "added a note", object: null as string | null, snippet: n.content,
     })),
-    ...auditRows.flatMap((r) => {
+    ...[...auditRows, ...firstAuditRows.filter((f) => !auditRows.some((r) => r.id === f.id))].flatMap((r) => {
       const d = describeAuditEvent(r, (uid) => nameOf(uid));
-      if (!SHOWN_AUDIT_KINDS.has(d.kind)) return [];
-      const fromForm = (d.kind === "submission" || d.kind === "created") && !r.user_id;
+      const creation = isCreationAudit(d.kind, r.changes);
+      if (!creation && !SHOWN_AUDIT_KINDS.has(d.kind)) return [];
+      const fromForm = (creation || d.kind === "submission") && !r.user_id;
       return [{
-        id: `l-${r.id}`, at: r.created_at, actor_id: r.user_id, actor_name: nameOf(r.user_id), kind: d.kind as string,
-        source: fromForm ? ((form.data as { name?: string } | null)?.name ?? humanizeIntakeValue(leadRow.intake_source as string | null)) || "Form" : null,
+        id: `l-${r.id}`, at: r.created_at, actor_id: r.user_id, actor_name: nameOf(r.user_id), kind: creation ? "created" : (d.kind as string),
+        source: fromForm ? sourceLabel : null,
         verb: d.verb, object: d.object, snippet: null as string | null,
       }];
     }),
-  ].sort((x, y) => y.at.localeCompare(x.at)).slice(0, feedLimit);
+  ];
+  const feed = ensureCreationEvent(feedCandidates, { createdAt: leadRow.created_at as string, sourceLabel })
+    .sort((x, y) => y.at.localeCompare(x.at)).slice(0, feedLimit);
 
   const cf = (leadRow.custom_fields ?? {}) as Record<string, unknown>;
   const feeStatus = (leadRow.pre_app_fee_status as string | null) ?? null;

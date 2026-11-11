@@ -97,7 +97,8 @@ describe("GET /api/v1/leads/:id/preview", () => {
     expect(data.last_touch).toMatchObject({ kind: "call", who_name: "Binod Rai" });
     expect(data.readiness.items).toEqual(["Pre-app fee", "Passport number", "Signed consent"]);
     expect(data.applications.count).toBe(0);
-    expect(data.activity.map((a: { id: string }) => a.id)).toEqual(["a-a1", "n-n1"]);
+    expect(data.activity.map((a: { id: string }) => a.id)).toEqual(["a-a1", "n-n1", "created-synthetic"])
+    expect(data.activity.at(-1)).toMatchObject({ kind: "created", verb: "created the lead", source: "Manual Entry" });
     expect(data).toHaveProperty("source_name");
     expect(data).toHaveProperty("branch_name");
   });
