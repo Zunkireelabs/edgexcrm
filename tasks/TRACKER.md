@@ -4,7 +4,7 @@
 > `EDGEX`) is the source of truth; this file is a read-only snapshot for everyone in the repo. Never copy
 > anything from this file back into Plane. Stale or conflicted? Run `/project-pm sync`.
 
-Last synced: **2026-11-04** by Project Manager · 69 open tickets (area parents EDGEX-2 to EDGEX-11 excluded)
+Last synced: **2026-11-11** by Sadin (lead session) · 135 open tickets (epics excluded)
 
 ---
 
@@ -26,25 +26,46 @@ Full SOP: `~/Projects/zunkireelabs-org/SOPs/developer-workflow/README.md` §4. S
 ---
 
 ## Flags from the last sync
-- **Open PRs without `EDGEX-` in the title:** #657, #613, #417, #396 (each has a ticket: EDGEX-15, -12, -16, -17). Rename the titles to `EDGEX-n: …`.
-- **Urgent/high with no owner:** none.
-- **Needs verification:** most tickets taken from `STATUS-BOARD.md` and `FEATURE-ROADMAP.md` (dated 7 Sep or older) carry `needs-verification` in Plane until someone checks them against the live system.
+- **Open PRs without `EDGEX-` in the title:** #613 (EDGEX-12), #417 (EDGEX-16), #396 (EDGEX-17), #91 and #33 (both under DECIDE EDGEX-18). Rename the titles to `EDGEX-n: …`.
+- **State behind reality:** EDGEX-15 says In Review, but PR #657 merged to `stage` on 2026-11-04 → should be On Stage (Hardik's ticket).
+- **In Progress with no owner (18):** EDGEX-149, EDGEX-148, EDGEX-146, EDGEX-145, EDGEX-143, EDGEX-138, EDGEX-137, EDGEX-129, EDGEX-127, EDGEX-126, EDGEX-125, EDGEX-124, EDGEX-122, EDGEX-117, EDGEX-116, EDGEX-94, EDGEX-86, EDGEX-85. Mostly the Design System v2 (PR #665) and leads-table v2 (local branch `feature/EDGEX-117-leads-table-v2`, not pushed) work; give each an owner.
+- **Urgent/high with no owner (16):** EDGEX-133, EDGEX-132, EDGEX-128, EDGEX-125, EDGEX-117, EDGEX-116, EDGEX-114, EDGEX-111, EDGEX-110, EDGEX-107, EDGEX-106, EDGEX-105, EDGEX-101, EDGEX-94, EDGEX-86, EDGEX-85.
+- **Likely overlap:** EDGEX-23 (delete the stray prod compose file) and EDGEX-40 (PROD-WEDGE leftovers, includes "rename stray compose"). EDGEX-124 (worked around) and EDGEX-142 (root cause) are a deliberate pair, not duplicates.
 
 ## In progress
 | Ticket | Owner | Priority | What |
 |---|---|---|---|
-
+| EDGEX-85 | unassigned | high | DS v2 rollout 1: design tokens + basic components (Button, Badge, Table, segmented control, Sheet) |
+| EDGEX-86 | unassigned | high | DS v2 rollout 2: the shell (global): sidebar regroup, header strip, your menu with credits/plan, Phosphor icons |
+| EDGEX-94 | unassigned | high | DS v2: move every page's icons from lucide to Phosphor (one automated pass) |
+| EDGEX-116 | unassigned | high | Leads v2 phase 1: filter chips, unsaved-view bar, sort popover, view tabs |
+| EDGEX-117 | unassigned | high | Leads v2 phase 2: table chrome, column menu, inline columns popover, rows, bulk bar, summary footer |
+| EDGEX-125 | unassigned | high | Lead-assigned emails ignore the email sandbox: local and test runs mail real staff |
+| EDGEX-129 | unassigned | medium | Sidebar nav: Attio-grade background, type, spacing and count badges |
+| EDGEX-137 | unassigned | medium | Load Inter with next/font so the app font stops depending on each computer |
+| EDGEX-138 | unassigned | medium | Design tokens: move neutral greys to the cooler approved-mockup values, keep brand blue |
+| EDGEX-143 | unassigned | medium | Toasts v1: Attio-style notifications app-wide (top-right card, status icon, title + detail, close, timed by type) |
+| EDGEX-145 | unassigned | medium | Dialogs v1: Attio two-layer shell as the standard for all pop-up dialogs app-wide |
+| EDGEX-146 | unassigned | medium | Leads table resets to the unfiltered first page after any bulk action while the search box keeps its term |
+| EDGEX-148 | unassigned | medium | Leads v2 grid: Name column divider is 2px (double-drawn) + Attio scroll shadow on the sticky column |
+| EDGEX-149 | unassigned | medium | Leads: record preview panel, Attio-grade (layout + the right at-a-glance data; AI-ready) |
+| EDGEX-122 | unassigned | low | Leads first page (SSR) sorts by created_at but table default is Last activity |
+| EDGEX-124 | unassigned | low | Dev console: Radix popover id mismatch in UserMenu (hydration) shows "Issues" badge on every page |
+| EDGEX-126 | unassigned | low | Leads v2: table footer summaries (stage count, follow-up count) over all filtered leads |
+| EDGEX-127 | unassigned | low | Leads v2: bulk "Add tag" (bulk "Message" waits for EDGEX-132) |
 
 ## In review / on stage
 | Ticket | Owner | Priority | State | What |
 |---|---|---|---|---|
 | EDGEX-1 | Sadin | high | In Review | Plane workflow setup (repo side): CLAUDE.md section, project-pm skill, tracker, retire to-do docs (PR #658) |
 | EDGEX-15 | Hardik | high | In Review | Client fixes (Nov 3): assignee on stage moves, application files and course in Activity, fee box wording (PR #657) |
+| EDGEX-81 | Sadin | high | In Review | AI-native principles doc + AI touchpoint register (education consultancy first) (PR #663) |
+| EDGEX-82 | Sadin | high | In Review | Pulse: team activity report for owners/admins (numbers + signals, AI layer later) (PR #665) |
 | EDGEX-12 | Sadin | medium | In Review | Inbox send UX polish, deferred media copy, lead_id scope gap (PR #613) |
 | EDGEX-13 | Hardik | medium | On Stage | Applications gate follow-ups: allow fee 0, warning on Send to next, red required fields (PR #653) |
-| EDGEX-71 | Sadin | medium | In Review | Sync tasks/TRACKER.md from Plane (first generation after the backfill) (PR #661) |
 | EDGEX-33 | Sadin | medium | In Review | Reconcile STATUS-BOARD and FEATURE-ROADMAP with Plane, then trim them to pointers (PR #659) |
-| EDGEX-69 | none | medium | In Review | Sweep about 120 *-BRIEF.md files and .claude/RESUME.md for open to-dos, then archive or ticket them |
+| EDGEX-69 | unassigned | medium | In Review | Sweep about 120 *-BRIEF.md files and .claude/RESUME.md for open to-dos, then archive or ticket them (PR #660) |
+| EDGEX-71 | Sadin | medium | In Review | Sync tasks/TRACKER.md from Plane (first generation after the backfill) (PR #661) |
 | EDGEX-14 | Sadin | low | On Stage | CI: pin Supabase CLI to 2.122.1, rename [inbucket] to [local_smtp] (PR #654) |
 | EDGEX-16 | Hardik | low | In Review | Leads table falls back to custom_fields for name display (PR #417) |
 | EDGEX-17 | Hardik | low | In Review | WhatsApp pre-flight pass and Meta verification checklist (docs, PR #396) |
@@ -52,18 +73,20 @@ Full SOP: `~/Projects/zunkireelabs-org/SOPs/developer-workflow/README.md` §4. S
 ## Todo
 | Ticket | Owner | Priority | What |
 |---|---|---|---|
-| EDGEX-70 | Anish, Hardik | high | Join EdgeX: Anish and Hardik start working from Plane in the edgexcrm repo (project join) |
+| EDGEX-70 | Anish, Hardik | high | Join EdgeX: Anish and Hardik start working from Plane in the edgexcrm repo (project join, SOP part B) |
+| EDGEX-80 | Hardik | medium | Email notification to admins and owners when a new lead lands in the New Lead stage |
 
 ## Waiting on owner
 | Ticket | Owner | Priority | What |
 |---|---|---|---|
-| EDGEX-27 | Sadin | medium | DECIDE: Admizz "email campaigns from admizz.com" - keep in Brevo or move into EdgeX Outreach? |
+| EDGEX-27 | Sadin | medium | DECIDE: Admizz "email campaigns from admizz.com" — keep in Brevo or move into EdgeX Outreach? |
 | EDGEX-18 | Sadin | low | DECIDE: close or revive old PRs #91 (move/assign undo) and #33 (leads-organise pagination)? |
-| EDGEX-28 | Sadin | low | DECIDE: Insights "Admin Dashboard" funnel widget - stage-to-phase mapping and lean vs full spec |
+| EDGEX-28 | Sadin | low | DECIDE: Insights "Admin Dashboard" funnel widget — stage-to-phase mapping and lean vs full spec |
 | EDGEX-49 | Sadin | low | DECIDE: keep, drop or cherry-pick the CLAUDE.md "Developer Persona and System Guardrails" section |
 | EDGEX-50 | Sadin | low | DECIDE: are the ai-insight stubs (013_lead_insights, /api/v1/ai/chat) dormant or still on the roadmap? |
 | EDGEX-68 | Sadin | low | DECIDE: two branches with no PR, and stale branches from the backlog triage |
 | EDGEX-74 | Sadin | low | DECIDE: migrate the app tier to GCP Cloud Run (ADR-0001 Track B), or shelve it? |
+| EDGEX-100 | unassigned | low | DECIDE: rename the "Applications" lead stage? (clashes with the Students → Applications page) |
 
 ## Backlog
 | Ticket | Owner | Priority | What |
@@ -73,49 +96,93 @@ Full SOP: `~/Projects/zunkireelabs-org/SOPs/developer-workflow/README.md` §4. S
 | EDGEX-22 | Sadin | high | Remove OLD_SUPABASE_* from prod .env.local and rotate the old service-role key |
 | EDGEX-34 | Sadin | high | Set AI_TOOL_APPROVAL_SECRET on stage (overdue) plus AI_AGENTS_ENABLED and AI_MCP_ENABLED |
 | EDGEX-77 | Sadin | high | Stage DB still holds real customer PII: run the supervised scrub (script exists, never run) |
+| EDGEX-101 | unassigned | high | AI autonomy gate: tenant-isolation + counsellor-scoping test suites in CI (unblocks AI acting on its own) |
+| EDGEX-105 | unassigned | high | A4 Lifecycle: move visa-success students to Enrolled (one click, then automatic with Undo) |
+| EDGEX-106 | unassigned | high | A4 Growth: referral ask from enrolled students, with referral tracking |
+| EDGEX-107 | unassigned | high | A4 Growth: drop reasons + re-engage fixable drops before each intake |
+| EDGEX-110 | unassigned | high | AI providers: make Claude (Anthropic) a working choice next to OpenAI, switchable by the platform owner |
+| EDGEX-111 | unassigned | high | PostHog: product analytics on production so each tenant's AI knows how EdgeX is really used |
+| EDGEX-114 | unassigned | high | Date filters on the leads list and SMS audiences use UTC days, not the tenant's (Nepal off by 5¾ h) |
+| EDGEX-128 | unassigned | high | Gmail sends ignore EMAIL_TRANSPORT: a connected Gmail account can still send real mail in stub mode |
+| EDGEX-132 | unassigned | high | Agentic messaging step 2: one "send to lead" tool (WhatsApp, email, SMS behind one seam) with a human "Send now" |
+| EDGEX-133 | unassigned | high | Agentic messaging step 3: connect Admizz's WhatsApp on the official Cloud API (start under the unverified limit, verify in parallel) |
 | EDGEX-20 | Sadin | medium | Register a branded SMS sender ID with NTC/Ncell |
 | EDGEX-23 | Sadin | medium | Delete the stray dev docker-compose.yml on the prod box |
 | EDGEX-24 | Sadin | medium | CI never runs 22 integration tests (money and compliance paths self-skip) |
 | EDGEX-25 | Sadin | medium | Tell Admizz that Orca is live (owner-only for now; AI settings tab is a placeholder) |
 | EDGEX-26 | Anish | medium | Advanced filters: produce the Phase 3.5 facet-count verification before the prod flag flip |
-| EDGEX-31 | none | medium | Unified Inbox: prod promotion (Phase 3b near-instant inbound, then Messenger and Instagram) |
-| EDGEX-35 | none | medium | AI Phase 5 agent spine: stage PR and deferred live verifications |
-| EDGEX-40 | none | medium | PROD-WEDGE leftovers: memory sampler cron, capacity decision, rename stray compose |
-| EDGEX-42 | none | medium | Wire the events table to the webhook dispatcher (webhook delivery is broken) |
-| EDGEX-53 | none | medium | Insights RPCs ignore branch-manager team scope (P3) and proposals RPC skips self-restriction (P4) |
-| EDGEX-63 | Sadin | medium | Outreach real send Phase 2 (drip and auto-send) after email blast Phase 1; consent basis for Admizz leads |
-| EDGEX-66 | none | medium | daily_digest agent: pipeline_summary tool has never worked under agent auth |
-| EDGEX-73 | none | medium | Contacts list still loads every lead (getLeads limit 50000): server-side pagination |
-| EDGEX-76 | none | medium | Agent value measurement gate (AI Phase 6): stopped at check F1, gate tenant not scrubbed |
-| EDGEX-29 | none | low | Leads Column Manager ("Edit columns") on the /leads table |
-| EDGEX-30 | none | low | AI-native Knowledge Layer: Phase 1 StorageProvider seam, then ingestion and retrieval |
-| EDGEX-32 | none | low | Applicant Document Intelligence: phases 2-7 after Phase 1 (PR #530, merged 11 Sep) |
-| EDGEX-36 | none | low | Migrate 67 legacy authenticated routes to scopedClient(auth) |
-| EDGEX-37 | none | low | Lead Detail Associations Rail: branch built, awaiting review and smoke test |
-| EDGEX-38 | none | low | Domain migration lead-crm to edgex.zunkireelabs.com: resume EDGEX-DRAIN, then Phase 3 |
-| EDGEX-39 | none | low | IT-agency surface pass (paused): dashboard, leads, team, time-tracking, settings, projects views |
-| EDGEX-41 | none | low | deriveHomeTip snaps day boundaries in the server timezone |
-| EDGEX-43 | none | low | Build per-industry AI agent prompts and tools (education-consultancy first) |
-| EDGEX-44 | none | low | Time Tracking smoke gaps: bulk approve/reject, member view, Admizz 404, CSV, race test |
-| EDGEX-45 | none | low | Promote the lead tags UI to _shared when a second industry wants tags |
-| EDGEX-46 | none | low | DELETE /api/v1/email/inboxes/[id] should check email_forward_rules FK references first |
-| EDGEX-47 | none | low | Serialize stage and main deploys with a shared concurrency group (optional) |
-| EDGEX-48 | none | low | Low-severity code-review findings: icon-name typing, tenant_id override warning, registry telemetry |
-| EDGEX-51 | none | low | EmailSenderCard (Settings, Communications) has no admin gate |
-| EDGEX-52 | none | low | Dashboards "Business OS" Phase 5: data-gap backlog G1 to G10 |
-| EDGEX-54 | none | low | Positions/RBAC-driven delivery permissions (configurable middle tier) |
-| EDGEX-55 | none | low | IT-agency: service catalog / packages and proposal / SOW generator |
-| EDGEX-56 | none | low | IT-agency Delivery Tier 4 remainder: risk register / RAID and other methodology depth |
-| EDGEX-57 | none | low | Travel-agency roadmap: package templates, margin tracking, bookings, repeat and referral, channels |
-| EDGEX-58 | none | low | Education: Class Bookings (Test Prep deal track) |
-| EDGEX-59 | none | low | Spreadsheet-to-CRM importer for Admizz's three workbooks (about 3,000 rows) |
-| EDGEX-60 | none | low | Education follow-ups: processing fee and consent in prospect context, list access in Positions, segments, lead_type to list_id |
-| EDGEX-61 | none | low | Lead Lists (lifecycle segmentation): confirm Phase 1 state, then Phase 2 and later |
-| EDGEX-62 | none | low | Email Automation Phase 1.2: automation_email_log and timeline mirror (parked) |
-| EDGEX-64 | none | low | Email Sequencing (Outreach): confirm Stage 1 state, then Stage 2 cockpit and lead-detail tab |
-| EDGEX-65 | none | low | Lead Triage AI score: middle bands are noisy (email-only leads scored 21 and 81) |
-| EDGEX-67 | none | low | AI agent writes: create_task cannot be undone, and suppressed-field strip is not enforced at execution |
-| EDGEX-72 | none | low | Advanced filters: remaining phases 2b, 4, 6-9 after the Phase 3.5 gate |
-| EDGEX-75 | none | low | Bring back the classic multi-pipeline board (dual-view /pipeline) |
+| EDGEX-31 | unassigned | medium | Unified Inbox: prod promotion (Phase 3b near-instant inbound, then Messenger and Instagram) |
+| EDGEX-35 | unassigned | medium | AI Phase 5 agent spine: stage PR and deferred live verifications |
+| EDGEX-40 | unassigned | medium | PROD-WEDGE leftovers: memory sampler cron, capacity decision, rename stray compose |
+| EDGEX-42 | unassigned | medium | Wire the events table to the webhook dispatcher (webhook delivery is broken) |
+| EDGEX-53 | unassigned | medium | Insights RPCs ignore branch-manager team scope (P3) and proposals RPC skips self-restriction (P4) |
+| EDGEX-63 | Sadin | medium | Outreach real send Phase 2 (drip and auto-send) after email blast Phase 1; DECIDE consent basis for Admizz leads |
+| EDGEX-66 | unassigned | medium | daily_digest agent: pipeline_summary tool has never worked under agent auth |
+| EDGEX-73 | unassigned | medium | Contacts list still loads every lead (getLeads limit 50000): server-side pagination |
+| EDGEX-76 | unassigned | medium | Agent value measurement gate (AI Phase 6): stopped at check F1, gate tenant not scrubbed |
+| EDGEX-83 | unassigned | medium | Pulse AI layer: briefing, inline AI notes, note quality, ask-a-follow-up (after EDGEX-82) |
+| EDGEX-88 | unassigned | medium | DS v2 rollout 3b: Leads list to Design System v2 (education) |
+| EDGEX-89 | unassigned | medium | DS v2 rollout 3c: Lead detail to Design System v2 (education) |
+| EDGEX-90 | unassigned | medium | DS v2 rollout 3d: Applications to Design System v2 (education) |
+| EDGEX-91 | unassigned | medium | DS v2 cleanup: make look="v2" the default and delete the legacy look |
+| EDGEX-95 | unassigned | medium | Quick action: "Search & create" in the ⌘K palette (new lead / task / application / note) |
+| EDGEX-96 | unassigned | medium | My tasks page for education (sidebar "My tasks" under Home/Inbox) |
+| EDGEX-97 | unassigned | medium | Your menu: My profile + Change password (replace the "Soon" rows) |
+| EDGEX-98 | unassigned | medium | Plans + AI credit allowance: real AI %, Top up, Upgrade, Billing & invoices (fills the Preview parts of the menu) |
+| EDGEX-103 | unassigned | medium | Book a timed office visit / meeting from Home's call log (shows in "Today") |
+| EDGEX-104 | unassigned | medium | Send one SMS to one lead (from the lead and from Home's "3 calls unanswered" row), with an Orca-drafted text |
+| EDGEX-108 | unassigned | medium | A4 Offboarding: hand over live leads when a team member is removed |
+| EDGEX-112 | unassigned | medium | Settings modal is unusable at phone width (nav squeezes the content to one word per line) |
+| EDGEX-113 | unassigned | medium | Forms: refuse an enquiry with no way to contact the person (no name, phone or email) |
+| EDGEX-118 | unassigned | medium | Leads v2 phase 3: Orca next-step column and data-fix flags (needs real backing) |
+| EDGEX-119 | unassigned | medium | Shared ("Save for everyone") leads views: add visibility + RLS migration, then wire the button |
+| EDGEX-120 | unassigned | medium | Leads v2: multi-level sort (API comma-separated sort/order + client sort state) |
+| EDGEX-121 | unassigned | medium | Leads v2: add "Needs follow-up" view tab once EDGEX-87 defines quiet leads |
+| EDGEX-130 | unassigned | medium | Admizz knowledge base: load partner-university and visa documents so Call prep can quote them |
+| EDGEX-134 | unassigned | medium | Agentic messaging step 4: agents send after approval (follow-up agent drafts, a manager approves in one go, Orca sends) |
+| EDGEX-135 | unassigned | medium | Agentic messaging step 5: agents send on their own inside Process rules, with a "sending in 5 min, Undo" window (needs EDGEX-101) |
+| EDGEX-139 | unassigned | medium | Open Ask Orca to counsellors and branch managers (role-scoped tools first), then show Home's Ask box to them |
+| EDGEX-140 | unassigned | medium | Home: "Close N leads that said no" instead of checking in again |
+| EDGEX-141 | unassigned | medium | Applications board: Attio-grade kanban (columns, cards, empty state, column footers) |
+| EDGEX-147 | unassigned | medium | Leads: remove a tag from a lead (no UI path today) |
+| EDGEX-150 | unassigned | medium | Searchable dropdowns app-wide (migrate remaining Radix Selects to SearchableSelect) |
+| EDGEX-29 | unassigned | low | Leads Column Manager ("Edit columns") on the /leads table |
+| EDGEX-30 | unassigned | low | AI-native Knowledge Layer: Phase 1 StorageProvider seam, then ingestion and retrieval |
+| EDGEX-32 | unassigned | low | Applicant Document Intelligence: phases 2–7 after Phase 1 (PR #530, merged 11 Sep) |
+| EDGEX-36 | unassigned | low | Migrate 67 legacy authenticated routes to scopedClient(auth) |
+| EDGEX-37 | unassigned | low | Lead Detail Associations Rail: branch built, awaiting review and smoke test |
+| EDGEX-38 | unassigned | low | Domain migration lead-crm to edgex.zunkireelabs.com: resume EDGEX-DRAIN, then Phase 3 |
+| EDGEX-39 | unassigned | low | IT-agency surface pass (paused): dashboard, leads, team, time-tracking, settings, projects views |
+| EDGEX-41 | unassigned | low | deriveHomeTip snaps day boundaries in the server timezone |
+| EDGEX-43 | unassigned | low | Build per-industry AI agent prompts and tools (education-consultancy first) |
+| EDGEX-44 | unassigned | low | Time Tracking smoke gaps: bulk approve/reject, member view, Admizz 404, CSV, race test |
+| EDGEX-45 | unassigned | low | Promote the lead tags UI to _shared when a second industry wants tags |
+| EDGEX-46 | unassigned | low | DELETE /api/v1/email/inboxes/[id] should check email_forward_rules FK references first |
+| EDGEX-47 | unassigned | low | Serialize stage and main deploys with a shared concurrency group (optional) |
+| EDGEX-48 | unassigned | low | Low-severity code-review findings: icon-name typing, tenant_id override warning, registry telemetry |
+| EDGEX-51 | unassigned | low | EmailSenderCard (Settings, Communications) has no admin gate |
+| EDGEX-52 | unassigned | low | Dashboards "Business OS" Phase 5: data-gap backlog G1 to G10 |
+| EDGEX-54 | unassigned | low | Positions/RBAC-driven delivery permissions (configurable middle tier) |
+| EDGEX-55 | unassigned | low | IT-agency: service catalog / packages and proposal / SOW generator |
+| EDGEX-56 | unassigned | low | IT-agency Delivery Tier 4 remainder: risk register / RAID and other methodology depth |
+| EDGEX-57 | unassigned | low | Travel-agency roadmap: package templates, margin tracking, bookings, repeat and referral, channels |
+| EDGEX-58 | unassigned | low | Education: Class Bookings (Test Prep deal track) |
+| EDGEX-59 | unassigned | low | Spreadsheet-to-CRM importer for Admizz's three workbooks (about 3,000 rows) |
+| EDGEX-60 | unassigned | low | Education follow-ups: processing fee and consent in prospect context, list access in Positions, segments, lead_type to list_id |
+| EDGEX-61 | unassigned | low | Lead Lists (lifecycle segmentation): confirm Phase 1 state, then Phase 2 and later |
+| EDGEX-62 | unassigned | low | Email Automation Phase 1.2: automation_email_log and timeline mirror (parked) |
+| EDGEX-64 | unassigned | low | Email Sequencing (Outreach): confirm Stage 1 state, then Stage 2 cockpit and lead-detail tab |
+| EDGEX-65 | unassigned | low | Lead Triage AI score: middle bands are noisy (email-only leads scored 21 and 81) |
+| EDGEX-67 | unassigned | low | AI agent writes: create_task cannot be undone, and suppressed-field strip is not enforced at execution |
+| EDGEX-72 | unassigned | low | Advanced filters: remaining phases 2b, 4, 6–9 after the Phase 3.5 gate |
+| EDGEX-75 | unassigned | low | Bring back the classic multi-pipeline board (dual-view /pipeline) |
 | EDGEX-78 | Sadin | low | Confirm the Google OAuth app verification status (Orca Auth: gmail.readonly + gmail.send) |
-| EDGEX-79 | none | low | Email BCC dropbox (slice A): stage smoke-row cleanup and confirm the prod promotion / T4 |
+| EDGEX-79 | unassigned | low | Email BCC dropbox (slice A): stage smoke-row cleanup and confirm the prod promotion / T4 |
+| EDGEX-92 | unassigned | low | DS v2: align the AI sparkle icon and older AI surfaces to the --ds-ai-* tokens |
+| EDGEX-93 | unassigned | low | DS v2: dark-mode values for the ds- tokens (when dark mode becomes reachable) |
+| EDGEX-99 | unassigned | low | Remove the non-education industries (code + tenants) after their data is migrated |
+| EDGEX-102 | unassigned | low | Application stages: let owners mark which stage means "submitted" (settings UI for is_submit_stage) |
+| EDGEX-123 | unassigned | low | Test suite writes fake emails onto real Admizz leads in the local copy |
+| EDGEX-136 | unassigned | low | Agentic messaging step 6: sequences, outreach and campaigns become agent-run (goal + audience + rules; the agent picks channel, timing and words) |
+| EDGEX-142 | unassigned | low | Find the real cause of the React useId mismatch in the dashboard header (UserMenu worked around in EDGEX-124) |
+| EDGEX-144 | unassigned | low | Leads v2 footer: "median age" summary (needs a DB aggregate via migration PR) and Attio-style "Add summary" per-column calculations |
