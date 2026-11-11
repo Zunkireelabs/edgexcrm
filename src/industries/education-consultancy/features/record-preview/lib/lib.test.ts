@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { flattenReadiness, readyCard } from "./readiness";
+import { flattenReadiness, readyCard, missingSub } from "./readiness";
 import { pickIntake, formatIntake, pickTestScore, studyPlanCard } from "./study-plan";
 import { dueLabel, pickNextTask, daysInStage, lastTouchCard, activityTime } from "./labels";
 import { navState } from "./nav";
@@ -16,11 +16,11 @@ describe("flattenReadiness", () => {
 });
 
 describe("readyCard", () => {
-  it("not ready: count + first two + more", () => {
-    expect(readyCard({ ready: false, items: ["A", "B", "C", "D", "E"], consentSignedAt: null, hasActiveConsentTemplate: true, feeStatus: null }))
-      .toEqual({ tone: "warn", value: "5 missing", sub: "A · B · +3 more" });
+  it("not ready: count + as many items as fit the budget", () => {
+    expect(readyCard({ ready: false, items: ["Pre-app fee", "Phone", "Degree level", "Field of study", "Passport"], consentSignedAt: null, hasActiveConsentTemplate: true, feeStatus: null }))
+      .toEqual({ tone: "warn", value: "5 missing", sub: "Pre-app fee · Phone · +3 more" });
     expect(readyCard({ ready: false, items: ["Passport number", "Signed consent"], consentSignedAt: null, hasActiveConsentTemplate: true, feeStatus: null }).sub)
-      .toBe("Passport number · Signed consent");
+      .toBe("Passport number · +1 more");
   });
   it("ready: consent + fee, consent dropped without a template", () => {
     expect(readyCard({ ready: true, items: [], consentSignedAt: "2026-11-03T10:00:00", hasActiveConsentTemplate: true, feeStatus: "paid" }).sub)
@@ -121,5 +121,19 @@ describe("navState (J/K, cross-page)", () => {
     expect(navState({ rowIndex: 0, rowCount: 25, page: 1, pageSize: 25, total: 444 })).toMatchObject({ hasPrev: false, prev: null });
     const last = navState({ rowIndex: 18, rowCount: 19, page: 18, pageSize: 25, total: 444 });
     expect(last).toMatchObject({ position: 444, hasNext: false, next: null });
+  });
+});
+
+describe("missingSub", () => {
+  it("keeps as many items as fit in 30 chars including +N more", () => {
+    expect(missingSub(["Pre-app fee", "Phone", "Degree level", "Field of study"])).toBe("Pre-app fee · Phone · +2 more");
+    expect(missingSub(["Pre-app fee", "Field of study", "Degree level"])).toBe("Pre-app fee · +2 more");
+  });
+  it("shows everything when it all fits, and a single long item as-is", () => {
+    expect(missingSub(["Phone", "Passport"])).toBe("Phone · Passport");
+    expect(missingSub(["A very long single missing item name here"])).toBe("A very long single missing item name here");
+  });
+  it("always shows at least one item", () => {
+    expect(missingSub(["A very long single missing item name here", "B"])).toBe("A very long single missing item name here · +1 more");
   });
 });

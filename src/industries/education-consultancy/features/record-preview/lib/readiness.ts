@@ -42,6 +42,19 @@ export function shortDate(iso: string): string {
   return `${d.getDate()} ${d.toLocaleString("en-GB", { month: "short" })}`;
 }
 
+/** Max characters for the missing-items sub-line, so "+N more" is never ellipsized by the card. */
+export const READY_SUB_BUDGET = 30;
+
+/** Largest prefix of items whose whole string (incl. " · +N more") fits the budget; always at least 1 item. */
+export function missingSub(items: readonly string[], budget = READY_SUB_BUDGET): string {
+  const n = items.length;
+  for (let k = n; k >= 1; k--) {
+    const text = items.slice(0, k).join(" · ") + (k < n ? ` · +${n - k} more` : "");
+    if (text.length <= budget) return text;
+  }
+  return n === 0 ? "" : items.length === 1 ? items[0] : `${items[0]} · +${n - 1} more`;
+}
+
 export function readyCard(input: {
   ready: boolean;
   items: readonly string[];
@@ -50,13 +63,7 @@ export function readyCard(input: {
   feeStatus: string | null;
 }): ReadyCard {
   if (!input.ready) {
-    const first = input.items.slice(0, 2).join(" · ");
-    const more = input.items.length - 2;
-    return {
-      tone: "warn",
-      value: `${input.items.length} missing`,
-      sub: more > 0 ? `${first} · +${more} more` : first,
-    };
+    return { tone: "warn", value: `${input.items.length} missing`, sub: missingSub(input.items) };
   }
   const parts: string[] = [];
   if (input.hasActiveConsentTemplate && input.consentSignedAt) parts.push(`Consent signed ${shortDate(input.consentSignedAt)}`);
