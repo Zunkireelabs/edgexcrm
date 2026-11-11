@@ -198,7 +198,7 @@ export function RecordPreview(props: RecordPreviewProps) {
 
   const TAB = "relative flex h-7 shrink-0 items-center gap-1.5 rounded-[8px] px-2 py-1 text-[14px] font-medium leading-5 shadow-[inset_0_0_0_1px_transparent] transition-[box-shadow,background-color] duration-[140ms] [&_svg]:size-4";
   const TAB_IDLE = "text-black/[.63] hover:text-[#101112] hover:shadow-[inset_0_0_0_1px_#eeeff1]";
-  const TAB_ON = "bg-[#fbfbfb] text-[#101112] shadow-[inset_0_0_0_1px_#eeeff1] after:absolute after:inset-x-0 after:-bottom-[9px] after:h-px after:bg-[#101112]";
+  const TAB_ON = "bg-[#fbfbfb] text-[#101112] shadow-[inset_0_0_0_1px_#eeeff1] after:absolute after:inset-x-0 after:-bottom-[8px] max-[430px]:after:-bottom-[7px] after:h-px after:bg-[#101112]";
   const tabBtn = (t: Tab, label: string, icon: React.ReactNode, count?: React.ReactNode) => (
     <button type="button" key={t} onClick={() => setTab(t)} className={cn(TAB, tab === t ? TAB_ON : TAB_IDLE)}>
       {icon}
@@ -257,9 +257,9 @@ export function RecordPreview(props: RecordPreviewProps) {
       </div>
 
       {/* Tabs (40px) */}
-      <nav className="flex h-11 flex-none items-center gap-1 overflow-x-auto border-b border-[#e8e9eb] px-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <nav className="flex h-11 flex-none items-start gap-1 border-b border-[#e8e9eb] px-3 pt-2 max-[430px]:overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {tabBtn("overview", "Overview", <SquaresFourIcon />)}
-        <span aria-hidden className="mx-2 h-4 w-px shrink-0 bg-[#eeeff1]" />
+        <span aria-hidden className="mx-2 mt-1.5 h-4 w-px shrink-0 bg-[#eeeff1]" />
         {tabBtn("activity", "Activity", <PulseIcon />)}
         {tabBtn("tasks", "Tasks", <CheckSquareIcon />, openCount ?? "–")}
         {tabBtn("notes", "Notes", <NoteIcon />, data ? data.notes.count : "–")}

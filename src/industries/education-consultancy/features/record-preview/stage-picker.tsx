@@ -32,6 +32,15 @@ export function StagePicker({
   children: ReactNode;
 }) {
   const [query, setQuery] = useState("");
+  // cmdk highlight: starts on the lead's CURRENT stage (the one with the check), not the first row.
+  const currentKey = currentListId && currentStageId ? `${currentListId}:${currentStageId}` : "";
+  const [highlight, setHighlight] = useState(currentKey);
+  // Re-point at the current stage each time it opens (state adjusted during render, not in an effect).
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) setHighlight(currentKey);
+  }
   const groups = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return [...lists]
@@ -51,11 +60,11 @@ export function StagePicker({
       <PopoverAnchor asChild>{children}</PopoverAnchor>
       <PopoverContent
         align="start"
-        sideOffset={4}
+        sideOffset={10}
         className="w-[280px] overflow-hidden p-0 outline-none ring-0"
         onCloseAutoFocus={(e) => e.preventDefault()}
       >
-        <Command shouldFilter={false} className="bg-transparent outline-none focus-visible:ring-0">
+        <Command shouldFilter={false} value={highlight} onValueChange={setHighlight} className="bg-transparent outline-none focus-visible:ring-0">
           <CommandInput value={query} onValueChange={setQuery} placeholder="Search stages…" aria-label="Search stages…" />
           <CommandList role="listbox" className="max-h-[260px] p-1">
             {groups.length === 0 ? (
