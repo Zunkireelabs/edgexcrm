@@ -18,7 +18,7 @@ describe("flattenReadiness", () => {
 describe("readyCard", () => {
   it("not ready: count + as many items as fit the budget", () => {
     expect(readyCard({ ready: false, items: ["Pre-app fee", "Phone", "Degree level", "Field of study", "Passport"], consentSignedAt: null, hasActiveConsentTemplate: true, feeStatus: null }))
-      .toEqual({ tone: "warn", value: "5 missing", sub: "Pre-app fee · Phone · +3 more" });
+      .toEqual({ tone: "warn", value: "5 missing", sub: "Pre-app fee · Phone · +3 more", subTitle: "Pre-app fee · Phone · Degree level · Field of study · Passport" });
     expect(readyCard({ ready: false, items: ["Passport number", "Signed consent"], consentSignedAt: null, hasActiveConsentTemplate: true, feeStatus: null }).sub)
       .toBe("Passport number · +1 more");
   });
