@@ -32,6 +32,8 @@ export interface ReadyCard {
   tone: "warn" | "good";
   value: string;
   sub: string;
+  /** Full, untruncated list (tooltip) when items are missing. */
+  subTitle?: string;
 }
 
 const FEE_WORD: Record<string, string> = { paid: "paid", waiver: "waived", claimed: "claimed" };
@@ -63,7 +65,7 @@ export function readyCard(input: {
   feeStatus: string | null;
 }): ReadyCard {
   if (!input.ready) {
-    return { tone: "warn", value: `${input.items.length} missing`, sub: missingSub(input.items) };
+    return { tone: "warn", value: `${input.items.length} missing`, sub: missingSub(input.items), subTitle: input.items.join(" · ") };
   }
   const parts: string[] = [];
   if (input.hasActiveConsentTemplate && input.consentSignedAt) parts.push(`Consent signed ${shortDate(input.consentSignedAt)}`);

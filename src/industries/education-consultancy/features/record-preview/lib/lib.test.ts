@@ -129,6 +129,12 @@ describe("missingSub", () => {
     expect(missingSub(["Pre-app fee", "Phone", "Degree level", "Field of study"])).toBe("Pre-app fee · Phone · +2 more");
     expect(missingSub(["Pre-app fee", "Field of study", "Degree level"])).toBe("Pre-app fee · +2 more");
   });
+  it("readyCard exposes the full list as subTitle", () => {
+    const items = ["Pre-app fee", "Field of study", "Degree level"];
+    const c = readyCard({ ready: false, items, consentSignedAt: null, hasActiveConsentTemplate: true, feeStatus: null });
+    expect(c.sub).toBe("Pre-app fee · +2 more");
+    expect(c.subTitle).toBe("Pre-app fee · Field of study · Degree level");
+  });
   it("shows everything when it all fits, and a single long item as-is", () => {
     expect(missingSub(["Phone", "Passport"])).toBe("Phone · Passport");
     expect(missingSub(["A very long single missing item name here"])).toBe("A very long single missing item name here");

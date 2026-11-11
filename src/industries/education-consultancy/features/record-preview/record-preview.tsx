@@ -333,6 +333,7 @@ export function RecordPreview(props: RecordPreviewProps) {
                   label="Ready to apply" icon={<ShieldCheckIcon />} tone={ready.tone === "good" ? "good" : "warn"}
                   value={ready.tone === "good" ? <><CheckIcon className="size-[14px]" /><ValueText>{ready.value}</ValueText></> : <ValueText>{ready.value}</ValueText>}
                   sub={ready.sub}
+                  subTitle={ready.subTitle}
                 />
               ) : (
                 <HighlightCard label="Ready to apply" icon={<ShieldCheckIcon />} loadingValue={70} loadingSub={130} />
