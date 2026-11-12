@@ -7,7 +7,10 @@ import { CaretDownIcon, CaretUpIcon, CircleNotchIcon, PencilSimpleIcon, ArrowLef
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useLeadBackDestination } from "@/hooks/use-lead-back-destination";
 import { getLeadFullName } from "@/components/dashboard/lead/lead-name";
-import { LeadTabs, type LeadTabsRef } from "@/components/dashboard/lead/lead-tabs";
+import { PersonalDetailsDialog } from "@/industries/education-consultancy/features/student-record/components/personal-details-dialog";
+import { getFeatureAccess } from "@/industries/_loader";
+import { FEATURES } from "@/industries/_registry";
+import { resolveThresholds } from "@/industries/education-consultancy/features/team-performance/lib/thresholds";
 import { ManagementPanel } from "@/components/dashboard/lead/management-panel";
 import { ApplicationsCard } from "@/industries/education-consultancy/features/application-tracking/components/applications-card";
 import { ConsentCard } from "@/industries/education-consultancy/features/application-tracking/components/consent-card";
@@ -23,6 +26,7 @@ import type { LeadSubmissionSnapshot } from "@/lib/leads/submission-history";
 import { NavButton } from "../record-preview/record-preview";
 import { shouldHandleNavKey } from "../record-preview/lib/nav";
 import { LeftColumn, MoreMenu } from "./left-column";
+import { MiddleColumn, type MiddleColumnHandle } from "./middle-column";
 import { useLeadActions, type Assignee, type Person } from "./use-lead-actions";
 import { fetchAdjacentLeadId, readLeadNav, resolveLeadNav, writeLeadNav, type LeadNavContext } from "./lib/lead-nav";
 
@@ -66,6 +70,10 @@ export interface LeadDetailEduProps {
   consentEnabled?: boolean;
   consentSigned?: boolean;
   projectBoardEnabled?: boolean;
+  /** AI_ASSISTANT_ENABLED env flag AND tenants.ai_enabled (computed by the page shell). Hides the Orca brief when false. */
+  aiEnabled?: boolean;
+  /** Follow-up staleness for the Last touch highlight; defaults to the tenant-config default. */
+  followUpStaleDays?: number;
 }
 
 /**
@@ -80,14 +88,24 @@ export function LeadDetailEdu(props: LeadDetailEduProps) {
     nextPositionMembers = [], revertTargetUserId = null, revertTargetName = null, revertTargetMembers = [], canMoveWithoutChain = false,
     stageAssigneeMap = {}, canManageApplications, canManageApplicationPanel, canEnroll, leadLists = [], activeLeadLists = [],
     classesActive, applicationsActive, checkInActive, documentsActive, consentEnabled = false, consentSigned = false, projectBoardEnabled,
+    aiEnabled = false, followUpStaleDays = resolveThresholds(null).followUpStaleDays,
   } = props;
   const router = useRouter();
   const searchParams = useSearchParams();
   const backDestination = useLeadBackDestination();
-  const tabsRef = useRef<LeadTabsRef>(null);
+  const middleRef = useRef<MiddleColumnHandle>(null);
   const mainRef = useRef<{ enabled: boolean; run: () => void } | null>(null);
 
-  const openStudentDetails = useCallback((missing?: string[]) => { tabsRef.current?.openStudentDetails(missing); }, []);
+  // Student Details pop-up (edit mode). Hosted here since the tab row no longer owns it.
+  const studentRecordActive = getFeatureAccess(tenant.industry_id, FEATURES.STUDENT_RECORD);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [missingBeforeApplications, setMissingBeforeApplications] = useState<string[]>([]);
+  const openStudentDetails = useCallback((missing?: string[]) => {
+    if (!studentRecordActive) return false;
+    setMissingBeforeApplications(missing ?? []);
+    setDetailsOpen(true);
+    return true;
+  }, [studentRecordActive]);
   const actions = useLeadActions({
     lead: props.lead, userId, leadLists, activeLeadLists, bypassQualification, nextPositionMembers, revertTargetUserId, revertTargetName,
     revertTargetMembers, stageAssigneeMap, openStudentDetails,
@@ -96,8 +114,6 @@ export function LeadDetailEdu(props: LeadDetailEduProps) {
 
   const [notes, setNotes] = useState(initialNotes);
   const [checklists, setChecklists] = useState(initialChecklists);
-  const [customFields, setCustomFields] = useState<Record<string, unknown>>(props.lead.custom_fields || {});
-  const [activeTab, setActiveTab] = useState("activity");
   const [consentSignedState, setConsentSignedState] = useState(consentSigned);
   useEffect(() => { setConsentSignedState(consentSigned); }, [consentSigned]);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -134,7 +150,7 @@ export function LeadDetailEdu(props: LeadDetailEduProps) {
   // ?edit=1 (the table's old "Edit" link) opens the Student Details pop-up, then drops the param.
   useEffect(() => {
     if (searchParams.get("edit") !== "1") return;
-    const t = setTimeout(() => tabsRef.current?.openStudentDetails(), 0);
+    const t = setTimeout(() => openStudentDetails(), 0);
     const url = new URL(window.location.href);
     url.searchParams.delete("edit");
     router.replace(url.pathname + url.search);
@@ -165,8 +181,8 @@ export function LeadDetailEdu(props: LeadDetailEduProps) {
     router.push(`/leads/${adj.id}`);
   }, [nav, navCtx, router]);
 
-  const goNote = useCallback(() => { setActiveTab("activity"); setTimeout(() => tabsRef.current?.focusComposer(), 100); }, []);
-  const goTask = useCallback(() => { setActiveTab("activity"); setTimeout(() => tabsRef.current?.focusTaskComposer(), 100); }, []);
+  const goNote = useCallback(() => { middleRef.current?.goNote(); }, []);
+  const goTask = useCallback(() => { middleRef.current?.goTask(); }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -250,15 +266,17 @@ export function LeadDetailEdu(props: LeadDetailEduProps) {
           />
         </aside>
 
-        {/* Middle: today's tabs, in the new frame */}
-        <main id="lead-tabpanel" tabIndex={-1} className="min-w-0 flex-1 overflow-y-auto px-4 pb-6 pt-4 outline-none max-[767px]:overflow-visible">
-          <LeadTabs
-            ref={tabsRef} lead={lead} notes={notes} activities={activities} teamMemberEmails={teamMemberEmails} teamMemberNames={teamMemberNames}
-            customFields={customFields} activeTab={activeTab} onTabChange={setActiveTab} onNotesChange={setNotes} onCustomFieldsChange={setCustomFields}
-            checklists={checklists} onChecklistsChange={setChecklists} isAdmin={isAdmin} canEdit={canEdit} canManageNotes={canManageNotes}
-            currentUserId={userId} industryId={tenant.industry_id} tenantName={tenant.name} tenantLogoUrl={tenant.logo_url}
-            projectBoardEnabled={projectBoardEnabled} submissionHistory={submissionHistory}
-            onLeadUpdate={(patch) => actions.setCurrentLead((prev) => ({ ...prev, ...patch } as Lead))}
+        {/* Middle: one tab row + the active panel (EDGEX-153) */}
+        <main className="flex min-w-0 flex-1 flex-col overflow-hidden max-[767px]:overflow-visible">
+          <MiddleColumn
+            ref={middleRef} lead={lead} notes={notes} onNotesChange={setNotes} checklists={checklists} onChecklistsChange={setChecklists} audits={activities}
+            stages={stages} leadLists={leadLists} tenantId={tenant.id} currentUserId={userId} memberNames={memberNames}
+            teamMemberNames={teamMemberNames} teamMemberEmails={teamMemberEmails} isAdmin={isAdmin} canEdit={canEdit} canManageNotes={canManageNotes}
+            aiEnabled={aiEnabled} followUpStaleDays={followUpStaleDays} projectBoardEnabled={projectBoardEnabled}
+            applicationsActive={applicationsActive} classesActive={classesActive} checkInActive={checkInActive} documentsActive={documentsActive}
+            consentEnabled={consentEnabled} consentSigned={consentSignedState} onConsentSignedChange={setConsentSignedState}
+            canManageApplications={canManageApplications} canManageApplicationPanel={canManageApplicationPanel} canEnroll={canEnroll}
+            onOpenStudentDetails={() => { openStudentDetails(); }} onMerged={() => router.refresh()}
           />
         </main>
 
@@ -285,13 +303,24 @@ export function LeadDetailEdu(props: LeadDetailEduProps) {
             {classesActive && <ClassesCard leadId={lead.id} canManage={canEnroll ?? isAdmin} />}
             {checkInActive && <CheckInHistoryCard leadId={lead.id} teamMemberNames={teamMemberNames} teamMemberEmails={teamMemberEmails} />}
             {documentsActive && (
-              <ApplicantDocumentsCard leadId={lead.id} canManage={canEdit} currentUserId={userId} isAdmin={isAdmin} variant="summary" onViewAll={() => tabsRef.current?.openDocuments()} />
+              <ApplicantDocumentsCard leadId={lead.id} canManage={canEdit} currentUserId={userId} isAdmin={isAdmin} variant="summary" onViewAll={() => middleRef.current?.openTab("documents")} />
             )}
           </div>
         </aside>
       </div>
 
       {actions.dialogs}
+
+      {studentRecordActive && (
+        <PersonalDetailsDialog
+          lead={lead} open={detailsOpen}
+          onOpenChange={(next) => { setDetailsOpen(next); if (!next) setMissingBeforeApplications([]); }}
+          submissionHistory={submissionHistory}
+          onLeadUpdate={(patch) => actions.setCurrentLead((prev) => ({ ...prev, ...patch } as Lead))}
+          canUploadDocuments={getFeatureAccess(tenant.industry_id, FEATURES.APPLICANT_DOCUMENTS) && canEdit}
+          openInEditMode isAdmin={isAdmin} missingBeforeApplications={missingBeforeApplications}
+        />
+      )}
 
       <AlertDialog open={deleteOpen} onOpenChange={(o) => { if (!deleting) setDeleteOpen(o); }}>
         <AlertDialogContent>

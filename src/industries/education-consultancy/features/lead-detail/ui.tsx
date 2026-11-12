@@ -63,3 +63,33 @@ export function Pill({ children, onRemove, removeLabel, avatar }: { children: Re
     </span>
   );
 }
+
+/** Attio-style empty state: icon, title, one line, one primary button. */
+export function EmptyState({ icon, title, line, cta, onCta }: { icon: ReactNode; title: string; line: string; cta?: string; onCta?: () => void }) {
+  return (
+    <div className="mt-3 flex flex-col items-center rounded-[12px] px-6 py-10 text-center shadow-[inset_0_0_0_1px_#eeeff1]">
+      <span aria-hidden className="mb-3 inline-flex size-10 items-center justify-center rounded-full bg-[#f6f7f9] text-[#6b6f76] [&_svg]:size-5">{icon}</span>
+      <h3 className="m-0 text-[14px] font-medium leading-5 text-[#101112]">{title}</h3>
+      <p className="m-0 mt-1 max-w-[320px] text-[13px] font-normal leading-[18px] text-black/50">{line}</p>
+      {cta && onCta && (
+        <button type="button" onClick={onCta} className="mt-4 inline-flex h-7 items-center rounded-[8px] bg-[#101112] px-3 text-[14px] font-medium leading-5 text-white outline-none hover:bg-[#2b2d2f] focus-visible:ring-2 focus-visible:ring-[#266df0]/50">{cta}</button>
+      )}
+    </div>
+  );
+}
+
+/** Section / box language for the tabs that reuse today's card bodies: a 14/20/500 .63 header over a radius-12 box. */
+export function TabSection({ title, right, children }: { title: string; right?: ReactNode; children: ReactNode }) {
+  return (
+    <section className="mt-3">
+      <div className="flex h-9 items-center px-1">
+        <h3 className="m-0 text-[14px] font-medium leading-5 text-black/[.63]">{title}</h3>
+        <span className="ml-auto">{right}</span>
+      </div>
+      <div className="rounded-[12px] p-3 shadow-[inset_0_0_0_1px_#eeeff1]">{children}</div>
+    </section>
+  );
+}
+
+/** Wrap today's card bodies (Consent, Applications, Classes, Check-ins, Documents) so they read in the box language: radius 12, 1px #eeeff1 ring. Logic untouched. */
+export const CARD_FRAME = "[&_[data-slot=card]]:!rounded-[12px] [&_[data-slot=card]]:!border-0 [&_[data-slot=card]]:!shadow-[inset_0_0_0_1px_#eeeff1]";

@@ -272,7 +272,7 @@ interface DuplicateSuggestion {
   };
 }
 
-function PossibleDuplicatesCard({ lead, onMerged }: { lead: Lead; onMerged?: () => void }) {
+export function PossibleDuplicatesCard({ lead, onMerged }: { lead: Lead; onMerged?: () => void }) {
   const [suggestions, setSuggestions] = useState<DuplicateSuggestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [dismissing, setDismissing] = useState<string | null>(null);

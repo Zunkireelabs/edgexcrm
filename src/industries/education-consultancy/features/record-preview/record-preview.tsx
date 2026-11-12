@@ -441,7 +441,7 @@ export function NavButton({ label, kbd, disabled, onClick, children }: { label: 
 }
 
 /** Application status chip: won/offer = green, lost = grey, everything in flight = blue. */
-function StatusChip({ status, terminal }: { status: string; terminal: string | null }) {
+export function StatusChip({ status, terminal }: { status: string; terminal: string | null }) {
   const won = terminal === "won" || /offer/i.test(status);
   const lost = terminal === "lost";
   const cls = won ? "bg-[#e7f6ef] text-[#12805c]" : lost ? "bg-[#f6f7f9] text-[#6b6f76]" : "bg-[#eaf1ff] text-[#266df0]";

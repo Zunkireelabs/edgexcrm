@@ -98,6 +98,11 @@ interface ActivitiesPanelProps {
   threadsLoading: boolean;
   /** Gates whether a project-linked task's chip links to the cockpit — resolved server-side via getFeatureAccess, never re-derived here. */
   projectBoardEnabled?: boolean;
+  /** Renders ONE sub-tab body without the sub-tab row (the education lead detail owns its own tab row and shows Emails this way). */
+  forcedTab?: SubTab;
+  /** Keeps a host's own merged feed in sync with what this panel logs / deletes. */
+  onActivityLogged?: (activity: LeadActivityRecord) => void;
+  onActivityDeleted?: (activityId: string) => void;
 }
 
 const SUB_TABS: { id: SubTab; label: string; icon: React.ReactNode }[] = [
@@ -150,8 +155,11 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
   setThreads,
   threadsLoading,
   projectBoardEnabled,
+  forcedTab,
+  onActivityLogged,
+  onActivityDeleted,
 }: ActivitiesPanelProps, ref) {
-  const [activeTab, setActiveTab] = useState<SubTab>("all");
+  const [activeTab, setActiveTab] = useState<SubTab>(forcedTab ?? "all");
   const notesTabRef = useRef<NotesTabRef>(null);
   const taskListRef = useRef<TaskListRef>(null);
 
@@ -298,6 +306,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
 
   const handleActivityLogged = (activity: LeadActivityRecord) => {
     setLoggedActivities((prev) => [activity, ...prev]);
+    onActivityLogged?.(activity);
   };
 
   const handleDeleteActivity = async (activityId: string) => {
@@ -311,6 +320,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
       if (!res.ok) throw new Error();
 
       setLoggedActivities((prev) => prev.filter((a) => a.id !== activityId));
+      onActivityDeleted?.(activityId);
       toast.success("Activity deleted");
     } catch {
       toast.error("Failed to delete activity");
@@ -525,7 +535,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
   return (
     <div className="space-y-4">
       {/* Sub-tabs */}
-      <div className="border-b">
+      {!forcedTab && <div className="border-b">
         <div className="flex gap-1 -mb-px overflow-x-auto">
           {visibleTabs.map((tab) => (
             <button
@@ -551,7 +561,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
             </button>
           ))}
         </div>
-      </div>
+      </div>}
 
       {/* Action buttons */}
       {(activeTab === "calls" || activeTab === "emails" || activeTab === "meetings" || (activeTab === "notes" && mergedIntoNotes)) && (
@@ -700,6 +710,21 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
             </div>
           )}
         </>
+      )}
+
+      {/* Education lead detail: the old "Subscribed" tab lives at the bottom of Emails. */}
+      {forcedTab === "emails" && hasOutreach && (
+        <div className="mt-6">
+          <h3 className="mb-2 text-[14px] font-medium leading-5 text-black/[.63]">Sequences &amp; campaigns</h3>
+          <LeadSubscriptionsTab
+            leadId={leadId}
+            isAdmin={isAdmin}
+            currentUserId={currentUserId}
+            leadFirstName={leadFirstName}
+            leadLastName={leadLastName}
+            leadEmail={leadEmail}
+          />
+        </div>
       )}
 
       {/* Activity list (calls, meetings only — "all" tab uses unified timeline below) */}

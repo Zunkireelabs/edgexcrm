@@ -22,6 +22,7 @@ import { isOffFunnelLeadList } from "@/lib/leads/list-funnel";
 import { filterAssignableMembersByChain } from "@/lib/leads/assignable";
 import { nextPositionSlug, ASSIGN_CHAIN_POSITIONS } from "@/industries/education-consultancy/lead-assignment-chain";
 import { stageAssigneeCandidates } from "@/industries/education-consultancy/lead-assignment-by-stage";
+import { isAssistantEnabled } from "@/lib/ai/flag";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import type { TenantEntity, Industry, LeadList } from "@/types/database";
@@ -331,6 +332,7 @@ export default async function LeadDetailPage({
         documentsActive={documentsActive}
         consentEnabled={consentEnabled}
         consentSigned={consentSigned}
+        aiEnabled={isAssistantEnabled() && tenantData.tenant.ai_enabled}
         projectBoardEnabled={projectBoardEnabled}
       />
     );
