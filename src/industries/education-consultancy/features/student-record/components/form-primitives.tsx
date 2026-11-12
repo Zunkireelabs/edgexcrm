@@ -114,6 +114,7 @@ export function EditableField({
   readOnlyNote,
   disabled,
   invalid,
+  needed,
 }: {
   field: FieldDef;
   isEditing: boolean;
@@ -125,6 +126,8 @@ export function EditableField({
   disabled?: boolean;
   /** Marks the field red — it is still required before the lead can move to Applications. */
   invalid?: boolean;
+  /** Edit profile: the consent form still needs this value ("· needed for consent" after the label). */
+  needed?: boolean;
 }) {
   const redBorder = invalid ? "border-red-500 focus-visible:ring-red-500" : "";
   return (
@@ -132,6 +135,7 @@ export function EditableField({
       <p className={invalid ? "text-xs font-medium text-red-600 mb-1" : "text-xs text-muted-foreground mb-1"}>
         {field.label}
         {invalid ? " — required" : ""}
+        {needed && !invalid && <span className="font-normal text-[#b25e09]"> · needed for consent</span>}
       </p>
       {isEditing ? (
         field.type === "select" ? (

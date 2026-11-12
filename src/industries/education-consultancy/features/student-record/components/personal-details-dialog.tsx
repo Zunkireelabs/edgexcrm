@@ -10,6 +10,8 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
+  DialogKeyHint,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -51,6 +53,7 @@ import { AttachDocumentButton } from "./attach-document-button";
 import { PERSONAL_DETAIL_COLUMNS, PERSONAL_DETAIL_DATE_COLUMNS } from "@/lib/leads/personal-details";
 import { FINANCIAL_COLUMNS } from "@/lib/leads/student-record-columns";
 import { getLeadCity, getLeadNationality } from "@/lib/leads/lead-location";
+import { PROFILE_SECTIONS, firstGapSection, missingBySection, type ProfileSectionId } from "./profile-sections";
 
 /**
  * Personal / passport / citizenship details are real `leads` columns
@@ -369,6 +372,13 @@ interface PersonalDetailsDialogProps {
    * missing (consent-form fields such as "First Name", "Email", "Phone", "Field of Study", "Passport Number"). The core ones show in red until filled.
    */
   missingBeforeApplications?: string[];
+  /**
+   * "sections" = Edit profile (EDGEX-155): the Dialogs v1 form with a 200px section list, always in edit mode, saved with one
+   * button. Same fields, same state, same save path as the classic pop-up. Default "classic" is what LeadDetailV2 uses.
+   */
+  layout?: "classic" | "sections";
+  /** Edit profile: J / K pressed with typed changes → Discard confirm → this carries on to the next / previous lead. */
+  onNavKey?: (dir: "next" | "prev") => void;
 }
 
 /** Shown above a list that is still loading (or failed to load): it cannot be edited until it is known, so it can never be saved over the stored rows. */
@@ -390,7 +400,7 @@ function ListsLoadNote({ status, onRetry }: { status: "loading" | "ready" | "err
   );
 }
 
-export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHistory, onLeadUpdate, canUploadDocuments, openInEditMode, isAdmin = false, missingBeforeApplications }: PersonalDetailsDialogProps) {
+export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHistory, onLeadUpdate, canUploadDocuments, openInEditMode, isAdmin = false, missingBeforeApplications, layout = "classic", onNavKey }: PersonalDetailsDialogProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [values, setValues] = useState<FieldValues>(() => personalDetailsFromLead(lead));
@@ -506,7 +516,23 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
   };
 
   // Which question is on screen: confirm a save, or confirm throwing away typed changes (by the Cancel button, or by closing the pop-up).
-  const [confirm, setConfirm] = useState<null | "save" | "discard" | "discard-close">(null);
+  const [confirm, setConfirm] = useState<null | "save" | "discard" | "discard-close" | "discard-nav">(null);
+  const [navDir, setNavDir] = useState<"next" | "prev" | null>(null);
+  // Edit profile: the section on show (null = the first with a gap) and what the consent form still needs.
+  const [section, setSection] = useState<ProfileSectionId | null>(null);
+  const [gaps, setGaps] = useState<{ missing: string[]; total: number; filled: number } | null>(null);
+  useEffect(() => {
+    if (!open || layout !== "sections") return;
+    let cancelled = false;
+    fetch(`/api/v1/leads/${lead.id}/profile-completeness`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: { data?: { missing?: string[]; total?: number; filled?: number } } | null) => {
+        const d = j?.data;
+        if (!cancelled && d && Array.isArray(d.missing) && typeof d.total === "number" && typeof d.filled === "number") setGaps({ missing: d.missing, total: d.total, filled: d.filled });
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [open, layout, lead.id]);
 
   const requestSave = () => {
     // Nothing changed: skip the question, save() just says so.
@@ -577,6 +603,7 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
       clearListEdits();
       setIsEditing(false);
       toast.success(hasLiveChanges || hasListChanges ? "Saved." : "Nothing to save — no changes were made.");
+      if (layout === "sections") onOpenChange(false);
     } catch {
       toast.error(
         listsFailed
@@ -649,6 +676,273 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
     onOpenChange(next);
   };
 
+  const changedCount = layout === "sections" && confirm !== null ? (() => { const c = computeChanges(); return Object.keys(c.patch).length + Object.keys(c.listsPayload).length; })() : 0;
+  const leadDisplayName = [coreIdentity.firstName, coreIdentity.lastName].filter(Boolean).join(" ") || "this student";
+  const discardConfirm = (
+    <AlertDialog open={confirm !== null} onOpenChange={(next) => { if (!next) setConfirm(null); }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{confirm === "save" ? "Save these changes?" : "Discard your changes?"}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {confirm === "save"
+              ? "The changes you made will be saved to this student's record."
+              : layout === "sections"
+                ? `You edited ${changedCount} field${changedCount === 1 ? "" : "s"} on ${leadDisplayName}. They won't be saved.`
+                : "You have unsaved changes. If you leave now, what you typed will be lost."}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Keep editing</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              const which = confirm;
+              setConfirm(null);
+              if (which === "save") void save();
+              else if (which === "discard") cancelEditing();
+              else if (which === "discard-close" || which === "discard-nav") {
+                cancelEditing();
+                onOpenChange(false);
+                if (which === "discard-nav" && navDir) onNavKey?.(navDir);
+              }
+            }}
+          >
+            {confirm === "save" ? "Save" : "Discard"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+
+  const sections = layout === "sections";
+  const neededLabels = useMemo(() => new Set((gaps?.missing ?? []).map((l) => l.trim().toLowerCase())), [gaps]);
+  const needed = (label: string) => sections && neededLabels.has(label.trim().toLowerCase());
+  const shownValues = isEditing ? draft : values;
+  const shownCore2 = isEditing ? coreIdentityDraft : coreIdentity;
+
+  // ── The pieces of the form. The classic pop-up stacks them in cards; Edit profile shows one per section. ──
+  const personalBlock = (
+    <FieldGrid>
+      {CORE_IDENTITY_FIELDS.map((field) => (
+        <EditableField
+          key={field.key}
+          field={field}
+          isEditing={isEditing}
+          value={shownCore2[field.key]}
+          onChange={(v) => handleCoreChange(field.key, v)}
+          invalid={redKeys.has(field.key)}
+          needed={needed(field.label)}
+        />
+      ))}
+    </FieldGrid>
+  );
+  const addressBlock = (
+    <AddressFields
+      isEditing={isEditing}
+      parts={addressPartsOf(shownCore2, shownValues)}
+      fullAddress={shownValues.full_address ?? ""}
+      onPartChange={handleAddressPartChange}
+      onFullAddressChange={(v) => handleChange("full_address", v)}
+    />
+  );
+  const studyBlock = (
+    <StudyInterestFields
+      isEditing={isEditing}
+      value={isEditing ? studyDraft : studyInterest}
+      onChange={setStudyDraft}
+      invalidFieldOfStudy={redKeys.has("fieldOfStudy")}
+      invalidDegreeLevel={redKeys.has("degreeLevel")}
+      neededFieldOfStudy={needed("Field of Study")}
+      neededDegreeLevel={needed("Degree Level")}
+    />
+  );
+  const basicBlock = (
+    <FieldGrid columns={2}>
+      {PERSONAL_DETAIL_FIELDS.map((field) => (
+        <EditableField
+          key={field.key}
+          field={field}
+          isEditing={isEditing}
+          value={shownValues[field.key] || ""}
+          onChange={(v) => handleChange(field.key, v)}
+          needed={needed(field.label)}
+        />
+      ))}
+    </FieldGrid>
+  );
+  const guardianBlock = (
+    <>
+      <p className="mb-3 text-xs text-muted-foreground">
+        The guardian signs for the student on the consent. Pick the relationship: Father or Mother fills the name in
+        from their name above; for anyone else, type the name. Choose &quot;None / Not applicable&quot; if there is no
+        guardian.
+      </p>
+      <FieldGrid>
+        {GUARDIAN_FIELDS.map((field) => {
+          const shown = shownValues;
+          // Father / Mother (picked, or the only parent on file): the consent prints that parent's own
+          // name, so show exactly that (locked) instead of a box whose contents the form would ignore.
+          const effective = resolveGuardian({
+            guardianName: shown.guardian_name,
+            guardianRelationship: shown.guardian_relationship,
+            fatherName: shown.father_name,
+            motherName: shown.mother_name,
+          });
+          const parentName =
+            effective.relationship === "Father" ? (shown.father_name ?? "").trim()
+            : effective.relationship === "Mother" ? (shown.mother_name ?? "").trim()
+            : "";
+          const fromParent = field.key === "guardian_name" && !!parentName;
+          const picked = !!normalizeGuardianRelationship(shown.guardian_relationship);
+          const note = !fromParent
+            ? undefined
+            : picked
+              ? `Taken from ${effective.relationship}'s Name above. Change it there.`
+              : `Defaults to ${effective.relationship} (the only parent on file). Pick a relationship to change it.`;
+          return (
+            <EditableField
+              key={field.key}
+              field={withLegacyRelationshipOption(field, shown.guardian_relationship)}
+              isEditing={isEditing}
+              value={fromParent ? parentName : shown[field.key] || ""}
+              onChange={(v) => handleChange(field.key, v)}
+              readOnlyNote={note}
+              needed={needed(field.label)}
+            />
+          );
+        })}
+      </FieldGrid>
+    </>
+  );
+  const attachPassport = canUploadDocuments && <AttachDocumentButton leadId={lead.id} defaultDocumentType="passport" label="Attach Passport / ID" />;
+  const passportBlock = <IdentityDocumentFields isEditing={isEditing} values={shownValues} onChange={handleChange} neededLabels={sections ? neededLabels : undefined} />;
+  const sourceBlock = (
+    <FieldGrid>
+      {LEAD_SOURCE_FIELDS.map((field) => (
+        <EditableField
+          key={field.key}
+          field={field}
+          isEditing={isEditing}
+          value={(isEditing ? leadSourceDraft : leadSource)[field.key]}
+          onChange={(v) => handleSourceChange(field.key, v)}
+        />
+      ))}
+    </FieldGrid>
+  );
+  const academicBlock = (
+    <QualificationsSection
+      isEditing={isEditing}
+      degreeLevel={(isEditing ? studyDraft : studyInterest).degreeLevel}
+      value={isEditing ? qualificationsDraft : qualifications}
+      onChange={setQualificationsDraft}
+      leadId={lead.id}
+      canUploadDocuments={canUploadDocuments}
+    />
+  );
+  const testsBlock = (
+    <>
+      <ListsLoadNote status={listsStatus} onRetry={reloadLists} />
+      <TestScoresSection isEditing={isEditing && listsEditable} value={isEditing ? testScoresDraft : testScores} onChange={setTestScoresEdits} />
+    </>
+  );
+  const workBlock = (
+    <>
+      <ListsLoadNote status={listsStatus} onRetry={reloadLists} />
+      <WorkExperienceSection isEditing={isEditing && listsEditable} value={isEditing ? workExperienceDraft : workExperience} onChange={setWorkExperienceEdits} />
+    </>
+  );
+  const referencesBlock = (
+    <>
+      <ListsLoadNote status={listsStatus} onRetry={reloadLists} />
+      <ReferencesSection isEditing={isEditing && listsEditable} value={isEditing ? referencesDraft : references} onChange={setReferencesEdits} />
+    </>
+  );
+  const fundingBlock = (
+    <FieldGrid>
+      {FINANCIAL_FIELDS.map((field) => (
+        <EditableField
+          key={field.key}
+          field={field}
+          isEditing={isEditing}
+          value={shownValues[field.key] || ""}
+          onChange={(v) => handleChange(field.key, v)}
+        />
+      ))}
+    </FieldGrid>
+  );
+  const gateBanner = gateBannerItems.length > 0 && (
+    <div role="alert" data-testid="gate-banner" className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
+      <p className="font-medium">Fill these in before moving to Applications:</p>
+      <p className="mt-0.5">{gateBannerItems.join(", ")}</p>
+    </div>
+  );
+
+  // ── Edit profile (Dialogs v1 form, flow 10): 200px section list + one section at a time. ──
+  if (sections) {
+    const counts = missingBySection(gaps?.missing ?? []);
+    const list = PROFILE_SECTIONS.filter((s) => s.id !== "source" || isAdmin);
+    const requested = firstGapSection(gateMissing);
+    const activeId = (section && list.some((s) => s.id === section) ? section : null) ?? requested ?? firstGapSection(gaps?.missing ?? []) ?? "personal";
+    const active = list.find((s) => s.id === activeId) ?? list[0];
+    const body: Record<ProfileSectionId, React.ReactNode> = {
+      personal: personalBlock, address: addressBlock, basic: basicBlock, guardian: guardianBlock,
+      passport: passportBlock, study: studyBlock, academic: academicBlock, tests: testsBlock,
+      work: workBlock, references: referencesBlock, funding: fundingBlock, source: sourceBlock,
+    };
+    const changed = (() => { const c = computeChanges(); return Object.keys(c.patch).length + Object.keys(c.listsPayload).length; })();
+    const fullName = [coreIdentity.firstName, coreIdentity.lastName].filter(Boolean).join(" ");
+    return (
+      <Dialog open={open} onOpenChange={handleOpenChange}>
+        <DialogContent
+          size="form" flush showCloseButton
+          onKeyDown={(e) => {
+            // J / K mean "next / previous lead" on the page; here they only matter when typed edits would be lost.
+            const t = e.target as HTMLElement;
+            if (e.metaKey || e.ctrlKey || e.altKey || !/^[jk]$/i.test(e.key)) {
+              if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && !isSaving) { e.preventDefault(); void save(); }
+              return;
+            }
+            if (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable || t.getAttribute("role") === "combobox") return;
+            if (computeChanges().hasChanges) { e.preventDefault(); setNavDir(e.key.toLowerCase() === "j" ? "next" : "prev"); setConfirm("discard-nav"); }
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>Edit profile</DialogTitle>
+            <DialogDescription>{[fullName, gaps ? `${gaps.filled} of ${gaps.total} filled` : null].filter(Boolean).join(" · ")}</DialogDescription>
+          </DialogHeader>
+          <div className="flex min-h-0 flex-1">
+            <nav aria-label="Profile sections" className="w-[200px] flex-none overflow-y-auto border-r border-ds-divider p-2">
+              {list.map((s) => {
+                const n = counts[s.id] ?? 0;
+                return (
+                  <button
+                    key={s.id} type="button" onClick={() => setSection(s.id)} aria-current={s.id === active.id ? "true" : undefined}
+                    className={`flex h-8 w-full items-center gap-2 rounded-[8px] px-2.5 text-left text-[14px] outline-none focus-visible:ring-2 focus-visible:ring-ds-accent/30 ${s.id === active.id ? "bg-ds-hover font-medium text-ds-ink" : "text-ds-muted hover:bg-ds-hover hover:text-ds-ink"}`}
+                  >
+                    <span className="min-w-0 flex-1 truncate">{s.label}</span>
+                    {n > 0 && <span aria-label={`${n} missing for consent`} className="inline-grid h-[18px] min-w-[18px] place-items-center rounded-full bg-ds-warn-soft px-1 text-[11px] font-medium text-ds-warn">{n}</span>}
+                  </button>
+                );
+              })}
+            </nav>
+            <div className="min-w-0 flex-1 overflow-y-auto px-5 py-4" data-testid="profile-section-body">
+              {gateBanner && <div className="mb-4">{gateBanner}</div>}
+              <h3 className="m-0 mb-3 text-[14px] font-medium leading-5 text-ds-ink">{active.label}</h3>
+              {body[active.id]}
+            </div>
+          </div>
+          <DialogFooter>
+            <span className="mr-auto text-[13px] text-ds-faint">{changed > 0 ? `${changed} field${changed === 1 ? "" : "s"} changed` : ""}</span>
+            <Button variant="outline" type="button" onClick={() => handleOpenChange(false)} disabled={isSaving}>Cancel</Button>
+            <Button type="button" onClick={() => void save()} disabled={isSaving}>
+              {isSaving && <CircleNotchIcon className="size-4 animate-spin" />}Save <DialogKeyHint>⌘↵</DialogKeyHint>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+        {discardConfirm}
+      </Dialog>
+    );
+  }
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="w-[95vw] sm:max-w-5xl p-0 gap-0 flex flex-col max-h-[85vh]">
@@ -688,37 +982,15 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-7 no-scrollbar">
-          {gateBannerItems.length > 0 && (
-            <div role="alert" data-testid="gate-banner" className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
-              <p className="font-medium">Fill these in before moving to Applications:</p>
-              <p className="mt-0.5">{gateBannerItems.join(", ")}</p>
-            </div>
-          )}
+          {gateBanner}
           <SectionGroup title="Personal Information">
             <CardSection title="From existing lead record">
-              <FieldGrid>
-                {CORE_IDENTITY_FIELDS.map((field) => (
-                  <EditableField
-                    key={field.key}
-                    field={field}
-                    isEditing={isEditing}
-                    value={(isEditing ? coreIdentityDraft : coreIdentity)[field.key]}
-                    onChange={(v) => handleCoreChange(field.key, v)}
-                    invalid={redKeys.has(field.key)}
-                  />
-                ))}
-              </FieldGrid>
+              {personalBlock}
 
               {/* Same card as Nationality and City: the client asked for the address "together with" them. */}
               <div className="mt-5 border-t pt-4">
                 <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Address</p>
-                <AddressFields
-                  isEditing={isEditing}
-                  parts={addressPartsOf(isEditing ? coreIdentityDraft : coreIdentity, isEditing ? draft : values)}
-                  fullAddress={(isEditing ? draft : values).full_address ?? ""}
-                  onPartChange={handleAddressPartChange}
-                  onFullAddressChange={(v) => handleChange("full_address", v)}
-                />
+                {addressBlock}
               </div>
             </CardSection>
           </SectionGroup>
@@ -726,193 +998,38 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
           {/* Study Interest is the first thing staff need after the contact details, so it sits right under them rather than
               after the long Basic Details / Guardian / Passport block (client request, Oct 13). */}
           <SectionGroup title="Study Interest">
-            <CardSection>
-              <StudyInterestFields
-                isEditing={isEditing}
-                value={isEditing ? studyDraft : studyInterest}
-                onChange={setStudyDraft}
-                invalidFieldOfStudy={redKeys.has("fieldOfStudy")}
-                invalidDegreeLevel={redKeys.has("degreeLevel")}
-              />
-            </CardSection>
+            <CardSection>{studyBlock}</CardSection>
           </SectionGroup>
 
           <SectionGroup title="Personal Details">
-            <CardSection title="Basic Details">
-              <FieldGrid columns={2}>
-                {PERSONAL_DETAIL_FIELDS.map((field) => (
-                  <EditableField
-                    key={field.key}
-                    field={field}
-                    isEditing={isEditing}
-                    value={(isEditing ? draft : values)[field.key] || ""}
-                    onChange={(v) => handleChange(field.key, v)}
-                  />
-                ))}
-              </FieldGrid>
-            </CardSection>
-
-            <CardSection title={GUARDIAN_SECTION_TITLE}>
-              <p className="mb-3 text-xs text-muted-foreground">
-                The guardian signs for the student on the consent. Pick the relationship: Father or Mother fills the name in
-                from their name above; for anyone else, type the name. Choose &quot;None / Not applicable&quot; if there is no
-                guardian.
-              </p>
-              <FieldGrid>
-                {GUARDIAN_FIELDS.map((field) => {
-                  const shown = isEditing ? draft : values;
-                  // Father / Mother (picked, or the only parent on file): the consent prints that parent's own
-                  // name, so show exactly that (locked) instead of a box whose contents the form would ignore.
-                  const effective = resolveGuardian({
-                    guardianName: shown.guardian_name,
-                    guardianRelationship: shown.guardian_relationship,
-                    fatherName: shown.father_name,
-                    motherName: shown.mother_name,
-                  });
-                  const parentName =
-                    effective.relationship === "Father" ? (shown.father_name ?? "").trim()
-                    : effective.relationship === "Mother" ? (shown.mother_name ?? "").trim()
-                    : "";
-                  const fromParent = field.key === "guardian_name" && !!parentName;
-                  const picked = !!normalizeGuardianRelationship(shown.guardian_relationship);
-                  const note = !fromParent
-                    ? undefined
-                    : picked
-                      ? `Taken from ${effective.relationship}'s Name above. Change it there.`
-                      : `Defaults to ${effective.relationship} (the only parent on file). Pick a relationship to change it.`;
-                  return (
-                    <EditableField
-                      key={field.key}
-                      field={withLegacyRelationshipOption(field, shown.guardian_relationship)}
-                      isEditing={isEditing}
-                      value={fromParent ? parentName : shown[field.key] || ""}
-                      onChange={(v) => handleChange(field.key, v)}
-                      readOnlyNote={note}
-                    />
-                  );
-                })}
-              </FieldGrid>
-            </CardSection>
-
-            <CardSection
-              title="Passport & Citizenship Details"
-              action={
-                canUploadDocuments && (
-                  <AttachDocumentButton leadId={lead.id} defaultDocumentType="passport" label="Attach Passport / ID" />
-                )
-              }
-            >
-              <IdentityDocumentFields
-                isEditing={isEditing}
-                values={isEditing ? draft : values}
-                onChange={handleChange}
-              />
-            </CardSection>
+            <CardSection title="Basic Details">{basicBlock}</CardSection>
+            <CardSection title={GUARDIAN_SECTION_TITLE}>{guardianBlock}</CardSection>
+            <CardSection title="Passport & Citizenship Details" action={attachPassport}>{passportBlock}</CardSection>
           </SectionGroup>
 
           {isAdmin && (
             <SectionGroup title="Lead Source">
-              <CardSection>
-                <FieldGrid>
-                  {LEAD_SOURCE_FIELDS.map((field) => (
-                    <EditableField
-                      key={field.key}
-                      field={field}
-                      isEditing={isEditing}
-                      value={(isEditing ? leadSourceDraft : leadSource)[field.key]}
-                      onChange={(v) => handleSourceChange(field.key, v)}
-                    />
-                  ))}
-                </FieldGrid>
-              </CardSection>
+              <CardSection>{sourceBlock}</CardSection>
             </SectionGroup>
           )}
 
           <SectionGroup title="Academic Information">
-            <QualificationsSection
-              isEditing={isEditing}
-              degreeLevel={(isEditing ? studyDraft : studyInterest).degreeLevel}
-              value={isEditing ? qualificationsDraft : qualifications}
-              onChange={setQualificationsDraft}
-              leadId={lead.id}
-              canUploadDocuments={canUploadDocuments}
-            />
-            <CardSection title="Test Scores">
-              <ListsLoadNote status={listsStatus} onRetry={reloadLists} />
-              <TestScoresSection
-                isEditing={isEditing && listsEditable}
-                value={isEditing ? testScoresDraft : testScores}
-                onChange={setTestScoresEdits}
-              />
-            </CardSection>
+            {academicBlock}
+            <CardSection title="Test Scores">{testsBlock}</CardSection>
           </SectionGroup>
 
           <SectionGroup title="Professional Information">
-            <CardSection title="Work Experience">
-              <ListsLoadNote status={listsStatus} onRetry={reloadLists} />
-              <WorkExperienceSection
-                isEditing={isEditing && listsEditable}
-                value={isEditing ? workExperienceDraft : workExperience}
-                onChange={setWorkExperienceEdits}
-              />
-            </CardSection>
-            <CardSection title="References">
-              <ListsLoadNote status={listsStatus} onRetry={reloadLists} />
-              <ReferencesSection
-                isEditing={isEditing && listsEditable}
-                value={isEditing ? referencesDraft : references}
-                onChange={setReferencesEdits}
-              />
-            </CardSection>
+            <CardSection title="Work Experience">{workBlock}</CardSection>
+            <CardSection title="References">{referencesBlock}</CardSection>
           </SectionGroup>
 
           <SectionGroup title="Financial Information">
-            <CardSection title="Sponsor / Study Funding">
-              <FieldGrid>
-                {FINANCIAL_FIELDS.map((field) => (
-                  <EditableField
-                    key={field.key}
-                    field={field}
-                    isEditing={isEditing}
-                    value={(isEditing ? draft : values)[field.key] || ""}
-                    onChange={(v) => handleChange(field.key, v)}
-                  />
-                ))}
-              </FieldGrid>
-            </CardSection>
+            <CardSection title="Sponsor / Study Funding">{fundingBlock}</CardSection>
           </SectionGroup>
         </div>
       </DialogContent>
 
-      <AlertDialog open={confirm !== null} onOpenChange={(next) => { if (!next) setConfirm(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{confirm === "save" ? "Save these changes?" : "Discard your changes?"}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {confirm === "save"
-                ? "The changes you made will be saved to this student's record."
-                : "You have unsaved changes. If you leave now, what you typed will be lost."}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Keep editing</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                const which = confirm;
-                setConfirm(null);
-                if (which === "save") void save();
-                else if (which === "discard") cancelEditing();
-                else if (which === "discard-close") {
-                  cancelEditing();
-                  onOpenChange(false);
-                }
-              }}
-            >
-              {confirm === "save" ? "Save" : "Discard"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {discardConfirm}
     </Dialog>
   );
 }
@@ -931,6 +1048,8 @@ function StudyInterestFields({
   onChange,
   invalidFieldOfStudy,
   invalidDegreeLevel,
+  neededFieldOfStudy,
+  neededDegreeLevel,
 }: {
   isEditing: boolean;
   value: StudyInterest;
@@ -938,6 +1057,9 @@ function StudyInterestFields({
   /** Still required before Applications — shown in red. */
   invalidFieldOfStudy?: boolean;
   invalidDegreeLevel?: boolean;
+  /** Edit profile: the consent form still needs it. */
+  neededFieldOfStudy?: boolean;
+  neededDegreeLevel?: boolean;
 }) {
   const { destinations: destOptions, fieldsOfStudy, studyLevels, intakeMonths, intakeYears } = useEduTaxonomy();
   const intake = [value.intakeMonth, value.intakeYear].filter(Boolean).join(" ");
@@ -964,6 +1086,7 @@ function StudyInterestFields({
       <div>
         <p className={invalidFieldOfStudy ? "text-xs font-medium text-red-600 mb-1" : "text-xs text-muted-foreground mb-1"}>
           Field of Study{invalidFieldOfStudy ? " — required" : ""}
+          {neededFieldOfStudy && !invalidFieldOfStudy && <span className="font-normal text-[#b25e09]"> · needed for consent</span>}
         </p>
         {isEditing ? (
           <Select value={value.fieldOfStudy || "__none__"} onValueChange={(v) => onChange({ ...value, fieldOfStudy: v === "__none__" ? "" : v })}>
@@ -985,6 +1108,7 @@ function StudyInterestFields({
       <div>
         <p className={invalidDegreeLevel ? "text-xs font-medium text-red-600 mb-1" : "text-xs text-muted-foreground mb-1"}>
           Degree Level{invalidDegreeLevel ? " — required" : ""}
+          {neededDegreeLevel && !invalidDegreeLevel && <span className="font-normal text-[#b25e09]"> · needed for consent</span>}
         </p>
         {isEditing ? (
           <Select value={value.degreeLevel || "__none__"} onValueChange={(v) => onChange({ ...value, degreeLevel: v === "__none__" ? "" : v })}>
