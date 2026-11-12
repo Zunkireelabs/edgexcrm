@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { ArchiveIcon, ArrowBendUpLeftIcon, ArrowRightIcon, CircleNotchIcon, GraduationCapIcon } from "@/components/icons";
+import { ArchiveIcon, ArrowBendUpLeftIcon, ArrowRightIcon, CircleNotchIcon, GraduationCapIcon, XIcon, type Icon } from "@/components/icons";
 import {
-  AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogKeyHint, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogKeyHint, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect, type SearchableOption } from "@/components/ui/searchable-select";
@@ -14,6 +14,8 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Textarea } from "@/components/ui/textarea";
 import { ACADEMIC_LEVELS, TEST_TYPES, hasProspectQualification } from "@/lib/leads/prospect-qualification";
 import { ARCHIVE_REASONS } from "@/lib/leads/archive-reasons";
+import { restoreOrigin } from "./focus-origin";
+import { initialsOf } from "../record-preview/parts";
 import { canQualify, confirmCopy, memberName, type ConfirmCopy, type Member, type MoveDirection } from "./lib/move-model";
 
 /**
@@ -34,6 +36,28 @@ function Field({ label, optional, hint, htmlFor, children }: { label: string; op
       {hint && <p className="m-0 text-[12px] leading-4 text-ds-faint">{hint}</p>}
     </div>
   );
+}
+
+/** The mockup's 44px dialog bar: a 13px icon, the title, then the lead's name INLINE at 50% black (never a line under the title). */
+export function DialogBar({ icon: IconC, title, sub }: { icon: Icon; title: string; sub?: string }) {
+  return (
+    <DialogHeader className="min-h-11 flex-row items-center gap-2 py-0">
+      <IconC className="size-[13px] shrink-0 text-ds-muted" aria-hidden />
+      <DialogTitle>{title}</DialogTitle>
+      {sub && <span className="min-w-0 truncate text-[14px] leading-5 text-black/50">{sub}</span>}
+    </DialogHeader>
+  );
+}
+
+const Avatar = ({ name }: { name: string }) => (
+  <span aria-hidden className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-[#eceef0] text-[9px] font-semibold text-[#2b2d2f]">{initialsOf(name)}</span>
+);
+
+/** "Aarav moves to **Qualified**.": the stage name bold. */
+function Emphasis({ text, bold }: { text: string; bold: string }) {
+  const i = bold ? text.indexOf(bold) : -1;
+  if (i < 0) return <>{text}</>;
+  return <>{text.slice(0, i)}<b className="font-semibold text-ds-ink">{bold}</b>{text.slice(i + bold.length)}</>;
 }
 
 // ───────────────────────── Qualify ─────────────────────────
@@ -67,17 +91,26 @@ export function QualifyDialog(p: QualifyDialogProps) {
   const ok = canQualify(p.destinations, p.course) && !p.saving;
   return (
     <Dialog open={p.open} onOpenChange={(o) => { if (!p.saving) p.onOpenChange(o); }}>
-      <DialogContent size="md">
-        <DialogHeader>
-          <DialogTitle>Qualify</DialogTitle>
-          <DialogDescription>{p.leadName}</DialogDescription>
-        </DialogHeader>
+      <DialogContent size="md" aria-describedby={undefined} onCloseAutoFocus={restoreOrigin}>
+        <DialogBar icon={GraduationCapIcon} title="Qualify" sub={p.leadName} />
         <form id="qualify-form" onSubmit={(e) => { e.preventDefault(); if (ok) p.onSubmit(); }} onKeyDown={(e) => cmdEnter(e, p.onSubmit, ok)} className="space-y-3">
           <Field label="Study countries">
-            <SearchableSelect
-              multiple aria-label="Study countries" value={p.destinations} onValueChange={p.onDestinations}
-              options={toOptions(p.destinationOptions, undefined)} placeholder="Add country" searchPlaceholder="Search countries…"
-            />
+            {/* Picked countries are chips with ×; the dropdown adds more. */}
+            <div className="flex min-h-8 flex-wrap items-center gap-1 rounded-[9px] border border-input px-1.5 py-1">
+              {p.destinations.map((d) => (
+                <span key={d} className="inline-flex h-6 items-center gap-1 rounded-[6px] bg-[#f6f7f9] pl-2 pr-1 text-[13px] font-medium text-[#2b2d2f]">
+                  {d}
+                  <button type="button" aria-label={`Remove ${d}`} onClick={() => p.onDestinations(p.destinations.filter((x) => x !== d))} className="inline-flex size-4 items-center justify-center rounded-[4px] text-[#9a9ea5] hover:bg-[#eef0f3] hover:text-[#101112]"><XIcon className="size-3" /></button>
+                </span>
+              ))}
+              <div className="w-[130px]">
+                <SearchableSelect
+                  multiple aria-label="Study countries" value={p.destinations} onValueChange={p.onDestinations}
+                  options={toOptions(p.destinationOptions, undefined)} placeholder="Add country" summarize={() => "Add country"}
+                  searchPlaceholder="Search countries…" className="h-6 border-0 px-1.5 text-[13px] text-black/50 shadow-none"
+                />
+              </div>
+            </div>
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Course">
@@ -88,11 +121,12 @@ export function QualifyDialog(p: QualifyDialogProps) {
             </Field>
           </div>
           <Field label="Note" optional htmlFor="qualify-note">
-            <Textarea id="qualify-note" value={p.note} onChange={(e) => p.onNote(e.target.value)} rows={3} placeholder="Anything the next person should know" className="min-h-[72px] resize-none rounded-[9px] text-sm" />
+            <Textarea id="qualify-note" value={p.note} onChange={(e) => p.onNote(e.target.value)} placeholder="Anything the next person should know" className="h-16 min-h-16 resize-none rounded-[9px] text-sm [field-sizing:fixed]" />
           </Field>
           <p className="m-0 text-[12px] leading-4 text-ds-faint">Needed: at least one study country or a course.</p>
-          <div className="flex items-center gap-2 rounded-[9px] bg-ds-accent-soft px-3 py-2 text-[13px] leading-[18px] text-ds-accent">
-            <ArrowRightIcon className="size-[14px] shrink-0" aria-hidden />Moves to Qualified and stays with you.
+          <div className="flex h-9 items-center gap-2 rounded-[10px] bg-[#f6f7f9] px-3 text-[13px] font-medium text-[#2b2d2f]">
+            <ArrowRightIcon className="size-[14px] shrink-0 text-[#6b6f76]" aria-hidden />
+            <span>Moves to <b className="font-semibold">Qualified</b> and stays with you.</span>
           </div>
         </form>
         <DialogFooter>
@@ -116,14 +150,13 @@ export interface GpaGateDialogProps {
   lead: Record<string, unknown> | null;
   /** Admins / branch managers: "Skip for now" moves on without a qualification. */
   canSkip: boolean;
-  targetName: string;
   onSave: (patch: Record<string, string>) => void | Promise<void>;
   onSkip: () => void;
   onCancel: () => void;
 }
 
 /** "Add academic qualification" (flow 2): the %/GPA gate, restyled. One gate-eligible level with a %/GPA unlocks the move. */
-export function GpaGateDialog({ open, lead, canSkip, targetName, onSave, onSkip, onCancel }: GpaGateDialogProps) {
+export function GpaGateDialog({ open, lead, canSkip, onSave, onSkip, onCancel }: GpaGateDialogProps) {
   const [level, setLevel] = useState("plus_two");
   const [fields, setFields] = useState<Record<string, string>>({});
   const [testKey, setTestKey] = useState<string>(TEST_TYPES[0].key);
@@ -154,14 +187,11 @@ export function GpaGateDialog({ open, lead, canSkip, targetName, onSave, onSkip,
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o && !saving) onCancel(); }}>
-      <DialogContent size="md">
-        <DialogHeader>
-          <DialogTitle>Add academic qualification</DialogTitle>
-          <DialogDescription>{`Needed before moving to ${targetName}.`}</DialogDescription>
-        </DialogHeader>
+      <DialogContent size="md" aria-describedby={undefined} onCloseAutoFocus={restoreOrigin}>
+        <DialogBar icon={GraduationCapIcon} title="Add academic qualification" />
         <form id="gpa-form" onSubmit={(e) => { e.preventDefault(); void save(); }} onKeyDown={(e) => cmdEnter(e, () => void save(), valid && !saving)} className="space-y-3">
           <SegmentedControl
-            aria-label="Level" value={level} onValueChange={setLevel}
+            aria-label="Level" value={level} onValueChange={setLevel} className="flex w-full [&>button]:flex-1 [&>button]:justify-center [&>button]:text-center"
             items={ACADEMIC_LEVELS.map((l) => ({ value: l.key, label: LEVEL_SHORT[l.key] ?? l.label }))}
           />
           <div className="grid grid-cols-3 gap-3">
@@ -175,10 +205,14 @@ export function GpaGateDialog({ open, lead, canSkip, targetName, onSave, onSkip,
               <Input id="gpa-test" value={fields[`${testKey}_score`] ?? ""} onChange={(e) => set(`${testKey}_score`, e.target.value)} placeholder="Score" disabled={saving} />
             </div>
           </Field>
-          <p className="m-0 flex items-center gap-1.5 text-[12px] leading-4 text-ds-faint"><GraduationCapIcon className="size-3.5 shrink-0" aria-hidden />SEE / 10th doesn&apos;t count for Prospects.</p>
+          <p className="m-0 text-[12px] leading-4 text-ds-faint">SEE / 10th doesn&apos;t count for Prospects.</p>
         </form>
         <DialogFooter>
-          {canSkip && <Button variant="ghost" type="button" className="mr-auto" onClick={onSkip} disabled={saving}>Skip for now</Button>}
+          {canSkip && (
+            <span className="mr-auto flex items-center gap-1 text-[13px] text-ds-faint">Admins only:
+              <Button variant="ghost" type="button" onClick={onSkip} disabled={saving}>Skip for now</Button>
+            </span>
+          )}
           <Button variant="outline" type="button" onClick={onCancel} disabled={saving}>Cancel</Button>
           <Button type="submit" form="gpa-form" disabled={!valid || saving}>
             {saving && <CircleNotchIcon className="size-4 animate-spin" />}Save &amp; continue <DialogKeyHint>⌘↵</DialogKeyHint>
@@ -218,17 +252,17 @@ export function MoveConfirmDialog(p: MoveConfirmDialogProps) {
   const needsPick = p.members.length > 0;
   const ok = !p.busy && (!needsPick || !!p.assignee);
   const options = useMemo<SearchableOption[]>(
-    () => p.members.map((m) => ({ value: m.user_id, label: memberName(m), secondary: m.position_name ?? undefined })),
-    [p.members],
+    () => p.members.map((m) => ({ value: m.user_id, label: memberName(m), icon: <Avatar name={memberName(m)} />, secondary: m.position_name || `${p.targetName} team` })),
+    [p.members, p.targetName],
   );
   const Icon = p.direction === "back" ? ArrowBendUpLeftIcon : ArrowRightIcon;
   return (
     <AlertDialog open={p.open} onOpenChange={(o) => { if (!o && !p.busy) p.onCancel(); }}>
-      <AlertDialogContent onKeyDown={(e) => cmdEnter(e, p.onConfirm, ok)}>
+      <AlertDialogContent size="sm" className="max-w-[min(460px,calc(100%-2rem))]" onKeyDown={(e) => cmdEnter(e, p.onConfirm, ok)} onCloseAutoFocus={restoreOrigin}>
         <AlertDialogHeader icon={<Icon aria-hidden />} tone={copy.tone === "amber" ? "warn" : "info"}>
           <AlertDialogTitle>{copy.title}</AlertDialogTitle>
           <AlertDialogDescription>
-            {copy.body}
+            <Emphasis text={copy.body} bold={copy.emphasis} />
             {p.direction === "back" && !needsPick && p.fixedHolderName ? <> It is handed back to {p.fixedHolderName}.</> : null}
             {p.direction === "back" && needsPick ? " Tell them why in a note so they know what to fix." : null}
           </AlertDialogDescription>
@@ -248,7 +282,7 @@ export function MoveConfirmDialog(p: MoveConfirmDialogProps) {
           </div>
         )}
         <AlertDialogFooter>
-          <Button variant="outline" type="button" onClick={p.onCancel} disabled={p.busy}>Cancel</Button>
+          <AlertDialogCancel disabled={p.busy}>Cancel</AlertDialogCancel>
           <Button type="button" disabled={!ok} onClick={p.onConfirm}>
             {p.busy && <CircleNotchIcon className="size-4 animate-spin" />}{copy.button(picked ? memberName(picked) : null)} <DialogKeyHint>↵</DialogKeyHint>
           </Button>
@@ -266,7 +300,7 @@ export function ArchiveDialog({
   const ok = !!reason;
   return (
     <AlertDialog open={open} onOpenChange={(o) => { if (!o) onCancel(); }}>
-      <AlertDialogContent onKeyDown={(e) => cmdEnter(e, onConfirm, ok)}>
+      <AlertDialogContent size="sm" className="max-w-[min(460px,calc(100%-2rem))]" onKeyDown={(e) => cmdEnter(e, onConfirm, ok)} onCloseAutoFocus={restoreOrigin}>
         <AlertDialogHeader icon={<ArchiveIcon aria-hidden />} tone="danger">
           <AlertDialogTitle>Archive {leadName}?</AlertDialogTitle>
           <AlertDialogDescription>They leave every stage. You can bring them back from Archive any time.</AlertDialogDescription>
@@ -280,7 +314,7 @@ export function ArchiveDialog({
           )}
         </div>
         <AlertDialogFooter>
-          <Button variant="outline" type="button" onClick={onCancel}>Cancel</Button>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
           <Button variant="destructive" type="button" disabled={!ok} onClick={onConfirm}>Archive <DialogKeyHint>↵</DialogKeyHint></Button>
         </AlertDialogFooter>
       </AlertDialogContent>

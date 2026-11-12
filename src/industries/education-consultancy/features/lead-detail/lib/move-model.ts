@@ -1,6 +1,7 @@
 import type { LeadList } from "@/types/database";
 import { toLocalDateString } from "@/lib/date";
-import { fetchAdjacentLeadId, nextLeadAfterHandOff, resolveLeadNav, type LeadNavContext } from "./lead-nav";
+import { fetchAdjacentLeadId, resolveLeadNav, type LeadNavContext } from "./lead-nav";
+import { flattenReadiness } from "../../record-preview/lib/readiness";
 
 /**
  * Pure rules behind the lead-detail flows and confirms (EDGEX-155): what each confirm says, which assignee is
@@ -33,6 +34,8 @@ export function defaultAssignee(members: readonly Member[], direction: MoveDirec
 export interface ConfirmCopy {
   title: string;
   body: string;
+  /** The stage name inside `body`, shown bold. */
+  emphasis: string;
   /** Primary button label for the chosen assignee (or none). */
   button: (assigneeName: string | null) => string;
   tone: "blue" | "amber";
@@ -42,12 +45,13 @@ export interface ConfirmCopy {
 export function confirmCopy(input: { direction: MoveDirection; targetName: string; leadName: string; isBackward: boolean; chainSend: boolean }): ConfirmCopy {
   const { direction, targetName, leadName, isBackward, chainSend } = input;
   if (direction === "back") {
-    return { title: `Revert to ${targetName}?`, body: `${leadName} goes back to ${targetName}.`, button: () => "Revert", tone: "amber" };
+    return { title: `Revert to ${targetName}?`, body: `${leadName} goes back to ${targetName}.`, emphasis: targetName, button: () => "Revert", tone: "amber" };
   }
   if (direction === "next" && chainSend) {
     return {
       title: `Send to ${targetName}?`,
       body: `${leadName} moves to ${targetName} and leaves your list.`,
+      emphasis: targetName,
       button: (n) => (n ? `Send to ${firstName(n)}` : "Send"),
       tone: "blue",
     };
@@ -55,6 +59,7 @@ export function confirmCopy(input: { direction: MoveDirection; targetName: strin
   return {
     title: `Move to ${targetName}?`,
     body: `${isBackward ? "This is a step back. " : ""}${leadName} moves to ${targetName}.`,
+    emphasis: targetName,
     button: () => "Move",
     tone: "blue",
   };
@@ -70,7 +75,7 @@ export function needsProspectGate(input: { target: Pick<LeadList, "slug"> | null
   return input.target?.slug === "prospects" && !input.stepBack && !input.hasQualification;
 }
 
-export interface MoveMenuOption { value: string; label: string; secondary?: string; disabled?: boolean }
+export interface MoveMenuOption { value: string; label: string; secondary?: string; secondaryTone?: "warn"; disabled?: boolean; slug: string }
 
 /** "Move to…" rows: active stages in funnel order; current = ticked/disabled; Applications disabled with "n missing". */
 export function buildMoveMenu(input: {
@@ -84,11 +89,12 @@ export function buildMoveMenu(input: {
     .sort((a, b) => a.sort_order - b.sort_order)
     .filter((l) => accessibleIds.has(l.id) || l.id === currentListId)
     .map((l) => {
-      if (l.id === currentListId) return { value: l.id, label: l.name, secondary: "Current", disabled: true };
+      if (l.id === currentListId) return { value: l.id, label: l.name, slug: l.slug, secondary: "Current", disabled: true };
       if (l.slug === "applications" && readiness && !readiness.ready && readiness.missing.length > 0) {
-        return { value: l.id, label: l.name, secondary: `${readiness.missing.length} missing`, disabled: true };
+        // Counted like the Highlights card ("Ready to apply"): "Basic info (a, b)" is two fields, not one line.
+        return { value: l.id, label: l.name, slug: l.slug, secondary: `${flattenReadiness(readiness.missing).length} missing`, secondaryTone: "warn" as const, disabled: true };
       }
-      return { value: l.id, label: l.name };
+      return { value: l.id, label: l.name, slug: l.slug };
     });
 }
 
@@ -119,7 +125,8 @@ export async function resolveHandOffTarget(
     const adj = await fetchAdjacent(ctx, "next");
     if (adj) return { nextId: adj.id, href, ctx: adj.ctx };
   }
-  return { nextId: nextLeadAfterHandOff(ctx, leadId), href, ctx };
+  // Strictly the NEXT lead of the view (no fallback to the previous row): none → back to the view.
+  return { nextId: r.nextId, href, ctx };
 }
 
 /** "<Name> sent to <assignee> · <Stage>". */

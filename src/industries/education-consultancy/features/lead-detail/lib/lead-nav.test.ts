@@ -68,6 +68,6 @@ describe("fetchAdjacentLeadId", () => {
 
 describe("hand-off: which lead opens next", () => {
   it("opens the next lead of the view", () => expect(nextLeadAfterHandOff(ctx, "a")).toBe("b"));
-  it("falls back to the previous when this was the last on the page", () => expect(nextLeadAfterHandOff({ ...ctx, page: 3 }, "c")).toBe("b"));
+  it("never falls back to the previous row: the last lead of the view has no next, so the page goes back", () => expect(nextLeadAfterHandOff({ ...ctx, page: 3 }, "c")).toBeNull());
   it("is null with no context, so the page goes back to the view", () => expect(nextLeadAfterHandOff(null, "a")).toBeNull());
 });

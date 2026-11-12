@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { ArchiveIcon, ArrowBendUpLeftIcon, ArrowRightIcon, CaretDownIcon, CheckCircleIcon, CircleIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { Dot } from "../record-preview/parts";
+import { rememberOrigin } from "./focus-origin";
 import { Picker, type PickerOption } from "./picker";
 import type { RequirementAction, StageCardModel } from "./lib/stage-card-model";
 import type { PipelineStage } from "@/types/database";
@@ -43,6 +44,7 @@ export function StageCard(p: StageCardProps) {
   const { model } = p;
   const [open, setOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
+  const moveTriggerRef = useRef<HTMLButtonElement>(null);
   const status = p.statuses.find((s) => s.id === p.statusId) ?? null;
   const options: PickerOption[] = useMemo(
     () => [...p.statuses].sort((a, b) => a.position - b.position).map((s) => ({ value: s.id, label: s.name, icon: <Dot color={s.color} /> })),
@@ -121,7 +123,7 @@ export function StageCard(p: StageCardProps) {
                   <span className={cn("min-w-0 flex-1 truncate", r.ok && "text-black/50")}>{r.text}</span>
                   {!r.ok && r.action && r.actionLabel && (p.actionAllowed?.(r.action) ?? true) && (() => {
                     const link = (
-                      <button type="button" onClick={r.action === "record-fee" && p.wrapRecord ? undefined : () => p.onRequirement(r.action!)} className="shrink-0 rounded-[4px] text-[13px] text-[#266df0] outline-none hover:underline focus-visible:ring-2 focus-visible:ring-[#266df0]/50">{r.actionLabel}</button>
+                      <button type="button" onClick={r.action === "record-fee" && p.wrapRecord ? undefined : () => { rememberOrigin(); p.onRequirement(r.action!); }} className="shrink-0 rounded-[4px] text-[13px] text-[#266df0] outline-none hover:underline focus-visible:ring-2 focus-visible:ring-[#266df0]/50">{r.actionLabel}</button>
                     );
                     return r.action === "record-fee" && p.wrapRecord ? p.wrapRecord(link) : link;
                   })()}
@@ -133,7 +135,7 @@ export function StageCard(p: StageCardProps) {
           {model.main.kind !== "none" ? (
             <button
               type="button"
-              onClick={p.onMain}
+              onClick={() => { rememberOrigin(); p.onMain(); }}
               disabled={!model.main.enabled}
               title={model.main.disabledReason ?? undefined}
               className={cn(
@@ -149,7 +151,7 @@ export function StageCard(p: StageCardProps) {
           )}
           <div className="mt-1.5 flex items-center gap-0.5">
             {model.footer.revert.show && (
-              <button type="button" disabled={!model.footer.revert.enabled} title={model.footer.revert.tooltip ?? model.footer.revert.label} onClick={p.onRevert} className={cn(BTN, "min-w-0 shrink")}>
+              <button type="button" disabled={!model.footer.revert.enabled} title={model.footer.revert.tooltip ?? model.footer.revert.label} onClick={() => { rememberOrigin(); p.onRevert(); }} className={cn(BTN, "min-w-0 shrink")}>
                 <ArrowBendUpLeftIcon className="size-3 shrink-0" /><span className="truncate">{model.footer.revert.label}</span>
               </button>
             )}
@@ -157,14 +159,14 @@ export function StageCard(p: StageCardProps) {
             {model.footer.moveTo && (
               <Picker
                 open={moveOpen} onOpenChange={setMoveOpen} options={p.moveOptions} selected={p.currentListId ? [p.currentListId] : []} placeholder="Move to…"
-                onPick={(id) => { if (id !== p.currentListId) p.onMovePick(id); }}
-                footer={model.footer.archive ? () => ({ label: "Archive…", icon: <ArchiveIcon className="size-[14px]" aria-hidden />, onSelect: p.onArchive }) : undefined}
+                onPick={(id) => { if (id !== p.currentListId) { rememberOrigin(moveTriggerRef.current); p.onMovePick(id); } }}
+                footer={model.footer.archive ? () => ({ label: "Archive…", icon: <ArchiveIcon className="size-[14px]" aria-hidden />, onSelect: () => { rememberOrigin(moveTriggerRef.current); p.onArchive(); } }) : undefined}
               >
-                <button type="button" aria-haspopup="listbox" aria-expanded={moveOpen} onClick={() => setMoveOpen((o) => !o)} className={cn(BTN, "shrink-0")}>Move to…<CaretDownIcon className="size-3" /></button>
+                <button ref={moveTriggerRef} type="button" aria-haspopup="listbox" aria-expanded={moveOpen} onClick={() => setMoveOpen((o) => !o)} className={cn(BTN, "shrink-0")}>Move to…<CaretDownIcon className="size-3" /></button>
               </Picker>
             )}
             {model.footer.archive && (
-              <button type="button" aria-label="Archive" title="Archive" onClick={p.onArchive} className={cn(BTN, "w-[26px] shrink-0 justify-center px-0 [&_svg]:size-[14px]")}><ArchiveIcon /></button>
+              <button type="button" aria-label="Archive" title="Archive" onClick={() => { rememberOrigin(); p.onArchive(); }} className={cn(BTN, "w-[26px] shrink-0 justify-center px-0 [&_svg]:size-[14px]")}><ArchiveIcon /></button>
             )}
           </div>
         </div>

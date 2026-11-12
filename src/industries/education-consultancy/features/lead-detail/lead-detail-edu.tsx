@@ -23,6 +23,7 @@ import type { LeadSubmissionSnapshot } from "@/lib/leads/submission-history";
 import { NavButton } from "../record-preview/record-preview";
 import { shouldHandleNavKey } from "../record-preview/lib/nav";
 import { LeftColumn, MoreMenu } from "./left-column";
+import { restoreOrigin, rememberOrigin } from "./focus-origin";
 import { MiddleColumn, type MiddleColumnHandle } from "./middle-column";
 import { useLeadActions, type Assignee, type Person } from "./use-lead-actions";
 import { useLeadFile } from "./lead-file";
@@ -102,6 +103,7 @@ export function LeadDetailEdu(props: LeadDetailEduProps) {
   const [missingBeforeApplications, setMissingBeforeApplications] = useState<string[]>([]);
   const openStudentDetails = useCallback((missing?: string[]) => {
     if (!studentRecordActive) return false;
+    rememberOrigin();
     setMissingBeforeApplications(missing ?? []);
     setDetailsKey((k) => k + 1);
     setDetailsOpen(true);
@@ -392,7 +394,7 @@ export function LeadDetailEdu(props: LeadDetailEduProps) {
       )}
 
       <AlertDialog open={deleteOpen} onOpenChange={(o) => { if (!deleting) setDeleteOpen(o); }}>
-        <AlertDialogContent>
+        <AlertDialogContent onCloseAutoFocus={restoreOrigin}>
           <AlertDialogHeader icon={<XIcon aria-hidden />} tone="danger">
             <AlertDialogTitle>Delete {name}?</AlertDialogTitle>
             <AlertDialogDescription>The lead moves to the Recycle bin. Admins can restore it from there.</AlertDialogDescription>

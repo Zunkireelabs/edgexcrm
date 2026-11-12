@@ -9,6 +9,8 @@ export interface PickerOption {
   value: string;
   label: string;
   secondary?: string;
+  /** "warn" paints the secondary text amber (e.g. "2 missing"). */
+  secondaryTone?: "warn";
   icon?: ReactNode;
   group?: string;
   disabled?: boolean;
@@ -73,7 +75,7 @@ export function Picker({
                     >
                       {o.icon}
                       <span className="min-w-0 truncate">{o.label}</span>
-                      {o.secondary && <span className="ml-1 truncate text-ds-faint">{o.secondary}</span>}
+                      {o.secondary && <span className={`ml-1 truncate ${o.secondaryTone === "warn" ? "text-ds-warn" : "text-ds-faint"}`}>{o.secondary}</span>}
                       <span className="ml-auto flex size-4 shrink-0 items-center justify-center text-ds-muted">
                         {selected.includes(o.value) && <CheckIcon className="size-4" aria-hidden />}
                       </span>

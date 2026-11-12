@@ -18,6 +18,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 const CollapsibleGroupsContext = createContext(false);
 
 /**
+ * Edit profile (EDGEX-155) layout: sentence-case labels ("Date of birth"), "Set …" placeholders and two-column grids inside the
+ * 600px section panel. Off everywhere else, so the classic pop-up and the summary card render exactly as before.
+ */
+export const EditProfileLayoutContext = createContext(false);
+
+/** "Date of Birth" → "Date of birth"; words that are already all caps (GPA, IELTS, SEE, +2) are kept. */
+export function sentenceCase(label: string): string {
+  const words = label.split(" ");
+  return words.map((w, i) => (/^[A-Z0-9+/&-]{2,}$/.test(w) ? w : i === 0 ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w.toLowerCase())).join(" ");
+}
+
+/**
  * Wrap a region to make every SectionGroup inside it collapsible (open by default) —
  * including groups added to that region later, with nothing to remember per section.
  * Outside a <CollapsibleGroups>, a SectionGroup is a plain heading (e.g. in the dialog).
@@ -82,7 +94,9 @@ export function CardSection({
   );
 }
 
-export function FieldGrid({ children, columns = 3 }: { children: React.ReactNode; columns?: 2 | 3 }) {
+export function FieldGrid({ children, columns: requested = 3 }: { children: React.ReactNode; columns?: 2 | 3 }) {
+  const compact = useContext(EditProfileLayoutContext);
+  const columns = compact ? 2 : requested;
   const cols = columns === 2 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3";
   return <div className={`grid ${cols} gap-x-6 gap-y-4`}>{children}</div>;
 }
@@ -129,11 +143,13 @@ export function EditableField({
   /** Edit profile: the consent form still needs this value ("· needed for consent" after the label). */
   needed?: boolean;
 }) {
+  const compact = useContext(EditProfileLayoutContext);
+  const label = compact ? sentenceCase(field.label) : field.label;
   const redBorder = invalid ? "border-red-500 focus-visible:ring-red-500" : "";
   return (
     <div className={field.span === 2 ? "col-span-full" : undefined} data-invalid={invalid ? "true" : undefined}>
       <p className={invalid ? "text-xs font-medium text-red-600 mb-1" : "text-xs text-muted-foreground mb-1"}>
-        {field.label}
+        {label}
         {invalid ? " — required" : ""}
         {needed && !invalid && <span className="font-normal text-[#b25e09]"> · needed for consent</span>}
       </p>
@@ -161,13 +177,13 @@ export function EditableField({
           </div>
         ) : (
           <>
-            <Label htmlFor={field.key} className="sr-only">{field.label}</Label>
+            <Label htmlFor={field.key} className="sr-only">{label}</Label>
             <Input
               id={field.key}
               type={field.type}
               value={value}
               onChange={(e) => onChange(e.target.value)}
-              placeholder={field.placeholder ?? `Enter ${field.label.toLowerCase()}`}
+              placeholder={field.placeholder ?? (compact ? `Set ${label.toLowerCase()}` : `Enter ${field.label.toLowerCase()}`)}
               className={`h-9 text-sm ${redBorder}`}
               readOnly={!!readOnlyNote}
               disabled={!!readOnlyNote}

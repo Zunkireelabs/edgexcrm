@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   CheckSquareIcon, DotsThreeIcon, EnvelopeSimpleIcon, EyeIcon, NotePencilIcon, PhoneIcon, WhatsappLogoIcon,
@@ -22,7 +22,9 @@ import { FeePopover } from "./fee-popover";
 import type { LeadFile } from "./lead-file";
 import { BigAvatar, CopyIconButton, IconButton } from "./ui";
 import { buildMoveMenu } from "./lib/move-model";
-import { buildStageCardModel, type ApplicationsReadiness, type RequirementAction } from "./lib/stage-card-model";
+import { Dot } from "../record-preview/parts";
+import { rememberOrigin } from "./focus-origin";
+import { buildStageCardModel, stageColor, type ApplicationsReadiness, type RequirementAction } from "./lib/stage-card-model";
 import type { PickerOption } from "./picker";
 import type { Assignee, Person, useLeadActions } from "./use-lead-actions";
 
@@ -134,7 +136,10 @@ export function LeftColumn(p: LeftColumnProps) {
   const chain = useMemo(() => [...p.activeLeadLists].sort((a, b) => a.sort_order - b.sort_order), [p.activeLeadLists]);
   const prevList = useMemo(() => { const i = chain.findIndex((l) => l.id === lead.list_id); return i > 0 ? chain[i - 1] : null; }, [chain, lead.list_id]);
   const accessibleIds = useMemo(() => new Set(p.leadLists.map((l) => l.id)), [p.leadLists]);
-  const moveOptions: PickerOption[] = buildMoveMenu({ chain, accessibleIds, currentListId: lead.list_id ?? null, readiness });
+  const moveOptions: PickerOption[] = buildMoveMenu({ chain, accessibleIds, currentListId: lead.list_id ?? null, readiness }).map((o) => {
+    const l = chain.find((x) => x.id === o.value);
+    return { ...o, icon: l ? <Dot color={stageColor(l)} /> : undefined };
+  });
 
   const statuses = useMemo(() => {
     const scoped = p.stages.filter((s) => s.pipeline_id === lead.pipeline_id);
@@ -289,19 +294,22 @@ export function LeftColumn(p: LeftColumnProps) {
 }
 
 export function MoreMenu({ isAdmin, onCopyLink, onCopyId, onDelete, onMerge, bordered }: { isAdmin: boolean; onCopyLink: () => void; onCopyId: () => void; onDelete: () => void; onMerge: () => void; bordered?: boolean }) {
+  // Dialogs opened from this menu hand focus back to ITS trigger button (the menu's items are gone by then).
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const viaMenu = (fn: () => void) => () => { rememberOrigin(triggerRef.current); fn(); };
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger aria-label="More actions" title="More actions" className={`inline-flex size-7 shrink-0 items-center justify-center rounded-[8px] text-[#6b6f76] outline-none hover:bg-[#f6f7f9] hover:text-[#101112] focus-visible:ring-2 focus-visible:ring-[#266df0]/50 data-[state=open]:bg-[#f6f7f9] ${bordered ? "bg-white text-[#2b2d2f] shadow-[inset_0_0_0_1px_#e8e9eb]" : ""}`}>
+      <DropdownMenuTrigger ref={triggerRef} aria-label="More actions" title="More actions" className={`inline-flex size-7 shrink-0 items-center justify-center rounded-[8px] text-[#6b6f76] outline-none hover:bg-[#f6f7f9] hover:text-[#101112] focus-visible:ring-2 focus-visible:ring-[#266df0]/50 data-[state=open]:bg-[#f6f7f9] ${bordered ? "bg-white text-[#2b2d2f] shadow-[inset_0_0_0_1px_#e8e9eb]" : ""}`}>
         <DotsThreeIcon className="size-[14px]" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-[220px] rounded-[12px]">
         <DropdownMenuItem className="rounded-[8px]" onSelect={onCopyLink}>Copy link to this lead</DropdownMenuItem>
         <DropdownMenuItem className="rounded-[8px]" onSelect={onCopyId}>Copy lead ID</DropdownMenuItem>
-        {isAdmin && <DropdownMenuItem className="rounded-[8px]" onSelect={onMerge}>Merge duplicates…</DropdownMenuItem>}
+        {isAdmin && <DropdownMenuItem className="rounded-[8px]" onSelect={viaMenu(onMerge)}>Merge duplicates…</DropdownMenuItem>}
         {isAdmin && (
           <>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="rounded-[8px] text-[#c4321f] focus:text-[#c4321f]" onSelect={onDelete}>Delete lead</DropdownMenuItem>
+            <DropdownMenuItem className="rounded-[8px] text-[#c4321f] focus:text-[#c4321f]" onSelect={viaMenu(onDelete)}>Delete lead</DropdownMenuItem>
           </>
         )}
       </DropdownMenuContent>

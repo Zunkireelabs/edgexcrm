@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import {
   EnvelopeSimpleIcon, FileTextIcon, FunnelIcon, GearIcon, NoteIcon, PhoneIcon, PlusIcon, UserCheckIcon, UsersIcon, ClockIcon,
 } from "@/components/icons";
@@ -13,6 +13,7 @@ import {
   CHIP_LABEL, CHIP_ORDER, QUOTE_KINDS, chipCounts, clock, filterFeed, groupByDay, type ChipId, type FeedItem,
 } from "./lib/activity-merge";
 import { EmptyState } from "./ui";
+import { rememberOrigin } from "./focus-origin";
 
 const BORDERED = "inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-[8px] bg-white px-2 text-[14px] font-medium leading-5 text-[#101112] shadow-[inset_0_0_0_1px_#e8e9eb] outline-none hover:bg-[#f6f7f9] focus-visible:ring-2 focus-visible:ring-[#266df0]/50 [&_svg]:size-[14px]";
 const MENU_ITEM = "h-8 gap-2 rounded-[8px] px-2 text-[14px] font-medium";
@@ -79,6 +80,9 @@ export function ActivityTab({ feed, currentUserId, onLog, onAddNote, onCheckIn }
   onCheckIn?: () => void;
 }) {
   const [chip, setChip] = useState<ChipId>("all");
+  const logTriggerRef = useRef<HTMLButtonElement>(null);
+  // A dialog opened from the "Log activity" menu hands focus back to that menu's button.
+  const viaLogMenu = (fn: () => void) => () => { rememberOrigin(logTriggerRef.current); fn(); };
   const counts = useMemo(() => chipCounts(feed ?? []), [feed]);
   const groups = useMemo(() => groupByDay(filterFeed(feed ?? [], chip)), [feed, chip]);
 
@@ -98,13 +102,13 @@ export function ActivityTab({ feed, currentUserId, onLog, onAddNote, onCheckIn }
           </DropdownMenuContent>
         </DropdownMenu>
         <DropdownMenu>
-          <DropdownMenuTrigger className={BORDERED}><PlusIcon aria-hidden />Log activity</DropdownMenuTrigger>
+          <DropdownMenuTrigger ref={logTriggerRef} className={BORDERED}><PlusIcon aria-hidden />Log activity</DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-[260px] rounded-[12px] p-1">
-            <DropdownMenuItem className={MENU_ITEM} onSelect={() => onLog("call")}><PhoneIcon className="size-4" />Call</DropdownMenuItem>
-            <DropdownMenuItem className={MENU_ITEM} onSelect={() => onLog("meeting")}><ClockIcon className="size-4" />Meeting</DropdownMenuItem>
-            <DropdownMenuItem className={MENU_ITEM} onSelect={() => onLog("email")}><EnvelopeSimpleIcon className="size-4" />Email (sent outside EdgeX)</DropdownMenuItem>
-            <DropdownMenuItem className={MENU_ITEM} onSelect={onAddNote}><NoteIcon className="size-4" />Note</DropdownMenuItem>
-            {onCheckIn && <DropdownMenuItem className={MENU_ITEM} onSelect={onCheckIn}><UserCheckIcon className="size-4" />Check-in</DropdownMenuItem>}
+            <DropdownMenuItem className={MENU_ITEM} onSelect={viaLogMenu(() => onLog("call"))}><PhoneIcon className="size-4" />Call</DropdownMenuItem>
+            <DropdownMenuItem className={MENU_ITEM} onSelect={viaLogMenu(() => onLog("meeting"))}><ClockIcon className="size-4" />Meeting</DropdownMenuItem>
+            <DropdownMenuItem className={MENU_ITEM} onSelect={viaLogMenu(() => onLog("email"))}><EnvelopeSimpleIcon className="size-4" />Email (sent outside EdgeX)</DropdownMenuItem>
+            <DropdownMenuItem className={MENU_ITEM} onSelect={viaLogMenu(onAddNote)}><NoteIcon className="size-4" />Note</DropdownMenuItem>
+            {onCheckIn && <DropdownMenuItem className={MENU_ITEM} onSelect={viaLogMenu(onCheckIn)}><UserCheckIcon className="size-4" />Check-in</DropdownMenuItem>}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

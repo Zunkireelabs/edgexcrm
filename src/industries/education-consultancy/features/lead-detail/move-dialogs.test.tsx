@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, waitFor, within } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { useState } from "react";
+import { rememberOrigin } from "./focus-origin";
 import { ArchiveDialog, GpaGateDialog, MoveConfirmDialog, QualifyDialog, type QualifyDialogProps } from "./move-dialogs";
 
 class RO { observe() {} unobserve() {} disconnect() {} }
@@ -27,7 +28,8 @@ describe("Qualify dialog", () => {
     render(<Qualify />);
     expect(qualifyBtn()).toBeDisabled();
     expect(screen.getByText("Needed: at least one study country or a course.")).toBeInTheDocument();
-    expect(screen.getByText("Moves to Qualified and stays with you.")).toBeInTheDocument();
+    expect(screen.getByText("Qualified").tagName).toBe("B");
+    expect(screen.getByText(/stays with you\./).textContent).toBe("Moves to Qualified and stays with you.");
   });
   it("is enabled with a country only", () => {
     render(<Qualify initial={{ dests: ["Australia"], course: "" }} />);
@@ -65,15 +67,15 @@ describe("Archive confirm", () => {
 describe("%/GPA gate", () => {
   const lead = { id: "l1" };
   it("shows 'Skip for now' to admins only", () => {
-    render(<GpaGateDialog open lead={lead} canSkip targetName="Prospects" onSave={() => {}} onSkip={() => {}} onCancel={() => {}} />);
+    render(<GpaGateDialog open lead={lead} canSkip onSave={() => {}} onSkip={() => {}} onCancel={() => {}} />);
     expect(screen.getByRole("button", { name: "Skip for now" })).toBeInTheDocument();
     cleanup();
-    render(<GpaGateDialog open lead={lead} canSkip={false} targetName="Prospects" onSave={() => {}} onSkip={() => {}} onCancel={() => {}} />);
+    render(<GpaGateDialog open lead={lead} canSkip={false} onSave={() => {}} onSkip={() => {}} onCancel={() => {}} />);
     expect(screen.queryByRole("button", { name: "Skip for now" })).toBeNull();
   });
   it("needs a %/GPA on a gate-eligible level; SEE does not count", () => {
     const onSave = vi.fn();
-    render(<GpaGateDialog open lead={lead} canSkip={false} targetName="Prospects" onSave={onSave} onSkip={() => {}} onCancel={() => {}} />);
+    render(<GpaGateDialog open lead={lead} canSkip={false} onSave={onSave} onSkip={() => {}} onCancel={() => {}} />);
     const save = () => screen.getByRole("button", { name: /^Save & continue/ });
     expect(save()).toBeDisabled();
     fireEvent.change(screen.getByLabelText("%/GPA"), { target: { value: "3.2" } });
@@ -106,5 +108,63 @@ describe("send / move / revert confirm", () => {
     render(<MoveConfirmDialog {...base} direction="back" targetName="Pre-qualified" />);
     expect(screen.getByText("Revert to Pre-qualified?")).toBeInTheDocument();
     expect(screen.getByLabelText(/Why/)).toBeInTheDocument();
+  });
+});
+
+// Requirement 9: every dialog hands focus back to the button (or menu button) that started the flow.
+describe("focus returns to the trigger", () => {
+  function Flow({ children }: { children: (open: boolean, close: () => void) => React.ReactNode }) {
+    const [open, setOpen] = useState(false);
+    return (
+      <>
+        <button type="button" onClick={(e) => { rememberOrigin(e.currentTarget); setOpen(true); }}>Trigger</button>
+        {children(open, () => setOpen(false))}
+      </>
+    );
+  }
+  const expectFocusOnTrigger = async () => {
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Trigger" })));
+  };
+
+  it("Qualify: Esc and Cancel both return focus to the trigger", async () => {
+    const view = (key: string) => (
+      <Flow>{(open, close) => <QualifyDialog open={open} onOpenChange={(o) => !o && close()} leadName="Sita" destinations={[]} onDestinations={() => {}} course="" onCourse={() => {}} level="" onLevel={() => {}} note="" onNote={() => {}} destinationOptions={[]} courseOptions={[]} levelOptions={[]} saving={false} onSubmit={() => {}} key={key} />}</Flow>
+    );
+    render(view("a"));
+    fireEvent.click(screen.getByRole("button", { name: "Trigger" }));
+    fireEvent.keyDown(await screen.findByRole("dialog"), { key: "Escape" });
+    await expectFocusOnTrigger();
+    fireEvent.click(screen.getByRole("button", { name: "Trigger" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+    await expectFocusOnTrigger();
+  });
+
+  it("Archive (alert dialog): focus starts INSIDE the dialog, and Cancel returns it to the trigger", async () => {
+    render(<Flow>{(open, close) => open && <ArchiveDialog open leadName="Aarav" reason="" onReason={() => {}} other="" onOther={() => {}} onConfirm={() => {}} onCancel={close} />}</Flow>);
+    fireEvent.click(screen.getByRole("button", { name: "Trigger" }));
+    const box = await screen.findByRole("alertdialog");
+    await waitFor(() => expect(box.contains(document.activeElement)).toBe(true));
+    fireEvent.click(within(box).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Trigger" })));
+  });
+
+  it("a chain returns to the ORIGINAL trigger (gate → confirm → Cancel)", async () => {
+    function Chain() {
+      const [step, setStep] = useState<"none" | "gate" | "confirm">("none");
+      return (
+        <>
+          <button type="button" onClick={(e) => { rememberOrigin(e.currentTarget); setStep("gate"); }}>Trigger</button>
+          <GpaGateDialog open={step === "gate"} lead={{ id: "l" }} canSkip onSave={() => setStep("confirm")} onSkip={() => setStep("confirm")} onCancel={() => setStep("none")} />
+          <MoveConfirmDialog open={step === "confirm"} direction="next" targetName="Prospects" leadName="Sita" isBackward={false} chainSend members={[]} assignee="" onAssignee={() => {}} why="" onWhy={() => {}} fixedHolderName={null} busy={false} onConfirm={() => {}} onCancel={() => setStep("none")} />
+        </>
+      );
+    }
+    render(<Chain />);
+    fireEvent.click(screen.getByRole("button", { name: "Trigger" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Skip for now" }));
+    const box = await screen.findByRole("alertdialog");
+    fireEvent.click(within(box).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Trigger" })));
   });
 });

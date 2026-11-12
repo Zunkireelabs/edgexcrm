@@ -112,11 +112,11 @@ export async function fetchAdjacentLeadId(
 }
 
 /**
- * After a hand-off the lead leaves the user's list: the NEXT lead of the view (or the previous when this was the last
- * on the page) is where they carry on. Null = nothing to open, go back to the view.
+ * After a hand-off the lead leaves the user's list: the NEXT lead of the view is where they carry on (strictly next: no
+ * fallback to the previous row). Null = nothing to open on this page, go back to the view.
  */
 export function nextLeadAfterHandOff(ctx: LeadNavContext | null, leadId: string): string | null {
   const r = resolveLeadNav(ctx, leadId);
   if (!r) return null;
-  return r.nextId ?? r.prevId;
+  return r.nextId;
 }

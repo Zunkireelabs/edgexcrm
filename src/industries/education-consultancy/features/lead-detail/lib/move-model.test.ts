@@ -71,8 +71,12 @@ describe("Move to… menu", () => {
     const m = buildMoveMenu({ chain, accessibleIds: all, currentListId: "p", readiness: { ready: false, missing: ["Processing fee", "Consent signed"] } });
     expect(m.map((o) => o.label)).toEqual(["Pre-qualified", "Qualified", "Prospects", "Applications"]);
     expect(m.find((o) => o.value === "p")).toMatchObject({ disabled: true, secondary: "Current" });
-    expect(m.find((o) => o.value === "app")).toMatchObject({ disabled: true, secondary: "2 missing" });
+    expect(m.find((o) => o.value === "app")).toMatchObject({ disabled: true, secondary: "2 missing", secondaryTone: "warn" });
     expect(m.find((o) => o.value === "q")?.disabled).toBeUndefined();
+  });
+  it("counts 'n missing' like the Highlights card: a 'Basic info (a, b)' line is two fields (one readiness source)", () => {
+    const m = buildMoveMenu({ chain, accessibleIds: all, currentListId: "p", readiness: { ready: false, missing: ["Basic info (Passport Number, Date Of Birth)", "Consent signed"] } });
+    expect(m.find((o) => o.value === "app")?.secondary).toBe("3 missing");
   });
   it("leaves Applications open when ready or when readiness is unknown (the server re-checks)", () => {
     expect(buildMoveMenu({ chain, accessibleIds: all, currentListId: "p", readiness: { ready: true, missing: [] } }).find((o) => o.value === "app")?.disabled).toBeUndefined();
@@ -89,6 +93,9 @@ describe("hand-off: which lead opens next", () => {
   });
   it("goes back to the view when there is no context", async () => {
     expect(await resolveHandOffTarget(null, "a", "/leads")).toEqual({ nextId: null, href: "/leads", ctx: null });
+  });
+  it("is strictly next-only: the last lead of the view goes back to the view, not to the previous row", async () => {
+    expect(await resolveHandOffTarget({ ...ctx, ids: ["a", "b", "c"], total: 3 }, "c", "/leads")).toMatchObject({ nextId: null, href: "/leads?view=mine" });
   });
   it("goes back to the view when the lead is not in the stored context (stale)", async () => {
     expect(await resolveHandOffTarget(ctx, "zzz", "/leads")).toMatchObject({ nextId: null, href: "/leads?view=mine" });

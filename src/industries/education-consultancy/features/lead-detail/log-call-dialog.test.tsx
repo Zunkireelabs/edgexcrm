@@ -37,7 +37,10 @@ describe("Log call", () => {
   it("sends the When as created_at for a call from earlier", async () => {
     const { posted } = setup();
     const earlier = new Date(Date.now() - 26 * 3600_000);
-    fireEvent.change(screen.getByLabelText("When"), { target: { value: toLocalInput(earlier) } });
+    const local = toLocalInput(earlier);
+    fireEvent.click(screen.getByRole("button", { name: /^When:/ }));
+    fireEvent.change(screen.getByLabelText("Date"), { target: { value: local.slice(0, 10) } });
+    fireEvent.change(screen.getByLabelText("Time"), { target: { value: local.slice(11) } });
     submit();
     await waitFor(() => expect(posted).toHaveLength(1));
     const sent = new Date(String(posted[0].created_at)).getTime();
@@ -46,7 +49,11 @@ describe("Log call", () => {
 
   it("refuses a time in the future and sends nothing", async () => {
     const { posted } = setup();
-    fireEvent.change(screen.getByLabelText("When"), { target: { value: toLocalInput(new Date(Date.now() + 3 * 3600_000)) } });
+    // Past only: the date input's max is today, but a time later today is still caught here.
+    fireEvent.click(screen.getByRole("button", { name: /^When:/ }));
+    const later = toLocalInput(new Date(Date.now() + 3 * 3600_000));
+    fireEvent.change(screen.getByLabelText("Date"), { target: { value: later.slice(0, 10) } });
+    fireEvent.change(screen.getByLabelText("Time"), { target: { value: later.slice(11) } });
     expect(screen.getByRole("alert")).toHaveTextContent(/future/);
     expect(screen.getByRole("button", { name: /^Log call/ })).toBeDisabled();
     expect(posted).toHaveLength(0);

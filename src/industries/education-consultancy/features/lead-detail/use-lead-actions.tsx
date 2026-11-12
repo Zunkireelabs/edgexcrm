@@ -302,7 +302,7 @@ export function useLeadActions(p: Params) {
       />
 
       <GpaGateDialog
-        open={!!gate} lead={currentLead as unknown as Record<string, unknown>} canSkip={p.bypassQualification} targetName={gate?.list.name ?? "Prospects"}
+        open={!!gate} lead={currentLead as unknown as Record<string, unknown>} canSkip={p.bypassQualification}
         onSave={(patch) => { if (gate) { const g = gate; setGate(null); openConfirm(g.list, g.direction, patch); } }}
         onSkip={() => { if (gate) { const g = gate; setGate(null); openConfirm(g.list, g.direction); } }}
         onCancel={() => setGate(null)}

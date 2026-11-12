@@ -1,9 +1,9 @@
 "use client";
 
 import { GUARDIAN_SECTION_TITLE } from "@/lib/consent/guardian";
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useContext, useEffect, useMemo, useState, useRef } from "react";
 import { toast } from "sonner";
-import { PencilSimpleIcon, XIcon, CheckIcon, CircleNotchIcon } from "@/components/icons";
+import { PencilSimpleIcon, XIcon, CheckIcon, CircleNotchIcon, UserIcon } from "@/components/icons";
 import {
   Dialog,
   DialogContent,
@@ -14,6 +14,7 @@ import {
   DialogKeyHint,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { restoreOrigin } from "../../lead-detail/focus-origin";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,7 +46,7 @@ import { QualificationsSection, qualificationsFromLead, type Qualifications } fr
 import { WorkExperienceSection, type WorkExperienceEntry } from "./work-experience-section";
 import { ReferencesSection, type ReferenceEntry } from "./references-section";
 import { GUARDIAN_RELATIONSHIP_OPTIONS, normalizeGuardianRelationship, guardianNameAfterRelationshipChange, resolveGuardian } from "@/lib/consent/guardian";
-import { SectionGroup, CardSection, FieldGrid, EditableField } from "./form-primitives";
+import { SectionGroup, CardSection, FieldGrid, EditableField, EditProfileLayoutContext, sentenceCase } from "./form-primitives";
 import { useStudentRecordLists } from "./use-student-record-lists";
 import { notifyStudentRecordChanged } from "./student-record-events";
 import { buildListsPayload, storedListsToState, type StoredLists } from "./student-record-lists";
@@ -680,14 +681,14 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
   const leadDisplayName = [coreIdentity.firstName, coreIdentity.lastName].filter(Boolean).join(" ") || "this student";
   const discardConfirm = (
     <AlertDialog open={confirm !== null} onOpenChange={(next) => { if (!next) setConfirm(null); }}>
-      <AlertDialogContent>
+      <AlertDialogContent className={layout === "sections" ? "max-w-[min(460px,calc(100%-2rem))]" : undefined} onCloseAutoFocus={layout === "sections" ? restoreOrigin : undefined}>
         <AlertDialogHeader>
           <AlertDialogTitle>{confirm === "save" ? "Save these changes?" : "Discard your changes?"}</AlertDialogTitle>
           <AlertDialogDescription>
             {confirm === "save"
               ? "The changes you made will be saved to this student's record."
               : layout === "sections"
-                ? `You edited ${changedCount} field${changedCount === 1 ? "" : "s"} on ${leadDisplayName}. They won't be saved.`
+                ? <>You edited {changedCount} field{changedCount === 1 ? "" : "s"} on <b className="font-semibold text-ds-ink">{leadDisplayName}</b>. They won&apos;t be saved.</>
                 : "You have unsaved changes. If you leave now, what you typed will be lost."}
           </AlertDialogDescription>
         </AlertDialogHeader>
@@ -706,7 +707,7 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
               }
             }}
           >
-            {confirm === "save" ? "Save" : "Discard"}
+            {confirm === "save" ? "Save" : <>Discard{layout === "sections" && <DialogKeyHint>↵</DialogKeyHint>}</>}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -893,7 +894,7 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
     return (
       <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent
-          size="form" flush showCloseButton
+          size="form" flush showCloseButton aria-describedby={undefined} onCloseAutoFocus={restoreOrigin}
           onKeyDown={(e) => {
             // J / K mean "next / previous lead" on the page; here they only matter when typed edits would be lost.
             const t = e.target as HTMLElement;
@@ -905,9 +906,10 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
             if (computeChanges().hasChanges) { e.preventDefault(); setNavDir(e.key.toLowerCase() === "j" ? "next" : "prev"); setConfirm("discard-nav"); }
           }}
         >
-          <DialogHeader>
+          <DialogHeader className="min-h-11 flex-row items-center gap-2 py-0">
+            <UserIcon className="size-[13px] shrink-0 text-ds-muted" aria-hidden />
             <DialogTitle>Edit profile</DialogTitle>
-            <DialogDescription>{[fullName, gaps ? `${gaps.filled} of ${gaps.total} filled` : null].filter(Boolean).join(" · ")}</DialogDescription>
+            <span className="min-w-0 truncate text-[14px] leading-5 text-black/50">{[fullName, gaps ? `${gaps.filled} of ${gaps.total} filled` : null].filter(Boolean).join(" · ")}</span>
           </DialogHeader>
           <div className="flex min-h-0 flex-1">
             <nav aria-label="Profile sections" className="w-[200px] flex-none overflow-y-auto border-r border-ds-divider p-2">
@@ -925,9 +927,11 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
               })}
             </nav>
             <div className="min-w-0 flex-1 overflow-y-auto px-5 py-4" data-testid="profile-section-body">
-              {gateBanner && <div className="mb-4">{gateBanner}</div>}
-              <h3 className="m-0 mb-3 text-[14px] font-medium leading-5 text-ds-ink">{active.label}</h3>
-              {body[active.id]}
+              <EditProfileLayoutContext.Provider value>
+                {gateBanner && <div className="mb-4">{gateBanner}</div>}
+                <h3 className="m-0 mb-3 text-[14px] font-medium leading-5 text-ds-ink">{active.label}</h3>
+                {body[active.id]}
+              </EditProfileLayoutContext.Provider>
             </div>
           </div>
           <DialogFooter>
@@ -1063,11 +1067,13 @@ function StudyInterestFields({
 }) {
   const { destinations: destOptions, fieldsOfStudy, studyLevels, intakeMonths, intakeYears } = useEduTaxonomy();
   const intake = [value.intakeMonth, value.intakeYear].filter(Boolean).join(" ");
+  const compact = useContext(EditProfileLayoutContext);
+  const L = (t: string) => (compact ? sentenceCase(t) : t);
 
   return (
     <FieldGrid>
       <div className="col-span-full">
-        <p className="text-xs text-muted-foreground mb-1">Interested Destinations</p>
+        <p className="text-xs text-muted-foreground mb-1">{L("Interested Destinations")}</p>
         {isEditing ? (
           <DestinationsMultiSelect
             selected={value.destinations}
@@ -1085,7 +1091,7 @@ function StudyInterestFields({
 
       <div>
         <p className={invalidFieldOfStudy ? "text-xs font-medium text-red-600 mb-1" : "text-xs text-muted-foreground mb-1"}>
-          Field of Study{invalidFieldOfStudy ? " — required" : ""}
+          {L("Field of Study")}{invalidFieldOfStudy ? " — required" : ""}
           {neededFieldOfStudy && !invalidFieldOfStudy && <span className="font-normal text-[#b25e09]"> · needed for consent</span>}
         </p>
         {isEditing ? (
@@ -1107,7 +1113,7 @@ function StudyInterestFields({
 
       <div>
         <p className={invalidDegreeLevel ? "text-xs font-medium text-red-600 mb-1" : "text-xs text-muted-foreground mb-1"}>
-          Degree Level{invalidDegreeLevel ? " — required" : ""}
+          {L("Degree Level")}{invalidDegreeLevel ? " — required" : ""}
           {neededDegreeLevel && !invalidDegreeLevel && <span className="font-normal text-[#b25e09]"> · needed for consent</span>}
         </p>
         {isEditing ? (
@@ -1132,7 +1138,7 @@ function StudyInterestFields({
       </div>
 
       <div className="col-span-full">
-        <p className="text-xs text-muted-foreground mb-1">Intake</p>
+        <p className="text-xs text-muted-foreground mb-1">{L("Intake")}</p>
         {isEditing ? (
           <div className="grid grid-cols-2 gap-3 max-w-sm">
             <Select value={value.intakeMonth || "__none__"} onValueChange={(v) => onChange({ ...value, intakeMonth: v === "__none__" ? "" : v })}>

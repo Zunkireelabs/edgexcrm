@@ -52,14 +52,29 @@ describe("Edit profile (sections layout)", () => {
   it("opens at the first section with a gap, and marks the fields the consent form needs", async () => {
     setup();
     await waitFor(() => expect(within(body()).getByRole("heading", { name: "Basic details" })).toBeInTheDocument(), WAIT);
-    expect(body()).toHaveTextContent("Date of Birth · needed for consent");
-    expect(body()).toHaveTextContent("Father's Name · needed for consent");
-    expect(body()).not.toHaveTextContent("Mother's Name · needed for consent");
+    // Sentence-case labels, "Set …" placeholders.
+    expect(body()).toHaveTextContent("Date of birth · needed for consent");
+    expect(body()).toHaveTextContent("Father's name · needed for consent");
+    expect(body()).not.toHaveTextContent("Mother's name · needed for consent");
+    expect(screen.getByPlaceholderText("Set father's name")).toBeInTheDocument();
+  });
+
+  it("shows the header as one bar: title, then the name and fill count inline (no description line)", async () => {
+    setup({ missing: [] });
+    await waitFor(() => expect(screen.getByText(/12 of 12 filled/)).toBeInTheDocument(), WAIT);
+    expect(screen.getByText("Aarav Shrestha · 12 of 12 filled").tagName).toBe("SPAN");
   });
 
   it("opens at the section a 'Complete' link asked for", async () => {
     setup({ requested: ["Passport Number"] });
     await waitFor(() => expect(within(body()).getByRole("heading", { name: "Passport" })).toBeInTheDocument(), WAIT);
+  });
+
+  it("Study interest uses the full two-column grid like Basic details", async () => {
+    setup({ missing: ["Field of Study"], requested: ["Field of Study"] });
+    await waitFor(() => expect(within(body()).getByRole("heading", { name: "Study interest" })).toBeInTheDocument(), WAIT);
+    expect(body().querySelector(".grid.sm\\:grid-cols-2")).not.toBeNull();
+    expect(body().querySelector(".lg\\:grid-cols-3")).toBeNull();
   });
 
   it("falls back to Personal when nothing is missing", async () => {
@@ -72,14 +87,16 @@ describe("Edit profile (sections layout)", () => {
     const onOpenChange = vi.fn();
     setup({ missing: [], onOpenChange });
     await waitFor(() => expect(screen.getByText(/12 of 12 filled/)).toBeInTheDocument(), WAIT);
-    fireEvent.change(screen.getByLabelText("First Name"), { target: { value: "Aaravv" } });
+    fireEvent.change(screen.getByLabelText("First name"), { target: { value: "Aaravv" } });
     expect(screen.getByText("1 field changed")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     const box = await screen.findByRole("alertdialog");
     expect(within(box).getByText("Discard your changes?")).toBeInTheDocument();
-    expect(within(box).getByText(/You edited 1 field on Aarav Shrestha\. They won't be saved\./)).toBeInTheDocument();
+    expect(box).toHaveTextContent("You edited 1 field on Aarav Shrestha. They won't be saved.");
+    expect(within(box).getByText("Aarav Shrestha").tagName).toBe("B");
+    expect(within(box).getByRole("button", { name: /^Discard/ })).toHaveTextContent("↵");
     expect(onOpenChange).not.toHaveBeenCalled();
-    fireEvent.click(within(box).getByRole("button", { name: "Discard" }));
+    fireEvent.click(within(box).getByRole("button", { name: /^Discard/ }));
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
@@ -97,11 +114,11 @@ describe("Edit profile (sections layout)", () => {
     const onOpenChange = vi.fn();
     setup({ missing: [], onNavKey, onOpenChange });
     await waitFor(() => expect(screen.getByText(/12 of 12 filled/)).toBeInTheDocument(), WAIT);
-    fireEvent.change(screen.getByLabelText("First Name"), { target: { value: "Aaravv" } });
+    fireEvent.change(screen.getByLabelText("First name"), { target: { value: "Aaravv" } });
     fireEvent.keyDown(screen.getByRole("navigation", { name: "Profile sections" }), { key: "j" });
     const box = await screen.findByRole("alertdialog");
     expect(onNavKey).not.toHaveBeenCalled();
-    fireEvent.click(within(box).getByRole("button", { name: "Discard" }));
+    fireEvent.click(within(box).getByRole("button", { name: /^Discard/ }));
     expect(onNavKey).toHaveBeenCalledWith("next");
   });
 
