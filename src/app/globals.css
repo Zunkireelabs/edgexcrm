@@ -368,6 +368,38 @@ html::-webkit-scrollbar-button {
 }
 
 /* ───────────────────────────────────────────────────────────────────────────────────────────────
+/* ── Education lead detail at phone width (EDGEX-156) ──────────────────────────────────────────────
+   Dialogs are portaled out of the page, so LeadDetailEdu marks <body data-edu-lead-detail> while it is mounted and the
+   phone sheet below applies to every dialog opened from it (Qualify, gate, confirms, Archive, Log call, check-in,
+   upload, add application / class, Edit profile …) and to nothing else, so LeadDetailV2 and other pages are unchanged.
+   A bottom sheet: full width, anchored to the bottom, rounded on top only. The Edit profile form dialog is a full-height
+   sheet. Unlayered on purpose (it must beat the layered Tailwind utilities on the dialog shell). */
+@media (max-width: 430px) {
+  body[data-edu-lead-detail] :is([data-slot="dialog-content"], [data-slot="alert-dialog-content"]) {
+    left: 0;
+    right: 0;
+    top: auto;
+    bottom: 0;
+    translate: none;
+    width: 100%;
+    max-width: 100%;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+  body[data-edu-lead-detail] [data-slot="dialog-content"][data-size="form"] {
+    top: 16px;
+  }
+  body[data-edu-lead-detail] :is([data-slot="dialog-card"], [data-slot="alert-dialog-card"]) {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    max-height: calc(100dvh - 32px);
+  }
+  /* the ↵ / ⌘↵ key hints mean nothing on a phone */
+  body[data-edu-lead-detail] [data-slot="dialog-key-hint"] {
+    display: none;
+  }
+}
+
    EDGEX-145 Dialogs v1: Attio form fields inside every dialog (values measured live from Attio's
    Create Person dialog). Scoped to dialogs (`dialog-card` = ui/dialog, `alert-dialog-card`) so page forms
    outside dialogs do not change. Unlayered on purpose: it wins over the Tailwind utility classes

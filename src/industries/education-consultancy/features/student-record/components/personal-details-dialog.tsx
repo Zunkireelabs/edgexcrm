@@ -382,6 +382,23 @@ interface PersonalDetailsDialogProps {
   onNavKey?: (dir: "next" | "prev") => void;
 }
 
+/** One entry of Edit profile's section list. At phone width the list is a sideways-scrolling chip row, so the active one scrolls into view. */
+function SectionNavButton({ label, count, active, onSelect }: { label: string; count: number; active: boolean; onSelect: () => void }) {
+  const ref = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (active) ref.current?.scrollIntoView?.({ inline: "center", block: "nearest" });
+  }, [active]);
+  return (
+    <button
+      ref={ref} type="button" onClick={onSelect} aria-current={active ? "true" : undefined}
+      className={`flex h-8 w-full items-center gap-2 rounded-[8px] px-2.5 text-left text-[14px] outline-none max-[430px]:w-auto max-[430px]:shrink-0 max-[430px]:whitespace-nowrap focus-visible:ring-2 focus-visible:ring-ds-accent/30 ${active ? "bg-ds-hover font-medium text-ds-ink" : "text-ds-muted hover:bg-ds-hover hover:text-ds-ink"}`}
+    >
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {count > 0 && <span aria-label={`${count} missing for consent`} className="inline-grid h-[18px] min-w-[18px] place-items-center rounded-full bg-ds-warn-soft px-1 text-[11px] font-medium text-ds-warn">{count}</span>}
+    </button>
+  );
+}
+
 /** Shown above a list that is still loading (or failed to load): it cannot be edited until it is known, so it can never be saved over the stored rows. */
 function ListsLoadNote({ status, onRetry }: { status: "loading" | "ready" | "error"; onRetry: () => void }) {
   if (status === "ready") return null;
@@ -911,18 +928,13 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
             <DialogTitle>Edit profile</DialogTitle>
             <span className="min-w-0 truncate text-[14px] leading-5 text-black/50">{[fullName, gaps ? `${gaps.filled} of ${gaps.total} filled` : null].filter(Boolean).join(" · ")}</span>
           </DialogHeader>
-          <div className="flex min-h-0 flex-1">
-            <nav aria-label="Profile sections" className="w-[200px] flex-none overflow-y-auto border-r border-ds-divider p-2">
+          {/* Phone (≤430): the 200px section list becomes a row of section chips along the top that scrolls sideways; the active one scrolls into view. */}
+          <div className="flex min-h-0 flex-1 max-[430px]:flex-col">
+            <nav aria-label="Profile sections" className="w-[200px] flex-none overflow-y-auto border-r border-ds-divider p-2 max-[430px]:flex max-[430px]:w-full max-[430px]:gap-1 max-[430px]:overflow-x-auto max-[430px]:overflow-y-hidden max-[430px]:border-b max-[430px]:border-r-0 max-[430px]:[scrollbar-width:none]">
               {list.map((s) => {
                 const n = counts[s.id] ?? 0;
                 return (
-                  <button
-                    key={s.id} type="button" onClick={() => setSection(s.id)} aria-current={s.id === active.id ? "true" : undefined}
-                    className={`flex h-8 w-full items-center gap-2 rounded-[8px] px-2.5 text-left text-[14px] outline-none focus-visible:ring-2 focus-visible:ring-ds-accent/30 ${s.id === active.id ? "bg-ds-hover font-medium text-ds-ink" : "text-ds-muted hover:bg-ds-hover hover:text-ds-ink"}`}
-                  >
-                    <span className="min-w-0 flex-1 truncate">{s.label}</span>
-                    {n > 0 && <span aria-label={`${n} missing for consent`} className="inline-grid h-[18px] min-w-[18px] place-items-center rounded-full bg-ds-warn-soft px-1 text-[11px] font-medium text-ds-warn">{n}</span>}
-                  </button>
+                  <SectionNavButton key={s.id} label={s.label} count={n} active={s.id === active.id} onSelect={() => setSection(s.id)} />
                 );
               })}
             </nav>

@@ -66,3 +66,32 @@ describe("TabBar", () => {
     expect(within(consent).getByText("2 left").className).toContain("text-[#b25e09]");
   });
 });
+
+describe("TabBar phone mode (scroll)", () => {
+  it("shows EVERY tab in one row that scrolls inside itself: no '+N more'", () => {
+    rowWidth = 358; // a 390 phone minus the gutters: far too narrow for 10 tabs
+    render(<TabBar tabs={defs(ALL)} active="overview" onSelect={() => {}} scroll />);
+    const tabs = within(screen.getByRole("tablist")).getAllByRole("tab");
+    expect(tabs).toHaveLength(ALL.length);
+    expect(screen.queryByRole("button", { name: /more tabs/ })).toBeNull();
+    expect(screen.queryByText(/\+\d+ more/)).toBeNull();
+    const nav = screen.getByRole("tablist").closest("nav") as HTMLElement;
+    expect(nav.className).toContain("overflow-x-auto");
+    expect(nav.dataset.scroll).toBe("true");
+  });
+
+  it("scrolls the active tab into view when it changes", () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    const { rerender } = render(<TabBar tabs={defs(ALL)} active="overview" onSelect={() => {}} scroll />);
+    scrollIntoView.mockClear();
+    rerender(<TabBar tabs={defs(ALL)} active="checkins" onSelect={() => {}} scroll />);
+    expect(scrollIntoView).toHaveBeenCalledWith({ inline: "center", block: "nearest" });
+  });
+
+  it("desktop mode still collapses into '+N more'", () => {
+    rowWidth = 560;
+    render(<TabBar tabs={defs(ALL)} active="overview" onSelect={() => {}} />);
+    expect(screen.getByRole("button", { name: "6 more tabs" })).toBeTruthy();
+  });
+});

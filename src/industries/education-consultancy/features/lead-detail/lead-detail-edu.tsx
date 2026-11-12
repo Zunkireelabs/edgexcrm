@@ -209,6 +209,12 @@ export function LeadDetailEdu(props: LeadDetailEduProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // The phone sheet CSS for every dialog is scoped to this page by an attribute on <body> (dialogs are portaled out of the page).
+  useEffect(() => {
+    document.body.dataset.eduLeadDetail = "true";
+    return () => { delete document.body.dataset.eduLeadDetail; };
+  }, []);
+
   useEffect(() => {
     const prev = document.title;
     document.title = `${name} · EdgeX`;
@@ -303,29 +309,33 @@ export function LeadDetailEdu(props: LeadDetailEduProps) {
     <div className="flex h-full min-h-[640px] flex-col overflow-hidden bg-white font-medium">
       <a href="#lead-tabpanel" className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-50 focus:rounded-[8px] focus:bg-white focus:px-3 focus:py-2 focus:text-[14px] focus:shadow-[0_0_0_1px_#266df0]">Skip to content</a>
 
-      {/* Header strip (48px) */}
+      {/* Header strip (48px). Phone (≤430): back icon, "12 of 444", spacer, ↑ ↓, ··· (Edit profile moves into ···). */}
       <header className="flex h-12 flex-none items-center gap-1 border-b border-[#e8e9eb] px-3">
-        <button type="button" onClick={() => router.push(backHref)} className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-[8px] px-1.5 text-[14px] text-black/[.63] outline-none hover:bg-[#f6f7f9] focus-visible:ring-2 focus-visible:ring-[#266df0]/50">
-          <ArrowLeftIcon className="size-[14px]" aria-hidden />{backLabel}
+        <button type="button" aria-label={`Back to ${backLabel}`} onClick={() => router.push(backHref)} className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-[8px] px-1.5 text-[14px] text-black/[.63] outline-none hover:bg-[#f6f7f9] focus-visible:ring-2 focus-visible:ring-[#266df0]/50 max-[430px]:order-1 max-[430px]:w-7 max-[430px]:justify-center max-[430px]:px-0 max-[430px]:shadow-[inset_0_0_0_1px_#e8e9eb]">
+          <ArrowLeftIcon className="size-[14px]" aria-hidden /><span className="max-[430px]:hidden">{backLabel}</span>
         </button>
         {nav && (
           <>
-            <span aria-hidden className="mx-1.5 h-4 w-px bg-[#e8e9eb]" />
-            <NavButton label="Previous lead" kbd="K" disabled={!nav.hasPrev} onClick={() => void goLead("prev")}><CaretUpIcon className="size-[14px]" /></NavButton>
-            <NavButton label="Next lead" kbd="J" disabled={!nav.hasNext} onClick={() => void goLead("next")}><CaretDownIcon className="size-[14px]" /></NavButton>
-            <span className="ml-1.5 text-[12px] font-medium leading-4 text-black/[.63]">{nav.position.toLocaleString()} of {nav.total.toLocaleString()} in {nav.viewLabel}</span>
+            <span aria-hidden className="mx-1.5 h-4 w-px bg-[#e8e9eb] max-[430px]:hidden" />
+            <span className="inline-flex gap-1 max-[430px]:order-4">
+              <NavButton label="Previous lead" kbd="K" disabled={!nav.hasPrev} onClick={() => void goLead("prev")}><CaretUpIcon className="size-[14px]" /></NavButton>
+              <NavButton label="Next lead" kbd="J" disabled={!nav.hasNext} onClick={() => void goLead("next")}><CaretDownIcon className="size-[14px]" /></NavButton>
+            </span>
+            <span className="ml-1.5 text-[12px] font-medium leading-4 text-black/[.63] max-[430px]:order-2 max-[430px]:ml-1">
+              {nav.position.toLocaleString()} of {nav.total.toLocaleString()}<span className="max-[430px]:hidden"> in {nav.viewLabel}</span>
+            </span>
           </>
         )}
-        <span className="flex-1" />
-        <button type="button" onClick={() => openStudentDetails()} className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-[8px] px-2 text-[14px] text-black/[.63] outline-none hover:bg-[#f6f7f9] focus-visible:ring-2 focus-visible:ring-[#266df0]/50">
+        <span className="flex-1 max-[430px]:order-3" />
+        <button type="button" onClick={() => openStudentDetails()} className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-[8px] px-2 text-[14px] text-black/[.63] outline-none hover:bg-[#f6f7f9] focus-visible:ring-2 focus-visible:ring-[#266df0]/50 max-[430px]:hidden">
           <PencilSimpleIcon className="size-[14px]" aria-hidden />Edit profile
         </button>
-        <MoreMenu isAdmin={isAdmin} onCopyLink={copyLink} onCopyId={copyId} onDelete={() => setDeleteOpen(true)} onMerge={() => void mergeDuplicates()} />
+        <span className="inline-flex max-[430px]:order-5"><MoreMenu isAdmin={isAdmin} onCopyLink={copyLink} onCopyId={copyId} onDelete={() => setDeleteOpen(true)} onMerge={() => void mergeDuplicates()} onEditProfile={() => openStudentDetails()} /></span>
       </header>
 
       <div className="flex min-h-0 flex-1 max-[767px]:flex-col max-[767px]:overflow-y-auto">
         {/* Left 320 */}
-        <aside aria-label="Lead" className="w-[320px] flex-none overflow-y-auto [scrollbar-color:#d0d3d7_transparent] [scrollbar-width:thin] border-r border-[#e8e9eb] max-[767px]:w-full max-[767px]:overflow-visible max-[767px]:border-r-0">
+        <aside aria-label="Lead" className="max-[430px]:contents w-[320px] flex-none overflow-y-auto [scrollbar-color:#d0d3d7_transparent] [scrollbar-width:thin] border-r border-[#e8e9eb] max-[767px]:w-full max-[767px]:overflow-visible max-[767px]:border-r-0">
           <LeftColumn
             lead={props.lead} actions={actions} stages={stages} leadLists={leadLists} activeLeadLists={activeLeadLists} userId={userId} memberNames={memberNames}
             isAdmin={isAdmin} leadScope={leadScope} canEdit={canEdit} isEditor={isEditor} canAssign={canAssign} canMoveWithoutChain={canMoveWithoutChain}
@@ -336,7 +346,7 @@ export function LeadDetailEdu(props: LeadDetailEduProps) {
         </aside>
 
         {/* Middle: one tab row + the active panel (EDGEX-153) */}
-        <main className="flex min-w-0 flex-1 flex-col overflow-hidden max-[767px]:overflow-visible">
+        <main className="flex min-w-0 flex-1 flex-col overflow-hidden max-[767px]:overflow-visible max-[430px]:order-3">
           <MiddleColumn
             ref={middleRef} lead={lead} notes={notes} onNotesChange={setNotes} checklists={checklists} onChecklistsChange={setChecklists} audits={activities}
             stages={stages} leadLists={leadLists} tenantId={tenant.id} currentUserId={userId} memberNames={memberNames}

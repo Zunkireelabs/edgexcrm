@@ -139,7 +139,7 @@ export function LogCallDialog({
         >
           <div className="space-y-1.5">
             <Label>Outcome</Label>
-            <SegmentedControl aria-label="Outcome" className="flex w-full [&>button]:flex-1 [&>button]:justify-center [&>button]:text-center" value={outcome} onValueChange={(v) => setOutcome(v as CallOutcome)} items={OUTCOMES.map((o) => ({ value: o.value, label: o.label }))} />
+            <SegmentedControl aria-label="Outcome" className="flex w-full [&>button]:min-w-0 [&>button]:flex-1 [&>button]:justify-center [&>button]:text-center max-[430px]:[&>button]:px-1" value={outcome} onValueChange={(v) => setOutcome(v as CallOutcome)} items={OUTCOMES.map((o) => ({ value: o.value, label: o.label }))} />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">

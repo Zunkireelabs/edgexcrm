@@ -202,7 +202,7 @@ export function GpaGateDialog({ open, lead, canSkip, onSave, onSkip, onCancel }:
             aria-label="Level" value={level} onValueChange={setLevel} className="flex w-full [&>button]:flex-1 [&>button]:justify-center [&>button]:text-center"
             items={ACADEMIC_LEVELS.map((l) => ({ value: l.key, label: LEVEL_SHORT[l.key] ?? l.label }))}
           />
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-3 gap-3 max-[430px]:grid-cols-1">
             <Field label="%/GPA" htmlFor="gpa-gpa"><Input id="gpa-gpa" value={fields[`${level}_gpa`] ?? ""} onChange={(e) => set(`${level}_gpa`, e.target.value)} placeholder="e.g. 3.21" disabled={saving} autoFocus /></Field>
             <Field label="School / college" htmlFor="gpa-school"><Input id="gpa-school" value={fields[`${level}_institution`] ?? ""} onChange={(e) => set(`${level}_institution`, e.target.value)} placeholder="Set school" disabled={saving} /></Field>
             <Field label="Passed year" htmlFor="gpa-year"><Input id="gpa-year" inputMode="numeric" value={fields[`${level}_passed_year`] ?? ""} onChange={(e) => set(`${level}_passed_year`, e.target.value)} placeholder="2025" disabled={saving} /></Field>

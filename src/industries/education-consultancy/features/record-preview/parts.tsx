@@ -102,7 +102,7 @@ interface CardProps {
 }
 
 /** Highlight card (86px; 74px at 390px). Editable ones get the hover tint + chevron; locked ones the lock. */
-export function HighlightCard(p: CardProps) {
+export function HighlightCard(p: CardProps & { className?: string }) {
   const interactive = p.editable && !!p.onClick;
   return (
     <div
@@ -115,6 +115,7 @@ export function HighlightCard(p: CardProps) {
         "group/card relative flex h-[86px] flex-col rounded-[12px] px-3 py-2.5 shadow-[inset_0_0_0_1px_#eeeff1] max-[430px]:h-[74px]",
         interactive ? "cursor-pointer hover:bg-[#faf9f7]" : "cursor-default",
         p.open && "bg-[#faf9f7]",
+        p.className,
       )}
     >
       <div className="flex items-center gap-2 text-[12px] font-medium leading-4 text-black/[.63]">

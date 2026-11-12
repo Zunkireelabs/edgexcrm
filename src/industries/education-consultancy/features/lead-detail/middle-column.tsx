@@ -32,6 +32,7 @@ import { mergeTasks, sendToggle, type TaskIn, type UnifiedTask } from "./lib/tas
 import { Overview } from "./overview";
 import { PANEL_ID, TabBar, tabId, type TabDef } from "./tab-bar";
 import { TasksTab } from "./tasks-tab";
+import { usePhone } from "./lib/use-phone";
 import { LogCallDialog } from "./log-call-dialog";
 import { followUpDefaults } from "./lib/move-model";
 import { getLeadFullName } from "@/components/dashboard/lead/lead-name";
@@ -93,6 +94,7 @@ export const MiddleColumn = forwardRef<MiddleColumnHandle, MiddleColumnProps>(fu
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  const phone = usePhone();
   const hasEmail = getFeatureAccess("education_consultancy", FEATURES.EMAIL);
   const unlocks = useMemo(() => ({
     emails: hasEmail,
@@ -215,7 +217,7 @@ export const MiddleColumn = forwardRef<MiddleColumnHandle, MiddleColumnProps>(fu
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <TabBar tabs={defs} active={activeTab} onSelect={selectTab} />
+      <TabBar tabs={defs} active={activeTab} onSelect={selectTab} scroll={phone} />
       <div id={PANEL_ID} role="tabpanel" aria-labelledby={tabId(activeTab)} tabIndex={0} className="min-h-0 flex-1 overflow-y-auto outline-none max-[767px]:overflow-visible">
         {activeTab === "overview" && (
           <Overview

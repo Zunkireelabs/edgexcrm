@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { CaretDownIcon } from "@/components/icons";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
@@ -33,7 +33,11 @@ function Badge({ t }: { t: TabDef }) {
   return t.count !== undefined && t.count !== null ? <CountChip>{t.count}</CountChip> : null;
 }
 
-export function TabBar({ tabs, active, onSelect }: { tabs: TabDef[]; active: TabId; onSelect: (id: TabId) => void }) {
+/**
+ * `scroll` (phone): ONE row of every tab that scrolls sideways inside itself: no measuring and no "+N more". The active tab is
+ * scrolled into view whenever it changes.
+ */
+export function TabBar({ tabs, active, onSelect, scroll = false }: { tabs: TabDef[]; active: TabId; onSelect: (id: TabId) => void; scroll?: boolean }) {
   const navRef = useRef<HTMLElement>(null);
   const measureRef = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(tabs.length);
@@ -62,8 +66,13 @@ export function TabBar({ tabs, active, onSelect }: { tabs: TabDef[]; active: Tab
     return () => ro.disconnect();
   }, [measure, tabs]);
 
-  const shown = tabs.slice(0, visible);
-  const hidden = tabs.slice(visible);
+  useEffect(() => {
+    if (!scroll) return;
+    document.getElementById(tabId(active))?.scrollIntoView?.({ inline: "center", block: "nearest" });
+  }, [scroll, active]);
+
+  const shown = scroll ? tabs : tabs.slice(0, visible);
+  const hidden = scroll ? [] : tabs.slice(visible);
   const activeHidden = hidden.some((t) => t.id === active);
 
   const focusTab = (id: TabId) => document.getElementById(tabId(id))?.focus();
@@ -82,8 +91,12 @@ export function TabBar({ tabs, active, onSelect }: { tabs: TabDef[]; active: Tab
   };
 
   return (
-    <nav ref={navRef} className="relative flex h-11 flex-none items-start border-b border-[#e8e9eb] px-3 pt-2" style={{ gap: TAB_GAP }}>
-      <div role="tablist" aria-label="Lead sections" onKeyDown={onKeyDown} className="flex items-start" style={{ gap: TAB_GAP }}>
+    <nav
+      ref={navRef} data-scroll={scroll ? "true" : undefined}
+      className={cn("relative flex h-11 flex-none items-start border-b border-[#e8e9eb] px-3 pt-2", scroll && "overflow-x-auto overflow-y-hidden px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden")}
+      style={{ gap: TAB_GAP }}
+    >
+      <div role="tablist" aria-label="Lead sections" onKeyDown={onKeyDown} className={cn("flex items-start", scroll && "flex-none")} style={{ gap: TAB_GAP }}>
         {shown.map((t) => (
           <button
             key={t.id} id={tabId(t.id)} type="button" role="tab" aria-selected={active === t.id} aria-controls={PANEL_ID}
@@ -118,13 +131,13 @@ export function TabBar({ tabs, active, onSelect }: { tabs: TabDef[]; active: Tab
         </DropdownMenu>
       )}
 
-      {/* Off-screen copy of every tab at natural width: this is what gets measured. */}
-      <div ref={measureRef} aria-hidden className="pointer-events-none invisible absolute left-0 top-0 flex h-0 overflow-hidden" style={{ gap: TAB_GAP }}>
+      {/* Off-screen copy of every tab at natural width: this is what gets measured (not needed when the row scrolls). */}
+      {!scroll && <div ref={measureRef} aria-hidden className="pointer-events-none invisible absolute left-0 top-0 flex h-0 overflow-hidden" style={{ gap: TAB_GAP }}>
         {tabs.map((t) => (
           <span key={t.id} data-measure-tab className={cn(TAB, TAB_IDLE)}>{t.icon}{t.label}<Badge t={t} /></span>
         ))}
         <span data-measure-more className={cn(TAB, TAB_IDLE)}>+{Math.max(1, tabs.length - 4)} more<CaretDownIcon className="!size-3" /></span>
-      </div>
+      </div>}
     </nav>
   );
 }

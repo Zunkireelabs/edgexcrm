@@ -86,9 +86,9 @@ export function Overview(p: OverviewProps) {
       <OrcaBrief leadId={lead.id} enabled={p.aiEnabled} />
 
       <Section title="Highlights" />
-      <div className="grid grid-cols-3 gap-2 max-[560px]:grid-cols-2 max-[400px]:grid-cols-1">
+      <div className="grid grid-cols-3 gap-2 max-[560px]:grid-cols-2">
         <HighlightCard
-          label="Stage · status" icon={<CircleDashedIcon />} valueTitle={stageLabel}
+          className="max-[430px]:order-3 max-[430px]:col-span-2" label="Stage · status" icon={<CircleDashedIcon />} valueTitle={stageLabel}
           value={<>{stage && <Dot color={stage.color} />}<ValueText>{stageLabel}</ValueText></>}
           sub={daysInStage(lead.stage_changed_at)}
         />
@@ -96,40 +96,40 @@ export function Overview(p: OverviewProps) {
         {p.tasks ? (
           next ? (
             <HighlightCard
-              label="Next step" icon={<ArrowRightIcon />} editable
+              className="max-[430px]:order-1" label="Next step" icon={<ArrowRightIcon />} editable
               onClick={() => (next.source === "task" ? router.push(`/tasks/${next.id}`) : p.goTab("tasks"))}
               tone={nextDue?.overdue ? "warn" : "ink"} subTone={nextDue?.overdue ? "warn" : "muted"}
               valueTitle={next.title} value={<ValueText>{next.title}</ValueText>}
               sub={[nextDue?.text, next.assignee_name ? (next.assignee_name === p.memberNames[p.currentUserId] ? "You" : next.assignee_name) : null].filter(Boolean).join(" · ")}
             />
           ) : (
-            <HighlightCard label="Next step" icon={<ArrowRightIcon />} editable onClick={p.onAddTask} tone="warn" value={<ValueText>None booked</ValueText>} sub="+ Add task" subTone="add" />
+            <HighlightCard className="max-[430px]:order-1" label="Next step" icon={<ArrowRightIcon />} editable onClick={p.onAddTask} tone="warn" value={<ValueText>None booked</ValueText>} sub="+ Add task" subTone="add" />
           )
         ) : (
-          <HighlightCard label="Next step" icon={<ArrowRightIcon />} loadingValue={140} loadingSub={90} />
+          <HighlightCard className="max-[430px]:order-1" label="Next step" icon={<ArrowRightIcon />} loadingValue={140} loadingSub={90} />
         )}
 
         <HighlightCard
-          label="Last touch" icon={<ClockIcon />} tone={touch.amber ? "warn" : "ink"} valueTitle={touch.value}
+          className="max-[430px]:order-2" label="Last touch" icon={<ClockIcon />} tone={touch.amber ? "warn" : "ink"} valueTitle={touch.value}
           value={<ValueText>{touch.value}</ValueText>} {...(data ? { sub: touch.sub } : { loadingSub: 110 })}
         />
 
         <HighlightCard
-          label="Counsellor" icon={<UserIcon />} valueTitle={assigneeName ?? "Unassigned"} tone={assigneeName ? "ink" : "empty"}
+          className="max-[430px]:order-4 max-[430px]:col-span-2" label="Counsellor" icon={<UserIcon />} valueTitle={assigneeName ?? "Unassigned"} tone={assigneeName ? "ink" : "empty"}
           value={assigneeName ? <><Avatar initials={initialsOf(assigneeReal ?? assigneeName)} /><ValueText>{assigneeName}</ValueText></> : <ValueText>Unassigned</ValueText>}
           sub={data?.branch_name ?? ""}
         />
 
-        <HighlightCard label="Study plan" icon={<GraduationCapIcon />} tone={plan.empty ? "empty" : "ink"} valueTitle={plan.value} value={<ValueText>{plan.value}</ValueText>} sub={plan.sub} />
+        <HighlightCard className="max-[430px]:order-5 max-[430px]:col-span-2" label="Study plan" icon={<GraduationCapIcon />} tone={plan.empty ? "empty" : "ink"} valueTitle={plan.value} value={<ValueText>{plan.value}</ValueText>} sub={plan.sub} />
 
         {ready ? (
           <HighlightCard
-            label="Ready to apply" icon={<ShieldCheckIcon />} tone={ready.tone === "good" ? "good" : "warn"}
+            className="max-[430px]:order-6 max-[430px]:col-span-2" label="Ready to apply" icon={<ShieldCheckIcon />} tone={ready.tone === "good" ? "good" : "warn"}
             value={ready.tone === "good" ? <><CheckIcon className="size-[14px]" /><ValueText>{ready.value}</ValueText></> : <ValueText>{ready.value}</ValueText>}
             sub={ready.sub} subTitle={ready.subTitle}
           />
         ) : (
-          <HighlightCard label="Ready to apply" icon={<ShieldCheckIcon />} loadingValue={70} loadingSub={130} />
+          <HighlightCard className="max-[430px]:order-6 max-[430px]:col-span-2" label="Ready to apply" icon={<ShieldCheckIcon />} loadingValue={70} loadingSub={130} />
         )}
       </div>
 

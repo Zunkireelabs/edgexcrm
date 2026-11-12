@@ -96,6 +96,20 @@ describe("Edit profile (sections layout)", () => {
     expect(screen.queryByText("Name of Institution")).toBeNull();
   });
 
+  it("phone: the section list is a sideways-scrolling chip row and the picked section scrolls into view", async () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    setup({ missing: [] });
+    await waitFor(() => expect(screen.getByText(/12 of 12 filled/)).toBeInTheDocument(), WAIT);
+    const nav = screen.getByRole("navigation", { name: "Profile sections" });
+    expect(nav.className).toContain("max-[430px]:overflow-x-auto");
+    expect(nav.className).toContain("max-[430px]:w-full");
+    scrollIntoView.mockClear();
+    fireEvent.click(within(nav).getByRole("button", { name: /References/ }));
+    expect(within(nav).getByRole("button", { name: /References/ })).toHaveAttribute("aria-current", "true");
+    expect(scrollIntoView).toHaveBeenCalledWith({ inline: "center", block: "nearest" });
+  });
+
   it("falls back to Personal when nothing is missing", async () => {
     setup({ missing: [] });
     await waitFor(() => expect(screen.getByText(/12 of 12 filled/)).toBeInTheDocument(), WAIT);

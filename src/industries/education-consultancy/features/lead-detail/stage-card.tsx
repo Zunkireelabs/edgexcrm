@@ -69,7 +69,7 @@ export function StageCard(p: StageCardProps) {
   const chipCls = "inline-flex h-6 items-center gap-1.5 whitespace-nowrap rounded-[8px] bg-white pl-2 pr-1.5 text-[13px] font-medium shadow-[inset_0_0_0_1px_#e8e9eb]";
 
   return (
-    <section aria-label="Stage" className="mx-3 rounded-[12px] p-3 shadow-[inset_0_0_0_1px_#eeeff1] max-[430px]:mx-4">
+    <section aria-label="Stage" className="mx-3 rounded-[12px] p-3 shadow-[inset_0_0_0_1px_#eeeff1] max-[430px]:order-2 max-[430px]:mx-4">
       <div className="flex items-center gap-2">
         <span className="text-[12px] font-medium leading-4 text-black/[.63]">Stage</span>
         <span className="flex-1" />

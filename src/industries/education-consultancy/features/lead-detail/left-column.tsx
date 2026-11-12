@@ -193,9 +193,10 @@ export function LeftColumn(p: LeftColumnProps) {
 
   const noPhone = "No phone number";
   return (
-    <div>
+    // Phone (≤430): the column dissolves (`contents`) so identity, stage card, tabs and then the Details can be ordered as one page.
+    <div className="max-[430px]:contents">
       {/* Identity */}
-      <div className="px-4 pb-3 pt-4 max-[430px]:pt-3.5">
+      <div className="px-4 pb-3 pt-4 max-[430px]:order-1 max-[430px]:pt-3.5">
         <div className="flex items-center gap-2.5">
           <BigAvatar initials={initialsOf(name)} />
           <h1 className="m-0 min-w-0 truncate text-[18px] font-semibold leading-6 tracking-[-.01em]">{name}</h1>
@@ -259,7 +260,8 @@ export function LeftColumn(p: LeftColumnProps) {
         archived={archived} onRestore={() => void p.actions.restore()}
       />
 
-      {/* Details */}
+      {/* Details: at phone width they follow the tab panel (order 4) so the tabs sit right under the stage card. */}
+      <div className="max-[430px]:order-4 max-[430px]:pb-2">
       <div className="mt-2.5 flex h-9 items-center px-4">
         <h2 className="m-0 text-[14px] font-medium leading-5 text-[#101112]">Details</h2>
         <button type="button" onClick={() => p.onEditProfile()} className="ml-auto rounded-[4px] text-[13px] text-[#6b6f76] outline-none hover:text-[#101112] focus-visible:ring-2 focus-visible:ring-[#266df0]/50">Edit profile</button>
@@ -289,11 +291,12 @@ export function LeftColumn(p: LeftColumnProps) {
           )}
         </div>
       )}
+      </div>
     </div>
   );
 }
 
-export function MoreMenu({ isAdmin, onCopyLink, onCopyId, onDelete, onMerge, bordered }: { isAdmin: boolean; onCopyLink: () => void; onCopyId: () => void; onDelete: () => void; onMerge: () => void; bordered?: boolean }) {
+export function MoreMenu({ isAdmin, onCopyLink, onCopyId, onDelete, onMerge, onEditProfile, bordered }: { isAdmin: boolean; onCopyLink: () => void; onCopyId: () => void; onDelete: () => void; onMerge: () => void; /** Phone header only: the "Edit profile" text button is hidden there, so it lives in ···. */ onEditProfile?: () => void; bordered?: boolean }) {
   // Dialogs opened from this menu hand focus back to ITS trigger button (the menu's items are gone by then).
   const triggerRef = useRef<HTMLButtonElement>(null);
   const viaMenu = (fn: () => void) => () => { rememberOrigin(triggerRef.current); fn(); };
@@ -303,6 +306,7 @@ export function MoreMenu({ isAdmin, onCopyLink, onCopyId, onDelete, onMerge, bor
         <DotsThreeIcon className="size-[14px]" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-[220px] rounded-[12px]">
+        {onEditProfile && <DropdownMenuItem className="rounded-[8px] min-[431px]:hidden" onSelect={onEditProfile}>Edit profile</DropdownMenuItem>}
         <DropdownMenuItem className="rounded-[8px]" onSelect={onCopyLink}>Copy link to this lead</DropdownMenuItem>
         <DropdownMenuItem className="rounded-[8px]" onSelect={onCopyId}>Copy lead ID</DropdownMenuItem>
         {isAdmin && <DropdownMenuItem className="rounded-[8px]" onSelect={viaMenu(onMerge)}>Merge duplicates…</DropdownMenuItem>}
