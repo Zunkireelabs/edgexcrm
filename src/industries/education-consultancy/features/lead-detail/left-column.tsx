@@ -1,9 +1,26 @@
 "use client";
 
-import { DotsThreeIcon } from "@/components/icons";
+import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
+import {
+  CheckSquareIcon, DotsThreeIcon, EnvelopeSimpleIcon, EyeIcon, NotePencilIcon, PhoneIcon, WhatsappLogoIcon,
+} from "@/components/icons";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { formatPhoneForTel, formatPhoneForWhatsApp } from "@/lib/phone-utils";
 import { getLeadFullName } from "@/components/dashboard/lead/lead-name";
+import { consentProfileKey } from "@/lib/consent/readiness";
+import { hasProspectQualification } from "@/lib/leads/prospect-qualification";
+import { isOtherLead } from "@/lib/leads/lead-type";
+import { canEditLeadWorkingData } from "@/lib/leads/lead-edit-scope";
 import type { Lead, LeadList, PipelineStage } from "@/types/database";
+import { initialsOf } from "../record-preview/parts";
+import { usePreviewData } from "../record-preview/use-preview-data";
+import { AllValues } from "./all-values";
+import { DetailsList } from "./details";
+import { StageCard } from "./stage-card";
+import { BigAvatar, CopyIconButton, IconButton } from "./ui";
+import { buildStageCardModel, type ApplicationsReadiness, type RequirementAction } from "./lib/stage-card-model";
+import type { PickerOption } from "./picker";
 import type { Assignee, Person, useLeadActions } from "./use-lead-actions";
 
 type Actions = ReturnType<typeof useLeadActions>;
@@ -32,14 +49,219 @@ export interface LeftColumnProps {
   onTask: () => void;
   onEditProfile: (missing?: string[]) => void;
   onDelete: () => void;
+  /** The frame's ⌘↵ shortcut runs the stage card's main button through this ref. */
   mainRef: React.MutableRefObject<{ enabled: boolean; run: () => void } | null>;
 }
 
-/** EDGEX-151 placeholder: the frame's left column shows the student's name (the page h1) until EDGEX-152 fills it. */
-export function LeftColumn({ actions }: LeftColumnProps) {
+function addedLabel(iso: string): string {
+  const d = new Date(iso);
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", ...(sameYear ? {} : { year: "numeric" }) });
+}
+
+export function LeftColumn(p: LeftColumnProps) {
+  const lead = p.actions.currentLead;
+  const [allValues, setAllValues] = useState(false);
+  const { data } = usePreviewData(lead.id, null, "top");
+
+  const name = getLeadFullName(lead, "Unnamed lead");
+  const isOther = isOtherLead(lead.tags, "education_consultancy");
+  const currentList = [...p.activeLeadLists, ...p.leadLists].find((l) => l.id === lead.list_id) ?? null;
+  const isArchived = !!currentList?.is_archive;
+  const canWork = canEditLeadWorkingData({ isAdmin: p.isAdmin, leadScope: p.leadScope, isOwnScopeEditor: p.canEdit && p.userId === lead.assigned_to });
+  const canFields = p.canEdit || p.isEditor;
+  const canPickCounsellor = p.isAdmin || p.leadScope === "team" || (p.canAssign && (!lead.assigned_to || p.userId === lead.assigned_to));
+
+  // What the NEXT stage needs: the server's own readiness answer (same rule it enforces on the move).
+  const next = useMemo(() => {
+    const chain = [...p.activeLeadLists].sort((a, b) => a.sort_order - b.sort_order);
+    const i = chain.findIndex((l) => l.id === lead.list_id);
+    return i >= 0 ? chain[i + 1] ?? null : null;
+  }, [lead.list_id, p.activeLeadLists]);
+  const [readiness, setReadiness] = useState<ApplicationsReadiness | null>(null);
+  const readinessKey = `${lead.id}|${lead.list_id}|${lead.pre_app_fee_status}|${lead.pre_app_fee_amount}|${p.consentSigned}|${consentProfileKey(lead)}`;
+  useEffect(() => {
+    if (next?.slug !== "applications") return;
+    let cancelled = false;
+    fetch(`/api/v1/leads/${lead.id}/applications-readiness`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: { data?: { ready?: boolean; missing?: string[] } } | null) => {
+        if (!cancelled) setReadiness(j?.data && typeof j.data.ready === "boolean" ? { ready: j.data.ready, missing: j.data.missing ?? [] } : null);
+      })
+      .catch(() => { if (!cancelled) setReadiness(null); });
+    return () => { cancelled = true; };
+    // readinessKey covers every input that changes the server's answer
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readinessKey, next?.slug]);
+
+  // Profile row: the consent-form fields still missing (existing endpoint, no new count).
+  const [missing, setMissing] = useState<string[] | null>(null);
+  const profileKey = consentProfileKey(lead);
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/v1/leads/${lead.id}/profile-completeness`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: { data?: { missing?: string[] } } | null) => { if (!cancelled) setMissing(j?.data?.missing ?? null); })
+      .catch(() => { if (!cancelled) setMissing(null); });
+    return () => { cancelled = true; };
+  }, [lead.id, profileKey]);
+
+  const model = useMemo(
+    () => buildStageCardModel({
+      isOtherContact: isOther, activeLists: p.activeLeadLists, accessibleLists: p.leadLists, currentListId: lead.list_id ?? null,
+      isArchived, canMoveWithoutChain: p.canMoveWithoutChain, revertTargetUserId: p.revertTargetUserId, canWork,
+      hasQualification: hasProspectQualification(lead as unknown as Record<string, unknown>), readiness,
+      consentEnabled: p.consentEnabled, consentSigned: p.consentSigned, feeStatus: lead.pre_app_fee_status ?? null, feeAmount: lead.pre_app_fee_amount ?? null,
+    }),
+    [canWork, isArchived, isOther, lead, p.activeLeadLists, p.canMoveWithoutChain, p.consentEnabled, p.consentSigned, p.leadLists, p.revertTargetUserId, readiness],
+  );
+
+  const chain = useMemo(() => [...p.activeLeadLists].sort((a, b) => a.sort_order - b.sort_order), [p.activeLeadLists]);
+  const prevList = useMemo(() => { const i = chain.findIndex((l) => l.id === lead.list_id); return i > 0 ? chain[i - 1] : null; }, [chain, lead.list_id]);
+  const accessibleIds = useMemo(() => new Set(p.leadLists.map((l) => l.id)), [p.leadLists]);
+  const moveOptions: PickerOption[] = chain
+    .filter((l) => accessibleIds.has(l.id) || l.id === lead.list_id)
+    .map((l) => ({ value: l.id, label: l.name, disabled: l.id === lead.list_id, secondary: l.id === lead.list_id ? "Current" : undefined }));
+
+  const statuses = useMemo(() => {
+    const scoped = p.stages.filter((s) => s.pipeline_id === lead.pipeline_id);
+    return scoped.length > 0 ? scoped : p.stages;
+  }, [lead.pipeline_id, p.stages]);
+
+  const goMain = () => {
+    if (!model.next) return;
+    const target = chain.find((l) => l.id === model.next!.id);
+    if (!target) return;
+    if (model.main.kind === "qualify") return p.actions.openQualify();
+    void p.actions.startMove(target, p.canMoveWithoutChain ? "move" : "next");
+  };
+
+  useEffect(() => {
+    p.mainRef.current = { enabled: model.main.enabled && model.main.kind !== "none" && !model.hidden, run: goMain };
+    const ref = p.mainRef;
+    return () => { ref.current = null; };
+  });
+
+  const onRequirement = (a: RequirementAction) => {
+    if (a === "add-qualification") return p.onEditProfile(); // Student Details has the academic section (Phase 4 gets the Edit profile dialog)
+    // Record fee / Copy consent link: the rail's Consent & fee card owns those handlers until Phase 3 wires them here.
+    const el = document.getElementById("lead-rail-consent");
+    if (el) { el.scrollIntoView({ block: "nearest", behavior: "smooth" }); toast.message("Use Consent & fee in the right column"); }
+    else toast.message("Open the Consent & fee card to do this");
+  };
+
+  const archived = isArchived ? (() => {
+    const from = [...p.leadLists, ...p.activeLeadLists].find((l) => l.id === lead.archived_from_list_id);
+    const by = lead.archived_by ? (lead.archived_by === p.userId ? "you" : p.memberNames[lead.archived_by] ?? "someone") : "someone";
+    return {
+      reason: lead.archive_reason,
+      text: `Archived ${lead.archived_at ? addedLabel(lead.archived_at) : ""} by ${by}${from ? ` from ${from.name}` : ""}.`.replace("  ", " "),
+      restoreLabel: `Restore to ${from?.name ?? "the pipeline"}`,
+    };
+  })() : null;
+
+  const sourceName = data?.source_name ?? (lead.intake_source ? lead.intake_source.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase()) : null);
+  const created = `Added ${addedLabel(lead.created_at)}${sourceName ? ` · ${sourceName}` : ""}`;
+
+  const copyLink = async () => { try { await navigator.clipboard.writeText(`${window.location.origin}/leads/${lead.id}`); toast.success("Link copied"); } catch { toast.error("Failed to copy"); } };
+  const copyId = async () => { try { await navigator.clipboard.writeText(lead.display_id ?? lead.id); toast.success("Lead ID copied"); } catch { toast.error("Failed to copy"); } };
+
+  if (allValues) {
+    return <AllValues lead={lead} name={name} canEdit={canFields} onPatch={p.actions.patchLead} onBack={() => setAllValues(false)} />;
+  }
+
+  const noPhone = "No phone number";
   return (
-    <div className="px-4 pb-3 pt-4">
-      <h1 className="m-0 truncate text-[18px] font-semibold leading-6 tracking-[-.01em]">{getLeadFullName(actions.currentLead, "Unnamed lead")}</h1>
+    <div>
+      {/* Identity */}
+      <div className="px-4 pb-3 pt-4 max-[430px]:pt-3.5">
+        <div className="flex items-center gap-2.5">
+          <BigAvatar initials={initialsOf(name)} />
+          <h1 className="m-0 min-w-0 truncate text-[18px] font-semibold leading-6 tracking-[-.01em]">{name}</h1>
+        </div>
+        <div className="mt-2.5 flex flex-col gap-0.5 text-[13px] text-[#2b2d2f]">
+          <div className="flex h-6 items-center gap-2">
+            {lead.display_id && <span className="rounded-[6px] bg-[#f6f7f9] px-1.5 text-[12px] font-medium leading-[18px] text-[#6b6f76]">{lead.display_id}</span>}
+            <span className="truncate text-[12px] text-black/50">{created}</span>
+          </div>
+          {lead.phone && (
+            <div className="flex h-6 items-center gap-2">
+              <PhoneIcon className="size-[14px] shrink-0 text-[#9a9ea5]" aria-hidden />
+              <span className="min-w-0 truncate tabular-nums">{lead.phone}</span>
+              <CopyIconButton value={lead.phone} label="Copy phone" />
+            </div>
+          )}
+          {lead.email && (
+            <div className="flex h-6 items-center gap-2">
+              <EnvelopeSimpleIcon className="size-[14px] shrink-0 text-[#9a9ea5]" aria-hidden />
+              <span className="min-w-0 truncate">{lead.email}</span>
+              <CopyIconButton value={lead.email} label="Copy email" />
+            </div>
+          )}
+        </div>
+        <div className="mt-3 flex gap-1.5">
+          {lead.email ? (
+            <a href={`mailto:${lead.email}`} className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-[8px] bg-white px-2 text-[14px] font-medium text-[#101112] shadow-[inset_0_0_0_1px_#e8e9eb] outline-none hover:bg-[#f6f7f9] focus-visible:ring-2 focus-visible:ring-[#266df0]/50 max-[430px]:w-7 max-[430px]:justify-center max-[430px]:px-0" aria-label="Email" title="Email (E)">
+              <EnvelopeSimpleIcon className="size-[14px]" /><span className="max-[430px]:hidden">Email</span>
+            </a>
+          ) : (
+            <button type="button" disabled title="No email address" aria-label="Email" className="inline-flex h-7 items-center gap-1.5 rounded-[8px] bg-white px-2 text-[14px] font-medium opacity-40 shadow-[inset_0_0_0_1px_#e8e9eb] max-[430px]:w-7 max-[430px]:justify-center max-[430px]:px-0">
+              <EnvelopeSimpleIcon className="size-[14px]" /><span className="max-[430px]:hidden">Email</span>
+            </button>
+          )}
+          <IconButton bordered label={lead.phone ? "Call" : noPhone} href={lead.phone ? `tel:${formatPhoneForTel(lead.phone)}` : undefined} disabled={!lead.phone}><PhoneIcon /></IconButton>
+          <IconButton bordered label={lead.phone ? "WhatsApp" : noPhone} disabled={!lead.phone} onClick={() => window.open(`https://wa.me/${formatPhoneForWhatsApp(lead.phone as string)}`, "_blank")}><WhatsappLogoIcon /></IconButton>
+          <IconButton bordered label="Add note (N)" onClick={p.onNote}><NotePencilIcon /></IconButton>
+          <IconButton bordered label="Add task (T)" onClick={p.onTask}><CheckSquareIcon /></IconButton>
+          <MoreMenu isAdmin={p.isAdmin} onCopyLink={copyLink} onCopyId={copyId} onDelete={p.onDelete} bordered />
+        </div>
+      </div>
+
+      <StageCard
+        model={model} statuses={statuses} statusId={lead.stage_id} canChangeStatus={canWork && !isOther}
+        onStatus={(s) => void p.actions.patchLead(
+          { stage_id: s.id, ...(s.pipeline_id && s.pipeline_id !== lead.pipeline_id ? { pipeline_id: s.pipeline_id } : {}) },
+          "status", { status: s.slug },
+        )}
+        onMain={goMain} onRequirement={onRequirement}
+        onRevert={() => prevList && void p.actions.startMove(prevList, "back")}
+        moveOptions={moveOptions} currentListId={lead.list_id ?? null}
+        onMovePick={(id) => {
+          const l = chain.find((x) => x.id === id);
+          if (!l) return;
+          if (l.slug === "qualified" && currentList?.is_intake) return p.actions.openQualify();
+          void p.actions.startMove(l, "move");
+        }}
+        onArchive={p.actions.openArchive}
+        archived={archived} onRestore={() => void p.actions.restore()}
+      />
+
+      {/* Details */}
+      <div className="mt-2.5 flex h-9 items-center px-4">
+        <h2 className="m-0 text-[14px] font-medium leading-5 text-black/[.63]">Details</h2>
+        <button type="button" onClick={() => p.onEditProfile()} className="ml-auto rounded-[4px] text-[13px] text-[#6b6f76] outline-none hover:text-[#101112] focus-visible:ring-2 focus-visible:ring-[#266df0]/50">Edit profile</button>
+      </div>
+      <DetailsList
+        lead={lead} currentUserId={p.userId} memberNames={p.memberNames} branchName={data?.branch_name ?? null} sourceName={sourceName} intake={data?.intake ?? null}
+        canEdit={canFields} canPickCounsellor={canPickCounsellor} isAdmin={p.isAdmin}
+        counsellorOptions={p.stageScopedAssignees ?? p.assignableMembers} roster={p.roster}
+        onAssign={(id) => void p.actions.changeAssignment(id)} onPatch={p.actions.patchLead} hideStudy={isOther}
+      />
+      <button type="button" onClick={() => setAllValues(true)} className="mx-4 mt-1 flex items-center gap-1 rounded-[4px] text-[12px] font-medium leading-4 text-black/50 outline-none hover:text-[#101112] focus-visible:ring-2 focus-visible:ring-[#266df0]/50">
+        <EyeIcon className="size-3" aria-hidden />View all values
+      </button>
+
+      {/* Profile */}
+      {missing && (
+        <div className="mx-3 mb-4 mt-3 flex items-center gap-2.5 rounded-[12px] px-3 py-2.5 shadow-[inset_0_0_0_1px_#eeeff1] max-[430px]:mx-4">
+          <div className="min-w-0 flex-1">
+            <div className="text-[13px] font-medium leading-[18px]">{missing.length === 0 ? "Profile complete" : `${missing.length} ${missing.length === 1 ? "field" : "fields"} to fill`}</div>
+            <div className="truncate text-[12px] font-medium leading-4 text-black/50" title={missing.join(", ")}>{missing.length === 0 ? "Everything the consent form needs" : `Needed for the consent form: ${missing.slice(0, 2).join(", ")}${missing.length > 2 ? "…" : ""}`}</div>
+            {missing.length === 0 && <div aria-hidden className="mt-2 h-1 overflow-hidden rounded-[2px] bg-[#f0f1f2]"><i className="block h-full w-full rounded-[2px] bg-[#101112]" /></div>}
+          </div>
+          {missing.length > 0 && <button type="button" onClick={() => p.onEditProfile(missing)} className="shrink-0 rounded-[4px] text-[13px] text-[#266df0] outline-none hover:underline focus-visible:ring-2 focus-visible:ring-[#266df0]/50">Complete</button>}
+        </div>
+      )}
     </div>
   );
 }
