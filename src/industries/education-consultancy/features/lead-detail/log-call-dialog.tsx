@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { CalendarIcon, CaretDownIcon, CircleNotchIcon, PhoneIcon } from "@/components/icons";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { DialogBar } from "./move-dialogs";
+import { DialogBar, NOTE_AREA } from "./move-dialogs";
 import { restoreOrigin } from "./focus-origin";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -154,7 +154,7 @@ export function LogCallDialog({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="call-notes">Notes</Label>
-            <Textarea id="call-notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="What was said, what happens next" className="h-16 min-h-16 resize-none rounded-[9px] text-sm [field-sizing:fixed]" />
+            <Textarea id="call-notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="What was said, what happens next" className={NOTE_AREA} />
           </div>
         </form>
         <DialogFooter>

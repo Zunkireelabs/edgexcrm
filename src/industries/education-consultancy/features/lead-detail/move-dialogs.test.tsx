@@ -47,6 +47,23 @@ describe("Qualify dialog", () => {
   });
 });
 
+describe("dialog bar and fixed-height notes", () => {
+  it("the bar is left-aligned with a blue icon, name inline", () => {
+    render(<Qualify />);
+    const bar = screen.getByText("Qualify", { selector: "[data-slot=dialog-title]" }).closest("[data-slot=dialog-header]") as HTMLElement;
+    expect(bar.className).toContain("justify-start");
+    expect(bar.querySelector("svg")?.getAttribute("class")).toContain("text-[#266df0]");
+    expect(within(bar).getByText("Sita Karki")).toBeInTheDocument();
+  });
+  it("the note textarea carries the important height classes that beat the unlayered dialog textarea rule", () => {
+    render(<Qualify />);
+    const cls = screen.getByLabelText(/Note/).className;
+    expect(cls).toContain("!h-16");
+    expect(cls).toContain("!min-h-16");
+    expect(cls).toContain("!field-sizing-fixed");
+  });
+});
+
 describe("Archive confirm", () => {
   function Archive({ onConfirm }: { onConfirm: () => void }) {
     const [reason, setReason] = useState("");

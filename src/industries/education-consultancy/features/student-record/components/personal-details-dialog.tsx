@@ -906,8 +906,8 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
             if (computeChanges().hasChanges) { e.preventDefault(); setNavDir(e.key.toLowerCase() === "j" ? "next" : "prev"); setConfirm("discard-nav"); }
           }}
         >
-          <DialogHeader className="min-h-11 flex-row items-center gap-2 py-0">
-            <UserIcon className="size-[13px] shrink-0 text-ds-muted" aria-hidden />
+          <DialogHeader className="min-h-11 flex-row items-center justify-start gap-2 py-0">
+            <UserIcon className="size-[13px] shrink-0 text-[#266df0]" aria-hidden />
             <DialogTitle>Edit profile</DialogTitle>
             <span className="min-w-0 truncate text-[14px] leading-5 text-black/50">{[fullName, gaps ? `${gaps.filled} of ${gaps.total} filled` : null].filter(Boolean).join(" · ")}</span>
           </DialogHeader>

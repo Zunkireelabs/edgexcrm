@@ -38,6 +38,18 @@ export function CollapsibleGroups({ children }: { children: React.ReactNode }) {
   return <CollapsibleGroupsContext.Provider value={true}>{children}</CollapsibleGroupsContext.Provider>;
 }
 
+/** A small field label that follows Edit profile's sentence case; everywhere else it is a plain `<p>`. */
+export function FieldLabel({ className, children }: { className?: string; children: string }) {
+  const compact = useContext(EditProfileLayoutContext);
+  return <p className={className}>{compact ? sentenceCase(children) : children}</p>;
+}
+
+/** "Set <label>" placeholder inside Edit profile; `undefined` elsewhere (those inputs keep whatever they had). */
+export function useSetPlaceholder(): (label: string) => string | undefined {
+  const compact = useContext(EditProfileLayoutContext);
+  return (label) => (compact ? `Set ${sentenceCase(label).toLowerCase()}` : undefined);
+}
+
 export function SectionGroup({ title, children }: { title: string; children: React.ReactNode }) {
   const collapsible = useContext(CollapsibleGroupsContext);
   const [open, setOpen] = useState(true);
@@ -183,7 +195,7 @@ export function EditableField({
               type={field.type}
               value={value}
               onChange={(e) => onChange(e.target.value)}
-              placeholder={field.placeholder ?? (compact ? `Set ${label.toLowerCase()}` : `Enter ${field.label.toLowerCase()}`)}
+              placeholder={compact ? `Set ${label.toLowerCase()}` : field.placeholder ?? `Enter ${field.label.toLowerCase()}`}
               className={`h-9 text-sm ${redBorder}`}
               readOnly={!!readOnlyNote}
               disabled={!!readOnlyNote}

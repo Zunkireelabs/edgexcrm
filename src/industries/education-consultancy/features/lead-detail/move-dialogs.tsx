@@ -23,6 +23,14 @@ import { canQualify, confirmCopy, memberName, type ConfirmCopy, type Member, typ
  * the archive confirm. They only render; the logic (what saves, what a hand-off does) lives in `useLeadActions`.
  */
 
+/**
+ * Fixed-height textareas inside dialogs. globals.css sets `height: auto; min-height: 32px` on every dialog textarea with an
+ * UNLAYERED rule, and unlayered CSS beats Tailwind's layered utilities whatever the specificity, so plain `h-16` loses. The
+ * important modifier (`!`) is what wins; `!field-sizing-fixed` also beats the base Textarea's `field-sizing-content`.
+ */
+export const NOTE_AREA = "!h-16 !min-h-16 !field-sizing-fixed resize-none rounded-[9px] text-sm";
+const SMALL_AREA = "!h-14 !min-h-14 !field-sizing-fixed resize-none rounded-[9px] text-sm";
+
 const cmdEnter = (e: React.KeyboardEvent, run: () => void, ok: boolean) => {
   // ⌘↵ anywhere; a bare ↵ only when no control has focus (so it never steals Enter from a field or a dropdown).
   if (e.key === "Enter" && ok && (e.metaKey || e.ctrlKey || e.target === e.currentTarget)) { e.preventDefault(); run(); }
@@ -41,8 +49,8 @@ function Field({ label, optional, hint, htmlFor, children }: { label: string; op
 /** The mockup's 44px dialog bar: a 13px icon, the title, then the lead's name INLINE at 50% black (never a line under the title). */
 export function DialogBar({ icon: IconC, title, sub }: { icon: Icon; title: string; sub?: string }) {
   return (
-    <DialogHeader className="min-h-11 flex-row items-center gap-2 py-0">
-      <IconC className="size-[13px] shrink-0 text-ds-muted" aria-hidden />
+    <DialogHeader className="min-h-11 flex-row items-center justify-start gap-2 py-0">
+      <IconC className="size-[13px] shrink-0 text-[#266df0]" aria-hidden />
       <DialogTitle>{title}</DialogTitle>
       {sub && <span className="min-w-0 truncate text-[14px] leading-5 text-black/50">{sub}</span>}
     </DialogHeader>
@@ -121,7 +129,7 @@ export function QualifyDialog(p: QualifyDialogProps) {
             </Field>
           </div>
           <Field label="Note" optional htmlFor="qualify-note">
-            <Textarea id="qualify-note" value={p.note} onChange={(e) => p.onNote(e.target.value)} placeholder="Anything the next person should know" className="h-16 min-h-16 resize-none rounded-[9px] text-sm [field-sizing:fixed]" />
+            <Textarea id="qualify-note" value={p.note} onChange={(e) => p.onNote(e.target.value)} placeholder="Anything the next person should know" className={NOTE_AREA} />
           </Field>
           <p className="m-0 text-[12px] leading-4 text-ds-faint">Needed: at least one study country or a course.</p>
           <div className="flex h-9 items-center gap-2 rounded-[10px] bg-[#f6f7f9] px-3 text-[13px] font-medium text-[#2b2d2f]">
@@ -276,7 +284,7 @@ export function MoveConfirmDialog(p: MoveConfirmDialogProps) {
             )}
             {p.direction === "back" && (
               <Field label="Why" optional htmlFor="revert-why">
-                <Textarea id="revert-why" value={p.why} onChange={(e) => p.onWhy(e.target.value)} rows={2} placeholder="Not reachable, wrong number…" className="min-h-[56px] resize-none rounded-[9px] text-sm" />
+                <Textarea id="revert-why" value={p.why} onChange={(e) => p.onWhy(e.target.value)} rows={2} placeholder="Not reachable, wrong number…" className={SMALL_AREA} />
               </Field>
             )}
           </div>
@@ -310,7 +318,7 @@ export function ArchiveDialog({
             <SearchableSelect aria-label="Reason" value={reason} onValueChange={onReason} searchable={false} placeholder="Choose a reason" options={ARCHIVE_REASONS.map((r) => ({ value: r, label: r }))} />
           </Field>
           {reason === "Other" && (
-            <Textarea aria-label="Describe the reason" value={other} onChange={(e) => onOther(e.target.value)} rows={2} placeholder="Describe the reason…" className="min-h-[56px] resize-none rounded-[9px] text-sm" />
+            <Textarea aria-label="Describe the reason" value={other} onChange={(e) => onOther(e.target.value)} rows={2} placeholder="Describe the reason…" className={SMALL_AREA} />
           )}
         </div>
         <AlertDialogFooter>

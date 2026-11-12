@@ -1,7 +1,9 @@
 "use client";
 
 import { PlusIcon, TrashIcon } from "@/components/icons";
+import { useContext } from "react";
 import { Button } from "@/components/ui/button";
+import { EditProfileLayoutContext, sentenceCase } from "./form-primitives";
 
 /**
  * Generic "add as many as you need" list building block — the PDF calls for
@@ -32,6 +34,7 @@ export function RepeatableList<T extends { id: string }>({
   addLabel,
   emptyLabel,
 }: RepeatableListProps<T>) {
+  const compact = useContext(EditProfileLayoutContext);
   const update = (id: string, patch: Partial<T>) => {
     onChange(items.map((item) => (item.id === id ? { ...item, ...patch } : item)));
   };
@@ -68,7 +71,7 @@ export function RepeatableList<T extends { id: string }>({
       ))}
       <Button type="button" variant="outline" size="sm" onClick={add}>
         <PlusIcon className="h-3.5 w-3.5 mr-1" />
-        {addLabel}
+        {compact ? sentenceCase(addLabel) : addLabel}
       </Button>
     </div>
   );

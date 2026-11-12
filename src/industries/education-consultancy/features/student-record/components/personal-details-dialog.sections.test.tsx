@@ -77,6 +77,25 @@ describe("Edit profile (sections layout)", () => {
     expect(body().querySelector(".lg\\:grid-cols-3")).toBeNull();
   });
 
+  it("header icon + title are left-aligned in a 44px bar and the icon is the page blue", async () => {
+    setup({ missing: [] });
+    const title = await screen.findByText("Edit profile");
+    const bar = title.closest('[data-slot="dialog-header"]') as HTMLElement;
+    expect(bar.className).toContain("justify-start");
+    expect(bar.className).toContain("min-h-11");
+    expect(bar.querySelector("svg")?.getAttribute("class")).toContain("text-[#266df0]");
+  });
+
+  it("other sections follow sentence case and 'Set …' placeholders too (Work experience)", async () => {
+    setup({ missing: [] });
+    await waitFor(() => expect(screen.getByText(/12 of 12 filled/)).toBeInTheDocument(), WAIT);
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Profile sections" })).getByRole("button", { name: /Work experience/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add work experience" }, WAIT));
+    expect(within(body()).getByText("Name of institution")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Set name of institution")).toBeInTheDocument();
+    expect(screen.queryByText("Name of Institution")).toBeNull();
+  });
+
   it("falls back to Personal when nothing is missing", async () => {
     setup({ missing: [] });
     await waitFor(() => expect(screen.getByText(/12 of 12 filled/)).toBeInTheDocument(), WAIT);
