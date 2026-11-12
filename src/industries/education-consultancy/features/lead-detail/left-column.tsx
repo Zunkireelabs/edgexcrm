@@ -18,6 +18,8 @@ import { usePreviewData } from "../record-preview/use-preview-data";
 import { AllValues } from "./all-values";
 import { DetailsList } from "./details";
 import { StageCard } from "./stage-card";
+import { FeePopover } from "./fee-popover";
+import type { LeadFile } from "./lead-file";
 import { BigAvatar, CopyIconButton, IconButton } from "./ui";
 import { buildStageCardModel, type ApplicationsReadiness, type RequirementAction } from "./lib/stage-card-model";
 import type { PickerOption } from "./picker";
@@ -45,6 +47,10 @@ export interface LeftColumnProps {
   assignableMembers: Person[];
   stageScopedAssignees: Assignee[] | null;
   roster: Person[];
+  /** The student file: the stage card's "Record" and "Copy link" call the SAME handlers as the rail (EDGEX-154). */
+  file: LeadFile;
+  /** May copy / send / sign consent (the Applications manage rule). */
+  canManageConsent: boolean;
   onNote: () => void;
   onTask: () => void;
   onEditProfile: (missing?: string[]) => void;
@@ -146,12 +152,15 @@ export function LeftColumn(p: LeftColumnProps) {
     return () => { ref.current = null; };
   });
 
+  // "Add" opens Student Details (the academic section; Phase 4 gets the Edit profile dialog). "Copy link" runs the one
+  // consent handler the rail uses. "Record" is a popover anchored to the link itself (see StageCard's renderAction).
   const onRequirement = (a: RequirementAction) => {
-    if (a === "add-qualification") return p.onEditProfile(); // Student Details has the academic section (Phase 4 gets the Edit profile dialog)
-    // Record fee / Copy consent link: the rail's Consent & fee card owns those handlers until Phase 3 wires them here.
-    const el = document.getElementById("lead-rail-consent");
-    if (el) { el.scrollIntoView({ block: "nearest", behavior: "smooth" }); toast.message("Use Consent & fee in the right column"); }
-    else toast.message("Open the Consent & fee card to do this");
+    if (a === "add-qualification") return p.onEditProfile();
+    if (a === "copy-consent") {
+      // A half-filled profile can't get a consent link: send them to fix it (the rail's row says "Complete").
+      if (p.file.consent.actionsBlocked) return p.onEditProfile();
+      return void p.file.consent.handleCreateAndCopyLink();
+    }
   };
 
   const archived = isArchived ? (() => {
@@ -228,6 +237,8 @@ export function LeftColumn(p: LeftColumnProps) {
           "status", { status: s.slug },
         )}
         onMain={goMain} onRequirement={onRequirement}
+        actionAllowed={(a) => (a === "record-fee" ? p.file.fee.canManageFee || p.file.fee.canReportFee : a === "copy-consent" ? p.canManageConsent : true)}
+        wrapRecord={(trigger) => <FeePopover fee={p.file.fee}>{trigger}</FeePopover>}
         onRevert={() => prevList && void p.actions.startMove(prevList, "back")}
         moveOptions={moveOptions} currentListId={lead.list_id ?? null}
         onMovePick={(id) => {

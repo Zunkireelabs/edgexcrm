@@ -4,14 +4,7 @@ import { useState, useEffect } from "react";
 import { CircleNotchIcon } from "@/components/icons";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-  SheetFooter,
-} from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogKeyHint, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -30,21 +23,30 @@ import { useBlockingNotice } from "@/components/dashboard/blocking-notice";
 import { DestinationsMultiSelect } from "@/components/dashboard/destinations-multi-select";
 import type { ApplicationStage, Lead } from "@/types/database";
 
-interface AddApplicationToLeadSheetProps {
+interface AddApplicationDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   leadId: string;
   stages: ApplicationStage[];
-  onSuccess: () => void;
+  /** Called after every saved application (so the list refreshes); the dialog closes itself unless "Add another" is on. */
+  onSaved: () => void;
+  /** Shown under the title ("for Aarav Shrestha"). */
+  leadName?: string;
 }
 
-export function AddApplicationToLeadSheet({
+/**
+ * Add an application to a lead — a Dialogs v1 form dialog (was a side sheet; EDGEX-154). Same fields, same API call.
+ * "Add another" keeps the dialog open and clears the form after each save.
+ */
+export function AddApplicationDialog({
   open,
   onOpenChange,
   leadId,
   stages,
-  onSuccess,
-}: AddApplicationToLeadSheetProps) {
+  onSaved,
+  leadName,
+}: AddApplicationDialogProps) {
+  const [addAnother, setAddAnother] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [universityName, setUniversityName] = useState("");
   const [universityId, setUniversityId] = useState<string | null>(null);
@@ -93,23 +95,28 @@ export function AddApplicationToLeadSheet({
   // Never submit a status that is not in the list shown (e.g. left over from a previous destination).
   const selectedStageId = statusStages.some((s) => s.id === stageId) ? stageId : (defaultStage?.id ?? "");
 
+  function resetForm() {
+    setUniversityName("");
+    setUniversityId(null);
+    setAddUniversityDialogOpen(false);
+    setPendingUniversityName("");
+    setProgramName("");
+    setIntakeMonth("");
+    setIntakeYear("");
+    setCountries([]);
+    setDegreeLevel("");
+    setFieldOfStudy("");
+    setDeadline("");
+    setAgentId("");
+    setAppliedDate("");
+    setIntakeStartDate("");
+  }
+
   useEffect(() => {
     if (!open) {
-      setUniversityName("");
-      setUniversityId(null);
-      setAddUniversityDialogOpen(false);
-      setPendingUniversityName("");
-      setProgramName("");
-      setIntakeMonth("");
-      setIntakeYear("");
-      setCountries([]);
-      setDegreeLevel("");
-      setFieldOfStudy("");
-      setDeadline("");
-      setAgentId("");
-      setAppliedDate("");
-      setIntakeStartDate("");
+      resetForm();
       setLeadDestinations([]);
+      setAddAnother(false);
     }
     if (open) setStageId(defaultStage?.id ?? "");
   }, [open, defaultStage?.id]);
@@ -165,8 +172,9 @@ export function AddApplicationToLeadSheet({
     ? countryOptions.filter((c) => leadDestinations.includes(c))
     : countryOptions;
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSubmit(e?: React.FormEvent) {
+    e?.preventDefault();
+    if (submitting) return;
     if (!universityName.trim() || !programName.trim()) {
       toast.error("University and program name are required");
       return;
@@ -202,7 +210,9 @@ export function AddApplicationToLeadSheet({
       }
 
       toast.success("Application added");
-      onSuccess();
+      onSaved();
+      if (addAnother) resetForm();
+      else onOpenChange(false);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to add application");
     } finally {
@@ -210,192 +220,190 @@ export function AddApplicationToLeadSheet({
     }
   }
 
+  const canSubmit = !submitting && !!universityName.trim() && !!programName.trim();
+
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-lg flex flex-col">
-        <SheetHeader className="shrink-0 border-b pb-4">
-          <SheetTitle>Add Application</SheetTitle>
-          <SheetDescription>Track a new university application for this student.</SheetDescription>
-        </SheetHeader>
+    <Dialog open={open} onOpenChange={(next) => { if (!submitting) onOpenChange(next); }}>
+      <DialogContent size="md">
+        <DialogHeader>
+          <DialogTitle>Add application</DialogTitle>
+          <DialogDescription>{leadName ? `For ${leadName}` : "Track a new university application for this student."}</DialogDescription>
+        </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
-           <DestinationsMultiSelect
-             selected={countries}
-             onChange={setCountries}
-             options={availableCountryOptions}
-             label="Destination"
-             optional={false}
-           />
+        <form
+          id="add-application-form"
+          onSubmit={handleSubmit}
+          onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && canSubmit) { e.preventDefault(); void handleSubmit(); } }}
+          className="space-y-3"
+        >
+          <DestinationsMultiSelect
+            selected={countries}
+            onChange={setCountries}
+            options={availableCountryOptions}
+            label="Destination"
+            optional={false}
+          />
 
-          <div className="space-y-1.5">
-            <Label htmlFor="app-university" className="text-xs text-gray-600">
-              University <span className="text-destructive">*</span>
-            </Label>
-            <AutocompleteInput
-              id="app-university"
-              value={universityName}
-              onChange={setUniversityName}
-              suggestions={collegeSuggestions}
-              placeholder="e.g. University of Melbourne"
-              onCreateNew={handleCreateCollege}
-              createLabel="university"
-              skipConfirm
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-xs text-gray-600">Interested Degree Level</Label>
-            <Select value={degreeLevel} onValueChange={setDegreeLevel}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select level" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__">Select level</SelectItem>
-                {studyLevels.map((lvl) => (
-                  <SelectItem key={lvl} value={lvl}>{lvl}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-xs text-gray-600">Field of Study</Label>
-            <Select value={fieldOfStudy} onValueChange={setFieldOfStudy}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select field" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__">Select field</SelectItem>
-                {fieldsOfStudy.map((f) => (
-                  <SelectItem key={f} value={f}>{f}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="app-program" className="text-xs text-gray-600">
-              Program <span className="text-destructive">*</span>
-            </Label>
-            <AutocompleteInput
-              id="app-program"
-              value={programName}
-              onChange={setProgramName}
-              suggestions={effectiveProgramSuggestions}
-              placeholder={!universityName.trim() ? "Select a university first" : "e.g. Master of Computer Science"}
-              onCreateNew={handleCreateProgram}
-              createLabel="program"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-xs text-gray-600">Intake Term</Label>
-            <div className="grid grid-cols-2 gap-2">
-              <Select value={intakeMonth} onValueChange={setIntakeMonth}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Month" />
-                </SelectTrigger>
-                <SelectContent>
-                  {intakeMonths.map((m) => (
-                    <SelectItem key={m} value={m}>{m}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={intakeYear} onValueChange={setIntakeYear}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Year" />
-                </SelectTrigger>
-                <SelectContent>
-                  {intakeYears.map((y) => (
-                    <SelectItem key={y} value={y}>{y}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="app-university">
+                University <span className="text-destructive">*</span>
+              </Label>
+              <AutocompleteInput
+                id="app-university"
+                value={universityName}
+                onChange={setUniversityName}
+                suggestions={collegeSuggestions}
+                placeholder="e.g. University of Melbourne"
+                onCreateNew={handleCreateCollege}
+                createLabel="university"
+                skipConfirm
+              />
             </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-xs text-gray-600">Status</Label>
-            <Select value={selectedStageId} onValueChange={setStageId} disabled={statusLoading}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select status" />
-              </SelectTrigger>
-              <SelectContent>
-                {statusStages.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="app-deadline" className="text-xs text-gray-600">Application Deadline</Label>
-            <Input
-              id="app-deadline"
-              type="date"
-              value={deadline}
-              onChange={(e) => setDeadline(e.target.value)}
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-xs text-gray-600">Agent</Label>
-            <Select value={agentId} onValueChange={setAgentId}>
-              <SelectTrigger>
-                <SelectValue placeholder="None" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__">None</SelectItem>
-                {agents.map((a) => (
-                  <SelectItem key={a.id} value={a.id}>
-                    {a.name}
-                    <span className="ml-1 text-xs text-muted-foreground">
-                      ({a.agent_type === "super_agent" ? "Super-Agent" : "Agent"})
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="space-y-1.5">
+              <Label htmlFor="app-program">
+                Program <span className="text-destructive">*</span>
+              </Label>
+              <AutocompleteInput
+                id="app-program"
+                value={programName}
+                onChange={setProgramName}
+                suggestions={effectiveProgramSuggestions}
+                placeholder={!universityName.trim() ? "Select a university first" : "e.g. Master of Computer Science"}
+                onCreateNew={handleCreateProgram}
+                createLabel="program"
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="app-applied-date" className="text-xs text-gray-600">Applied Date</Label>
-              <Input
-                id="app-applied-date"
-                type="date"
-                value={appliedDate}
-                onChange={(e) => setAppliedDate(e.target.value)}
-              />
+              <Label>Interested degree level</Label>
+              <Select value={degreeLevel} onValueChange={setDegreeLevel}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select level" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Select level</SelectItem>
+                  {studyLevels.map((lvl) => (
+                    <SelectItem key={lvl} value={lvl}>{lvl}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="app-intake-start" className="text-xs text-gray-600">Intake / Start Date</Label>
-              <Input
-                id="app-intake-start"
-                type="date"
-                value={intakeStartDate}
-                onChange={(e) => setIntakeStartDate(e.target.value)}
-              />
+              <Label>Field of study</Label>
+              <Select value={fieldOfStudy} onValueChange={setFieldOfStudy}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select field" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Select field</SelectItem>
+                  {fieldsOfStudy.map((f) => (
+                    <SelectItem key={f} value={f}>{f}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Intake term</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Select value={intakeMonth} onValueChange={setIntakeMonth}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Month" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {intakeMonths.map((m) => (
+                      <SelectItem key={m} value={m}>{m}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={intakeYear} onValueChange={setIntakeYear}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Year" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {intakeYears.map((y) => (
+                      <SelectItem key={y} value={y}>{y}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Status</Label>
+              <Select value={selectedStageId} onValueChange={setStageId} disabled={statusLoading}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  {statusStages.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="app-deadline">Application deadline</Label>
+              <Input id="app-deadline" type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Agent</Label>
+              <Select value={agentId} onValueChange={setAgentId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="None" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">None</SelectItem>
+                  {agents.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {a.name}
+                      <span className="ml-1 text-xs text-muted-foreground">
+                        ({a.agent_type === "super_agent" ? "Super-Agent" : "Agent"})
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="app-applied-date">Applied date</Label>
+              <Input id="app-applied-date" type="date" value={appliedDate} onChange={(e) => setAppliedDate(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="app-intake-start">Intake / start date</Label>
+              <Input id="app-intake-start" type="date" value={intakeStartDate} onChange={(e) => setIntakeStartDate(e.target.value)} />
             </div>
           </div>
         </form>
 
-        <SheetFooter className="shrink-0 border-t pt-4">
-          <div className="flex w-full gap-4">
-            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting} className="flex-1">
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={submitting || !universityName.trim() || !programName.trim()}
-              className="flex-1"
+        <DialogFooter>
+          <label className="mr-auto inline-flex cursor-pointer items-center gap-2 text-[13px] text-ds-muted">
+            <button
+              type="button" role="switch" aria-checked={addAnother} aria-label="Add another"
+              onClick={() => setAddAnother((v) => !v)}
+              className={`relative h-4 w-7 shrink-0 rounded-[8px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ds-accent/40 ${addAnother ? "bg-ds-accent" : "bg-[#d0d3d7]"}`}
             >
-              {submitting && <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />}
-              Add Application
-            </Button>
-          </div>
-        </SheetFooter>
-      </SheetContent>
+              <span className={`absolute top-[2px] size-3 rounded-[6px] bg-white transition-all ${addAnother ? "left-[14px]" : "left-[2px]"}`} />
+            </button>
+            Add another
+          </label>
+          <Button variant="outline" type="button" onClick={() => onOpenChange(false)} disabled={submitting}>Cancel</Button>
+          <Button type="submit" form="add-application-form" disabled={!canSubmit}>
+            {submitting && <CircleNotchIcon className="h-4 w-4 animate-spin" />}
+            Add application <DialogKeyHint>⌘↵</DialogKeyHint>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
 
       <AddUniversityWithProgramsDialog
         open={addUniversityDialogOpen}
@@ -413,6 +421,6 @@ export function AddApplicationToLeadSheet({
       />
 
       {noticeDialog}
-    </Sheet>
+    </Dialog>
   );
 }

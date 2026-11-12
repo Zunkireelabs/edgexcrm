@@ -1,46 +1,27 @@
 "use client";
 
 import { SECTION_TITLE_CLASS } from "@/components/dashboard/lead/section-title";
-import { useState, useEffect, useCallback } from "react";
-import { ClockIcon, CircleNotchIcon, CaretRightIcon } from "@/components/icons";
+import { useState } from "react";
+import { ClockIcon, CircleNotchIcon, CaretRightIcon, PlusIcon } from "@/components/icons";
+import { Button } from "@/components/ui/button";
+import { useLeadCheckIns, type CheckInsApi } from "./lead-check-in";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-
-interface CheckInRecord {
-  id: string;
-  content: string;
-  created_at: string;
-  user_email: string;
-  user_id: string | null;
-  meet_with_id: string | null;
-}
 
 interface CheckInHistoryCardProps {
   leadId: string;
   teamMemberNames: Record<string, string>;
   teamMemberEmails: Record<string, string>;
+  /** Lead page: the shared check-ins state (also read by the right rail). Omit and the card owns its own. */
+  store?: CheckInsApi;
+  /** Lead page: shows a "+" that records a visit (the page hosts the dialog). */
+  onCheckIn?: () => void;
 }
 
-export function CheckInHistoryCard({ leadId, teamMemberNames, teamMemberEmails }: CheckInHistoryCardProps) {
-  const [records, setRecords] = useState<CheckInRecord[]>([]);
-  const [loading, setLoading] = useState(true);
+export function CheckInHistoryCard({ leadId, teamMemberNames, teamMemberEmails, store, onCheckIn }: CheckInHistoryCardProps) {
+  const own = useLeadCheckIns(leadId, { enabled: !store });
+  const { records, loading } = store ?? own;
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-
-  const fetchHistory = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/v1/leads/${leadId}/check-ins`);
-      if (!res.ok) throw new Error("Failed to fetch");
-      const { data } = await res.json();
-      setRecords(data ?? []);
-    } catch {
-      // silently fail
-    }
-  }, [leadId]);
-
-  useEffect(() => {
-    setLoading(true);
-    fetchHistory().finally(() => setLoading(false));
-  }, [fetchHistory]);
 
   function toggleExpanded(id: string) {
     setExpanded((prev) => {
@@ -64,6 +45,11 @@ export function CheckInHistoryCard({ leadId, teamMemberNames, teamMemberEmails }
               </Badge>
             )}
           </span>
+          {onCheckIn && (
+            <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={onCheckIn} title="Record check-in" aria-label="Record check-in">
+              <PlusIcon className="h-3.5 w-3.5" />
+            </Button>
+          )}
         </div>
       </CardHeader>
 

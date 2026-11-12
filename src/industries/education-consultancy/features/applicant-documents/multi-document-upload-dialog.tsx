@@ -6,7 +6,7 @@ import {
   CheckCircleIcon,
   FileTextIcon,
   CircleNotchIcon,
-  PaperclipIcon,
+  UploadIcon,
   XIcon,
 } from "@/components/icons";
 import { toast } from "sonner";
@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 import { formatBytes } from "@/lib/format";
 import { DOCUMENT_TYPE_CATEGORY, type DocumentType } from "@/lib/documents/constants";
 import { DOCUMENT_CATEGORY_LABELS, documentTypeLabel } from "./labels";
@@ -23,6 +24,8 @@ import {
   ACCEPT_ATTR,
   MAX_FILES_PER_BATCH,
   QUALIFICATION_LINKABLE_TYPES,
+  STAGE_PROGRESS,
+  formatLimitMb,
   changeName,
   changeQualificationLevel,
   changeType,
@@ -69,6 +72,7 @@ export function MultiDocumentUploadDialog({
   fixedQualificationLevel,
   showQualificationLevelPicker,
   nameFrom = "type",
+  maxFileBytes,
 }: {
   leadId: string;
   /** The files chosen when the dialog was opened; null = closed. */
@@ -88,6 +92,8 @@ export function MultiDocumentUploadDialog({
   showQualificationLevelPicker?: boolean;
   /** "type" (default): a new file is named after its type; "file": after its own file name (the generic Documents card). */
   nameFrom?: NameFrom;
+  /** The tenant's per-file cap (tenant_document_settings.max_document_size_mb, read by the lead page). Unknown = no hint, no client check; the server enforces it either way. */
+  maxFileBytes?: number | null;
 }) {
   const [items, setItems] = useState<UploadItem[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -105,7 +111,14 @@ export function MultiDocumentUploadDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [files]);
 
-  function addMore(chosen: File[]) {
+  const limitLabel = formatLimitMb(maxFileBytes);
+  const [dragging, setDragging] = useState(false);
+
+  function addMore(chosenAll: File[]) {
+    // A convenience check only (the server's upload-url route enforces the cap): name what is too big before it is queued.
+    const tooBig = maxFileBytes ? chosenAll.filter((f) => f.size > maxFileBytes) : [];
+    if (tooBig.length > 0) toast.error(`${tooBig.map((f) => f.name).join(", ")} ${tooBig.length === 1 ? "is" : "are"} over the ${limitLabel} limit.`);
+    const chosen = tooBig.length > 0 ? chosenAll.filter((f) => !tooBig.includes(f)) : chosenAll;
     const result = pickFiles(items.map((i) => i.file), chosen);
     const note = describeSkipped(result);
     if (note) toast.error(note);
@@ -128,6 +141,7 @@ export function MultiDocumentUploadDialog({
         documentType: item.type,
         name: resolveName(item),
         qualificationLevel: qualificationLevelFor(item, { fixedLevel: fixedQualificationLevel, pickerShown: showQualificationLevelPicker }),
+        onStage: (st) => setItems((prev) => prev.map((p) => (p.id === item.id ? { ...p, progress: STAGE_PROGRESS[st] } : p))),
       });
       if (!result.ok) failed.push({ ...item, status: "failed", error: result.message });
       else setItems((prev) => prev.filter((p) => p.id !== item.id)); // saved: leaves the list
@@ -149,28 +163,78 @@ export function MultiDocumentUploadDialog({
 
   const atLimit = items.length >= MAX_FILES_PER_BATCH;
 
+  const dropZone = (
+    <div
+      data-testid="multi-upload-drop"
+      onDragOver={(e) => { if (uploading || atLimit) return; e.preventDefault(); setDragging(true); }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragging(false);
+        if (uploading || atLimit) return;
+        const dropped = Array.from(e.dataTransfer?.files ?? []);
+        if (dropped.length > 0) addMore(dropped);
+      }}
+      className={cn(
+        "flex flex-col items-center justify-center gap-1 rounded-[12px] px-4 text-[13px] text-ds-muted",
+        items.length === 0 ? "h-[120px]" : "h-[72px]",
+        dragging ? "bg-[#eaf1ff] shadow-[inset_0_0_0_1px_#266df0]" : "bg-[#faf9f7] shadow-[inset_0_0_0_1px_#e8e9eb]",
+      )}
+    >
+      <input
+        ref={addInputRef}
+        type="file"
+        multiple
+        accept={ACCEPT_ATTR}
+        className="hidden"
+        data-testid="multi-upload-add-input"
+        onChange={(e) => {
+          const chosen = Array.from(e.target.files ?? []);
+          if (chosen.length > 0) addMore(chosen);
+          e.target.value = "";
+        }}
+      />
+      <span className="inline-flex items-center gap-1.5 text-ds-ink">
+        <UploadIcon className="size-4" aria-hidden />
+        Drop files or{" "}
+        <button
+          type="button" disabled={uploading || atLimit} onClick={() => addInputRef.current?.click()}
+          aria-label={items.length > 0 ? "Add more files" : undefined}
+          className="rounded-[4px] font-medium text-ds-accent outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ds-accent/40 disabled:opacity-50"
+        >
+          {items.length > 0 ? "add more" : "browse"}
+        </button>
+      </span>
+      <span className="text-[12px] text-ds-faint">
+        PDF, Word, JPG, PNG, WEBP{limitLabel ? ` · up to ${limitLabel} each (tenant setting)` : ""}
+      </span>
+    </div>
+  );
+
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!next && !uploading) onClose(); }}>
       <DialogContent
-        className="sm:max-w-2xl max-h-[85vh] flex flex-col gap-0 p-0"
+        size="md"
         // Ten named files are real work: a stray click on the dimmed page must not throw them away.
         // Cancel, the X and Escape still close it.
         onInteractOutside={(e) => {
           if (items.length > 0) e.preventDefault();
         }}
       >
-        <DialogHeader className="px-6 pt-6 pb-3 shrink-0">
-          <DialogTitle>Attach documents</DialogTitle>
+        <DialogHeader>
+          <DialogTitle>Upload documents</DialogTitle>
           <DialogDescription>
             Choose what each file is and name it. Up to {MAX_FILES_PER_BATCH} files at once.
             {fixedQualificationLevel && <> Linked to <strong>{QUALIFICATION_LEVEL_LABELS[fixedQualificationLevel]}</strong>.</>}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto px-6 pb-3 space-y-2" data-testid="multi-upload-list">
-          {items.length === 0 && <p className="py-6 text-center text-sm text-muted-foreground">No files selected.</p>}
+        {dropZone}
+
+        {items.length > 0 && (
+        <div className="space-y-2" data-testid="multi-upload-list">
           {items.map((item) => (
-            <div key={item.id} className="rounded-md border p-3 space-y-2" data-status={item.status}>
+            <div key={item.id} className="space-y-2 rounded-[10px] p-3 shadow-[inset_0_0_0_1px_#e8e9eb]" data-status={item.status}>
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <FileTextIcon className="h-3.5 w-3.5 shrink-0" />
                 <span className="truncate">{item.file.name}</span>
@@ -189,6 +253,11 @@ export function MultiDocumentUploadDialog({
                   </button>
                 </span>
               </div>
+              {item.status === "uploading" && (
+                <div role="progressbar" aria-label={`Uploading ${item.file.name}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={item.progress ?? 0} className="h-1 overflow-hidden rounded-[2px] bg-[#eef0f3]">
+                  <i className="block h-full rounded-[2px] bg-[#266df0] transition-[width]" style={{ width: `${item.progress ?? 0}%` }} />
+                </div>
+              )}
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <div>
                   <label className="mb-1 block text-[11px] text-muted-foreground" htmlFor={`mu-type-${item.id}`}>Type</label>
@@ -267,35 +336,15 @@ export function MultiDocumentUploadDialog({
             </div>
           ))}
         </div>
+        )}
 
-        <DialogFooter className="px-6 py-4 border-t shrink-0 sm:justify-between items-center gap-2">
-          <div className="flex items-center gap-2">
-            <input
-              ref={addInputRef}
-              type="file"
-              multiple
-              accept={ACCEPT_ATTR}
-              className="hidden"
-              data-testid="multi-upload-add-input"
-              onChange={(e) => {
-                const chosen = Array.from(e.target.files ?? []);
-                if (chosen.length > 0) addMore(chosen);
-                e.target.value = "";
-              }}
-            />
-            <Button type="button" variant="ghost" size="sm" disabled={uploading || atLimit} onClick={() => addInputRef.current?.click()}>
-              <PaperclipIcon className="h-3.5 w-3.5 mr-1" />
-              Add more files
-            </Button>
-            <span className="text-xs text-muted-foreground">{items.length} of {MAX_FILES_PER_BATCH}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={onClose} disabled={uploading}>Cancel</Button>
-            <Button onClick={uploadAll} disabled={uploading || items.length === 0}>
-              {uploading ? <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircleIcon className="h-4 w-4 mr-2" />}
-              {uploading ? "Uploading…" : `Upload ${items.length} file${items.length === 1 ? "" : "s"}`}
-            </Button>
-          </div>
+        <DialogFooter>
+          <span className="mr-auto text-xs text-muted-foreground">{items.length} of {MAX_FILES_PER_BATCH}</span>
+          <Button variant="outline" onClick={onClose} disabled={uploading}>Cancel</Button>
+          <Button onClick={uploadAll} disabled={uploading || items.length === 0}>
+            {uploading ? <CircleNotchIcon className="h-4 w-4 animate-spin" /> : <CheckCircleIcon className="h-4 w-4" />}
+            {uploading ? "Uploading…" : `Upload ${items.length} file${items.length === 1 ? "" : "s"}`}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

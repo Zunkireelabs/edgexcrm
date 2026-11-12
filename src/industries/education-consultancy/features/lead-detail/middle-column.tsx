@@ -19,6 +19,7 @@ import { ClassesCard } from "@/industries/education-consultancy/features/classes
 import { CheckInHistoryCard } from "@/industries/_shared/features/check-in/check-in-history-card";
 import { ApplicantDocumentsCard } from "@/industries/education-consultancy/features/applicant-documents/documents-card";
 import { consentProfileKey } from "@/lib/consent/readiness";
+import type { LeadFile } from "./lead-file";
 import { notifyTaskChanged, TASK_CHANGED_EVENT } from "@/lib/tasks/task-events";
 import type { ActivityType, Lead, LeadActivityRecord, LeadChecklist, LeadList, LeadNote, PipelineStage } from "@/types/database";
 import type { LeadActivity } from "@/lib/supabase/queries";
@@ -72,6 +73,9 @@ export interface MiddleColumnProps {
   canEnroll?: boolean;
   onOpenStudentDetails: () => void;
   onMerged: () => void;
+  /** The student file: ONE state per feature, shared with the right rail (EDGEX-154). */
+  file: LeadFile;
+  onOpenCheckIn: () => void;
 }
 
 /**
@@ -269,6 +273,7 @@ export const MiddleColumn = forwardRef<MiddleColumnHandle, MiddleColumnProps>(fu
             <h3 className="m-0 mt-3 mb-2 px-1 text-[14px] font-medium leading-5 text-black/[.63]">Consent &amp; fee</h3>
             <ConsentCard
               {...cardCommon} tenantId={p.tenantId} consentEnabled={p.consentEnabled} consentSigned={p.consentSigned} showCopyLink showCollapsedStatus
+              feeApi={p.file.fee} consentApi={p.file.consent}
               profileKey={profileKey} onOpenStudentDetails={p.onOpenStudentDetails}
               canManage={p.canManageApplications ?? p.isAdmin} canManageFee={p.isAdmin} canOverrideProfileCheck={p.isAdmin} onSignedChange={p.onConsentSignedChange}
               feeStatus={lead.pre_app_fee_status} feeAmount={lead.pre_app_fee_amount} feeNotes={lead.pre_app_fee_notes}
@@ -279,28 +284,28 @@ export const MiddleColumn = forwardRef<MiddleColumnHandle, MiddleColumnProps>(fu
         {activeTab === "applications" && (
           <div className={`px-4 pb-4 pt-1 ${CARD_FRAME}`}>
             <h3 className="m-0 mt-3 mb-2 px-1 text-[14px] font-medium leading-5 text-black/[.63]">Applications</h3>
-            <ApplicationsCard {...cardCommon} canManage={p.canManageApplicationPanel ?? p.canManageApplications ?? p.isAdmin} disabled={p.consentEnabled && !p.consentSigned} />
+            <ApplicationsCard {...cardCommon} store={p.file.applications} canManage={p.canManageApplicationPanel ?? p.canManageApplications ?? p.isAdmin} disabled={p.consentEnabled && !p.consentSigned} />
           </div>
         )}
 
         {activeTab === "classes" && (
           <div className={`px-4 pb-4 pt-1 ${CARD_FRAME}`}>
             <h3 className="m-0 mt-3 mb-2 px-1 text-[14px] font-medium leading-5 text-black/[.63]">Classes</h3>
-            <ClassesCard {...cardCommon} canManage={p.canEnroll ?? p.isAdmin} />
+            <ClassesCard {...cardCommon} store={p.file.enrollments} canManage={p.canEnroll ?? p.isAdmin} />
           </div>
         )}
 
         {activeTab === "documents" && (
           <div className={`px-4 pb-4 pt-1 ${CARD_FRAME}`}>
             <h3 className="m-0 mt-3 mb-2 px-1 text-[14px] font-medium leading-5 text-black/[.63]">Documents</h3>
-            <ApplicantDocumentsCard {...cardCommon} canManage={p.canEdit} currentUserId={currentUserId} isAdmin={p.isAdmin} />
+            <ApplicantDocumentsCard {...cardCommon} store={p.file.documents} canManage={p.canEdit} currentUserId={currentUserId} isAdmin={p.isAdmin} />
           </div>
         )}
 
         {activeTab === "checkins" && (
           <div className={`px-4 pb-4 pt-1 ${CARD_FRAME}`}>
             <h3 className="m-0 mt-3 mb-2 px-1 text-[14px] font-medium leading-5 text-black/[.63]">Check-ins</h3>
-            <CheckInHistoryCard {...cardCommon} teamMemberNames={p.teamMemberNames} teamMemberEmails={p.teamMemberEmails} />
+            <CheckInHistoryCard {...cardCommon} store={p.file.checkIns} onCheckIn={p.onOpenCheckIn} teamMemberNames={p.teamMemberNames} teamMemberEmails={p.teamMemberEmails} />
           </div>
         )}
       </div>

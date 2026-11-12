@@ -24,6 +24,10 @@ export interface StageCardProps {
   onStatus: (stage: PipelineStage) => void;
   onMain: () => void;
   onRequirement: (a: RequirementAction) => void;
+  /** Which requirement links this viewer may use (default: all). A link the viewer can't act on is left out, not dead. */
+  actionAllowed?: (a: RequirementAction) => boolean;
+  /** Wraps the "Record" link (the fee popover anchors to it). */
+  wrapRecord?: (trigger: React.ReactElement) => React.ReactElement;
   onRevert: () => void;
   /** "Move to…" (admin / branch manager): the active stages with their state, and the pick handler. */
   moveOptions: PickerOption[];
@@ -115,9 +119,12 @@ export function StageCard(p: StageCardProps) {
                 <li key={r.id} className="flex h-7 items-center gap-2 text-[13px]">
                   {r.ok ? <CheckCircleIcon aria-label="Done" className="size-[14px] shrink-0 text-[#12805c]" /> : <CircleIcon aria-label="To do" className="size-[14px] shrink-0 text-[#b25e09]" />}
                   <span className={cn("min-w-0 flex-1 truncate", r.ok && "text-black/50")}>{r.text}</span>
-                  {!r.ok && r.action && r.actionLabel && (
-                    <button type="button" onClick={() => p.onRequirement(r.action!)} className="shrink-0 rounded-[4px] text-[13px] text-[#266df0] outline-none hover:underline focus-visible:ring-2 focus-visible:ring-[#266df0]/50">{r.actionLabel}</button>
-                  )}
+                  {!r.ok && r.action && r.actionLabel && (p.actionAllowed?.(r.action) ?? true) && (() => {
+                    const link = (
+                      <button type="button" onClick={r.action === "record-fee" && p.wrapRecord ? undefined : () => p.onRequirement(r.action!)} className="shrink-0 rounded-[4px] text-[13px] text-[#266df0] outline-none hover:underline focus-visible:ring-2 focus-visible:ring-[#266df0]/50">{r.actionLabel}</button>
+                    );
+                    return r.action === "record-fee" && p.wrapRecord ? p.wrapRecord(link) : link;
+                  })()}
                 </li>
               ))}
             </ul>

@@ -1,11 +1,11 @@
 "use client";
 
-import { notifyDocumentsChanged, onDocumentsChanged } from "./documents-events";
+import { notifyDocumentsChanged } from "./documents-events";
 import { replaceDocumentFile } from "./replace-document";
 import { formatRelativeTime } from "@/lib/date";
-import { groupDocuments, type ApplicationNames } from "./group-documents";
+import { groupDocuments } from "./group-documents";
 import { SECTION_TITLE_CLASS, SUBHEADING_CLASS } from "@/components/dashboard/lead/section-title";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import {
   FileTextIcon,
@@ -34,29 +34,13 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { formatBytes } from "@/lib/format";
-import { DOCUMENT_TYPES, type DocumentType } from "@/lib/documents/constants";
+import { DOCUMENT_TYPES } from "@/lib/documents/constants";
 import { documentTypeLabel, DOCUMENT_CATEGORY_LABELS } from "./labels";
 import { MultiDocumentUploadDialog } from "./multi-document-upload-dialog";
+import { useLeadDocuments, type ApplicantDocument, type DocumentsApi } from "./use-lead-documents";
 import { QUALIFICATION_LEVEL_LABELS } from "./document-upload-dialog";
 import type { QualificationLevel } from "@/lib/documents/constants";
 import { ACCEPTED_LABEL, ACCEPT_ATTR, describeSkipped, isSupportedFile, pickFiles } from "./multi-upload";
-
-interface ApplicantDocument {
-  id: string;
-  document_type: DocumentType;
-  name: string;
-  original_filename: string;
-  mime_type: string;
-  file_size: number;
-  status: string;
-  processing_error: string | null;
-  current_version_id: string | null;
-  uploaded_by: string | null;
-  created_at: string;
-  application_id?: string | null;
-  /** Academic level the document is linked to (migration 240), if any. */
-  qualification_level?: string | null;
-}
 
 type ViewMode = "grid" | "list";
 
@@ -75,6 +59,7 @@ export function ApplicantDocumentsCard({
   isAdmin,
   variant = "page",
   onViewAll,
+  store,
 }: {
   leadId: string;
   canManage: boolean;
@@ -83,12 +68,12 @@ export function ApplicantDocumentsCard({
   variant?: "page" | "summary";
   /** Summary card only: when given, "View all" calls this (e.g. switch to the lead page's Documents tab) instead of leaving for the documents page. */
   onViewAll?: () => void;
+  /** Lead page: the shared documents state (also read by the right rail). Omit and the card owns its own. */
+  store?: DocumentsApi;
 }) {
   const isSummary = variant === "summary";
-  const [docs, setDocs] = useState<ApplicantDocument[]>([]);
-  // Names of the university applications some files are linked to, for the "University – Programme" groups.
-  const [applications, setApplications] = useState<ApplicationNames>({});
-  const [loading, setLoading] = useState(true);
+  const own = useLeadDocuments(leadId, { enabled: !store });
+  const { docs, setDocs, applications, loading, maxFileBytes } = store ?? own;
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   // The files chosen with the upload button (several at once); null = the upload dialog is closed.
   const [pendingFiles, setPendingFiles] = useState<File[] | null>(null);
@@ -101,27 +86,6 @@ export function ApplicantDocumentsCard({
   const replaceInputRef = useRef<HTMLInputElement>(null);
   const replaceTargetRef = useRef<ApplicantDocument | null>(null);
   const [replacingId, setReplacingId] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/v1/leads/${leadId}/documents`);
-      if (!res.ok) return;
-      const json = await res.json();
-      setDocs((json.data?.documents ?? []) as ApplicantDocument[]);
-      setApplications((json.data?.applications ?? {}) as ApplicationNames);
-    } catch {
-      // silently fail — empty state renders
-    } finally {
-      setLoading(false);
-    }
-  }, [leadId]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  // Refresh when documents are added elsewhere on the page (e.g. the Attach button in the Student Details pop-up).
-  useEffect(() => onDocumentsChanged(leadId, load), [leadId, load]);
 
   async function handleDelete(doc: ApplicantDocument) {
     if (!confirm(`Delete "${doc.name}"? This cannot be undone.`)) return;
@@ -279,7 +243,8 @@ export function ApplicantDocumentsCard({
                     size="sm"
                     variant="ghost"
                     className="h-6 w-6 p-0"
-                    onClick={() => fileInputRef.current?.click()}
+                    // On the lead page the dialog itself has the drop zone; standalone, the picker comes first.
+                    onClick={() => (store ? store.openUpload() : fileInputRef.current?.click())}
                     title="Upload documents"
                   >
                     <UploadIcon className="h-3.5 w-3.5" />
@@ -390,6 +355,7 @@ export function ApplicantDocumentsCard({
         defaultType="other"
         showQualificationLevelPicker
         nameFrom="file"
+        maxFileBytes={maxFileBytes}
       />
 
       {/* Viewer dialog */}

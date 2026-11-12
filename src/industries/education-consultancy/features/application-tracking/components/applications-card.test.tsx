@@ -6,8 +6,8 @@ import "@testing-library/jest-dom/vitest";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 // The form itself is not under test here — only whether the card opens it.
-vi.mock("./add-application-to-lead-sheet", () => ({
-  AddApplicationToLeadSheet: ({ open }: { open: boolean }) => (open ? <div>ADD APPLICATION FORM IS OPEN</div> : null),
+vi.mock("./add-application-dialog", () => ({
+  AddApplicationDialog: ({ open }: { open: boolean }) => (open ? <div>ADD APPLICATION FORM IS OPEN</div> : null),
 }));
 
 import { ApplicationsCard } from "./applications-card";

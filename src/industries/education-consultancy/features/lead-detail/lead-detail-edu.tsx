@@ -11,14 +11,9 @@ import { PersonalDetailsDialog } from "@/industries/education-consultancy/featur
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { resolveThresholds } from "@/industries/education-consultancy/features/team-performance/lib/thresholds";
-import { ManagementPanel } from "@/components/dashboard/lead/management-panel";
-import { ApplicationsCard } from "@/industries/education-consultancy/features/application-tracking/components/applications-card";
-import { ConsentCard } from "@/industries/education-consultancy/features/application-tracking/components/consent-card";
-import { ClassesCard } from "@/industries/education-consultancy/features/classes/components/classes-card";
-import { CheckInHistoryCard } from "@/industries/_shared/features/check-in/check-in-history-card";
-import { ApplicantDocumentsCard } from "@/industries/education-consultancy/features/applicant-documents/documents-card";
+import { LeadCheckInDialog, type CheckInTriage } from "@/industries/_shared/features/check-in/lead-check-in";
+import type { SearchableOption } from "@/components/ui/searchable-select";
 import { canEditLeadWorkingData } from "@/lib/leads/lead-edit-scope";
-import { consentProfileKey } from "@/lib/consent/readiness";
 import { isOwnerOrAdmin } from "@/lib/roles";
 import type { Lead, LeadChecklist, LeadList, LeadNote, PipelineStage, Tenant } from "@/types/database";
 import type { LeadActivity } from "@/lib/supabase/queries";
@@ -28,6 +23,8 @@ import { shouldHandleNavKey } from "../record-preview/lib/nav";
 import { LeftColumn, MoreMenu } from "./left-column";
 import { MiddleColumn, type MiddleColumnHandle } from "./middle-column";
 import { useLeadActions, type Assignee, type Person } from "./use-lead-actions";
+import { useLeadFile } from "./lead-file";
+import { RightRail } from "./right-rail";
 import { fetchAdjacentLeadId, readLeadNav, resolveLeadNav, writeLeadNav, type LeadNavContext } from "./lib/lead-nav";
 
 interface TeamMember extends Person {
@@ -122,6 +119,17 @@ export function LeadDetailEdu(props: LeadDetailEduProps) {
   const isAdmin = isOwnerOrAdmin(role);
   const canEdit = isAdmin || canEditLeads;
   const canManageNotes = canEditLeadWorkingData({ isAdmin, leadScope, isOwnScopeEditor: userId === lead.assigned_to });
+  const name = getLeadFullName(lead, "Unnamed lead");
+
+  // The student file (EDGEX-154): one state per feature, read by the rail, the matching tab and the stage card.
+  const consentActive = !!applicationsActive && consentEnabled;
+  const file = useLeadFile({
+    lead, initialLead: props.lead, tenantId: tenant.id, leadName: name,
+    applicationsActive: !!applicationsActive, consentEnabled, consentSigned: consentSignedState, classesActive: !!classesActive,
+    documentsActive: !!documentsActive, checkInActive: !!checkInActive, isAdmin, canManageApplications: canManageApplications ?? isAdmin,
+    onConsentSignedChange: setConsentSignedState,
+    onFeeSaved: (patch) => actions.setCurrentLead((prev) => ({ ...prev, ...patch } as Lead)),
+  });
 
   // Roster for the collaborator picker + the Activity feed's names (admins / assigners only; others never open the picker).
   const [roster, setRoster] = useState<TeamMember[]>([]);
@@ -131,6 +139,42 @@ export function LeadDetailEdu(props: LeadDetailEduProps) {
   }, [isAdmin, canAssign]);
   const teamMemberEmails = useMemo(() => roster.reduce<Record<string, string>>((a, m) => { a[m.user_id] = m.email; return a; }, {}), [roster]);
   const teamMemberNames = useMemo(() => roster.reduce<Record<string, string>>((a, m) => { if (m.name) a[m.user_id] = m.name; return a; }, { ...memberNames }), [roster, memberNames]);
+
+  // ── Check-in dialog (EDGEX-154): records a visit via POST /leads/:id/check-in; Assign / Move are the education triage ──
+  const [minimalRoster, setMinimalRoster] = useState<{ user_id: string; name: string }[] | null>(null);
+  const checkInOpen = file.checkIns.dialogOpen;
+  useEffect(() => {
+    if (!checkInOpen || minimalRoster) return;
+    fetch("/api/v1/team?minimal=1").then((r) => (r.ok ? r.json() : null)).then((j) => { if (j) setMinimalRoster(j.data || []); }).catch(() => {});
+  }, [checkInOpen, minimalRoster]);
+  const meetWithOptions = useMemo<SearchableOption[]>(() => {
+    const byId = new Map<string, string>(Object.entries(teamMemberNames));
+    for (const m of minimalRoster ?? []) byId.set(m.user_id, m.name);
+    return [...byId].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
+  }, [teamMemberNames, minimalRoster]);
+  const checkInTriage = useMemo<CheckInTriage>(() => {
+    const opt = (m: TeamMember): SearchableOption => ({ value: m.user_id, label: m.name || m.email.split("@")[0], secondary: m.position_name ?? undefined });
+    const isLeadExec = (m: TeamMember) => /lead\s*exec/i.test(m.position_name ?? "");
+    const isCounsellor = (m: TeamMember) => /counsel+or/i.test(m.position_name ?? "");
+    const list = [...activeLeadLists, ...leadLists].find((l) => l.id === lead.list_id);
+    return {
+      currentSlug: list?.slug ?? null,
+      leadExecs: roster.filter(isLeadExec).map(opt),
+      counselors: roster.filter(isCounsellor).map(opt),
+      holderName: lead.assigned_to ? teamMemberNames[lead.assigned_to] ?? null : null,
+    };
+  }, [roster, activeLeadLists, leadLists, lead.list_id, lead.assigned_to, teamMemberNames]);
+  const onCheckedIn = useCallback(async ({ triaged }: { triaged: boolean }) => {
+    void file.checkIns.fetchHistory();
+    // The visit is a note: re-read them so the Activity tab shows it without a reload.
+    fetch(`/api/v1/leads/${props.lead.id}/notes`).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j && Array.isArray(j.data)) setNotes(j.data); }).catch(() => {});
+    if (triaged) {
+      // An assignee or a stage move was sent: re-read the lead so the left column and the stage card follow.
+      fetch(`/api/v1/leads/${props.lead.id}`).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j?.data) actions.setCurrentLead((prev) => ({ ...prev, ...j.data } as Lead)); }).catch(() => {});
+      router.refresh();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.lead.id, file.checkIns.fetchHistory, router]);
 
   // Academic/test edit gate (admin, the assignee, or a collaborator) — unchanged from today's page.
   const [isCollaboratorUser, setIsCollaboratorUser] = useState(false);
@@ -159,7 +203,6 @@ export function LeadDetailEdu(props: LeadDetailEduProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const name = getLeadFullName(lead, "Unnamed lead");
   useEffect(() => {
     const prev = document.title;
     document.title = `${name} · EdgeX`;
@@ -262,7 +305,7 @@ export function LeadDetailEdu(props: LeadDetailEduProps) {
             isAdmin={isAdmin} leadScope={leadScope} canEdit={canEdit} isEditor={isEditor} canAssign={canAssign} canMoveWithoutChain={canMoveWithoutChain}
             revertTargetUserId={revertTargetUserId} consentEnabled={consentEnabled} consentSigned={consentSignedState}
             assignableMembers={assignableMembers} stageScopedAssignees={stageScopedAssignees} roster={roster}
-            onNote={goNote} onTask={goTask} onEditProfile={openStudentDetails} onDelete={() => setDeleteOpen(true)} mainRef={mainRef}
+            file={file} canManageConsent={canManageApplications ?? isAdmin} onNote={goNote} onTask={goTask} onEditProfile={openStudentDetails} onDelete={() => setDeleteOpen(true)} mainRef={mainRef}
           />
         </aside>
 
@@ -276,40 +319,34 @@ export function LeadDetailEdu(props: LeadDetailEduProps) {
             applicationsActive={applicationsActive} classesActive={classesActive} checkInActive={checkInActive} documentsActive={documentsActive}
             consentEnabled={consentEnabled} consentSigned={consentSignedState} onConsentSignedChange={setConsentSignedState}
             canManageApplications={canManageApplications} canManageApplicationPanel={canManageApplicationPanel} canEnroll={canEnroll}
+            file={file} onOpenCheckIn={file.checkIns.openCheckIn}
             onOpenStudentDetails={() => { openStudentDetails(); }} onMerged={() => router.refresh()}
           />
         </main>
 
-        {/* Right rail 280, from 1280px wide. Today's cards until the rail is rebuilt (Phase 3). */}
+        {/* Right rail 280, from 1280px wide (EDGEX-154): the student file, sharing state with its tabs. */}
         <aside aria-label="Student file" className="hidden w-[280px] flex-none overflow-y-auto border-l border-[#e8e9eb] px-3 pb-4 pt-1 min-[1280px]:block">
-          <div className="space-y-4 pt-3">
-            {applicationsActive ? (
-              <>
-                {consentEnabled && (
-                  <div id="lead-rail-consent">
-                    <ConsentCard
-                      leadId={lead.id} tenantId={tenant.id} consentEnabled={consentEnabled} consentSigned={consentSignedState} showCopyLink showCollapsedStatus
-                      profileKey={consentProfileKey(lead)} onOpenStudentDetails={() => openStudentDetails()}
-                      canManage={canManageApplications ?? isAdmin} canManageFee={isAdmin} canOverrideProfileCheck={isAdmin} onSignedChange={setConsentSignedState}
-                      feeStatus={lead.pre_app_fee_status} feeAmount={lead.pre_app_fee_amount} feeNotes={lead.pre_app_fee_notes}
-                    />
-                  </div>
-                )}
-                <ApplicationsCard leadId={lead.id} canManage={canManageApplicationPanel ?? canManageApplications ?? isAdmin} disabled={consentEnabled && !consentSignedState} />
-              </>
-            ) : (
-              <ManagementPanel lead={lead} />
-            )}
-            {classesActive && <ClassesCard leadId={lead.id} canManage={canEnroll ?? isAdmin} />}
-            {checkInActive && <CheckInHistoryCard leadId={lead.id} teamMemberNames={teamMemberNames} teamMemberEmails={teamMemberEmails} />}
-            {documentsActive && (
-              <ApplicantDocumentsCard leadId={lead.id} canManage={canEdit} currentUserId={userId} isAdmin={isAdmin} variant="summary" onViewAll={() => middleRef.current?.openTab("documents")} />
-            )}
-          </div>
+          <RightRail
+            lead={lead} file={file} applicationsActive={!!applicationsActive} consentActive={consentActive} classesActive={!!classesActive}
+            documentsActive={!!documentsActive} checkInActive={!!checkInActive} consentSigned={consentSignedState} isAdmin={isAdmin}
+            canManageConsent={canManageApplications ?? isAdmin} canManageApplications={canManageApplicationPanel ?? canManageApplications ?? isAdmin}
+            canEnroll={canEnroll ?? isAdmin} canUpload={canEdit} teamMemberNames={teamMemberNames}
+            openTab={(t) => middleRef.current?.openTab(t)} onEditProfile={() => openStudentDetails()} onCheckIn={file.checkIns.openCheckIn}
+          />
         </aside>
       </div>
 
       {actions.dialogs}
+
+      {/* The student file's dialogs, hosted once: the rail's "+", the tab's main button and the stage card's links open THESE. */}
+      {file.consent.dialogs}
+      {file.applications.dialogs}
+      {file.enrollments.dialogs}
+      {file.documents.dialogs}
+      <LeadCheckInDialog
+        open={file.checkIns.dialogOpen} onOpenChange={file.checkIns.setDialogOpen} leadId={lead.id} leadName={name}
+        meetWithOptions={meetWithOptions} triage={checkInTriage} onSaved={(info) => void onCheckedIn(info)}
+      />
 
       {studentRecordActive && (
         <PersonalDetailsDialog
