@@ -29,17 +29,21 @@ function kindIcon(kind: string): ReactNode {
   }
 }
 
-function Row({ it, currentUserId }: { it: FeedItem; currentUserId: string }) {
+function Row({ it, currentUserId, last }: { it: FeedItem; currentUserId: string; last: boolean }) {
   const person = !!it.actor_id;
   const actor = person ? (it.actor_id === currentUserId ? "You" : it.actor_name ?? "Someone") : it.source ?? "System";
   const verb = it.verb.charAt(0).toLowerCase() + it.verb.slice(1);
   const iconOnly = !person || it.kind === "note" || it.kind === "checkin";
   return (
-    <div className="flex gap-2.5 px-1 py-1.5">
-      <span aria-hidden className={cn("inline-flex size-6 flex-none items-center justify-center rounded-full bg-[#f6f7f7] text-[9px] font-semibold text-[#6b6f76] shadow-[inset_0_0_0_1px_#e6e7ea]", !iconOnly && "bg-[#eef0f3] text-[#2b2d2f]")}>
-        {iconOnly ? kindIcon(it.kind) : initialsOf(it.actor_name ?? actor)}
-      </span>
-      <div className="min-w-0 flex-1">
+    <div className="flex gap-2.5 px-1 pt-1.5">
+      {/* Attio-style thread: a 1px #eeeff1 line (the record preview timeline's connector) links this item's avatar to the next one's, through the quote box. None after the last item of a day group. */}
+      <div className="flex flex-none flex-col items-center">
+        <span aria-hidden className={cn("inline-flex size-6 flex-none items-center justify-center rounded-full bg-[#f6f7f7] text-[9px] font-semibold text-[#6b6f76] shadow-[inset_0_0_0_1px_#e6e7ea]", !iconOnly && "bg-[#eef0f3] text-[#2b2d2f]")}>
+          {iconOnly ? kindIcon(it.kind) : initialsOf(it.actor_name ?? actor)}
+        </span>
+        {!last && <span aria-hidden data-connector className="mt-0.5 w-px flex-1 bg-[#eeeff1]" />}
+      </div>
+      <div className={cn("min-w-0 flex-1", last ? "pb-1.5" : "pb-3")}>
         <div className="flex gap-1.5 text-[14px] leading-5">
           <span className="min-w-0 flex-1">
             <b className="font-medium">{actor}</b>{" "}
@@ -131,7 +135,7 @@ export function ActivityTab({ feed, currentUserId, onLog, onAddNote }: {
         groups.map((g) => (
           <div key={g.label}>
             <div className="mx-1 mb-1.5 mt-4 text-[12px] font-medium leading-4 text-black/50">{g.label}</div>
-            {g.items.map((it) => <Row key={it.id} it={it} currentUserId={currentUserId} />)}
+            {g.items.map((it, i) => <Row key={it.id} it={it} currentUserId={currentUserId} last={i === g.items.length - 1} />)}
           </div>
         ))
       )}

@@ -256,7 +256,7 @@ export function LeadDetailEdu(props: LeadDetailEduProps) {
 
       <div className="flex min-h-0 flex-1 max-[767px]:flex-col max-[767px]:overflow-y-auto">
         {/* Left 320 */}
-        <aside aria-label="Lead" className="w-[320px] flex-none overflow-y-auto border-r border-[#e8e9eb] max-[767px]:w-full max-[767px]:overflow-visible max-[767px]:border-r-0">
+        <aside aria-label="Lead" className="w-[320px] flex-none overflow-y-auto [scrollbar-color:#d0d3d7_transparent] [scrollbar-width:thin] border-r border-[#e8e9eb] max-[767px]:w-full max-[767px]:overflow-visible max-[767px]:border-r-0">
           <LeftColumn
             lead={props.lead} actions={actions} stages={stages} leadLists={leadLists} activeLeadLists={activeLeadLists} userId={userId} memberNames={memberNames}
             isAdmin={isAdmin} leadScope={leadScope} canEdit={canEdit} isEditor={isEditor} canAssign={canAssign} canMoveWithoutChain={canMoveWithoutChain}

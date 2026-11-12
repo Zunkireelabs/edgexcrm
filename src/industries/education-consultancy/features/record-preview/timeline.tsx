@@ -4,6 +4,7 @@ import { Fragment } from "react";
 import { FileTextIcon, GearIcon } from "@/components/icons";
 import { Skeleton } from "@/components/ui/skeleton";
 import { activityTime } from "./lib/labels";
+import type { DateFmt } from "./lib/readiness";
 import { initialsOf } from "./parts";
 import type { PreviewActivity } from "./use-preview-data";
 
@@ -30,7 +31,7 @@ function TimelineAvatar({ person, initials, form }: { person: boolean; initials:
   );
 }
 
-export function Timeline({ rows, currentUserId }: { rows: PreviewActivity[]; currentUserId: string }) {
+export function Timeline({ rows, currentUserId, dateFormat }: { rows: PreviewActivity[]; currentUserId: string; dateFormat?: DateFmt }) {
   return (
     <div className={BOX}>
       {rows.map((a, i) => {
@@ -48,7 +49,7 @@ export function Timeline({ rows, currentUserId }: { rows: PreviewActivity[]; cur
                 <em className="not-italic text-black/[.63]">{verb}{a.snippet ? ` · “${a.snippet}”` : ""}</em>
                 {a.object ? <> {a.object}</> : null}
               </span>
-              <span className="flex-none text-[12px] font-medium leading-4 text-black/50">{activityTime(a.at)}</span>
+              <span className="flex-none text-[12px] font-medium leading-4 text-black/50">{activityTime(a.at, new Date(), dateFormat)}</span>
             </div>
           </Fragment>
         );

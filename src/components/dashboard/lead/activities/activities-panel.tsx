@@ -44,6 +44,7 @@ import { TaskList, type TaskListRef } from "@/components/dashboard/tasks/task-li
 import { type EmailThread, type Email } from "@/industries/_shared/features/email/hooks/use-email-threads";
 import { useConnectedInboxes } from "@/industries/_shared/features/email/hooks/use-connected-inboxes";
 import { getFeatureAccess } from "@/industries/_loader";
+import { changedFieldLabels } from "./describe-audit-event";
 import { describeSubmission, humanizeIntakeValue } from "./lead-activity-labels";
 import {
   applicationParts, directDocumentItems, feedDocumentLine, hideAutoAttachedText,
@@ -54,7 +55,6 @@ import { FEATURES } from "@/industries/_registry";
 import { LeadCadenceStrip } from "@/industries/_shared/features/outreach/ui/lead-cadence-strip";
 import { LeadSubscriptionsTab } from "@/industries/_shared/features/outreach/ui/lead-subscriptions-tab";
 import { ApplicantDocumentsCard } from "@/industries/education-consultancy/features/applicant-documents/documents-card";
-import { FINANCIAL_COLUMNS, QUALIFICATION_DETAIL_COLUMNS } from "@/lib/leads/student-record-columns";
 
 // Lazy-load compose dialog so TipTap only loads when the modal is opened
 const ComposeEmailDialog = dynamic(
@@ -567,7 +567,9 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
       </div>}
 
       {/* Action buttons */}
-      {(activeTab === "calls" || activeTab === "emails" || activeTab === "meetings" || (activeTab === "notes" && mergedIntoNotes)) && (
+      {/* (Education lead detail: an empty Emails tab shows only its empty-state button, not a second Compose.) */}
+      {(activeTab === "calls" || activeTab === "emails" || activeTab === "meetings" || (activeTab === "notes" && mergedIntoNotes))
+        && !(forcedTab === "emails" && emailsEmpty && !hasEmailContent && !isEmailsTabLoading) && (
         <div className="flex justify-end">
           {getActionButtons()}
         </div>
@@ -643,7 +645,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
       {/* Emails sub-tab — threads (top) + logged emails (below, "Past activity") */}
       {activeTab === "emails" && (
         <>
-          {hasOutreach && (
+          {hasOutreach && !forcedTab && (
             <div className="mb-3">
               <LeadCadenceStrip
                 leadId={leadId}
@@ -728,6 +730,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
             leadFirstName={leadFirstName}
             leadLastName={leadLastName}
             leadEmail={leadEmail}
+            plainHeaders
           />
         </div>
       )}
@@ -1448,47 +1451,7 @@ export function getSystemActivityDescription(
 
   // Generic lead.updated: build "Updated name, destinations, …" from the changed fields
   if (activity.action === "lead.updated" && Object.keys(changes).length > 0) {
-    const FIELD_LABELS: Record<string, string> = {
-      first_name: "name",
-      last_name: "name",
-      phone: "phone",
-      email: "email",
-      destinations: "destinations",
-      field_of_study: "field of study",
-      degree_level: "degree level",
-      tags: "tags",
-      intake_source: "source",
-      source: "source",
-      custom_fields: "details",
-      notes: "notes",
-      status: "stage",
-      stage_id: "stage",
-      city: "city",
-      country: "country",
-      company_name: "company",
-      designation: "designation",
-      salutation: "salutation",
-      preferred_contact_method: "contact method",
-      // The structured address is saved as several columns; one edit should read as one "address".
-      full_address: "address",
-      address_province: "address",
-      address_district: "address",
-      address_municipality: "address",
-      address_ward: "address",
-      address_tole: "address",
-      // Qualification details (migration 236) and financial details (migration 239): one label each, not 19 + 4 raw column names.
-      ...Object.fromEntries(QUALIFICATION_DETAIL_COLUMNS.map((c) => [c, "qualification details"])),
-      ...Object.fromEntries(FINANCIAL_COLUMNS.map((c) => [c, "financial details"])),
-    };
-    const seen = new Set<string>();
-    const labels: string[] = [];
-    for (const key of Object.keys(changes)) {
-      const label = FIELD_LABELS[key] ?? key.replace(/_/g, " ");
-      if (!seen.has(label)) {
-        seen.add(label);
-        labels.push(label);
-      }
-    }
+    const labels = changedFieldLabels(changes);
     if (labels.length > 0) return `Updated ${labels.join(", ")}`;
   }
 

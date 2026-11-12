@@ -3,6 +3,7 @@
 import { PlusIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { dueLabel } from "./lib/labels";
+import type { DateFmt } from "./lib/readiness";
 import { ListBox, ListRow, Section } from "./parts";
 
 export interface OverviewTask {
@@ -16,13 +17,14 @@ export interface OverviewTask {
  * the "0" chip and the "+", and NO box underneath; with tasks, up to 3 rows with an in-place complete checkbox.
  */
 export function TasksSection({
-  count, items, onAdd, onComplete, onOpen,
+  count, items, onAdd, onComplete, onOpen, dateFormat,
 }: {
   count: number;
   items: OverviewTask[];
   onAdd: () => void;
   onComplete: (id: string) => void;
   onOpen: (id: string) => void;
+  dateFormat?: DateFmt;
 }) {
   return (
     <>
@@ -34,7 +36,7 @@ export function TasksSection({
       {items.length > 0 && (
         <ListBox>
           {items.slice(0, 3).map((t) => {
-            const d = dueLabel(t.due_date);
+            const d = dueLabel(t.due_date, new Date(), dateFormat);
             return (
               <ListRow key={t.id}>
                 <button type="button" aria-label={`Complete ${t.title}`} onClick={() => onComplete(t.id)} className="size-[14px] flex-none cursor-pointer rounded-[4px] shadow-[inset_0_0_0_1.5px_#d0d3d7] hover:shadow-[inset_0_0_0_1.5px_#12805c]" />

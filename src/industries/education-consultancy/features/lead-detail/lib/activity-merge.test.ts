@@ -85,6 +85,22 @@ describe("mergeFeed", () => {
   });
 });
 
+describe("no raw action key reaches a row", () => {
+  it("lead.updated with tags reads 'Updated tags'; an unknown action reads 'Updated the lead'", () => {
+    const feed = mergeFeed({
+      ...base,
+      audits: [
+        audit({ id: "a1", action: "lead.updated", created_at: at(11, 5), changes: { tags: { old: [], new: ["x"] } } }),
+        audit({ id: "a2", action: "lead.frobnicated", created_at: at(11, 4), changes: { zzz: { old: 1, new: 2 } } }),
+        audit({ id: "a3", action: "lead.updated", created_at: at(11, 3), changes: {} }),
+      ],
+    });
+    const lines = feed.filter((f) => f.id.startsWith("audit-")).map((f) => `${f.verb} ${f.object ?? ""}`.trim());
+    expect(lines).toEqual(["Updated tags", "Updated the lead", "Updated the lead"]);
+    for (const f of feed) expect(`${f.verb} ${f.object ?? ""}`).not.toMatch(/\b[a-z]+\.[a-z_]+\b/);
+  });
+});
+
 describe("application notes and files (under All only)", () => {
   it("are merged into the timeline, count in All, and belong to no chip", () => {
     const feed = mergeFeed({

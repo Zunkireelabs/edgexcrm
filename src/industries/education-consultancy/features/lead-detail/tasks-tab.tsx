@@ -110,10 +110,10 @@ export function TasksTab({
             <div className="mx-1 mb-1.5 mt-4 text-[12px] font-medium leading-4 text-black/50">{TASK_GROUP_LABEL[g.id]}</div>
             <div className="rounded-[12px] p-1 shadow-[inset_0_0_0_1px_#eeeff1]">
               {g.items.map((t) => {
-                const d = dueLabel(t.due_date);
+                const d = dueLabel(t.due_date, new Date(), "md");
                 const meta = t.done
-                  ? (t.done_at ? shortDate(t.done_at) : null)
-                  : [d ? (d.overdue ? shortDate(t.due_date as string) : d.text) : null, t.assignee_name].filter(Boolean).join(" · ") || null;
+                  ? (t.done_at ? shortDate(t.done_at, "md") : null)
+                  : [d ? (d.overdue ? shortDate(t.due_date as string, "md") : d.text) : null, t.assignee_name].filter(Boolean).join(" · ") || null;
                 return (
                   <div key={t.key} className="flex h-8 items-center gap-2 whitespace-nowrap rounded-[8px] px-2 text-[14px] font-medium leading-5 hover:bg-[#f6f7f9]">
                     <button

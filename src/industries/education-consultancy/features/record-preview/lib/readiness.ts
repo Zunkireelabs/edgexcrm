@@ -38,10 +38,13 @@ export interface ReadyCard {
 
 const FEE_WORD: Record<string, string> = { paid: "paid", waiver: "waived", claimed: "claimed" };
 
-/** "D Mon" — e.g. "3 Nov". */
-export function shortDate(iso: string): string {
+/** "dm" = "3 Nov" (the record preview); "md" = "Nov 3" (the lead detail page, month first like its mockup). */
+export type DateFmt = "dm" | "md";
+
+export function shortDate(iso: string, fmt: DateFmt = "dm"): string {
   const d = new Date(iso);
-  return `${d.getDate()} ${d.toLocaleString("en-GB", { month: "short" })}`;
+  const mon = d.toLocaleString("en-GB", { month: "short" });
+  return fmt === "md" ? `${mon} ${d.getDate()}` : `${d.getDate()} ${mon}`;
 }
 
 /** Max characters for the missing-items sub-line, so "+N more" is never ellipsized by the card. */
@@ -63,12 +66,13 @@ export function readyCard(input: {
   consentSignedAt: string | null;
   hasActiveConsentTemplate: boolean;
   feeStatus: string | null;
+  dateFormat?: DateFmt;
 }): ReadyCard {
   if (!input.ready) {
     return { tone: "warn", value: `${input.items.length} missing`, sub: missingSub(input.items), subTitle: input.items.join(" · ") };
   }
   const parts: string[] = [];
-  if (input.hasActiveConsentTemplate && input.consentSignedAt) parts.push(`Consent signed ${shortDate(input.consentSignedAt)}`);
+  if (input.hasActiveConsentTemplate && input.consentSignedAt) parts.push(`Consent signed ${shortDate(input.consentSignedAt, input.dateFormat)}`);
   const fee = input.feeStatus ? FEE_WORD[input.feeStatus] : null;
   if (fee) parts.push(`Pre-app fee ${fee}`);
   return { tone: "good", value: "Ready", sub: parts.join(" · ") };

@@ -53,7 +53,7 @@ describe("TasksTab", () => {
 
   it("open rows read 'date · assignee' (overdue amber)", () => {
     setup();
-    const meta = screen.getByText("1 Jan · Farhan");
+    const meta = screen.getByText("Jan 1 · Farhan");
     expect(meta.className).toContain("text-[#b25e09]");
   });
 

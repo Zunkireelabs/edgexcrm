@@ -57,13 +57,13 @@ export function Overview(p: OverviewProps) {
 
   const open = (p.tasks ?? []).filter((t) => !t.done);
   const next = pickNextTask(open);
-  const nextDue = dueLabel(next?.due_date);
+  const nextDue = dueLabel(next?.due_date, new Date(), "md");
 
   const touch = lastTouchCard({
     lastTouchedAt: lead.last_touched_at, createdAt: lead.created_at,
     kind: data?.last_touch?.kind ?? null,
     who: data?.last_touch ? nameOf(data.last_touch.who_id, data.last_touch.who_name) : null,
-    onHold: lead.on_hold, followUpLabel: followUpBadgeLabel(lead, p.followUpStaleDays), staleDays: p.followUpStaleDays,
+    onHold: lead.on_hold, followUpLabel: followUpBadgeLabel(lead, p.followUpStaleDays), staleDays: p.followUpStaleDays, dateFormat: "md",
   });
 
   const assigneeName = lead.assigned_to ? nameOf(lead.assigned_to, p.memberNames[lead.assigned_to]) : null;
@@ -78,7 +78,7 @@ export function Overview(p: OverviewProps) {
 
   const ready = data ? readyCard({
     ready: data.readiness.ready, items: data.readiness.items, consentSignedAt: data.readiness.consent_signed_at,
-    hasActiveConsentTemplate: data.readiness.has_active_consent_template, feeStatus: data.readiness.fee_status,
+    hasActiveConsentTemplate: data.readiness.has_active_consent_template, feeStatus: data.readiness.fee_status, dateFormat: "md",
   }) : null;
 
   return (
@@ -148,13 +148,13 @@ export function Overview(p: OverviewProps) {
       )}
 
       <Section title="Activity" right={<ViewAll onClick={() => p.goTab("activity")} />} />
-      {p.feed ? <Timeline rows={p.feed.slice(0, 5)} currentUserId={p.currentUserId} /> : <TimelineSkeleton widths={["60%", "45%", "52%"]} />}
+      {p.feed ? <Timeline rows={p.feed.slice(0, 5)} currentUserId={p.currentUserId} dateFormat="md" /> : <TimelineSkeleton widths={["60%", "45%", "52%"]} />}
 
       {p.tasks && (
         <TasksSection
           count={open.length}
           items={open.map((t) => ({ id: t.key, title: t.title, due_date: t.due_date }))}
-          onAdd={p.onAddTask}
+          onAdd={p.onAddTask} dateFormat="md"
           onComplete={p.onCompleteTask}
           onOpen={(key) => { const t = open.find((x) => x.key === key); if (t?.source === "task") router.push(`/tasks/${t.id}`); else p.goTab("tasks"); }}
         />

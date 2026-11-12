@@ -47,4 +47,27 @@ describe("ActivityTab", () => {
     const { container } = render(<ActivityTab feed={null} currentUserId="me" onLog={() => {}} onAddNote={() => {}} />);
     expect(container.querySelector('[aria-busy="true"]')).not.toBeNull();
   });
+
+  it("connector lines: between items of the SAME day only, none after a group's last item, none across days", () => {
+    const { container } = render(<ActivityTab feed={feed} currentUserId="me" onLog={() => {}} onAddNote={() => {}} />);
+    // 4 items in 3 day groups (Nov 10 call; Nov 9 note; Nov 6 check-in; Oct 19 created) -> every group has one item -> no line at all.
+    expect(container.querySelectorAll("[data-connector]")).toHaveLength(0);
+
+    const two = mergeFeed({
+      notes: [
+        { id: "n1", user_id: "u1", user_email: "", content: "first", created_at: new Date(2026, 10, 9, 15).toISOString() },
+        { id: "n2", user_id: "u1", user_email: "", content: "second", created_at: new Date(2026, 10, 9, 10).toISOString() },
+        { id: "n3", user_id: "u1", user_email: "", content: "other day", created_at: new Date(2026, 10, 8, 10).toISOString() },
+      ],
+      logged: [], emails: [], audits: [], leadCreatedAt: new Date(2026, 9, 19).toISOString(), sourceLabel: null, nameOf,
+    });
+    cleanup();
+    const r = render(<ActivityTab feed={two} currentUserId="me" onLog={() => {}} onAddNote={() => {}} />);
+    // Nov 9 has 2 items -> exactly ONE line (after the first, not after the last); Nov 8 and Oct 19 have 1 item each.
+    expect(r.container.querySelectorAll("[data-connector]")).toHaveLength(1);
+    const first = screen.getByText("first").closest(".flex.gap-2\\.5") as HTMLElement;
+    expect(first.querySelector("[data-connector]")).not.toBeNull();
+    const second = screen.getByText("second").closest(".flex.gap-2\\.5") as HTMLElement;
+    expect(second.querySelector("[data-connector]")).toBeNull();
+  });
 });

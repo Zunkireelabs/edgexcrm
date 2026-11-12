@@ -8,6 +8,11 @@ import { Picker, type PickerOption } from "./picker";
 import type { RequirementAction, StageCardModel } from "./lib/stage-card-model";
 import type { PipelineStage } from "@/types/database";
 
+/** Grid columns for the stage bar and its labels: weighted by label length so "Applications" is never cut at 320px (even with a 12px scrollbar). */
+export function segmentGrid(names: readonly string[]): string {
+  return names.length ? names.map((n) => `minmax(0, ${Math.max(n.length, 7)}fr)`).join(" ") : "minmax(0, 1fr)";
+}
+
 const BTN = "inline-flex h-[26px] items-center gap-1.5 whitespace-nowrap rounded-[8px] px-1.5 text-[13px] font-medium text-black/[.63] outline-none hover:bg-[#f6f7f9] hover:text-[#101112] focus-visible:ring-2 focus-visible:ring-[#266df0]/50 disabled:cursor-not-allowed disabled:opacity-40";
 
 export interface StageCardProps {
@@ -42,7 +47,8 @@ export function StageCard(p: StageCardProps) {
   if (model.hidden) return null;
 
   const n = model.segments.length;
-  const grid = n === 4 ? "76px 60px 62px 1fr" : `repeat(${Math.max(n, 1)}, minmax(0, 1fr))`;
+  // Weighted by label length so a long label ("Applications") gets the room it needs at 320px, with or without a classic scrollbar.
+  const grid = segmentGrid(model.segments.map((s) => s.name));
   const chipLabel = p.archived
     ? `Archived${p.archived.reason ? ` · ${p.archived.reason}` : ""}`
     : [model.current?.name, status?.name].filter(Boolean).join(" · ") || "No stage";
@@ -136,21 +142,21 @@ export function StageCard(p: StageCardProps) {
           )}
           <div className="mt-1.5 flex items-center gap-0.5">
             {model.footer.revert.show && (
-              <button type="button" disabled={!model.footer.revert.enabled} title={model.footer.revert.tooltip ?? undefined} onClick={p.onRevert} className={BTN}>
-                <ArrowBendUpLeftIcon className="size-3" />{model.footer.revert.label}
+              <button type="button" disabled={!model.footer.revert.enabled} title={model.footer.revert.tooltip ?? model.footer.revert.label} onClick={p.onRevert} className={cn(BTN, "min-w-0 shrink")}>
+                <ArrowBendUpLeftIcon className="size-3 shrink-0" /><span className="truncate">{model.footer.revert.label}</span>
               </button>
             )}
-            <span className="flex-1" />
+            <span className="min-w-0 flex-1" />
             {model.footer.moveTo && (
               <Picker
                 open={moveOpen} onOpenChange={setMoveOpen} options={p.moveOptions} selected={p.currentListId ? [p.currentListId] : []} placeholder="Move to…"
                 onPick={(id) => { if (id !== p.currentListId) p.onMovePick(id); }}
               >
-                <button type="button" aria-haspopup="listbox" aria-expanded={moveOpen} onClick={() => setMoveOpen((o) => !o)} className={BTN}>Move to…<CaretDownIcon className="size-3" /></button>
+                <button type="button" aria-haspopup="listbox" aria-expanded={moveOpen} onClick={() => setMoveOpen((o) => !o)} className={cn(BTN, "shrink-0")}>Move to…<CaretDownIcon className="size-3" /></button>
               </Picker>
             )}
             {model.footer.archive && (
-              <button type="button" aria-label="Archive" title="Archive" onClick={p.onArchive} className={cn(BTN, "w-[26px] justify-center px-0 [&_svg]:size-[14px]")}><ArchiveIcon /></button>
+              <button type="button" aria-label="Archive" title="Archive" onClick={p.onArchive} className={cn(BTN, "w-[26px] shrink-0 justify-center px-0 [&_svg]:size-[14px]")}><ArchiveIcon /></button>
             )}
           </div>
         </div>

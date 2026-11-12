@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import {
   CircleNotchIcon,
   EnvelopeSimpleIcon,
@@ -39,7 +39,11 @@ interface LeadSubscriptionsTabProps {
   leadFirstName?: string | null;
   leadLastName?: string | null;
   leadEmail?: string | null;
+  /** Section headers in the 14/20/500 sentence-case style (the education lead detail) instead of the old uppercase caption. */
+  plainHeaders?: boolean;
 }
+
+const PlainHeadersContext = createContext(false);
 
 const EMPTY: LeadSubscriptions = { sequences: [], queued: [], campaigns: [], autoEnrollOptOuts: { email: false, sms: false } };
 
@@ -62,7 +66,7 @@ function ChannelTag({ channel }: { channel: OutreachChannel }) {
   );
 }
 
-export function LeadSubscriptionsTab(props: LeadSubscriptionsTabProps) {
+export function LeadSubscriptionsTab({ plainHeaders = false, ...props }: LeadSubscriptionsTabProps) {
   const { leadId } = props;
   const [data, setData] = useState<LeadSubscriptions>(EMPTY);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -95,6 +99,7 @@ export function LeadSubscriptionsTab(props: LeadSubscriptionsTabProps) {
   const busyChannels = (["email", "sms"] as const).filter((c) => live.some((s) => s.channel === c));
 
   return (
+    <PlainHeadersContext.Provider value={plainHeaders}>
     <div className="space-y-4">
       <Section title="Running now" hint="A lead runs at most one email and one SMS sequence at a time.">
         <LeadCadenceStrip key={stripKey} {...props} readFromLead labelled onChanged={load} />
@@ -168,14 +173,16 @@ export function LeadSubscriptionsTab(props: LeadSubscriptionsTabProps) {
         </>
       )}
     </div>
+    </PlainHeadersContext.Provider>
   );
 }
 
 function Section({ title, count, hint, children }: { title: string; count?: number; hint?: string; children: React.ReactNode }) {
+  const plain = useContext(PlainHeadersContext);
   return (
     <section className="space-y-2">
       <div>
-        <h4 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <h4 className={plain ? "text-[14px] font-medium leading-5 text-black/[.63]" : "text-xs font-medium uppercase tracking-wide text-muted-foreground"}>
           {title}
           {count ? ` (${count})` : ""}
         </h4>

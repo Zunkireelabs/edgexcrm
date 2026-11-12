@@ -1,4 +1,4 @@
-import { shortDate } from "./readiness";
+import { shortDate, type DateFmt } from "./readiness";
 
 const DAY = 86_400_000;
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -17,7 +17,7 @@ export interface DueLabel {
 }
 
 /** "Today", "Tomorrow", "Overdue 2d", "Fri 14 Nov" (within 7 days), else "14 Nov". */
-export function dueLabel(due: string | null | undefined, now: Date = new Date()): DueLabel | null {
+export function dueLabel(due: string | null | undefined, now: Date = new Date(), fmt: DateFmt = "dm"): DueLabel | null {
   if (!due) return null;
   const n = daysUntil(due, now);
   if (n < 0) return { text: `Overdue ${-n}d`, overdue: true };
@@ -25,7 +25,8 @@ export function dueLabel(due: string | null | undefined, now: Date = new Date())
   if (n === 1) return { text: "Tomorrow", overdue: false };
   const [y, m, d] = due.slice(0, 10).split("-").map(Number);
   const dt = new Date(Date.UTC(y, m - 1, d));
-  const dm = `${d} ${dt.toLocaleString("en-GB", { month: "short", timeZone: "UTC" })}`;
+  const mon = dt.toLocaleString("en-GB", { month: "short", timeZone: "UTC" });
+  const dm = fmt === "md" ? `${mon} ${d}` : `${d} ${mon}`;
   return { text: n <= 7 ? `${WEEKDAYS[dt.getUTCDay()]} ${dm}` : dm, overdue: false };
 }
 
@@ -69,12 +70,13 @@ export function lastTouchCard(input: {
   followUpLabel: string | null;
   staleDays: number;
   now?: Date;
+  dateFormat?: DateFmt;
 }): LastTouchCard {
   const now = input.now ?? new Date();
   if (!input.lastTouchedAt) {
     return {
       value: "Never touched",
-      sub: `Added ${shortDate(input.createdAt)}`,
+      sub: `Added ${shortDate(input.createdAt, input.dateFormat)}`,
       amber: !input.onHold && input.followUpLabel !== null,
     };
   }
@@ -89,7 +91,7 @@ export function lastTouchCard(input: {
 }
 
 /** Activity row time: "now", "{m}m", "{h}h", "{d}d" under 7 days, else "D Mon". */
-export function activityTime(iso: string, now: Date = new Date()): string {
+export function activityTime(iso: string, now: Date = new Date(), fmt: DateFmt = "dm"): string {
   const ms = now.getTime() - new Date(iso).getTime();
   const mins = Math.floor(ms / 60_000);
   if (mins < 1) return "now";
@@ -98,7 +100,7 @@ export function activityTime(iso: string, now: Date = new Date()): string {
   if (hours < 24) return `${hours}h`;
   const days = Math.floor(hours / 24);
   if (days < 7) return `${days}d`;
-  return shortDate(iso);
+  return shortDate(iso, fmt);
 }
 
 /** Note byline age: "3 days ago", "yesterday", "today". */
