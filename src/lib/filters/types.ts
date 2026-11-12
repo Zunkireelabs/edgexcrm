@@ -91,7 +91,7 @@ export const EMPTY_TREE: FilterTree = { conjunction: "and", conditions: [] };
 // injection defense for column position (see pgrst.ts for value escaping).
 export type FieldSource =
   | { kind: "column"; column: string }
-  | { kind: "columns"; columns: string[]; fullNamePairs?: boolean } // the search field
+  | { kind: "columns"; columns: string[]; fullNamePairs?: boolean } // the search field; fullNamePairs = multi-word values must match every word against first/last name (see renderColumnsPredicate)
   | { kind: "array_column"; column: string } // tags, destinations
   | { kind: "jsonb"; column: "custom_fields"; path: string }
   | { kind: "promoted"; column: string; jsonb: { column: "custom_fields"; path: string } }

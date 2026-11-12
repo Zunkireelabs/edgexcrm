@@ -409,6 +409,10 @@ function renderPromotedPredicate(field: FieldDef & { source: Extract<FieldDef["s
   return and(negRealLeg, negJsonLeg);
 }
 
+// Above this many typed words the name-token legs are skipped (whole-value legs
+// only) to bound the generated or=() string; tokens are never truncated.
+const MAX_NAME_TOKENS = 8;
+
 function renderColumnsPredicate(field: FieldDef & { source: Extract<FieldDef["source"], { kind: "columns" }> }, cond: FilterCondition): string {
   const { columns, fullNamePairs } = field.source;
   const isNeg = isNegative(cond.op);
@@ -430,19 +434,45 @@ function renderColumnsPredicate(field: FieldDef & { source: Extract<FieldDef["so
   }
 
   if (!isNeg && fullNamePairs && columns.length >= 2 && typeof cond.value === "string") {
-    // "John Smith" won't match any single column — match token pairs against
-    // the first two columns in either order (mirrors route.ts's full-name
-    // search special-case). Only meaningful for a positive "contains"-style
-    // match; there is no sound negation of a token-pair match, so it's
-    // skipped for negative operators.
+    // A multi-word value ("Ram Bahadur Thapa") won't match any single column,
+    // so every typed word must match the NAME (the first two columns, first/
+    // last). NO word may be dropped — truncating tokens was the EDGEX-159 bug
+    // ("Pulse Lead 3" used to match every "Pulse Lead N"). The whole-value
+    // legs above (every column contains the full string) always stay.
+    //   contains: OR(whole-value legs,
+    //                AND over every distinct token of OR(first has t, last has t),
+    //                [all tokens digits] phone contains tokens.join("")).
+    //     Words match in any order and middle names are skipped. No per-token
+    //     legs on email/phone/display_id — that is what made it loose.
+    //   is / starts_with / ends_with: split enumeration — for each split k,
+    //     AND(first op head, last op tail) and the reverse, head/tail being
+    //     the first k / remaining tokens joined by a space.
+    // More than MAX_NAME_TOKENS words: whole-value legs only (never truncate).
+    // Negative ops have no sound token negation and are skipped; every token
+    // still goes through renderAgainstColumn so pgrst escaping applies.
     const tokens = cond.value.trim().split(/\s+/).filter(Boolean);
-    if (tokens.length >= 2) {
+    if (tokens.length >= 2 && tokens.length <= MAX_NAME_TOKENS) {
       const [a, b] = columns;
-      const [t1, t2] = tokens;
-      legs.push(
-        and(renderAgainstColumn(a, field, { ...cond, value: t1 }), renderAgainstColumn(b, field, { ...cond, value: t2 })),
-        and(renderAgainstColumn(a, field, { ...cond, value: t2 }), renderAgainstColumn(b, field, { ...cond, value: t1 }))
-      );
+      const withValue = (col: string, value: string) => renderAgainstColumn(col, field, { ...cond, value });
+      if (cond.op === "contains") {
+        const seen = new Set<string>();
+        const distinct = tokens.filter((t) => {
+          const k = t.toLowerCase();
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        });
+        legs.push(and(...distinct.map((t) => or(withValue(a, t), withValue(b, t)))));
+        if (columns.includes("phone") && tokens.every((t) => /^\+?\d+$/.test(t))) {
+          legs.push(withValue("phone", tokens.join("")));
+        }
+      } else if (cond.op === "is" || cond.op === "starts_with" || cond.op === "ends_with") {
+        for (let k = 1; k < tokens.length; k++) {
+          const head = tokens.slice(0, k).join(" ");
+          const tail = tokens.slice(k).join(" ");
+          legs.push(and(withValue(a, head), withValue(b, tail)), and(withValue(b, head), withValue(a, tail)));
+        }
+      }
     }
   }
 
