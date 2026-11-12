@@ -211,7 +211,8 @@ export function LeadDetailEdu(props: LeadDetailEduProps) {
   }
 
   const backHref = nav?.backHref ?? backDestination.href;
-  const backLabel = nav?.viewLabel ?? backDestination.label;
+  // The shared hook says "All Leads"; the education page (and its mockup) reads "All leads".
+  const backLabel = nav?.viewLabel ?? (backDestination.label === "All Leads" ? "All leads" : backDestination.label);
 
   return (
     <div className="flex h-full min-h-[640px] flex-col overflow-hidden bg-white font-medium">

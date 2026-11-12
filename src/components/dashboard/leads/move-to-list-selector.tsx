@@ -17,15 +17,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { CaretDownIcon, CheckIcon, ArrowBendUpRightIcon } from "@/components/icons";
 import type { LeadList } from "@/types/database";
+import { ARCHIVE_REASONS } from "@/lib/leads/archive-reasons";
 import { stageDotColor } from "@/components/dashboard/leads/table/stage-color";
 
-const ARCHIVE_REASONS = [
-  "Not interested",
-  "Wrong number",
-  "Not reachable",
-  "Already enrolled elsewhere",
-  "Other",
-];
 
 // Tailored confirmation message per destination list, keyed by slug.
 // Any list not listed here falls back to a generic "Move this lead to {name}?".

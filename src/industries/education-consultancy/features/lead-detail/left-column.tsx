@@ -94,15 +94,19 @@ export function LeftColumn(p: LeftColumnProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [readinessKey, next?.slug]);
 
-  // Profile row: the consent-form fields still missing (existing endpoint, no new count).
-  const [missing, setMissing] = useState<string[] | null>(null);
+  // Profile row: the consent-form fields (existing endpoint: missing + the total it derives from the same field groups).
+  const [profile, setProfile] = useState<{ missing: string[]; total: number; filled: number } | null>(null);
   const profileKey = consentProfileKey(lead);
   useEffect(() => {
     let cancelled = false;
     fetch(`/api/v1/leads/${lead.id}/profile-completeness`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((j: { data?: { missing?: string[] } } | null) => { if (!cancelled) setMissing(j?.data?.missing ?? null); })
-      .catch(() => { if (!cancelled) setMissing(null); });
+      .then((j: { data?: { missing?: string[]; total?: number; filled?: number } } | null) => {
+        const d = j?.data;
+        if (cancelled) return;
+        setProfile(d && Array.isArray(d.missing) && typeof d.total === "number" && typeof d.filled === "number" ? { missing: d.missing, total: d.total, filled: d.filled } : null);
+      })
+      .catch(() => { if (!cancelled) setProfile(null); });
     return () => { cancelled = true; };
   }, [lead.id, profileKey]);
 
@@ -238,7 +242,7 @@ export function LeftColumn(p: LeftColumnProps) {
 
       {/* Details */}
       <div className="mt-2.5 flex h-9 items-center px-4">
-        <h2 className="m-0 text-[14px] font-medium leading-5 text-black/[.63]">Details</h2>
+        <h2 className="m-0 text-[14px] font-medium leading-5 text-[#101112]">Details</h2>
         <button type="button" onClick={() => p.onEditProfile()} className="ml-auto rounded-[4px] text-[13px] text-[#6b6f76] outline-none hover:text-[#101112] focus-visible:ring-2 focus-visible:ring-[#266df0]/50">Edit profile</button>
       </div>
       <DetailsList
@@ -252,14 +256,18 @@ export function LeftColumn(p: LeftColumnProps) {
       </button>
 
       {/* Profile */}
-      {missing && (
+      {profile && (
         <div className="mx-3 mb-4 mt-3 flex items-center gap-2.5 rounded-[12px] px-3 py-2.5 shadow-[inset_0_0_0_1px_#eeeff1] max-[430px]:mx-4">
           <div className="min-w-0 flex-1">
-            <div className="text-[13px] font-medium leading-[18px]">{missing.length === 0 ? "Profile complete" : `${missing.length} ${missing.length === 1 ? "field" : "fields"} to fill`}</div>
-            <div className="truncate text-[12px] font-medium leading-4 text-black/50" title={missing.join(", ")}>{missing.length === 0 ? "Everything the consent form needs" : `Needed for the consent form: ${missing.slice(0, 2).join(", ")}${missing.length > 2 ? "…" : ""}`}</div>
-            {missing.length === 0 && <div aria-hidden className="mt-2 h-1 overflow-hidden rounded-[2px] bg-[#f0f1f2]"><i className="block h-full w-full rounded-[2px] bg-[#101112]" /></div>}
+            <div className="text-[13px] font-medium leading-[18px]">Profile {profile.filled} of {profile.total} filled</div>
+            <div className="text-[12px] font-medium leading-4 text-black/50">Needed for the consent form</div>
+            <div aria-hidden className="relative mt-2 h-1 overflow-hidden rounded-[2px] bg-[#f0f1f2]">
+              <i className="absolute inset-y-0 left-0 rounded-[2px] bg-[#101112]" style={{ width: `${profile.total > 0 ? Math.round((profile.filled / profile.total) * 100) : 0}%` }} />
+            </div>
           </div>
-          {missing.length > 0 && <button type="button" onClick={() => p.onEditProfile(missing)} className="shrink-0 rounded-[4px] text-[13px] text-[#266df0] outline-none hover:underline focus-visible:ring-2 focus-visible:ring-[#266df0]/50">Complete</button>}
+          {profile.missing.length > 0 && (
+            <button type="button" onClick={() => p.onEditProfile(profile.missing)} className="shrink-0 rounded-[4px] text-[13px] text-[#266df0] outline-none hover:underline focus-visible:ring-2 focus-visible:ring-[#266df0]/50">Complete</button>
+          )}
         </div>
       )}
     </div>

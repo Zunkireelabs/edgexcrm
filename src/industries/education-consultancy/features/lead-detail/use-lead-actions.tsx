@@ -11,9 +11,9 @@ import { DestinationsMultiSelect } from "@/components/dashboard/destinations-mul
 import { ApplicationsGateDialog } from "@/components/dashboard/leads/applications-gate-dialog";
 import { ProspectQualificationDialog } from "@/components/dashboard/leads/prospect-qualification-dialog";
 import { moveConfirmMessage } from "@/components/dashboard/leads/move-to-list-selector";
+import { ARCHIVE_REASONS } from "@/lib/leads/archive-reasons";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
-import { hasProspectQualification } from "@/lib/leads/prospect-qualification";
-import { moveErrorMessage, isApplicationsGateError, gateMissingItems } from "@/lib/leads/gate-error";
+import { useLeadMoves } from "@/components/dashboard/lead/use-lead-moves";
 import type { Lead, LeadList } from "@/types/database";
 
 export interface Assignee {
@@ -27,7 +27,6 @@ export interface Person extends Assignee {
   position_name?: string | null;
 }
 
-export const ARCHIVE_REASONS = ["Not interested", "Wrong number", "Not reachable", "Already enrolled elsewhere", "Other"];
 
 interface Params {
   lead: Lead;
@@ -58,13 +57,9 @@ export function useLeadActions(p: Params) {
   const router = useRouter();
   const { destinations: destOptions, fieldsOfStudy, studyLevels } = useEduTaxonomy();
   const [currentLead, setCurrentLead] = useState<Lead>(p.lead);
-  const [leaving, setLeaving] = useState(false);
   const [confirm, setConfirm] = useState<ConfirmMove>(null);
   const [assignee, setAssignee] = useState("");
   const [saving, setSaving] = useState(false);
-  const [gateMissing, setGateMissing] = useState<string[] | null>(null);
-  const [pendingProspectMove, setPendingProspectMove] = useState<{ listId: string; archiveReason?: string; assignToUserId?: string | null } | null>(null);
-  const [pendingAssignGate, setPendingAssignGate] = useState<{ userId: string } | null>(null);
 
   // Qualify pop-up
   const [qualifyOpen, setQualifyOpen] = useState(false);
@@ -82,100 +77,23 @@ export function useLeadActions(p: Params) {
   const stageId = currentLead.stage_id;
   const assignedTo = currentLead.assigned_to ?? "";
 
-  const performListMove = useCallback(
-    async (listId: string, archiveReason?: string, assignToUserId?: string | null, academicPatch?: Record<string, string>) => {
-      const prevLead = currentLead;
-      const willHandOff = assignToUserId !== undefined && assignToUserId !== null && assignToUserId !== p.userId;
-      if (willHandOff) setLeaving(true);
-      const targetList = p.leadLists.find((l) => l.id === listId) ?? p.activeLeadLists.find((l) => l.id === listId);
-      setCurrentLead((prev) => ({
-        ...prev,
-        list_id: listId,
-        lead_type: targetList?.slug === "prospects" ? "prospect" : "lead",
-        archive_reason: archiveReason ?? null,
-        ...(assignToUserId !== undefined ? { assigned_to: assignToUserId } : {}),
-        ...(academicPatch ?? {}),
-      } as Lead));
-      let gateBlocked: string[] | null = null;
-      try {
-        const body: Record<string, unknown> = { list_id: listId, archive_reason: archiveReason ?? null, ...(academicPatch ?? {}) };
-        if (assignToUserId !== undefined) body.assigned_to = assignToUserId;
-        const res = await fetch(`/api/v1/leads/${currentLead.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-        if (!res.ok) {
-          const errJson = await res.json().catch(() => null);
-          const msg = moveErrorMessage(errJson, "Failed to move lead");
-          if (isApplicationsGateError(errJson)) {
-            const items = gateMissingItems(errJson);
-            if (items.length > 0) gateBlocked = items;
-          }
-          throw new Error(msg);
-        }
-        const updated = ((await res.json()).data ?? {}) as Lead;
-        // The server resets stage_id to the new list's default and may re-assign (stage-transition governance): re-read both.
-        setCurrentLead((prev) => ({ ...prev, stage_id: updated.stage_id, status: updated.status, assigned_to: updated.assigned_to } as Lead));
-        if (updated.assigned_to !== prevLead.assigned_to) router.refresh();
-        toast.success(`Moved to ${targetList?.name ?? "list"}`);
-        if (updated.assigned_to && updated.assigned_to !== p.userId) {
-          // Handed to someone else: the lead is read-only for this user now. Go back to where it came from.
-          router.back();
-          router.refresh();
-          return;
-        }
-        if (willHandOff) setLeaving(false);
-        router.refresh();
-      } catch (err) {
-        setCurrentLead(prevLead);
-        setLeaving(false);
-        if (gateBlocked) setGateMissing(gateBlocked);
-        else toast.error(err instanceof Error ? err.message : "Failed to move lead");
-      }
-    },
-    [currentLead, p.activeLeadLists, p.leadLists, p.userId, router],
-  );
-
-  /** Move gate: Prospects needs a qualifying %/GPA unless the viewer may bypass it or the move is backwards. */
-  const requestMove = useCallback(
-    async (listId: string, assignToUserId?: string | null, archive?: string) => {
-      const target = p.leadLists.find((l) => l.id === listId) ?? p.activeLeadLists.find((l) => l.id === listId);
-      const from = p.activeLeadLists.find((l) => l.id === currentLead.list_id);
-      const isBackward = !!from && !!target && target.sort_order < from.sort_order;
-      if (!p.bypassQualification && !isBackward && target?.slug === "prospects" && !hasProspectQualification(currentLead as unknown as Record<string, unknown>)) {
-        setPendingProspectMove({ listId, archiveReason: archive, assignToUserId });
-        return;
-      }
-      await performListMove(listId, archive, assignToUserId);
-    },
-    [currentLead, p.activeLeadLists, p.bypassQualification, p.leadLists, performListMove],
-  );
-
-  /** Applications pre-check (same rule the server enforces): shows the pop-up straight away when something is missing. */
-  const precheckApplications = useCallback(
-    async (list: LeadList): Promise<boolean> => {
-      if (list.slug !== "applications") return true;
-      try {
-        const res = await fetch(`/api/v1/leads/${currentLead.id}/applications-readiness`);
-        if (!res.ok) return true;
-        const json = (await res.json()) as { data?: { ready?: boolean; missing?: string[] } };
-        if (json.data && json.data.ready === false && (json.data.missing?.length ?? 0) > 0) {
-          setGateMissing(json.data.missing!);
-          return false;
-        }
-      } catch {
-        /* the move re-checks on the server */
-      }
-      return true;
-    },
-    [currentLead.id],
-  );
+  // The move / assign / gate logic is shared with LeadDetailV2 (one hook, one behaviour).
+  const moves = useLeadMoves({
+    lead: p.lead, currentLead, setCurrentLead, stageId, setStageId: () => {},
+    setAssignedTo: (v) => setCurrentLead((l) => ({ ...l, assigned_to: v || null } as Lead)),
+    userId: p.userId, industryId: "education_consultancy", bypassQualification: p.bypassQualification, leadLists: p.leadLists,
+  });
+  const { leaving, gateMissing, setGateMissing, pendingProspectMove, setPendingProspectMove, pendingAssignGate, setPendingAssignGate, performListMove } = moves;
+  const requestMove = (listId: string, assignToUserId?: string | null, archive?: string) => moves.requestListChange(listId, archive, assignToUserId);
 
   const startMove = useCallback(
     async (list: LeadList, direction: "next" | "back" | "move") => {
-      if (direction !== "back" && !(await precheckApplications(list))) return;
+      if (direction !== "back" && !(await moves.precheckApplications(list.id))) return;
       const members = direction === "next" ? p.nextPositionMembers : direction === "back" ? p.revertTargetMembers : p.stageAssigneeMap[list.id] ?? [];
       setAssignee(direction === "back" ? p.revertTargetUserId ?? "" : members.length === 1 ? members[0].user_id : "");
       setConfirm({ list, direction });
     },
-    [p.nextPositionMembers, p.revertTargetMembers, p.revertTargetUserId, p.stageAssigneeMap, precheckApplications],
+    [p.nextPositionMembers, p.revertTargetMembers, p.revertTargetUserId, p.stageAssigneeMap, moves],
   );
 
   const openQualify = useCallback(() => {
@@ -210,48 +128,6 @@ export function useLeadActions(p: Params) {
       toast.error("Failed to qualify lead");
     } finally {
       setQualifying(false);
-    }
-  };
-
-  /** Counsellor change. The server rejects an assignment that would push an unqualified lead into Prospects → fill-in pop-up. */
-  const changeAssignment = useCallback(
-    async (userIdOrNull: string | null) => {
-      const prev = currentLead.assigned_to;
-      setCurrentLead((l) => ({ ...l, assigned_to: userIdOrNull } as Lead));
-      try {
-        const res = await fetch(`/api/v1/leads/${currentLead.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ assigned_to: userIdOrNull }) });
-        if (!res.ok) {
-          const errJson = await res.json().catch(() => null);
-          const academicMsg = errJson?.error?.details?.academic?.[0] as string | undefined;
-          if (academicMsg && userIdOrNull) {
-            setCurrentLead((l) => ({ ...l, assigned_to: prev } as Lead));
-            toast.error(academicMsg);
-            setPendingAssignGate({ userId: userIdOrNull });
-            return;
-          }
-          throw new Error(errJson?.error?.message);
-        }
-        toast.success("Assignment updated");
-        router.refresh();
-      } catch {
-        toast.error("Failed to update assignment");
-        setCurrentLead((l) => ({ ...l, assigned_to: prev } as Lead));
-      }
-    },
-    [currentLead.assigned_to, currentLead.id, router],
-  );
-
-  const confirmAssignQualification = async (patch: Record<string, string>) => {
-    if (!pendingAssignGate) return;
-    try {
-      const res = await fetch(`/api/v1/leads/${currentLead.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ assigned_to: pendingAssignGate.userId, ...patch }) });
-      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error?.message || "Failed to update assignment");
-      setCurrentLead((await res.json()).data as Lead);
-      toast.success("Assignment updated");
-      setPendingAssignGate(null);
-      router.refresh();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to update assignment");
     }
   };
 
@@ -418,13 +294,13 @@ export function useLeadActions(p: Params) {
         }}
         onCancel={() => setPendingProspectMove(null)}
       />
-      <ProspectQualificationDialog lead={currentLead as unknown as Record<string, unknown>} open={!!pendingAssignGate} onConfirm={confirmAssignQualification} onCancel={() => setPendingAssignGate(null)} />
+      <ProspectQualificationDialog lead={currentLead as unknown as Record<string, unknown>} open={!!pendingAssignGate} onConfirm={moves.confirmAssignQualification} onCancel={() => setPendingAssignGate(null)} />
     </>
   );
 
   return {
     currentLead, setCurrentLead, stageId, assignedTo, leaving,
-    startMove, requestMove, openQualify, changeAssignment, patchLead, restore,
+    startMove, requestMove, openQualify, changeAssignment: (id: string | null) => moves.handleAssignmentChange(id ?? "unassigned"), patchLead, restore,
     openArchive: () => { setArchiveReason(""); setArchiveOther(""); setArchiveOpen(true); },
     dialogs,
   };

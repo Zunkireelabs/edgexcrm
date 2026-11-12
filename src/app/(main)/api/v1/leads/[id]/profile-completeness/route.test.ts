@@ -37,7 +37,7 @@ const params = () => ({ params: Promise.resolve({ id: "lead-1" }) });
 beforeEach(() => {
   authenticateRequestMock.mockReset().mockResolvedValue(authAs());
   getFeatureAccessMock.mockReset().mockReturnValue(true);
-  completenessMock.mockReset().mockResolvedValue({ complete: true, missing: [] });
+  completenessMock.mockReset().mockResolvedValue({ complete: true, missing: [], total: 8, filled: 8 });
   shouldRestrictToSelfMock.mockReset().mockReturnValue(false);
   requireLeadBranchAccessMock.mockReset().mockReturnValue(true);
   leadRow = { id: "lead-1", assigned_to: "user-1", branch_id: null };
@@ -45,20 +45,20 @@ beforeEach(() => {
 
 describe("GET /api/v1/leads/[id]/profile-completeness", () => {
   it("reports what is missing, using the same rule the create-application APIs enforce", async () => {
-    completenessMock.mockResolvedValue({ complete: false, missing: ["Email", "a document"] });
+    completenessMock.mockResolvedValue({ complete: false, missing: ["Email", "a document"], total: 8, filled: 6 });
     const { GET } = await import("./route");
     const res = await GET({} as NextRequest, params());
     const body = await res.json();
 
     expect(res.status).toBe(200);
-    expect(body.data).toEqual({ complete: false, missing: ["Email", "a document"] });
+    expect(body.data).toEqual({ complete: false, missing: ["Email", "a document"], total: 8, filled: 6 });
     expect(completenessMock).toHaveBeenCalledWith(expect.anything(), "tenant-1", "lead-1");
   });
 
   it("reports complete: true with nothing missing for a complete profile", async () => {
     const { GET } = await import("./route");
     const body = await (await GET({} as NextRequest, params())).json();
-    expect(body.data).toEqual({ complete: true, missing: [] });
+    expect(body.data).toEqual({ complete: true, missing: [], total: 8, filled: 8 });
   });
 
   it("401 when not signed in, and never runs the check", async () => {

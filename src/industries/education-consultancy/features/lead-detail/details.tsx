@@ -218,7 +218,7 @@ export function DetailsList(p: DetailsProps) {
                 <Pill key={c.user_id} avatar={<Avatar initials={initialsOf(c.name)} size={18} />} onRemove={cc.canRemove ? () => void collab.remove(c) : undefined} removeLabel={`Remove ${c.name}`}>{c.name}</Pill>
               ))}
               {cc.canAdd && (
-                <button type="button" aria-label="Add collaborator" title="Add collaborator" onClick={() => setEditing("collaborators")} className="inline-flex size-[22px] items-center justify-center rounded-[6px] text-[#9a9ea5] opacity-0 outline-none hover:bg-[#eef0f3] hover:text-[#101112] focus-visible:opacity-100 group-hover/row:opacity-100">
+                <button type="button" aria-label="Add collaborator" title="Add collaborator" onClick={() => setEditing("collaborators")} className="inline-flex size-6 items-center justify-center rounded-[6px] text-[#9a9ea5] opacity-0 outline-none hover:bg-[#eef0f3] hover:text-[#101112] focus-visible:opacity-100 group-hover/row:opacity-100">
                   <PlusIcon className="size-3" />
                 </button>
               )}
@@ -285,7 +285,7 @@ export function DetailsList(p: DetailsProps) {
             <DetailRow icon={<TagIcon />} label="Tags" wrap empty={tags.length === 0} editable={ce && tags.length === 0} onActivate={openTags}>
               {tags.length === 0 ? "Add tag" : tags.map((t) => <Pill key={t} onRemove={ce ? () => void setTags(tags.filter((x) => x !== t)) : undefined} removeLabel={`Remove tag ${t}`}>{t}</Pill>)}
               {ce && tags.length > 0 && (
-                <button type="button" aria-label="Add tag" title="Add tag" onClick={openTags} className="inline-flex size-[22px] items-center justify-center rounded-[6px] text-[#9a9ea5] opacity-0 outline-none hover:bg-[#eef0f3] hover:text-[#101112] focus-visible:opacity-100 group-hover/row:opacity-100"><PlusIcon className="size-3" /></button>
+                <button type="button" aria-label="Add tag" title="Add tag" onClick={openTags} className="inline-flex size-6 items-center justify-center rounded-[6px] text-[#9a9ea5] opacity-0 outline-none hover:bg-[#eef0f3] hover:text-[#101112] focus-visible:opacity-100 group-hover/row:opacity-100"><PlusIcon className="size-3" /></button>
               )}
             </DetailRow>
           </div>

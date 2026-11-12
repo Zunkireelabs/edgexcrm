@@ -102,6 +102,7 @@ import { moveErrorMessage } from "@/lib/leads/gate-error";
 import { AddLeadSheet } from "@/components/dashboard/add-lead-sheet";
 import { LeadPreviewSlot } from "@/components/dashboard/leads/preview-slot";
 import { RecordPreview } from "@/industries/education-consultancy/features/record-preview/record-preview";
+import { ARCHIVE_REASONS } from "@/lib/leads/archive-reasons";
 import { writeLeadNav } from "@/industries/education-consultancy/features/lead-detail/lib/lead-nav";
 import type { StageChoice } from "@/industries/education-consultancy/features/record-preview/stage-picker";
 import { navState } from "@/industries/education-consultancy/features/record-preview/lib/nav";
@@ -4156,7 +4157,7 @@ export function LeadsTable({
               <div className="space-y-1.5">
                 <p className="text-[13px] font-medium text-ds-muted">Archive reason</p>
                 <SearchableSelect
-                  options={["Not interested", "Wrong number", "Not reachable", "Already enrolled elsewhere", "Other"].map((r) => ({ value: r, label: r }))}
+                  options={ARCHIVE_REASONS.map((r) => ({ value: r, label: r }))}
                   value={moveArchiveReason}
                   onValueChange={(v) => {
                     setMoveArchiveReason(v);
