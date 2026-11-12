@@ -12,7 +12,7 @@ class RO { observe() {} unobserve() {} disconnect() {} }
 (globalThis as unknown as { ResizeObserver: typeof RO }).ResizeObserver = RO;
 Element.prototype.scrollIntoView = () => {};
 
-import { LeadCheckInDialog, type CheckInTriage } from "./lead-check-in";
+import { LeadCheckInDialog, guideLine, type CheckInTriage } from "./lead-check-in";
 
 const PEOPLE = [{ value: "u-farhan", label: "Farhan Ali" }, { value: "u-sita", label: "Sita Karki" }];
 const triage = (currentSlug: string | null, o: Partial<CheckInTriage> = {}): CheckInTriage => ({
@@ -43,7 +43,7 @@ describe("LeadCheckInDialog", () => {
     expect(screen.getByRole("combobox", { name: "Meeting with" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Assign to" })).toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "Move to" })).toBeNull();
-    expect(screen.getByText("Records a visit now. Assign and Move are optional.")).toBeInTheDocument();
+    expect(screen.getByText("Records a visit now. Assign is optional.")).toBeInTheDocument();
   });
 
   it("a lead not yet in Qualified can be moved (Move to), and Assign only appears once a stage is chosen", () => {
@@ -59,6 +59,19 @@ describe("LeadCheckInDialog", () => {
     cleanup();
     renderDialog(triage("applications"));
     expect(screen.queryByRole("combobox", { name: "Move to" })).toBeNull();
+  });
+
+  it("guide line matches what is on screen: both / only Assign / only Move / neither", () => {
+    expect(guideLine(true, true)).toBe("Records a visit now. Assign and Move are optional.");
+    renderDialog(triage("new")); // Move only (Assign waits for a stage)
+    expect(screen.getByText("Records a visit now. Move is optional.")).toBeInTheDocument();
+    cleanup();
+    renderDialog(triage("qualified")); // Assign only
+    expect(screen.getByText("Records a visit now. Assign is optional.")).toBeInTheDocument();
+    cleanup();
+    renderDialog(triage("prospects")); // neither
+    expect(screen.getByText("Records a visit now.")).toBeInTheDocument();
+    expect(screen.queryByText(/(is|are) optional/)).toBeNull();
   });
 
   it("non-education (no triage): only Reason and Meeting with, and no Assign / Move line", () => {

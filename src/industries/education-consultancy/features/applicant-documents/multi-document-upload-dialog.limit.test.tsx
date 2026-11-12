@@ -27,9 +27,9 @@ beforeEach(() => { fetchMock = vi.fn(); vi.stubGlobal("fetch", fetchMock); });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); toastError.mockClear(); });
 
 describe("drop zone hint reads the tenant's limit", () => {
-  it("25 MB tenant: 'PDF, Word, JPG, PNG, WEBP · up to 25 MB each (tenant setting)'", () => {
+  it("25 MB tenant: 'PDF, Word, JPG, PNG, WEBP · up to 25 MB each'", () => {
     dialog({ maxFileBytes: 25 * MB });
-    expect(screen.getByText("PDF, Word, JPG, PNG, WEBP · up to 25 MB each (tenant setting)")).toBeInTheDocument();
+    expect(screen.getByText("PDF, Word, JPG, PNG, WEBP · up to 25 MB each")).toBeInTheDocument();
   });
   it("a different tenant setting changes the text (not hardcoded)", () => {
     dialog({ maxFileBytes: 10 * MB });
@@ -40,6 +40,7 @@ describe("drop zone hint reads the tenant's limit", () => {
     dialog({ maxFileBytes: null });
     expect(screen.getByText("PDF, Word, JPG, PNG, WEBP")).toBeInTheDocument();
     expect(screen.queryByText(/up to/)).toBeNull();
+    expect(screen.queryByText(/tenant setting/)).toBeNull();
   });
   it("opens on the drop zone with no files chosen yet", () => {
     dialog({ files: [] });

@@ -206,7 +206,7 @@ export function MultiDocumentUploadDialog({
         </button>
       </span>
       <span className="text-[12px] text-ds-faint">
-        PDF, Word, JPG, PNG, WEBP{limitLabel ? ` · up to ${limitLabel} each (tenant setting)` : ""}
+        PDF, Word, JPG, PNG, WEBP{limitLabel ? ` · up to ${limitLabel} each` : ""}
       </span>
     </div>
   );

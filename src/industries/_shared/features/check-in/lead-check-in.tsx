@@ -63,6 +63,14 @@ export interface CheckInTriage {
 
 const NONE = "__none__";
 
+/** The guide line names only the optional fields that are actually on screen. */
+export function guideLine(canAssign: boolean, canMove: boolean): string {
+  if (canAssign && canMove) return "Records a visit now. Assign and Move are optional.";
+  if (canAssign) return "Records a visit now. Assign is optional.";
+  if (canMove) return "Records a visit now. Move is optional.";
+  return "Records a visit now.";
+}
+
 /**
  * Record a visit from the lead page (Dialogs v1 form dialog). POST /api/v1/leads/:id/check-in, the same endpoint the
  * Check-in page uses: anyone with check-in access may record a visit for any lead in the tenant (front-desk action).
@@ -195,7 +203,7 @@ export function LeadCheckInDialog({
             </div>
           )}
 
-          {triage && <p className="m-0 text-[12px] leading-4 text-ds-faint">Records a visit now. Assign and Move are optional.</p>}
+          <p className="m-0 text-[12px] leading-4 text-ds-faint">{guideLine(canAssign, canMove)}</p>
         </form>
 
         <DialogFooter>

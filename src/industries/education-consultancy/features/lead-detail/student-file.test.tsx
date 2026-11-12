@@ -272,7 +272,7 @@ describe("Documents '+' opens the upload dialog with the tenant's own limit", ()
   it("the drop-zone hint comes from the documents response (25 MB here, 10 MB for another tenant)", async () => {
     const { unmount } = render(<Rail />);
     fireEvent.click(await within(await screen.findByTestId("rail-documents")).findByRole("button", { name: "Upload documents" }));
-    expect(await screen.findByText("PDF, Word, JPG, PNG, WEBP · up to 25 MB each (tenant setting)")).toBeInTheDocument();
+    expect(await screen.findByText("PDF, Word, JPG, PNG, WEBP · up to 25 MB each")).toBeInTheDocument();
     unmount();
     maxFileBytes = 10 * 1024 * 1024;
     render(<Rail />);
