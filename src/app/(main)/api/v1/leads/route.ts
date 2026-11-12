@@ -678,6 +678,11 @@ export async function GET(request: NextRequest) {
     const effectiveCreatedAfter = rawFilterParam !== null ? (aggParams?.createdAfter ?? null) : createdAfter;
     // Search is not expressible in the ?f= tree, so it is always read from its own param (list and counts must agree).
     const effectiveSearch = search ? search.replace(/[,().]/g, "") : null;
+    // Source/Destination ride lead_aggregates(), whose p_search is ONE whole-string ILIKE on
+    // first/last/email/phone with no display_id match — unlike the list (per-word name match +
+    // display_id). Under a search those counts can't be faithful to the list, so they come back
+    // null ("no number") rather than contradict it. The DB-side fix waits for EDGEX-163 part (a).
+    const rpcSearchFaithful = !effectiveSearch;
 
     const baseFacetParams = {
       tenantId: auth.tenantId,
@@ -768,7 +773,7 @@ export async function GET(request: NextRequest) {
       if (requestedFacets.includes("source")) {
         // Source facet: cross-filtered by the current assignee selection (there's no
         // "source" axis to exclude — it has no p_source param at all).
-        sourceOptions = aggregateFacetsAvailable
+        sourceOptions = aggregateFacetsAvailable && rpcSearchFaithful
           ? await getSourceFacet({
               ...baseFacetParams,
               assigneesAny: effectiveAssigneesAny,
@@ -781,7 +786,7 @@ export async function GET(request: NextRequest) {
         // axis via baseFacetParams, same as source — there is no p_destination self-
         // filter param on the RPC (this axis has no way to filter the base query yet,
         // matching source's own precedent), so nothing needs to be omitted here.
-        destinationOptions = aggregateFacetsAvailable ? await getDestinationFacet(baseFacetParams) : null;
+        destinationOptions = aggregateFacetsAvailable && rpcSearchFaithful ? await getDestinationFacet(baseFacetParams) : null;
       }
 
       // Assignee + collaborator: counted with the list's OWN query (buildScopedQuery),
@@ -831,7 +836,7 @@ export async function GET(request: NextRequest) {
           let formerIds: string[] = [];
           if (aggregateFacetsAvailable) {
             try {
-              const discovered = await getCollaboratorFacet({ ...baseFacetParams, collaboratorIds: null });
+              const discovered = await getCollaboratorFacet({ ...baseFacetParams, collaboratorIds: null, search: null });
               formerIds = discovered.map((o) => o.name).filter((id) => !memberSet.has(id)).slice(0, 50);
             } catch (err) {
               log.warn({ err }, "former-collaborator discovery failed; listing current members only");

@@ -836,20 +836,67 @@ describe("GET /api/v1/leads — ?f= compiles through the SAME compileFilter() as
     expect(calls.some(([m, a]) => m === "or" && String(a[0]).toLowerCase().includes("first_name"))).toBe(false);
   });
 
-  it("?facets=source with ?f= + ?search= passes the search to lead_aggregates (counts match the searched list)", async () => {
+  // EDGEX-163: lead_aggregates()'s p_search is one whole-string ILIKE with no display_id match, so
+  // under a search its Source/Destination counts would contradict the list. They come back null.
+  const noRpcClient = (rpcCalls: [string, Record<string, unknown>][]) => ({
+    rpc: (name: string, params: Record<string, unknown>) => {
+      rpcCalls.push([name, params]);
+      return Promise.resolve({ data: [], error: null });
+    },
+  });
+
+  it("?facets=source with ?f= + ?search= returns null counts and never calls lead_aggregates (the RPC's whole-string search can't match the list)", async () => {
     const rpcCalls: [string, Record<string, unknown>][] = [];
-    createClientMock.mockResolvedValue({
-      rpc: (name: string, params: Record<string, unknown>) => {
-        rpcCalls.push([name, params]);
-        return Promise.resolve({ data: [], error: null });
-      },
-    });
+    createClientMock.mockResolvedValue(noRpcClient(rpcCalls));
     createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
     const { GET } = await import("./route");
     const res = await GET(fakeReq({ facets: "source", [FILTER_PARAM]: encodedTreeFor({ status: "contacted" }), search: "akash" }));
     expect(res.status).toBe(200);
-    expect(rpcCalls.some(([, params]) => params.p_search === "akash")).toBe(true);
+    expect(rpcCalls.filter(([n]) => n === "lead_aggregates")).toHaveLength(0);
   });
+
+  it("?facets=destination&search=Ram Thapa returns destination:null and never calls lead_aggregates", async () => {
+    const rpcCalls: [string, Record<string, unknown>][] = [];
+    createClientMock.mockResolvedValue(noRpcClient(rpcCalls));
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ facets: "destination", search: "Ram Thapa" }));
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data).toEqual({ facets: { destination: null } });
+    expect(rpcCalls.filter(([n]) => n === "lead_aggregates")).toHaveLength(0);
+  });
+
+  it("?facets=source,assignee&search=PS-371 (single word, display id): source is null but assignee is still counted per person from the list's own query", async () => {
+    const rpcCalls: [string, Record<string, unknown>][] = [];
+    createClientMock.mockResolvedValue(noRpcClient(rpcCalls));
+    createServiceClientMock.mockResolvedValue(
+      facetDb({ memberIds: ["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1"], countFor: (calls) => (callsMention(calls, "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1") ? 6 : 0) }),
+    );
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ facets: "source,assignee", search: "PS-371" }));
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data).toEqual({
+      facets: { source: null, assignee: { options: [{ name: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1", count: 6 }] } },
+    });
+    expect(rpcCalls.filter(([n]) => n === "lead_aggregates")).toHaveLength(0);
+  });
+
+  it("legacy single ?facets=source + ?search= returns the null shape { facet, options: [], counts: null }", async () => {
+    const rpcCalls: [string, Record<string, unknown>][] = [];
+    createClientMock.mockResolvedValue(noRpcClient(rpcCalls));
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ facets: "source", search: "Ram Thapa" }));
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data).toEqual({ facet: "source", options: [], counts: null });
+    expect(rpcCalls.filter(([n]) => n === "lead_aggregates")).toHaveLength(0);
+  });
+
+  // "?facets=source with NO search → unchanged" is already proven by the branch-manager test above
+  // ("branch-manager facets=source resolves p_scope…": lead_aggregates IS called) — no duplicate added.
 
   it("?tag=vip and its equivalent ?f= tree produce byte-identical query calls (native .contains() path)", async () => {
     const legacyCalls: Call[] = [];
@@ -1081,6 +1128,42 @@ describe("GET /api/v1/leads — ?f= compiles through the SAME compileFilter() as
       { name: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1", count: 4 },
       { name: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2", count: 4 },
     ]);
+  });
+
+  it("former-collaborator discovery under a ?search= asks lead_aggregates WITHOUT p_search (a search must not hide former collaborators); counts still use the list's own query", async () => {
+    const rpcCalls: RpcCall[] = [];
+    authenticateRequestMock.mockResolvedValue(
+      authFixture({
+        userId: "user-1",
+        branchId: "branch-1",
+        branchMemberIds: ["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1"],
+        permissions: permissions({ leadScope: "team" }),
+      }),
+    );
+    createClientMock.mockResolvedValue({
+      rpc: (name: string, params: unknown, opts: unknown) => {
+        rpcCalls.push([name, params, opts]);
+        if (name === "lead_aggregates") return Promise.resolve({ data: [], error: null });
+        const chain: Record<string, unknown> = {
+          select: () => chain,
+          is: () => chain,
+          not: () => chain,
+          eq: () => chain,
+          in: () => chain,
+          or: () => chain,
+          then: (resolve: (v: { data: null; error: null; count: number }) => void) =>
+            resolve({ data: null, error: null, count: 2 }),
+        };
+        return chain;
+      },
+    });
+    createServiceClientMock.mockResolvedValue(facetDb({ memberIds: ["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1"], countFor: () => 0 }));
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ facets: "collaborator", search: "Ram Thapa" }));
+    expect(res.status).toBe(200);
+    const discovery = rpcCalls.filter(([name]) => name === "lead_aggregates");
+    expect(discovery).toHaveLength(1);
+    expect(discovery[0][1]).not.toHaveProperty("p_search");
   });
 
   it("a malformed ?f= (not valid base64url JSON) is a 422, never an unhandled throw", async () => {
