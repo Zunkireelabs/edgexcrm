@@ -426,7 +426,7 @@ export function RecordPreview(props: RecordPreviewProps) {
   );
 }
 
-function NavButton({ label, kbd, disabled, onClick, children }: { label: string; kbd: string; disabled: boolean; onClick: () => void; children: React.ReactNode }) {
+export function NavButton({ label, kbd, disabled, onClick, children }: { label: string; kbd: string; disabled: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button
       type="button" aria-label={label} disabled={disabled} onClick={onClick}

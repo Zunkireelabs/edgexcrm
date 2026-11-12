@@ -102,6 +102,7 @@ import { moveErrorMessage } from "@/lib/leads/gate-error";
 import { AddLeadSheet } from "@/components/dashboard/add-lead-sheet";
 import { LeadPreviewSlot } from "@/components/dashboard/leads/preview-slot";
 import { RecordPreview } from "@/industries/education-consultancy/features/record-preview/record-preview";
+import { writeLeadNav } from "@/industries/education-consultancy/features/lead-detail/lib/lead-nav";
 import type { StageChoice } from "@/industries/education-consultancy/features/record-preview/stage-picker";
 import { navState } from "@/industries/education-consultancy/features/record-preview/lib/nav";
 import { MergeDialog } from "@/components/dashboard/lead/merge-dialog";
@@ -2172,6 +2173,25 @@ export function LeadsTable({
   const previewLead = localLeads.find((l) => l.id === previewLeadId) || null;
   const eduPreview = industryId === "education_consultancy";
   const previewRowIndex = previewLeadId ? displayLeads.findIndex((l) => l.id === previewLeadId) : -1;
+
+  // EDGEX-151: the lead detail's prev/next + counter + back link read this (sessionStorage `edgex.leadNav`). Kept current
+  // whenever the page of rows changes, so every way into a lead (name click, Open, Expand, ⌘↵) carries the same context.
+  useEffect(() => {
+    if (!eduPreview || !serverPaginated || tableLoading || displayLeads.length === 0) return;
+    const query: Record<string, string> = {};
+    buildFetchParams(currentPage, itemsPerPage, false).forEach((v, k) => {
+      if (k !== "page" && k !== "pageSize" && k !== "count") query[k] = v;
+    });
+    writeLeadNav({
+      viewLabel: activeViewLabel,
+      href: `${window.location.pathname}${window.location.search}`,
+      query,
+      page: currentPage,
+      pageSize: itemsPerPage,
+      ids: displayLeads.map((l) => l.id),
+      total: effectiveTotal,
+    });
+  }, [eduPreview, serverPaginated, tableLoading, displayLeads, buildFetchParams, currentPage, itemsPerPage, activeViewLabel, effectiveTotal]);
   // Keep showing the last record while J/K waits for the neighbouring page to arrive (no unmount flicker).
   const shownPreviewLead = previewLead ?? (pendingPreviewEdge.current ? stickyPreviewLead : null);
   useEffect(() => {

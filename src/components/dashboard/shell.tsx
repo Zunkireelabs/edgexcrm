@@ -217,7 +217,10 @@ export function DashboardShell({
   // consistent with the (hidden) mode-switcher tab above.
   const isOrcaRoute = aiAssistantEnabled && (pathname === "/orca" || pathname.startsWith("/orca/"));
   const navMode = isOrcaRoute ? "orca" : "ops";
-  const isLeadsFullBleed = pathname === "/leads";
+  // /leads and the education lead detail (EDGEX-89, three scrolling columns) run edge to edge inside the main card.
+  const isLeadsFullBleed =
+    pathname === "/leads" ||
+    (tenant.industry_id === "education_consultancy" && /^\/leads\/[0-9a-f-]{36}$/i.test(pathname));
   const [mounted, setMounted] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
