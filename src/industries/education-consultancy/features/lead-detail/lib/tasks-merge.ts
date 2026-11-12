@@ -11,11 +11,14 @@ export interface TaskIn {
   status: "todo" | "in_progress" | "done";
   due_date: string | null;
   assignee_name?: string | null;
+  /** Tasks have no completed_at column; updated_at is the closest stamp for a done row's date. */
+  updated_at?: string | null;
 }
 export interface ChecklistIn {
   id: string;
   title: string;
   is_completed: boolean;
+  completed_at?: string | null;
 }
 
 export interface UnifiedTask {
@@ -27,15 +30,19 @@ export interface UnifiedTask {
   done: boolean;
   due_date: string | null;
   assignee_name: string | null;
+  /** When a done row was finished (shown on the row). */
+  done_at: string | null;
 }
 
 export function mergeTasks(tasks: readonly TaskIn[], checklists: readonly ChecklistIn[]): UnifiedTask[] {
   return [
     ...tasks.map<UnifiedTask>((t) => ({
       key: `task-${t.id}`, id: t.id, source: "task", title: t.title, done: t.status === "done", due_date: t.due_date ?? null, assignee_name: t.assignee_name ?? null,
+      done_at: t.status === "done" ? t.updated_at ?? null : null,
     })),
     ...checklists.map<UnifiedTask>((c) => ({
       key: `checklist-${c.id}`, id: c.id, source: "checklist", title: c.title, done: c.is_completed, due_date: null, assignee_name: null,
+      done_at: c.is_completed ? c.completed_at ?? null : null,
     })),
   ];
 }

@@ -33,14 +33,28 @@ describe("TasksTab", () => {
     expect(screen.getByText(/old checklist items show here as tasks without a due date/)).toBeTruthy();
   });
 
-  it("chips show Open and Done counts; Done switches to the done group with struck-through rows", () => {
+  it("mockup state 3: with Open active the Done group shows under the open groups, struck through at .5", () => {
     setup();
+    expect(screen.getByRole("button", { name: /^Open/ }).getAttribute("aria-pressed")).toBe("true");
     expect(screen.getByRole("button", { name: /^Open/ }).textContent).toContain("2");
     expect(screen.getByRole("button", { name: /^Done/ }).textContent).toContain("1");
-    fireEvent.click(screen.getByRole("button", { name: /^Done/ }));
-    expect(screen.queryByText("Collect passport")).toBeNull();
+    expect(screen.getByText("Collect passport")).toBeTruthy();
+    expect(screen.getByText("Done", { selector: "div" })).toBeTruthy();
     expect(screen.getByText("Old done task").className).toContain("line-through");
     expect(screen.getByText("Old done task").className).toContain("opacity-50");
+  });
+
+  it("the Done chip narrows the list to the Done group", () => {
+    setup();
+    fireEvent.click(screen.getByRole("button", { name: /^Done/ }));
+    expect(screen.queryByText("Collect passport")).toBeNull();
+    expect(screen.getByText("Old done task")).toBeTruthy();
+  });
+
+  it("open rows read 'date · assignee' (overdue amber)", () => {
+    setup();
+    const meta = screen.getByText("1 Jan · Farhan");
+    expect(meta.className).toContain("text-[#b25e09]");
   });
 
   it("ticking a checklist row hands back a checklist-source item; ticking a task hands back a task-source item", () => {

@@ -6,6 +6,7 @@ import { MemberPicker, type RosterMember } from "@/components/dashboard/tasks/me
 import { toLocalDateString } from "@/lib/date";
 import { cn } from "@/lib/utils";
 import { dueLabel } from "../record-preview/lib/labels";
+import { shortDate } from "../record-preview/lib/readiness";
 import { TASK_GROUP_LABEL, groupTasks, taskCounts, type UnifiedTask } from "./lib/tasks-merge";
 import { EmptyState } from "./ui";
 
@@ -24,7 +25,8 @@ export function TasksTab({
 }) {
   const [view, setView] = useState<"open" | "done">("open");
   const counts = useMemo(() => taskCounts(items ?? []), [items]);
-  const groups = useMemo(() => groupTasks((items ?? []).filter((t) => (view === "done" ? t.done : !t.done))), [items, view]);
+  // Mockup state 3: with "Open" active the list shows the open groups AND the Done group under them. "Done" narrows it to the Done group.
+  const groups = useMemo(() => groupTasks((items ?? []).filter((t) => (view === "done" ? t.done : true))), [items, view]);
 
   const [title, setTitle] = useState("");
   const [due, setDue] = useState("");
@@ -109,6 +111,9 @@ export function TasksTab({
             <div className="rounded-[12px] p-1 shadow-[inset_0_0_0_1px_#eeeff1]">
               {g.items.map((t) => {
                 const d = dueLabel(t.due_date);
+                const meta = t.done
+                  ? (t.done_at ? shortDate(t.done_at) : null)
+                  : [d ? (d.overdue ? shortDate(t.due_date as string) : d.text) : null, t.assignee_name].filter(Boolean).join(" · ") || null;
                 return (
                   <div key={t.key} className="flex h-8 items-center gap-2 whitespace-nowrap rounded-[8px] px-2 text-[14px] font-medium leading-5 hover:bg-[#f6f7f9]">
                     <button
@@ -119,8 +124,7 @@ export function TasksTab({
                       {t.done && <CheckIcon className="size-3" />}
                     </button>
                     <button type="button" onClick={() => onOpen(t)} className={cn("min-w-0 flex-1 overflow-hidden text-ellipsis text-left outline-none", t.done && "line-through opacity-50")}>{t.title}</button>
-                    {t.assignee_name && !t.done && <span className="flex-none text-[12px] text-black/50">{t.assignee_name}</span>}
-                    {d && !t.done && <span className={cn("flex-none text-[12px]", d.overdue ? "text-[#b25e09]" : "text-black/50")}>{d.text}</span>}
+                    {meta && <span className={cn("flex-none text-[12px]", !t.done && d?.overdue ? "text-[#b25e09]" : "text-black/50")}>{meta}</span>}
                   </div>
                 );
               })}

@@ -103,6 +103,8 @@ interface ActivitiesPanelProps {
   /** Keeps a host's own merged feed in sync with what this panel logs / deletes. */
   onActivityLogged?: (activity: LeadActivityRecord) => void;
   onActivityDeleted?: (activityId: string) => void;
+  /** Host-provided empty state for the Emails body (no threads, no logged emails). Gets the panel's own compose / log actions. */
+  emailsEmpty?: (a: { canCompose: boolean; compose: () => void; logPast: () => void }) => React.ReactNode;
 }
 
 const SUB_TABS: { id: SubTab; label: string; icon: React.ReactNode }[] = [
@@ -158,6 +160,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
   forcedTab,
   onActivityLogged,
   onActivityDeleted,
+  emailsEmpty,
 }: ActivitiesPanelProps, ref) {
   const [activeTab, setActiveTab] = useState<SubTab>(forcedTab ?? "all");
   const notesTabRef = useRef<NotesTabRef>(null);
@@ -658,6 +661,8 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
                 <p className="text-muted-foreground">Loading emails...</p>
               </CardContent>
             </Card>
+          ) : !hasEmailContent && emailsEmpty ? (
+            emailsEmpty({ canCompose: hasEmail, compose: () => { setReplyContext(null); setComposeOpen(true); }, logPast: () => handleLogActivity("email") })
           ) : !hasEmailContent ? (
             <Card className="shadow-none rounded-lg py-0">
               <CardContent className="p-8 text-center">

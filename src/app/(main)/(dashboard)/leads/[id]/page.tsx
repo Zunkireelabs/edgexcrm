@@ -23,6 +23,7 @@ import { filterAssignableMembersByChain } from "@/lib/leads/assignable";
 import { nextPositionSlug, ASSIGN_CHAIN_POSITIONS } from "@/industries/education-consultancy/lead-assignment-chain";
 import { stageAssigneeCandidates } from "@/industries/education-consultancy/lead-assignment-by-stage";
 import { isAssistantEnabled } from "@/lib/ai/flag";
+import { resolveThresholds } from "@/industries/education-consultancy/features/team-performance/lib/thresholds";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import type { TenantEntity, Industry, LeadList } from "@/types/database";
@@ -333,6 +334,7 @@ export default async function LeadDetailPage({
         consentEnabled={consentEnabled}
         consentSigned={consentSigned}
         aiEnabled={isAssistantEnabled() && tenantData.tenant.ai_enabled}
+        followUpStaleDays={resolveThresholds(tenantData.tenant.config).followUpStaleDays}
         projectBoardEnabled={projectBoardEnabled}
       />
     );

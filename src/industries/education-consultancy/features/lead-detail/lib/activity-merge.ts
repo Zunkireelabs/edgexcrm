@@ -1,5 +1,6 @@
 import { describeAuditEvent } from "@/components/dashboard/lead/activities/describe-audit-event";
 import type { LeadActivity } from "@/lib/supabase/queries";
+import type { FeedAppDoc, FeedAppNote } from "./application-feed";
 import { ensureCreationEvent, isCreationAudit } from "../../record-preview/lib/creation-event";
 import type { PreviewActivity } from "../../record-preview/use-preview-data";
 
@@ -18,7 +19,7 @@ export const CHIP_LABEL: Record<ChipId, string> = {
 };
 
 /** Kinds whose body is shown as a quote box under the line. */
-export const QUOTE_KINDS: ReadonlySet<string> = new Set(["note", "call", "meeting"]);
+export const QUOTE_KINDS: ReadonlySet<string> = new Set(["note", "call", "meeting", "appnote"]);
 
 const CHIP_OF: Record<string, ChipId> = {
   call: "calls", meeting: "calls", note: "notes", email: "emails",
@@ -52,6 +53,9 @@ export interface FeedInputs {
   logged: readonly FeedLogged[];
   emails: readonly FeedEmail[];
   audits: readonly LeadActivity[];
+  /** Application notes / files (today's feed shows them; they sit under "All" only). */
+  appNotes?: readonly FeedAppNote[];
+  appDocs?: readonly FeedAppDoc[];
   leadCreatedAt: string;
   sourceLabel: string | null;
   /** Display name for a user id (real name, else null). The renderer swaps the current user for "You". */
@@ -116,6 +120,20 @@ export function mergeFeed(i: FeedInputs): FeedItem[] {
       actor_name: out ? i.nameOf(e.sender_user_id, e.from_name ?? e.from_email) : null,
       source: out ? null : e.from_name || e.from_email,
       kind: "email", verb: out ? "sent an email" : "emailed", object: null, snippet: e.subject || null,
+    });
+  }
+
+  for (const n of i.appNotes ?? []) {
+    items.push({
+      id: n.id, at: n.at, actor_id: n.authorId, actor_name: i.nameOf(n.authorId), source: null, kind: "appnote",
+      verb: `added an application note${n.fileCount ? ` · ${n.fileCount} file${n.fileCount > 1 ? "s" : ""}` : ""}`,
+      object: n.where ? `on ${n.where}` : null, snippet: n.content ? plainText(n.content) || null : null,
+    });
+  }
+  for (const d of i.appDocs ?? []) {
+    items.push({
+      id: d.id, at: d.at, actor_id: d.authorId, actor_name: i.nameOf(d.authorId), source: null, kind: "appdoc",
+      verb: "added a document", object: d.where ? `on ${d.where}` : null, snippet: d.line,
     });
   }
 

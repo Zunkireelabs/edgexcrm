@@ -25,12 +25,13 @@ import type { LeadActivity } from "@/lib/supabase/queries";
 import { usePreviewData, useTaskChangedRefresh } from "../record-preview/use-preview-data";
 import { ActivityTab } from "./activity-tab";
 import { mergeFeed } from "./lib/activity-merge";
+import { parseApplicationFeed, type FeedAppDoc, type FeedAppNote } from "./lib/application-feed";
 import { availableTabs, parseTab, TAB_LABEL, tabHref, type TabId } from "./lib/tabs";
 import { mergeTasks, sendToggle, type TaskIn, type UnifiedTask } from "./lib/tasks-merge";
 import { Overview } from "./overview";
 import { PANEL_ID, TabBar, tabId, type TabDef } from "./tab-bar";
 import { TasksTab } from "./tasks-tab";
-import { CARD_FRAME } from "./ui";
+import { CARD_FRAME, EmptyState } from "./ui";
 
 export interface MiddleColumnHandle {
   goNote: () => void;
@@ -122,6 +123,14 @@ export const MiddleColumn = forwardRef<MiddleColumnHandle, MiddleColumnProps>(fu
     return () => { cancelled = true; };
   }, [lead.id]);
 
+  // Application notes + files for the merged timeline (same endpoint today's feed reads).
+  const [appFeed, setAppFeed] = useState<{ notes: FeedAppNote[]; docs: FeedAppDoc[] }>({ notes: [], docs: [] });
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/v1/leads/${lead.id}/applications`).then((r) => (r.ok ? r.json() : null)).then((j) => { if (!cancelled && j) setAppFeed(parseApplicationFeed(j.data ?? [])); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [lead.id]);
+
   const { threads, setThreads } = useEmailThreads(hasEmail ? lead.id : "");
 
   const [tasks, setTasks] = useState<TaskIn[] | null>(null);
@@ -138,8 +147,8 @@ export const MiddleColumn = forwardRef<MiddleColumnHandle, MiddleColumnProps>(fu
   const sourceLabel = data?.source_name ?? (lead.intake_source ? lead.intake_source.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase()) : null);
   const feed = useMemo(() => (logged === null ? null : mergeFeed({
     notes: p.notes, logged, audits: p.audits, leadCreatedAt: lead.created_at, sourceLabel, nameOf,
-    emails: threads.flatMap((t) => t.emails),
-  })), [logged, p.notes, p.audits, lead.created_at, sourceLabel, nameOf, threads]);
+    emails: threads.flatMap((t) => t.emails), appNotes: appFeed.notes, appDocs: appFeed.docs,
+  })), [logged, p.notes, p.audits, appFeed, lead.created_at, sourceLabel, nameOf, threads]);
 
   const merged = useMemo(() => (tasks === null ? null : mergeTasks(tasks, p.checklists)), [tasks, p.checklists]);
 
@@ -156,14 +165,16 @@ export const MiddleColumn = forwardRef<MiddleColumnHandle, MiddleColumnProps>(fu
   }, [lead.id, p.checklists, p.onChecklistsChange]);
 
   // ── composers (N / T / left-column buttons) ──
+  // Notes: an empty lead shows the empty state until someone starts a note.
+  const [composingNote, setComposingNote] = useState(false);
   const notesRef = useRef<NotesTabRef>(null);
   const taskInputRef = useRef<HTMLInputElement | null>(null);
   const pendingFocus = useRef<"note" | "task" | null>(null);
   useEffect(() => {
     if (activeTab === "notes" && pendingFocus.current === "note") { pendingFocus.current = null; setTimeout(() => notesRef.current?.focusComposer(), 50); }
     if (activeTab === "tasks" && pendingFocus.current === "task") { pendingFocus.current = null; setTimeout(() => taskInputRef.current?.focus(), 50); }
-  }, [activeTab]);
-  const goNote = useCallback(() => { pendingFocus.current = "note"; if (activeTab === "notes") { pendingFocus.current = null; setTimeout(() => notesRef.current?.focusComposer(), 0); } else selectTab("notes"); }, [activeTab, selectTab]);
+  }, [activeTab, composingNote]);
+  const goNote = useCallback(() => { setComposingNote(true); pendingFocus.current = "note"; if (activeTab === "notes") { pendingFocus.current = null; setTimeout(() => notesRef.current?.focusComposer(), 60); } else selectTab("notes"); }, [activeTab, selectTab]);
   const goTask = useCallback(() => { pendingFocus.current = "task"; if (activeTab === "tasks") { pendingFocus.current = null; setTimeout(() => taskInputRef.current?.focus(), 0); } else selectTab("tasks"); }, [activeTab, selectTab]);
   useImperativeHandle(ref, () => ({ goNote, goTask, openTab: (t) => { if (available.includes(t)) selectTab(t); } }), [goNote, goTask, available, selectTab]);
 
@@ -220,10 +231,14 @@ export const MiddleColumn = forwardRef<MiddleColumnHandle, MiddleColumnProps>(fu
         {activeTab === "notes" && (
           <div className="px-4 pb-4 pt-1">
             <h3 className="m-0 mt-3 mb-2 px-1 text-[14px] font-medium leading-5 text-black/[.63]">Notes</h3>
+            {p.notes.length === 0 && !composingNote ? (
+              <EmptyState icon={<NoteIcon />} title="No notes yet" line="Notes you add stay with this lead for your whole team." cta="Add a note" onCta={() => { setComposingNote(true); pendingFocus.current = "note"; }} />
+            ) : (
             <NotesTab
               ref={notesRef} leadId={lead.id} notes={p.notes} onNotesChange={(n) => { p.onNotesChange(n); invalidate(lead.id); }}
               teamMemberNames={p.teamMemberNames} teamMemberEmails={p.teamMemberEmails} currentUserId={currentUserId} canManageNotes={p.canManageNotes}
             />
+            )}
           </div>
         )}
 
@@ -236,6 +251,13 @@ export const MiddleColumn = forwardRef<MiddleColumnHandle, MiddleColumnProps>(fu
               checklists={p.checklists} onChecklistsChange={p.onChecklistsChange} currentUserId={currentUserId} industryId="education_consultancy"
               leadEmail={lead.email} leadFirstName={lead.first_name} leadLastName={lead.last_name}
               threads={threads} setThreads={setThreads} threadsLoading={false} projectBoardEnabled={p.projectBoardEnabled}
+              emailsEmpty={({ canCompose, compose, logPast }) => (
+                <EmptyState
+                  icon={<EnvelopeSimpleIcon />} title="No emails yet"
+                  line={canCompose ? "Compose an email to this lead, or log a past one." : "Log emails to keep track of your communication with this lead."}
+                  cta={canCompose ? "Compose email" : "Log past email"} onCta={canCompose ? compose : logPast}
+                />
+              )}
               onActivityLogged={(a) => setLogged((prev) => (prev ? [a, ...prev] : [a]))}
               onActivityDeleted={(id) => setLogged((prev) => (prev ? prev.filter((a) => a.id !== id) : prev))}
             />

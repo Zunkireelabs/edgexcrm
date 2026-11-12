@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { LeadActivity } from "@/lib/supabase/queries";
+import { parseApplicationFeed } from "./application-feed";
 import { chipCounts, dayLabel, filterFeed, groupByDay, mergeFeed, type FeedInputs } from "./activity-merge";
 
 // Local-time constructors so the tests hold in any timezone.
@@ -81,6 +82,42 @@ describe("mergeFeed", () => {
   it("skips an email with no timestamp instead of crashing", () => {
     const feed = mergeFeed({ ...base, emails: [{ id: "e1", direction: "outbound", from_email: "f@x", from_name: null, subject: "x", sent_at: null, received_at: null, sender_user_id: null }] });
     expect(feed).toHaveLength(1);
+  });
+});
+
+describe("application notes and files (under All only)", () => {
+  it("are merged into the timeline, count in All, and belong to no chip", () => {
+    const feed = mergeFeed({
+      ...base,
+      appNotes: [
+        { id: "appnote-a1", at: at(11, 9), authorId: "u1", content: "Offer received", where: "UEL · BA Hons", fileCount: 0 },
+        { id: "appnote-entry-e1", at: at(11, 8), authorId: "u1", content: null, where: "UEL · BA Hons", fileCount: 2 },
+      ],
+      appDocs: [{ id: "appdoc-d1", at: at(11, 7), authorId: "u2", line: "Offer Letter · Offer", where: "UEL" }],
+    });
+    expect(feed.map((f) => f.id)).toEqual(["appnote-a1", "appnote-entry-e1", "appdoc-d1", "created-synthetic"]);
+    expect(feed[0]).toMatchObject({ kind: "appnote", verb: "added an application note", object: "on UEL · BA Hons", snippet: "Offer received" });
+    expect(feed[1].verb).toBe("added an application note · 2 files");
+    expect(feed[1].snippet).toBeNull();
+    expect(feed[2]).toMatchObject({ kind: "appdoc", verb: "added a document", object: "on UEL" });
+    expect(chipCounts(feed)).toEqual({ all: 4, calls: 0, notes: 0, emails: 0, stage: 0, checkins: 0 });
+  });
+
+  it("parseApplicationFeed uses today's helpers: auto 'Attached:' text dropped, note-attached files not repeated as documents", () => {
+    const { notes, docs } = parseApplicationFeed([{
+      id: "A1", notes: "  Typed note ", created_at: at(11, 1), created_by: "u1", notes_updated_by: null, notes_updated_at: at(11, 2),
+      university_name: "UEL", program_name: "BA Hons",
+      application_notes: [{ id: "n1", content: "Attached: offer.pdf", user_id: "u1", created_at: at(11, 3), documents: [{ id: "d1", name: null, document_type: "offer_letter", original_filename: "offer.pdf", application_note_id: "n1", created_at: at(11, 3) }] }],
+      application_documents: [
+        { id: "d1", name: null, document_type: "offer_letter", original_filename: "offer.pdf", application_note_id: "n1", created_at: at(11, 3) },
+        { id: "d2", name: "Transcript", document_type: "transcript", original_filename: null, application_note_id: null, uploaded_by: "u2", created_at: at(11, 4) },
+      ],
+    }]);
+    expect(notes.map((n) => [n.id, n.at === at(11, 2) || n.at === at(11, 3), n.content, n.fileCount, n.where])).toEqual([
+      ["appnote-A1", true, "  Typed note ", 0, "UEL · BA Hons"],
+      ["appnote-entry-n1", true, null, 1, "UEL · BA Hons"],
+    ]);
+    expect(docs.map((d) => d.id)).toEqual(["appdoc-d2"]);
   });
 });
 
