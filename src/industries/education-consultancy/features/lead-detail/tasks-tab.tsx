@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type RefObject } from "react";
+import { useEffect, useMemo, useState, type RefObject } from "react";
 import { CalendarIcon, CheckIcon, ClipboardTextIcon, PlusIcon } from "@/components/icons";
 import { MemberPicker, type RosterMember } from "@/components/dashboard/tasks/member-picker";
 import { toLocalDateString } from "@/lib/date";
@@ -12,7 +12,7 @@ import { EmptyState } from "./ui";
 
 /** Tasks tab (EDGEX-153): composer on top, Open/Done chips, ONE list (tasks + old checklist items) in date groups. */
 export function TasksTab({
-  items, leadId, currentUserId, composerRef, onToggle, onOpen, onCreated,
+  items, leadId, currentUserId, composerRef, onToggle, onOpen, onCreated, prefill,
 }: {
   items: UnifiedTask[] | null;
   leadId: string;
@@ -22,6 +22,8 @@ export function TasksTab({
   onOpen: (t: UnifiedTask) => void;
   /** Called after a task was created, so the parent refetches the (enriched) list. */
   onCreated: () => void;
+  /** "Also set a follow-up task" (Log call): fills the composer with a title and due date, assigned to the current user. `n` changes per request. */
+  prefill?: { title: string; due: string; n: number } | null;
 }) {
   const [view, setView] = useState<"open" | "done">("open");
   const counts = useMemo(() => taskCounts(items ?? []), [items]);
@@ -35,6 +37,15 @@ export function TasksTab({
   const [membersLoading, setMembersLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(false);
+
+  useEffect(() => {
+    if (!prefill) return;
+    setTitle(prefill.title); setDue(prefill.due); setAssignee(currentUserId);
+    const t = setTimeout(() => composerRef.current?.focus(), 60);
+    return () => clearTimeout(t);
+    // once per request (n), not on every render
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefill?.n]);
 
   const loadMembers = async () => {
     if (members.length > 0) return;

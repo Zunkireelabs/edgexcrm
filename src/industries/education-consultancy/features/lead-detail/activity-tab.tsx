@@ -70,11 +70,13 @@ const EMPTY: Record<Exclude<ChipId, "all">, { title: string; line: string }> = {
 };
 
 /** Activity tab (EDGEX-153): header + Filter + Log activity, filter chips with counts, ONE merged timeline grouped by day. */
-export function ActivityTab({ feed, currentUserId, onLog, onAddNote }: {
+export function ActivityTab({ feed, currentUserId, onLog, onAddNote, onCheckIn }: {
   feed: FeedItem[] | null;
   currentUserId: string;
   onLog: (t: ActivityType) => void;
   onAddNote: () => void;
+  /** Check-in (only when the tenant has the check-in feature). */
+  onCheckIn?: () => void;
 }) {
   const [chip, setChip] = useState<ChipId>("all");
   const counts = useMemo(() => chipCounts(feed ?? []), [feed]);
@@ -97,10 +99,12 @@ export function ActivityTab({ feed, currentUserId, onLog, onAddNote }: {
         </DropdownMenu>
         <DropdownMenu>
           <DropdownMenuTrigger className={BORDERED}><PlusIcon aria-hidden />Log activity</DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-[200px] rounded-[12px] p-1">
-            <DropdownMenuItem className={MENU_ITEM} onSelect={() => onLog("call")}><PhoneIcon className="size-4" />Log call</DropdownMenuItem>
-            <DropdownMenuItem className={MENU_ITEM} onSelect={() => onLog("meeting")}><ClockIcon className="size-4" />Log meeting</DropdownMenuItem>
-            <DropdownMenuItem className={MENU_ITEM} onSelect={() => onLog("email")}><EnvelopeSimpleIcon className="size-4" />Log past email</DropdownMenuItem>
+          <DropdownMenuContent align="end" className="w-[260px] rounded-[12px] p-1">
+            <DropdownMenuItem className={MENU_ITEM} onSelect={() => onLog("call")}><PhoneIcon className="size-4" />Call</DropdownMenuItem>
+            <DropdownMenuItem className={MENU_ITEM} onSelect={() => onLog("meeting")}><ClockIcon className="size-4" />Meeting</DropdownMenuItem>
+            <DropdownMenuItem className={MENU_ITEM} onSelect={() => onLog("email")}><EnvelopeSimpleIcon className="size-4" />Email (sent outside EdgeX)</DropdownMenuItem>
+            <DropdownMenuItem className={MENU_ITEM} onSelect={onAddNote}><NoteIcon className="size-4" />Note</DropdownMenuItem>
+            {onCheckIn && <DropdownMenuItem className={MENU_ITEM} onSelect={onCheckIn}><UserCheckIcon className="size-4" />Check-in</DropdownMenuItem>}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

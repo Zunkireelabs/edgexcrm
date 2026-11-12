@@ -32,12 +32,17 @@ import { mergeTasks, sendToggle, type TaskIn, type UnifiedTask } from "./lib/tas
 import { Overview } from "./overview";
 import { PANEL_ID, TabBar, tabId, type TabDef } from "./tab-bar";
 import { TasksTab } from "./tasks-tab";
+import { LogCallDialog } from "./log-call-dialog";
+import { followUpDefaults } from "./lib/move-model";
+import { getLeadFullName } from "@/components/dashboard/lead/lead-name";
 import { CARD_FRAME, EmptyState } from "./ui";
 
 export interface MiddleColumnHandle {
   goNote: () => void;
   goTask: () => void;
   openTab: (t: TabId) => void;
+  /** Opens the Tasks tab with the composer prefilled (Log call → "Also set a follow-up task"). */
+  followUpTask: (f: { title: string; due: string }) => void;
 }
 
 export interface MiddleColumnProps {
@@ -180,7 +185,9 @@ export const MiddleColumn = forwardRef<MiddleColumnHandle, MiddleColumnProps>(fu
   }, [activeTab, composingNote]);
   const goNote = useCallback(() => { setComposingNote(true); pendingFocus.current = "note"; if (activeTab === "notes") { pendingFocus.current = null; setTimeout(() => notesRef.current?.focusComposer(), 60); } else selectTab("notes"); }, [activeTab, selectTab]);
   const goTask = useCallback(() => { pendingFocus.current = "task"; if (activeTab === "tasks") { pendingFocus.current = null; setTimeout(() => taskInputRef.current?.focus(), 0); } else selectTab("tasks"); }, [activeTab, selectTab]);
-  useImperativeHandle(ref, () => ({ goNote, goTask, openTab: (t) => { if (available.includes(t)) selectTab(t); } }), [goNote, goTask, available, selectTab]);
+  const [taskPrefill, setTaskPrefill] = useState<{ title: string; due: string; n: number } | null>(null);
+  const followUpTask = useCallback((f: { title: string; due: string }) => { setTaskPrefill((prev) => ({ ...f, n: (prev?.n ?? 0) + 1 })); selectTab("tasks"); }, [selectTab]);
+  useImperativeHandle(ref, () => ({ goNote, goTask, followUpTask, openTab: (t) => { if (available.includes(t)) selectTab(t); } }), [goNote, goTask, followUpTask, available, selectTab]);
 
   const [logOpen, setLogOpen] = useState(false);
   const [logType, setLogType] = useState<ActivityType>("call");
@@ -222,13 +229,13 @@ export const MiddleColumn = forwardRef<MiddleColumnHandle, MiddleColumnProps>(fu
         )}
 
         {activeTab === "activity" && (
-          <ActivityTab feed={feed} currentUserId={currentUserId} onLog={(t) => { setLogType(t); setLogOpen(true); }} onAddNote={goNote} />
+          <ActivityTab feed={feed} currentUserId={currentUserId} onLog={(t) => { setLogType(t); setLogOpen(true); }} onAddNote={goNote} onCheckIn={p.checkInActive ? p.onOpenCheckIn : undefined} />
         )}
 
         {activeTab === "tasks" && (
           <TasksTab
             items={merged} leadId={lead.id} currentUserId={currentUserId} composerRef={taskInputRef} onToggle={(t, d) => void toggleTask(t, d)}
-            onOpen={(t) => { if (t.source === "task") router.push(`/tasks/${t.id}`); }} onCreated={() => { loadTasks(); invalidate(lead.id); }}
+            onOpen={(t) => { if (t.source === "task") router.push(`/tasks/${t.id}`); }} onCreated={() => { loadTasks(); invalidate(lead.id); }} prefill={taskPrefill}
           />
         )}
 
@@ -310,8 +317,13 @@ export const MiddleColumn = forwardRef<MiddleColumnHandle, MiddleColumnProps>(fu
         )}
       </div>
 
+      <LogCallDialog
+        open={logOpen && logType === "call"} onOpenChange={setLogOpen} leadId={lead.id} leadName={getLeadFullName(lead, "this lead")}
+        onLogged={(a) => setLogged((prev) => (prev ? [a, ...prev] : [a]))}
+        onFollowUp={() => followUpTask(followUpDefaults(getLeadFullName(lead, "this lead")))}
+      />
       <LogActivityModal
-        open={logOpen} onOpenChange={setLogOpen} leadId={lead.id} activityType={logType}
+        open={logOpen && logType !== "call"} onOpenChange={setLogOpen} leadId={lead.id} activityType={logType}
         onActivityLogged={(a) => setLogged((prev) => (prev ? [a, ...prev] : [a]))}
       />
     </div>
