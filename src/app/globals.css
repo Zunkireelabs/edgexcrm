@@ -367,7 +367,6 @@ html::-webkit-scrollbar-button {
   color: var(--ds-faint);
 }
 
-/* ───────────────────────────────────────────────────────────────────────────────────────────────
 /* ── Education lead detail at phone width (EDGEX-156) ──────────────────────────────────────────────
    Dialogs are portaled out of the page, so LeadDetailEdu marks <body data-edu-lead-detail> while it is mounted and the
    phone sheet below applies to every dialog opened from it (Qualify, gate, confirms, Archive, Log call, check-in,
@@ -400,6 +399,7 @@ html::-webkit-scrollbar-button {
   }
 }
 
+/* ───────────────────────────────────────────────────────────────────────────────────────────────
    EDGEX-145 Dialogs v1: Attio form fields inside every dialog (values measured live from Attio's
    Create Person dialog). Scoped to dialogs (`dialog-card` = ui/dialog, `alert-dialog-card`) so page forms
    outside dialogs do not change. Unlayered on purpose: it wins over the Tailwind utility classes
