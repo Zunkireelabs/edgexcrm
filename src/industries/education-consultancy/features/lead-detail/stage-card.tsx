@@ -158,6 +158,7 @@ export function StageCard(p: StageCardProps) {
               <Picker
                 open={moveOpen} onOpenChange={setMoveOpen} options={p.moveOptions} selected={p.currentListId ? [p.currentListId] : []} placeholder="Move to…"
                 onPick={(id) => { if (id !== p.currentListId) p.onMovePick(id); }}
+                footer={model.footer.archive ? () => ({ label: "Archive…", icon: <ArchiveIcon className="size-[14px]" aria-hidden />, onSelect: p.onArchive }) : undefined}
               >
                 <button type="button" aria-haspopup="listbox" aria-expanded={moveOpen} onClick={() => setMoveOpen((o) => !o)} className={cn(BTN, "shrink-0")}>Move to…<CaretDownIcon className="size-3" /></button>
               </Picker>

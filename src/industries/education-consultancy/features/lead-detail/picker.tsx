@@ -83,7 +83,7 @@ export function Picker({
               ))
             )}
             {foot && (
-              <CommandGroup className="p-0">
+              <CommandGroup className="mt-1 border-t border-ds-divider p-0 pt-1">
                 <CommandItem value="__footer__" role="option" onSelect={() => { foot.onSelect(); onOpenChange(false); }}>
                   {foot.icon}
                   <span className="min-w-0 truncate">{foot.label}</span>

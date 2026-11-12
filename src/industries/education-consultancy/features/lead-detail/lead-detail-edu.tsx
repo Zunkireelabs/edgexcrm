@@ -3,10 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { CaretDownIcon, CaretUpIcon, CircleNotchIcon, PencilSimpleIcon, ArrowLeftIcon } from "@/components/icons";
+import { CaretDownIcon, CaretUpIcon, CircleNotchIcon, PencilSimpleIcon, ArrowLeftIcon, XIcon } from "@/components/icons";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useLeadBackDestination } from "@/hooks/use-lead-back-destination";
 import { getLeadFullName } from "@/components/dashboard/lead/lead-name";
+import { DialogKeyHint } from "@/components/ui/dialog";
+import { MergeDialog } from "@/components/dashboard/lead/merge-dialog";
 import { PersonalDetailsDialog } from "@/industries/education-consultancy/features/student-record/components/personal-details-dialog";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
@@ -96,16 +98,18 @@ export function LeadDetailEdu(props: LeadDetailEduProps) {
   // Student Details pop-up (edit mode). Hosted here since the tab row no longer owns it.
   const studentRecordActive = getFeatureAccess(tenant.industry_id, FEATURES.STUDENT_RECORD);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailsKey, setDetailsKey] = useState(0);
   const [missingBeforeApplications, setMissingBeforeApplications] = useState<string[]>([]);
   const openStudentDetails = useCallback((missing?: string[]) => {
     if (!studentRecordActive) return false;
     setMissingBeforeApplications(missing ?? []);
+    setDetailsKey((k) => k + 1);
     setDetailsOpen(true);
     return true;
   }, [studentRecordActive]);
   const actions = useLeadActions({
     lead: props.lead, userId, leadLists, activeLeadLists, bypassQualification, nextPositionMembers, revertTargetUserId, revertTargetName,
-    revertTargetMembers, stageAssigneeMap, openStudentDetails,
+    revertTargetMembers, stageAssigneeMap, openStudentDetails, memberNames, canMoveWithoutChain, fallbackHref: backDestination.href,
   });
   const lead = actions.currentLead;
 
@@ -265,6 +269,26 @@ export function LeadDetailEdu(props: LeadDetailEduProps) {
   const copyLink = async () => { try { await navigator.clipboard.writeText(`${window.location.origin}/leads/${lead.id}`); toast.success("Link copied"); } catch { toast.error("Failed to copy"); } };
   const copyId = async () => { try { await navigator.clipboard.writeText(lead.display_id ?? lead.id); toast.success("Lead ID copied"); } catch { toast.error("Failed to copy"); } };
 
+  // ··· → Merge duplicates… (admins): one suggestion opens the existing merge dialog; several (or none) go to / say so on the Overview card.
+  const [mergeWith, setMergeWith] = useState<Lead | null>(null);
+  const mergeDuplicates = async () => {
+    try {
+      const res = await fetch(`/api/v1/leads/${lead.id}/duplicates`);
+      const list = res.ok ? ((await res.json()).data ?? []) as Array<{ other_lead: { id: string } }> : [];
+      if (list.length === 0) { toast.info("No possible duplicates for this lead"); return; }
+      if (list.length > 1) {
+        middleRef.current?.openTab("overview");
+        setTimeout(() => document.getElementById("possible-duplicates")?.scrollIntoView({ block: "center" }), 80);
+        return;
+      }
+      const other = await fetch(`/api/v1/leads/${list[0].other_lead.id}`).then((r) => (r.ok ? r.json() : null));
+      if (other?.data) setMergeWith(other.data as Lead);
+      else toast.error("Couldn't load the duplicate");
+    } catch {
+      toast.error("Couldn't check for duplicates");
+    }
+  };
+
   if (actions.leaving) {
     return <div className="flex h-full items-center justify-center py-32"><CircleNotchIcon className="size-6 animate-spin text-muted-foreground" /></div>;
   }
@@ -294,7 +318,7 @@ export function LeadDetailEdu(props: LeadDetailEduProps) {
         <button type="button" onClick={() => openStudentDetails()} className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-[8px] px-2 text-[14px] text-black/[.63] outline-none hover:bg-[#f6f7f9] focus-visible:ring-2 focus-visible:ring-[#266df0]/50">
           <PencilSimpleIcon className="size-[14px]" aria-hidden />Edit profile
         </button>
-        <MoreMenu isAdmin={isAdmin} onCopyLink={copyLink} onCopyId={copyId} onDelete={() => setDeleteOpen(true)} />
+        <MoreMenu isAdmin={isAdmin} onCopyLink={copyLink} onCopyId={copyId} onDelete={() => setDeleteOpen(true)} onMerge={() => void mergeDuplicates()} />
       </header>
 
       <div className="flex min-h-0 flex-1 max-[767px]:flex-col max-[767px]:overflow-y-auto">
@@ -305,7 +329,7 @@ export function LeadDetailEdu(props: LeadDetailEduProps) {
             isAdmin={isAdmin} leadScope={leadScope} canEdit={canEdit} isEditor={isEditor} canAssign={canAssign} canMoveWithoutChain={canMoveWithoutChain}
             revertTargetUserId={revertTargetUserId} consentEnabled={consentEnabled} consentSigned={consentSignedState}
             assignableMembers={assignableMembers} stageScopedAssignees={stageScopedAssignees} roster={roster}
-            file={file} canManageConsent={canManageApplications ?? isAdmin} onNote={goNote} onTask={goTask} onEditProfile={openStudentDetails} onDelete={() => setDeleteOpen(true)} mainRef={mainRef}
+            file={file} canManageConsent={canManageApplications ?? isAdmin} onNote={goNote} onTask={goTask} onEditProfile={openStudentDetails} onDelete={() => setDeleteOpen(true)} onMerge={() => void mergeDuplicates()} mainRef={mainRef}
           />
         </aside>
 
@@ -348,26 +372,34 @@ export function LeadDetailEdu(props: LeadDetailEduProps) {
         meetWithOptions={meetWithOptions} triage={checkInTriage} onSaved={(info) => void onCheckedIn(info)}
       />
 
-      {studentRecordActive && (
+      {/* Edit profile (flow 10). Mounted per opening so it always starts from the CURRENT lead (inline edits happen meanwhile). */}
+      {studentRecordActive && detailsOpen && (
         <PersonalDetailsDialog
-          lead={lead} open={detailsOpen}
+          key={detailsKey}
+          layout="sections"
+          lead={lead} open
           onOpenChange={(next) => { setDetailsOpen(next); if (!next) setMissingBeforeApplications([]); }}
           submissionHistory={submissionHistory}
           onLeadUpdate={(patch) => actions.setCurrentLead((prev) => ({ ...prev, ...patch } as Lead))}
           canUploadDocuments={getFeatureAccess(tenant.industry_id, FEATURES.APPLICANT_DOCUMENTS) && canEdit}
           openInEditMode isAdmin={isAdmin} missingBeforeApplications={missingBeforeApplications}
+          onNavKey={(dir) => void goLead(dir)}
         />
+      )}
+
+      {mergeWith && (
+        <MergeDialog leadA={lead} leadB={mergeWith} open onOpenChange={(o) => { if (!o) setMergeWith(null); }} onMerged={() => { setMergeWith(null); router.refresh(); }} />
       )}
 
       <AlertDialog open={deleteOpen} onOpenChange={(o) => { if (!deleting) setDeleteOpen(o); }}>
         <AlertDialogContent>
-          <AlertDialogHeader>
+          <AlertDialogHeader icon={<XIcon aria-hidden />} tone="danger">
             <AlertDialogTitle>Delete {name}?</AlertDialogTitle>
             <AlertDialogDescription>The lead moves to the Recycle bin. Admins can restore it from there.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction disabled={deleting} onClick={(e) => { e.preventDefault(); void deleteLead(); }} className="bg-[#c4321f] text-white hover:bg-[#a82a1a]">{deleting ? "Deleting…" : "Delete lead"}</AlertDialogAction>
+            <AlertDialogAction variant="destructive" disabled={deleting} onClick={(e) => { e.preventDefault(); void deleteLead(); }}>{deleting ? "Deleting…" : <>Delete <DialogKeyHint>↵</DialogKeyHint></>}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

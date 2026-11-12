@@ -21,6 +21,7 @@ import { StageCard } from "./stage-card";
 import { FeePopover } from "./fee-popover";
 import type { LeadFile } from "./lead-file";
 import { BigAvatar, CopyIconButton, IconButton } from "./ui";
+import { buildMoveMenu } from "./lib/move-model";
 import { buildStageCardModel, type ApplicationsReadiness, type RequirementAction } from "./lib/stage-card-model";
 import type { PickerOption } from "./picker";
 import type { Assignee, Person, useLeadActions } from "./use-lead-actions";
@@ -55,6 +56,8 @@ export interface LeftColumnProps {
   onTask: () => void;
   onEditProfile: (missing?: string[]) => void;
   onDelete: () => void;
+  /** "Merge duplicates…" in the ··· menu (admins). */
+  onMerge: () => void;
   /** The frame's ⌘↵ shortcut runs the stage card's main button through this ref. */
   mainRef: React.MutableRefObject<{ enabled: boolean; run: () => void } | null>;
 }
@@ -86,8 +89,10 @@ export function LeftColumn(p: LeftColumnProps) {
   }, [lead.list_id, p.activeLeadLists]);
   const [readiness, setReadiness] = useState<ApplicationsReadiness | null>(null);
   const readinessKey = `${lead.id}|${lead.list_id}|${lead.pre_app_fee_status}|${lead.pre_app_fee_amount}|${p.consentSigned}|${consentProfileKey(lead)}`;
+  // Admins / branch managers also need it for the "Move to…" menu (Applications shows "n missing").
+  const wantsReadiness = next?.slug === "applications" || (p.canMoveWithoutChain && p.activeLeadLists.some((l) => l.slug === "applications"));
   useEffect(() => {
-    if (next?.slug !== "applications") return;
+    if (!wantsReadiness) return;
     let cancelled = false;
     fetch(`/api/v1/leads/${lead.id}/applications-readiness`)
       .then((r) => (r.ok ? r.json() : null))
@@ -98,7 +103,7 @@ export function LeftColumn(p: LeftColumnProps) {
     return () => { cancelled = true; };
     // readinessKey covers every input that changes the server's answer
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [readinessKey, next?.slug]);
+  }, [readinessKey, wantsReadiness]);
 
   // Profile row: the consent-form fields (existing endpoint: missing + the total it derives from the same field groups).
   const [profile, setProfile] = useState<{ missing: string[]; total: number; filled: number } | null>(null);
@@ -129,9 +134,7 @@ export function LeftColumn(p: LeftColumnProps) {
   const chain = useMemo(() => [...p.activeLeadLists].sort((a, b) => a.sort_order - b.sort_order), [p.activeLeadLists]);
   const prevList = useMemo(() => { const i = chain.findIndex((l) => l.id === lead.list_id); return i > 0 ? chain[i - 1] : null; }, [chain, lead.list_id]);
   const accessibleIds = useMemo(() => new Set(p.leadLists.map((l) => l.id)), [p.leadLists]);
-  const moveOptions: PickerOption[] = chain
-    .filter((l) => accessibleIds.has(l.id) || l.id === lead.list_id)
-    .map((l) => ({ value: l.id, label: l.name, disabled: l.id === lead.list_id, secondary: l.id === lead.list_id ? "Current" : undefined }));
+  const moveOptions: PickerOption[] = buildMoveMenu({ chain, accessibleIds, currentListId: lead.list_id ?? null, readiness });
 
   const statuses = useMemo(() => {
     const scoped = p.stages.filter((s) => s.pipeline_id === lead.pipeline_id);
@@ -152,10 +155,10 @@ export function LeftColumn(p: LeftColumnProps) {
     return () => { ref.current = null; };
   });
 
-  // "Add" opens Student Details (the academic section; Phase 4 gets the Edit profile dialog). "Copy link" runs the one
+  // "Add" opens the %/GPA gate. "Copy link" runs the one
   // consent handler the rail uses. "Record" is a popover anchored to the link itself (see StageCard's renderAction).
   const onRequirement = (a: RequirementAction) => {
-    if (a === "add-qualification") return p.onEditProfile();
+    if (a === "add-qualification") return p.actions.openGate();
     if (a === "copy-consent") {
       // A half-filled profile can't get a consent link: send them to fix it (the rail's row says "Complete").
       if (p.file.consent.actionsBlocked) return p.onEditProfile();
@@ -226,7 +229,7 @@ export function LeftColumn(p: LeftColumnProps) {
           <IconButton bordered label={lead.phone ? "WhatsApp" : noPhone} disabled={!lead.phone} onClick={() => window.open(`https://wa.me/${formatPhoneForWhatsApp(lead.phone as string)}`, "_blank")}><WhatsappLogoIcon /></IconButton>
           <IconButton bordered label="Add note (N)" onClick={p.onNote}><NotePencilIcon /></IconButton>
           <IconButton bordered label="Add task (T)" onClick={p.onTask}><CheckSquareIcon /></IconButton>
-          <MoreMenu isAdmin={p.isAdmin} onCopyLink={copyLink} onCopyId={copyId} onDelete={p.onDelete} bordered />
+          <MoreMenu isAdmin={p.isAdmin} onCopyLink={copyLink} onCopyId={copyId} onDelete={p.onDelete} onMerge={p.onMerge} bordered />
         </div>
       </div>
 
@@ -285,7 +288,7 @@ export function LeftColumn(p: LeftColumnProps) {
   );
 }
 
-export function MoreMenu({ isAdmin, onCopyLink, onCopyId, onDelete, bordered }: { isAdmin: boolean; onCopyLink: () => void; onCopyId: () => void; onDelete: () => void; bordered?: boolean }) {
+export function MoreMenu({ isAdmin, onCopyLink, onCopyId, onDelete, onMerge, bordered }: { isAdmin: boolean; onCopyLink: () => void; onCopyId: () => void; onDelete: () => void; onMerge: () => void; bordered?: boolean }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger aria-label="More actions" title="More actions" className={`inline-flex size-7 shrink-0 items-center justify-center rounded-[8px] text-[#6b6f76] outline-none hover:bg-[#f6f7f9] hover:text-[#101112] focus-visible:ring-2 focus-visible:ring-[#266df0]/50 data-[state=open]:bg-[#f6f7f9] ${bordered ? "bg-white text-[#2b2d2f] shadow-[inset_0_0_0_1px_#e8e9eb]" : ""}`}>
@@ -294,6 +297,7 @@ export function MoreMenu({ isAdmin, onCopyLink, onCopyId, onDelete, bordered }: 
       <DropdownMenuContent align="end" className="min-w-[220px] rounded-[12px]">
         <DropdownMenuItem className="rounded-[8px]" onSelect={onCopyLink}>Copy link to this lead</DropdownMenuItem>
         <DropdownMenuItem className="rounded-[8px]" onSelect={onCopyId}>Copy lead ID</DropdownMenuItem>
+        {isAdmin && <DropdownMenuItem className="rounded-[8px]" onSelect={onMerge}>Merge duplicates…</DropdownMenuItem>}
         {isAdmin && (
           <>
             <DropdownMenuSeparator />

@@ -171,7 +171,7 @@ export function Overview(p: OverviewProps) {
         </>
       )}
 
-      {p.isAdmin && <div className="mt-3"><PossibleDuplicatesCard lead={lead} onMerged={p.onMerged} /></div>}
+      {p.isAdmin && <div id="possible-duplicates" className="mt-3"><PossibleDuplicatesCard lead={lead} onMerged={p.onMerged} /></div>}
     </div>
   );
 }

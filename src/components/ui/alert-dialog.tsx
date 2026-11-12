@@ -78,6 +78,8 @@ function AlertDialogContent({
 
 const ICON_TONES = {
   danger: "bg-ds-bad-soft text-ds-bad",
+  info: "bg-ds-accent-soft text-ds-accent",
+  warn: "bg-ds-warn-soft text-ds-warn",
   default: "bg-ds-hover text-ds-muted",
 } as const
 

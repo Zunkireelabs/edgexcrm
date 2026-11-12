@@ -3,18 +3,18 @@
 import { useCallback, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowBendUpRightIcon, CircleNotchIcon } from "@/components/icons";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DestinationsMultiSelect } from "@/components/dashboard/destinations-multi-select";
 import { ApplicationsGateDialog } from "@/components/dashboard/leads/applications-gate-dialog";
 import { ProspectQualificationDialog } from "@/components/dashboard/leads/prospect-qualification-dialog";
-import { moveConfirmMessage } from "@/components/dashboard/leads/move-to-list-selector";
-import { ARCHIVE_REASONS } from "@/lib/leads/archive-reasons";
+import { getLeadFullName } from "@/components/dashboard/lead/lead-name";
+import { hasProspectQualification } from "@/lib/leads/prospect-qualification";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 import { useLeadMoves } from "@/components/dashboard/lead/use-lead-moves";
 import type { Lead, LeadList } from "@/types/database";
+import { readLeadNav, writeLeadNav } from "./lib/lead-nav";
+import {
+  defaultAssignee, handOffToast, isStepBack, memberName, needsProspectGate, resolveHandOffTarget, revertNote, type MoveDirection,
+} from "./lib/move-model";
+import { ArchiveDialog, GpaGateDialog, MoveConfirmDialog, QualifyDialog } from "./move-dialogs";
 
 export interface Assignee {
   user_id: string;
@@ -27,7 +27,6 @@ export interface Person extends Assignee {
   position_name?: string | null;
 }
 
-
 interface Params {
   lead: Lead;
   userId: string;
@@ -39,26 +38,42 @@ interface Params {
   revertTargetName: string | null;
   revertTargetMembers: Assignee[];
   stageAssigneeMap: Record<string, Assignee[]>;
+  /** Names for the hand-off toast ("sent to <assignee>"), user id → display name. */
+  memberNames?: Record<string, string>;
+  /** Admin / owner / branch manager: "Move" wording, no chain. */
+  canMoveWithoutChain?: boolean;
+  /** Where "back to the view" goes when there is no edgex.leadNav context. */
+  fallbackHref?: string;
   /** Opens the Student Details pop-up (the same one the page's Edit button used). */
   openStudentDetails: (missing?: string[]) => void;
 }
 
-type ConfirmMove = { list: LeadList; direction: "next" | "back" | "move" } | null;
-
-const nameOf = (m: Assignee) => m.name || m.email.split("@")[0];
+interface Confirm {
+  list: LeadList;
+  direction: MoveDirection;
+  /** %/GPA the gate collected; sent with the move (the confirm can still be cancelled, so nothing saved yet). */
+  patch?: Record<string, string>;
+}
 
 /**
  * Everything that changes the lead's stage / holder on the detail page, with today's rules kept exactly:
  * the Prospects %/GPA gate, the Applications readiness gate, optimistic updates that roll back with a toast, and a
- * re-read of `assigned_to` after every move (the server may assign on its own). Phase 1 shows today's pop-ups; the
- * restyled Dialogs v1 versions replace the `dialogs` node in a later phase without touching these handlers.
+ * re-read of `assigned_to` after every move (the server may assign on its own). EDGEX-155 puts the Dialogs v1 pop-ups
+ * on these handlers: Qualify, the %/GPA gate FIRST then the send / move / revert confirm, and the archive confirm. The
+ * move logic itself is the shared `useLeadMoves` (also used by LeadDetailV2).
  */
 export function useLeadActions(p: Params) {
   const router = useRouter();
   const { destinations: destOptions, fieldsOfStudy, studyLevels } = useEduTaxonomy();
   const [currentLead, setCurrentLead] = useState<Lead>(p.lead);
-  const [confirm, setConfirm] = useState<ConfirmMove>(null);
+  const leadName = getLeadFullName(currentLead, "this lead");
+
+  // `confirm` keeps what the dialog shows while it fades out; `confirmOpen` is what opens / closes it.
+  const [confirm, setConfirm] = useState<Confirm | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [gate, setGate] = useState<{ list: LeadList; direction: MoveDirection } | null>(null);
   const [assignee, setAssignee] = useState("");
+  const [why, setWhy] = useState("");
   const [saving, setSaving] = useState(false);
 
   // Qualify pop-up
@@ -69,32 +84,87 @@ export function useLeadActions(p: Params) {
   const [qNote, setQNote] = useState("");
   const [qualifying, setQualifying] = useState(false);
 
-  // Archive pop-up
+  // Archive confirm
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [archiveReason, setArchiveReason] = useState("");
   const [archiveOther, setArchiveOther] = useState("");
 
   const stageId = currentLead.stage_id;
   const assignedTo = currentLead.assigned_to ?? "";
+  const allLists = [...p.activeLeadLists, ...p.leadLists];
+  const currentList = allLists.find((l) => l.id === currentLead.list_id) ?? null;
+
+  const nameOfUser = useCallback((id: string) => {
+    const fromLists = [...p.nextPositionMembers, ...p.revertTargetMembers, ...Object.values(p.stageAssigneeMap).flat()].find((m) => m.user_id === id);
+    return p.memberNames?.[id] ?? (fromLists ? memberName(fromLists) : "someone");
+  }, [p.memberNames, p.nextPositionMembers, p.revertTargetMembers, p.stageAssigneeMap]);
+
+  // After a hand-off the lead is read-only for this user: open THEIR next lead of the view (or go back to it) and say what happened.
+  const onHandOff = useCallback(({ lead: updated, listName }: { lead: Lead; listName: string }) => {
+    void (async () => {
+      const target = await resolveHandOffTarget(readLeadNav(), p.lead.id, p.fallbackHref ?? "/leads");
+      const text = handOffToast(leadName, updated.assigned_to ? nameOfUser(updated.assigned_to) : "someone", listName);
+      if (target.nextId) {
+        if (target.ctx) writeLeadNav(target.ctx);
+        router.push(`/leads/${target.nextId}`);
+        // The toast names the next lead once we know its name (the nav context only stores ids).
+        let next = "";
+        try {
+          const r = await fetch(`/api/v1/leads/${target.nextId}`);
+          if (r.ok) next = getLeadFullName((await r.json()).data as Lead, "");
+        } catch { /* the line is a nicety */ }
+        toast.success(text, next ? { description: `Opened your next lead: ${next}` } : undefined);
+      } else {
+        toast.success(text);
+        router.push(target.href);
+      }
+      router.refresh();
+    })();
+  }, [leadName, nameOfUser, p.fallbackHref, p.lead.id, router]);
 
   // The move / assign / gate logic is shared with LeadDetailV2 (one hook, one behaviour).
   const moves = useLeadMoves({
     lead: p.lead, currentLead, setCurrentLead, stageId, setStageId: () => {},
     setAssignedTo: (v) => setCurrentLead((l) => ({ ...l, assigned_to: v || null } as Lead)),
     userId: p.userId, industryId: "education_consultancy", bypassQualification: p.bypassQualification, leadLists: p.leadLists,
+    onHandOff,
   });
   const { leaving, gateMissing, setGateMissing, pendingProspectMove, setPendingProspectMove, pendingAssignGate, setPendingAssignGate, performListMove } = moves;
   const requestMove = (listId: string, assignToUserId?: string | null, archive?: string) => moves.requestListChange(listId, archive, assignToUserId);
 
+  const membersFor = useCallback((list: LeadList, direction: MoveDirection): Assignee[] =>
+    direction === "next" ? p.nextPositionMembers : direction === "back" ? p.revertTargetMembers : p.stageAssigneeMap[list.id] ?? [],
+  [p.nextPositionMembers, p.revertTargetMembers, p.stageAssigneeMap]);
+
+  const openConfirm = useCallback((list: LeadList, direction: MoveDirection, patch?: Record<string, string>) => {
+    setAssignee(defaultAssignee(membersFor(list, direction), direction, p.revertTargetUserId));
+    setWhy("");
+    setConfirm({ list, direction, patch });
+    setConfirmOpen(true);
+  }, [membersFor, p.revertTargetUserId]);
+
+  /**
+   * Start a move. Order matters (flow 2): Applications readiness first, then the %/GPA gate when moving forward into
+   * Prospects without a qualifying level, THEN the confirm with the assignee.
+   */
   const startMove = useCallback(
-    async (list: LeadList, direction: "next" | "back" | "move") => {
+    async (list: LeadList, direction: MoveDirection) => {
       if (direction !== "back" && !(await moves.precheckApplications(list.id))) return;
-      const members = direction === "next" ? p.nextPositionMembers : direction === "back" ? p.revertTargetMembers : p.stageAssigneeMap[list.id] ?? [];
-      setAssignee(direction === "back" ? p.revertTargetUserId ?? "" : members.length === 1 ? members[0].user_id : "");
-      setConfirm({ list, direction });
+      const stepBack = isStepBack(currentList, list);
+      if (direction !== "back" && needsProspectGate({ target: list, stepBack, hasQualification: hasProspectQualification(currentLead as unknown as Record<string, unknown>) })) {
+        setGate({ list, direction });
+        return;
+      }
+      openConfirm(list, direction);
     },
-    [p.nextPositionMembers, p.revertTargetMembers, p.revertTargetUserId, p.stageAssigneeMap, moves],
+    [moves, currentList, currentLead, openConfirm],
   );
+
+  /** The stage card's "Add" next to the %/GPA requirement: the same gate, then straight to the Prospects confirm. */
+  const openGate = useCallback(() => {
+    const next = [...p.activeLeadLists].sort((a, b) => a.sort_order - b.sort_order).find((l) => l.slug === "prospects");
+    if (next) setGate({ list: next, direction: p.canMoveWithoutChain ? "move" : "next" });
+  }, [p.activeLeadLists, p.canMoveWithoutChain]);
 
   const openQualify = useCallback(() => {
     const l = currentLead as { destinations?: string[] | null; field_of_study?: string | null; degree_level?: string | null };
@@ -125,7 +195,7 @@ export function useLeadActions(p: Params) {
       setQualifyOpen(false);
       router.refresh();
     } catch {
-      toast.error("Failed to qualify lead");
+      toast.error("Couldn't qualify, try again");
     } finally {
       setQualifying(false);
     }
@@ -159,6 +229,7 @@ export function useLeadActions(p: Params) {
     const archive = p.leadLists.find((l) => l.is_archive);
     if (!archive) { toast.error("Archive list not found"); return; }
     const reason = archiveReason === "Other" ? archiveOther.trim() || "Other" : archiveReason;
+    if (!reason) return;
     setArchiveOpen(false);
     await performListMove(archive.id, reason);
   };
@@ -176,114 +247,78 @@ export function useLeadActions(p: Params) {
 
   const confirmMove = async () => {
     if (!confirm) return;
-    const members = confirm.direction === "next" ? p.nextPositionMembers : confirm.direction === "back" ? p.revertTargetMembers : p.stageAssigneeMap[confirm.list.id] ?? [];
+    const members = membersFor(confirm.list, confirm.direction);
     if (members.length > 0 && !assignee) return;
     setSaving(true);
     try {
       const assignTo = members.length > 0 ? assignee || null : undefined;
-      const listId = confirm.list.id;
-      setConfirm(null);
-      if (confirm.direction === "back") await performListMove(listId, undefined, assignTo);
-      else await requestMove(listId, assignTo);
+      const { list, direction, patch } = confirm;
+      const note = direction === "back" ? revertNote(why) : null;
+      setConfirmOpen(false);
+      if (direction === "back") {
+        const ok = await performListMove(list.id, undefined, assignTo);
+        // The "Why" becomes a lead note ONLY after the move went through (a failed move must leave no note behind).
+        if (ok && note) {
+          try {
+            const r = await fetch(`/api/v1/leads/${currentLead.id}/notes`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: note }) });
+            if (!r.ok) throw new Error();
+          } catch {
+            toast.error("Moved, but the note couldn't be saved");
+          }
+        }
+      } else if (patch) {
+        // The gate already collected the %/GPA: send it with the move (requestListChange would ask for it again).
+        await performListMove(list.id, undefined, assignTo, patch);
+      } else {
+        await requestMove(list.id, assignTo);
+      }
     } finally {
       setSaving(false);
     }
   };
 
-  const members = confirm ? (confirm.direction === "next" ? p.nextPositionMembers : confirm.direction === "back" ? p.revertTargetMembers : p.stageAssigneeMap[confirm.list.id] ?? []) : [];
+  const confirmMembers = confirm ? membersFor(confirm.list, confirm.direction) : [];
   const dialogs: ReactNode = (
     <>
-      <Dialog open={!!confirm} onOpenChange={(v) => { if (!v && !saving) setConfirm(null); }}>
-        <DialogContent className="max-w-md sm:max-w-md" overlayClassName="bg-[#0000004d] backdrop-blur-[2px]">
-          <DialogHeader>
-            <div className="flex size-10 items-center justify-center rounded-full bg-blue-50 text-blue-600"><ArrowBendUpRightIcon className="size-5" /></div>
-            <DialogTitle className="pt-1">{confirm ? (confirm.direction === "back" ? `Revert to ${confirm.list.name}` : moveConfirmMessage(confirm.list)) : ""}</DialogTitle>
-            <DialogDescription>
-              {confirm?.direction === "back" ? (
-                <>This lead will move back to <span className="font-medium text-foreground">{confirm.list.name}</span>.{members.length === 0 && p.revertTargetName ? <> Reassigned to <span className="font-medium text-foreground">{p.revertTargetName}</span>.</> : null}</>
-              ) : (
-                <>This lead will move to <span className="font-medium text-foreground">{confirm?.list.name}</span>.</>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          {members.length > 0 && (
-            <div className="py-2">
-              <p className="mb-1.5 text-xs text-muted-foreground">Assign to</p>
-              <Select value={assignee} onValueChange={setAssignee}>
-                <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select assignee" /></SelectTrigger>
-                <SelectContent>{members.map((m) => <SelectItem key={m.user_id} value={m.user_id}>{nameOf(m)}</SelectItem>)}</SelectContent>
-              </Select>
-              {!assignee && <p className="mt-1 text-xs text-muted-foreground">Select an assignee to continue.</p>}
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" disabled={saving} onClick={() => setConfirm(null)}>Cancel</Button>
-            <Button disabled={saving || (members.length > 0 && !assignee)} onClick={confirmMove}>{saving ? "Moving…" : "Confirm"}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <MoveConfirmDialog
+        open={confirmOpen && !!confirm}
+        direction={confirm?.direction ?? "move"}
+        targetName={confirm?.list.name ?? ""}
+        leadName={leadName}
+        isBackward={!!confirm && isStepBack(currentList, confirm.list)}
+        chainSend={!p.canMoveWithoutChain}
+        members={confirmMembers as Person[]}
+        assignee={assignee} onAssignee={setAssignee} why={why} onWhy={setWhy}
+        fixedHolderName={p.revertTargetName}
+        busy={saving}
+        onConfirm={() => void confirmMove()} onCancel={() => setConfirmOpen(false)}
+      />
 
-      <Dialog open={qualifyOpen} onOpenChange={setQualifyOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>Qualify Lead</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-2">
-            <DestinationsMultiSelect selected={qDests} onChange={setQDests} options={destOptions} label="Interested Destinations" optional={false} />
-            <div className="space-y-1.5">
-              <p className="text-sm font-medium">Field of Study</p>
-              <Select value={qField || "__none__"} onValueChange={(v) => setQField(v === "__none__" ? "" : v)}>
-                <SelectTrigger><SelectValue placeholder="Select field" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__"><span className="text-muted-foreground">Not specified</span></SelectItem>
-                  {fieldsOfStudy.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <p className="text-sm font-medium">Degree Level</p>
-              <Select value={qDegree || "__none__"} onValueChange={(v) => setQDegree(v === "__none__" ? "" : v)}>
-                <SelectTrigger><SelectValue placeholder="Select level" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__"><span className="text-muted-foreground">Not specified</span></SelectItem>
-                  {studyLevels.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <p className="text-sm font-medium">Note <span className="font-normal text-muted-foreground">(optional)</span></p>
-              <textarea value={qNote} onChange={(e) => setQNote(e.target.value)} placeholder="Add a note about this qualification…" rows={3} className="w-full resize-none rounded-[8px] border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
-            </div>
-            {qDests.length === 0 && !qField && <p className="text-xs text-muted-foreground">Needed: at least one study country or a course.</p>}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setQualifyOpen(false)} disabled={qualifying}>Cancel</Button>
-            <Button onClick={submitQualify} disabled={qualifying || (qDests.length === 0 && !qField)}>
-              {qualifying ? <><CircleNotchIcon className="mr-2 size-4 animate-spin" />Qualifying…</> : "Qualify →"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <QualifyDialog
+        open={qualifyOpen} onOpenChange={setQualifyOpen} leadName={leadName}
+        destinations={qDests} onDestinations={setQDests} course={qField} onCourse={setQField} level={qDegree} onLevel={setQDegree} note={qNote} onNote={setQNote}
+        destinationOptions={destOptions} courseOptions={fieldsOfStudy} levelOptions={studyLevels}
+        saving={qualifying} onSubmit={() => void submitQualify()}
+      />
 
-      <Dialog open={archiveOpen} onOpenChange={setArchiveOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Archive this lead</DialogTitle><DialogDescription>Pick why. The lead moves to the archive and can be restored.</DialogDescription></DialogHeader>
-          <div className="space-y-1">
-            {ARCHIVE_REASONS.map((r) => (
-              <button key={r} type="button" onClick={() => setArchiveReason(r)} className={`w-full rounded-[8px] px-2 py-1.5 text-left text-sm ${archiveReason === r ? "bg-blue-50 font-medium text-blue-800" : "hover:bg-muted"}`}>{r}</button>
-            ))}
-            {archiveReason === "Other" && <textarea value={archiveOther} onChange={(e) => setArchiveOther(e.target.value)} placeholder="Describe the reason…" className="mt-1 h-16 w-full resize-none rounded-[8px] border p-2 text-sm" />}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setArchiveOpen(false)}>Cancel</Button>
-            <Button disabled={!archiveReason} onClick={submitArchive}>Archive</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <GpaGateDialog
+        open={!!gate} lead={currentLead as unknown as Record<string, unknown>} canSkip={p.bypassQualification} targetName={gate?.list.name ?? "Prospects"}
+        onSave={(patch) => { if (gate) { const g = gate; setGate(null); openConfirm(g.list, g.direction, patch); } }}
+        onSkip={() => { if (gate) { const g = gate; setGate(null); openConfirm(g.list, g.direction); } }}
+        onCancel={() => setGate(null)}
+      />
+
+      <ArchiveDialog
+        open={archiveOpen} leadName={leadName} reason={archiveReason} onReason={setArchiveReason} other={archiveOther} onOther={setArchiveOther}
+        onConfirm={() => void submitArchive()} onCancel={() => setArchiveOpen(false)}
+      />
 
       <ApplicationsGateDialog
         missing={gateMissing}
         onClose={() => setGateMissing(null)}
         onEditProfile={gateMissing && gateMissing.some((m) => /^Basic info/i.test(m)) ? () => { const m = gateMissing; setGateMissing(null); p.openStudentDetails(m.filter((x) => /^Basic info/i.test(x))); } : undefined}
       />
+      {/* Server-side blocks (someone else changed the lead meanwhile) still open the gate instead of a corner toast. */}
       <ProspectQualificationDialog
         lead={currentLead as unknown as Record<string, unknown>}
         open={!!pendingProspectMove}
@@ -300,7 +335,7 @@ export function useLeadActions(p: Params) {
 
   return {
     currentLead, setCurrentLead, stageId, assignedTo, leaving,
-    startMove, requestMove, openQualify, changeAssignment: (id: string | null) => moves.handleAssignmentChange(id ?? "unassigned"), patchLead, restore,
+    startMove, requestMove, openQualify, openGate, changeAssignment: (id: string | null) => moves.handleAssignmentChange(id ?? "unassigned"), patchLead, restore,
     openArchive: () => { setArchiveReason(""); setArchiveOther(""); setArchiveOpen(true); },
     dialogs,
   };

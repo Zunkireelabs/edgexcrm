@@ -25,10 +25,16 @@ export interface UseLeadMovesParams {
   industryId: string | null | undefined;
   bypassQualification: boolean;
   leadLists?: LeadList[];
+  /**
+   * Hand-off hook (education lead detail). When given, a move that leaves the lead with someone else calls this
+   * INSTEAD of `router.back()` and shows no generic toast: the page decides where to go next and what to say.
+   * LeadDetailV2 does not pass it, so its behaviour is unchanged.
+   */
+  onHandOff?: (info: { lead: Lead; listName: string }) => void;
 }
 
 export function useLeadMoves({
-  lead, currentLead, setCurrentLead, stageId, setStageId, setAssignedTo, userId, industryId, bypassQualification, leadLists,
+  lead, currentLead, setCurrentLead, stageId, setStageId, setAssignedTo, userId, industryId, bypassQualification, leadLists, onHandOff,
 }: UseLeadMovesParams) {
   const router = useRouter();
   const [leaving, setLeaving] = useState(false);
@@ -74,7 +80,7 @@ export function useLeadMoves({
     archiveReason?: string,
     assignToUserId?: string | null,
     academicPatch?: Record<string, string>
-  ) {
+  ): Promise<boolean> {
     const prevLead = currentLead;
     const prevStageId = stageId;
     const willHandOff =
@@ -129,6 +135,11 @@ export function useLeadMoves({
         setCurrentLead((prev) => ({ ...prev, assigned_to: updated.assigned_to } as Lead));
         router.refresh();
       }
+      // Education detail page: it owns the hand-off (next lead + its own toast).
+      if (onHandOff && updated.assigned_to && updated.assigned_to !== userId) {
+        onHandOff({ lead: updated, listName: targetList?.name ?? "list" });
+        return true;
+      }
       toast.success(`Moved to ${targetList?.name ?? "list"}`);
       // Handed off to someone else (send-to-next / revert to another holder):
       // the lead leaves this user's control and is now read-only for them, so
@@ -136,11 +147,12 @@ export function useLeadMoves({
       if (updated.assigned_to && updated.assigned_to !== userId) {
         router.back();
         router.refresh();
-        return;
+        return true;
       }
       // Predicted a handoff (spinner shown) but the server kept the lead
       // with us — restore the detail instead of hanging on the spinner.
       if (willHandOff) setLeaving(false);
+      return true;
     } catch (err) {
       setCurrentLead(prevLead);
       setStageId(prevStageId);
@@ -148,6 +160,7 @@ export function useLeadMoves({
       setLeaving(false);
       if (gateBlocked) setGateMissing(gateBlocked);
       else toast.error(err instanceof Error ? err.message : "Failed to move lead");
+      return false;
     }
   }
 
