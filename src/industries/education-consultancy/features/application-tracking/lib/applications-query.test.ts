@@ -41,7 +41,13 @@ function getCol(r: Row, col: string): unknown {
 const parseList = (s: string) => s.replace(/^\(|\)$/g, "").split(",");
 const likeRe = (p: string) => new RegExp(`^${p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/%/g, ".*")}$`, "i");
 
+const splitTop = (f: string) => f.split(/,(?![^(]*\))/);
 function leaf(expr: string, table: string | null): Pred {
+  const group = expr.match(/^(and|or)\((.*)\)$/);
+  if (group) {
+    const legs = splitTop(group[2]).map((e) => leaf(e, table));
+    return group[1] === "and" ? (r) => legs.every((p) => p(r)) : (r) => legs.some((p) => p(r));
+  }
   const [col, op, ...rest] = expr.split(".");
   const val = rest.join(".");
   const colName = table ? `${table}.${col}` : col;
@@ -70,6 +76,7 @@ class FakeQuery implements PromiseLike<{ data: unknown; count: number | null; er
   is(c: string, v: null | boolean) { return this.add(`is(${c})`, (r) => (c === "deleted_at" || c === "leads.deleted_at" ? true : getCol(r, c) === v)); }
   in(c: string, v: readonly unknown[]) { return this.add(`in(${c})`, (r) => v.includes(getCol(r, c))); }
   lt(c: string, v: unknown) { return this.add(`lt(${c})`, (r) => String(getCol(r, c)) < String(v)); }
+  ilike(c: string, v: string) { return this.add(`ilike(${c})`, (r) => { const x = getCol(r, c); return typeof x === "string" && likeRe(v).test(x); }); }
   not(c: string, op: string, v: unknown) {
     return this.add(`not(${c},${op})`, (r) => {
       const x = getCol(r, c);
@@ -80,7 +87,7 @@ class FakeQuery implements PromiseLike<{ data: unknown; count: number | null; er
     });
   }
   or(f: string, o?: { referencedTable?: string }) {
-    const legs = f.split(/,(?![^(]*\))/).map((e) => leaf(e, o?.referencedTable ?? null));
+    const legs = splitTop(f).map((e) => leaf(e, o?.referencedTable ?? null));
     return this.add(`or(${f})`, (r) => legs.some((p) => p(r)));
   }
   then<T1, T2>(ok?: (v: { data: unknown; count: number | null; error: null }) => T1 | PromiseLike<T1>, bad?: (e: unknown) => T2 | PromiseLike<T2>) {
@@ -129,9 +136,9 @@ const FIXTURE: Row[] = [
 ];
 const scope: ApplicationsScope = { leadIds: null, teamMemberIds: null };
 
-async function ids(tree: FilterTree, tab = {}, sc: ApplicationsScope = scope) {
+async function ids(tree: FilterTree, tab = {}, sc: ApplicationsScope = scope, q?: string) {
   const { client, queries } = fakeSupabase(FIXTURE);
-  const res = await runApplicationsQuery({ supabase: client as never, tenantId: "t", scope: sc, tree, tab, ctx, mode: "rows" });
+  const res = await runApplicationsQuery({ supabase: client as never, tenantId: "t", scope: sc, tree, tab, q, ctx, mode: "rows" });
   if (!res.ok || res.mode !== "rows") throw new Error(res.ok ? "mode" : res.error);
   return { ids: res.rows.map((r) => r.id).sort(), queries, branches: res.branches };
 }
@@ -171,6 +178,37 @@ describe("planApplicationsQuery", () => {
     expect(mergeMine({ mode: "null" }, A)).toEqual({ mode: "nothing" });
     expect(mergeMine({ mode: "not_null" }, A)).toEqual({ mode: "in", ids: [A] });
     expect(mergeMine(null, A)).toEqual({ mode: "in", ids: [A] });
+  });
+});
+
+describe("search box (q) is a top-level AND input, never folded into the tree (B1)", () => {
+  // compile.ts GROUP SEMANTICS: (root conditions joined by the root conjunction) AND group 1 AND ...
+  // Here: (university ~ yale OR program ~ harvard) AND (university ~ yale OR university ~ mit).
+  const orWithGroup: FilterTree = {
+    conjunction: "or",
+    conditions: [cond("university", "contains", "yale"), cond("program", "contains", "harvard")],
+    groups: [{ conjunction: "or", conditions: [cond("university", "contains", "yale"), cond("university", "contains", "mit")] }],
+  };
+  it("keeps an OR-root tree (and its groups) exactly as given; q goes to plan.search", () => {
+    const r = planApplicationsQuery(orWithGroup, {}, "  har ");
+    if (!r.ok) throw new Error(r.error);
+    expect(r.plan.restTree).toEqual(orWithGroup);
+    expect(r.plan.search).toBe("har");
+  });
+  it("OR root with groups + q = the tree's own result, ANDed with the search", async () => {
+    // 7: Yale / Law / student Harvey; 8: MIT / 'Harvard Studies'; 6 (Harvard univ, no program) fails both clauses.
+    expect((await ids(orWithGroup)).ids).toEqual(["7", "8"]);
+    expect((await ids(orWithGroup, {}, scope, "har")).ids).toEqual(["7", "8"]); // name Harvey / program Harvard
+    expect((await ids(orWithGroup, {}, scope, "harvey")).ids).toEqual(["7"]);
+    expect((await ids(orWithGroup, {}, scope, "studies")).ids).toEqual(["8"]);
+    expect((await ids(orWithGroup, {}, scope, "zzz")).ids).toEqual([]);
+  });
+  it("q plus a search condition already in the tree is one search too many", () => {
+    expect(planApplicationsQuery(and(cond("search", "contains", "x")), {}, "y")).toEqual({ ok: false, error: "Only one search can be applied at a time" });
+  });
+  it("blank q is no search", () => {
+    const r = planApplicationsQuery(and(), {}, "   ");
+    expect(r.ok && r.plan.search).toBeNull();
   });
 });
 

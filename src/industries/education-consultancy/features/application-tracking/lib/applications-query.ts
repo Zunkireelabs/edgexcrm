@@ -24,9 +24,12 @@ export const DEFAULT_APPLICATION_SORT: ApplicationSort = "stage";
 
 export const APPLICATION_SELECT =
   "*, leads!applications_lead_id_fkey!inner(id,first_name,last_name,email,assigned_to)";
-/** Lightweight shape for counts that need no card data (header total, tab counts). */
+/**
+ * Lightweight shape of the UNFILTERED read: header total, tab counts, stage + pipeline totals, and
+ * the filter menu's option lists + per-option counts (intake / country / offer type). See board-data.ts.
+ */
 export const APPLICATION_LIGHT_SELECT =
-  "id, lead_id, stage_id, pipeline_id, stage_changed_at, assigned_to, leads!applications_lead_id_fkey!inner(assigned_to)";
+  "id, lead_id, stage_id, pipeline_id, stage_changed_at, assigned_to, intake_term, countries, offer_type, leads!applications_lead_id_fkey!inner(assigned_to)";
 
 export interface ApplicationsScope {
   /** null = no lead-id restriction; [] = empty result (own-scope with no visible leads). */
@@ -107,8 +110,11 @@ export function mergeMine(spec: CounsellorSpec | null, me: string): CounsellorSp
  * Splits a tree into the part compileFilter handles and the three cross-table fields.
  * Cross-table fields are only legal in the top-level AND (root conditions of an AND tree, or
  * inside an AND group); anywhere inside an OR the plan is rejected with a friendly message.
+ *
+ * `q` (the search box) is its own top-level AND input, never folded into the tree: folding it
+ * into an OR-root tree would have to rewrite the root as AND and so change what its groups mean.
  */
-export function planApplicationsQuery(tree: FilterTree, tab: ApplicationsTab = {}): PlanResult {
+export function planApplicationsQuery(tree: FilterTree, tab: ApplicationsTab = {}, q = ""): PlanResult {
   const rootIsAnd = tree.conjunction === "and";
   const crossConds: FilterCondition[] = [];
   const rest = (conds: FilterCondition[], allowed: boolean): FilterCondition[] | string => {
@@ -148,10 +154,12 @@ export function planApplicationsQuery(tree: FilterTree, tab: ApplicationsTab = {
     .map((c) => words(String(c.value ?? "")))
     .filter((w) => w.length > 0);
 
-  const q = searches[0] ? String(searches[0].value ?? "").trim() : "";
+  const boxText = q.trim();
+  if (boxText && searches.length > 0) return { ok: false, error: "Only one search can be applied at a time" };
+  const text = boxText || (searches[0] ? String(searches[0].value ?? "").trim() : "");
   return {
     ok: true,
-    plan: { restTree, counsellor, studentWords, search: q || null, stuck: tab.stuck ?? null },
+    plan: { restTree, counsellor, studentWords, search: text || null, stuck: tab.stuck ?? null },
   };
 }
 
@@ -278,6 +286,8 @@ export interface RunApplicationsQueryInput {
   scope: ApplicationsScope;
   tree: FilterTree;
   tab?: ApplicationsTab;
+  /** The search box: ANDed with the whole tree (whatever its root conjunction), see planApplicationsQuery. */
+  q?: string;
   ctx: CompileCtx;
   sort?: ApplicationSort;
   mode: "rows" | "count";
@@ -297,7 +307,7 @@ export async function runApplicationsQuery(input: RunApplicationsQueryInput): Pr
   const registry = applicationFields(ctx);
 
   // Validate the (cross-table-free) remainder up front so a bad tree is a chip error, not a 500.
-  const planned = planApplicationsQuery(tree, input.tab);
+  const planned = planApplicationsQuery(tree, input.tab, input.q);
   if (!planned.ok) return { ok: false, error: planned.error };
   const { plan } = planned;
   const valid = planFilter(plan.restTree, registry, ctx);
