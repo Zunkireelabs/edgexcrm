@@ -412,7 +412,7 @@ export function ApplicationsWorkspace({
               className="inline-flex h-[30px] items-center gap-1.5 rounded-[8px] bg-[#0f0f10] px-2.5 text-[13px] font-medium text-white transition-colors hover:bg-[#0f0f10]/90"
             >
               <PlusIcon className="h-3 w-3 shrink-0" />
-              <span>Add application</span>
+              Add application
             </button>
           )}
         </div>
@@ -544,7 +544,7 @@ export function ApplicationsWorkspace({
                     className="inline-flex h-[30px] items-center gap-1.5 rounded-[8px] bg-[#0f0f10] px-2.5 text-[13px] font-medium text-white hover:bg-[#0f0f10]/90"
                   >
                     <PlusIcon className="h-3 w-3" />
-                    <span>Add application</span>
+                    Add application
                   </button>
                 )}
               </div>
