@@ -67,22 +67,10 @@ function studentOf(app: Application) {
   return full || "Unknown student";
 }
 
-export function ApplicationCard({
-  application,
-  disabled,
-  onOpenDetail,
-  assigneeNames,
-  finished = false,
-  showAge = true,
-  onMoveRequest,
-}: ApplicationCardProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: application.id,
-    disabled,
-  });
+type CardBodyProps = Pick<ApplicationCardProps, "application" | "assigneeNames" | "finished" | "showAge" | "onMoveRequest">;
 
-  const style = { transform: CSS.Transform.toString(transform), transition };
-
+/** The card's face: no dnd hooks, so the DragOverlay clone can reuse it without registering a second sortable. */
+function CardBody({ application, assigneeNames, finished = false, showAge = true, onMoveRequest }: CardBodyProps) {
   const leadId = application.leads?.id ?? application.lead_id;
   const student = studentOf(application);
   const counsellor = resolveCounsellor(application, assigneeNames);
@@ -93,70 +81,8 @@ export function ApplicationCard({
   const openTasks = application.open_task_count ?? 0;
   const docs = application.doc_count ?? 0;
 
-  // Long-press (phone): fires after LONG_PRESS_MS unless the finger moves (a swipe/scroll) or lifts.
-  const press = useRef<{ x: number; y: number; timer: ReturnType<typeof setTimeout> } | null>(null);
-  const firedRef = useRef(false);
-  function cancelPress() {
-    if (press.current) clearTimeout(press.current.timer);
-    press.current = null;
-  }
-  const longPress = onMoveRequest
-    ? {
-        onPointerDown(e: React.PointerEvent) {
-          firedRef.current = false;
-          cancelPress();
-          press.current = {
-            x: e.clientX,
-            y: e.clientY,
-            timer: setTimeout(() => {
-              press.current = null;
-              firedRef.current = true;
-              onMoveRequest(application);
-            }, LONG_PRESS_MS),
-          };
-        },
-        onPointerMove(e: React.PointerEvent) {
-          const p = press.current;
-          if (p && Math.hypot(e.clientX - p.x, e.clientY - p.y) > LONG_PRESS_SLOP_PX) cancelPress();
-        },
-        onPointerUp: cancelPress,
-        onPointerCancel: cancelPress,
-        onPointerLeave: cancelPress,
-        onContextMenu(e: React.MouseEvent) {
-          e.preventDefault();
-        },
-      }
-    : null;
-
-  function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      onOpenDetail?.(application);
-    }
-  }
-
   return (
-    <div
-      ref={setNodeRef}
-      style={{ ...style, boxShadow: "0 0 0 1px rgba(0,0,0,.06)" }}
-      {...attributes}
-      {...listeners}
-      {...longPress}
-      onClick={() => {
-        // The click that ends a long-press opened the Move sheet; it doesn't also open the detail.
-        if (firedRef.current) {
-          firedRef.current = false;
-          return;
-        }
-        onOpenDetail?.(application);
-      }}
-      onKeyDown={handleKeyDown}
-      data-testid="application-card"
-      data-app-id={application.id}
-      className={`shrink-0 rounded-[12px] bg-white transition-shadow ${
-        isDragging ? "opacity-50" : "hover:!shadow-[0_0_0_1px_rgba(0,0,0,.1),0_1px_2px_rgba(0,0,0,.05)]"
-      } ${disabled ? "cursor-default" : "cursor-grab active:cursor-grabbing"}${onMoveRequest ? " select-none [-webkit-touch-callout:none]" : ""}`}
-    >
+    <>
       <div className={`flex items-center gap-2 pt-[10px] pb-[6px] pl-3 ${onMoveRequest ? "pr-1" : "pr-2"}`}>
         <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-[6px] bg-[#f6f7f9] text-[#6b6f76]">
           <GraduationCapIcon className="h-3 w-3" />
@@ -274,6 +200,113 @@ export function ApplicationCard({
           </span>
         )}
       </div>
+    </>
+  );
+}
+
+export function ApplicationCard({
+  application,
+  disabled,
+  onOpenDetail,
+  assigneeNames,
+  finished = false,
+  showAge = true,
+  onMoveRequest,
+}: ApplicationCardProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: application.id,
+    disabled,
+  });
+
+  const style = { transform: CSS.Transform.toString(transform), transition };
+
+  // Long-press (phone): fires after LONG_PRESS_MS unless the finger moves (a swipe/scroll) or lifts.
+  const press = useRef<{ x: number; y: number; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const firedRef = useRef(false);
+  function cancelPress() {
+    if (press.current) clearTimeout(press.current.timer);
+    press.current = null;
+  }
+  const longPress = onMoveRequest
+    ? {
+        onPointerDown(e: React.PointerEvent) {
+          firedRef.current = false;
+          cancelPress();
+          press.current = {
+            x: e.clientX,
+            y: e.clientY,
+            timer: setTimeout(() => {
+              press.current = null;
+              firedRef.current = true;
+              onMoveRequest(application);
+            }, LONG_PRESS_MS),
+          };
+        },
+        onPointerMove(e: React.PointerEvent) {
+          const p = press.current;
+          if (p && Math.hypot(e.clientX - p.x, e.clientY - p.y) > LONG_PRESS_SLOP_PX) cancelPress();
+        },
+        onPointerUp: cancelPress,
+        onPointerCancel: cancelPress,
+        onPointerLeave: cancelPress,
+        onContextMenu(e: React.MouseEvent) {
+          e.preventDefault();
+        },
+      }
+    : null;
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onOpenDetail?.(application);
+    }
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ ...style, boxShadow: "0 0 0 1px rgba(0,0,0,.06)" }}
+      {...attributes}
+      {...listeners}
+      {...longPress}
+      onClick={() => {
+        // The click that ends a long-press opened the Move sheet; it doesn't also open the detail.
+        if (firedRef.current) {
+          firedRef.current = false;
+          return;
+        }
+        onOpenDetail?.(application);
+      }}
+      onKeyDown={handleKeyDown}
+      data-testid="application-card"
+      data-app-id={application.id}
+      className={`shrink-0 rounded-[12px] bg-white transition-shadow ${
+        isDragging ? "opacity-50" : "hover:!shadow-[0_0_0_1px_rgba(0,0,0,.1),0_1px_2px_rgba(0,0,0,.05)]"
+      } ${disabled ? "cursor-default" : "cursor-grab active:cursor-grabbing"}${onMoveRequest ? " select-none [-webkit-touch-callout:none]" : ""}`}
+    >
+      <CardBody
+        application={application}
+        assigneeNames={assigneeNames}
+        finished={finished}
+        showAge={showAge}
+        onMoveRequest={onMoveRequest}
+      />
+    </div>
+  );
+}
+
+/**
+ * The DragOverlay clone (EDGEX-169). Presentational only: dnd-kit requires the overlay never to use the
+ * sortable's id, and a second useSortable({id}) here fought the real card for that id's rect measuring.
+ */
+export function ApplicationCardOverlay({ application, assigneeNames, finished = false, showAge = true }: Omit<ApplicationCardProps, "disabled" | "onOpenDetail" | "onMoveRequest">) {
+  return (
+    <div
+      style={{ boxShadow: "0 0 0 1px rgba(0,0,0,.06)" }}
+      data-testid="application-card-overlay"
+      className="shrink-0 cursor-default rounded-[12px] bg-white transition-shadow"
+    >
+      <CardBody application={application} assigneeNames={assigneeNames} finished={finished} showAge={showAge} />
     </div>
   );
 }

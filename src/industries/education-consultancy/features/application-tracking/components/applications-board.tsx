@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ApplicationColumn, SlimColumn } from "./application-column";
-import { ApplicationCard } from "./application-card";
+import { ApplicationCardOverlay } from "./application-card";
 import { PhoneBoard } from "./phone-board";
 import { matchesBelowMd } from "../hooks/use-below-md";
 import { STUCK_DAYS, daysInStage, isFinishedStage } from "../lib/card-metrics";
@@ -79,6 +79,42 @@ export function fromPayload(board: BoardPayload<Application>, pin: Pin | null): 
     out[sid] = { cards, total: col.total, stuck: col.stuck, nextOffset: col.cards.length, loading: false };
   }
   return out;
+}
+
+/** Two moves this close together that undo each other are a collision flip-flop, not the user (EDGEX-169). */
+const PING_PONG_MS = 50;
+
+export function isPingPong(
+  last: { appId: string; from: string; at: number } | null,
+  appId: string,
+  toCol: string,
+  now: number,
+): boolean {
+  return !!last && last.appId === appId && last.from === toCol && now - last.at < PING_PONG_MS;
+}
+
+/**
+ * Moves the dragged card into the hovered column (on a card: above it; on the column: the top).
+ * Returns `prev` itself (same object, so no rerender) when the card is already there. fromCol is read
+ * from `prev`, not from a render closure, so a stale closure can't disagree with the state it updates.
+ */
+export function moveCardForDrag(
+  prev: ColumnsState,
+  appId: string,
+  overId: string,
+  stageMap: ReadonlyMap<string, unknown>,
+): ColumnsState {
+  const fromCol = findAppColumn(prev, appId);
+  const toCol = stageMap.has(overId) ? overId : findAppColumn(prev, overId);
+  if (!fromCol || !toCol || fromCol === toCol || !prev[toCol]) return prev;
+  const app = prev[fromCol].cards.find((a) => a.id === appId);
+  if (!app) return prev;
+  const from = prev[fromCol].cards.filter((a) => a.id !== appId);
+  const to = [...prev[toCol].cards];
+  const overIdx = to.findIndex((a) => a.id === overId);
+  if (overIdx >= 0) to.splice(overIdx, 0, app);
+  else to.unshift(app); // dropped on the column itself: top, so it is in view
+  return { ...prev, [fromCol]: { ...prev[fromCol], cards: from }, [toCol]: { ...prev[toCol], cards: to } };
 }
 
 function findAppColumn(columns: ColumnsState, appId: string): string | null {
@@ -145,6 +181,7 @@ export function ApplicationsBoard({
   const [deleteTarget, setDeleteTarget] = useState<ApplicationStage | null>(null);
   const [deleting, setDeleting] = useState(false);
   const prevColumnsRef = useRef<ColumnsState | null>(null);
+  const lastMoveRef = useRef<{ appId: string; from: string; to: string; at: number } | null>(null);
 
   // Prefs live in localStorage, so they are read after mount (no SSR mismatch).
   useEffect(() => {
@@ -233,6 +270,7 @@ export function ApplicationsBoard({
   function handleDragStart(event: DragStartEvent) {
     if (!canManageApplications) return;
     setActiveId(event.active.id as string);
+    lastMoveRef.current = null;
     prevColumnsRef.current = JSON.parse(JSON.stringify(columns));
   }
 
@@ -242,28 +280,32 @@ export function ApplicationsBoard({
 
     const appId = active.id as string;
     const overId = over.id as string;
-    const fromCol = findAppColumn(columns, appId);
-    const overIsColumn = stageMap.has(overId);
-    const toCol = overIsColumn ? overId : findAppColumn(columns, overId);
-
+    const latest = columnsRef.current;
+    const fromCol = findAppColumn(latest, appId);
+    const toCol = stageMap.has(overId) ? overId : findAppColumn(latest, overId);
     if (!fromCol || !toCol || fromCol === toCol) return;
 
-    setColumns((prev) => {
-      const from = prev[fromCol].cards.filter((a) => a.id !== appId);
-      const app = prev[fromCol].cards.find((a) => a.id === appId);
-      if (!app) return prev;
-      const to = [...prev[toCol].cards];
-      const overIdx = to.findIndex((a) => a.id === overId);
-      if (overIdx >= 0) to.splice(overIdx, 0, app);
-      else to.unshift(app); // dropped on the column itself: top, so it is in view
-      return { ...prev, [fromCol]: { ...prev[fromCol], cards: from }, [toCol]: { ...prev[toCol], cards: to } };
-    });
+    // EDGEX-169: never bounce straight back to the column we left a frame ago.
+    const now = performance.now();
+    const last = lastMoveRef.current;
+    if (isPingPong(last, appId, toCol, now)) return;
+    lastMoveRef.current = { appId, from: fromCol, to: toCol, at: now };
+
+    setColumns((prev) => moveCardForDrag(prev, appId, overId, stageMap));
+  }
+
+  function handleDragCancel() {
+    setActiveId(null);
+    lastMoveRef.current = null;
+    if (prevColumnsRef.current) setColumns(prevColumnsRef.current);
+    prevColumnsRef.current = null;
   }
 
   const handleDragEnd = useCallback(
     async (event: DragEndEvent) => {
       const { active, over } = event;
       setActiveId(null);
+      lastMoveRef.current = null;
 
       const rollback = () => {
         if (prevColumnsRef.current) setColumns(prevColumnsRef.current);
@@ -480,6 +522,7 @@ export function ApplicationsBoard({
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
       >
         <div className="flex h-full items-start gap-2 overflow-x-auto pb-1" data-testid="applications-board">
           {active.map(renderStage)}
@@ -500,9 +543,8 @@ export function ApplicationsBoard({
 
         <DragOverlay>
           {activeApp ? (
-            <ApplicationCard
+            <ApplicationCardOverlay
               application={activeApp}
-              disabled
               assigneeNames={assigneeNames}
               finished={isFinishedStage(stageMap.get(activeStageId ?? activeApp.stage_id))}
             />
