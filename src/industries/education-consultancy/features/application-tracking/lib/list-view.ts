@@ -28,7 +28,7 @@ export interface ListColumnDef {
   label: string;
   /**
    * Mockup colgroup widths, except three headers that would truncate at the mockup's minimum
-   * (Time in stage 120 -> 140, Deadline 110 -> 120, Docs 80 -> 90). The table stretches past these.
+   * (Time in stage 120 -> 160 with its sort arrow, Deadline 110 -> 130, Docs 80 -> 90; Updated and Created 130). The table stretches past these.
    */
   width: number;
   /** The column menu offers Sort ascending / descending. */
@@ -46,17 +46,17 @@ export const LIST_COLUMNS: Record<ListColumnKey, ListColumnDef> = {
   university: { key: "university", label: "University", width: 210, sortField: "university", filterFieldKey: "university" },
   program: { key: "program", label: "Program", width: 180, filterFieldKey: "program" },
   stage: { key: "stage", label: "Stage", width: 190, filterFieldKey: "stage" },
-  time_in_stage: { key: "time_in_stage", label: "Time in stage", width: 140, sortField: "stage", filterFieldKey: "time_in_stage" },
+  time_in_stage: { key: "time_in_stage", label: "Time in stage", width: 160, sortField: "stage", filterFieldKey: "time_in_stage" },
   counsellor: { key: "counsellor", label: "Counsellor", width: 160, filterFieldKey: "counsellor" },
   intake: { key: "intake", label: "Intake", width: 110, filterFieldKey: "intake" },
-  deadline: { key: "deadline", label: "Deadline", width: 120, sortField: "deadline", filterFieldKey: "deadline" },
+  deadline: { key: "deadline", label: "Deadline", width: 130, sortField: "deadline", filterFieldKey: "deadline" },
   docs: { key: "docs", label: "Docs", width: 90 },
   country: { key: "country", label: "Country", width: 140, filterFieldKey: "country" },
-  updated: { key: "updated", label: "Updated", width: 120, sortField: "updated", filterFieldKey: "updated_at" },
+  updated: { key: "updated", label: "Updated", width: 130, sortField: "updated", filterFieldKey: "updated_at" },
   offer_type: { key: "offer_type", label: "Offer type", width: 140, filterFieldKey: "offer_type" },
   fee_paid: { key: "fee_paid", label: "Fee paid", width: 100, filterFieldKey: "fee_paid" },
   open_tasks: { key: "open_tasks", label: "Open tasks", width: 100 },
-  created: { key: "created", label: "Created", width: 120, sortField: "created", filterFieldKey: "created_at" },
+  created: { key: "created", label: "Created", width: 130, sortField: "created", filterFieldKey: "created_at" },
 };
 export const LIST_ALL_KEYS: ListColumnKey[] = [...LIST_DEFAULT_KEYS, ...LIST_HIDDEN_KEYS];
 export const STUDENT_WIDTH = 190;
