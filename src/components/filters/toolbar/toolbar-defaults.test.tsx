@@ -68,3 +68,29 @@ describe("FilterMenu add button variants", () => {
     expect(html).toContain('aria-label="Add filter"');
   });
 });
+
+// EDGEX-141 Phase 5: the bottom-sheet container is opt-in. With no `container` prop (Leads never
+// passes one) the parts render the popover markup: no sheet, the trigger keeps its Radix popover
+// attributes, and the output equals an explicit container="popover".
+describe("container prop: Leads guard", () => {
+  const menuHtml = (container?: "popover" | "sheet") =>
+    renderToStaticMarkup(
+      <FilterMenu fields={[FIELD]} tree={TREE} onChange={() => {}} ctx={CTX} mostUsedKeys={[]} variant="chip" maxConditions={12} open={false} onOpenChange={() => {}} container={container} />,
+    );
+  const chipsHtml = (container?: "popover" | "sheet") =>
+    renderToStaticMarkup(<FilterChips fields={[FIELD]} tree={TREE} onChange={() => {}} ctx={CTX} maxConditions={12} container={container} />);
+
+  it("FilterMenu with no container renders the popover trigger, identical to container='popover'", () => {
+    expect(menuHtml()).toBe(menuHtml("popover"));
+    expect(menuHtml()).toContain('aria-haspopup="dialog"');
+    expect(menuHtml()).toContain('data-testid="leads-filter-trigger"');
+  });
+  it("FilterChips with no container is identical to container='popover'", () => {
+    expect(chipsHtml()).toBe(chipsHtml("popover"));
+    expect(chipsHtml()).toContain("border-l border-ds-divider");
+  });
+  it("only container='sheet' drops the popover trigger attributes (Applications phone)", () => {
+    expect(menuHtml("sheet")).not.toContain("aria-haspopup");
+    expect(menuHtml("sheet")).toContain('data-testid="leads-filter-trigger"');
+  });
+});
