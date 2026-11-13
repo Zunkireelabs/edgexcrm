@@ -14,6 +14,8 @@ export function GridPagination({
   pageSize,
   onPage,
   onPageSize,
+  sizes = [10, 25, 50, 100],
+  testId = "leads-showing",
 }: {
   total: number;
   /** 0-based index of the first row on this page. */
@@ -25,10 +27,13 @@ export function GridPagination({
   pageSize: number;
   onPage: (page: number) => void;
   onPageSize: (size: number) => void;
+  /** "Rows per page" choices (Leads: 10/25/50/100; Applications List: 25/50/100). */
+  sizes?: readonly number[];
+  testId?: string;
 }) {
   return (
     <div className="flex h-12 shrink-0 items-center justify-between border-t border-ds-border bg-ds-surface px-3 text-sm font-medium text-ds-muted">
-      <span className="tabular-nums" data-testid="leads-showing">
+      <span className="tabular-nums" data-testid={testId}>
         {total === 0 ? "Showing 0 of 0" : `Showing ${(start + 1).toLocaleString()}–${end.toLocaleString()} of ${total.toLocaleString()}`}
       </span>
       <div className="flex items-center gap-4">
@@ -39,7 +44,7 @@ export function GridPagination({
             onChange={(e) => onPageSize(Number(e.target.value))}
             className="h-7 rounded-ds-xs bg-ds-surface px-1.5 text-sm font-medium text-ds-ink shadow-[inset_0_0_0_1px_var(--ds-border)] outline-none focus-visible:ring-1 focus-visible:ring-ds-ghost"
           >
-            {[10, 25, 50, 100].map((n) => (
+            {sizes.map((n) => (
               <option key={n} value={n}>
                 {n}
               </option>

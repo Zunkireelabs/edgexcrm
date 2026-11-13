@@ -10,22 +10,32 @@ import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, v
 import { CSS } from "@dnd-kit/utilities";
 import { ArrowCounterClockwiseIcon, DotsSixVerticalIcon, EyeIcon, EyeSlashIcon, MagnifyingGlassIcon } from "@/components/icons";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import type { LeadColumn } from "../columns-registry";
+import type { Icon } from "@/components/icons";
 import { FALLBACK_COLUMN_ICON } from "./v2-columns";
 import { hideColumn, reorderColumns, showColumn, type ColumnLayout } from "./grid-layout";
 import { ITEM, POP, POP_LABEL, POP_SEP } from "@/components/filters/toolbar/tokens";
 
-export interface ColumnsPopoverProps {
-  trigger: ReactNode;
-  /** Every column a user may show, excluding Name. */
-  columns: LeadColumn[];
-  layout: ColumnLayout;
-  titleFor: (col: LeadColumn) => string;
-  onLayoutChange: (next: ColumnLayout) => void;
-  onReset: () => void;
+/** What the popover reads from a column (a Leads LeadColumn fits; so does an Applications list column). */
+export interface PopoverColumn {
+  key: string;
+  label: string;
+  v2?: { icon?: Icon };
 }
 
-function ShownRow({ col, title, pinned, canDrag, onHide }: { col: LeadColumn; title: string; pinned: boolean; canDrag: boolean; onHide: () => void }) {
+export interface ColumnsPopoverProps<C extends PopoverColumn = PopoverColumn> {
+  trigger: ReactNode;
+  /** Every column a user may show, excluding Name. */
+  columns: C[];
+  layout: ColumnLayout;
+  titleFor: (col: C) => string;
+  onLayoutChange: (next: ColumnLayout) => void;
+  onReset: () => void;
+  /** dnd-kit context id (stable for SSR); defaults to the Leads one. */
+  dndId?: string;
+  testId?: string;
+}
+
+function ShownRow({ col, title, pinned, canDrag, onHide }: { col: PopoverColumn; title: string; pinned: boolean; canDrag: boolean; onHide: () => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: col.key, disabled: !canDrag });
   const Icon = col.v2?.icon ?? FALLBACK_COLUMN_ICON;
   return (
@@ -54,7 +64,16 @@ function ShownRow({ col, title, pinned, canDrag, onHide }: { col: LeadColumn; ti
   );
 }
 
-export function ColumnsPopover({ trigger, columns, layout, titleFor, onLayoutChange, onReset }: ColumnsPopoverProps) {
+export function ColumnsPopover<C extends PopoverColumn>({
+  trigger,
+  columns,
+  layout,
+  titleFor,
+  onLayoutChange,
+  onReset,
+  dndId = "leads-columns-dnd",
+  testId = "columns-popover",
+}: ColumnsPopoverProps<C>) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const sensors = useSensors(
@@ -63,9 +82,9 @@ export function ColumnsPopover({ trigger, columns, layout, titleFor, onLayoutCha
   );
   const byKey = useMemo(() => new Map(columns.map((c) => [c.key, c])), [columns]);
   const q = search.trim().toLowerCase();
-  const matches = (c: LeadColumn) => !q || titleFor(c).toLowerCase().includes(q) || c.label.toLowerCase().includes(q);
+  const matches = (c: C) => !q || titleFor(c).toLowerCase().includes(q) || c.label.toLowerCase().includes(q);
 
-  const shown = layout.keys.map((k) => byKey.get(k)).filter((c): c is LeadColumn => !!c);
+  const shown = layout.keys.map((k) => byKey.get(k)).filter((c): c is C => !!c);
   const hidden = columns.filter((c) => !layout.keys.includes(c.key));
   const shownVisible = shown.filter(matches);
   const hiddenVisible = hidden.filter(matches);
@@ -88,7 +107,7 @@ export function ColumnsPopover({ trigger, columns, layout, titleFor, onLayoutCha
       }}
     >
       <PopoverTrigger asChild>{trigger}</PopoverTrigger>
-      <PopoverContent align="end" sideOffset={4} className={`${POP} w-[280px]`} data-testid="columns-popover">
+      <PopoverContent align="end" sideOffset={4} className={`${POP} w-[280px]`} data-testid={testId}>
         <div className="-mx-1 -mt-1 mb-1 flex h-9 items-center gap-2 rounded-t-[10px] border-b border-ds-divider px-2.5 text-ds-faint">
           <MagnifyingGlassIcon className="size-4 shrink-0" />
           <input
@@ -102,7 +121,7 @@ export function ColumnsPopover({ trigger, columns, layout, titleFor, onLayoutCha
         </div>
         <div className="max-h-[360px] overflow-y-auto">
           <div className={POP_LABEL}>Shown · drag to reorder</div>
-          <DndContext id="leads-columns-dnd" sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+          <DndContext id={dndId} sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
             <SortableContext items={shownVisible.map((c) => c.key)} strategy={verticalListSortingStrategy}>
               {shownVisible.map((c) => (
                 <ShownRow

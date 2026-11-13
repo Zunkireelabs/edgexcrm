@@ -48,11 +48,17 @@ export interface ColumnHeaderMenuProps {
   /** null restores the default title. */
   onRename: (label: string | null) => void;
   onHide: () => void;
+  /**
+   * "leads" (default): today's Leads menu. "compact" (Applications List, EDGEX-141 Phase 4): no pin,
+   * no rename; one hairline between sort/filter and move/hide, as in the applications-list mockup.
+   */
+  variant?: "leads" | "compact";
 }
 
 const SHORTCUT = "text-xs font-medium text-ds-faint";
 
-export function ColumnHeaderMenu({ anchor, model, onClose, onSort, onFilter, onTogglePin, onMove, onRename, onHide }: ColumnHeaderMenuProps) {
+export function ColumnHeaderMenu({ anchor, model, onClose, onSort, onFilter, onTogglePin, onMove, onRename, onHide, variant = "leads" }: ColumnHeaderMenuProps) {
+  const compact = variant === "compact";
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState(model.title);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -64,7 +70,7 @@ export function ColumnHeaderMenu({ anchor, model, onClose, onSort, onFilter, onT
   // ⌘P / Ctrl+P pins or unpins, only while this menu is open.
   const canTogglePin = !model.isName && (model.pinned || model.canPin);
   useEffect(() => {
-    if (model.isName) return;
+    if (model.isName || compact) return;
     function onKeyDown(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "p") {
         e.preventDefault();
@@ -76,7 +82,7 @@ export function ColumnHeaderMenu({ anchor, model, onClose, onSort, onFilter, onT
     }
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [model.isName, canTogglePin, onClose]);
+  }, [model.isName, canTogglePin, onClose, compact]);
 
   useEffect(() => {
     if (renaming) inputRef.current?.select();
@@ -167,7 +173,7 @@ export function ColumnHeaderMenu({ anchor, model, onClose, onSort, onFilter, onT
               )}
               {model.canFilter && (
                 <>
-                  {model.sortKey && <div className={POP_SEP} />}
+                  {model.sortKey && !compact && <div className={POP_SEP} />}
                   <button
                     type="button"
                     className={ITEM}
@@ -181,9 +187,11 @@ export function ColumnHeaderMenu({ anchor, model, onClose, onSort, onFilter, onT
                   </button>
                 </>
               )}
+              {compact && !model.isName && (model.sortKey || model.canFilter) && <div className={POP_SEP} />}
               {!model.isName && (
                 <>
-                  <div className={POP_SEP} />
+                  {!compact && <div className={POP_SEP} />}
+                  {!compact && (
                   <button
                     type="button"
                     className={`${ITEM} disabled:pointer-events-none disabled:opacity-50`}
@@ -198,6 +206,7 @@ export function ColumnHeaderMenu({ anchor, model, onClose, onSort, onFilter, onT
                     <span className="flex-1">{model.pinned ? "Unpin column" : "Pin column"}</span>
                     <span className={SHORTCUT}>⌘ P</span>
                   </button>
+                  )}
                   {model.canMoveLeft && (
                     <button type="button" className={ITEM} onClick={() => onMove("left")}>
                       <ArrowLeftIcon className="size-4 text-ds-faint" />
@@ -212,6 +221,8 @@ export function ColumnHeaderMenu({ anchor, model, onClose, onSort, onFilter, onT
                   )}
                 </>
               )}
+              {!compact && (
+                <>
               <div className={POP_SEP} />
               <button
                 type="button"
@@ -224,6 +235,8 @@ export function ColumnHeaderMenu({ anchor, model, onClose, onSort, onFilter, onT
                 <PencilSimpleIcon className="size-4 text-ds-faint" />
                 <span className="flex-1">Rename column</span>
               </button>
+                </>
+              )}
               {!model.isName && (
                 <button
                   type="button"
