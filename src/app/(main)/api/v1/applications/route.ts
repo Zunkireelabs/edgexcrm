@@ -12,7 +12,10 @@ import {
 import { validate, required, maxLength } from "@/lib/api/validation";
 import { createRequestLogger } from "@/lib/logger";
 import { scopedClient } from "@/lib/supabase/scoped";
-import { createServiceClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { EMPTY_TREE } from "@/lib/filters/types";
+import { resolveApplicationsScope } from "@/industries/education-consultancy/features/application-tracking/lib/applications-scope";
+import { runApplicationsQuery, type ApplicationsBuilder } from "@/industries/education-consultancy/features/application-tracking/lib/applications-query";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
@@ -23,12 +26,21 @@ import { checkProcessingFeeEntered } from "@/lib/leads/applications-readiness";
 import { alignStageToCountryPipeline } from "@/lib/applications/pipeline-resolution";
 import { normalizeDestinations, normalizeFieldOfStudy, normalizeDegreeLevel } from "@/lib/leads/destination-normalize";
 
+// GET keeps its response shape and params (stage_id, status, country, lead_id, assigned_to, page,
+// pageSize) but scopes through the ONE rule the board uses (EDGEX-141 Phase 3, B1):
+// resolveApplicationsScope (own = collaborator-aware visible leads; branch = branch members; all)
+// and runApplicationsQuery's chunked, paged reads. Before this, own scope used leads.assigned_to only
+// (missing collaborator-visible leads, one unbounded `.in("lead_id", …)`), and branch scope was
+// missing entirely (a branch user got every application in the tenant).
+const LIST_SELECT =
+  "*, leads!applications_lead_id_fkey(id,first_name,last_name,email), application_stages!applications_stage_id_fkey(id,name,slug,color,position,terminal_type)";
+const ORDER_SELECT = "id, created_at, leads!applications_lead_id_fkey!inner(id)";
+
 export async function GET(request: NextRequest) {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
   if (!getFeatureAccess(auth.industryId, FEATURES.APPLICATION_TRACKING)) return apiForbidden();
 
-  const db = await scopedClient(auth);
   const { searchParams } = new URL(request.url);
 
   const stageId = searchParams.get("stage_id");
@@ -36,50 +48,54 @@ export async function GET(request: NextRequest) {
   const country = searchParams.get("country");
   const leadId = searchParams.get("lead_id");
   const assignedTo = searchParams.get("assigned_to");
-  const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));
-  const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") ?? "50", 10)));
+  const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10) || 1);
+  const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") ?? "50", 10) || 50));
 
-  let query = db
-    .from("applications")
-    .select(
-      "*, leads!applications_lead_id_fkey(id,first_name,last_name,email), application_stages!applications_stage_id_fkey(id,name,slug,color,position,terminal_type)",
-      { count: "exact" }
-    )
-    .is("deleted_at", null);
-
-  if (stageId) query = query.eq("stage_id", stageId);
-  if (status) query = query.eq("status", status);
-  if (country) query = query.contains("countries", [country]);
-  if (leadId) query = query.eq("lead_id", leadId);
-
-  // Counselor scoping: only applications belonging to their own leads
-  if (shouldRestrictToSelf(auth.permissions)) {
-    // Get lead IDs assigned to this counselor
-    const { data: assignedLeads } = await db
-      .from("leads")
-      .select("id")
-      .eq("assigned_to", auth.userId)
-      .is("deleted_at", null);
-    const assignedLeadIds = ((assignedLeads ?? []) as unknown as { id: string }[]).map((l) => l.id);
-    if (assignedLeadIds.length === 0) {
-      return apiPaginated([], { page, pageSize, total: 0, totalPages: 0 });
-    }
-    query = query.in("lead_id", assignedLeadIds);
-  } else if (assignedTo) {
-    query = query.eq("assigned_to", assignedTo);
+  const supabase = await createServiceClient();
+  const userClient = await createClient();
+  const resolved = await resolveApplicationsScope({ user: userClient, service: supabase }, auth);
+  if (resolved.error) {
+    console.error("[api/applications] own-scope lead visibility query failed", { tenantId: auth.tenantId, userId: auth.userId, error: resolved.error });
   }
 
+  // The assigned_to param is honoured for wider scopes only (an own-scope caller sees their own set).
+  const refine = (b: ApplicationsBuilder): ApplicationsBuilder => {
+    let q = b;
+    if (stageId) q = q.eq("stage_id", stageId);
+    if (status) q = q.eq("status", status);
+    if (country) q = q.contains("countries", [country]);
+    if (leadId) q = q.eq("lead_id", leadId);
+    if (assignedTo && resolved.kind !== "own") q = q.eq("assigned_to", assignedTo);
+    return q;
+  };
+
+  // 1) The ordered id index of everything in scope (paged + chunked, never capped at 1000).
+  const index = await runApplicationsQuery({
+    supabase, tenantId: auth.tenantId, scope: resolved.scope, tree: EMPTY_TREE, refine,
+    ctx: { tz: "UTC", now: new Date(), industryId: auth.industryId, permissions: {} },
+    mode: "rows", select: ORDER_SELECT, sort: "newest",
+  });
+  if (!index.ok || index.mode !== "rows") return apiError("DB_ERROR", "Failed to fetch applications", 500);
+
+  const total = index.rows.length;
   const from = (page - 1) * pageSize;
-  const to = from + pageSize - 1;
+  const pageIds = index.rows.slice(from, from + pageSize).map((r) => r.id);
 
-  const { data, error, count } = await query
-    .order("created_at", { ascending: false })
-    .range(from, to);
+  // 2) Full rows for this page only, in index order.
+  let data: Record<string, unknown>[] = [];
+  if (pageIds.length > 0) {
+    const { data: rows, error } = await supabase
+      .from("applications")
+      .select(LIST_SELECT)
+      .eq("tenant_id", auth.tenantId)
+      .in("id", pageIds)
+      .is("deleted_at", null);
+    if (error) return apiError("DB_ERROR", "Failed to fetch applications", 500);
+    const byId = new Map(((rows ?? []) as unknown as Record<string, unknown>[]).map((r) => [String(r.id), r]));
+    data = pageIds.map((id) => byId.get(id)).filter((r): r is Record<string, unknown> => !!r);
+  }
 
-  if (error) return apiError("DB_ERROR", "Failed to fetch applications", 500);
-
-  const total = count ?? 0;
-  return apiPaginated(data ?? [], {
+  return apiPaginated(data, {
     page,
     pageSize,
     total,
