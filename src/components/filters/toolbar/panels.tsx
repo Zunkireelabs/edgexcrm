@@ -9,24 +9,27 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
 import { CaretRightIcon, CheckIcon, MagnifyingGlassIcon } from "@/components/icons";
 import type { FieldDef } from "@/lib/filters/types";
 import { cn } from "@/lib/utils";
+import { useInSheet } from "@/components/ui/bottom-sheet";
 import { FieldIcon } from "./field-icon";
 import { filterOptionRows, type OptionRow } from "./option-view";
 import { ITEM, POP_LABEL, POP_SEARCH, POP_SEP } from "./tokens";
 
 /** Up/Down/Enter roving highlight for a searchable list. */
 function useListNav(length: number) {
-  const [active, setActive] = useState(0);
-  const clamped = length === 0 ? 0 : Math.min(active, length - 1);
+  // In a phone sheet nothing is highlighted until an arrow key is pressed (-1).
+  const inSheet = useInSheet();
+  const [active, setActive] = useState(inSheet ? -1 : 0);
+  const clamped = active < 0 ? -1 : length === 0 ? 0 : Math.min(active, length - 1);
   function onKeyDown(e: KeyboardEvent, onEnter: (index: number) => void) {
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setActive((clamped + 1) % Math.max(length, 1));
+      setActive((Math.max(clamped, -1) + 1) % Math.max(length, 1));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setActive((clamped - 1 + Math.max(length, 1)) % Math.max(length, 1));
+      setActive(clamped < 0 ? Math.max(length, 1) - 1 : (clamped - 1 + Math.max(length, 1)) % Math.max(length, 1));
     } else if (e.key === "Enter" && length > 0) {
       e.preventDefault();
-      onEnter(clamped);
+      onEnter(Math.max(clamped, 0));
     }
   }
   return { active: clamped, setActive, onKeyDown };
@@ -45,12 +48,13 @@ function SearchRow({
   onKeyDown: (e: KeyboardEvent<HTMLInputElement>) => void;
   inputRef?: React.RefObject<HTMLInputElement | null>;
 }) {
+  const inSheet = useInSheet();
   return (
     <div className={POP_SEARCH}>
       <MagnifyingGlassIcon className="size-4 shrink-0" />
       <input
         ref={inputRef}
-        autoFocus
+        autoFocus={!inSheet}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={onKeyDown}

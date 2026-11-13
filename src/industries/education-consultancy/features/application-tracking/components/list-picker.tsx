@@ -75,7 +75,7 @@ function PickerBody({
         <div className={POP_SEARCH}>
           <MagnifyingGlassIcon className="size-4 shrink-0" />
           <input
-            autoFocus
+            autoFocus={!sheet}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {

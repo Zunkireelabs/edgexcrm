@@ -9,7 +9,7 @@
 // descendant selectors only, so that content keeps one code path: 44px rows, full-width lists,
 // no inner 320px cap, a boxed 40px search row that stays pinned while the list scrolls.
 
-import { useRef, type ReactNode } from "react";
+import { createContext, useContext, useRef, type ReactNode } from "react";
 import { Dialog as SheetPrimitive } from "radix-ui";
 import { XIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
@@ -28,6 +28,12 @@ export const SHEET_BODY_OVERRIDES = [
 ].join(" ");
 
 const SWIPE_CLOSE_PX = 80;
+
+/** True inside a BottomSheet: hosted search inputs must not auto-focus (it pops the phone keyboard). */
+const InSheetContext = createContext(false);
+export function useInSheet(): boolean {
+  return useContext(InSheetContext);
+}
 
 export interface BottomSheetProps {
   open: boolean;
@@ -122,7 +128,9 @@ export function BottomSheet({ open, onOpenChange, title, subtitle, leading, chil
               </SheetPrimitive.Close>
             </div>
           </div>
-          <div className={cn("min-h-0 flex-1 overflow-y-auto overscroll-contain px-2", sheetRows && SHEET_BODY_OVERRIDES, bodyClassName)}>{children}</div>
+          <div className={cn("min-h-0 flex-1 overflow-y-auto overscroll-contain px-2", sheetRows && SHEET_BODY_OVERRIDES, bodyClassName)}>
+            <InSheetContext.Provider value={true}>{children}</InSheetContext.Provider>
+          </div>
         </SheetPrimitive.Content>
       </SheetPrimitive.Portal>
     </SheetPrimitive.Root>
