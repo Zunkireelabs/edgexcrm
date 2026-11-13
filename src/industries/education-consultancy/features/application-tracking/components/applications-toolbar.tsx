@@ -15,7 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { isEmptyTree } from "@/lib/filters/serialize";
 import type { FieldDef, FilterTree } from "@/lib/filters/types";
 import { cn } from "@/lib/utils";
-import { APPLICATION_SORTS, type ApplicationSort } from "../lib/applications-query";
+import { PRIMARY_APPLICATION_SORTS, sortFieldOf, type ApplicationSort } from "../lib/applications-query";
 import { APPLICATION_TABS, SORT_LABELS, type ApplicationTab } from "../lib/applications-url";
 import type { TabCounts } from "../lib/applications-url";
 import { COLUMN_WIDTHS, type ColumnWidth } from "../lib/board-view-prefs";
@@ -80,22 +80,26 @@ function SortChip({ sort, onChange }: { sort: ApplicationSort; onChange: (s: App
       </PopoverTrigger>
       <PopoverContent align="start" sideOffset={4} className={cn(POP, "w-[220px]")}>
         <div role="listbox" aria-label="Sort applications">
-          {APPLICATION_SORTS.map((s) => (
-            <button
-              key={s}
-              type="button"
-              role="option"
-              aria-selected={s === sort}
-              className={ITEM}
-              onClick={() => {
-                onChange(s);
-                setOpen(false);
-              }}
-            >
-              {SORT_LABELS[s]}
-              {s === sort && <CheckIcon className="ml-auto size-4 text-ds-muted" />}
-            </button>
-          ))}
+          {PRIMARY_APPLICATION_SORTS.map((s) => {
+            // A reversed direction (set from a list column menu) checks its field's row and shows its own label.
+            const on = sortFieldOf(s).field === sortFieldOf(sort).field;
+            return (
+              <button
+                key={s}
+                type="button"
+                role="option"
+                aria-selected={on}
+                className={ITEM}
+                onClick={() => {
+                  onChange(s);
+                  setOpen(false);
+                }}
+              >
+                {on ? SORT_LABELS[sort] : SORT_LABELS[s]}
+                {on && <CheckIcon className="ml-auto size-4 text-ds-muted" />}
+              </button>
+            );
+          })}
         </div>
       </PopoverContent>
     </Popover>

@@ -19,6 +19,11 @@ export const SORT_LABELS: Record<ApplicationSort, string> = {
   updated: "Recently updated",
   university: "University A–Z",
   deadline: "Deadline soonest",
+  stage_asc: "Time in stage (shortest)",
+  created_asc: "Oldest",
+  updated_asc: "Least recently updated",
+  university_desc: "University Z–A",
+  deadline_desc: "Deadline latest",
 };
 
 export function parseTab(v: string | null | undefined): ApplicationTab {

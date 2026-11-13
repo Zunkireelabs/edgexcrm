@@ -6,8 +6,12 @@ import {
   planApplicationsQuery,
   runApplicationsQuery,
   sortApplications,
+  APPLICATION_SORTS,
+  SORT_BY_FIELD,
+  sortFieldOf,
   type ApplicationsScope,
 } from "./applications-query";
+import { parseSort, SORT_LABELS } from "./applications-url";
 
 const ctx: CompileCtx = { tz: "UTC", now: new Date("2026-01-15T12:00:00.000Z"), industryId: "education_consultancy", permissions: {} };
 const A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -316,5 +320,27 @@ describe("sortApplications", () => {
     expect(sortApplications([r("b", { university_name: "Yale" }), r("a", { university_name: "harvard" })], "university").map((x) => x.id)).toEqual(["a", "b"]);
     expect(sortApplications([r("o", { created_at: "2025-01-01" }), r("n", { created_at: "2026-01-01" })], "newest").map((x) => x.id)).toEqual(["n", "o"]);
     expect(sortApplications([r("o", { updated_at: "2025-01-01" }), r("n", { updated_at: "2026-01-01" })], "updated").map((x) => x.id)).toEqual(["n", "o"]);
+  });
+  it("Phase 4 directions: each field sorts both ways, with an id tie-break and no-deadline last", () => {
+    const ids = (sort: Parameters<typeof sortApplications>[1], rows: ReturnType<typeof r>[]) => sortApplications(rows, sort).map((x) => x.id);
+    expect(ids("stage_asc", [r("old", { stage_changed_at: "2025-12-01" }), r("new", { stage_changed_at: "2026-01-10" })])).toEqual(["new", "old"]);
+    expect(ids("created_asc", [r("n", { created_at: "2026-01-01" }), r("o", { created_at: "2025-01-01" })])).toEqual(["o", "n"]);
+    expect(ids("updated_asc", [r("n", { updated_at: "2026-01-01" }), r("o", { updated_at: "2025-01-01" })])).toEqual(["o", "n"]);
+    expect(ids("university_desc", [r("a", { university_name: "harvard" }), r("b", { university_name: "Yale" })])).toEqual(["b", "a"]);
+    expect(ids("deadline_desc", [r("none", {}), r("soon", { application_deadline: "2026-02-01" }), r("late", { application_deadline: "2026-03-01" })])).toEqual(["late", "soon", "none"]);
+    // ties fall back to id in every direction
+    expect(ids("university_desc", [r("z", {}), r("a", {})])).toEqual(["a", "z"]);
+  });
+  it("every sort has a label, parses from the URL, and maps back to its field + direction", () => {
+    for (const s of APPLICATION_SORTS) {
+      expect(SORT_LABELS[s]).toBeTruthy();
+      expect(parseSort(s)).toBe(s);
+      const { field, dir } = sortFieldOf(s);
+      expect(SORT_BY_FIELD[field][dir]).toBe(s);
+    }
+    // old URLs keep their meaning
+    expect(sortFieldOf("stage")).toEqual({ field: "stage", dir: "desc" });
+    expect(sortFieldOf("university")).toEqual({ field: "university", dir: "asc" });
+    expect(parseSort("bogus")).toBe("stage");
   });
 });

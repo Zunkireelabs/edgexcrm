@@ -20,9 +20,52 @@ import { chunk, PAGE_SIZE } from "./board-counts";
 
 const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export const APPLICATION_SORTS = ["stage", "newest", "updated", "university", "deadline"] as const;
+/**
+ * Each sort is a field + a direction. The original five keep their old meaning (and their old URLs);
+ * Phase 4 adds the opposite direction of each, so a list column can sort both ways:
+ *   stage = longest in stage first, stage_asc = shortest first
+ *   newest = created desc,           created_asc = oldest first
+ *   updated = updated desc,          updated_asc = least recently updated first
+ *   university = A to Z,             university_desc = Z to A
+ *   deadline = soonest first,        deadline_desc = latest first (no deadline last both ways)
+ */
+export const APPLICATION_SORTS = [
+  "stage",
+  "newest",
+  "updated",
+  "university",
+  "deadline",
+  "stage_asc",
+  "created_asc",
+  "updated_asc",
+  "university_desc",
+  "deadline_desc",
+] as const;
 export type ApplicationSort = (typeof APPLICATION_SORTS)[number];
 export const DEFAULT_APPLICATION_SORT: ApplicationSort = "stage";
+/** The five offered in the Sorted-by popover (one per field, its natural direction). */
+export const PRIMARY_APPLICATION_SORTS = ["stage", "newest", "updated", "university", "deadline"] as const satisfies readonly ApplicationSort[];
+
+export type ApplicationSortField = "stage" | "created" | "updated" | "university" | "deadline";
+export type SortDir = "asc" | "desc";
+
+/** field + direction -> the sort value (the column menu's "Sort ascending / descending"). */
+export const SORT_BY_FIELD: Record<ApplicationSortField, Record<SortDir, ApplicationSort>> = {
+  // Ascending time in stage = fewest days first = newest stage_changed_at first.
+  stage: { asc: "stage_asc", desc: "stage" },
+  created: { asc: "created_asc", desc: "newest" },
+  updated: { asc: "updated_asc", desc: "updated" },
+  university: { asc: "university", desc: "university_desc" },
+  deadline: { asc: "deadline", desc: "deadline_desc" },
+};
+
+export function sortFieldOf(sort: ApplicationSort): { field: ApplicationSortField; dir: SortDir } {
+  for (const [field, dirs] of Object.entries(SORT_BY_FIELD) as [ApplicationSortField, Record<SortDir, ApplicationSort>][]) {
+    if (dirs.asc === sort) return { field, dir: "asc" };
+    if (dirs.desc === sort) return { field, dir: "desc" };
+  }
+  return { field: "stage", dir: "desc" };
+}
 
 export const APPLICATION_SELECT =
   "*, leads!applications_lead_id_fkey!inner(id,first_name,last_name,email,assigned_to)";
@@ -270,17 +313,29 @@ export function sortApplications<T extends SortRow & { id: string }>(rows: T[], 
     switch (sort) {
       case "newest":
         return cmpStr(b.created_at, a.created_at);
+      case "created_asc":
+        return cmpStr(a.created_at, b.created_at);
       case "updated":
         return cmpStr(b.updated_at, a.updated_at);
+      case "updated_asc":
+        return cmpStr(a.updated_at, b.updated_at);
       case "university":
         return cmpStr(a.university_name.toLowerCase(), b.university_name.toLowerCase());
-      case "deadline": {
-        // soonest first; no deadline last
+      case "university_desc":
+        return cmpStr(b.university_name.toLowerCase(), a.university_name.toLowerCase());
+      case "deadline":
+      case "deadline_desc": {
+        // no deadline last in BOTH directions
         if (!a.application_deadline && !b.application_deadline) return 0;
         if (!a.application_deadline) return 1;
         if (!b.application_deadline) return -1;
-        return cmpStr(a.application_deadline, b.application_deadline);
+        return sort === "deadline"
+          ? cmpStr(a.application_deadline, b.application_deadline)
+          : cmpStr(b.application_deadline, a.application_deadline);
       }
+      case "stage_asc":
+        // shortest in stage first = newest stage_changed_at first
+        return cmpStr(b.stage_changed_at, a.stage_changed_at);
       case "stage":
       default:
         // longest in stage first = oldest stage_changed_at first
