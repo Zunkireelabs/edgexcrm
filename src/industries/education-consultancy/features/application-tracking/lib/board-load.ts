@@ -10,7 +10,7 @@ import {
 } from "./applications-query";
 import { decodeApplicationParams, finishedStageIdSet, type DecodedApplicationParams } from "./applications-url";
 import { assembleBoardTotals, isUnfilteredLoad, type BoardTotals } from "./board-data";
-import { assembleBoardPayload, buildBoardIndex, firstPageIds, slicePage, type BoardIndex, type BoardPayload, type IndexRow } from "./board-index";
+import { assembleBoardPayload, buildBoardIndex, firstPageIds, slicePage, summarizeIndex, type BoardIndex, type BoardPayload, type IndexRow, type ListSummary } from "./board-index";
 import { IMPLICIT_PIPELINE } from "./board-placement";
 import { chunk, fetchBoardCounts } from "./board-counts";
 import { resolvePipelineSelection } from "./pipeline-selection";
@@ -195,7 +195,16 @@ export async function loadBoardPage(input: Omit<LoadBoardIndexInput, "withUnfilt
 }
 
 export type LoadBoardSliceResult =
-  | { ok: true; cards: Application[]; total: number; hasMore: boolean; truncated: boolean; filterError: string | null }
+  | {
+      ok: true;
+      cards: Application[];
+      total: number;
+      hasMore: boolean;
+      truncated: boolean;
+      filterError: string | null;
+      /** List mode only (no stage): the footer over the whole filtered index. */
+      summary: ListSummary | null;
+    }
   | { ok: false; status: 400 | 500; message: string };
 
 /** One page of one column (stage) or of the flat list (no stage), for GET /api/v1/applications/board-page. */
@@ -213,5 +222,6 @@ export async function loadBoardSlice(
   }
   const page = slicePage(pool, input.offset, input.limit);
   const cards = await fetchCards(input.supabase, input.tenantId, page.items.map((r) => r.id));
-  return { ok: true, cards, total: page.total, hasMore: page.hasMore, truncated: loaded.truncated, filterError: loaded.filterError };
+  const summary = input.stage ? null : summarizeIndex(loaded.index, { tz: input.ctx.tz, nowMs: input.ctx.now.getTime() });
+  return { ok: true, cards, total: page.total, hasMore: page.hasMore, truncated: loaded.truncated, filterError: loaded.filterError, summary };
 }

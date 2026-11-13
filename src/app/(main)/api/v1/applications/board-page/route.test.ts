@@ -55,8 +55,18 @@ describe("GET /api/v1/applications/board-page", () => {
     expect(new Set(flat.body.data.cards.map((c) => APPS.find((a) => a.id === c.id)!.stage_id)).size).toBeGreaterThan(1);
   });
 
+  it("Phase 4: the list (no stage) allows 100 per page and returns the footer summary; columns stay capped at 50", async () => {
+    const flat = await call("offset=0&limit=100");
+    expect(flat.status).toBe(200);
+    expect(flat.body.data.cards).toHaveLength(Math.min(100, APPS.length));
+    const summary = (flat.body.data as unknown as { summary: { applications: number } }).summary;
+    expect(summary.applications).toBe(APPS.length);
+    const col = await call(`stage=${S1}&offset=0`);
+    expect((col.body.data as unknown as { summary: unknown }).summary).toBeNull();
+  });
+
   it("bad params are a 400, never a 500", async () => {
-    for (const qs of ["offset=-1", "offset=abc", "offset=1.5", "limit=0", "limit=51", "stage=not-a-stage"]) {
+    for (const qs of ["offset=-1", "offset=abc", "offset=1.5", "limit=0", "limit=101", `stage=${S1}&limit=51`, "stage=not-a-stage"]) {
       expect((await call(qs)).status, qs).toBe(400);
     }
   });

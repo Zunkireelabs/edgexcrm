@@ -1,7 +1,7 @@
 import type { ApplicationStage } from "@/types/database";
 import { appsOnPipeline, resolveBoardPlacement } from "./board-placement";
 import { sortApplications, type ApplicationSort } from "./applications-query";
-import { STUCK_DAYS, isFinishedStage } from "./card-metrics";
+import { STUCK_DAYS, daysInStage, isFinishedStage } from "./card-metrics";
 import type { BoardRow } from "./board-data";
 
 // The filtered board INDEX (EDGEX-141 Phase 3, B2): every filtered application of the selected
@@ -10,7 +10,14 @@ import type { BoardRow } from "./board-data";
 // Pure: the page and the board-page API both build it, so they always agree on offsets.
 
 export const COLUMN_PAGE_SIZE = 25;
+/** Largest page a board COLUMN may ask for ("Show more" asks for COLUMN_PAGE_SIZE). */
 export const LIST_PAGE_SIZE = 50;
+/** List view (Phase 4): "Rows per page" choices; the API allows up to the last one in list mode only. */
+export const LIST_PAGE_SIZES = [25, 50, 100] as const;
+export const LIST_MAX_PAGE_SIZE = 100;
+export const DEFAULT_LIST_PAGE_SIZE = 25;
+/** "due in 14d" in the list footer, and the amber deadline cell. */
+export const DEADLINE_SOON_DAYS = 14;
 
 /** A light index row with the sort keys (APPLICATION_LIGHT_SELECT). */
 export type IndexRow = BoardRow & {
@@ -120,4 +127,76 @@ export function assembleBoardPayload<C extends { id: string }>(
     };
   }
   return { columns, total: index.flat.length, truncated };
+}
+
+// ── list footer (Phase 4): summaries over the FILTERED index, never a new query ─────────────────
+
+export interface ListSummary {
+  applications: number;
+  universities: number;
+  /** Stages of the pipeline holding at least one filtered application. */
+  stages: number;
+  /** Median whole days in the current stage; null when there are no rows. */
+  medianDaysInStage: number | null;
+  /** Distinct effective counsellors (application assignee, else the lead's). */
+  counsellors: number;
+  /** Deadlines from today through today + DEADLINE_SOON_DAYS, in the tenant's timezone. */
+  dueSoon: number;
+}
+
+/** YYYY-MM-DD of `ms` in `tz` (falls back to UTC for an unknown zone). */
+export function ymdInTz(ms: number, tz: string): string {
+  const fmt = (zone: string) =>
+    new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(ms));
+  try {
+    return fmt(tz);
+  } catch {
+    return fmt("UTC");
+  }
+}
+
+/** Calendar days from `todayYmd` to the deadline's date (negative = past). Null for no / unreadable deadline. */
+export function daysUntilDeadline(deadline: string | null | undefined, todayYmd: string): number | null {
+  if (!deadline) return null;
+  const d = Date.parse(`${deadline.slice(0, 10)}T00:00:00Z`);
+  const t = Date.parse(`${todayYmd}T00:00:00Z`);
+  if (Number.isNaN(d) || Number.isNaN(t)) return null;
+  return Math.round((d - t) / 86_400_000);
+}
+
+export type DeadlineTone = "none" | "neutral" | "soon" | "past";
+
+export function deadlineTone(deadline: string | null | undefined, todayYmd: string): DeadlineTone {
+  const days = daysUntilDeadline(deadline, todayYmd);
+  if (days === null) return "none";
+  if (days < 0) return "past";
+  if (days <= DEADLINE_SOON_DAYS) return "soon";
+  return "neutral";
+}
+
+export function summarizeIndex(index: BoardIndex, opts: { tz: string; nowMs: number }): ListSummary {
+  const today = ymdInTz(opts.nowMs, opts.tz);
+  const universities = new Set<string>();
+  const counsellors = new Set<string>();
+  const days: number[] = [];
+  let dueSoon = 0;
+  for (const r of index.flat) {
+    const uni = (r.university_name ?? "").trim().toLowerCase();
+    if (uni) universities.add(uni);
+    const c = r.assigned_to ?? r.leads?.assigned_to ?? null;
+    if (c) counsellors.add(c);
+    days.push(daysInStage(r.stage_changed_at, opts.nowMs));
+    if (deadlineTone(r.application_deadline, today) === "soon") dueSoon += 1;
+  }
+  days.sort((a, b) => a - b);
+  const mid = days.length >> 1;
+  const median = days.length === 0 ? null : days.length % 2 ? days[mid] : Math.floor((days[mid - 1] + days[mid]) / 2);
+  return {
+    applications: index.flat.length,
+    universities: universities.size,
+    stages: Object.values(index.byStage).filter((col) => col.length > 0).length,
+    medianDaysInStage: median,
+    counsellors: counsellors.size,
+    dueSoon,
+  };
 }

@@ -7,13 +7,15 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getCurrentTenantTimezone } from "@/industries/education-consultancy/features/application-tracking/lib/tenant-timezone";
 import { resolveApplicationsScope } from "@/industries/education-consultancy/features/application-tracking/lib/applications-scope";
 import { loadBoardMeta, loadBoardSlice } from "@/industries/education-consultancy/features/application-tracking/lib/board-load";
-import { COLUMN_PAGE_SIZE, LIST_PAGE_SIZE } from "@/industries/education-consultancy/features/application-tracking/lib/board-index";
+import { COLUMN_PAGE_SIZE, LIST_MAX_PAGE_SIZE, LIST_PAGE_SIZE } from "@/industries/education-consultancy/features/application-tracking/lib/board-index";
 import type { CompileCtx } from "@/lib/filters/types";
 
 // GET /api/v1/applications/board-page (EDGEX-141 Phase 3, B4): the next page of one board column
 // (?stage=) or of the flat list (no stage), from the SAME URL state the board page renders
 // (f, q, sort, tab, pipeline). The server rebuilds the index with the same scope helper every time;
-// the client never sends ids. Params: offset (>= 0), limit (1..50, default 25).
+// the client never sends ids. Params: offset (>= 0), limit (default 25; 1..50 for a column,
+// 1..100 for the list, Phase 4). List responses also carry the footer `summary` over the whole
+// filtered index (computed from the same index, no extra query).
 
 const MAX_OFFSET = 1_000_000;
 
@@ -31,9 +33,10 @@ export async function GET(request: NextRequest) {
   const url = new URL(request.url);
   const offset = intParam(url.searchParams.get("offset"), 0);
   if (offset === null || offset > MAX_OFFSET) return apiError("BAD_REQUEST", "offset must be a whole number of 0 or more", 400);
-  const limit = intParam(url.searchParams.get("limit"), COLUMN_PAGE_SIZE);
-  if (limit === null || limit < 1 || limit > LIST_PAGE_SIZE) return apiError("BAD_REQUEST", `limit must be between 1 and ${LIST_PAGE_SIZE}`, 400);
   const stage = url.searchParams.get("stage");
+  const maxLimit = stage ? LIST_PAGE_SIZE : LIST_MAX_PAGE_SIZE;
+  const limit = intParam(url.searchParams.get("limit"), COLUMN_PAGE_SIZE);
+  if (limit === null || limit < 1 || limit > maxLimit) return apiError("BAD_REQUEST", `limit must be between 1 and ${maxLimit}`, 400);
 
   const supabase = await createServiceClient();
   const userClient = await createClient();
@@ -64,5 +67,6 @@ export async function GET(request: NextRequest) {
     offset,
     truncated: res.truncated,
     filterError: res.filterError,
+    summary: res.summary,
   });
 }
