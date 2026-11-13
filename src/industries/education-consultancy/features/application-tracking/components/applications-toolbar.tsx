@@ -22,7 +22,8 @@ import { COLUMN_WIDTHS, type ColumnWidth } from "../lib/board-view-prefs";
 
 const TAB_LABEL: Record<ApplicationTab, string> = { all: "All applications", mine: "My applications", stuck: "Stuck 30d+" };
 
-export function ApplicationsTabs({ active, counts, onSelect }: { active: ApplicationTab; counts: TabCounts; onSelect: (t: ApplicationTab) => void }) {
+/** `counts` null = the unfiltered read failed: badges hide rather than read 0. */
+export function ApplicationsTabs({ active, counts, onSelect }: { active: ApplicationTab; counts: TabCounts | null; onSelect: (t: ApplicationTab) => void }) {
   return (
     <div role="tablist" aria-label="Applications view" className="flex items-end gap-0.5 border-b border-ds-border pt-2">
       {APPLICATION_TABS.map((t) => {
@@ -41,15 +42,17 @@ export function ApplicationsTabs({ active, counts, onSelect }: { active: Applica
             )}
           >
             {TAB_LABEL[t]}
-            <span
-              data-testid={`applications-tab-count-${t}`}
-              className={cn(
-                "rounded-full px-1.5 text-[11px] font-semibold leading-[18px] tabular-nums",
-                t === "stuck" ? "bg-ds-bad-soft text-ds-bad" : "bg-ds-hover text-ds-muted",
-              )}
-            >
-              {counts[t].toLocaleString()}
-            </span>
+            {counts && (
+              <span
+                data-testid={`applications-tab-count-${t}`}
+                className={cn(
+                  "rounded-full px-1.5 text-[11px] font-semibold leading-[18px] tabular-nums",
+                  t === "stuck" ? "bg-ds-bad-soft text-ds-bad" : "bg-ds-hover text-ds-muted",
+                )}
+              >
+                {counts[t].toLocaleString()}
+              </span>
+            )}
           </button>
         );
       })}
@@ -114,7 +117,7 @@ function Svg({ children }: { children: React.ReactNode }) {
 
 export interface ApplicationsToolbarProps {
   tab: ApplicationTab;
-  tabCounts: TabCounts;
+  tabCounts: TabCounts | null;
   onTab: (t: ApplicationTab) => void;
   q: string;
   onSearch: (q: string) => void;

@@ -7,6 +7,7 @@ import {
   CaretLeftIcon,
   GearIcon,
   InfoIcon,
+  MagnifyingGlassIcon,
 } from "@/components/icons";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ApplicationsToolbar } from "../components/applications-toolbar";
@@ -32,16 +33,17 @@ import {
   resolveBoardPlacement,
 } from "../lib/board-placement";
 import { resolvePipelineSelection } from "../lib/pipeline-selection";
-import { decodeApplicationParams, withParam, withPipelineSwitch, type TabCounts } from "../lib/applications-url";
+import { applicationDetailHref, decodeApplicationParams, withParam, withPipelineSwitch } from "../lib/applications-url";
+import type { BoardTotals } from "../lib/board-data";
 import { DEFAULT_APPLICATION_SORT } from "../lib/applications-query";
 import { COLUMN_WIDTH_PX, DEFAULT_COLUMN_WIDTH, readColumnWidth, writeColumnWidth, type ColumnWidth } from "../lib/board-view-prefs";
 import { applicationFields, APPLICATION_MOST_USED_KEYS } from "@/lib/filters/registry/applications";
 import { useAdvancedFilters } from "@/lib/filters/use-advanced-filters";
-import { isEmptyTree } from "@/lib/filters/serialize";
+import { FILTER_PARAM, isEmptyTree } from "@/lib/filters/serialize";
+import { countSuffix, sortByCountDesc } from "@/lib/leads/facet-labels";
 import type { FilterOption } from "@/components/ui/filter-dropdown";
 import type { FieldDef, FilterTree } from "@/lib/filters/types";
 import type { Application, ApplicationStage, ApplicationPipelineWithCounts, UserRole } from "@/types/database";
-import { normalizeDestinations } from "@/lib/leads/destination-normalize";
 
 interface ApplicationsWorkspaceTeamMember {
   user_id: string;
@@ -52,10 +54,11 @@ interface ApplicationsWorkspaceTeamMember {
 interface ApplicationsWorkspaceProps {
   stages: ApplicationStage[];
   applications: Application[];
-  /** Header total + tab counts for the selected pipeline, with no chips/search applied. */
-  tabCounts: TabCounts;
-  /** Unfiltered application count per stage (delete-stage message, settings modal). */
-  stageTotals: Record<string, number>;
+  /**
+   * Everything that must NOT follow the chips: tab counts, "of T", stage + pipeline totals, filter
+   * option lists + per-option counts (board-data.ts).
+   */
+  totals: BoardTotals;
   /** "That filter couldn't be read" / "Counsellor can't be combined with OR yet" chip text. */
   filterError?: string | null;
   canManageApplications: boolean;
@@ -76,8 +79,7 @@ const COLUMNS_STORAGE_KEY = "edgex-applications-visible-columns";
 export function ApplicationsWorkspace({
   stages: initialStages,
   applications: initialApplications,
-  tabCounts,
-  stageTotals,
+  totals,
   filterError = null,
   canManageApplications,
   teamMembers,
@@ -135,7 +137,8 @@ export function ApplicationsWorkspace({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const { placements, countByPipeline, noPipelineCount } = useMemo(
+  const { tabCounts, stageTotals, pipelineTotals, noPipelineTotal, facets } = totals;
+  const { placements } = useMemo(
     () => resolveBoardPlacement(applications, stages, allPipelines),
     [applications, stages, allPipelines],
   );
@@ -211,28 +214,65 @@ export function ApplicationsWorkspace({
 
   // The server already filtered + sorted `applications`; the board just lays out the selected pipeline.
   const filteredApplications = pipelineApplications;
+  // Header "N of T": chips or search (T is the same tab with neither).
   const filtersActive = !isEmptyTree(tree) || q !== "";
+  // Empty-state choice: anything that narrows the board, the tab included.
+  const anythingActive = filtersActive || tab !== "all";
+  const pipelineTotal = pipelineTotals[selectedPipelineId] ?? 0;
 
   const pickerFields = useMemo<FieldDef[]>(
     () => Object.values(registry).filter((f) => f.filterable && !f.hiddenFromPicker),
     [registry],
   );
+  // Option lists + per-option counts come from the UNFILTERED board (selected pipeline, all tabs),
+  // so a Counsellor chip can't shrink the Country list (fix round 1, M2). Counts ride in the label
+  // the Leads way (countSuffix) and the toolbar strips them back out via countSources.
   const optionCtx = useMemo(() => {
-    const present = (pick: (a: Application) => string[]) =>
-      Array.from(new Set(applications.flatMap(pick))).sort((a, b) => a.localeCompare(b));
+    const toMap = (r: Record<string, number>) => new Map(Object.entries(r));
+    const counts = {
+      counsellor: toMap(facets.counsellor),
+      stage: toMap(facets.stage),
+      intake: toMap(facets.intake),
+      country: toMap(facets.country),
+      offer_type: toMap(facets.offer_type),
+    };
+    const withCount = (key: keyof typeof counts, value: string, label: string) => `${label}${countSuffix(counts[key], value)}`;
+    const keysOf = (r: Record<string, number>) => Object.keys(r).sort((a, b) => a.localeCompare(b));
+    const people = sortByCountDesc(
+      teamMembers.map((m) => ({ value: m.user_id, name: m.name || m.email.split("@")[0], email: m.email })),
+      counts.counsellor,
+      (m) => m.value,
+      (m) => m.name,
+    );
     const options: Record<string, FilterOption[]> = {
-      counsellor: teamMembers
-        .map((m) => ({ value: m.user_id, label: m.name || m.email.split("@")[0], description: m.email }))
-        .sort((a, b) => a.label.localeCompare(b.label)),
-      stage: filteredStages.map((st) => ({ value: st.id, label: st.name, color: st.color })),
-      intake: present((a) => (a.intake_term ? [a.intake_term] : [])).map((v) => ({ value: v, label: v })),
-      country: normalizeDestinations(applications.flatMap((a) => a.countries ?? [])).map((c) => ({ value: c, label: c })),
+      counsellor: people.map((m) => ({ value: m.value, label: withCount("counsellor", m.value, m.name), description: m.email })),
+      stage: filteredStages.map((st) => ({ value: st.id, label: withCount("stage", st.id, st.name), color: st.color })),
+      intake: keysOf(facets.intake).map((v) => ({ value: v, label: withCount("intake", v, v) })),
+      country: keysOf(facets.country).map((v) => ({ value: v, label: withCount("country", v, v) })),
     };
     return {
-      getOptions: (f: FieldDef): FilterOption[] => options[f.key] ?? f.options?.map((o) => ({ value: o.value, label: o.label })) ?? [],
-      countSources: {},
+      getOptions: (f: FieldDef): FilterOption[] =>
+        options[f.key] ??
+        (f.key === "offer_type"
+          ? (f.options ?? []).map((o) => ({ value: o.value, label: withCount("offer_type", o.value, o.label) }))
+          : f.options?.map((o) => ({ value: o.value, label: o.label })) ?? []),
+      countSources: counts,
     };
-  }, [applications, filteredStages, teamMembers]);
+  }, [facets, filteredStages, teamMembers]);
+
+  // Card/row -> detail carries the board's f/q/sort/tab/pipeline for the in-app back link (B3).
+  const boardQuery = searchParams.toString();
+  const detailHref = useCallback((appId: string) => applicationDetailHref(appId, boardQuery), [boardQuery]);
+
+  // "Clear filters" on the no-matches state: drops ?f ?q ?tab, keeps ?pipeline (and ?sort).
+  const [toolbarKey, setToolbarKey] = useState(0);
+  const clearFilters = useCallback(() => {
+    const p = new URLSearchParams(searchParams.toString());
+    for (const k of [FILTER_PARAM, "q", "tab"]) p.delete(k);
+    const qs = p.toString();
+    setToolbarKey((k) => k + 1); // the search box keeps its own text; remount it empty
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [router, pathname, searchParams]);
 
   const handleTreeChange = useCallback((next: FilterTree) => setTree(next), [setTree]);
   const handleColumnWidth = useCallback(
@@ -257,6 +297,11 @@ export function ApplicationsWorkspace({
   }, []);
 
   const pipelineIsEmpty = pipelineApplications.length === 0;
+  // Filtered to zero (chips, search or a tab) -> "No applications match"; the "No applications in
+  // this board yet" state is only for a pipeline that is empty with nothing applied. A known-empty
+  // pipeline stays the real empty state even under a tab.
+  const knownEmptyPipeline = !totals.degraded && pipelineTotal === 0;
+  const showNoMatches = pipelineIsEmpty && anythingActive && !knownEmptyPipeline && filteredStages.length > 0;
   const settingsPipeline = settingsState ? allPipelines.find((p) => p.id === settingsState.pipelineId) ?? null : null;
 
   return (
@@ -268,7 +313,7 @@ export function ApplicationsWorkspace({
           data-testid="header-count"
           className="rounded-full bg-[#f6f7f9] px-2 py-0.5 text-[12px] text-[#6b6f76] tabular-nums"
         >
-          {filtersActive ? `${filteredApplications.length} of ${tabCounts[tab]}` : filteredApplications.length}
+          {filtersActive && tabCounts ? `${filteredApplications.length} of ${tabCounts[tab]}` : filteredApplications.length}
         </span>
         <div className="flex-1" />
         <div className="flex items-center gap-2">
@@ -276,10 +321,10 @@ export function ApplicationsWorkspace({
             pipelines={allPipelines}
             stages={stages}
             stageTotals={stageTotals}
-            pipelineCounts={countByPipeline}
-            noPipelineCount={noPipelineCount}
+            pipelineCounts={pipelineTotals}
+            noPipelineCount={noPipelineTotal}
             selectedPipelineId={selectedPipelineId}
-            selectedCount={filteredApplications.length}
+            selectedCount={pipelineTotal}
             isAdmin={isAdmin}
             onSelect={handlePipelineChange}
             onOpenSettings={(id) => setSettingsState({ pipelineId: id, addStage: false })}
@@ -311,6 +356,7 @@ export function ApplicationsWorkspace({
 
       {/* Toolbar: tabs + search + sort + chips (all URL-backed) */}
       <ApplicationsToolbar
+        key={toolbarKey}
         tab={tab}
         tabCounts={tabCounts}
         onTab={(t) => pushParam("tab", t === "all" ? null : t)}
@@ -336,14 +382,14 @@ export function ApplicationsWorkspace({
         }
       />
 
-      {isDefaultSelected && noPipelineCount > 0 && (
+      {isDefaultSelected && noPipelineTotal > 0 && (
         <div
           data-testid="no-pipeline-note"
           className="flex shrink-0 items-center gap-2 rounded-[8px] bg-[#fafaf9] px-2.5 py-[7px] text-[12px] text-[#6b6f76] shadow-[0_0_0_1px_rgba(0,0,0,.06)]"
         >
           <InfoIcon className="h-[14px] w-[14px] shrink-0 text-[#9a9ea5]" />
           <span>
-            <b className="font-semibold text-[#101112]">{noPipelineCount}</b> applications have no pipeline yet — they&apos;re
+            <b className="font-semibold text-[#101112]">{noPipelineTotal}</b> applications have no pipeline yet — they&apos;re
             shown here under Default.
           </span>
         </div>
@@ -369,8 +415,33 @@ export function ApplicationsWorkspace({
             }
             assigneeNames={assigneeNames}
             columnWidth={COLUMN_WIDTH_PX[columnWidth]}
+            detailHref={detailHref}
           />
-          {pipelineIsEmpty && filteredStages.length > 0 && (
+          {showNoMatches && (
+            <div
+              data-testid="no-matches"
+              className="pointer-events-none absolute inset-x-0 top-[170px] flex flex-col items-center text-center"
+            >
+              <div className="mb-3.5 flex h-[120px] w-[120px] items-center justify-center rounded-[20px] bg-[#f3f4f6]">
+                <MagnifyingGlassIcon className="h-9 w-9 text-[#9a9ea5]" />
+              </div>
+              <h3 className="mb-1 text-[18px] font-semibold text-[#101112]">No applications match these filters</h3>
+              <p className="mb-3.5 max-w-[340px] text-[13px] text-[#6b6f76]">
+                Try removing a filter, or check the spelling of your search.
+              </p>
+              <div className="pointer-events-auto flex gap-2">
+                <button
+                  type="button"
+                  data-testid="no-matches-clear"
+                  onClick={clearFilters}
+                  className="inline-flex h-[30px] items-center gap-1.5 rounded-[8px] border border-[#e8e9eb] bg-white px-2.5 text-[13px] font-medium text-[#2b2d2f] hover:bg-[#f6f7f9]"
+                >
+                  Clear filters
+                </button>
+              </div>
+            </div>
+          )}
+          {pipelineIsEmpty && !showNoMatches && filteredStages.length > 0 && (
             <div
               data-testid="empty-pipeline"
               className="pointer-events-none absolute inset-x-0 top-[170px] flex flex-col items-center text-center"
@@ -437,6 +508,7 @@ export function ApplicationsWorkspace({
             applications={filteredApplications}
             stages={filteredStages}
             visibleKeys={visibleColumnKeys}
+            detailHref={detailHref}
           />
         </div>
       )}

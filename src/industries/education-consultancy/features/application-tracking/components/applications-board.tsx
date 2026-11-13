@@ -64,6 +64,8 @@ function findAppColumn(columns: ColumnsState, appId: string): string | null {
 }
 
 interface ApplicationsBoardProps {
+  /** Where a card opens (carries the board's filters for the detail page's back link). */
+  detailHref?: (appId: string) => string;
   /** Column width in px (Narrow 232 / Wide 268). */
   columnWidth?: number;
   /** The selected pipeline's stages, in position order. */
@@ -86,6 +88,7 @@ interface ApplicationsBoardProps {
 
 export function ApplicationsBoard({
   columnWidth,
+  detailHref,
   stages,
   applications,
   placements,
@@ -230,9 +233,9 @@ export function ApplicationsBoard({
 
   const handleOpenDetail = useCallback(
     (app: Application) => {
-      router.push(`/applications/${app.id}`);
+      router.push(detailHref ? detailHref(app.id) : `/applications/${app.id}`);
     },
-    [router],
+    [router, detailHref],
   );
 
   const renameStage = useCallback(

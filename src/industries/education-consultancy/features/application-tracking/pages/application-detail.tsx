@@ -47,6 +47,7 @@ import { useApplicationReferenceData, getCollegeSuggestions } from "../hooks/use
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 import { DestinationsMultiSelect } from "@/components/dashboard/destinations-multi-select";
 import { AddUniversityWithProgramsDialog } from "../components/add-university-with-programs-dialog";
+import { BOARD_BACK_PARAM, boardBackHref } from "../lib/applications-url";
 import type { Application, ApplicationStage, Lead } from "@/types/database";
 import type { LeadActivity } from "@/lib/supabase/queries";
 import { normalizeDestinations, normalizeFieldOfStudy, normalizeDegreeLevel } from "@/lib/leads/destination-normalize";
@@ -114,7 +115,8 @@ export function ApplicationDetailPage({
   // If opened from a lead's Applications card (?from=lead&leadId=...), back nav
   // should return there instead of the global Applications board.
   const fromLeadId = searchParams.get("from") === "lead" ? searchParams.get("leadId") : null;
-  const backHref = fromLeadId ? `/leads/${fromLeadId}` : "/applications";
+  // From the board: back to the board with its filters (?back=, same-origin board path only, B3).
+  const backHref = fromLeadId ? `/leads/${fromLeadId}` : boardBackHref(searchParams.get(BOARD_BACK_PARAM));
   const backLabel = fromLeadId ? "Back to Lead" : "Applications";
 
   const [application, setApplication] = useState<Application>(initialApplication);

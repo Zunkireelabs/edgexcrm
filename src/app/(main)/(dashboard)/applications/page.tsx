@@ -7,9 +7,9 @@ import { leadQueryScope } from "@/lib/api/permissions";
 import { branchMemberIds } from "@/lib/leads/branch-membership";
 import { visibleLeadsBase } from "@/lib/leads/visibility-query";
 import { POSITION_ROUTE_MAP } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
-import { resolveBoardPlacement } from "@/industries/education-consultancy/features/application-tracking/lib/board-placement";
 import { runApplicationsQuery, APPLICATION_LIGHT_SELECT, type ApplicationsTab } from "@/industries/education-consultancy/features/application-tracking/lib/applications-query";
-import { computeTabCounts, decodeApplicationParams, finishedStageIdSet, withSearchCondition } from "@/industries/education-consultancy/features/application-tracking/lib/applications-url";
+import { decodeApplicationParams, finishedStageIdSet } from "@/industries/education-consultancy/features/application-tracking/lib/applications-url";
+import { assembleBoardTotals, isUnfilteredLoad, type BoardRow } from "@/industries/education-consultancy/features/application-tracking/lib/board-data";
 import { resolvePipelineSelection } from "@/industries/education-consultancy/features/application-tracking/lib/pipeline-selection";
 import { STUCK_DAYS } from "@/industries/education-consultancy/features/application-tracking/lib/card-metrics";
 import { EMPTY_TREE, type CompileCtx } from "@/lib/filters/types";
@@ -59,6 +59,13 @@ export default async function ApplicationsRoute({ searchParams }: { searchParams
     permissions: {},
   };
 
+  // Filters live in the URL and run on the server (EDGEX-141 Phase 2).
+  const decoded = decodeApplicationParams(sp, ctx);
+  let filterError = decoded.filterError;
+  // No chips, no search, All tab: the main query below IS the unfiltered read, so the light read
+  // is skipped and every unfiltered number is derived from the main rows (fix round 1, M3).
+  const unfiltered = isUnfilteredLoad(decoded);
+
   const [stagesResult, teamMembers, pipelinesResult, lightResult] = await Promise.all([
     supabase
       .from("application_stages")
@@ -73,21 +80,19 @@ export default async function ApplicationsRoute({ searchParams }: { searchParams
       .eq("tenant_id", tenantData.tenant.id)
       .eq("is_active", true)
       .order("position", { ascending: true }),
-    // One lightweight, UNfiltered read of the same scope: header total, tab counts and per-stage
-    // totals. Chips/search never change these (mockup state 2: tabs 201/34/17 under "20 of 201").
-    runApplicationsQuery({
-      supabase, tenantId: tenantData.tenant.id, scope: scopeInput, tree: EMPTY_TREE, ctx,
-      mode: "rows", select: APPLICATION_LIGHT_SELECT, sort: "stage",
-    }),
+    // Filtered loads only: one lightweight, UNfiltered read of the same scope for the numbers that
+    // must not follow the chips (tabs, "of T", pipeline + stage totals, filter options + counts).
+    unfiltered
+      ? null
+      : runApplicationsQuery({
+          supabase, tenantId: tenantData.tenant.id, scope: scopeInput, tree: EMPTY_TREE, ctx,
+          mode: "rows", select: APPLICATION_LIGHT_SELECT, sort: "stage",
+        }),
   ]);
 
   const stages = (stagesResult.data ?? []) as ApplicationStage[];
   const rawPipelines = pipelinesResult.data ?? [];
-  const lightRows = lightResult.ok && lightResult.mode === "rows" ? lightResult.rows : [];
 
-  // Filters live in the URL and run on the server (EDGEX-141 Phase 2).
-  const decoded = decodeApplicationParams(sp, ctx);
-  let filterError = decoded.filterError;
   const tab: ApplicationsTab =
     decoded.tab === "mine"
       ? { mineUserId: tenantData.userId }
@@ -96,7 +101,7 @@ export default async function ApplicationsRoute({ searchParams }: { searchParams
         : {};
   const queryFor = (tree: typeof EMPTY_TREE) =>
     runApplicationsQuery({
-      supabase, tenantId: tenantData.tenant.id, scope: scopeInput, tree: withSearchCondition(tree, decoded.q), tab, ctx,
+      supabase, tenantId: tenantData.tenant.id, scope: scopeInput, tree, q: decoded.q, tab, ctx,
       mode: "rows", sort: decoded.sort,
     });
   let rowsResult = await queryFor(decoded.tree);
@@ -110,29 +115,37 @@ export default async function ApplicationsRoute({ searchParams }: { searchParams
   }
   const applications = rowsResult.ok && rowsResult.mode === "rows" ? rowsResult.rows : [];
 
+  let lightRows: BoardRow[] | null = applications;
+  if (lightResult) {
+    if (lightResult.ok && lightResult.mode === "rows") {
+      lightRows = lightResult.rows;
+    } else {
+      // Never silent zeros: log it like the main query; the totals then degrade (tab badges hide,
+      // pipeline/stage/option counts fall back to the filtered rows) instead of reading 0.
+      console.error("[applications/page] unfiltered count query failed", {
+        tenantId: tenantData.tenant.id, error: lightResult.ok ? "mode" : lightResult.error,
+      });
+      lightRows = null;
+    }
+  }
+
+  const selectedPipelineId = resolvePipelineSelection(typeof sp.pipeline === "string" ? sp.pipeline : null, rawPipelines);
+  const totals = assembleBoardTotals({
+    lightRows, mainRows: applications, stages, pipelines: rawPipelines, selectedPipelineId,
+    userId: tenantData.userId, nowMs: ctx.now.getTime(),
+  });
+
   const stageCountByPipeline = new Map<string, number>();
   for (const s of stages) {
     if (s.pipeline_id) stageCountByPipeline.set(s.pipeline_id, (stageCountByPipeline.get(s.pipeline_id) ?? 0) + 1);
   }
-  // Same placement the board uses, so a pipeline's menu count equals what its board renders
-  // (null-pipeline apps are counted under Default instead of vanishing). With chips active these
-  // are the FILTERED counts per pipeline.
-  const { countByPipeline: appCountByPipeline } = resolveBoardPlacement(applications, stages, rawPipelines);
+  // Pipeline counts are UNFILTERED totals (mockup: "Default pipeline 201" under "20 of 201"),
+  // with the same placement the board uses (null-pipeline apps count under Default).
   const pipelines: ApplicationPipelineWithCounts[] = rawPipelines.map((p) => ({
     ...p,
     stage_count: stageCountByPipeline.get(p.id) ?? 0,
-    application_count: appCountByPipeline.get(p.id) ?? 0,
+    application_count: totals.pipelineTotals[p.id] ?? 0,
   }));
-
-  // Unfiltered numbers for the selected pipeline (see the light read above).
-  const lightPlacements = resolveBoardPlacement(lightRows, stages, rawPipelines).placements;
-  const selectedPipelineId = resolvePipelineSelection(typeof sp.pipeline === "string" ? sp.pipeline : null, rawPipelines);
-  const tabCounts = computeTabCounts(lightRows, lightPlacements, selectedPipelineId, finishedStageIdSet(stages), tenantData.userId, ctx.now.getTime());
-  const stageTotals: Record<string, number> = {};
-  for (const a of lightRows) {
-    const sid = lightPlacements.get(a.id)?.stageId;
-    if (sid) stageTotals[sid] = (stageTotals[sid] ?? 0) + 1;
-  }
 
   const { docsByApplication, openTasksByLead } = await fetchBoardCounts(supabase, tenantData.tenant.id, applications);
   const boardApplications: Application[] = applications.map((a) => ({
@@ -146,8 +159,7 @@ export default async function ApplicationsRoute({ searchParams }: { searchParams
       <ApplicationsWorkspace
         stages={stages}
         applications={boardApplications}
-        tabCounts={tabCounts}
-        stageTotals={stageTotals}
+        totals={totals}
         filterError={filterError}
         canManageApplications={tenantData.permissions.canManageApplications}
         teamMembers={teamMembers.map((m) => ({ user_id: m.user_id, name: m.name, email: m.email }))}

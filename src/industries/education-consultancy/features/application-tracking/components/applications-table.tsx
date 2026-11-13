@@ -22,6 +22,8 @@ interface ApplicationsTableProps {
   stages: ApplicationStage[];
   /** Which of APPLICATION_COLUMNS to render, in addition to the always-shown Student column. */
   visibleKeys?: string[];
+  /** Where a row opens (carries the board's filters for the detail page's back link). */
+  detailHref?: (appId: string) => string;
 }
 
 function formatDate(dateString: string | null): string {
@@ -43,6 +45,7 @@ export function ApplicationsTable({
   applications,
   stages,
   visibleKeys = APPLICATION_DEFAULT_COLUMN_KEYS,
+  detailHref,
 }: ApplicationsTableProps) {
   const router = useRouter();
   const stageMap = new Map(stages.map((s) => [s.id, s]));
@@ -79,7 +82,7 @@ export function ApplicationsTable({
               <tr
                 key={app.id}
                 className="hover:bg-muted/10 transition-colors cursor-pointer"
-                onClick={() => router.push(`/applications/${app.id}`)}
+                onClick={() => router.push(detailHref ? detailHref(app.id) : `/applications/${app.id}`)}
               >
                 <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                   <Link href={`/leads/${leadId}`} prefetch={false} className="font-medium hover:text-primary transition-colors">

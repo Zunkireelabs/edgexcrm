@@ -3,13 +3,16 @@ import { encodeFilterTree } from "@/lib/filters/serialize";
 import type { CompileCtx, FilterTree } from "@/lib/filters/types";
 import { ageTone, STUCK_DAYS } from "./card-metrics";
 import {
+  applicationDetailHref,
+  BOARD_BACK_PARAM,
+  boardBackHref,
+  boardStateQuery,
   computeTabCounts,
   decodeApplicationParams,
   parseSort,
   parseTab,
   withParam,
   withPipelineSwitch,
-  withSearchCondition,
 } from "./applications-url";
 
 const ctx: CompileCtx = { tz: "UTC", now: new Date("2026-01-15T12:00:00.000Z"), industryId: "education_consultancy", permissions: {} };
@@ -70,17 +73,6 @@ describe("switching pipeline", () => {
   });
 });
 
-describe("search folds into the tree", () => {
-  it("adds a top-level search condition; keeps an OR tree as a group", () => {
-    expect(withSearchCondition(tree, " ").conditions).toHaveLength(3);
-    expect(withSearchCondition(tree, "har").conditions.at(-1)).toMatchObject({ field: "search", value: "har" });
-    const or: FilterTree = { conjunction: "or", conditions: [tree.conditions[2]] };
-    const t = withSearchCondition(or, "har");
-    expect(t.conjunction).toBe("and");
-    expect(t.groups?.[0].conjunction).toBe("or");
-  });
-});
-
 describe("header + tab counts", () => {
   const day = 86_400_000;
   const now = Date.parse("2026-01-15T12:00:00.000Z");
@@ -103,3 +95,37 @@ describe("header + tab counts", () => {
     expect(ageTone(STUCK_DAYS - 1, false)).not.toBe("red");
   });
 });
+
+describe("board <-> detail back link (B3)", () => {
+  const f = encodeFilterTree({ conjunction: "and", conditions: [{ id: "c", field: "intake", op: "is", value: "Fall 2026" }] });
+  const board = `f=${f}&q=har&sort=newest&tab=stuck&pipeline=p2&utm=x&view=list`;
+
+  it("boardStateQuery keeps only f, q, sort, tab, pipeline", () => {
+    const p = new URLSearchParams(boardStateQuery(board));
+    expect([...p.keys()]).toEqual(["f", "q", "sort", "tab", "pipeline"]);
+    expect(p.get("f")).toBe(f);
+  });
+  it("card href carries the board state; a bare board gets a bare href", () => {
+    expect(applicationDetailHref("app-1", "")).toBe("/applications/app-1");
+    expect(applicationDetailHref("app-1", "utm=x")).toBe("/applications/app-1");
+    const href = applicationDetailHref("app-1", board);
+    const back = new URL(href, "http://h").searchParams.get(BOARD_BACK_PARAM);
+    expect(back).toBe(`/applications?${boardStateQuery(board)}`);
+  });
+  it("round trip: detail -> back link restores the same board state", () => {
+    const back = new URL(applicationDetailHref("app-1", board), "http://h").searchParams.get(BOARD_BACK_PARAM);
+    const restored = new URLSearchParams(boardBackHref(back).split("?")[1]);
+    expect(restored.get("tab")).toBe("stuck");
+    expect(restored.get("pipeline")).toBe("p2");
+    expect(decodeApplicationParams({ f: restored.get("f") ?? undefined }, ctx).tree.conditions[0]).toMatchObject({ field: "intake", value: "Fall 2026" });
+  });
+  it("only a same-origin path to the board is honoured", () => {
+    for (const bad of [null, "", "https://evil.test/applications?q=x", "//evil.test/applications", "/\\evil.test/applications", "javascript:alert(1)", "/leads?q=x", "/applications/other", "applications?q=x"]) {
+      expect(boardBackHref(bad), String(bad)).toBe("/applications");
+    }
+  });
+  it("strips params outside the allow-list from a hand-edited back value", () => {
+    expect(boardBackHref("/applications?q=har&redirect=https://evil.test&tab=mine")).toBe("/applications?q=har&tab=mine");
+  });
+});
+

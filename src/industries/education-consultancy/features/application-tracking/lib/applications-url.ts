@@ -68,17 +68,50 @@ export function decodeApplicationParams(params: ParamBag, ctx: CompileCtx): Deco
   return { tree, q: (one(params.q) ?? "").trim(), sort: parseSort(one(params.sort)), tab: parseTab(one(params.tab)), filterError };
 }
 
-/** Folds the search box into the tree as the hidden top-level `search` condition. */
-export function withSearchCondition(tree: FilterTree, q: string): FilterTree {
-  const text = q.trim();
-  if (!text) return tree;
-  if (tree.conjunction === "or" && !isEmptyTree(tree)) {
-    // keep the user's OR as one group; search ANDs with it
-    return { conjunction: "and", conditions: [searchCondition(text)], groups: [{ conjunction: "or", conditions: tree.conditions }, ...(tree.groups ?? [])] };
+// ── board <-> detail round trip (fix round 1, B3) ─────────────────────────────────
+
+/** The only params a detail page may carry back to the board. */
+export const BOARD_STATE_PARAMS = [FILTER_PARAM, "q", "sort", "tab", "pipeline"] as const;
+/** Detail-page param holding the board path (with its query) to return to. */
+export const BOARD_BACK_PARAM = "back";
+const BOARD_PATH = "/applications";
+const SAME_ORIGIN = "http://same-origin.invalid";
+
+/** The board's query string restricted to BOARD_STATE_PARAMS (order kept, others dropped). */
+export function boardStateQuery(current: string): string {
+  const src = new URLSearchParams(current);
+  const out = new URLSearchParams();
+  for (const k of BOARD_STATE_PARAMS) {
+    const v = src.get(k);
+    if (v) out.set(k, v);
   }
-  return { ...tree, conditions: [...tree.conditions, searchCondition(text)] };
+  return out.toString();
 }
-const searchCondition = (text: string): FilterCondition => ({ id: "q", field: "search", op: "contains", value: text });
+
+/** /applications/<id>, with ?back=<board path + state> when the board has any state to restore. */
+export function applicationDetailHref(appId: string, boardQuery: string): string {
+  const qs = boardStateQuery(boardQuery);
+  const path = `${BOARD_PATH}/${encodeURIComponent(appId)}`;
+  return qs ? `${path}?${BOARD_BACK_PARAM}=${encodeURIComponent(`${BOARD_PATH}?${qs}`)}` : path;
+}
+
+/**
+ * The detail page's in-app back link. Only a same-origin path to the board itself is honoured
+ * (no scheme, no //host, no backslash tricks, no other path), and only BOARD_STATE_PARAMS survive.
+ * Anything else falls back to the plain board.
+ */
+export function boardBackHref(raw: string | null | undefined): string {
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//") || raw.includes("\\")) return BOARD_PATH;
+  let url: URL;
+  try {
+    url = new URL(raw, SAME_ORIGIN);
+  } catch {
+    return BOARD_PATH;
+  }
+  if (url.origin !== SAME_ORIGIN || url.pathname !== BOARD_PATH) return BOARD_PATH;
+  const qs = boardStateQuery(url.search);
+  return qs ? `${BOARD_PATH}?${qs}` : BOARD_PATH;
+}
 
 /** Set (or delete when value is null/default) one param on a query string. */
 export function withParam(current: string, key: string, value: string | null): string {
@@ -122,6 +155,9 @@ export interface LightApplication {
   stage_id: string;
   stage_changed_at: string;
   assigned_to: string | null;
+  intake_term?: string | null;
+  countries?: string[] | null;
+  offer_type?: string | null;
   leads?: { assigned_to?: string | null } | null;
 }
 
