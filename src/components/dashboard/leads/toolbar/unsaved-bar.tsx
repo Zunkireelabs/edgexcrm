@@ -9,7 +9,7 @@ import { useState } from "react";
 import { CaretDownIcon } from "@/components/icons";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { SaveViewForm } from "./save-view-form";
-import { CTRL, CTRL_PRIMARY, POP } from "./tokens";
+import { CTRL, CTRL_PRIMARY, POP } from "@/components/filters/toolbar/tokens";
 
 export interface UnsavedBarProps {
   /** False when there is nothing a saved view could store (no filters; sort alone isn't saved). */

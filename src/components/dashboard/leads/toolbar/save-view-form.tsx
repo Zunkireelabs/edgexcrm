@@ -6,7 +6,7 @@
 
 import { useState } from "react";
 import { MAX_SAVED_FILTER_NAME_LENGTH } from "@/industries/education-consultancy/features/saved-lead-filters/lib/saved-filter-schema";
-import { CTRL_PRIMARY } from "./tokens";
+import { CTRL_PRIMARY } from "@/components/filters/toolbar/tokens";
 
 export interface SaveViewFormProps {
   /** Set when there is nothing to save yet (no filters): shown instead of enabling Save. */

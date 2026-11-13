@@ -16,7 +16,7 @@ import {
   PencilSimpleIcon,
   PushPinIcon,
 } from "@/components/icons";
-import { ITEM, POP, POP_SEP } from "../toolbar/tokens";
+import { ITEM, POP, POP_SEP } from "@/components/filters/toolbar/tokens";
 import { directionOptions, sortOption } from "../toolbar/sort-options";
 import type { SortDirection } from "../toolbar/view-state";
 import { MAX_LABEL_LENGTH } from "./grid-prefs";

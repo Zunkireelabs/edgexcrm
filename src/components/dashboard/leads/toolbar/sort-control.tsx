@@ -9,7 +9,7 @@ import { ArrowsDownUpIcon, CaretDownIcon, CheckIcon, XIcon } from "@/components/
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { SORT_OPTIONS, directionOptions, isDefaultSort, sortOption, withDirection, withField } from "./sort-options";
-import { ITEM, POP } from "./tokens";
+import { ITEM, POP } from "@/components/filters/toolbar/tokens";
 import { DEFAULT_SORT, type SortState } from "./view-state";
 
 type Picker = null | "field" | "direction";

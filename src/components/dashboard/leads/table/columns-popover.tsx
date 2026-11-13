@@ -13,7 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import type { LeadColumn } from "../columns-registry";
 import { FALLBACK_COLUMN_ICON } from "./v2-columns";
 import { hideColumn, reorderColumns, showColumn, type ColumnLayout } from "./grid-layout";
-import { ITEM, POP, POP_LABEL, POP_SEP } from "../toolbar/tokens";
+import { ITEM, POP, POP_LABEL, POP_SEP } from "@/components/filters/toolbar/tokens";
 
 export interface ColumnsPopoverProps {
   trigger: ReactNode;

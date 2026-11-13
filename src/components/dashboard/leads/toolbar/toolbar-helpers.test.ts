@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { decodeFilterTree } from "@/lib/filters/serialize";
 import type { FilterCondition, FilterTree } from "@/lib/filters/types";
-import { chipValueText, conditionForPickedValues, plainOperatorLabel, selectedValues, toggleValue } from "./chip-parts";
+import { chipValueText, conditionForPickedValues, plainOperatorLabel, selectedValues, toggleValue } from "@/components/filters/toolbar/chip-parts";
 import { buildCountParams, treeWithoutField } from "./lead-count";
-import { filterOptionRows, toOptionRows } from "./option-view";
+import { filterOptionRows, toOptionRows } from "@/components/filters/toolbar/option-view";
 
 const opts = [
   { value: "u1", label: "Diplov Karki (449)" },
@@ -118,7 +118,7 @@ describe("count requests", () => {
   });
 });
 
-import { findConditionForField, removeCondition, upsertCondition } from "./tree-edit";
+import { findConditionForField, removeCondition, upsertCondition } from "@/components/filters/toolbar/tree-edit";
 
 describe("tree edits", () => {
   const base: FilterTree = { conjunction: "and", conditions: [{ id: "a", field: "stage", op: "is_any_of", value: ["s1"] }] };

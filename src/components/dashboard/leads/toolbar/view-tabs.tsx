@@ -12,7 +12,7 @@ import type { SavedLeadFilter } from "@/industries/education-consultancy/feature
 import { cn } from "@/lib/utils";
 import type { ViewDef } from "./builtin-views";
 import { SaveViewForm } from "./save-view-form";
-import { ITEM, POP, POP_SEARCH, POP_SEP } from "./tokens";
+import { ITEM, POP, POP_SEARCH, POP_SEP } from "@/components/filters/toolbar/tokens";
 
 const TAB =
   "relative flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap px-2.5 text-sm font-medium text-ds-muted transition-colors hover:text-ds-ink focus-visible:outline-none focus-visible:text-ds-ink";

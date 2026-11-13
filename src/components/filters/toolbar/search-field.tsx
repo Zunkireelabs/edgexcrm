@@ -10,9 +10,13 @@ export interface SearchFieldProps {
   value: string;
   onChange: (value: string) => void;
   loading?: boolean;
+  /** Defaults are the Leads strings, so Leads renders byte-identically. */
+  placeholder?: string;
+  ariaLabel?: string;
+  testId?: string;
 }
 
-export const SearchField = forwardRef<HTMLInputElement, SearchFieldProps>(function SearchField({ value, onChange, loading }, ref) {
+export const SearchField = forwardRef<HTMLInputElement, SearchFieldProps>(function SearchField({ value, onChange, loading, placeholder = "Search leads", ariaLabel = "Search leads", testId = "leads-search" }, ref) {
   return (
     <label className="flex h-7 w-[220px] shrink-0 items-center gap-2 rounded-ds-sm bg-ds-surface px-2 text-ds-faint shadow-[inset_0_0_0_1px_var(--ds-border)] transition-shadow focus-within:shadow-[inset_0_0_0_1px_var(--ds-ghost)] hover:shadow-[inset_0_0_0_1px_var(--ds-ghost)]">
       <MagnifyingGlassIcon className="size-4 shrink-0" />
@@ -24,9 +28,9 @@ export const SearchField = forwardRef<HTMLInputElement, SearchFieldProps>(functi
         onKeyDown={(e) => {
           if (e.key === "Escape") e.currentTarget.blur();
         }}
-        placeholder="Search leads"
-        aria-label="Search leads"
-        data-testid="leads-search"
+        placeholder={placeholder}
+        aria-label={ariaLabel}
+        data-testid={testId}
         className="h-full min-w-0 flex-1 bg-transparent text-sm font-medium text-ds-ink outline-none placeholder:font-medium placeholder:text-ds-faint"
       />
       {loading ? (

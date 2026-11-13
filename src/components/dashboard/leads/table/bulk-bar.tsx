@@ -18,7 +18,7 @@ import {
   XIcon,
 } from "@/components/icons";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ITEM, POP, POP_SEP } from "../toolbar/tokens";
+import { ITEM, POP, POP_SEP } from "@/components/filters/toolbar/tokens";
 
 // Destructive menu rows: red text + icon, red-tinted hover (the neutral ITEM colours swapped out, not stacked).
 const ITEM_DESTRUCTIVE = ITEM.replace("text-ds-ink", "text-ds-bad").replace("hover:bg-ds-hover focus-visible:bg-ds-hover data-[active=true]:bg-ds-hover", "hover:bg-ds-bad-soft focus-visible:bg-ds-bad-soft data-[active=true]:bg-ds-bad-soft");

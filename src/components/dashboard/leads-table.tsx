@@ -24,9 +24,9 @@ import { TOOLBAR_BTN } from "@/components/dashboard/leads/toolbar-btn";
 import { AdvancedFilterBar, DEFAULT_MAX_CONDITIONS } from "@/components/filters/advanced-filter-bar";
 // Leads toolbar v2 (EDGEX-116): new layout lives in its own folder; this file only feeds it state.
 import { LeadsToolbar } from "@/components/dashboard/leads/toolbar/leads-toolbar";
-import type { CountLoader, OptionContext } from "@/components/dashboard/leads/toolbar/condition-body";
+import type { CountLoader, OptionContext } from "@/components/filters/toolbar/condition-body";
 import { fetchLeadCount, treeWithoutField } from "@/components/dashboard/leads/toolbar/lead-count";
-import { CTRL, CTRL_BORDERED, CTRL_PRIMARY } from "@/components/dashboard/leads/toolbar/tokens";
+import { CTRL, CTRL_BORDERED, CTRL_PRIMARY } from "@/components/filters/toolbar/tokens";
 import { LEADS_V2_DEFAULT_SORT } from "@/lib/leads/default-sort";
 import { SortControl } from "@/components/dashboard/leads/toolbar/sort-control";
 import { AddFilterButton } from "@/components/filters/add-filter-button";

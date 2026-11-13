@@ -18,10 +18,10 @@ import { useSavedLeadFilters, type SavedLeadFilter } from "@/industries/educatio
 import { buildBuiltinViews, matchBuiltinView, matchSavedView, singleValueTree, type ViewDef } from "./builtin-views";
 import { fetchLeadCount } from "./lead-count";
 import { ViewTabs } from "./view-tabs";
-import type { OptionContext } from "./condition-body";
-import { FilterChips } from "./filter-chips";
-import { FilterMenu } from "./filter-menu";
-import { SearchField } from "./search-field";
+import type { OptionContext } from "@/components/filters/toolbar/condition-body";
+import { FilterChips } from "@/components/filters/toolbar/filter-chips";
+import { FilterMenu } from "@/components/filters/toolbar/filter-menu";
+import { SearchField } from "@/components/filters/toolbar/search-field";
 import { UnsavedBar } from "./unsaved-bar";
 import { DEFAULT_SORT, baselineFromState, discardToBaseline, isViewDirty, type SortState, type ViewBaseline } from "./view-state";
 

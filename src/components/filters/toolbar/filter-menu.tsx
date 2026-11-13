@@ -32,9 +32,11 @@ export interface FilterMenuProps {
   onOpenChange: (open: boolean) => void;
   /** Open straight on this field's editor (from a column header). A new nonce re-triggers it. */
   request?: { fieldKey: string; nonce: number } | null;
+  /** Defaults to the Leads test id so Leads renders byte-identically. */
+  testId?: string;
 }
 
-export function FilterMenu({ fields, tree, onChange, ctx, mostUsedKeys, variant, maxConditions, open, onOpenChange, request }: FilterMenuProps) {
+export function FilterMenu({ fields, tree, onChange, ctx, mostUsedKeys, variant, maxConditions, open, onOpenChange, request, testId = "leads-filter-trigger" }: FilterMenuProps) {
   const [screen, setScreen] = useState<Screen>({ kind: "menu" });
   const [seenNonce, setSeenNonce] = useState<number | null>(request?.nonce ?? null);
 
@@ -67,14 +69,14 @@ export function FilterMenu({ fields, tree, onChange, ctx, mostUsedKeys, variant,
     <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         {variant === "chip" ? (
-          <button type="button" data-testid="leads-filter-trigger" className={cn(CTRL_MUTED, open && "bg-ds-hover text-ds-ink")}>
+          <button type="button" data-testid={testId} className={cn(CTRL_MUTED, open && "bg-ds-hover text-ds-ink")}>
             <FunnelSimpleIcon className="size-4" />
             Filter
           </button>
         ) : (
           <button
             type="button"
-            data-testid="leads-filter-trigger"
+            data-testid={testId}
             aria-label="Add filter"
             title="Add filter"
             className={cn(CTRL_MUTED, "w-7 justify-center px-0", open && "bg-ds-hover text-ds-ink")}
