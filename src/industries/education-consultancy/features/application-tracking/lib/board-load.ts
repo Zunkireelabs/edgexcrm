@@ -221,7 +221,9 @@ export async function loadBoardSlice(
     pool = loaded.index.flat;
   }
   const page = slicePage(pool, input.offset, input.limit);
-  const cards = await fetchCards(input.supabase, input.tenantId, page.items.map((r) => r.id));
+  let cards = await fetchCards(input.supabase, input.tenantId, page.items.map((r) => r.id));
+  // List rows show the column the board places them in (a no-pipeline app sits in Default's start stage).
+  if (!input.stage) cards = cards.map((c) => ({ ...c, placed_stage_id: loaded.index.placedStage?.[c.id] ?? c.stage_id }));
   const summary = input.stage ? null : summarizeIndex(loaded.index, { tz: input.ctx.tz, nowMs: input.ctx.now.getTime() });
   return { ok: true, cards, total: page.total, hasMore: page.hasMore, truncated: loaded.truncated, filterError: loaded.filterError, summary };
 }

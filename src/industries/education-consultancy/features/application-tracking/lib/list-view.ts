@@ -26,7 +26,10 @@ export type ListColumnKey =
 export interface ListColumnDef {
   key: ListColumnKey;
   label: string;
-  /** Mockup colgroup widths. */
+  /**
+   * Mockup colgroup widths, except three headers that would truncate at the mockup's minimum
+   * (Time in stage 120 -> 140, Deadline 110 -> 120, Docs 80 -> 90). The table stretches past these.
+   */
   width: number;
   /** The column menu offers Sort ascending / descending. */
   sortField?: ApplicationSortField;
@@ -43,11 +46,11 @@ export const LIST_COLUMNS: Record<ListColumnKey, ListColumnDef> = {
   university: { key: "university", label: "University", width: 210, sortField: "university", filterFieldKey: "university" },
   program: { key: "program", label: "Program", width: 180, filterFieldKey: "program" },
   stage: { key: "stage", label: "Stage", width: 190, filterFieldKey: "stage" },
-  time_in_stage: { key: "time_in_stage", label: "Time in stage", width: 120, sortField: "stage", filterFieldKey: "time_in_stage" },
+  time_in_stage: { key: "time_in_stage", label: "Time in stage", width: 140, sortField: "stage", filterFieldKey: "time_in_stage" },
   counsellor: { key: "counsellor", label: "Counsellor", width: 160, filterFieldKey: "counsellor" },
   intake: { key: "intake", label: "Intake", width: 110, filterFieldKey: "intake" },
-  deadline: { key: "deadline", label: "Deadline", width: 110, sortField: "deadline", filterFieldKey: "deadline" },
-  docs: { key: "docs", label: "Docs", width: 80 },
+  deadline: { key: "deadline", label: "Deadline", width: 120, sortField: "deadline", filterFieldKey: "deadline" },
+  docs: { key: "docs", label: "Docs", width: 90 },
   country: { key: "country", label: "Country", width: 140, filterFieldKey: "country" },
   updated: { key: "updated", label: "Updated", width: 120, sortField: "updated", filterFieldKey: "updated_at" },
   offer_type: { key: "offer_type", label: "Offer type", width: 140, filterFieldKey: "offer_type" },

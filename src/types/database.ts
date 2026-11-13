@@ -1263,6 +1263,8 @@ export interface Application {
   // Board-only, attached by /applications page.tsx (not DB columns)
   doc_count?: number;
   open_task_count?: number;
+  /** List view (board-page, no stage): the column the board places this app in. */
+  placed_stage_id?: string | null;
 }
 
 // Deals / Opportunities (it_agency feature)

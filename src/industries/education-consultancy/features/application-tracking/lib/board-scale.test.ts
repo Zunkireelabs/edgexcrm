@@ -283,6 +283,13 @@ describe("Phase 4 list view over 2,500 apps", () => {
     });
   }
 
+  it("list cards carry the stage the board places them in", async () => {
+    const r = await listPage({}, 0, 100);
+    const seed = new Map(SEED.map((a) => [a.id, a]));
+    expect(r.cards.length).toBe(100);
+    for (const c of r.cards) expect(c.placed_stage_id).toBe(seed.get(c.id)!.stage_id);
+  });
+
   it("a column page carries no list summary", async () => {
     const r = await loadBoardSlice({ supabase: db() as never, tenantId: T, userId: ME, scope: ALL, ctx, meta: META, params: {}, stage: P1_STAGES[0].id, offset: 0, limit: 25 });
     expect(r.ok && r.summary).toBe(null);

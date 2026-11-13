@@ -2,7 +2,8 @@
 
 // Applications List view (EDGEX-141 Phase 4, mockup temp_ss/applications-list-v1.html): the Leads v2
 // table metrics (shared grid-styles, column menu, View settings, pagination) over the board's
-// filtered index. Pages come from GET /api/v1/applications/board-page (no stage) with the same URL
+// filtered index. No filler column: like the mockup, the fixed-layout table stretches its columns
+// across the width once it is wider than their sum (min-width = the sum). Pages come from GET /api/v1/applications/board-page (no stage) with the same URL
 // state the board uses; the footer summaries come back with every page.
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
@@ -178,7 +179,7 @@ function cellFor(key: ListColumnKey, app: Application, c: CellCtx): ReactNode {
     case "program":
       return <span className="text-ds-muted">{app.program_name || "—"}</span>;
     case "stage": {
-      const st = c.stageById.get(app.stage_id);
+      const st = c.stageById.get(app.placed_stage_id ?? app.stage_id);
       const inner = (
         <>
           <span className="size-2 shrink-0 rounded-full" style={{ background: st?.color ?? "#9a9ea5" }} />
@@ -203,7 +204,7 @@ function cellFor(key: ListColumnKey, app: Application, c: CellCtx): ReactNode {
     }
     case "time_in_stage": {
       const days = daysInStage(app.stage_changed_at, c.now);
-      const tone = ageTone(days, isFinishedStage(c.stageById.get(app.stage_id)));
+      const tone = ageTone(days, isFinishedStage(c.stageById.get(app.placed_stage_id ?? app.stage_id)));
       return (
         <span data-testid="age-pill" data-tone={tone} className={`inline-flex items-center rounded-[6px] px-1.5 text-xs font-medium leading-5 tabular-nums ${AGE_CLASS[tone]}`}>
           {days}d
@@ -344,7 +345,6 @@ const Row = memo(function Row({ app, keys, selected, anySelected, selectable, on
           {cellFor(k, app, cellCtx)}
         </td>
       ))}
-      <td className="h-9 border-b border-ds-border bg-ds-surface p-0 group-hover/row:bg-ds-hover" aria-hidden />
     </tr>
   );
 });
@@ -466,7 +466,7 @@ export function ApplicationsList(p: ApplicationsListProps) {
 
   async function moveOne(app: Application, stageId: string) {
     setStagePick(null);
-    if (stageId === app.stage_id) return;
+    if (stageId === (app.placed_stage_id ?? app.stage_id) && stageId === app.stage_id) return;
     setBusy(true);
     const res = await runBulkPatch([app.id], { stage_id: stageId }, fetchImpl);
     setBusy(false);
@@ -595,7 +595,6 @@ export function ApplicationsList(p: ApplicationsListProps) {
               {keys.map((k) => (
                 <col key={k} style={{ width: LIST_COLUMNS[k].width }} />
               ))}
-              <col />
             </colgroup>
             <thead>
               <tr>
@@ -654,7 +653,6 @@ export function ApplicationsList(p: ApplicationsListProps) {
                     </th>
                   );
                 })}
-                <th className="sticky top-0 z-20 h-[38px] border-b border-ds-border bg-ds-surface p-0" aria-hidden />
               </tr>
             </thead>
             <tbody>
@@ -670,7 +668,6 @@ export function ApplicationsList(p: ApplicationsListProps) {
                           <span className="block h-2.5 w-3/5 animate-pulse rounded-full bg-ds-hover" />
                         </td>
                       ))}
-                      <td className="h-9 border-b border-ds-border bg-ds-surface p-0" />
                     </tr>
                   ))
                 : rows.map((app) => (
@@ -708,7 +705,6 @@ export function ApplicationsList(p: ApplicationsListProps) {
                     {footerFor(k, summary)}
                   </td>
                 ))}
-                <td className="sticky bottom-0 z-20 h-9 border-t border-ds-border bg-ds-sunken p-0" aria-hidden />
               </tr>
             </tfoot>
           </table>
@@ -790,7 +786,7 @@ export function ApplicationsList(p: ApplicationsListProps) {
           onOpenChange={(o) => !o && setStagePick(null)}
           anchor={stagePick.anchor}
           placeholder="Move to stage…"
-          groups={stageGroups(stagePick.app.stage_id)}
+          groups={stageGroups(stagePick.app.placed_stage_id ?? stagePick.app.stage_id)}
           onPick={(stageId) => void moveOne(stagePick.app, stageId)}
           testId="row-stage-picker"
         />

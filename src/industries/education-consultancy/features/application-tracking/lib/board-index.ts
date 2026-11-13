@@ -35,6 +35,8 @@ export interface BoardIndex {
   byStage: Record<string, IndexRow[]>;
   /** stage id -> filtered apps in that column stuck STUCK_DAYS+ (active stages only). */
   stuckByStage: Record<string, number>;
+  /** app id -> the column it is placed in (may differ from its raw stage_id: no-pipeline apps). */
+  placedStage?: Record<string, string>;
 }
 
 export function buildBoardIndex(input: {
@@ -57,13 +59,15 @@ export function buildBoardIndex(input: {
     stuckByStage[s.id] = 0;
   }
   const cutoff = nowMs - STUCK_DAYS * 86_400_000;
+  const placedStage: Record<string, string> = {};
   for (const r of flat) {
     const sid = placements.get(r.id)?.stageId;
     if (!sid || !byStage[sid]) continue;
+    placedStage[r.id] = sid;
     byStage[sid].push(r);
     if (!finished.has(sid) && new Date(r.stage_changed_at).getTime() <= cutoff) stuckByStage[sid] += 1;
   }
-  return { flat, byStage, stuckByStage };
+  return { flat, byStage, stuckByStage, placedStage };
 }
 
 export interface PageSlice<T> {
