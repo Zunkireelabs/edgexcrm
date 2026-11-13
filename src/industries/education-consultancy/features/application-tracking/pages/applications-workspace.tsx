@@ -304,7 +304,12 @@ export function ApplicationsWorkspace({
   const fetchColumnPage = useCallback((stageId: string, offset: number) => requestPage({ stage: stageId, offset, limit: 25 }), [requestPage]);
 
   // List view (Phase 4): Leads-style pages of the flat filtered index, ?page= in the URL.
-  const listPage = parsePage(searchParams.get("page"));
+  // A page-size change resets to page 1. Until the URL drops ?page=, render page 1 anyway: otherwise
+  // the list would briefly see the old page with the new size and clamp it (a racing ?page= write).
+  const urlPage = searchParams.get("page");
+  const [forcePage1, setForcePage1] = useState(false);
+  if (forcePage1 && !urlPage) setForcePage1(false);
+  const listPage = forcePage1 ? 1 : parsePage(urlPage);
   const fetchListPage = useCallback(
     async (offset: number, limit: number): Promise<ListPage> => {
       const p = new URLSearchParams(boardQuery0);
@@ -322,9 +327,10 @@ export function ApplicationsWorkspace({
     (n: number) => {
       setPageSize(n);
       savePageSize(tenantId, userId, n);
+      if (searchParams.get("page")) setForcePage1(true);
       pushParam("page", null);
     },
-    [tenantId, userId, pushParam],
+    [tenantId, userId, pushParam, searchParams],
   );
   const [filterRequest, setFilterRequest] = useState<{ fieldKey: string; nonce: number } | null>(null);
   const filterFieldKeys = useMemo(() => new Set(pickerFields.map((f) => f.key)), [pickerFields]);
