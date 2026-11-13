@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-const CHUNK = 250; // keeps the id list under undici's 16 KB URL limit
+const CHUNK = 200; // 200 uuids ≈ 7.4 KB: each `.in()` URL stays under ~8 KB (undici caps at 16 KB)
 
 export function chunk<T>(items: T[], size = CHUNK): T[][] {
   const out: T[][] = [];

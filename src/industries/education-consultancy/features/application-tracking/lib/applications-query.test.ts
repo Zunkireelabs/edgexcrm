@@ -69,7 +69,10 @@ function leaf(expr: string, table: string | null): Pred {
 class FakeQuery implements PromiseLike<{ data: unknown; count: number | null; error: null }> {
   preds: Pred[] = [];
   log: string[] = [];
+  private window: [number, number] | null = null;
   constructor(private rows: Row[], private head: boolean) {}
+  order(c: string) { this.log.push(`order(${c})`); return this; }
+  range(from: number, to: number) { this.window = [from, to]; return this; }
   private add(label: string, p: Pred): this { this.log.push(label); this.preds.push(p); return this; }
   select() { return this; }
   eq(c: string, v: unknown) { return this.add(`eq(${c})`, (r) => c === "tenant_id" || getCol(r, c) === v); }
@@ -91,7 +94,8 @@ class FakeQuery implements PromiseLike<{ data: unknown; count: number | null; er
     return this.add(`or(${f})`, (r) => legs.some((p) => p(r)));
   }
   then<T1, T2>(ok?: (v: { data: unknown; count: number | null; error: null }) => T1 | PromiseLike<T1>, bad?: (e: unknown) => T2 | PromiseLike<T2>) {
-    const hit = this.rows.filter((r) => this.preds.every((p) => p(r)));
+    let hit = this.rows.filter((r) => this.preds.every((p) => p(r)));
+    if (this.window) hit = [...hit].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)).slice(this.window[0], this.window[1] + 1);
     return Promise.resolve({ data: this.head ? null : hit, count: this.head ? hit.length : null, error: null }).then(ok, bad);
   }
 }

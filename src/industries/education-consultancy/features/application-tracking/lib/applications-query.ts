@@ -4,7 +4,7 @@ import { pgLike } from "@/lib/filters/pgrst";
 import { applicationFields, CROSS_TABLE_KEYS } from "@/lib/filters/registry/applications";
 import type { CompileCtx, FilterCondition, FilterGroup, FilterLeafGroup, FilterTree } from "@/lib/filters/types";
 import type { Application } from "@/types/database";
-import { chunk } from "./board-counts";
+import { chunk, PAGE_SIZE } from "./board-counts";
 
 // The ONE place that turns an applications filter tree into PostgREST queries (EDGEX-141 Phase 2).
 //
@@ -13,8 +13,10 @@ import { chunk } from "./board-counts";
 // which PostgREST cannot express. Each is therefore split into DISJOINT branch queries that are
 // merged by id; because the branches never overlap, exact head counts simply add up.
 //
-// Phase 3 swaps this helper for per-column paging, later for a DB view (EDGEX-165). Keep every
-// caller going through runApplicationsQuery.
+// Phase 3: rows mode pages through EVERY matching row (.order("id").range()), never stopping at
+// PostgREST's 1000-row cap; a safety ceiling flags `truncated` instead of returning a wrong count.
+// A DB view (EDGEX-165) replaces this in-memory index later. Keep every caller going through
+// runApplicationsQuery.
 
 const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -25,11 +27,15 @@ export const DEFAULT_APPLICATION_SORT: ApplicationSort = "stage";
 export const APPLICATION_SELECT =
   "*, leads!applications_lead_id_fkey!inner(id,first_name,last_name,email,assigned_to)";
 /**
- * Lightweight shape of the UNFILTERED read: header total, tab counts, stage + pipeline totals, and
- * the filter menu's option lists + per-option counts (intake / country / offer type). See board-data.ts.
+ * The board INDEX row (Phase 3): enough to place, count, facet and sort every application without
+ * loading its card. Used for both the unfiltered read (tab counts, "of T", stage + pipeline totals,
+ * filter options + counts; board-data.ts) and the filtered read (column counts, "N", card order).
  */
 export const APPLICATION_LIGHT_SELECT =
-  "id, lead_id, stage_id, pipeline_id, stage_changed_at, assigned_to, intake_term, countries, offer_type, leads!applications_lead_id_fkey!inner(assigned_to)";
+  "id, lead_id, stage_id, pipeline_id, stage_changed_at, created_at, updated_at, university_name, application_deadline, assigned_to, intake_term, countries, offer_type, leads!applications_lead_id_fkey!inner(assigned_to)";
+
+/** Rows mode stops here (log + `truncated`) rather than reading an unbounded tenant into memory. */
+export const INDEX_ROW_CEILING = 50_000;
 
 export interface ApplicationsScope {
   /** null = no lead-id restriction; [] = empty result (own-scope with no visible leads). */
@@ -165,7 +171,7 @@ export function planApplicationsQuery(tree: FilterTree, tab: ApplicationsTab = {
 
 // ── Branches (pure, tested with a fake builder) ────────────────────────────────────
 
-type ApplicationsBuilder = QueryBuilder & {
+export type ApplicationsBuilder = QueryBuilder & {
   or(filters: string, opts?: { referencedTable?: string }): ApplicationsBuilder;
 };
 type Apply = (b: ApplicationsBuilder) => ApplicationsBuilder;
@@ -250,10 +256,17 @@ export function buildBranches(plan: ApplicationsPlan): Branch[] {
 
 type SortRow = Pick<Application, "created_at" | "updated_at" | "stage_changed_at" | "university_name" | "application_deadline">;
 
-export function sortApplications<T extends SortRow>(rows: T[], sort: ApplicationSort): T[] {
+/**
+ * Total order: every sort ends on `id`, so two reads of the same rows (page load, then a
+ * "Show more" request) always agree on which card is at which offset.
+ */
+export function sortApplications<T extends SortRow & { id: string }>(rows: T[], sort: ApplicationSort): T[] {
   const cmpStr = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
   const out = [...rows];
-  out.sort((a, b) => {
+  out.sort((a, b) => primary(a, b) || cmpStr(a.id, b.id));
+  return out;
+
+  function primary(a: T, b: T): number {
     switch (sort) {
       case "newest":
         return cmpStr(b.created_at, a.created_at);
@@ -273,8 +286,7 @@ export function sortApplications<T extends SortRow>(rows: T[], sort: Application
         // longest in stage first = oldest stage_changed_at first
         return cmpStr(a.stage_changed_at, b.stage_changed_at);
     }
-  });
-  return out;
+  }
 }
 
 // ── Runner ─────────────────────────────────────────────────────────────────────
@@ -293,14 +305,19 @@ export interface RunApplicationsQueryInput {
   mode: "rows" | "count";
   /** rows mode only. Defaults to the full board select. */
   select?: string;
+  /** Extra filters ANDed onto every branch query (GET /api/v1/applications' stage_id, status, …). */
+  refine?: (b: ApplicationsBuilder) => ApplicationsBuilder;
+  /** rows mode only: stop (and set `truncated`) past this many rows. Defaults to INDEX_ROW_CEILING. */
+  maxRows?: number;
 }
 
 export type RunApplicationsQueryResult =
-  | { ok: true; mode: "rows"; rows: Application[]; branches: number }
+  | { ok: true; mode: "rows"; rows: Application[]; branches: number; truncated: boolean }
   | { ok: true; mode: "count"; count: number; branches: number }
   | { ok: false; error: string };
 
-const SCOPE_CHUNK = 250;
+// 200 lead uuids ≈ 7.4 KB of query string: the URL stays under ~8 KB with the other filters.
+const SCOPE_CHUNK = 200;
 
 export async function runApplicationsQuery(input: RunApplicationsQueryInput): Promise<RunApplicationsQueryResult> {
   const { supabase, tenantId, scope, tree, ctx, mode } = input;
@@ -315,7 +332,7 @@ export async function runApplicationsQuery(input: RunApplicationsQueryInput): Pr
 
   const branches = buildBranches(plan);
   if (scope.leadIds !== null && scope.leadIds.length === 0) {
-    return mode === "count" ? { ok: true, mode, count: 0, branches: 0 } : { ok: true, mode, rows: [], branches: 0 };
+    return mode === "count" ? { ok: true, mode, count: 0, branches: 0 } : { ok: true, mode, rows: [], branches: 0, truncated: false };
   }
   const chunks: (string[] | undefined)[] = scope.leadIds === null ? [undefined] : chunk(scope.leadIds, SCOPE_CHUNK);
   const select = input.select ?? APPLICATION_SELECT;
@@ -343,25 +360,61 @@ export async function runApplicationsQuery(input: RunApplicationsQueryInput): Pr
   };
 
   if (branches.length === 0) {
-    return mode === "count" ? { ok: true, mode, count: 0, branches: 0 } : { ok: true, mode, rows: [], branches: 0 };
+    return mode === "count" ? { ok: true, mode, count: 0, branches: 0 } : { ok: true, mode, rows: [], branches: 0, truncated: false };
   }
 
-  const calls = chunks.flatMap((lead) => branches.map((br) => br.apply(shape(base(lead)))));
-  const results = await Promise.all(calls.map((c) => c as unknown as PromiseLike<{ data: unknown; count: number | null; error: { message: string } | null }>));
-  const failed = results.find((r) => r.error);
-  if (failed?.error) return { ok: false, error: failed.error.message };
+  const refine = input.refine ?? ((b: ApplicationsBuilder) => b);
+  const build = (lead: string[] | undefined, br: Branch) => br.apply(refine(shape(base(lead))));
+  type Res = { data: unknown; count: number | null; error: { message: string } | null };
 
   if (mode === "count") {
+    const results = await Promise.all(chunks.flatMap((lead) => branches.map((br) => build(lead, br) as unknown as PromiseLike<Res>)));
+    const failed = results.find((r) => r.error);
+    if (failed?.error) return { ok: false, error: failed.error.message };
     return { ok: true, mode, count: results.reduce((n, r) => n + (r.count ?? 0), 0), branches: branches.length };
   }
+
+  // Rows: every (scope chunk x branch) query is read page by page until a short page comes back.
+  // The query is rebuilt per page (a builder is single-use) and ordered by id so pages never
+  // overlap or skip. One shared budget enforces the ceiling across the parallel calls.
+  const ceiling = input.maxRows ?? INDEX_ROW_CEILING;
+  let read = 0;
+  let truncated = false;
+  const readAll = async (lead: string[] | undefined, br: Branch): Promise<{ rows: Application[]; error: string | null }> => {
+    const rows: Application[] = [];
+    for (let from = 0; ; from += PAGE_SIZE) {
+      if (read >= ceiling) {
+        truncated = true;
+        return { rows, error: null };
+      }
+      const page = build(lead, br) as unknown as { order(c: string): { range(a: number, b: number): PromiseLike<Res> } };
+      const r = await page.order("id").range(from, from + PAGE_SIZE - 1);
+      if (r.error) return { rows, error: r.error.message };
+      const got = (r.data ?? []) as Application[];
+      rows.push(...got);
+      read += got.length;
+      if (got.length < PAGE_SIZE) return { rows, error: null };
+    }
+  };
+  const results = await Promise.all(chunks.flatMap((lead) => branches.map((br) => readAll(lead, br))));
+  const failed = results.find((r) => r.error);
+  if (failed?.error) return { ok: false, error: failed.error };
+
   const seen = new Set<string>();
   const merged: Application[] = [];
   for (const r of results) {
-    for (const row of (r.data ?? []) as Application[]) {
+    for (const row of r.rows) {
       if (seen.has(row.id)) continue;
       seen.add(row.id);
       merged.push(row);
     }
   }
-  return { ok: true, mode, rows: sortApplications(merged, input.sort ?? DEFAULT_APPLICATION_SORT), branches: branches.length };
+  if (truncated) {
+    console.error("[applications-query] index read hit the row ceiling; numbers are a lower bound", {
+      tenantId, ceiling, rows: merged.length,
+    });
+  }
+  return {
+    ok: true, mode, rows: sortApplications(merged, input.sort ?? DEFAULT_APPLICATION_SORT), branches: branches.length, truncated,
+  };
 }
