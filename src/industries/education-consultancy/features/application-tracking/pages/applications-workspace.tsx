@@ -468,7 +468,7 @@ export function ApplicationsWorkspace({
 
       {/* Content */}
       {view === "board" ? (
-        <div ref={boardAreaRef} className="relative flex-1 min-h-0 overflow-hidden">
+        <div ref={boardAreaRef} className="relative flex-1 min-h-0 overflow-hidden max-md:flex-none max-md:overflow-visible">
           <ApplicationsBoard
             key={selectedPipelineId}
             stages={filteredStages}
@@ -487,17 +487,18 @@ export function ApplicationsWorkspace({
             assigneeNames={assigneeNames}
             columnWidth={COLUMN_WIDTH_PX[columnWidth]}
             detailHref={detailHref}
+            phone={phone}
           />
           {showNoMatches && (
             <div
               data-testid="no-matches"
               style={emptySlot}
-              className="pointer-events-none absolute inset-x-0 flex flex-col items-center overflow-y-auto text-center"
+              className="pointer-events-none absolute inset-x-0 flex flex-col items-center overflow-y-auto text-center max-md:static max-md:px-6 max-md:pt-14"
             >
-              <div className="mb-3.5 flex h-[120px] w-[120px] items-center justify-center rounded-[20px] bg-[#f3f4f6]">
-                <MagnifyingGlassIcon className="h-9 w-9 text-[#9a9ea5]" />
+              <div className="mb-3.5 flex h-[120px] w-[120px] items-center justify-center rounded-[20px] bg-[#f3f4f6] max-md:size-[96px] max-md:rounded-[18px]">
+                <MagnifyingGlassIcon className="h-9 w-9 text-[#9a9ea5] max-md:size-7" />
               </div>
-              <h3 className="mb-1 text-[18px] font-semibold text-[#101112]">No applications match these filters</h3>
+              <h3 className="mb-1 text-[18px] font-semibold text-[#101112] max-md:text-[17px]">No applications match these filters</h3>
               <p className="mb-3.5 max-w-[340px] text-[13px] text-[#6b6f76]">
                 Try removing a filter, or check the spelling of your search.
               </p>
@@ -517,10 +518,10 @@ export function ApplicationsWorkspace({
             <div
               data-testid="empty-pipeline"
               style={emptySlot}
-              className="pointer-events-none absolute inset-x-0 flex flex-col items-center overflow-y-auto text-center"
+              className="pointer-events-none absolute inset-x-0 flex flex-col items-center overflow-y-auto text-center max-md:static max-md:px-6 max-md:pt-14"
             >
-              <div className="mb-3.5 flex h-[120px] w-[120px] items-center justify-center rounded-[20px] bg-[#f3f4f6]">
-                <div className="flex h-[84px] w-[72px] flex-col gap-[7px] rounded-[14px] bg-white p-[14px_12px] shadow-[0_0_0_1px_#e3e4e7,0_2px_6px_rgba(0,0,0,.05)]">
+              <div className="mb-3.5 flex h-[120px] w-[120px] items-center justify-center rounded-[20px] bg-[#f3f4f6] max-md:size-[96px] max-md:rounded-[18px]">
+                <div className="flex h-[84px] w-[72px] max-md:h-[68px] max-md:w-[58px] max-md:gap-1.5 max-md:rounded-[12px] max-md:p-[11px_10px] flex-col gap-[7px] rounded-[14px] bg-white p-[14px_12px] shadow-[0_0_0_1px_#e3e4e7,0_2px_6px_rgba(0,0,0,.05)]">
                   <i className="block h-1.5 rounded-[3px] bg-[#e6e7ea]" />
                   <i className="block h-1.5 w-3/4 rounded-[3px] bg-[#e6e7ea]" />
                   <i className="block h-1.5 w-1/2 rounded-[3px] bg-[#e6e7ea]" />

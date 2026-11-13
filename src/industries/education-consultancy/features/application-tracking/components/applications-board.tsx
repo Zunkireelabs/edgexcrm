@@ -26,6 +26,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { ApplicationColumn, SlimColumn } from "./application-column";
 import { ApplicationCard } from "./application-card";
+import { PhoneBoard } from "./phone-board";
 import { STUCK_DAYS, daysInStage, isFinishedStage } from "../lib/card-metrics";
 import { COLUMN_PAGE_SIZE, type BoardPayload } from "../lib/board-index";
 import {
@@ -108,6 +109,11 @@ interface ApplicationsBoardProps {
   onEditStages: (opts?: { addStage?: boolean }) => void;
   /** user_id -> display name, for resolving a card's counsellor. */
   assigneeNames?: Record<string, string>;
+  /**
+   * Below md (EDGEX-141 Phase 5): one stage at a time with a stage strip, no drag (no DndContext),
+   * and a Move sheet for admins. Same columns, paging and pinning.
+   */
+  phone?: boolean;
 }
 
 export function ApplicationsBoard({
@@ -125,6 +131,7 @@ export function ApplicationsBoard({
   onAddToStage,
   onEditStages,
   assigneeNames,
+  phone = false,
 }: ApplicationsBoardProps) {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
@@ -376,6 +383,24 @@ export function ApplicationsBoard({
   }
 
   if (!mounted) return <div className="h-full" />;
+
+  if (phone) {
+    return (
+      <PhoneBoard
+        stages={stages}
+        columns={columns}
+        setColumns={setColumns}
+        loadPage={loadPage}
+        pinRef={pinRef}
+        canManageApplications={canManageApplications}
+        trackTime={(id) => !prefs.noAge.includes(id)}
+        assigneeNames={assigneeNames}
+        onOpenDetail={handleOpenDetail}
+        onAddToStage={onAddToStage}
+        onRefresh={onRefresh}
+      />
+    );
+  }
 
   const visibleStages = stages.filter((s) => !prefs.hidden.includes(s.id));
   const hiddenStages = stages.filter((s) => prefs.hidden.includes(s.id));

@@ -64,7 +64,7 @@ export default async function ApplicationsRoute({ searchParams }: { searchParams
   }));
 
   return (
-    <div className="flex flex-col h-[calc(100vh-90px)]">
+    <div className="flex flex-col h-[calc(100vh-90px)] max-md:h-auto">
       <ApplicationsWorkspace
         stages={meta.stages}
         board={board}
