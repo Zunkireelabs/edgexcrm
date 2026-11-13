@@ -23,3 +23,48 @@ describe("column width pref", () => {
     expect(COLUMN_WIDTH_PX).toEqual({ narrow: 232, wide: 268 });
   });
 });
+
+// Fix round 2 (A1): the Applications pill chip + dashed "+" are opt-in variants; Leads keeps the defaults.
+import { FilterChips } from "./filter-chips";
+import { FilterMenu } from "./filter-menu";
+import type { FieldDef, FilterTree } from "@/lib/filters/types";
+
+const FIELD = { key: "offer_type", label: "Offer type", type: "select", filterable: true, options: [{ value: "conditional", label: "Conditional" }] } as unknown as FieldDef;
+const TREE: FilterTree = { conjunction: "and", conditions: [{ id: "c1", field: "offer_type", op: "is_any_of", value: ["conditional"] }] };
+const CTX = { getOptions: (f: FieldDef) => (f.options ?? []).map((o) => ({ value: o.value, label: o.label })), countSources: {} };
+
+describe("FilterChips variants", () => {
+  it("default (Leads) is the segmented chip with dividers", () => {
+    const html = renderToStaticMarkup(<FilterChips fields={[FIELD]} tree={TREE} onChange={() => {}} ctx={CTX} maxConditions={12} />);
+    expect(html).toContain("border-l border-ds-divider");
+    expect(html).not.toContain('data-variant="pill"');
+  });
+  it("pill (Applications) is one bordered pill: no dividers, each part still a button", () => {
+    const html = renderToStaticMarkup(<FilterChips fields={[FIELD]} tree={TREE} onChange={() => {}} ctx={CTX} maxConditions={12} variant="pill" />);
+    expect(html).toContain('data-variant="pill"');
+    expect(html).not.toContain("border-l");
+    expect(html).toContain("h-7");
+    expect(html).toContain("rounded-[8px] border border-ds-border bg-ds-sunken px-2.5 text-[13px]");
+    for (const label of ["Edit Offer type filter", "Change Offer type operator", "Edit Offer type value", "Remove Offer type filter"]) {
+      expect(html).toContain(`aria-label="${label}"`);
+    }
+    expect(html).toContain("Conditional");
+  });
+});
+
+describe("FilterMenu add button variants", () => {
+  const menu = (variant: "chip" | "plus" | "dashed-plus") =>
+    renderToStaticMarkup(
+      <FilterMenu fields={[FIELD]} tree={TREE} onChange={() => {}} ctx={CTX} mostUsedKeys={[]} variant={variant} maxConditions={12} open={false} onOpenChange={() => {}} />,
+    );
+  it("Leads' plus is unchanged (no dashed border)", () => {
+    expect(menu("plus")).not.toContain("border-dashed");
+    expect(menu("plus")).toContain('data-testid="leads-filter-trigger"');
+  });
+  it("dashed-plus is the 28px dashed ghost button", () => {
+    const html = menu("dashed-plus");
+    expect(html).toContain("h-7");
+    expect(html).toContain("border border-dashed border-ds-ghost");
+    expect(html).toContain('aria-label="Add filter"');
+  });
+});

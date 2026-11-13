@@ -25,8 +25,11 @@ export interface FilterMenuProps {
   ctx: OptionContext;
   /** Registry keys offered first (Stage, Assigned to, Last activity). */
   mostUsedKeys: string[];
-  /** "chip" = the "Filter" control; "plus" = the icon-only add button shown once chips exist. */
-  variant: "chip" | "plus";
+  /**
+   * "chip" = the "Filter" control; "plus" = the icon-only add button shown once chips exist;
+   * "dashed-plus" = the Applications add button (mockup state 2: 28px tall, dashed ghost border).
+   */
+  variant: "chip" | "plus" | "dashed-plus";
   maxConditions: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -72,6 +75,19 @@ export function FilterMenu({ fields, tree, onChange, ctx, mostUsedKeys, variant,
           <button type="button" data-testid={testId} className={cn(CTRL_MUTED, open && "bg-ds-hover text-ds-ink")}>
             <FunnelSimpleIcon className="size-4" />
             Filter
+          </button>
+        ) : variant === "dashed-plus" ? (
+          <button
+            type="button"
+            data-testid={testId}
+            aria-label="Add filter"
+            title="Add filter"
+            className={cn(
+              "inline-flex h-7 shrink-0 items-center justify-center rounded-[8px] border border-dashed border-ds-ghost px-2.5 text-ds-muted transition-colors hover:bg-ds-hover hover:text-ds-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ds-ghost",
+              open && "bg-ds-hover text-ds-ink",
+            )}
+          >
+            <PlusIcon className="size-[15px]" />
           </button>
         ) : (
           <button

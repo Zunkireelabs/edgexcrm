@@ -188,14 +188,14 @@ export function ApplicationsToolbar(p: ApplicationsToolbarProps) {
           testId="applications-search"
         />
         <SortChip sort={p.sort} onChange={p.onSort} />
-        <FilterChips fields={p.fields} tree={p.tree} onChange={p.onTreeChange} ctx={p.optionCtx} maxConditions={maxConditions} />
+        <FilterChips fields={p.fields} tree={p.tree} onChange={p.onTreeChange} ctx={p.optionCtx} maxConditions={maxConditions} variant="pill" />
         <FilterMenu
           fields={p.fields}
           tree={p.tree}
           onChange={p.onTreeChange}
           ctx={p.optionCtx}
           mostUsedKeys={p.mostUsedKeys}
-          variant={hasFilters ? "plus" : "chip"}
+          variant={hasFilters ? "dashed-plus" : "chip"}
           maxConditions={maxConditions}
           open={filterOpen}
           onOpenChange={setFilterOpen}

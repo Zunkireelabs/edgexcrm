@@ -21,6 +21,9 @@ import { ITEM, POP } from "./tokens";
 
 const SEG = "flex items-center gap-1.5 px-2 transition-colors hover:bg-ds-hover focus-visible:outline-none focus-visible:bg-ds-hover";
 const SEG_DIVIDER = "border-l border-ds-divider";
+/** A clickable part of the pill chip: no box of its own, the pill's 6px gap spaces the parts. */
+const PILL_PART =
+  "inline-flex items-center gap-1.5 rounded-[4px] transition-colors hover:text-ds-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ds-ghost";
 
 /** Plain-word operator choices for a pick-list field: is / is not / is empty / is not empty. */
 const OPTION_FIELD_OPS: { op: FilterOperator; label: string }[] = [
@@ -38,9 +41,15 @@ export interface FilterChipsProps {
   onChange: (tree: FilterTree) => void;
   ctx: OptionContext;
   maxConditions: number;
+  /**
+   * "segmented" (default) = the Leads chip: four bordered segments with dividers.
+   * "pill" = the Applications chip (applications-board mockup state 2): one 28px pill, icon + field +
+   * muted operator + bold value + ×, no dividers. Each part still opens the same editor.
+   */
+  variant?: "segmented" | "pill";
 }
 
-export function FilterChips({ fields, tree, onChange, ctx, maxConditions }: FilterChipsProps) {
+export function FilterChips({ fields, tree, onChange, ctx, maxConditions, variant = "segmented" }: FilterChipsProps) {
   const byKey = useMemo(() => new Map(fields.map((f) => [f.key, f])), [fields]);
   return (
     <>
@@ -56,6 +65,7 @@ export function FilterChips({ fields, tree, onChange, ctx, maxConditions }: Filt
             onChange={onChange}
             ctx={ctx}
             canAdd={tree.conditions.length < maxConditions}
+            variant={variant}
           />
         );
       })}
@@ -72,6 +82,7 @@ function SentenceChip({
   onChange,
   ctx,
   canAdd,
+  variant,
 }: {
   field: FieldDef;
   condition: FilterCondition;
@@ -79,6 +90,7 @@ function SentenceChip({
   onChange: (tree: FilterTree) => void;
   ctx: OptionContext;
   canAdd: boolean;
+  variant: "segmented" | "pill";
 }) {
   const [mode, setMode] = useState<Mode>(null);
   // An operator change whose value isn't valid yet (e.g. "contains" with nothing typed) opens the
@@ -124,32 +136,62 @@ function SentenceChip({
   return (
     <Popover open={mode !== null} onOpenChange={(o) => !o && close()}>
       <PopoverAnchor asChild>
-        <span
-          data-testid="filter-chip"
-          className="inline-flex h-7 shrink-0 items-stretch overflow-hidden rounded-ds-sm bg-ds-surface text-sm font-medium shadow-[inset_0_0_0_1px_var(--ds-border)]"
-        >
-          <button type="button" className={cn(SEG, "text-ds-muted")} onClick={() => setMode("edit")} aria-label={`Edit ${field.label} filter`}>
-            <FieldIcon field={field} className="size-4 shrink-0" />
-            {field.label}
-          </button>
-          <button type="button" className={cn(SEG, SEG_DIVIDER, "text-ds-muted")} onClick={() => setMode("operator")} aria-label={`Change ${field.label} operator`}>
-            {plainOperatorLabel(condition)}
-          </button>
-          {hasValue && (
-            <button type="button" className={cn(SEG, SEG_DIVIDER, "text-ds-ink")} onClick={() => setMode("edit")} aria-label={`Edit ${field.label} value`}>
-              {dot && <span aria-hidden="true" className="size-2 shrink-0 rounded-full" style={{ backgroundColor: dot }} />}
-              <span className="max-w-[220px] truncate">{valueText || "…"}</span>
-            </button>
-          )}
-          <button
-            type="button"
-            className={cn(SEG, SEG_DIVIDER, "px-1.5 text-ds-faint hover:text-ds-ink")}
-            onClick={() => onChange(removeCondition(tree, condition.id))}
-            aria-label={`Remove ${field.label} filter`}
+        {variant === "pill" ? (
+          <span
+            data-testid="filter-chip"
+            data-variant="pill"
+            className="inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[8px] border border-ds-border bg-ds-sunken px-2.5 text-[13px] font-medium text-ds-ink"
           >
-            <XIcon className="size-3.5" />
-          </button>
-        </span>
+            <button type="button" className={PILL_PART} onClick={() => setMode("edit")} aria-label={`Edit ${field.label} filter`}>
+              <FieldIcon field={field} className="size-[15px] shrink-0" />
+              {field.label}
+            </button>
+            <button type="button" className={cn(PILL_PART, "font-normal text-ds-muted")} onClick={() => setMode("operator")} aria-label={`Change ${field.label} operator`}>
+              {plainOperatorLabel(condition)}
+            </button>
+            {hasValue && (
+              <button type="button" className={cn(PILL_PART, "font-semibold")} onClick={() => setMode("edit")} aria-label={`Edit ${field.label} value`}>
+                {dot && <span aria-hidden="true" className="size-2 shrink-0 rounded-full" style={{ backgroundColor: dot }} />}
+                <span className="max-w-[220px] truncate">{valueText || "…"}</span>
+              </button>
+            )}
+            <button
+              type="button"
+              className={cn(PILL_PART, "text-ds-faint hover:text-ds-ink")}
+              onClick={() => onChange(removeCondition(tree, condition.id))}
+              aria-label={`Remove ${field.label} filter`}
+            >
+              ×
+            </button>
+          </span>
+        ) : (
+          <span
+            data-testid="filter-chip"
+            className="inline-flex h-7 shrink-0 items-stretch overflow-hidden rounded-ds-sm bg-ds-surface text-sm font-medium shadow-[inset_0_0_0_1px_var(--ds-border)]"
+          >
+            <button type="button" className={cn(SEG, "text-ds-muted")} onClick={() => setMode("edit")} aria-label={`Edit ${field.label} filter`}>
+              <FieldIcon field={field} className="size-4 shrink-0" />
+              {field.label}
+            </button>
+            <button type="button" className={cn(SEG, SEG_DIVIDER, "text-ds-muted")} onClick={() => setMode("operator")} aria-label={`Change ${field.label} operator`}>
+              {plainOperatorLabel(condition)}
+            </button>
+            {hasValue && (
+              <button type="button" className={cn(SEG, SEG_DIVIDER, "text-ds-ink")} onClick={() => setMode("edit")} aria-label={`Edit ${field.label} value`}>
+                {dot && <span aria-hidden="true" className="size-2 shrink-0 rounded-full" style={{ backgroundColor: dot }} />}
+                <span className="max-w-[220px] truncate">{valueText || "…"}</span>
+              </button>
+            )}
+            <button
+              type="button"
+              className={cn(SEG, SEG_DIVIDER, "px-1.5 text-ds-faint hover:text-ds-ink")}
+              onClick={() => onChange(removeCondition(tree, condition.id))}
+              aria-label={`Remove ${field.label} filter`}
+            >
+              <XIcon className="size-3.5" />
+            </button>
+          </span>
+        )}
       </PopoverAnchor>
       <PopoverContent align="start" sideOffset={4} className={POP}>
         {mode === "operator" ? (

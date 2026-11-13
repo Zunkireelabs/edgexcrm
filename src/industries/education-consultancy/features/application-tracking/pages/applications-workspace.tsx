@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import {
   PlusIcon,
   ColumnsIcon,
@@ -33,6 +33,7 @@ import {
   resolveBoardPlacement,
 } from "../lib/board-placement";
 import { resolvePipelineSelection } from "../lib/pipeline-selection";
+import { useEmptyStateSlot } from "../hooks/use-empty-state-slot";
 import { applicationDetailHref, decodeApplicationParams, withParam, withPipelineSwitch } from "../lib/applications-url";
 import type { BoardTotals } from "../lib/board-data";
 import { DEFAULT_APPLICATION_SORT } from "../lib/applications-query";
@@ -302,6 +303,9 @@ export function ApplicationsWorkspace({
   // pipeline stays the real empty state even under a tab.
   const knownEmptyPipeline = !totals.degraded && pipelineTotal === 0;
   const showNoMatches = pipelineIsEmpty && anythingActive && !knownEmptyPipeline && filteredStages.length > 0;
+  const showEmptyPipeline = pipelineIsEmpty && !showNoMatches && filteredStages.length > 0;
+  const boardAreaRef = useRef<HTMLDivElement>(null);
+  const emptySlot = useEmptyStateSlot(boardAreaRef, view === "board" && (showNoMatches || showEmptyPipeline));
   const settingsPipeline = settingsState ? allPipelines.find((p) => p.id === settingsState.pipelineId) ?? null : null;
 
   return (
@@ -389,15 +393,16 @@ export function ApplicationsWorkspace({
         >
           <InfoIcon className="h-[14px] w-[14px] shrink-0 text-[#9a9ea5]" />
           <span>
-            <b className="font-semibold text-[#101112]">{noPipelineTotal}</b> applications have no pipeline yet — they&apos;re
-            shown here under Default.
+            <b className="font-semibold text-[#101112]">{noPipelineTotal}</b>{" "}
+            {noPipelineTotal === 1 ? "application has no pipeline yet — it's" : "applications have no pipeline yet — they're"} shown
+            here under Default.
           </span>
         </div>
       )}
 
       {/* Content */}
       {view === "board" ? (
-        <div className="relative flex-1 min-h-0 overflow-hidden">
+        <div ref={boardAreaRef} className="relative flex-1 min-h-0 overflow-hidden">
           <ApplicationsBoard
             key={selectedPipelineId}
             stages={filteredStages}
@@ -420,7 +425,8 @@ export function ApplicationsWorkspace({
           {showNoMatches && (
             <div
               data-testid="no-matches"
-              className="pointer-events-none absolute inset-x-0 top-[170px] flex flex-col items-center text-center"
+              style={emptySlot}
+              className="pointer-events-none absolute inset-x-0 flex flex-col items-center overflow-y-auto text-center"
             >
               <div className="mb-3.5 flex h-[120px] w-[120px] items-center justify-center rounded-[20px] bg-[#f3f4f6]">
                 <MagnifyingGlassIcon className="h-9 w-9 text-[#9a9ea5]" />
@@ -441,10 +447,11 @@ export function ApplicationsWorkspace({
               </div>
             </div>
           )}
-          {pipelineIsEmpty && !showNoMatches && filteredStages.length > 0 && (
+          {showEmptyPipeline && (
             <div
               data-testid="empty-pipeline"
-              className="pointer-events-none absolute inset-x-0 top-[170px] flex flex-col items-center text-center"
+              style={emptySlot}
+              className="pointer-events-none absolute inset-x-0 flex flex-col items-center overflow-y-auto text-center"
             >
               <div className="mb-3.5 flex h-[120px] w-[120px] items-center justify-center rounded-[20px] bg-[#f3f4f6]">
                 <div className="flex h-[84px] w-[72px] flex-col gap-[7px] rounded-[14px] bg-white p-[14px_12px] shadow-[0_0_0_1px_#e3e4e7,0_2px_6px_rgba(0,0,0,.05)]">

@@ -333,7 +333,7 @@ export function ApplicationsBoard({
   return (
     <>
       {hiddenStages.length > 0 && (
-        <div className="mb-2 flex shrink-0 flex-wrap items-center gap-1.5 text-[12px] text-[#6b6f76]">
+        <div data-board-chrome className="mb-2 flex shrink-0 flex-wrap items-center gap-1.5 text-[12px] text-[#6b6f76]">
           <span>{hiddenStages.length} hidden:</span>
           {hiddenStages.map((s) => (
             <button
