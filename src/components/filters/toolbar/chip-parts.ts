@@ -62,3 +62,17 @@ export function conditionForPickedValues(
 export function toggleValue(current: string[], value: string): string[] {
   return current.includes(value) ? current.filter((v) => v !== value) : [...current, value];
 }
+
+/** Filter fields whose values are people (counsellors, assignees, collaborators). */
+const PERSON_FIELD_KEYS = new Set(["counsellor", "assignees", "collaborators"]);
+
+export function isPersonField(field: FieldDef): boolean {
+  return PERSON_FIELD_KEYS.has(field.key);
+}
+
+/** "Gita Karki" -> "Gita K." (phone chips, mockup state 2). One-word names stay as they are. */
+export function shortPersonName(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length < 2) return name;
+  return `${parts[0]} ${parts[parts.length - 1][0].toUpperCase()}.`;
+}

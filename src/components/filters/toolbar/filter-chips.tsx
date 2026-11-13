@@ -13,7 +13,7 @@ import { conditionSchema } from "@/lib/filters/schema";
 import { operatorsForField } from "@/lib/filters/operators";
 import type { FieldDef, FilterCondition, FilterOperator, FilterTree } from "@/lib/filters/types";
 import { cn } from "@/lib/utils";
-import { chipValueText, conditionHasValue, isOptionField, plainOperatorLabel, selectedValues } from "./chip-parts";
+import { chipValueText, conditionHasValue, isOptionField, isPersonField, plainOperatorLabel, selectedValues, shortPersonName } from "./chip-parts";
 import { ConditionBody, type OptionContext } from "./condition-body";
 import { FieldIcon } from "./field-icon";
 import { toOptionRows } from "./option-view";
@@ -115,8 +115,10 @@ function SentenceChip({
   const cleanOptions = useMemo(() => rows.map((r) => ({ value: r.value, label: r.label, color: r.color })), [rows]);
 
   const hasValue = conditionHasValue(condition.op);
-  const valueText = chipValueText(condition, cleanOptions);
   const picked = selectedValues(condition);
+  // Phone chips are narrow: a single person reads "Gita K."; the full name stays in the edit sheet.
+  const fullValueText = chipValueText(condition, cleanOptions);
+  const valueText = container === "sheet" && isPersonField(field) && picked.length === 1 ? shortPersonName(fullValueText) : fullValueText;
   const dot = picked.length === 1 ? rows.find((r) => r.value === picked[0])?.color : undefined;
 
   function close() {
