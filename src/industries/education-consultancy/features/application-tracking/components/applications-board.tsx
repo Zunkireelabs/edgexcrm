@@ -26,7 +26,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { ApplicationColumn, SlimColumn } from "./application-column";
 import { ApplicationCard } from "./application-card";
-import { isFinishedStage } from "../lib/card-metrics";
+import { STUCK_DAYS, daysInStage, isFinishedStage } from "../lib/card-metrics";
+import { COLUMN_PAGE_SIZE, type BoardPayload } from "../lib/board-index";
 import {
   EMPTY_PREFS,
   isStageCollapsed,
@@ -37,28 +38,50 @@ import {
   writeBoardPrefs,
   type BoardPrefs,
 } from "../lib/board-prefs";
-import type { BoardPlacement } from "../lib/board-placement";
 import type { Application, ApplicationStage } from "@/types/database";
 
-type ColumnsState = Record<string, Application[]>;
+/** One column on the client: the cards loaded so far, plus the server's exact numbers. */
+export interface ColumnState {
+  cards: Application[];
+  /** Filtered count of the whole column (server). */
+  total: number;
+  /** Filtered count stuck STUCK_DAYS+ (server). */
+  stuck: number;
+  /** Index offset of the next page (cards loaded FROM THE INDEX; a pinned moved card isn't one). */
+  nextOffset: number;
+  loading: boolean;
+}
+type ColumnsState = Record<string, ColumnState>;
 
-function groupByStage(
-  applications: Application[],
-  stages: ApplicationStage[],
-  placements: Map<string, BoardPlacement>,
-): ColumnsState {
-  const columns: ColumnsState = {};
-  for (const stage of stages) columns[stage.id] = [];
-  for (const app of applications) {
-    const stageId = placements.get(app.id)?.stageId ?? app.stage_id;
-    if (stageId && columns[stageId]) columns[stageId].push(app);
+export interface ColumnPage {
+  cards: Application[];
+  total: number;
+  hasMore: boolean;
+}
+
+/** A card the user just dragged into a column: kept visible there until the column itself loads it. */
+export interface Pin {
+  appId: string;
+  stageId: string;
+  card: Application;
+}
+
+export function fromPayload(board: BoardPayload<Application>, pin: Pin | null): ColumnsState {
+  const out: ColumnsState = {};
+  for (const [sid, col] of Object.entries(board.columns)) {
+    let cards = col.cards;
+    if (pin) {
+      if (sid === pin.stageId && !cards.some((c) => c.id === pin.appId)) cards = [pin.card, ...cards];
+      else if (sid !== pin.stageId) cards = cards.filter((c) => c.id !== pin.appId);
+    }
+    out[sid] = { cards, total: col.total, stuck: col.stuck, nextOffset: col.cards.length, loading: false };
   }
-  return columns;
+  return out;
 }
 
 function findAppColumn(columns: ColumnsState, appId: string): string | null {
-  for (const [stageId, apps] of Object.entries(columns)) {
-    if (apps.some((a) => a.id === appId)) return stageId;
+  for (const [stageId, col] of Object.entries(columns)) {
+    if (col.cards.some((a) => a.id === appId)) return stageId;
   }
   return null;
 }
@@ -70,9 +93,10 @@ interface ApplicationsBoardProps {
   columnWidth?: number;
   /** The selected pipeline's stages, in position order. */
   stages: ApplicationStage[];
-  applications: Application[];
-  /** app id -> effective pipeline/stage (see lib/board-placement). */
-  placements: Map<string, BoardPlacement>;
+  /** Server columns: first page of cards + exact filtered totals (EDGEX-141 Phase 3). */
+  board: BoardPayload<Application>;
+  /** Next page of one column, from the same URL state (GET /api/v1/applications/board-page). */
+  fetchPage: (stageId: string, offset: number) => Promise<ColumnPage>;
   /** Unfiltered application count per stage, for the delete-stage message. */
   stageTotals: Record<string, number>;
   pipelineId: string;
@@ -90,8 +114,8 @@ export function ApplicationsBoard({
   columnWidth,
   detailHref,
   stages,
-  applications,
-  placements,
+  board,
+  fetchPage,
   stageTotals,
   pipelineId,
   userId,
@@ -105,7 +129,10 @@ export function ApplicationsBoard({
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [prefs, setPrefs] = useState<BoardPrefs>(EMPTY_PREFS);
-  const [columns, setColumns] = useState<ColumnsState>(() => groupByStage(applications, stages, placements));
+  const pinRef = useRef<Pin | null>(null);
+  const [columns, setColumns] = useState<ColumnsState>(() => fromPayload(board, null));
+  // Columns we already asked the server for (first page of a finished/collapsed column).
+  const requested = useRef<Set<string>>(new Set());
   const [activeId, setActiveId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ApplicationStage | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -120,9 +147,61 @@ export function ApplicationsBoard({
     return () => clearTimeout(id);
   }, [userId, pipelineId]);
 
+  // A new server payload (URL change, router.refresh() after a move) replaces the columns: every
+  // column is back to its first page, with the server's exact totals. A just-moved card stays pinned
+  // at the top of its new column until that column's own pages include it.
   useEffect(() => {
-    setColumns(groupByStage(applications, stages, placements));
-  }, [applications, stages, placements]);
+    const pin = pinRef.current;
+    if (pin && (board.columns[pin.stageId]?.cards ?? []).some((c) => c.id === pin.appId)) pinRef.current = null;
+    requested.current = new Set();
+    setColumns(fromPayload(board, pinRef.current));
+  }, [board]);
+
+  const columnsRef = useRef(columns);
+  useEffect(() => {
+    columnsRef.current = columns;
+  }, [columns]);
+  const inFlight = useRef<Set<string>>(new Set());
+
+  /** Appends the next page of one column (dedupes by id, so a pinned card never doubles). */
+  const loadPage = useCallback(
+    async (stageId: string) => {
+      const col = columnsRef.current[stageId];
+      if (!col || inFlight.current.has(stageId)) return;
+      inFlight.current.add(stageId);
+      const offset = col.nextOffset;
+      setColumns((prev) => (prev[stageId] ? { ...prev, [stageId]: { ...prev[stageId], loading: true } } : prev));
+      try {
+        const page = await fetchPage(stageId, offset);
+        setColumns((prev) => {
+          const cur = prev[stageId];
+          if (!cur) return prev;
+          const have = new Set(cur.cards.map((c) => c.id));
+          const fresh = page.cards.filter((c) => !have.has(c.id));
+          return { ...prev, [stageId]: { ...cur, cards: [...cur.cards, ...fresh], total: page.total, nextOffset: offset + page.cards.length, loading: false } };
+        });
+      } catch {
+        setColumns((prev) => (prev[stageId] ? { ...prev, [stageId]: { ...prev[stageId], loading: false } } : prev));
+        toast.error("Couldn't load more applications. Please try again.");
+      } finally {
+        inFlight.current.delete(stageId);
+      }
+    },
+    [fetchPage],
+  );
+
+  // A column that renders expanded with nothing loaded (a finished column the user opened, or an
+  // active one they re-expanded) fetches its first page once.
+  useEffect(() => {
+    if (!mounted) return;
+    for (const stage of stages) {
+      if (prefs.hidden.includes(stage.id) || isStageCollapsed(stage, prefs)) continue;
+      const col = columns[stage.id];
+      if (!col || col.total === 0 || col.nextOffset > 0 || requested.current.has(stage.id)) continue;
+      requested.current.add(stage.id);
+      void loadPage(stage.id);
+    }
+  }, [mounted, prefs, columns, stages, loadPage]);
 
   const stageMap = useMemo(() => new Map(stages.map((s) => [s.id, s])), [stages]);
 
@@ -139,7 +218,9 @@ export function ApplicationsBoard({
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
-  const activeApp = activeId ? Object.values(columns).flat().find((a) => a.id === activeId) ?? null : null;
+  const allCards = (cols: ColumnsState) => Object.values(cols).flatMap((c) => c.cards);
+  const activeApp = activeId ? allCards(columns).find((a) => a.id === activeId) ?? null : null;
+  const activeStageId = activeId ? findAppColumn(columns, activeId) : null;
 
   function handleDragStart(event: DragStartEvent) {
     if (!canManageApplications) return;
@@ -160,14 +241,14 @@ export function ApplicationsBoard({
     if (!fromCol || !toCol || fromCol === toCol) return;
 
     setColumns((prev) => {
-      const from = prev[fromCol].filter((a) => a.id !== appId);
-      const app = prev[fromCol].find((a) => a.id === appId);
+      const from = prev[fromCol].cards.filter((a) => a.id !== appId);
+      const app = prev[fromCol].cards.find((a) => a.id === appId);
       if (!app) return prev;
-      const to = [...prev[toCol]];
+      const to = [...prev[toCol].cards];
       const overIdx = to.findIndex((a) => a.id === overId);
       if (overIdx >= 0) to.splice(overIdx, 0, app);
-      else to.unshift(app); // dropped on the column itself: top, so it is inside the first 25 shown
-      return { ...prev, [fromCol]: from, [toCol]: to };
+      else to.unshift(app); // dropped on the column itself: top, so it is in view
+      return { ...prev, [fromCol]: { ...prev[fromCol], cards: from }, [toCol]: { ...prev[toCol], cards: to } };
     });
   }
 
@@ -189,11 +270,19 @@ export function ApplicationsBoard({
       if (!targetCol) return rollback();
 
       const origin = prevColumnsRef.current ?? columns;
-      const app = Object.values(origin).flat().find((a) => a.id === appId);
-      if (!app || findAppColumn(origin, appId) === targetCol) {
+      const app = allCards(origin).find((a) => a.id === appId);
+      const sourceCol = findAppColumn(origin, appId);
+      if (!app || !sourceCol || sourceCol === targetCol) {
         prevColumnsRef.current = null;
         return;
       }
+      // Counts follow the move at once (the refresh below then brings the server's exact numbers).
+      const wasStuck = !isFinishedStage(stageMap.get(sourceCol)) && daysInStage(app.stage_changed_at) >= STUCK_DAYS;
+      setColumns((prev) => ({
+        ...prev,
+        [sourceCol]: { ...prev[sourceCol], total: Math.max(0, prev[sourceCol].total - 1), stuck: Math.max(0, prev[sourceCol].stuck - (wasStuck ? 1 : 0)), nextOffset: Math.max(0, prev[sourceCol].nextOffset - 1) },
+        [targetCol]: { ...prev[targetCol], total: prev[targetCol].total + 1 },
+      }));
 
       try {
         const res = await fetch(`/api/v1/applications/${appId}`, {
@@ -206,12 +295,12 @@ export function ApplicationsBoard({
         const { data: updated } = await res.json();
         const newStatus: string = (updated as Application)?.status ?? app.status;
 
+        const moved: Application = { ...app, stage_id: targetCol, stage_changed_at: new Date().toISOString(), status: newStatus };
+        pinRef.current = { appId, stageId: targetCol, card: moved };
         setColumns((prev) => {
           const next = { ...prev };
           for (const sid of Object.keys(next)) {
-            next[sid] = next[sid].map((a) =>
-              a.id === appId ? { ...a, stage_id: targetCol, stage_changed_at: new Date().toISOString(), status: newStatus } : a,
-            );
+            next[sid] = { ...next[sid], cards: next[sid].cards.map((a) => (a.id === appId ? moved : a)) };
           }
           return next;
         });
@@ -294,14 +383,14 @@ export function ApplicationsBoard({
   const finished = visibleStages.filter((s) => isFinishedStage(s));
 
   const renderStage = (stage: ApplicationStage) => {
-    const apps = columns[stage.id] ?? [];
+    const col = columns[stage.id] ?? { cards: [], total: 0, stuck: 0, nextOffset: 0, loading: false };
     const isFinished = isFinishedStage(stage);
     if (isStageCollapsed(stage, prefs)) {
       return (
         <SlimColumn
           key={stage.id}
           stage={stage}
-          count={apps.length}
+          count={col.total}
           onExpand={(s) => updatePrefs((p) => toggleCollapse(s, p))}
         />
       );
@@ -311,7 +400,12 @@ export function ApplicationsBoard({
         key={stage.id}
         width={columnWidth}
         stage={stage}
-        applications={apps}
+        applications={col.cards}
+        total={col.total}
+        stuck={col.stuck}
+        moreCount={Math.min(COLUMN_PAGE_SIZE, Math.max(0, col.total - col.nextOffset))}
+        loadingMore={col.loading}
+        onShowMore={() => loadPage(stage.id)}
         finished={isFinished}
         canDrag={canManageApplications}
         canManage={canManageApplications}
@@ -381,7 +475,7 @@ export function ApplicationsBoard({
               application={activeApp}
               disabled
               assigneeNames={assigneeNames}
-              finished={isFinishedStage(stageMap.get(placements.get(activeApp.id)?.stageId ?? activeApp.stage_id))}
+              finished={isFinishedStage(stageMap.get(activeStageId ?? activeApp.stage_id))}
             />
           ) : null}
         </DragOverlay>

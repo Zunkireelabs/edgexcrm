@@ -16,7 +16,9 @@ import {
 } from "../components/applications-column-manager";
 import {
   ApplicationsBoard,
+  type ColumnPage,
 } from "../components/applications-board";
+import { ShowMoreButton } from "../components/column-show-more";
 import {
   ApplicationsTable,
   APPLICATION_COLUMNS,
@@ -26,15 +28,11 @@ import { AddApplicationSheet } from "../components/add-application-sheet";
 import { ApplicationPipelineSelector } from "../components/pipeline/application-pipeline-selector";
 import { ApplicationPipelineSettingsModal } from "../components/pipeline/application-pipeline-settings-modal";
 import { CreateApplicationPipelineModal } from "../components/pipeline/create-application-pipeline-modal";
-import {
-  IMPLICIT_PIPELINE,
-  appsOnPipeline,
-  defaultPipelineOf,
-  resolveBoardPlacement,
-} from "../lib/board-placement";
+import { IMPLICIT_PIPELINE, defaultPipelineOf } from "../lib/board-placement";
+import { LIST_PAGE_SIZE, type BoardPayload } from "../lib/board-index";
 import { resolvePipelineSelection } from "../lib/pipeline-selection";
 import { useEmptyStateSlot } from "../hooks/use-empty-state-slot";
-import { applicationDetailHref, decodeApplicationParams, withParam, withPipelineSwitch } from "../lib/applications-url";
+import { applicationDetailHref, boardStateQuery, decodeApplicationParams, withParam, withPipelineSwitch } from "../lib/applications-url";
 import type { BoardTotals } from "../lib/board-data";
 import { DEFAULT_APPLICATION_SORT } from "../lib/applications-query";
 import { COLUMN_WIDTH_PX, DEFAULT_COLUMN_WIDTH, readColumnWidth, writeColumnWidth, type ColumnWidth } from "../lib/board-view-prefs";
@@ -54,7 +52,8 @@ interface ApplicationsWorkspaceTeamMember {
 
 interface ApplicationsWorkspaceProps {
   stages: ApplicationStage[];
-  applications: Application[];
+  /** Server columns: first page of cards per expanded column + exact filtered totals (Phase 3). */
+  board: BoardPayload<Application>;
   /**
    * Everything that must NOT follow the chips: tab counts, "of T", stage + pipeline totals, filter
    * option lists + per-option counts (board-data.ts).
@@ -79,7 +78,7 @@ const COLUMNS_STORAGE_KEY = "edgex-applications-visible-columns";
 
 export function ApplicationsWorkspace({
   stages: initialStages,
-  applications: initialApplications,
+  board,
   totals,
   filterError = null,
   canManageApplications,
@@ -97,7 +96,6 @@ export function ApplicationsWorkspace({
   const [view, setView] = useState<View>("board");
   // Server props are the source of truth (router.refresh() must be able to update them).
   const stages = initialStages;
-  const applications = initialApplications;
   const allPipelines = useMemo(() => pipelines ?? [], [pipelines]);
   const [addOpen, setAddOpen] = useState(false);
   const [addStageId, setAddStageId] = useState<string | null>(null);
@@ -139,10 +137,6 @@ export function ApplicationsWorkspace({
   }, []);
 
   const { tabCounts, stageTotals, pipelineTotals, noPipelineTotal, facets } = totals;
-  const { placements } = useMemo(
-    () => resolveBoardPlacement(applications, stages, allPipelines),
-    [applications, stages, allPipelines],
-  );
 
   const filteredStages = useMemo(() => {
     if (selectedPipelineId === IMPLICIT_PIPELINE) {
@@ -151,10 +145,6 @@ export function ApplicationsWorkspace({
     return stages.filter((s) => s.pipeline_id === selectedPipelineId);
   }, [stages, selectedPipelineId, allPipelines]);
 
-  const pipelineApplications = useMemo(
-    () => appsOnPipeline(applications, placements, selectedPipelineId),
-    [applications, placements, selectedPipelineId],
-  );
 
   // ── toolbar state: the URL is the source of truth (?f= ?q= ?sort= ?tab=) ──────────────────────
   const fieldCtx = useMemo(() => ({ tz: "UTC", now: new Date(0), industryId: "education_consultancy", permissions: {} }), []);
@@ -213,8 +203,6 @@ export function ApplicationsWorkspace({
     }
   }
 
-  // The server already filtered + sorted `applications`; the board just lays out the selected pipeline.
-  const filteredApplications = pipelineApplications;
   // Header "N of T": chips or search (T is the same tab with neither).
   const filtersActive = !isEmptyTree(tree) || q !== "";
   // Empty-state choice: anything that narrows the board, the tab included.
@@ -297,7 +285,52 @@ export function ApplicationsWorkspace({
     setAddOpen(true);
   }, []);
 
-  const pipelineIsEmpty = pipelineApplications.length === 0;
+  // ── server paging (Phase 3): the next page of a column / of the list, from the URL state ─────────
+  const boardQuery0 = boardStateQuery(searchParams.toString());
+  const requestPage = useCallback(
+    async (opts: { stage?: string; offset: number; limit: number }): Promise<ColumnPage> => {
+      const p = new URLSearchParams(boardQuery0);
+      if (opts.stage) p.set("stage", opts.stage);
+      p.set("offset", String(opts.offset));
+      p.set("limit", String(opts.limit));
+      const res = await fetch(`/api/v1/applications/board-page?${p.toString()}`);
+      if (!res.ok) throw new Error(`board-page ${res.status}`);
+      const { data } = (await res.json()) as { data: ColumnPage };
+      return data;
+    },
+    [boardQuery0],
+  );
+  const fetchColumnPage = useCallback((stageId: string, offset: number) => requestPage({ stage: stageId, offset, limit: 25 }), [requestPage]);
+
+  // List view (still the Phase 1 table until Phase 4): the flat sorted filtered index, 50 at a time.
+  const [list, setList] = useState<{ key: string; rows: Application[]; total: number; loading: boolean } | null>(null);
+  const listKey = `${boardQuery0}|${board.total}`;
+  const loadList = useCallback(
+    async (append: boolean) => {
+      const offset = append && list?.key === listKey ? list.rows.length : 0;
+      setList((prev) => ({ key: listKey, rows: append && prev?.key === listKey ? prev.rows : [], total: prev?.total ?? 0, loading: true }));
+      try {
+        const page = await requestPage({ offset, limit: LIST_PAGE_SIZE });
+        setList((prev) => {
+          const base = append && prev?.key === listKey ? prev.rows : [];
+          const have = new Set(base.map((r) => r.id));
+          return { key: listKey, rows: [...base, ...page.cards.filter((c) => !have.has(c.id))], total: page.total, loading: false };
+        });
+      } catch {
+        setList((prev) => (prev ? { ...prev, loading: false } : prev));
+      }
+    },
+    [list, listKey, requestPage],
+  );
+  useEffect(() => {
+    if (view !== "list" || list?.key === listKey) return;
+    const id = setTimeout(() => void loadList(false), 0);
+    return () => clearTimeout(id);
+  }, [view, list?.key, listKey, loadList]);
+  const listRows = list?.key === listKey ? list.rows : [];
+  const listMore = list?.key === listKey ? Math.min(LIST_PAGE_SIZE, Math.max(0, list.total - list.rows.length)) : 0;
+
+  const pipelineIsEmpty = board.total === 0;
   // Filtered to zero (chips, search or a tab) -> "No applications match"; the "No applications in
   // this board yet" state is only for a pipeline that is empty with nothing applied. A known-empty
   // pipeline stays the real empty state even under a tab.
@@ -317,7 +350,10 @@ export function ApplicationsWorkspace({
           data-testid="header-count"
           className="rounded-full bg-[#f6f7f9] px-2 py-0.5 text-[12px] text-[#6b6f76] tabular-nums"
         >
-          {filtersActive && tabCounts ? `${filteredApplications.length} of ${tabCounts[tab]}` : filteredApplications.length}
+          {(() => {
+            const n = `${board.total.toLocaleString()}${board.truncated ? "+" : ""}`;
+            return filtersActive && tabCounts ? `${n} of ${tabCounts[tab].toLocaleString()}${totals.truncated ? "+" : ""}` : n;
+          })()}
         </span>
         <div className="flex-1" />
         <div className="flex items-center gap-2">
@@ -406,8 +442,8 @@ export function ApplicationsWorkspace({
           <ApplicationsBoard
             key={selectedPipelineId}
             stages={filteredStages}
-            applications={filteredApplications}
-            placements={placements}
+            board={board}
+            fetchPage={fetchColumnPage}
             stageTotals={stageTotals}
             pipelineId={selectedPipelineId}
             userId={userId}
@@ -512,11 +548,14 @@ export function ApplicationsWorkspace({
       ) : (
         <div className="flex-1 min-h-0 overflow-y-auto">
           <ApplicationsTable
-            applications={filteredApplications}
+            applications={listRows}
             stages={filteredStages}
             visibleKeys={visibleColumnKeys}
             detailHref={detailHref}
           />
+          <div className="flex justify-center py-2" data-testid="list-show-more">
+            <ShowMoreButton count={listMore} loading={!!list?.loading} onClick={() => void loadList(true)} />
+          </div>
         </div>
       )}
 

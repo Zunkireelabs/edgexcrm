@@ -8,7 +8,7 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn() }) }));
 
 import { ApplicationsBoard } from "./applications-board";
-import { resolveBoardPlacement } from "../lib/board-placement";
+import { assembleBoardPayload, buildBoardIndex, firstPageIds, type IndexRow } from "../lib/board-index";
 import type { Application, ApplicationStage } from "@/types/database";
 
 const stage = (o: Partial<ApplicationStage>): ApplicationStage =>
@@ -22,21 +22,37 @@ const stages = [
 const app = (id: string, stage_id: string | null, extra: Partial<Application> = {}): Application =>
   ({
     id, lead_id: "l" + id, university_name: "Uni " + id, program_name: "Prog", stage_id, pipeline_id: null, status: "x",
-    stage_changed_at: new Date(Date.now() - 31 * 86_400_000).toISOString(), assigned_to: null, countries: [], intake_term: null,
+    stage_changed_at: new Date(Date.now() - 31 * 86_400_000).toISOString(), created_at: "2026-01-01", updated_at: "2026-01-01",
+    application_deadline: null, assigned_to: null, countries: [], intake_term: null,
     offer_type: null, leads: { id: "l" + id, first_name: "A", last_name: "B", email: null }, ...extra,
   }) as unknown as Application;
 
 const apps = [app("1", "s1"), app("2", "s3"), app("3", null)];
 const pipelines = [{ id: "p1", is_default: true, position: 0 }];
 
+/** What the server does: index -> first page per active column -> payload; fetchPage slices the same index. */
+function serverFor(list: Application[]) {
+  const index = buildBoardIndex({
+    rows: list as unknown as IndexRow[], stages, pipelines, selectedPipelineId: "p1", pipelineStages: stages, sort: "stage", nowMs: Date.now(),
+  });
+  const byId = new Map(list.map((a) => [a.id, a]));
+  const cards = firstPageIds(index, stages).map((id) => byId.get(id)!);
+  const board = assembleBoardPayload(index, stages, cards, false);
+  const fetchPage = vi.fn(async (sid: string, offset: number) => {
+    const col = index.byStage[sid] ?? [];
+    const items = col.slice(offset, offset + 25);
+    return { cards: items.map((r) => byId.get(r.id)!), total: col.length, hasMore: offset + items.length < col.length };
+  });
+  return { board, fetchPage };
+}
+
 function renderBoard(over: { isAdmin: boolean; canManage: boolean; apps?: Application[] }) {
-  const list = over.apps ?? apps;
-  const { placements } = resolveBoardPlacement(list, stages, pipelines);
+  const { board, fetchPage } = serverFor(over.apps ?? apps);
   return render(
     <ApplicationsBoard
       stages={stages}
-      applications={list}
-      placements={placements}
+      board={board}
+      fetchPage={fetchPage}
       stageTotals={{}}
       pipelineId="p1"
       userId="u1"
@@ -109,9 +125,9 @@ describe("ApplicationsBoard", () => {
   it("deleting a stage that holds applications says to move them out first (no API call)", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
-    const { placements } = resolveBoardPlacement(apps, stages, pipelines);
+    const { board, fetchPage } = serverFor(apps);
     render(
-      <ApplicationsBoard stages={stages} applications={apps} placements={placements} stageTotals={{ s1: 2 }} pipelineId="p1" userId="u1"
+      <ApplicationsBoard stages={stages} board={board} fetchPage={fetchPage} stageTotals={{ s1: 2 }} pipelineId="p1" userId="u1"
         canManageApplications isAdmin onRefresh={vi.fn()} onAddToStage={vi.fn()} onEditStages={vi.fn()} />,
     );
     await waitFor(() => screen.getAllByTestId("board-column"));
@@ -121,15 +137,35 @@ describe("ApplicationsBoard", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("shows 25 cards then 'Show N more', 25 per click", async () => {
-    const many = Array.from({ length: 60 }, (_, i) => app("m" + i, "s1"));
+  it("shows the server's first 25 and the column's TRUE total; 'Show N more' pages from the server, no duplicates", async () => {
+    const many = Array.from({ length: 60 }, (_, i) => app("m" + String(i).padStart(2, "0"), "s1"));
     renderBoard({ isAdmin: false, canManage: false, apps: many });
     await waitFor(() => screen.getAllByTestId("board-column"));
     expect(screen.getAllByTestId("application-card")).toHaveLength(25);
+    expect(screen.getAllByTestId("count-pill")[0]).toHaveTextContent("60");
     fireEvent.click(screen.getByText("Show 25 more"));
-    expect(screen.getAllByTestId("application-card")).toHaveLength(50);
+    await waitFor(() => expect(screen.getAllByTestId("application-card")).toHaveLength(50));
     fireEvent.click(screen.getByText("Show 10 more"));
-    expect(screen.getAllByTestId("application-card")).toHaveLength(60);
+    await waitFor(() => expect(screen.getAllByTestId("application-card")).toHaveLength(60));
+    const ids = screen.getAllByTestId("application-card").map((c) => c.textContent);
+    expect(new Set(ids).size).toBe(60);
+    expect(screen.queryByText(/^Show \d+ more$/)).toBeNull();
+    expect(screen.getAllByTestId("count-pill")[0]).toHaveTextContent("60");
+  });
+
+  it("a collapsed finished column shows its count without cards, and loads its first page when expanded", async () => {
+    const { board, fetchPage } = serverFor(apps);
+    render(
+      <ApplicationsBoard stages={stages} board={board} fetchPage={fetchPage} stageTotals={{}} pipelineId="p1" userId="u1"
+        canManageApplications={false} isAdmin={false} onRefresh={vi.fn()} onAddToStage={vi.fn()} onEditStages={vi.fn()} />,
+    );
+    await waitFor(() => screen.getByTestId("slim-column"));
+    expect(screen.getByTestId("slim-column")).toHaveTextContent("1");
+    expect(fetchPage).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId("slim-column"));
+    await waitFor(() => expect(fetchPage).toHaveBeenCalledWith("s3", 0));
+    await waitFor(() => expect(screen.getAllByTestId("board-column")[2].querySelectorAll("[data-testid=application-card]")).toHaveLength(1));
+    expect(fetchPage).toHaveBeenCalledTimes(1);
   });
 
   it("age pill is neutral on the finished stage and red on an active one at 31d", async () => {
@@ -143,5 +179,33 @@ describe("ApplicationsBoard", () => {
     });
     expect(cols[0].querySelector("[data-testid=age-pill]")?.className).toContain("text-[#b42318]");
     expect(cols[2].querySelector("[data-testid=age-pill]")?.className).not.toContain("b42318");
+  });
+});
+
+describe("after a move + refresh (fromPayload)", () => {
+  const card = (id: string, stage_id: string) => app(id, stage_id);
+  const payload = {
+    columns: {
+      s1: { cards: [card("a", "s1"), card("b", "s1")], total: 30, stuck: 0 },
+      s2: { cards: [card("c", "s2")], total: 40, stuck: 0 },
+    },
+    total: 70,
+    truncated: false,
+  };
+  it("keeps the moved card pinned at the top of its new column when the first page doesn't include it", async () => {
+    const { fromPayload } = await import("./applications-board");
+    const moved = card("m", "s2");
+    const cols = fromPayload(payload, { appId: "m", stageId: "s2", card: moved });
+    expect(cols.s2.cards.map((c) => c.id)).toEqual(["m", "c"]);
+    expect(cols.s2.total).toBe(40); // the server's count (already includes the moved card)
+    expect(cols.s2.nextOffset).toBe(1); // index offset ignores the pinned card; Show more dedupes it
+  });
+  it("never shows the moved card twice: dropped from any other column, not re-added where the server has it", async () => {
+    const { fromPayload } = await import("./applications-board");
+    const stale = { ...payload, columns: { ...payload.columns, s1: { ...payload.columns.s1, cards: [card("m", "s1"), card("a", "s1")] } } };
+    const cols = fromPayload(stale, { appId: "m", stageId: "s2", card: card("m", "s2") });
+    expect(cols.s1.cards.map((c) => c.id)).toEqual(["a"]);
+    const already = fromPayload({ ...payload, columns: { ...payload.columns, s2: { ...payload.columns.s2, cards: [card("c", "s2"), card("m", "s2")] } } }, { appId: "m", stageId: "s2", card: card("m", "s2") });
+    expect(already.s2.cards.map((c) => c.id)).toEqual(["c", "m"]);
   });
 });

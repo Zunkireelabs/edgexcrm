@@ -1,34 +1,20 @@
 "use client";
 
-import { useState } from "react";
-
-export const COLUMN_PAGE_SIZE = 25;
-
 /**
- * Client-side "Show N more" for a board column: renders the first 25 cards, reveals 25 more per click.
- * Kept to this one small hook + button so Phase 3's server paging can swap it out in one place.
+ * "Show N more" at the bottom of a board column / under the list (mockup `.more`). The board pages
+ * from the server (GET /api/v1/applications/board-page, EDGEX-141 Phase 3); this is only the button.
  */
-export function useRevealedCards<T>(items: T[], pageSize: number = COLUMN_PAGE_SIZE) {
-  const [limit, setLimit] = useState(pageSize);
-  const visible = items.slice(0, limit);
-  const remaining = Math.max(0, items.length - visible.length);
-  return {
-    visible,
-    remaining,
-    showMore: () => setLimit((l) => l + pageSize),
-    nextBatch: Math.min(pageSize, remaining),
-  };
-}
-
-export function ShowMoreButton({ count, onClick }: { count: number; onClick: () => void }) {
+export function ShowMoreButton({ count, loading = false, onClick }: { count: number; loading?: boolean; onClick: () => void }) {
   if (count <= 0) return null;
   return (
     <button
       type="button"
+      data-testid="column-show-more"
       onClick={onClick}
-      className="h-[30px] shrink-0 rounded-[8px] text-[13px] font-medium text-[#6b6f76] transition-colors hover:bg-black/[.04] hover:text-[#101112]"
+      disabled={loading}
+      className="h-[30px] shrink-0 rounded-[8px] text-[13px] font-medium text-[#6b6f76] transition-colors hover:bg-black/[.04] hover:text-[#101112] disabled:opacity-60"
     >
-      Show {count} more
+      {loading ? "Loading…" : `Show ${count} more`}
     </button>
   );
 }

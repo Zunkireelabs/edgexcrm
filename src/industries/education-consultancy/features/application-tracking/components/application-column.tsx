@@ -4,16 +4,25 @@ import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { PlusIcon } from "@/components/icons";
 import { ApplicationCard } from "./application-card";
-import { ShowMoreButton, useRevealedCards } from "./column-show-more";
+import { ShowMoreButton } from "./column-show-more";
 import { StageColumnMenu } from "./stage-column-menu";
-import { STUCK_DAYS, daysInStage } from "../lib/card-metrics";
+import { STUCK_DAYS } from "../lib/card-metrics";
 import type { Application, ApplicationStage } from "@/types/database";
 
 interface ApplicationColumnProps {
   /** Column width in px (Narrow 232 / Wide 268). */
   width?: number;
   stage: ApplicationStage;
+  /** The cards loaded so far (the first page, plus any "Show more" pages). */
   applications: Application[];
+  /** Filtered count of the whole column (server). */
+  total: number;
+  /** Filtered count stuck STUCK_DAYS+ in the whole column (server). */
+  stuck: number;
+  /** "Show N more": min(25, not yet loaded). 0 hides the button. */
+  moreCount: number;
+  loadingMore?: boolean;
+  onShowMore: () => void;
   finished: boolean;
   canDrag: boolean;
   /** Can add applications (header "+" and "+ New application"). */
@@ -36,6 +45,11 @@ export function ApplicationColumn({
   width = 268,
   stage,
   applications,
+  total,
+  stuck: stuckTotal,
+  moreCount,
+  loadingMore = false,
+  onShowMore,
   finished,
   canDrag,
   canManage,
@@ -52,10 +66,11 @@ export function ApplicationColumn({
   onDelete,
 }: ApplicationColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
-  const { visible, showMore, nextBatch } = useRevealedCards(applications);
+  const visible = applications;
 
-  // One stage-specific fact from loaded data. Required-document data does not exist, so no "missing docs".
-  const stuck = finished ? 0 : applications.filter((a) => daysInStage(a.stage_changed_at) >= STUCK_DAYS).length;
+  // One stage-specific fact over the WHOLE filtered column (server count, not just loaded cards).
+  // Required-document data does not exist, so no "missing docs".
+  const stuck = finished ? 0 : stuckTotal;
   const fact = stuck > 0 ? `${stuck} stuck ${STUCK_DAYS}d+` : null;
 
   return (
@@ -73,7 +88,7 @@ export function ApplicationColumn({
           data-testid="count-pill"
           className="inline-flex h-4 items-center rounded-[6px] bg-black/[.04] px-1 text-[12px] font-medium text-[#505155] tabular-nums shadow-[inset_0_0_0_1px_#EEEFF1]"
         >
-          {applications.length}
+          {total}
         </span>
         <div className="ml-auto flex gap-0.5">
           {canManage && (
@@ -126,7 +141,7 @@ export function ApplicationColumn({
             />
           ))}
         </SortableContext>
-        <ShowMoreButton count={nextBatch} onClick={showMore} />
+        <ShowMoreButton count={moreCount} loading={loadingMore} onClick={onShowMore} />
       </div>
 
       {(fact || finished) && (

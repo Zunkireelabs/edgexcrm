@@ -97,6 +97,7 @@ export function ApplicationCard({
       onClick={() => onOpenDetail?.(application)}
       onKeyDown={handleKeyDown}
       data-testid="application-card"
+      data-app-id={application.id}
       className={`shrink-0 rounded-[12px] bg-white transition-shadow ${
         isDragging ? "opacity-50" : "hover:!shadow-[0_0_0_1px_rgba(0,0,0,.1),0_1px_2px_rgba(0,0,0,.05)]"
       } ${disabled ? "cursor-default" : "cursor-grab active:cursor-grabbing"}`}
