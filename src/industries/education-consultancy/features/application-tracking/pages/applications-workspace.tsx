@@ -11,7 +11,7 @@ import {
   GearIcon,
   InfoIcon,
 } from "@/components/icons";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FilterDropdown } from "@/components/ui/filter-dropdown";
 import {
   ApplicationsFilterMenu,
@@ -93,6 +93,7 @@ export function ApplicationsWorkspace({
 }: ApplicationsWorkspaceProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const pathname = usePathname();
   const isAdmin = role === "owner" || role === "admin";
 
   const [view, setView] = useState<View>("board");
@@ -120,9 +121,9 @@ export function ApplicationsWorkspace({
       } catch {
         /* ignore */
       }
-      router.replace(`/applications?${withPipelineParam(searchParams.toString(), pipelineId)}`, { scroll: false });
+      router.replace(`${pathname}?${withPipelineParam(searchParams.toString(), pipelineId)}`, { scroll: false });
     },
-    [router, searchParams, tenantId],
+    [router, searchParams, pathname, tenantId],
   );
 
   // No ?pipeline= yet: restore this person's last pipeline (once, on load).
@@ -131,7 +132,7 @@ export function ApplicationsWorkspace({
     try {
       const saved = localStorage.getItem(`application_pipeline_selected_${tenantId}`);
       if (saved && saved !== defaultPipeline?.id && allPipelines.some((p) => p.id === saved)) {
-        router.replace(`/applications?${withPipelineParam(searchParams.toString(), saved)}`, { scroll: false });
+        router.replace(`${pathname}?${withPipelineParam(searchParams.toString(), saved)}`, { scroll: false });
       }
     } catch {
       /* ignore */
