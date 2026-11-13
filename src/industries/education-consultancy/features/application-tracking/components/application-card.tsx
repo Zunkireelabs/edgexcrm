@@ -3,100 +3,83 @@
 import Link from "next/link";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { CalendarIcon, ClockIcon, MapPinIcon, UserIcon } from "@/components/icons";
+import {
+  BookOpenIcon,
+  CalendarIcon,
+  CheckSquareIcon,
+  ClockIcon,
+  FileTextIcon,
+  GraduationCapIcon,
+  MapPinIcon,
+  UserIcon,
+} from "@/components/icons";
 import type { Application } from "@/types/database";
 import { normalizeDestinations } from "@/lib/leads/destination-normalize";
+import { ageTone, daysInStage, resolveCounsellor, type AgeTone } from "../lib/card-metrics";
 
 interface ApplicationCardProps {
   application: Application;
   disabled: boolean;
   onOpenDetail?: (app: Application) => void;
-  /** Resolved display name for application.assigned_to, matching the leads-Kanban avatar row. */
-  assigneeName?: string;
+  /** user_id -> display name, to resolve the counsellor. */
+  assigneeNames?: Record<string, string>;
+  /** The stage is a finished one: the age pill is always neutral. */
+  finished?: boolean;
+  /** Show the time-in-stage pill (per-column "Track time in stage" pref). */
+  showAge?: boolean;
 }
 
 const AVATAR_COLORS = [
-  { bg: "bg-blue-100 dark:bg-blue-900/40", text: "text-blue-700 dark:text-blue-300" },
-  { bg: "bg-emerald-100 dark:bg-emerald-900/40", text: "text-emerald-700 dark:text-emerald-300" },
-  { bg: "bg-violet-100 dark:bg-violet-900/40", text: "text-violet-700 dark:text-violet-300" },
-  { bg: "bg-amber-100 dark:bg-amber-900/40", text: "text-amber-700 dark:text-amber-300" },
-  { bg: "bg-pink-100 dark:bg-pink-900/40", text: "text-pink-700 dark:text-pink-300" },
-  { bg: "bg-cyan-100 dark:bg-cyan-900/40", text: "text-cyan-700 dark:text-cyan-300" },
+  { bg: "#e8f1fb", fg: "#1f5d94" },
+  { bg: "#efeafc", fg: "#5b47d6" },
+  { bg: "#e9f6ef", fg: "#127a4a" },
+  { bg: "#fdf3e3", fg: "#a15c07" },
+  { bg: "#fdeeec", fg: "#b42318" },
+  { bg: "#e6f6f8", fg: "#0e7490" },
 ];
 
-function colorFor(name: string): { bg: string; text: string } {
+function colorFor(name: string) {
   let hash = 0;
   for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
-// Applications don't have their own stage_changed_at column (unlike leads) — age is
-// measured off updated_at, same as the leads card did before LEADS-KANBAN-REDESIGN.
-function getDaysInStage(dateString: string): number {
-  const diff = Date.now() - new Date(dateString).getTime();
-  return Math.floor(diff / (1000 * 60 * 60 * 24));
+const AGE_STYLES: Record<AgeTone, string> = {
+  neutral: "text-[rgba(0,0,0,.63)]",
+  amber: "bg-[#fdf3e3] text-[#a15c07]",
+  red: "bg-[#fdeeec] text-[#b42318]",
+};
+
+function studentOf(app: Application) {
+  const lead = app.leads;
+  const full = lead ? [lead.first_name, lead.last_name].filter(Boolean).join(" ") : "";
+  return full || "Unknown student";
 }
 
-function getUrgencyStyles(days: number): { bg: string; text: string } {
-  if (days >= 7) return { bg: "bg-red-100 dark:bg-red-900/30", text: "text-red-700 dark:text-red-400" };
-  if (days >= 3) return { bg: "bg-amber-100 dark:bg-amber-900/30", text: "text-amber-700 dark:text-amber-400" };
-  return { bg: "bg-muted", text: "text-muted-foreground" };
-}
+export function ApplicationCard({
+  application,
+  disabled,
+  onOpenDetail,
+  assigneeNames,
+  finished = false,
+  showAge = true,
+}: ApplicationCardProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: application.id,
+    disabled,
+  });
 
-function getInitials(firstName: string | null, lastName: string | null): string {
-  const first = firstName?.[0]?.toUpperCase() || "";
-  const last = lastName?.[0]?.toUpperCase() || "";
-  return first + last || "?";
-}
+  const style = { transform: CSS.Transform.toString(transform), transition };
 
-/** Relative "1m / 30m / 2h / 5d" — last-changed (any field), distinct from the stage-age badge. */
-function formatRelativeTime(dateString: string): string {
-  const diffMs = Date.now() - new Date(dateString).getTime();
-  const minutes = Math.floor(diffMs / (1000 * 60));
-  if (minutes < 1) return "now";
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h`;
-  const days = Math.floor(hours / 24);
-  return `${days}d`;
-}
-
-function formatDate(dateString: string | null): string {
-  if (!dateString) return "";
-  return new Date(dateString).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
-
-function getStudentName(app: Application): { first: string | null; last: string | null; full: string } {
-  const lead = app.leads as { first_name: string | null; last_name: string | null } | null;
-  if (!lead) return { first: null, last: null, full: "Unknown Student" };
-  const full = [lead.first_name, lead.last_name].filter(Boolean).join(" ") || "Unknown Student";
-  return { first: lead.first_name, last: lead.last_name, full };
-}
-
-export function ApplicationCard({ application, disabled, onOpenDetail, assigneeName }: ApplicationCardProps) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: application.id, disabled });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
-
-  const leadId = (application.leads as { id?: string } | null)?.id ?? application.lead_id;
-  const student = getStudentName(application);
-  const days = getDaysInStage(application.stage_changed_at);
-  const urgencyStyles = getUrgencyStyles(days);
-  const avatarColors = colorFor(student.full);
-
-  function handleCardClick() {
-    onOpenDetail?.(application);
-  }
+  const leadId = application.leads?.id ?? application.lead_id;
+  const student = studentOf(application);
+  const counsellor = resolveCounsellor(application, assigneeNames);
+  const avatar = counsellor ? colorFor(counsellor.name) : null;
+  const days = daysInStage(application.stage_changed_at);
+  const tone = ageTone(days, finished);
+  const countries = normalizeDestinations(application.countries ?? []);
+  const openTasks = application.open_task_count ?? 0;
+  const docs = application.doc_count ?? 0;
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter" || e.key === " ") {
@@ -108,94 +91,116 @@ export function ApplicationCard({ application, disabled, onOpenDetail, assigneeN
   return (
     <div
       ref={setNodeRef}
-      style={style}
+      style={{ ...style, boxShadow: "0 0 0 1px rgba(0,0,0,.06)" }}
       {...attributes}
       {...listeners}
-      onClick={handleCardClick}
+      onClick={() => onOpenDetail?.(application)}
       onKeyDown={handleKeyDown}
-      className={`group rounded-[12px] border bg-card p-4 transition-all ${
-        isDragging
-          ? "opacity-50 ring-2 ring-primary/20 scale-[1.02]"
-          : "hover:border-muted-foreground/30"
+      data-testid="application-card"
+      className={`shrink-0 rounded-[12px] bg-white pb-0.5 transition-shadow ${
+        isDragging ? "opacity-50" : "hover:!shadow-[0_0_0_1px_rgba(0,0,0,.1),0_1px_2px_rgba(0,0,0,.05)]"
       } ${disabled ? "cursor-default" : "cursor-grab active:cursor-grabbing"}`}
     >
-      {/* Header: Application title = university, subtitle = program */}
-      <div className="mb-3">
-        <p className="text-sm font-semibold line-clamp-1">{application.university_name}</p>
-        <p className="text-xs text-muted-foreground truncate mt-0.5">{application.program_name}</p>
+      <div className="flex items-center gap-2 pt-[10px] pr-2 pb-[6px] pl-3">
+        <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-[6px] bg-[#f6f7f9] text-[#6b6f76]">
+          <GraduationCapIcon className="h-3 w-3" />
+        </span>
+        <span className="truncate text-[14px] font-medium text-[#101112]">{application.university_name}</span>
       </div>
 
-      {/* Application details */}
-      <div className="space-y-1 mb-3">
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <UserIcon className="h-3 w-3 shrink-0" />
-          <Link
-            href={`/leads/${leadId}`}
-            prefetch={false}
-            onClick={(e) => e.stopPropagation()}
-            className="truncate hover:text-primary hover:underline"
-          >
-            {student.full}
-          </Link>
-        </div>
-        {application.intake_term && (
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <CalendarIcon className="h-3 w-3 shrink-0" />
-            <span className="truncate">{application.intake_term}</span>
-          </div>
+      <div className="flex min-w-0 items-center gap-2 px-3 py-[3px] text-[13px] text-[#6b6f76]">
+        <BookOpenIcon className="h-[14px] w-[14px] shrink-0 text-[#9a9ea5]" />
+        <span className="truncate">{application.program_name}</span>
+      </div>
+
+      <div className="flex min-w-0 items-center gap-2 px-3 py-[3px] text-[13px] text-[#2b2d2f]">
+        <UserIcon className="h-[14px] w-[14px] shrink-0 text-[#9a9ea5]" />
+        <Link
+          href={`/leads/${leadId}`}
+          prefetch={false}
+          onClick={(e) => e.stopPropagation()}
+          className="truncate hover:underline"
+        >
+          {student}
+        </Link>
+      </div>
+
+      <div className="flex min-w-0 items-center gap-2 px-3 py-[3px] text-[13px] text-[#2b2d2f]">
+        {counsellor && avatar ? (
+          <>
+            <span
+              className="inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full text-[9px] font-semibold tracking-[.02em]"
+              style={{ background: avatar.bg, color: avatar.fg }}
+            >
+              {counsellor.initials}
+            </span>
+            <span className="truncate">{counsellor.name}</span>
+          </>
+        ) : (
+          <>
+            <span className="inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-[#f6f7f9] text-[#9a9ea5]">
+              <UserIcon className="h-[11px] w-[11px]" />
+            </span>
+            <span className="text-[rgba(0,0,0,.42)]">Set counsellor</span>
+          </>
         )}
-        {application.countries && application.countries.length > 0 && (
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <MapPinIcon className="h-3 w-3 shrink-0" />
-            <span className="truncate">{normalizeDestinations(application.countries).join(", ")}</span>
-          </div>
+      </div>
+
+      <div className="flex min-w-0 items-center gap-2 px-3 py-[3px] text-[13px] text-[#2b2d2f]">
+        <CalendarIcon className="h-[14px] w-[14px] shrink-0 text-[#9a9ea5]" />
+        {application.intake_term ? (
+          <span className="shrink-0">{application.intake_term}</span>
+        ) : (
+          <span className="text-[rgba(0,0,0,.42)]">Set intake</span>
         )}
-        {application.application_deadline && (
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <CalendarIcon className="h-3 w-3 shrink-0" />
-            <span>{formatDate(application.application_deadline)}</span>
-          </div>
+        {countries.length > 0 && (
+          <>
+            <span className="text-[#6b6f76]">·</span>
+            <MapPinIcon className="h-[14px] w-[14px] shrink-0 text-[#9a9ea5]" />
+            <span className="truncate text-[#6b6f76]">{countries.join(", ")}</span>
+          </>
         )}
       </div>
 
       {application.offer_type && (
-        <span className={`inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-full mb-3 ${
-          application.offer_type === "unconditional"
-            ? "bg-teal-100 text-teal-700"
-            : "bg-yellow-100 text-yellow-700"
-        }`}>
-          {application.offer_type === "unconditional" ? "Unconditional Offer" : "Conditional Offer"}
+        <span
+          className={`mt-1 ml-3 inline-flex h-5 items-center rounded-[6px] px-[7px] text-[11.5px] font-medium ${
+            application.offer_type === "unconditional"
+              ? "bg-[#e9f6ef] text-[#127a4a]"
+              : "bg-[#fdf3e3] text-[#a15c07]"
+          }`}
+        >
+          {application.offer_type === "unconditional" ? "Unconditional offer" : "Conditional offer"}
         </span>
       )}
 
-      {/* Divider */}
-      <div className="border-t border-border/50 my-3" />
-
-      {/* Footer: stage-age badge (stage moves only) + last-activity time (any edit) + assignee avatar */}
-      <div className="flex items-center justify-between text-[11px]">
-        <div
-          className={`flex items-center gap-1 px-2 py-1 rounded-full font-medium ${urgencyStyles.bg} ${urgencyStyles.text}`}
-          title={`Stage changed ${new Date(application.stage_changed_at).toLocaleString()}`}
+      <div className="mt-[6px] flex items-center gap-3 pt-2 pr-[10px] pb-[9px] pl-3 text-[12px] text-[#9a9ea5] tabular-nums">
+        <span
+          className="inline-flex items-center gap-1"
+          title={`${docs} ${docs === 1 ? "document" : "documents"} uploaded`}
         >
-          <ClockIcon className="h-3 w-3" />
-          <span>{days === 0 ? "Today" : `${days}d`}</span>
-        </div>
-
-        <div className="flex items-center gap-1.5 flex-shrink-0">
-          <span className="text-muted-foreground" title={`Last changed ${new Date(application.updated_at).toLocaleString()}`}>
-            {formatRelativeTime(application.updated_at)}
-          </span>
-          <span className="text-muted-foreground truncate max-w-20" title={assigneeName ?? (application.assigned_to ? "Assigned" : "Unassigned")}>
-            {application.assigned_to ? assigneeName ?? "Assigned" : "Unassigned"}
-          </span>
-          <div
-            className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${
-              application.assigned_to ? `${avatarColors.bg} ${avatarColors.text}` : "bg-muted border border-border"
-            }`}
+          <FileTextIcon className="h-[13px] w-[13px]" />
+          {docs}
+        </span>
+        {openTasks > 0 && (
+          <span
+            className="inline-flex items-center gap-1"
+            title={`${openTasks} open ${openTasks === 1 ? "task" : "tasks"} for ${student}`}
           >
-            {application.assigned_to ? getInitials(student.first, student.last) : <UserIcon className="h-3 w-3 text-muted-foreground" />}
-          </div>
-        </div>
+            <CheckSquareIcon className="h-[13px] w-[13px]" />
+            {openTasks}
+          </span>
+        )}
+        {showAge && (
+          <span
+            data-testid="age-pill"
+            className={`ml-auto inline-flex h-5 items-center gap-1 rounded-[6px] px-1.5 text-[12px] font-medium tabular-nums ${AGE_STYLES[tone]}`}
+            title={`In this stage since ${new Date(application.stage_changed_at).toLocaleDateString()}`}
+          >
+            <ClockIcon className="h-3 w-3" />
+            {days}d
+          </span>
+        )}
       </div>
     </div>
   );

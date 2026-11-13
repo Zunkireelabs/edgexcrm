@@ -8,8 +8,10 @@ import {
   MagnifyingGlassIcon,
   ArrowsDownUpIcon,
   ColumnsIcon,
+  GearIcon,
+  InfoIcon,
 } from "@/components/icons";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { FilterDropdown } from "@/components/ui/filter-dropdown";
 import {
   ApplicationsFilterMenu,
@@ -29,6 +31,15 @@ import {
 } from "../components/applications-table";
 import { AddApplicationSheet } from "../components/add-application-sheet";
 import { ApplicationPipelineSelector } from "../components/pipeline/application-pipeline-selector";
+import { ApplicationPipelineSettingsModal } from "../components/pipeline/application-pipeline-settings-modal";
+import { CreateApplicationPipelineModal } from "../components/pipeline/create-application-pipeline-modal";
+import {
+  IMPLICIT_PIPELINE,
+  appsOnPipeline,
+  defaultPipelineOf,
+  resolveBoardPlacement,
+} from "../lib/board-placement";
+import { resolvePipelineSelection, withPipelineParam } from "../lib/pipeline-selection";
 import type { Application, ApplicationStage, ApplicationPipelineWithCounts, UserRole } from "@/types/database";
 import { normalizeDestinations } from "@/lib/leads/destination-normalize";
 
@@ -46,6 +57,7 @@ interface ApplicationsWorkspaceProps {
   pipelines?: ApplicationPipelineWithCounts[];
   role: UserRole;
   tenantId: string;
+  userId: string;
 }
 
 type View = "board" | "list";
@@ -77,34 +89,90 @@ export function ApplicationsWorkspace({
   pipelines,
   role,
   tenantId,
+  userId,
 }: ApplicationsWorkspaceProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isAdmin = role === "owner" || role === "admin";
 
   const [view, setView] = useState<View>("board");
-  const [stages] = useState<ApplicationStage[]>(initialStages);
-  const [applications] = useState<Application[]>(initialApplications);
+  // Server props are the source of truth (router.refresh() must be able to update them).
+  const stages = initialStages;
+  const applications = initialApplications;
+  const allPipelines = useMemo(() => pipelines ?? [], [pipelines]);
   const [addOpen, setAddOpen] = useState(false);
+  const [addStageId, setAddStageId] = useState<string | null>(null);
   const [columnDialogOpen, setColumnDialogOpen] = useState(false);
   const [visibleColumnKeys, setVisibleColumnKeys] = useState<string[]>(APPLICATION_DEFAULT_COLUMN_KEYS);
-  // Defaults to the tenant's Default Pipeline so the very first render already
-  // scopes to one pipeline's stages, instead of showing every pipeline's stages
-  // interleaved (all 12 pipelines' position-0 "Shortlisted" stage sorting
-  // adjacent, etc. — the bug this default avoids re-introducing).
-  const [selectedPipelineId, setSelectedPipelineId] = useState<string | null>(
-    () => pipelines?.find((p) => p.is_default)?.id ?? pipelines?.[0]?.id ?? null
+  const [settingsState, setSettingsState] = useState<{ pipelineId: string; addStage: boolean } | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+
+  // The URL is the source of truth for the selected pipeline; unknown ids fall back to Default.
+  const selectedPipelineId = resolvePipelineSelection(searchParams.get("pipeline"), allPipelines);
+  const selectedPipeline = allPipelines.find((p) => p.id === selectedPipelineId) ?? null;
+  const defaultPipeline = defaultPipelineOf(allPipelines);
+  const isDefaultSelected = !!selectedPipeline && selectedPipeline.id === defaultPipeline?.id;
+
+  const handlePipelineChange = useCallback(
+    (pipelineId: string) => {
+      try {
+        localStorage.setItem(`application_pipeline_selected_${tenantId}`, pipelineId);
+      } catch {
+        /* ignore */
+      }
+      router.replace(`/applications?${withPipelineParam(searchParams.toString(), pipelineId)}`, { scroll: false });
+    },
+    [router, searchParams, tenantId],
   );
 
-  const handlePipelineChange = useCallback((pipelineId: string) => {
-    setSelectedPipelineId(pipelineId);
+  // No ?pipeline= yet: restore this person's last pipeline (once, on load).
+  useEffect(() => {
+    if (searchParams.get("pipeline")) return;
+    try {
+      const saved = localStorage.getItem(`application_pipeline_selected_${tenantId}`);
+      if (saved && saved !== defaultPipeline?.id && allPipelines.some((p) => p.id === saved)) {
+        router.replace(`/applications?${withPipelineParam(searchParams.toString(), saved)}`, { scroll: false });
+      }
+    } catch {
+      /* ignore */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const filteredStages = useMemo(
-    () => (selectedPipelineId ? stages.filter((s) => s.pipeline_id === selectedPipelineId) : stages),
-    [stages, selectedPipelineId]
+  const { placements, noPipelineCount } = useMemo(
+    () => resolveBoardPlacement(applications, stages, allPipelines),
+    [applications, stages, allPipelines],
   );
 
+  const filteredStages = useMemo(() => {
+    if (selectedPipelineId === IMPLICIT_PIPELINE) {
+      return stages.filter((s) => !s.pipeline_id || !allPipelines.some((p) => p.id === s.pipeline_id));
+    }
+    return stages.filter((s) => s.pipeline_id === selectedPipelineId);
+  }, [stages, selectedPipelineId, allPipelines]);
+
+  const pipelineApplications = useMemo(
+    () => appsOnPipeline(applications, placements, selectedPipelineId),
+    [applications, placements, selectedPipelineId],
+  );
+
+  const stageTotals = useMemo(() => {
+    const t: Record<string, number> = {};
+    for (const a of applications) {
+      const sid = placements.get(a.id)?.stageId;
+      if (sid) t[sid] = (t[sid] ?? 0) + 1;
+    }
+    return t;
+  }, [applications, placements]);
+
   const [search, setSearch] = useState("");
-  const [stageFilter, setStageFilter] = useState("all");
+  // Stage filter belongs to the pipeline it was picked on, so it never leaks into another pipeline.
+  const [stageFilterState, setStageFilterState] = useState({ pipelineId: selectedPipelineId, value: "all" });
+  const stageFilter = stageFilterState.pipelineId === selectedPipelineId ? stageFilterState.value : "all";
+  const setStageFilter = useCallback(
+    (value: string) => setStageFilterState({ pipelineId: selectedPipelineId, value }),
+    [selectedPipelineId],
+  );
   const [countryFilter, setCountryFilter] = useState("all");
   const [createdByFilter, setCreatedByFilter] = useState<string[]>([]);
   const [sortValue, setSortValue] = useState("created_at:desc");
@@ -155,20 +223,20 @@ export function ApplicationsWorkspace({
   ], [filteredStages]);
 
   const countryOptions = useMemo(() => {
-    const countries = normalizeDestinations(applications.flatMap((a) => a.countries ?? []));
+    const countries = normalizeDestinations(pipelineApplications.flatMap((a) => a.countries ?? []));
     return [
       { value: "all", label: "All countries" },
       ...countries.map((c) => ({ value: c, label: c })),
     ];
-  }, [applications]);
+  }, [pipelineApplications]);
 
   // Per-creator counts — cross-filtered: reflects Stage + Country but deliberately
   // excludes Created By itself, so selecting a person never collapses everyone
   // else's count to 0 (same convention as Leads' "Assigned To" counselorCounts).
   const createdByCounts = useMemo(() => {
     const m = new Map<string, number>();
-    applications.forEach((a) => {
-      const matchesStage = stageFilter === "all" || a.stage_id === stageFilter;
+    pipelineApplications.forEach((a) => {
+      const matchesStage = stageFilter === "all" || placements.get(a.id)?.stageId === stageFilter;
       const matchesCountry = countryFilter === "all" || normalizeDestinations(a.countries ?? []).includes(countryFilter);
       if (matchesStage && matchesCountry) {
         const key = a.created_by ?? "unknown";
@@ -176,12 +244,12 @@ export function ApplicationsWorkspace({
       }
     });
     return m;
-  }, [applications, stageFilter, countryFilter]);
+  }, [pipelineApplications, placements, stageFilter, countryFilter]);
 
   // Only creators actually present in the data (same principle as countryOptions) —
   // avoids listing every tenant member when most have created zero applications.
   const createdByOptions = useMemo(() => {
-    const creatorIds = Array.from(new Set(applications.map((a) => a.created_by).filter((v): v is string => !!v)));
+    const creatorIds = Array.from(new Set(pipelineApplications.map((a) => a.created_by).filter((v): v is string => !!v)));
     const known = creatorIds
       .filter((id) => (createdByCounts.get(id) ?? 0) > 0)
       .map((id) => {
@@ -199,14 +267,10 @@ export function ApplicationsWorkspace({
     return unknownCount > 0
       ? [...known, { value: "unknown", label: `Unknown (${unknownCount})`, description: "No creator recorded" }]
       : known;
-  }, [applications, createdByCounts, memberMap]);
+  }, [pipelineApplications, createdByCounts, memberMap]);
 
   const filteredApplications = useMemo(() => {
-    let result = applications;
-
-    if (selectedPipelineId) {
-      result = result.filter((a) => a.pipeline_id === selectedPipelineId);
-    }
+    let result = pipelineApplications;
 
     if (search) {
       const q = search.toLowerCase();
@@ -215,7 +279,7 @@ export function ApplicationsWorkspace({
         a.program_name.toLowerCase().includes(q)
       );
     }
-    if (stageFilter !== "all") result = result.filter((a) => a.stage_id === stageFilter);
+    if (stageFilter !== "all") result = result.filter((a) => placements.get(a.id)?.stageId === stageFilter);
     if (countryFilter !== "all") result = result.filter((a) => normalizeDestinations(a.countries ?? []).includes(countryFilter));
     if (createdByFilter.length > 0) {
       result = result.filter((a) => createdByFilter.includes(a.created_by ?? "unknown"));
@@ -244,7 +308,7 @@ export function ApplicationsWorkspace({
     });
 
     return result;
-  }, [applications, search, stageFilter, countryFilter, createdByFilter, sortField, sortDir, selectedPipelineId]);
+  }, [pipelineApplications, placements, search, stageFilter, countryFilter, createdByFilter, sortField, sortDir]);
 
   // Scoped to Stage + Country + Created By — Search stays independent so clearing
   // filters never unexpectedly wipes out what the user typed in the search box.
@@ -294,27 +358,57 @@ export function ApplicationsWorkspace({
     router.refresh();
   }, [router]);
 
+  const openAdd = useCallback((stageId: string | null) => {
+    setAddStageId(stageId);
+    setAddOpen(true);
+  }, []);
+
+  const pipelineIsEmpty = pipelineApplications.length === 0;
+  const settingsPipeline = settingsState ? allPipelines.find((p) => p.id === settingsState.pipelineId) ?? null : null;
+
   return (
     <div className="flex flex-col flex-1 min-h-0 gap-3">
       {/* Header */}
-      <div className="flex items-center justify-between gap-3 shrink-0">
-        <h1 className="text-base font-bold">Applications</h1>
+      <div className="flex items-center gap-2.5 shrink-0">
+        <h1 className="text-[20px] font-semibold tracking-[-0.02em] text-[#101112]">Applications</h1>
+        <span
+          data-testid="header-count"
+          className="rounded-full bg-[#f6f7f9] px-2 py-0.5 text-[12px] text-[#6b6f76] tabular-nums"
+        >
+          {filteredApplications.length}
+        </span>
+        <div className="flex-1" />
         <div className="flex items-center gap-2">
           <ApplicationPipelineSelector
-            pipelines={pipelines ?? []}
-            selectedPipelineId={selectedPipelineId ?? ""}
-            role={role}
-            tenantId={tenantId}
-            onPipelineChange={handlePipelineChange}
+            pipelines={allPipelines}
+            stages={stages}
+            stageTotals={stageTotals}
+            selectedPipelineId={selectedPipelineId}
+            selectedCount={filteredApplications.length}
+            isAdmin={isAdmin}
+            onSelect={handlePipelineChange}
+            onOpenSettings={(id) => setSettingsState({ pipelineId: id, addStage: false })}
+            onCreate={() => setCreateOpen(true)}
           />
+          {isAdmin && selectedPipeline && (
+            <button
+              type="button"
+              title="Pipeline settings"
+              aria-label="Pipeline settings"
+              onClick={() => setSettingsState({ pipelineId: selectedPipeline.id, addStage: false })}
+              className="inline-flex h-[30px] w-[30px] items-center justify-center rounded-[8px] border border-[#e8e9eb] bg-white text-[#2b2d2f] hover:bg-[#f6f7f9]"
+            >
+              <GearIcon className="h-[15px] w-[15px]" />
+            </button>
+          )}
           {canManageApplications && (
             <button
               type="button"
-              onClick={() => setAddOpen(true)}
-              className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-[8px] transition-colors bg-[#0f0f10] text-white hover:bg-[#0f0f10]/90"
+              onClick={() => openAdd(null)}
+              className="inline-flex h-[30px] items-center gap-1.5 rounded-[8px] bg-[#0f0f10] px-2.5 text-[13px] font-medium text-white transition-colors hover:bg-[#0f0f10]/90"
             >
               <PlusIcon className="h-3 w-3 shrink-0" />
-              Add Application
+              Add application
             </button>
           )}
         </div>
@@ -322,11 +416,7 @@ export function ApplicationsWorkspace({
 
       {/* Toolbar */}
       <div className="shrink-0">
-        <div className="flex flex-wrap items-center gap-2 p-3">
-          <div className="text-sm font-medium text-muted-foreground shrink-0">
-            {applications.length} Application{applications.length !== 1 ? "s" : ""}
-          </div>
-
+        <div className="flex flex-wrap items-center gap-2 py-1">
           <div className="relative w-52">
             <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
             <input
@@ -381,16 +471,98 @@ export function ApplicationsWorkspace({
         )}
       </div>
 
+      {isDefaultSelected && noPipelineCount > 0 && (
+        <div
+          data-testid="no-pipeline-note"
+          className="flex shrink-0 items-center gap-2 rounded-[8px] bg-[#fafaf9] px-2.5 py-[7px] text-[12px] text-[#6b6f76] shadow-[0_0_0_1px_rgba(0,0,0,.06)]"
+        >
+          <InfoIcon className="h-[14px] w-[14px] shrink-0 text-[#9a9ea5]" />
+          <span>
+            <b className="font-semibold text-[#101112]">{noPipelineCount}</b> applications have no pipeline yet — they&apos;re
+            shown here under Default.
+          </span>
+        </div>
+      )}
+
       {/* Content */}
       {view === "board" ? (
-        <div className="flex-1 min-h-0 overflow-hidden">
+        <div className="relative flex-1 min-h-0 overflow-hidden">
           <ApplicationsBoard
+            key={selectedPipelineId}
             stages={filteredStages}
             applications={filteredApplications}
+            placements={placements}
+            stageTotals={stageTotals}
+            pipelineId={selectedPipelineId}
+            userId={userId}
             canManageApplications={canManageApplications}
+            isAdmin={isAdmin && !!selectedPipeline}
             onRefresh={handleRefresh}
+            onAddToStage={openAdd}
+            onEditStages={(opts) =>
+              selectedPipeline && setSettingsState({ pipelineId: selectedPipeline.id, addStage: !!opts?.addStage })
+            }
             assigneeNames={assigneeNames}
           />
+          {pipelineIsEmpty && filteredStages.length > 0 && (
+            <div
+              data-testid="empty-pipeline"
+              className="pointer-events-none absolute inset-x-0 top-[170px] flex flex-col items-center text-center"
+            >
+              <div className="mb-3.5 flex h-[120px] w-[120px] items-center justify-center rounded-[20px] bg-[#f3f4f6]">
+                <div className="flex h-[84px] w-[72px] flex-col gap-[7px] rounded-[14px] bg-white p-[14px_12px] shadow-[0_0_0_1px_#e3e4e7,0_2px_6px_rgba(0,0,0,.05)]">
+                  <i className="block h-1.5 rounded-[3px] bg-[#e6e7ea]" />
+                  <i className="block h-1.5 w-3/4 rounded-[3px] bg-[#e6e7ea]" />
+                  <i className="block h-1.5 w-1/2 rounded-[3px] bg-[#e6e7ea]" />
+                </div>
+              </div>
+              <h3 className="mb-1 text-[18px] font-semibold text-[#101112]">
+                No applications in {selectedPipeline?.name ?? "this board"} yet
+              </h3>
+              <p className="mb-3.5 max-w-[340px] text-[13px] text-[#6b6f76]">
+                Applications you add or move here will show up in their stage.
+              </p>
+              <div className="pointer-events-auto flex gap-2">
+                {!isDefaultSelected && defaultPipeline && (
+                  <button
+                    type="button"
+                    onClick={() => handlePipelineChange(defaultPipeline.id)}
+                    className="inline-flex h-[30px] items-center rounded-[8px] border border-[#e8e9eb] bg-white px-2.5 text-[13px] font-medium text-[#2b2d2f] hover:bg-[#f6f7f9]"
+                  >
+                    Back to Default pipeline
+                  </button>
+                )}
+                {canManageApplications && (
+                  <button
+                    type="button"
+                    onClick={() => openAdd(null)}
+                    className="inline-flex h-[30px] items-center gap-1.5 rounded-[8px] bg-[#0f0f10] px-2.5 text-[13px] font-medium text-white hover:bg-[#0f0f10]/90"
+                  >
+                    <PlusIcon className="h-3 w-3" />
+                    Add application
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+          {pipelineIsEmpty && filteredStages.length === 0 && (
+            <div data-testid="no-pipeline-setup" className="flex h-full flex-col items-center justify-center text-center">
+              <h3 className="mb-1 text-[18px] font-semibold text-[#101112]">No applications yet</h3>
+              <p className="mb-3.5 max-w-[340px] text-[13px] text-[#6b6f76]">
+                {isAdmin ? "Set up a pipeline to start tracking applications." : "Ask an admin to set up a pipeline."}
+              </p>
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => setCreateOpen(true)}
+                  className="inline-flex h-[30px] items-center gap-1.5 rounded-[8px] bg-[#0f0f10] px-2.5 text-[13px] font-medium text-white hover:bg-[#0f0f10]/90"
+                >
+                  <PlusIcon className="h-3 w-3" />
+                  Set up a pipeline
+                </button>
+              )}
+            </div>
+          )}
         </div>
       ) : (
         <div className="flex-1 min-h-0 overflow-y-auto">
@@ -408,6 +580,7 @@ export function ApplicationsWorkspace({
         stages={stages}
         canManageApplications={canManageApplications}
         onSuccess={handleCreated}
+        initialStageId={addStageId}
       />
 
       <ApplicationsColumnManager
@@ -418,6 +591,32 @@ export function ApplicationsWorkspace({
         defaultKeys={APPLICATION_DEFAULT_COLUMN_KEYS}
         onApply={handleColumnsApply}
       />
+
+      {isAdmin && settingsPipeline && (
+        <ApplicationPipelineSettingsModal
+          open
+          onClose={() => {
+            setSettingsState(null);
+            router.refresh();
+          }}
+          pipeline={settingsPipeline}
+          stageAppCounts={stageTotals}
+          startAddingStage={settingsState?.addStage}
+          key={settingsPipeline.id}
+        />
+      )}
+
+      {isAdmin && (
+        <CreateApplicationPipelineModal
+          open={createOpen}
+          onClose={(newId) => {
+            setCreateOpen(false);
+            if (newId) handlePipelineChange(newId);
+            else router.refresh();
+          }}
+          pipelines={allPipelines}
+        />
+      )}
     </div>
   );
 }

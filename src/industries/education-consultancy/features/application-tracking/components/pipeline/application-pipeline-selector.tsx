@@ -1,246 +1,172 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import {
-  GearIcon,
-  PlusIcon,
-  CaretDownIcon,
-  MagnifyingGlassIcon,
-  CheckIcon,
-  GitBranchIcon,
-} from "@/components/icons";
-import { Button } from "@/components/ui/button";
-import { ApplicationPipelineSettingsModal } from "./application-pipeline-settings-modal";
-import { CreateApplicationPipelineModal } from "./create-application-pipeline-modal";
-import type { ApplicationPipelineWithCounts, UserRole } from "@/types/database";
+import { GearIcon, PlusIcon, CaretDownIcon, MagnifyingGlassIcon, CheckIcon, GitBranchIcon } from "@/components/icons";
+import type { ApplicationPipelineWithCounts, ApplicationStage } from "@/types/database";
 
 interface ApplicationPipelineSelectorProps {
   pipelines: ApplicationPipelineWithCounts[];
+  stages: ApplicationStage[];
+  /** application count per stage id (placement-based). */
+  stageTotals: Record<string, number>;
   selectedPipelineId: string;
-  role: UserRole;
-  tenantId: string;
-  onPipelineChange?: (pipelineId: string) => void;
+  /** Count shown on the button: what the board renders for the selected pipeline. */
+  selectedCount: number;
+  isAdmin: boolean;
+  onSelect: (pipelineId: string) => void;
+  onOpenSettings: (pipelineId: string) => void;
+  onCreate: () => void;
 }
 
 export function ApplicationPipelineSelector({
-  pipelines: initialPipelines,
+  pipelines,
+  stages,
+  stageTotals,
   selectedPipelineId,
-  role,
-  tenantId,
-  onPipelineChange,
+  selectedCount,
+  isAdmin,
+  onSelect,
+  onOpenSettings,
+  onCreate,
 }: ApplicationPipelineSelectorProps) {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const [pipelines, setPipelines] = useState(initialPipelines);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [createOpen, setCreateOpen] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const searchInputRef = useRef<HTMLInputElement>(null);
+  const [query, setQuery] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
 
-  const isAdmin = role === "owner" || role === "admin";
-  const selectedPipeline = pipelines.find((p) => p.id === selectedPipelineId);
-  const isNonDefaultSelected = selectedPipeline && !selectedPipeline.is_default;
-
-  const filteredPipelines = pipelines.filter((p) =>
-    p.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-        setSearchQuery("");
-      }
-    }
-    if (isOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-      return () => document.removeEventListener("mousedown", handleClickOutside);
-    }
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (isOpen && searchInputRef.current) {
-      const timer = setTimeout(() => { searchInputRef.current?.focus(); }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [isOpen]);
+  const selected = pipelines.find((p) => p.id === selectedPipelineId);
+  const label = selected ? selected.name : "All applications";
 
   useEffect(() => {
     if (!isOpen) return;
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") { setIsOpen(false); setSearchQuery(""); }
-    }
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setIsOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setIsOpen(false);
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
   }, [isOpen]);
 
-  const refreshPipelines = async () => {
-    try {
-      const res = await fetch("/api/v1/application-pipelines");
-      const json = await res.json();
-      if (json.data) setPipelines(json.data);
-    } catch { /* ignore */ }
-  };
-
-  const handlePipelineChange = (pipelineId: string) => {
-    try {
-      localStorage.setItem(`application_pipeline_selected_${tenantId}`, pipelineId);
-    } catch { /* ignore */ }
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("pipeline", pipelineId);
-    router.push(`/applications?${params.toString()}`);
+  const close = () => {
     setIsOpen(false);
-    setSearchQuery("");
-    onPipelineChange?.(pipelineId);
+    setQuery("");
   };
-
-  const handleSettingsClose = () => {
-    setSettingsOpen(false);
-    refreshPipelines();
-    router.refresh();
-  };
-
-  const handleCreateClose = (newPipelineId?: string) => {
-    setCreateOpen(false);
-    refreshPipelines().then(() => {
-      if (newPipelineId) handlePipelineChange(newPipelineId);
-    });
-  };
-
-  const handleCreateClick = () => {
-    setIsOpen(false);
-    setSearchQuery("");
-    setCreateOpen(true);
-  };
-
-  useEffect(() => { setPipelines(initialPipelines); }, [initialPipelines]);
-
-  useEffect(() => {
-    if (searchParams.get("pipeline")) return;
-    try {
-      const saved = localStorage.getItem(`application_pipeline_selected_${tenantId}`);
-      if (saved && saved !== selectedPipelineId && initialPipelines.some((p) => p.id === saved)) {
-        const params = new URLSearchParams(searchParams.toString());
-        params.set("pipeline", saved);
-        router.replace(`/applications?${params.toString()}`);
-      }
-    } catch { /* ignore */ }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const filtered = pipelines.filter((p) => p.name.toLowerCase().includes(query.toLowerCase()));
 
   return (
-    <>
-      <div className="flex items-center gap-2">
-        <div ref={dropdownRef} className="relative">
-          <button
-            type="button"
-            onClick={() => setIsOpen(!isOpen)}
-            className={`
-              inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md border transition-colors
-              ${isNonDefaultSelected
-                ? "border-[#0f0f10] bg-[#0000170b] text-[#0f0f10]"
-                : "border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b]"
-              }
-            `}
-          >
-            <GitBranchIcon className="h-3 w-3 shrink-0" />
-            <span className="truncate max-w-[140px]">{selectedPipeline?.name || "Select Pipeline"}</span>
-            <CaretDownIcon className={`h-3 w-3 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`} />
-          </button>
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setIsOpen((o) => !o)}
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
+        data-testid="pipeline-button"
+        className="inline-flex h-[30px] items-center gap-1.5 rounded-[8px] border border-[#e8e9eb] bg-white px-2.5 text-[13px] font-medium text-[#2b2d2f] hover:bg-[#f6f7f9]"
+      >
+        <span className="inline-flex h-[18px] w-[18px] items-center justify-center rounded-[5px] bg-[#fff1e6] text-[#c2561a]">
+          <GitBranchIcon className="h-3 w-3" />
+        </span>
+        <span className="max-w-[160px] truncate">{label}</span>
+        <span className="font-normal text-[#9a9ea5] tabular-nums">{selectedCount}</span>
+        <CaretDownIcon className="h-3 w-3 shrink-0 text-[#9a9ea5]" />
+      </button>
 
-          {isOpen && (
-            <div className="absolute top-full right-0 mt-1.5 w-72 bg-white rounded-lg shadow-lg border border-gray-200 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
-              <div className="p-2 border-b border-gray-100">
-                <div className="relative">
-                  <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-                  <input
-                    ref={searchInputRef}
-                    type="text"
-                    placeholder="Search pipelines..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-full focus:outline-none focus:ring-1 focus:ring-gray-300 focus:border-transparent"
-                  />
-                </div>
-              </div>
+      {isOpen && (
+        <div
+          role="menu"
+          className="absolute top-full right-0 z-50 mt-1.5 w-[340px] rounded-[12px] bg-white p-1 shadow-[0_10px_15px_-3px_rgb(0_0_0/.1),0_4px_6px_-4px_rgb(0_0_0/.1),0_0_0_1px_rgba(0,0,0,.06)]"
+        >
+          <div className="m-0.5 mb-1 flex h-[30px] items-center gap-2 rounded-[8px] px-2 text-[#9a9ea5] shadow-[inset_0_0_0_1px_#e8e9eb]">
+            <MagnifyingGlassIcon className="h-[14px] w-[14px]" />
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Find a pipeline…"
+              className="min-w-0 flex-1 bg-transparent text-[13px] text-[#101112] outline-none placeholder:text-[#9a9ea5]"
+            />
+          </div>
 
-              <div className="max-h-56 overflow-y-auto py-1">
-                {filteredPipelines.length === 0 ? (
-                  <div className="px-3 py-2 text-xs text-gray-500 text-center">No pipelines found</div>
-                ) : (
-                  filteredPipelines.map((pipeline) => {
-                    const isSelected = selectedPipelineId === pipeline.id;
-                    return (
-                      <button
-                        key={pipeline.id}
-                        type="button"
-                        onClick={() => handlePipelineChange(pipeline.id)}
-                        className="w-full flex items-start gap-2.5 px-3 py-2 text-left transition-colors hover:bg-[#0000170b]"
-                      >
-                        <div className={`mt-0.5 w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center shrink-0 ${isSelected ? "border-[#0f0f10] bg-[#0f0f10]" : "border-gray-300"}`}>
-                          {isSelected && <CheckIcon className="w-2 h-2 text-white" />}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            {pipeline.is_default && (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 font-medium shrink-0">Default</span>
-                            )}
-                            <span className="text-xs font-medium truncate text-[#0f0f10]">{pipeline.name}</span>
-                          </div>
-                          <div className="text-[11px] text-[#787871] mt-0.5">
-                            {pipeline.application_count} {pipeline.application_count === 1 ? "application" : "applications"} · {pipeline.stage_count} stages
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })
-                )}
-              </div>
-
-              {isAdmin && (
-                <>
-                  <div className="h-px bg-gray-100" />
-                  <div className="p-1">
+          <div className="max-h-[320px] overflow-y-auto">
+            {filtered.length === 0 && <div className="px-3 py-2 text-center text-[12px] text-[#9a9ea5]">No pipelines found</div>}
+            {filtered.map((p) => {
+              const ps = stages.filter((s) => s.pipeline_id === p.id).sort((a, b) => a.position - b.position);
+              const total = ps.reduce((n, s) => n + (stageTotals[s.id] ?? 0), 0);
+              return (
+                <div key={p.id} className="group relative">
+                  <button
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={p.id === selectedPipelineId}
+                    onClick={() => {
+                      close();
+                      onSelect(p.id);
+                    }}
+                    className="flex w-full gap-2.5 rounded-[8px] px-2 pt-2 pb-[9px] text-left hover:bg-[#f6f7f9]"
+                  >
+                    <CheckIcon className={`mt-px h-4 w-4 shrink-0 ${p.id === selectedPipelineId ? "text-[#2272B4]" : "text-transparent"}`} />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-1.5 text-[13px] font-medium text-[#101112]">
+                        <span className="truncate">{p.name}</span>
+                        {p.is_default && (
+                          <span className="inline-flex h-[18px] items-center rounded-[5px] bg-[#f6f7f9] px-[5px] text-[11px] font-medium text-[#6b6f76] shadow-[inset_0_0_0_1px_#e8e9eb]">
+                            Default
+                          </span>
+                        )}
+                      </span>
+                      <span className="mt-px block text-[12px] text-[#6b6f76] tabular-nums">
+                        {p.application_count} {p.application_count === 1 ? "application" : "applications"} · {p.stage_count}{" "}
+                        {p.stage_count === 1 ? "stage" : "stages"}
+                      </span>
+                      <span className="mt-[7px] flex h-1 gap-px overflow-hidden rounded-full bg-[#f0f1f2]">
+                        {total > 0
+                          ? ps
+                              .filter((s) => (stageTotals[s.id] ?? 0) > 0)
+                              .map((s) => <i key={s.id} className="block h-full" style={{ flex: stageTotals[s.id], background: s.color }} />)
+                          : null}
+                      </span>
+                    </span>
+                  </button>
+                  {isAdmin && (
                     <button
                       type="button"
-                      onClick={handleCreateClick}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+                      title="Pipeline settings"
+                      aria-label={`${p.name} settings`}
+                      onClick={() => {
+                        close();
+                        onOpenSettings(p.id);
+                      }}
+                      className="absolute top-[7px] right-1.5 hidden h-6 w-6 items-center justify-center rounded-[6px] text-[#6b6f76] group-hover:flex hover:bg-black/5 hover:text-[#101112]"
                     >
-                      <PlusIcon className="h-3.5 w-3.5" />
-                      Create New Pipeline
+                      <GearIcon className="h-[14px] w-[14px]" />
                     </button>
-                  </div>
-                </>
-              )}
-            </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {isAdmin && (
+            <>
+              <div className="my-1 border-t border-[#f0f1f2]" />
+              <button
+                type="button"
+                onClick={() => {
+                  close();
+                  onCreate();
+                }}
+                className="flex h-8 w-full items-center gap-2 rounded-[8px] px-2 text-[13px] font-medium text-[#2b2d2f] hover:bg-[#f6f7f9]"
+              >
+                <PlusIcon className="h-[14px] w-[14px]" />
+                New pipeline
+              </button>
+            </>
           )}
         </div>
-
-        {isAdmin && selectedPipeline && (
-          <Button variant="ghost" size="icon-sm" onClick={() => setSettingsOpen(true)} title="Pipeline Settings">
-            <GearIcon className="h-4 w-4" />
-          </Button>
-        )}
-      </div>
-
-      {isAdmin && selectedPipeline && (
-        <ApplicationPipelineSettingsModal
-          open={settingsOpen}
-          onClose={handleSettingsClose}
-          pipeline={selectedPipeline}
-        />
       )}
-
-      {isAdmin && (
-        <CreateApplicationPipelineModal
-          open={createOpen}
-          onClose={handleCreateClose}
-          pipelines={pipelines}
-        />
-      )}
-    </>
+    </div>
   );
 }

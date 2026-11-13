@@ -44,6 +44,8 @@ interface AddApplicationSheetProps {
   stages: ApplicationStage[];
   canManageApplications: boolean;
   onSuccess: () => void;
+  /** Preselects this stage when the sheet opens (the board column "+"). Ignored if it is not in the status list shown. */
+  initialStageId?: string | null;
 }
 
 export function AddApplicationSheet({
@@ -52,6 +54,7 @@ export function AddApplicationSheet({
   stages,
   canManageApplications,
   onSuccess,
+  initialStageId,
 }: AddApplicationSheetProps) {
 
   const [submitting, setSubmitting] = useState(false);
@@ -73,6 +76,7 @@ export function AddApplicationSheet({
   const defaultStage = statusStages.find((s) => s.is_default) ?? statusStages[0];
   // Never submit a status that is not in the list shown (e.g. left over from a previous destination).
   const selectedStageId = statusStages.some((s) => s.id === stageId) ? stageId : (defaultStage?.id ?? "");
+  const presetStageId = initialStageId && statusStages.some((s) => s.id === initialStageId) ? initialStageId : null;
   const [deadline, setDeadline] = useState("");
   const [agentId, setAgentId] = useState("");
   const [appliedDate, setAppliedDate] = useState("");
@@ -147,8 +151,8 @@ export function AddApplicationSheet({
       setIntakeStartDate("");
       setConsentBlocked(false);
     }
-    if (open) setStageId(defaultStage?.id ?? "");
-  }, [open, defaultStage?.id]);
+    if (open) setStageId(presetStageId ?? defaultStage?.id ?? "");
+  }, [open, defaultStage?.id, presetStageId]);
 
   // Program suggestions are the one dataset here NOT shared with the other
   // Add Application screens — this reads real past-application university/

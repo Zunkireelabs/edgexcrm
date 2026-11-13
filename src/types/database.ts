@@ -1258,8 +1258,11 @@ export interface Application {
   stage_changed_at: string;
   deleted_at: string | null;
   // Joined fields (present when fetched with select joins)
-  leads?: { id: string; first_name: string | null; last_name: string | null; email: string | null } | null;
+  leads?: { id: string; first_name: string | null; last_name: string | null; email: string | null; assigned_to?: string | null } | null;
   application_stages?: ApplicationStage | null;
+  // Board-only, attached by /applications page.tsx (not DB columns)
+  doc_count?: number;
+  open_task_count?: number;
 }
 
 // Deals / Opportunities (it_agency feature)

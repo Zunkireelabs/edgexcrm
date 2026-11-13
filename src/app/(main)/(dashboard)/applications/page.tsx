@@ -7,6 +7,8 @@ import { leadQueryScope } from "@/lib/api/permissions";
 import { branchMemberIds } from "@/lib/leads/branch-membership";
 import { visibleLeadsBase } from "@/lib/leads/visibility-query";
 import { POSITION_ROUTE_MAP } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
+import { resolveBoardPlacement } from "@/industries/education-consultancy/features/application-tracking/lib/board-placement";
+import { fetchBoardCounts } from "@/industries/education-consultancy/features/application-tracking/lib/board-counts";
 import { ApplicationsWorkspace } from "@/industries/education-consultancy/features/application-tracking/pages/applications-workspace";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ApplicationStage, Application, ApplicationPipelineWithCounts, UserRole } from "@/types/database";
@@ -23,7 +25,7 @@ async function fetchApplicationsByLeadIds(
   const buildQ = (chunk?: string[]) => {
     let q = supabase
       .from("applications")
-      .select("*, leads!applications_lead_id_fkey!inner(id,first_name,last_name,email)")
+      .select("*, leads!applications_lead_id_fkey!inner(id,first_name,last_name,email,assigned_to)")
       .eq("tenant_id", tenantId)
       .is("deleted_at", null)
       .is("leads.deleted_at", null)
@@ -117,26 +119,33 @@ export default async function ApplicationsRoute() {
   for (const s of stages) {
     if (s.pipeline_id) stageCountByPipeline.set(s.pipeline_id, (stageCountByPipeline.get(s.pipeline_id) ?? 0) + 1);
   }
-  const appCountByPipeline = new Map<string, number>();
-  for (const a of applications) {
-    if (a.pipeline_id) appCountByPipeline.set(a.pipeline_id, (appCountByPipeline.get(a.pipeline_id) ?? 0) + 1);
-  }
+  // Same placement the board uses, so a pipeline's menu count equals what its board renders
+  // (null-pipeline apps are counted under Default instead of vanishing).
+  const { countByPipeline: appCountByPipeline } = resolveBoardPlacement(applications, stages, rawPipelines);
   const pipelines: ApplicationPipelineWithCounts[] = rawPipelines.map((p) => ({
     ...p,
     stage_count: stageCountByPipeline.get(p.id) ?? 0,
     application_count: appCountByPipeline.get(p.id) ?? 0,
   }));
 
+  const { docsByApplication, openTasksByLead } = await fetchBoardCounts(supabase, tenantData.tenant.id, applications);
+  const boardApplications: Application[] = applications.map((a) => ({
+    ...a,
+    doc_count: docsByApplication.get(a.id) ?? 0,
+    open_task_count: openTasksByLead.get(a.lead_id) ?? 0,
+  }));
+
   return (
     <div className="flex flex-col h-[calc(100vh-90px)]">
       <ApplicationsWorkspace
         stages={stages}
-        applications={applications}
+        applications={boardApplications}
         canManageApplications={tenantData.permissions.canManageApplications}
         teamMembers={teamMembers.map((m) => ({ user_id: m.user_id, name: m.name, email: m.email }))}
         pipelines={pipelines}
         role={tenantData.role as UserRole}
         tenantId={tenantData.tenant.id}
+        userId={tenantData.userId}
       />
     </div>
   );
