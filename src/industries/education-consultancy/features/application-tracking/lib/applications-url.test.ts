@@ -110,7 +110,8 @@ describe("board <-> detail back link (B3)", () => {
     expect(applicationDetailHref("app-1", "utm=x")).toBe("/applications/app-1");
     const href = applicationDetailHref("app-1", board);
     const back = new URL(href, "http://h").searchParams.get(BOARD_BACK_PARAM);
-    expect(back).toBe(`/applications?${boardStateQuery(board)}`);
+    // Phase 4: the List view and its page ride along (view=list from the board string; no page there)
+    expect(back).toBe(`/applications?${boardStateQuery(board)}&view=list`);
   });
   it("round trip: detail -> back link restores the same board state", () => {
     const back = new URL(applicationDetailHref("app-1", board), "http://h").searchParams.get(BOARD_BACK_PARAM);
@@ -123,6 +124,14 @@ describe("board <-> detail back link (B3)", () => {
     for (const bad of [null, "", "https://evil.test/applications?q=x", "//evil.test/applications", "/\\evil.test/applications", "javascript:alert(1)", "/leads?q=x", "/applications/other", "applications?q=x"]) {
       expect(boardBackHref(bad), String(bad)).toBe("/applications");
     }
+  });
+  it("Phase 4: list view + page survive the round trip; a board-view page or a bad page is dropped", () => {
+    const back = new URL(applicationDetailHref("app-1", "q=har&view=list&page=3"), "http://h").searchParams.get(BOARD_BACK_PARAM);
+    expect(boardBackHref(back)).toBe("/applications?q=har&view=list&page=3");
+    expect(boardBackHref("/applications?q=har&page=3")).toBe("/applications?q=har");
+    expect(boardBackHref("/applications?view=list&page=0")).toBe("/applications?view=list");
+    expect(boardBackHref("/applications?view=list&page=abc")).toBe("/applications?view=list");
+    expect(boardBackHref("/applications?view=grid&page=2")).toBe("/applications");
   });
   it("strips params outside the allow-list from a hand-edited back value", () => {
     expect(boardBackHref("/applications?q=har&redirect=https://evil.test&tab=mine")).toBe("/applications?q=har&tab=mine");

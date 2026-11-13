@@ -3,7 +3,8 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import {
   PlusIcon,
-  ColumnsIcon,
+  CaretDownIcon,
+  SlidersHorizontalIcon,
   CaretLeftIcon,
   GearIcon,
   InfoIcon,
@@ -12,24 +13,19 @@ import {
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ApplicationsToolbar } from "../components/applications-toolbar";
 import {
-  ApplicationsColumnManager,
-} from "../components/applications-column-manager";
-import {
   ApplicationsBoard,
   type ColumnPage,
 } from "../components/applications-board";
-import { ShowMoreButton } from "../components/column-show-more";
-import {
-  ApplicationsTable,
-  APPLICATION_COLUMNS,
-  APPLICATION_DEFAULT_COLUMN_KEYS,
-} from "../components/applications-table";
+import { ApplicationsList, LIST_POPOVER_COLUMNS, type ListPage } from "../components/applications-list";
+import { ColumnsPopover } from "@/components/dashboard/leads/table/columns-popover";
+import type { ColumnLayout } from "@/components/dashboard/leads/table/grid-layout";
 import { AddApplicationSheet } from "../components/add-application-sheet";
 import { ApplicationPipelineSelector } from "../components/pipeline/application-pipeline-selector";
 import { ApplicationPipelineSettingsModal } from "../components/pipeline/application-pipeline-settings-modal";
 import { CreateApplicationPipelineModal } from "../components/pipeline/create-application-pipeline-modal";
 import { IMPLICIT_PIPELINE, defaultPipelineOf } from "../lib/board-placement";
-import { LIST_PAGE_SIZE, type BoardPayload } from "../lib/board-index";
+import { DEFAULT_LIST_PAGE_SIZE, type BoardPayload, type ListSummary } from "../lib/board-index";
+import { LIST_DEFAULT_KEYS, loadListLayout, loadPageSize, parsePage, resetListLayout, saveListLayout, savePageSize } from "../lib/list-view";
 import { resolvePipelineSelection } from "../lib/pipeline-selection";
 import { useEmptyStateSlot } from "../hooks/use-empty-state-slot";
 import { applicationDetailHref, boardStateQuery, decodeApplicationParams, withParam, withPipelineSwitch } from "../lib/applications-url";
@@ -67,14 +63,16 @@ interface ApplicationsWorkspaceProps {
   role: UserRole;
   tenantId: string;
   userId: string;
+  /** Tenant timezone: the list's deadline colours (due in 14d / past). */
+  timezone?: string;
+  /** Visibility scope of this user ("own" = a counsellor's own leads): own scope gets no bulk actions. */
+  scopeKind?: "own" | "branch" | "all";
 }
 
 type View = "board" | "list";
-// Applications-only button style for the list view's "Edit columns".
-const TOOLBAR_BTN =
-  "inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-[8px] border transition-colors border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b]";
-
-const COLUMNS_STORAGE_KEY = "edgex-applications-visible-columns";
+// Mockup state 6: a ghost 28px button at the right end of the tabs row.
+const VIEW_SETTINGS_BTN =
+  "inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-ds-sm px-2 text-sm font-medium text-ds-ink transition-colors hover:bg-ds-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ds-ghost data-[state=open]:bg-ds-hover";
 
 export function ApplicationsWorkspace({
   stages: initialStages,
@@ -87,20 +85,21 @@ export function ApplicationsWorkspace({
   role,
   tenantId,
   userId,
+  timezone = "UTC",
+  scopeKind = "own",
 }: ApplicationsWorkspaceProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const isAdmin = role === "owner" || role === "admin";
 
-  const [view, setView] = useState<View>("board");
+  // ?view=list keeps the List view across reloads and the detail back link (Phase 4).
+  const view: View = searchParams.get("view") === "list" ? "list" : "board";
   // Server props are the source of truth (router.refresh() must be able to update them).
   const stages = initialStages;
   const allPipelines = useMemo(() => pipelines ?? [], [pipelines]);
   const [addOpen, setAddOpen] = useState(false);
   const [addStageId, setAddStageId] = useState<string | null>(null);
-  const [columnDialogOpen, setColumnDialogOpen] = useState(false);
-  const [visibleColumnKeys, setVisibleColumnKeys] = useState<string[]>(APPLICATION_DEFAULT_COLUMN_KEYS);
   const [settingsState, setSettingsState] = useState<{ pipelineId: string; addStage: boolean } | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
 
@@ -157,7 +156,17 @@ export function ApplicationsWorkspace({
   const { q, sort, tab } = urlState;
   const pushParam = useCallback(
     (key: string, value: string | null) => {
-      const qs = withParam(searchParams.toString(), key, value);
+      // Any filter / sort / tab change goes back to page 1 of the list.
+      const base = key === "page" ? searchParams.toString() : withParam(searchParams.toString(), "page", null);
+      const qs = withParam(base, key, value);
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    },
+    [router, pathname, searchParams],
+  );
+  const setView = useCallback(
+    (v: View) => {
+      const base = withParam(searchParams.toString(), "page", null);
+      const qs = withParam(base, "view", v === "list" ? "list" : null);
       router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
     },
     [router, pathname, searchParams],
@@ -174,34 +183,26 @@ export function ApplicationsWorkspace({
     [teamMembers],
   );
 
-  // Load saved column prefs after mount to avoid SSR hydration mismatch.
-  // Why: react-hooks/set-state-in-effect rejects synchronous setState inside an
-  // effect body; deferring via setTimeout places the update outside the
-  // synchronous effect execution (matches tag-multi-picker.tsx's convention).
+  // List prefs (per user): column layout under its own grid-prefs key + rows per page. Read after
+  // mount (no SSR mismatch), deferred like the column width above.
+  const [listLayout, setListLayout] = useState<ColumnLayout>({ keys: LIST_DEFAULT_KEYS, pins: [] });
+  const [pageSize, setPageSize] = useState<number>(DEFAULT_LIST_PAGE_SIZE);
+  const [prefsReady, setPrefsReady] = useState(false);
   useEffect(() => {
     const id = setTimeout(() => {
-      try {
-        const raw = window.localStorage.getItem(COLUMNS_STORAGE_KEY);
-        if (raw) {
-          const saved = JSON.parse(raw) as string[];
-          const valid = saved.filter((k) => APPLICATION_DEFAULT_COLUMN_KEYS.includes(k));
-          if (valid.length > 0) setVisibleColumnKeys(valid);
-        }
-      } catch {
-        // localStorage unavailable or corrupt — keep defaults
-      }
+      setListLayout(loadListLayout(tenantId, userId));
+      setPageSize(loadPageSize(tenantId, userId));
+      setPrefsReady(true);
     }, 0);
     return () => clearTimeout(id);
-  }, []);
-
-  function handleColumnsApply(keys: string[]) {
-    setVisibleColumnKeys(keys);
-    try {
-      window.localStorage.setItem(COLUMNS_STORAGE_KEY, JSON.stringify(keys));
-    } catch {
-      // localStorage unavailable — ignore
-    }
-  }
+  }, [tenantId, userId]);
+  const handleListLayout = useCallback(
+    (next: ColumnLayout) => {
+      setListLayout(next);
+      saveListLayout(tenantId, userId, next);
+    },
+    [tenantId, userId],
+  );
 
   // Header "N of T": chips or search (T is the same tab with neither).
   const filtersActive = !isEmptyTree(tree) || q !== "";
@@ -257,13 +258,13 @@ export function ApplicationsWorkspace({
   const [toolbarKey, setToolbarKey] = useState(0);
   const clearFilters = useCallback(() => {
     const p = new URLSearchParams(searchParams.toString());
-    for (const k of [FILTER_PARAM, "q", "tab"]) p.delete(k);
+    for (const k of [FILTER_PARAM, "q", "tab", "page"]) p.delete(k);
     const qs = p.toString();
     setToolbarKey((k) => k + 1); // the search box keeps its own text; remount it empty
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   }, [router, pathname, searchParams]);
 
-  const handleTreeChange = useCallback((next: FilterTree) => setTree(next), [setTree]);
+  const handleTreeChange = useCallback((next: FilterTree) => setTree(next, { deleteParams: ["page"] }), [setTree]);
   const handleColumnWidth = useCallback(
     (w: ColumnWidth) => {
       setColumnWidth(w);
@@ -302,33 +303,33 @@ export function ApplicationsWorkspace({
   );
   const fetchColumnPage = useCallback((stageId: string, offset: number) => requestPage({ stage: stageId, offset, limit: 25 }), [requestPage]);
 
-  // List view (still the Phase 1 table until Phase 4): the flat sorted filtered index, 50 at a time.
-  const [list, setList] = useState<{ key: string; rows: Application[]; total: number; loading: boolean } | null>(null);
-  const listKey = `${boardQuery0}|${board.total}`;
-  const loadList = useCallback(
-    async (append: boolean) => {
-      const offset = append && list?.key === listKey ? list.rows.length : 0;
-      setList((prev) => ({ key: listKey, rows: append && prev?.key === listKey ? prev.rows : [], total: prev?.total ?? 0, loading: true }));
-      try {
-        const page = await requestPage({ offset, limit: LIST_PAGE_SIZE });
-        setList((prev) => {
-          const base = append && prev?.key === listKey ? prev.rows : [];
-          const have = new Set(base.map((r) => r.id));
-          return { key: listKey, rows: [...base, ...page.cards.filter((c) => !have.has(c.id))], total: page.total, loading: false };
-        });
-      } catch {
-        setList((prev) => (prev ? { ...prev, loading: false } : prev));
-      }
+  // List view (Phase 4): Leads-style pages of the flat filtered index, ?page= in the URL.
+  const listPage = parsePage(searchParams.get("page"));
+  const fetchListPage = useCallback(
+    async (offset: number, limit: number): Promise<ListPage> => {
+      const p = new URLSearchParams(boardQuery0);
+      p.set("offset", String(offset));
+      p.set("limit", String(limit));
+      const res = await fetch(`/api/v1/applications/board-page?${p.toString()}`);
+      if (!res.ok) throw new Error(`board-page ${res.status}`);
+      const { data } = (await res.json()) as { data: ColumnPage & { summary: ListSummary | null; truncated: boolean } };
+      return { rows: data.cards, total: data.total, summary: data.summary, truncated: data.truncated };
     },
-    [list, listKey, requestPage],
+    [boardQuery0],
   );
-  useEffect(() => {
-    if (view !== "list" || list?.key === listKey) return;
-    const id = setTimeout(() => void loadList(false), 0);
-    return () => clearTimeout(id);
-  }, [view, list?.key, listKey, loadList]);
-  const listRows = list?.key === listKey ? list.rows : [];
-  const listMore = list?.key === listKey ? Math.min(LIST_PAGE_SIZE, Math.max(0, list.total - list.rows.length)) : 0;
+  const handleListPage = useCallback((n: number) => pushParam("page", n <= 1 ? null : String(n)), [pushParam]);
+  const handlePageSize = useCallback(
+    (n: number) => {
+      setPageSize(n);
+      savePageSize(tenantId, userId, n);
+      pushParam("page", null);
+    },
+    [tenantId, userId, pushParam],
+  );
+  const [filterRequest, setFilterRequest] = useState<{ fieldKey: string; nonce: number } | null>(null);
+  const filterFieldKeys = useMemo(() => new Set(pickerFields.map((f) => f.key)), [pickerFields]);
+  // Bulk actions are admin-only; counsellors (own scope) never see them (Phase 3 note).
+  const bulkAllowed = canManageApplications && scopeKind !== "own";
 
   const pipelineIsEmpty = board.total === 0;
   // Filtered to zero (chips, search or a tab) -> "No applications match"; the "No applications in
@@ -414,11 +415,24 @@ export function ApplicationsWorkspace({
         onColumnWidth={handleColumnWidth}
         view={view}
         onView={setView}
+        filterRequest={filterRequest}
         listActions={
-          <button type="button" onClick={() => setColumnDialogOpen(true)} className={TOOLBAR_BTN}>
-            <ColumnsIcon className="h-3 w-3 shrink-0" />
-            Edit columns
-          </button>
+          <ColumnsPopover
+            trigger={
+              <button type="button" data-testid="view-settings" className={VIEW_SETTINGS_BTN}>
+                <SlidersHorizontalIcon className="size-4 shrink-0" />
+                View settings
+                <CaretDownIcon className="size-3.5 shrink-0 text-ds-faint" />
+              </button>
+            }
+            columns={LIST_POPOVER_COLUMNS}
+            layout={listLayout}
+            titleFor={(c) => c.label}
+            onLayoutChange={handleListLayout}
+            onReset={() => setListLayout(resetListLayout(tenantId, userId))}
+            dndId="applications-list-columns-dnd"
+            testId="applications-view-settings"
+          />
         }
       />
 
@@ -546,16 +560,34 @@ export function ApplicationsWorkspace({
           )}
         </div>
       ) : (
-        <div className="flex-1 min-h-0 overflow-y-auto">
-          <ApplicationsTable
-            applications={listRows}
-            stages={filteredStages}
-            visibleKeys={visibleColumnKeys}
-            detailHref={detailHref}
-          />
-          <div className="flex justify-center py-2" data-testid="list-show-more">
-            <ShowMoreButton count={listMore} loading={!!list?.loading} onClick={() => void loadList(true)} />
-          </div>
+        <div className="flex min-h-0 flex-1 flex-col -mx-0" data-testid="list-area">
+          {prefsReady && (
+            <ApplicationsList
+              key={selectedPipelineId}
+              stateQuery={boardQuery0}
+              fetchPage={fetchListPage}
+              page={listPage}
+              pageSize={pageSize}
+              onPage={handleListPage}
+              onPageSize={handlePageSize}
+              layout={listLayout}
+              onLayoutChange={handleListLayout}
+              sort={sort}
+              onSort={(s2) => pushParam("sort", s2 === DEFAULT_APPLICATION_SORT ? null : s2)}
+              onFilterRequest={(fieldKey) => setFilterRequest({ fieldKey, nonce: Date.now() })}
+              filterFieldKeys={filterFieldKeys}
+              stages={filteredStages}
+              teamMembers={teamMembers}
+              assigneeNames={assigneeNames}
+              canManageApplications={canManageApplications}
+              bulkAllowed={bulkAllowed}
+              timezone={timezone}
+              detailHref={detailHref}
+              filtersActive={anythingActive}
+              onClearFilters={clearFilters}
+              onChanged={handleRefresh}
+            />
+          )}
         </div>
       )}
 
@@ -568,14 +600,6 @@ export function ApplicationsWorkspace({
         initialStageId={addStageId}
       />
 
-      <ApplicationsColumnManager
-        open={columnDialogOpen}
-        onOpenChange={setColumnDialogOpen}
-        columns={APPLICATION_COLUMNS}
-        visibleKeys={visibleColumnKeys}
-        defaultKeys={APPLICATION_DEFAULT_COLUMN_KEYS}
-        onApply={handleColumnsApply}
-      />
 
       {isAdmin && settingsPipeline && (
         <ApplicationPipelineSettingsModal

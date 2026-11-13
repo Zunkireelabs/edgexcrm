@@ -76,6 +76,8 @@ export default async function ApplicationsRoute({ searchParams }: { searchParams
         role={tenantData.role as UserRole}
         tenantId={tenantId}
         userId={tenantData.userId}
+        timezone={ctx.tz}
+        scopeKind={resolved.kind}
       />
     </div>
   );

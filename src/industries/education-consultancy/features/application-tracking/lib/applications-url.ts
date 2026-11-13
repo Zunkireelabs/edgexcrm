@@ -93,9 +93,24 @@ export function boardStateQuery(current: string): string {
   return out.toString();
 }
 
+/**
+ * The back link also restores the List view and its page (Phase 4): ?view=list and ?page=<n> only,
+ * nothing else. They are not part of boardStateQuery (the board-page API and the index ignore them).
+ */
+function backQuery(current: string): string {
+  const src = new URLSearchParams(current);
+  const out = new URLSearchParams(boardStateQuery(current));
+  if (src.get("view") === "list") {
+    out.set("view", "list");
+    const page = src.get("page");
+    if (page && /^[1-9]\d{0,5}$/.test(page)) out.set("page", page);
+  }
+  return out.toString();
+}
+
 /** /applications/<id>, with ?back=<board path + state> when the board has any state to restore. */
 export function applicationDetailHref(appId: string, boardQuery: string): string {
-  const qs = boardStateQuery(boardQuery);
+  const qs = backQuery(boardQuery);
   const path = `${BOARD_PATH}/${encodeURIComponent(appId)}`;
   return qs ? `${path}?${BOARD_BACK_PARAM}=${encodeURIComponent(`${BOARD_PATH}?${qs}`)}` : path;
 }
@@ -114,7 +129,7 @@ export function boardBackHref(raw: string | null | undefined): string {
     return BOARD_PATH;
   }
   if (url.origin !== SAME_ORIGIN || url.pathname !== BOARD_PATH) return BOARD_PATH;
-  const qs = boardStateQuery(url.search);
+  const qs = backQuery(url.search);
   return qs ? `${BOARD_PATH}?${qs}` : BOARD_PATH;
 }
 

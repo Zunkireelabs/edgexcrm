@@ -23,9 +23,21 @@ import { COLUMN_WIDTHS, type ColumnWidth } from "../lib/board-view-prefs";
 const TAB_LABEL: Record<ApplicationTab, string> = { all: "All applications", mine: "My applications", stuck: "Stuck 30d+" };
 
 /** `counts` null = the unfiltered read failed: badges hide rather than read 0. */
-export function ApplicationsTabs({ active, counts, onSelect }: { active: ApplicationTab; counts: TabCounts | null; onSelect: (t: ApplicationTab) => void }) {
+export function ApplicationsTabs({
+  active,
+  counts,
+  onSelect,
+  right,
+}: {
+  active: ApplicationTab;
+  counts: TabCounts | null;
+  onSelect: (t: ApplicationTab) => void;
+  /** Right end of the tabs row (list view: "View settings", mockup state 6). */
+  right?: React.ReactNode;
+}) {
   return (
-    <div role="tablist" aria-label="Applications view" className="flex items-end gap-0.5 border-b border-ds-border pt-2">
+    <div className="flex items-center border-b border-ds-border">
+    <div role="tablist" aria-label="Applications view" className="flex flex-1 items-end gap-0.5 pt-2">
       {APPLICATION_TABS.map((t) => {
         const on = t === active;
         return (
@@ -56,6 +68,8 @@ export function ApplicationsTabs({ active, counts, onSelect }: { active: Applica
           </button>
         );
       })}
+    </div>
+    {right && <div className="flex shrink-0 items-center pt-2">{right}</div>}
     </div>
   );
 }
@@ -137,8 +151,10 @@ export interface ApplicationsToolbarProps {
   onColumnWidth: (w: ColumnWidth) => void;
   view: "board" | "list";
   onView: (v: "board" | "list") => void;
-  /** "Edit columns" (list view only). */
+  /** List view only: the tabs row's right end ("View settings"). */
   listActions?: React.ReactNode;
+  /** Column menu "Filter by …": a new nonce opens the filter menu on that field (Leads pattern). */
+  filterRequest?: { fieldKey: string; nonce: number } | null;
 }
 
 function isTypingTarget(target: EventTarget | null): boolean {
@@ -149,6 +165,11 @@ function isTypingTarget(target: EventTarget | null): boolean {
 export function ApplicationsToolbar(p: ApplicationsToolbarProps) {
   const searchRef = useRef<HTMLInputElement>(null);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [seenFilterNonce, setSeenFilterNonce] = useState<number | null>(p.filterRequest?.nonce ?? null);
+  if (p.filterRequest && p.filterRequest.nonce !== seenFilterNonce) {
+    setSeenFilterNonce(p.filterRequest.nonce);
+    setFilterOpen(true);
+  }
   const [text, setText] = useState(p.q);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasFilters = !isEmptyTree(p.tree);
@@ -181,7 +202,7 @@ export function ApplicationsToolbar(p: ApplicationsToolbarProps) {
 
   return (
     <div className="shrink-0" data-testid="applications-toolbar">
-      <ApplicationsTabs active={p.tab} counts={p.tabCounts} onSelect={p.onTab} />
+      <ApplicationsTabs active={p.tab} counts={p.tabCounts} onSelect={p.onTab} right={p.view === "list" ? p.listActions : undefined} />
       <div className="flex min-h-[50px] flex-wrap items-center gap-2 border-b border-ds-border py-2">
         <SearchField
           ref={searchRef}
@@ -203,6 +224,7 @@ export function ApplicationsToolbar(p: ApplicationsToolbarProps) {
           maxConditions={maxConditions}
           open={filterOpen}
           onOpenChange={setFilterOpen}
+          request={p.filterRequest ?? null}
           testId="applications-filter-trigger"
         />
         {p.filterError && (
@@ -233,8 +255,7 @@ export function ApplicationsToolbar(p: ApplicationsToolbarProps) {
             ))}
           </span>
         )}
-        {p.view === "list" && p.listActions}
-        <span aria-hidden="true" className="h-[18px] w-px bg-ds-border" />
+        {p.view === "board" && <span aria-hidden="true" className="h-[18px] w-px bg-ds-border" />}
         <span className={SEG} role="group" aria-label="View">
           <button type="button" aria-pressed={p.view === "board"} data-testid="view-board" onClick={() => p.onView("board")} className={cn(SEG_BTN, p.view === "board" && SEG_ON)}>
             <Svg><rect x="3" y="4" width="5" height="16" rx="1.5" /><rect x="10" y="4" width="5" height="11" rx="1.5" /><rect x="17" y="4" width="4" height="7" rx="1.5" /></Svg>

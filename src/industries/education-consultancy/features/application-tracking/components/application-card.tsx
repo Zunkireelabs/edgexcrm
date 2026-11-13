@@ -38,7 +38,7 @@ const AVATAR_COLORS = [
   { bg: "#e6f6f8", fg: "#0e7490" },
 ];
 
-function colorFor(name: string) {
+export function colorFor(name: string) {
   let hash = 0;
   for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
