@@ -29,7 +29,9 @@ describe("a date filter counts days in the tenant's timezone", () => {
 
 // Guard: no production CompileCtx that COMPILES a filter may be built with a literal "UTC". The allowed uses are UI files that only build
 // the field registry (labels and options; `now` is the epoch, no date is ever compiled) and a display window in Pulse that is not a
-// CompileCtx at all. They are listed on purpose so a new one has to be argued for.
+// CompileCtx at all, and (EDGEX-173) two Applications files that arrived with ui-v2: the workspace page (registry + URL decode only,
+// `now` is the epoch) and GET /api/v1/applications (compiles EMPTY_TREE, so no date is ever compiled). They are listed on purpose so a
+// new one has to be argued for.
 describe("no literal UTC CompileCtx", () => {
   const ALLOWED = new Set([
     "src/components/dashboard/leads-table.tsx",
@@ -37,6 +39,8 @@ describe("no literal UTC CompileCtx", () => {
     "src/industries/_shared/features/outreach/ui/audience-picker.tsx",
     "src/industries/_shared/features/sms/ui/blast-composer.tsx",
     "src/industries/education-consultancy/features/pulse/ui/pulse-page.tsx",
+    "src/industries/education-consultancy/features/application-tracking/pages/applications-workspace.tsx",
+    "src/app/(main)/api/v1/applications/route.ts",
   ]);
   const root = join(process.cwd(), "src");
   const walk = (dir: string): string[] =>
