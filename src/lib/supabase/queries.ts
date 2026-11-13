@@ -962,8 +962,8 @@ export interface MyTasksResult {
   done: PersonalTask[];
 }
 
-/** Batch-resolve display names for a set of user IDs (single auth.admin.listUsers() call — no N+1). */
-export async function resolveUserNames(userIds: string[]): Promise<Map<string, string>> {
+/** Batch-resolve display names for a set of user IDs (single auth.admin.listUsers() call — no N+1). `strict`: a failed or timed-out read throws instead of returning no names. */
+export async function resolveUserNames(userIds: string[], opts: { strict?: boolean } = {}): Promise<Map<string, string>> {
   const ids = Array.from(new Set(userIds.filter(Boolean)));
   const map = new Map<string, string>();
   if (ids.length === 0) return map;
@@ -973,9 +973,13 @@ export async function resolveUserNames(userIds: string[]): Promise<Map<string, s
   try {
     const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), TIMEOUT_MS));
     const result = await Promise.race([
-      supabase.auth.admin.listUsers({ perPage: 1000 }).then((r) => r.data),
+      supabase.auth.admin.listUsers({ perPage: 1000 }).then((r) => {
+        if (r.error && opts.strict) throw r.error;
+        return r.data;
+      }),
       timeoutPromise,
     ]);
+    if (!result && opts.strict) throw new Error("timed out");
     for (const u of result?.users ?? []) {
       if (!ids.includes(u.id)) continue;
       const meta = u.user_metadata as Record<string, unknown> | undefined;
@@ -983,6 +987,7 @@ export async function resolveUserNames(userIds: string[]): Promise<Map<string, s
     }
   } catch (err) {
     console.error("[resolveUserNames] auth.admin.listUsers() failed", err);
+    if (opts.strict) throw new Error(`resolveUserNames: ${err instanceof Error ? err.message : String(err)}`);
   }
   return map;
 }

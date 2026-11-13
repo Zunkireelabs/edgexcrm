@@ -145,6 +145,9 @@ export interface FieldDef {
   // — never offered in FilterFieldPicker. Still fully filterable/compilable;
   // this only affects manual "+ Add filter" selection.
   hiddenFromPicker?: boolean;
+  // A condition whose value is machine data (e.g. `workable`'s terminal-stage plan) shows this text as its whole chip and is
+  // not editable (it can only be removed); the value is never printed.
+  fixedChipLabel?: string;
   sortable?: boolean;
   sortColumns?: string[]; // multi-column sort (e.g. first_name -> [first_name, last_name])
   // Postgres's own ASC/DESC null-ordering default (NULLS LAST for ASC, NULLS

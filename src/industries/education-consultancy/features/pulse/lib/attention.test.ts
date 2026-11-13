@@ -3,6 +3,7 @@ import { buildAttention, countByCategory, type AttentionInput } from "./attentio
 import { leadsOfPersonHref } from "./leads-links";
 import { computeSignals } from "./signals";
 import { DEFAULT_PULSE_THRESHOLDS as T } from "./thresholds";
+import { decodeFilterTree } from "@/lib/filters/serialize";
 import { normalizePosition } from "./positions";
 import { ZERO_COUNTS, type MetricCounts, type PersonRow } from "./types";
 
@@ -16,7 +17,39 @@ const people = [P("a", "Asha", { calls: 18, notes: 13 }, { calls: 82, notes: 54 
 const signals = computeSignals({ people, stageFlows: [], untouched: { count: 63, byPerson: [] }, branchKpis: [], thresholds: T }).all;
 const input = (o: Partial<AttentionInput> = {}): AttentionInput => ({
   people, signals, stageFlows: [], leakReasons: {}, staleHeld: { a: 34 }, heldLoad: { a: 200, b: 100, d: 100 }, flags7d: { a: "red", b: "amber" },
-  untouched: { count: 63, byBranch: [{ name: "Butwal", count: 41 }, { name: "Pokhara", count: 22 }], byRole: [{ key: "telecaller", label: "TeleCaller", count: 50 }] }, ...o,
+  untouched: { count: 63, listIds: ["intake"], byBranch: [{ name: "Butwal", count: 41 }, { name: "Pokhara", count: 22 }], byRole: [{ key: "telecaller", label: "TeleCaller", count: 50 }] }, ...o,
+});
+
+describe("one lead reads as one lead (click-through round 4, G)", () => {
+  const solo = (n: number) => buildAttention(input({ people: [people[0]], staleHeld: { a: n } })).find((i) => i.subject === "Asha")!;
+  it("at 1", () => {
+    expect(solo(1).figure).toEqual({ strong: "1", text: " lead untouched" });
+    expect(solo(1).action?.label).toBe("Review 1 lead");
+    expect(solo(1).links[0].label).toBe("See the 1 lead →");
+  });
+  it("at 2", () => {
+    expect(solo(2).figure).toEqual({ strong: "2", text: " leads untouched" });
+    expect(solo(2).action?.label).toBe("Review 2 leads");
+    expect(solo(2).links[0].label).toBe("See the 2 leads →");
+  });
+  it("the untouched-leads row's Review", () => {
+    const one = computeSignals({ people, stageFlows: [], untouched: { count: 1, byPerson: [] }, branchKpis: [], thresholds: T }).all;
+    const row = buildAttention(input({ signals: one, untouched: { count: 1, listIds: ["intake"], byBranch: [], byRole: [] } })).find((i) => i.id === "untouched_leads");
+    if (row) expect(row.action?.label).toBe("Review 1 lead");
+  });
+});
+
+describe("activity-drop numbers for Home's row (click-through round 4, L)", () => {
+  it("carried as data, the same percentage as Pulse's own sentence", () => {
+    const a = buildAttention(input()).find((i) => i.subject === "Asha")!;
+    expect(a.activity).toEqual({ current: 31, usual: 136, downPct: 77 });
+    expect(a.what).toContain(`${a.activity?.downPct}%`);
+  });
+  it("Pulse's row itself is unchanged", () => {
+    const a = buildAttention(input()).find((i) => i.subject === "Asha")!;
+    expect(a.subject).toBe("Asha");
+    expect(a.figure).toEqual({ strong: "34", text: " leads untouched" });
+  });
 });
 
 describe("activity-drop row text", () => {
@@ -48,9 +81,13 @@ describe("buildAttention — the one list", () => {
   it("untouched leads: branch share and a role target, both from the real tally", () => {
     const u = items.find((i) => i.id === "untouched_leads")!;
     expect(u.what).toBe("untouched for over 48 hours, 41 of them with Butwal");
-    expect(u.action?.label).toBe("Review 63 leads"); // Dipa (100 held) can take at most +50
-    expect(u.action?.href).toContain("/leads?list=pre-qualified");
-    expect(u.action?.label).toMatch(/^(Assign \d+ (to|·)|Review \d+ leads)/);
+    // No smart-assignment suggestion supplied (no unassigned leads in the set): a plain Review, never a spare-capacity guess.
+    expect(u.action?.label).toBe("Review 63 leads");
+    // The link names the intake list(s) that were counted, never a hard-coded slug.
+    expect(u.action?.href).not.toContain("list=");
+    const res = decodeFilterTree(new URL(u.action!.href, "http://x").searchParams.get("f")!);
+    if (!res.ok) throw new Error("undecodable");
+    expect((res.tree.conditions.find((c) => c.field === "stage") as { value?: string[] }).value).toEqual(["intake"]);
   });
   it("over capacity is a rule item without a Suggested tag", () => {
     const o = items.find((i) => i.subject === "Binod")!;
@@ -71,7 +108,7 @@ describe("branch heads-up threshold", () => {
   it("a 5% branch change produces no attention item", () => {
     const sig = computeSignals({ people: [], stageFlows: [], untouched: { count: 0, byPerson: [] }, thresholds: T,
       branchKpis: [{ branchId: "k", name: "Kathmandu", metric: "prospects", current: 10, usual: 11, hasUsual: true }] }).all;
-    expect(buildAttention({ people: [], signals: sig, stageFlows: [], leakReasons: {}, staleHeld: {}, untouched: { count: 0, byBranch: [], byRole: [] } })).toEqual([]);
+    expect(buildAttention({ people: [], signals: sig, stageFlows: [], leakReasons: {}, staleHeld: {}, untouched: { count: 0, listIds: [], byBranch: [], byRole: [] } })).toEqual([]);
   });
 });
 
@@ -83,7 +120,7 @@ describe("the same fact reads the same on every surface", () => {
     a.previous = c({ prospects: 12 }); a.current = c({ calls: 34, prospects: 2 });
     const ppl = [a];
     const sig = computeSignals({ people: ppl, stageFlows: [], untouched: { count: 0, byPerson: [] }, branchKpis: [], thresholds: T }).all;
-    const row = buildAttention({ people: ppl, signals: sig, stageFlows: [], leakReasons: {}, staleHeld: {}, untouched: { count: 0, byBranch: [], byRole: [] } }).find((i) => i.subject === "Asha")!;
+    const row = buildAttention({ people: ppl, signals: sig, stageFlows: [], leakReasons: {}, staleHeld: {}, untouched: { count: 0, listIds: [], byBranch: [], byRole: [] } }).find((i) => i.subject === "Asha")!;
     const down = Number(/down (\d+)%/.exec(row.what)![1]);
     const b = buildBriefing({ people: ppl, team: rollups(ppl).team, stageFlows: [], leakReasons: {}, untouched: { count: 5 }, thresholds: T })!;
     const at = Number(/at (\d+)% of usual/.exec(b.items[0].detail)![1]);
@@ -138,10 +175,18 @@ describe("the seeded 7d story (round 12)", () => {
     expect(b.meta).toMatch(/no TeleCaller has spare capacity$/);
     expect(b.action?.drill).toEqual({ metric: "received", userId: "b" });
   });
-  it("the 48h row names a plan: split across same-role people when one can't take it", () => {
-    const t = [...people, P("e", "Esha", {}, {})];
-    const u = buildAttention(input({ people: t, untouched: { count: 63, byBranch: [], byRole: [{ key: "telecaller", label: "TeleCaller", count: 50 }] }, heldLoad: { a: 200, b: 100, d: 80, e: 80 } })).find((i) => i.id === "untouched_leads")!;
-    expect(u.action?.label).toBe("Assign 63 · split across 2 TeleCallers"); // caps 40 + 40
+  it("the 48h row uses smart assignment's own suggestion for its unassigned leads (the same one Home shows)", () => {
+    const sug = { assignments: [{ userId: "x", name: "Diplov", take: 2, leadIds: ["1", "2"] }, { userId: "y", name: "Gautam", take: 2, leadIds: ["3", "4"] }], placed: 4, unplaced: 0, reason: null };
+    const u = buildAttention(input({ newLeadSuggestion: sug })).find((i) => i.id === "untouched_leads")!;
+    expect(u.action?.label).toBe("Assign 4 · split across 2 people");
+    expect(u.suggested).toBe(true);
+    expect(u.why).toContain("Diplov +2, Gautam +2");
+  });
+  it("when nobody can take the unassigned ones, the row says the engine's reason and stays a Review", () => {
+    const u = buildAttention(input({ newLeadSuggestion: { assignments: [], placed: 0, unplaced: 3, reason: "2 on leave" } })).find((i) => i.id === "untouched_leads")!;
+    expect(u.action?.label).toBe("Review 63 leads");
+    expect(u.suggested).toBe(false);
+    expect(u.why).toContain("No one can take them now (2 on leave).");
   });
 });
 

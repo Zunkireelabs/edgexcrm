@@ -1,10 +1,14 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { checkDailyBudget, checkAgentDailyBudget } from "./budget";
+import { checkDailyBudget, checkAgentDailyBudget, HOME_AI_SURFACES } from "./budget";
 import type { ScopedClient } from "@/lib/supabase/scoped";
 
 function fakeDb(rows: Array<{ output_tokens: number | null }>, eqCalls: Array<[string, unknown]> = []): ScopedClient {
   const builder = {
     eq: (col: string, val: unknown) => {
+      eqCalls.push([col, val]);
+      return builder;
+    },
+    in: (col: string, val: unknown) => {
       eqCalls.push([col, val]);
       return builder;
     },
@@ -50,11 +54,12 @@ describe("checkDailyBudget", () => {
     expect(result.overBudget).toBe(false);
   });
 
-  it("filters ai_usage_events by surface:'assistant'", async () => {
+  it("sums the assistant surface AND Home's five surfaces: Ask Orca and Home share one cap", async () => {
     const eqCalls: Array<[string, unknown]> = [];
     const db = fakeDb([], eqCalls);
     await checkDailyBudget(db, "tenant-1");
-    expect(eqCalls).toContainEqual(["surface", "assistant"]);
+    expect(eqCalls).toContainEqual(["surface", ["assistant", ...HOME_AI_SURFACES]]);
+    expect(HOME_AI_SURFACES).toEqual(["home_read", "home_draft", "home_prep", "home_note", "home_batch"]);
   });
 });
 
@@ -67,7 +72,7 @@ describe("checkAgentDailyBudget", () => {
     const eqCalls: Array<[string, unknown]> = [];
     const db = fakeDb([], eqCalls);
     await checkAgentDailyBudget(db, "tenant-1");
-    expect(eqCalls).toContainEqual(["surface", "background_agent"]);
+    expect(eqCalls).toContainEqual(["surface", ["background_agent"]]);
   });
 
   it("flags overBudget once agent usage meets AI_AGENT_DAILY_OUTPUT_TOKEN_BUDGET", async () => {

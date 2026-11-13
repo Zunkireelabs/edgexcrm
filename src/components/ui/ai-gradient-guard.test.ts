@@ -13,10 +13,14 @@ const AI_TOKEN_ALLOWLIST = [
   // EDGEX-86: the global shell — Ask Orca header button and the "your menu" AI credits card
   "src/components/dashboard/shell.tsx",
   "src/components/dashboard/user-menu.tsx",
+  // EDGEX-109 P4b: Orca on the Processes screens: every AI-toned surface of those pages lives in this one file
+  "src/industries/education-consultancy/features/processes/ui/orca.tsx",
   "src/industries/education-consultancy/features/pulse/ui/pulse.css",
   "src/industries/education-consultancy/features/pulse/ui/briefing-card.tsx",
   "src/industries/education-consultancy/features/pulse/ui/attention-list.tsx",
   "src/industries/education-consultancy/features/pulse/ui/scoreboard.tsx",
+  // EDGEX-87 Part B: Orca on Home (the note that fills the record, the read, drafts); every AI-toned Home surface lives in this one file
+  "src/industries/education-consultancy/features/home/ui/home.css",
   "src/components/design-system/showcase.tsx",
   "src/app/(main)/(dashboard)/design-system/page.tsx",
   // this test file names the tokens it searches for

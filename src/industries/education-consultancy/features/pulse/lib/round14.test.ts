@@ -64,7 +64,7 @@ describe("G4: never 'down 100%' / '100% below usual' in prose", () => {
   it("buildAttention row text has no 'down 100%'", () => {
     const people = [p];
     const signals = computeSignals({ people, stageFlows: [], untouched: { count: 0, byPerson: [] }, branchKpis: [], thresholds: T }).all;
-    const items = buildAttention({ people, signals, stageFlows: [], leakReasons: {}, staleHeld: {}, untouched: { count: 0, byBranch: [], byRole: [] }, periodNoun: "today" } as AttentionInput);
+    const items = buildAttention({ people, signals, stageFlows: [], leakReasons: {}, staleHeld: {}, untouched: { count: 0, listIds: [], byBranch: [], byRole: [] }, periodNoun: "today" } as AttentionInput);
     const row = items.find((i) => i.subject === "Asha");
     expect(row?.what).toBe("no activity yet today (usual 136 by now)");
   });
@@ -73,7 +73,7 @@ describe("G4: never 'down 100%' / '100% below usual' in prose", () => {
 describe("G5: the activity-drop button always names what it opens", () => {
   const people = [P("a", "Asha Rai", "telecaller", "K", { calls: 18, notes: 13 }, { calls: 82, notes: 54 }), P("d", "Dipa", "telecaller", "K", { calls: 60 }, { calls: 60 })];
   const signals = computeSignals({ people, stageFlows: [], untouched: { count: 0, byPerson: [] }, branchKpis: [], thresholds: T }).all;
-  const run = (stale: number) => buildAttention({ people, signals, stageFlows: [], leakReasons: {}, staleHeld: { a: stale }, heldLoad: { a: 100, d: 100 }, untouched: { count: 0, byBranch: [], byRole: [] } } as AttentionInput).find((i) => i.subject === "Asha Rai")!;
+  const run = (stale: number) => buildAttention({ people, signals, stageFlows: [], leakReasons: {}, staleHeld: { a: stale }, heldLoad: { a: 100, d: 100 }, untouched: { count: 0, listIds: [], byBranch: [], byRole: [] } } as AttentionInput).find((i) => i.subject === "Asha Rai")!;
   it("stale = 0 → 'See Asha's day' opens the person drawer (no lead set, no 'Review leads')", () => {
     const a = run(0).action!;
     expect(a.label).toBe("See Asha's day");

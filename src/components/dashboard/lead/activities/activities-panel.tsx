@@ -1125,7 +1125,11 @@ function SystemActivityItem({
   isLast: boolean;
 }) {
   const time = formatTimeOnly(activity.created_at);
-  const actor = resolveActorLabel(activity.user_id, currentUserId, teamMemberNames, teamMemberEmails);
+  // Smart assignment writes as the tenant owner (audit user_id), but the audit row carries `via`: show the rule, not the owner.
+  const actor =
+    activity.changes?.via?.new === "smart_assignment"
+      ? "Smart assignment"
+      : resolveActorLabel(activity.user_id, currentUserId, teamMemberNames, teamMemberEmails);
   const description = getSystemActivityDescription(activity, teamMemberEmails, teamMemberNames);
   const isSubmission = activity.action === "lead.submission";
   const Icon = getSystemActivityIcon(activity);

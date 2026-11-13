@@ -279,6 +279,32 @@ describe("POST /api/v1/email/send — flag OFF: unchanged original ordering (bri
   });
 });
 
+describe("POST /api/v1/email/send — EMAIL_TRANSPORT=stub result (EDGEX-128)", () => {
+  it("records the thread and email as normal with the stub_ ids sendMessage returns", async () => {
+    sendMessageMock.mockReset().mockResolvedValue({
+      gmail_message_id: "stub_11111111-2222-3333-4444-555555555555",
+      gmail_thread_id: "stub_66666666-7777-8888-9999-000000000000",
+      rfc_message_id: "<stub-rfc-1@edgex-crm.com>",
+      refreshed_credentials: null,
+    });
+    const { db, state } = fakeDb({ account: ACCOUNT_ROW });
+    scopedClientMock.mockResolvedValue(db);
+
+    const { POST } = await import("./route");
+    const res = await POST(
+      fakeReq({ from_account_id: "11111111-1111-1111-1111-111111111111", subject: "Hi", body_html: "<p>Hi</p>", to: ["lead@example.com"] }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(persistRefreshedTokenMock).not.toHaveBeenCalled();
+    expect(state.insertedThreads).toHaveLength(1);
+    expect(state.insertedThreads[0].gmail_thread_id).toBe("stub_66666666-7777-8888-9999-000000000000");
+    expect(state.insertedEmails).toHaveLength(1);
+    expect(state.insertedEmails[0].gmail_message_id).toBe("stub_11111111-2222-3333-4444-555555555555");
+    expect(state.insertedEmails[0].rfc_message_id).toBe("<stub-rfc-1@edgex-crm.com>");
+  });
+});
+
 describe("POST /api/v1/email/send — flag ON, tenant inbound_enabled=true: pre-send wiring (brief §3/§6)", () => {
   function enableInbound() {
     process.env.EDGEX_INBOUND_ENABLED = "true";

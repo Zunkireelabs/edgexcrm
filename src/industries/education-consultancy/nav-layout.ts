@@ -20,6 +20,7 @@ export type EducationNavEntryKey =
   | "universal:/home"
   | "universal:/inbox"
   | "/pulse"
+  | "/processes"
   | "/insights/dashboards"
   | "universal:/knowledge-bases"
   | "slot:lead-lists"
@@ -49,7 +50,7 @@ export const EDUCATION_NAV_LAYOUT: readonly EducationNavSection[] = [
   {
     id: "insights",
     label: "Insights",
-    entries: ["/pulse", "/insights/dashboards", "universal:/knowledge-bases"],
+    entries: ["/pulse", "/processes", "/insights/dashboards", "universal:/knowledge-bases"],
   },
   {
     id: "leads",

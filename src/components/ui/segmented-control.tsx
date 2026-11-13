@@ -30,7 +30,7 @@ const ITEM = {
 } as const
 
 const COUNT = {
-  segmented: "",
+  segmented: "ml-1.5 text-ds-faint",
   pills: "text-ds-faint font-medium group-data-[state=on]/seg:text-[#a3a3a3]",
 } as const
 

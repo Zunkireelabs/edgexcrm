@@ -18,6 +18,8 @@ import { outreachMeta } from "../_shared/features/outreach/meta";
 import { studentRecordMeta } from "./features/student-record/meta";
 import { teamPerformanceMeta } from "./features/team-performance/meta";
 import { pulseMeta } from "./features/pulse/meta";
+import { processesMeta } from "./features/processes/meta";
+import { eduHomeMeta } from "./features/home/meta";
 import { savedLeadFiltersMeta } from "./features/saved-lead-filters/meta";
 import { aiConfig } from "./ai/agent";
 
@@ -35,6 +37,8 @@ export const manifest: IndustryManifest = {
     { meta: classesMeta },
     { meta: teamPerformanceMeta },
     { meta: pulseMeta },
+    { meta: processesMeta },
+    { meta: eduHomeMeta },
     { meta: affiliatesMeta },
     { meta: applicantDocumentsMeta },
     { meta: archivedLookupMeta },
@@ -47,6 +51,7 @@ export const manifest: IndustryManifest = {
   sidebar: [
     // Intelligence section
     { featureId: FEATURES.PULSE, href: "/pulse", label: "Pulse", icon: "Activity", minRoles: ["owner", "admin"] },
+    { featureId: FEATURES.PROCESSES, href: "/processes", label: "Processes", icon: "Network", minRoles: ["owner", "admin"] },
     { featureId: FEATURES.INSIGHTS, href: "/insights/dashboards", label: "Dashboards", icon: "LayoutDashboard" },
     // Operations section
     { featureId: FEATURES.APPLICATION_TRACKING, href: "/applications", label: "Applications", icon: "GraduationCap" },

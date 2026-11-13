@@ -14,6 +14,8 @@ import { POSITION_ROUTE_MAP as POSITION_HOME_LIST } from "@/industries/education
 import { filterAssignableMembersByChain } from "@/lib/leads/assignable";
 import { canBypassProspectQualification } from "@/lib/leads/prospect-qualification";
 import { resolveThresholds } from "@/industries/education-consultancy/features/team-performance/lib/thresholds";
+import { canOpenNamedList, masterViewExcludeIds } from "@/lib/leads/master-exclusion";
+import { decodeFilterTree } from "@/lib/filters/serialize";
 import { isOffFunnelLeadList } from "@/lib/leads/list-funnel";
 import type { TenantEntity, Industry, LeadList, PipelineWithCounts, Lead, PipelineLead, TenantConfig } from "@/types/database";
 
@@ -25,13 +27,13 @@ const FUNNEL_LABELS: Record<string, string> = {
 export default async function LeadsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ list?: string; view?: string; funnel?: string }>;
+  searchParams: Promise<{ list?: string; view?: string; funnel?: string; f?: string }>;
 }) {
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
   if (!canSeeNav(tenantData.permissions, "/leads")) redirect("/dashboard");
 
-  const { list: listSlug, view, funnel: funnelParam } = await searchParams;
+  const { list: listSlug, view, funnel: funnelParam, f: filterParam } = await searchParams;
   const viewMode2 = view === "kanban" ? "kanban" : "list";
 
   const [serviceClient, cookieStore] = await Promise.all([
@@ -107,7 +109,12 @@ export default async function LeadsPage({
     // existing visibility rules (own/branch/all — see `scope` above). No position-based
     // redirect — clicking "All Leads" must always show the master view, not a stage.
 
-    const excludeIds = allLists.filter((l) => l.is_archive || l.is_staging).map((l) => l.id);
+    // An explicit `stage is_any_of` filter (?f=) lifts the staging/archive hide for the lists it names, admin/owner only and within `access`.
+    const decodedFilter = filterParam ? decodeFilterTree(filterParam) : null;
+    const excludeIds = masterViewExcludeIds(allLists, decodedFilter?.ok ? decodedFilter.tree : null, (id) => {
+      const l = allLists.find((x) => x.id === id);
+      return !!l && canOpenNamedList({ role: tenantData.role, permissions: tenantData.permissions, positionId: tenantData.positionId }, l);
+    });
     if (activeList?.slug === "delete") {
       scope.onlyDeleted = true; // Delete view = recycle bin of soft-deleted leads
     } else if (activeList) {

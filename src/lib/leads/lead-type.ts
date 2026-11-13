@@ -4,7 +4,7 @@
 // treat any lingering "parent"-tagged lead as Other here so the UI is correct even on
 // a database that hasn't run migration 157 yet (e.g. prod before promotion).
 
-const OTHER_TAG_VALUES = ["other", "parent"] as const;
+export const OTHER_TAG_VALUES = ["other", "parent"] as const;
 
 /**
  * True when this lead is an "Other" walk-in Contact — i.e. not a real pipeline lead.

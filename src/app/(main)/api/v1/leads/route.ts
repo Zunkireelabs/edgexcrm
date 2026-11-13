@@ -4,6 +4,8 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { normalizePhoneForStorage } from "@/lib/phone-utils";
 import { getBranchIds, getChecklistCounts, getTaskCounts } from "@/lib/supabase/queries";
 import { authenticateRequest, getClientIp } from "@/lib/api/auth";
+import { resolveTenantTz } from "@/lib/filters/tenant-tz";
+import { canOpenNamedList, masterViewExcludeIds } from "@/lib/leads/master-exclusion";
 import { leadQueryScope, canSeeNav, canAccessList, isSharedPoolList, resolveEffectiveBranch } from "@/lib/api/permissions";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
@@ -22,6 +24,7 @@ import { PROSPECT_INDUSTRY_VALUES } from "@/industries/it-agency/leads/prospect-
 import { SALUTATION_VALUES } from "@/industries/it-agency/leads/salutations";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { checkRateLimit, FORM_SUBMIT_LIMIT } from "@/lib/api/rate-limit";
+import { requestSmartAssignment } from "@/industries/education-consultancy/features/home/server/assignment/request";
 import { createRequestLogger } from "@/lib/logger";
 import {
   upsertThreadNotification,
@@ -213,10 +216,8 @@ export async function GET(request: NextRequest) {
   // compileFilter() call further below, which is the whole point (the existing
   // route.test.ts suite is a full-fidelity regression harness for the compiler
   // against real production semantics precisely because the legacy path routes
-  // through it too). `tz` is fixed at "UTC" for now — no legacy toolbar param
-  // needs tz-aware day boundaries (they all use rolling within_last windows or
-  // plain column comparisons), and per-tenant timezone wiring for the real
-  // date-picker UI is Phase 3+ work.
+  // through it too). `tz` is the tenant's own timezone (EDGEX-114): a date filter's day
+  // starts and ends at the tenant's midnight, not UTC's.
   // "Follow-up needed"'s cutoff is the same tenant-configurable threshold the Team &
   // Lead Performance dashboard's Pipeline widget already reads (resolveThresholds()) —
   // one threshold, one meaning, never a second config key for the same concept. Only
@@ -230,8 +231,17 @@ export async function GET(request: NextRequest) {
     followUpStaleDays = resolveThresholds((tenantRow?.config ?? null) as TenantConfig | null).followUpStaleDays;
   }
 
+  // EDGEX-114: date filters count days in the TENANT's timezone, never UTC. A failed read falls back to the default, never breaks the list.
+  let tenantTz = resolveTenantTz(null);
+  try {
+    const tzClient = await createServiceClient();
+    const { data: tzRow } = await tzClient.from("tenants").select("timezone").eq("id", auth.tenantId).maybeSingle();
+    tenantTz = resolveTenantTz((tzRow as { timezone?: string | null } | null)?.timezone);
+  } catch {
+    /* default tz */
+  }
   const compileCtx: CompileCtx = {
-    tz: "UTC",
+    tz: tenantTz,
     now: new Date(),
     industryId: auth.industryId,
     // src/lib/filters/types.ts deliberately does not import the real ResolvedPermissions
@@ -305,7 +315,11 @@ export async function GET(request: NextRequest) {
       // Master view (no list/funnel) excludes both archive AND staging lists — the
       // page's `excludeIds` (page.tsx) filters on `is_archive || is_staging`; the old
       // version of this route only excluded is_archive, a real parity gap.
-      excludeListIds = lists.filter((l) => l.is_archive || l.is_staging).map((l) => l.id);
+      // An explicit `stage is_any_of` filter lifts the hide for the lists it names, admin/owner only (staging is admin-only) and within `access`.
+      excludeListIds = masterViewExcludeIds(lists, filterTree, (id) => {
+        const l = lists.find((x) => x.id === id);
+        return !!l && canOpenNamedList(auth, l);
+      });
 
       if (listSlug) {
         const targetList = lists.find((l) => l.slug === listSlug);
@@ -1530,6 +1544,8 @@ async function handlePost(request: NextRequest) {
         void touchLastActivity(supabase, { leadId: canonical.id, tenantId });
 
         log.info({ draftId: leadId, canonicalId: canonical.id }, "Draft folded into canonical lead");
+        // Smart assignment: the multi-step form just completed, so the lead that SURVIVES the fold is the one to place.
+        if (!(draftLead as Lead).is_final) void requestSmartAssignment({ tenantId, leadId: canonical.id, assignedTo: canonical.assigned_to, requireWorkable: true });
         return apiSuccess({ ...canonical, id: canonical.id }, 200);
       }
     }
@@ -1617,6 +1633,9 @@ async function handlePost(request: NextRequest) {
     ]);
 
     if (leadPayload.is_final === true) {
+      // Smart assignment, exactly once: only when THIS update flipped is_final to true (a multi-step form completing),
+      // never on a repeat save of an already-final lead. requestSmartAssignment skips an assigned lead; the run is idempotent per lead.
+      if (!(existingLead as Lead).is_final) void requestSmartAssignment({ tenantId, leadId, assignedTo: (updated as Lead).assigned_to });
       void processEmailForwardRules({
         tenantId,
         lead: updated as Lead,
@@ -1967,6 +1986,9 @@ async function handlePost(request: NextRequest) {
       });
     })().catch(() => { /* non-fatal */ });
   }
+
+  // Smart assignment (only when the tenant turned it on, only for a lead created unassigned). Non-blocking.
+  if ((lead as Lead).is_final !== false) void requestSmartAssignment({ tenantId, leadId: lead.id, assignedTo: (lead as Lead).assigned_to });
 
   Promise.all([
     // lead.created audit suppressed when lead.submission was recorded (A4: combined display)

@@ -21,6 +21,7 @@ import {
   type StageFlow,
 } from "../lib/types";
 import { untouchedHeldCutoff } from "../lib/untouched";
+import { suggestForLeads } from "../../home/server/assignment/suggest";
 import { loadUserNames, type PulseContext } from "./context";
 
 interface TenantUserRow {
@@ -95,7 +96,7 @@ async function loadWeeklyFlags(ctx: PulseContext, shownFlags: Record<string, "re
 }
 
 /** Open leads each person holds now: active lists, not deleted. One head-count per person (a few dozen, in parallel). */
-async function loadHeldLoad(ctx: PulseContext, people: PersonRow[], activeIds: string[]): Promise<Record<string, number>> {
+export async function loadHeldLoad(ctx: PulseContext, people: PersonRow[], activeIds: string[]): Promise<Record<string, number>> {
   const out: Record<string, number> = {};
   if (activeIds.length === 0) return out;
   await Promise.all(people.map(async (p) => {
@@ -128,7 +129,7 @@ export async function loadPulse(ctx: PulseContext): Promise<PulseResponse> {
     // Held-lead neglect (3+ days) is a per-person matter: the person rows and the drawer tile.
     intakeIds.length === 0
       ? Promise.resolve({ data: [], error: null })
-      : db.from("leads").select("assigned_to, branch_id").in("list_id", intakeIds).is("deleted_at", null).is("last_touched_at", null)
+      : db.from("leads").select("id, assigned_to, branch_id").in("list_id", intakeIds).is("deleted_at", null).is("last_touched_at", null)
           .lt("created_at", cutoff48).limit(5000),
     isAssistantEnabledForTenant(auth.tenantId).catch(() => false),
   ]);
@@ -176,7 +177,7 @@ export async function loadPulse(ctx: PulseContext): Promise<PulseResponse> {
     }
   }
 
-  const untouchedRows = (untouchedRes.data ?? []) as unknown as Array<{ assigned_to: string | null; branch_id: string | null }>;
+  const untouchedRows = (untouchedRes.data ?? []) as unknown as Array<{ id: string; assigned_to: string | null; branch_id: string | null }>;
   const untouchedCount = untouchedRows.length;
   const branchName = new Map(ctx.branches.map((b) => [b.id, b.name]));
   const personById = new Map(people.map((p) => [p.userId, p]));
@@ -244,9 +245,15 @@ export async function loadPulse(ctx: PulseContext): Promise<PulseResponse> {
   const winDays0 = (new Date(ctx.windowInfo.to).getTime() - new Date(ctx.windowInfo.from).getTime()) / 86_400_000;
   const win7 = Math.abs(winDays0 - 7) < 0.1, win1 = ctx.window.key === "today";
   const { groups, team } = rollups(people);
+  // The unassigned part of the intake alarm gets smart assignment's own suggestion (the same function Home's "Assign N new leads"
+  // row calls), not a spare-capacity guess. Only computed when the alarm row exists and some of its leads have no holder.
+  const unassignedUntouchedIds = untouchedRows.filter((r) => !r.assigned_to).map((r) => r.id);
+  const newLeadSuggestion = signals.all.some((x) => x.kind === "untouched_leads") && unassignedUntouchedIds.length > 0
+    ? await suggestForLeads(db, auth.tenantId, unassignedUntouchedIds, { branchId })
+    : null;
   const attention = buildAttention({
-    people, signals: signals.all, stageFlows, leakReasons, staleHeld, heldLoad, flags7d,
-    untouched: { count: untouchedCount, byBranch: byBranchCount, byRole },
+    people, signals: signals.all, stageFlows, leakReasons, staleHeld, heldLoad, flags7d, newLeadSuggestion,
+    untouched: { count: untouchedCount, listIds: intakeIds, byBranch: byBranchCount, byRole },
     periodNoun: win7 ? "this week" : win1 ? "today" : "this period",
     baselineCovered,
   });
@@ -272,6 +279,7 @@ export async function loadPulse(ctx: PulseContext): Promise<PulseResponse> {
     },
     briefing,
     attention,
+    heldLoad,
     coverage: { baselineCovered, hasUsual: teamHasUsual },
     window: ctx.windowInfo,
     branchId,

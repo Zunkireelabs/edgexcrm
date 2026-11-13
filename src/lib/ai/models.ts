@@ -1,7 +1,9 @@
 // The ONLY place model ids live. Provider swap = set AI_PROVIDER (see provider.ts).
+// Language models only: embeddings stay on OpenAI (text-embedding-3-large, lib/ai/embeddings.ts) whichever provider is active,
+// because Anthropic has no embeddings API. OPENAI_API_KEY is therefore still required for knowledge ingestion / retrieval.
 export const MODELS = {
   openai: { agent: "gpt-4o-mini", fast: "gpt-4o-mini" }, // demo default — mini tier to conserve budget
-  anthropic: { agent: "claude-sonnet-5", fast: "claude-haiku-4-5" },
+  anthropic: { agent: "claude-sonnet-5-5", fast: "claude-haiku-5-5" },
 } as const;
 
 // AI_PROVIDER is read explicitly rather than sniffed from ANTHROPIC_API_KEY's

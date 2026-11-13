@@ -1,3 +1,4 @@
+import { resolveTenantTz } from "@/lib/filters/tenant-tz";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AuthContext } from "@/lib/api/auth";
 import { visibleLeadsBase } from "@/lib/leads/visibility-query";
@@ -102,8 +103,17 @@ export async function resolveAudienceCore<TContact, TExcluded extends Record<str
   adapter: ChannelAdapter<TContact, TExcluded>
 ): Promise<ResolveAudienceResult<TContact, TExcluded>> {
   // Same structural cast the leads route uses (src/app/(main)/api/v1/leads/route.ts:200-209).
+  // EDGEX-114: the tenant's timezone, so "arrived on 9 Oct" means the tenant's 9 Oct (same as the leads list).
+  // A failed read falls back to the default tz; it must never break an audience.
+  let tenantTz = resolveTenantTz(null);
+  try {
+    const { data: tzRow } = await clients.db.fromGlobal("tenants").select("timezone").eq("id", auth.tenantId).maybeSingle();
+    tenantTz = resolveTenantTz((tzRow as { timezone?: string | null } | null)?.timezone);
+  } catch {
+    /* default tz */
+  }
   const compileCtx: CompileCtx = {
-    tz: "UTC",
+    tz: tenantTz,
     now: new Date(),
     industryId: auth.industryId,
     permissions: auth.permissions as unknown as FilterResolvedPermissions,

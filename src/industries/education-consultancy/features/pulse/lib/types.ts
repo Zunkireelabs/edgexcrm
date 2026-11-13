@@ -241,6 +241,10 @@ export interface AttentionItem {
   figure: { strong?: string; text: string; textFirst?: boolean } | null;
   /** Rule-generated suggestion → gradient "Suggested" tag. */
   suggested: boolean;
+  /** Activity-drop items: how many leads this person holds with no touch or move for 3+ days (what a nudge would be about). */
+  staleHeld?: number;
+  /** Activity-drop items: the numbers behind `what` (calls + notes + stage moves), as data for Home's row. `usual` is rounded as printed. */
+  activity?: { current: number; usual: number; downPct: number };
   /** The concrete action, carrying its value ("Reassign 12 to Anil KC"). */
   action: { label: string; href: string; primary: boolean; drill?: EventsQuery; /** Opens this person's drawer instead of a lead set. */ personId?: string } | null;
   /** Expanded: the why sentence (an AI paragraph block in Preview mode), a meta line and links. */
@@ -293,6 +297,8 @@ export interface PulseResponse {
   header: PulseHeader;
   briefing: Briefing | null;
   attention: AttentionItem[];
+  /** Open leads each person holds right now (the load a reassign target is chosen by). Additive: lets Home reuse it instead of recounting. */
+  heldLoad?: Record<string, number>;
   /** Whether "last period" and "usual" are backed by data (the tenant has records that far back). */
   coverage?: { baselineCovered: boolean; hasUsual: boolean };
   window: PulseWindowInfo;
