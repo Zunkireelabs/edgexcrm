@@ -127,8 +127,7 @@ function StageRow({
       {stage.is_default ? (
         <span className="inline-flex h-5 items-center rounded-[6px] bg-[#eaf2fa] px-[7px] text-[11px] font-medium text-[#2272B4]">Start</span>
       ) : (
-        !finished &&
-        !stage.key.startsWith("new:") && (
+        !finished && (
           <button
             type="button"
             onClick={() => onPatch(stage, { is_default: true })}

@@ -57,6 +57,11 @@ export function diffToOps(original: DraftState, draft: DraftState): SettingsOp[]
     });
   }
 
+  // A new stage chosen as Start: the add can't carry it (the endpoint only unsets the old Start on PATCH), so patch right after.
+  for (const s of added) {
+    if (s.is_default) ops.push({ kind: "patch", stageId: s.key, label: `Set "${s.name}" as the start stage`, body: { is_default: true } });
+  }
+
   // 2. patches on surviving saved stages only (a renamed-then-deleted stage gets just its delete)
   for (const s of draft.stages) {
     const o = originalById.get(s.key);

@@ -67,6 +67,28 @@ describe("diffToOps", () => {
   });
 });
 
+describe("a new stage marked Start", () => {
+  it("is added, then patched is_default right after (the add alone would lose it)", () => {
+    const d = clone(original());
+    d.stages.forEach((x) => (x.is_default = false));
+    d.stages.push(st("new:1", { name: "Fresh", is_default: true }));
+    const ops = diffToOps(original(), d);
+    expect(ops.map((o) => o.kind)).toEqual(["add", "patch"]);
+    expect(ops[1]).toMatchObject({ kind: "patch", stageId: "new:1", body: { is_default: true } });
+  });
+
+  it("the patch hits the real id returned by the add", async () => {
+    const d = clone(original());
+    d.stages.push(st("new:1", { is_default: true }));
+    const calls: string[] = [];
+    await runSettingsOps(diffToOps(original(), d), "p1", async (method, path) => {
+      calls.push(`${method} ${path}`);
+      return { ok: true, status: 200, json: { data: { id: "REAL1" } } };
+    });
+    expect(calls).toEqual(["POST /api/v1/application-pipelines/p1/stages", "PATCH /api/v1/application-pipelines/p1/stages/REAL1"]);
+  });
+});
+
 describe("runSettingsOps", () => {
   const ok = (json: unknown = {}) => ({ ok: true, status: 200, json });
 
