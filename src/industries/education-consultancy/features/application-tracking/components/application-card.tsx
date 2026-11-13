@@ -97,7 +97,7 @@ export function ApplicationCard({
       onClick={() => onOpenDetail?.(application)}
       onKeyDown={handleKeyDown}
       data-testid="application-card"
-      className={`shrink-0 rounded-[12px] bg-white pb-0.5 transition-shadow ${
+      className={`shrink-0 rounded-[12px] bg-white transition-shadow ${
         isDragging ? "opacity-50" : "hover:!shadow-[0_0_0_1px_rgba(0,0,0,.1),0_1px_2px_rgba(0,0,0,.05)]"
       } ${disabled ? "cursor-default" : "cursor-grab active:cursor-grabbing"}`}
     >
@@ -105,15 +105,15 @@ export function ApplicationCard({
         <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-[6px] bg-[#f6f7f9] text-[#6b6f76]">
           <GraduationCapIcon className="h-3 w-3" />
         </span>
-        <span className="truncate text-[14px] font-medium text-[#101112]">{application.university_name}</span>
+        <span className="truncate text-[14px] leading-[1.4] font-medium text-[#101112]">{application.university_name}</span>
       </div>
 
-      <div className="flex min-w-0 items-center gap-2 px-3 py-[3px] text-[13px] text-[#6b6f76]">
+      <div className="flex min-w-0 items-center gap-2 px-3 py-[3px] text-[13px] leading-[1.4] text-[#6b6f76]">
         <BookOpenIcon className="h-[14px] w-[14px] shrink-0 text-[#9a9ea5]" />
         <span className="truncate">{application.program_name}</span>
       </div>
 
-      <div className="flex min-w-0 items-center gap-2 px-3 py-[3px] text-[13px] text-[#2b2d2f]">
+      <div className="flex min-w-0 items-center gap-2 px-3 py-[3px] text-[13px] leading-[1.4] text-[#2b2d2f]">
         <UserIcon className="h-[14px] w-[14px] shrink-0 text-[#9a9ea5]" />
         <Link
           href={`/leads/${leadId}`}
@@ -125,7 +125,7 @@ export function ApplicationCard({
         </Link>
       </div>
 
-      <div className="flex min-w-0 items-center gap-2 px-3 py-[3px] text-[13px] text-[#2b2d2f]">
+      <div className="flex min-w-0 items-center gap-2 px-3 py-[3px] text-[13px] leading-[1.4] text-[#2b2d2f]">
         {counsellor && avatar ? (
           <>
             <span
@@ -146,7 +146,7 @@ export function ApplicationCard({
         )}
       </div>
 
-      <div className="flex min-w-0 items-center gap-2 px-3 py-[3px] text-[13px] text-[#2b2d2f]">
+      <div className="flex min-w-0 items-center gap-2 px-3 py-[3px] text-[13px] leading-[1.4] text-[#2b2d2f]">
         <CalendarIcon className="h-[14px] w-[14px] shrink-0 text-[#9a9ea5]" />
         {application.intake_term ? (
           <span className="shrink-0">{application.intake_term}</span>
