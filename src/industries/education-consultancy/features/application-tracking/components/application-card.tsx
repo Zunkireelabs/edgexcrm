@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import Link from "next/link";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -8,6 +9,7 @@ import {
   CalendarIcon,
   CheckSquareIcon,
   ClockIcon,
+  DotsThreeIcon,
   FileTextIcon,
   GraduationCapIcon,
   MapPinIcon,
@@ -27,7 +29,16 @@ interface ApplicationCardProps {
   finished?: boolean;
   /** Show the time-in-stage pill (per-column "Track time in stage" pref). */
   showAge?: boolean;
+  /**
+   * Phone board, admins only (EDGEX-141 Phase 5): a 32px "⋯" in the title row and a 500ms long-press
+   * open the Move to stage sheet. Omitted (desktop, read-only users) = no button, long-press does nothing.
+   */
+  onMoveRequest?: (app: Application) => void;
 }
+
+/** Long-press to open the Move sheet (mockup state 3). */
+export const LONG_PRESS_MS = 500;
+const LONG_PRESS_SLOP_PX = 8;
 
 const AVATAR_COLORS = [
   { bg: "#e8f1fb", fg: "#1f5d94" },
@@ -63,6 +74,7 @@ export function ApplicationCard({
   assigneeNames,
   finished = false,
   showAge = true,
+  onMoveRequest,
 }: ApplicationCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: application.id,
@@ -81,6 +93,41 @@ export function ApplicationCard({
   const openTasks = application.open_task_count ?? 0;
   const docs = application.doc_count ?? 0;
 
+  // Long-press (phone): fires after LONG_PRESS_MS unless the finger moves (a swipe/scroll) or lifts.
+  const press = useRef<{ x: number; y: number; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const firedRef = useRef(false);
+  function cancelPress() {
+    if (press.current) clearTimeout(press.current.timer);
+    press.current = null;
+  }
+  const longPress = onMoveRequest
+    ? {
+        onPointerDown(e: React.PointerEvent) {
+          firedRef.current = false;
+          cancelPress();
+          press.current = {
+            x: e.clientX,
+            y: e.clientY,
+            timer: setTimeout(() => {
+              press.current = null;
+              firedRef.current = true;
+              onMoveRequest(application);
+            }, LONG_PRESS_MS),
+          };
+        },
+        onPointerMove(e: React.PointerEvent) {
+          const p = press.current;
+          if (p && Math.hypot(e.clientX - p.x, e.clientY - p.y) > LONG_PRESS_SLOP_PX) cancelPress();
+        },
+        onPointerUp: cancelPress,
+        onPointerCancel: cancelPress,
+        onPointerLeave: cancelPress,
+        onContextMenu(e: React.MouseEvent) {
+          e.preventDefault();
+        },
+      }
+    : null;
+
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
@@ -94,19 +141,43 @@ export function ApplicationCard({
       style={{ ...style, boxShadow: "0 0 0 1px rgba(0,0,0,.06)" }}
       {...attributes}
       {...listeners}
-      onClick={() => onOpenDetail?.(application)}
+      {...longPress}
+      onClick={() => {
+        // The click that ends a long-press opened the Move sheet; it doesn't also open the detail.
+        if (firedRef.current) {
+          firedRef.current = false;
+          return;
+        }
+        onOpenDetail?.(application);
+      }}
       onKeyDown={handleKeyDown}
       data-testid="application-card"
       data-app-id={application.id}
       className={`shrink-0 rounded-[12px] bg-white transition-shadow ${
         isDragging ? "opacity-50" : "hover:!shadow-[0_0_0_1px_rgba(0,0,0,.1),0_1px_2px_rgba(0,0,0,.05)]"
-      } ${disabled ? "cursor-default" : "cursor-grab active:cursor-grabbing"}`}
+      } ${disabled ? "cursor-default" : "cursor-grab active:cursor-grabbing"}${onMoveRequest ? " select-none [-webkit-touch-callout:none]" : ""}`}
     >
-      <div className="flex items-center gap-2 pt-[10px] pr-2 pb-[6px] pl-3">
+      <div className={`flex items-center gap-2 pt-[10px] pb-[6px] pl-3 ${onMoveRequest ? "pr-1" : "pr-2"}`}>
         <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-[6px] bg-[#f6f7f9] text-[#6b6f76]">
           <GraduationCapIcon className="h-3 w-3" />
         </span>
         <span className="truncate text-[14px] leading-[1.4] font-medium text-[#101112]">{application.university_name}</span>
+        {onMoveRequest && (
+          <button
+            type="button"
+            title="Move to stage"
+            aria-label={`Move ${student} to another stage`}
+            data-testid="card-move"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onMoveRequest(application);
+            }}
+            className="-my-1.5 ml-auto inline-flex size-8 shrink-0 items-center justify-center rounded-[8px] text-[#9a9ea5] hover:bg-black/5 hover:text-[#101112]"
+          >
+            <DotsThreeIcon className="size-[15px]" />
+          </button>
+        )}
       </div>
 
       <div className="flex min-w-0 items-center gap-2 px-3 py-[3px] text-[13px] leading-[1.4] text-[#6b6f76]">
