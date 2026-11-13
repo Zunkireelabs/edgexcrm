@@ -49,7 +49,7 @@ export function ApplicationsTabs({
 }) {
   return (
     <div className="flex items-center border-b border-ds-border">
-    <div role="tablist" aria-label="Applications view" className="flex flex-1 items-end gap-0.5 pt-2 max-md:no-scrollbar max-md:min-w-0 max-md:overflow-x-auto">
+    <div role="tablist" aria-label="Applications view" className="flex flex-1 items-end gap-0.5 pt-2 max-md:no-scrollbar max-md:min-w-0 max-md:overflow-x-auto max-md:pt-[9.8px]">
       {APPLICATION_TABS.map((t) => {
         const on = t === active;
         return (
@@ -66,12 +66,12 @@ export function ApplicationsTabs({
             )}
           >
             {TAB_LABEL[t]}
-            <span className="mr-1.5 text-sm md:hidden">{TAB_LABEL_PHONE[t]}</span>
+            <span className="mr-1.5 text-[13px] leading-[1.4] md:hidden">{TAB_LABEL_PHONE[t]}</span>
             {counts && (
               <span
                 data-testid={`applications-tab-count-${t}`}
                 className={cn(
-                  "rounded-full px-1.5 text-[11px] font-semibold leading-[18px] tabular-nums",
+                  "rounded-full px-1.5 text-[11px] font-semibold leading-[18px] tabular-nums max-md:leading-[15.4px]",
                   t === "stuck" ? "bg-ds-bad-soft text-ds-bad" : "bg-ds-hover text-ds-muted",
                 )}
               >

@@ -228,7 +228,7 @@ export function PhoneBoard({
         data-stage-pill={s.id}
         data-testid="stage-pill"
         onClick={() => jumpTo(s.id)}
-        className={`inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-[13px] font-medium transition-colors ${
+        className={`inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-[13px] leading-[1.4] font-medium transition-colors ${
           on ? "bg-ds-ink text-white" : fin ? "bg-transparent text-ds-muted shadow-[inset_0_0_0_1px_var(--ds-border)]" : "bg-ds-hover text-ds-muted"
         }`}
       >
