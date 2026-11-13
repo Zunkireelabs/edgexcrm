@@ -56,6 +56,7 @@ import {
   type ListColumnKey,
 } from "../lib/list-view";
 import { colorFor } from "./application-card";
+import { matchesBelowMd } from "../hooks/use-below-md";
 import { ListPicker, type PickerGroup } from "./list-picker";
 
 export const LIST_COLUMN_ICONS: Record<ListColumnKey, Icon> = {
@@ -638,7 +639,9 @@ export function ApplicationsList(p: ApplicationsListProps) {
   const showEmpty = !loading && !failed && current !== null && total === 0;
   const headState = headerCheckState(selected, pageIds);
 
-  if (p.phone) {
+  // Rendered only after mount (the workspace waits for the stored list prefs), so the synchronous
+  // media read is hydration-safe and stops one frame of the table on a phone reload.
+  if (p.phone || matchesBelowMd()) {
     return (
       <div className="relative flex flex-col" data-testid="applications-list" data-variant="phone">
         {showEmpty ? (

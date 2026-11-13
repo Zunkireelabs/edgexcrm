@@ -10,6 +10,11 @@ import { useEffect, useState } from "react";
  */
 export const BELOW_MD_QUERY = "(max-width: 767px)";
 
+/** Synchronous read for client-only code paths (never during SSR or the hydration render). */
+export function matchesBelowMd(): boolean {
+  return typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia(BELOW_MD_QUERY).matches;
+}
+
 /** True below 768px. Starts false (server render and first paint) and follows the media query. */
 export function useBelowMd(): boolean {
   const [below, setBelow] = useState(false);

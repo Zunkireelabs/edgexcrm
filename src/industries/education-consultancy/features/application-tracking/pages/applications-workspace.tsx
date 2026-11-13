@@ -507,7 +507,7 @@ export function ApplicationsWorkspace({
                   type="button"
                   data-testid="no-matches-clear"
                   onClick={clearFilters}
-                  className="inline-flex h-[30px] items-center gap-1.5 rounded-[8px] border border-[#e8e9eb] bg-white px-2.5 text-[13px] font-medium text-[#2b2d2f] hover:bg-[#f6f7f9]"
+                  className="inline-flex h-[30px] items-center gap-1.5 rounded-[8px] border border-[#e8e9eb] bg-white px-2.5 text-[13px] font-medium text-[#2b2d2f] hover:bg-[#f6f7f9] max-md:h-8"
                 >
                   Clear filters
                 </button>

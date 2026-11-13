@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { ApplicationColumn, SlimColumn } from "./application-column";
 import { ApplicationCard } from "./application-card";
 import { PhoneBoard } from "./phone-board";
+import { matchesBelowMd } from "../hooks/use-below-md";
 import { STUCK_DAYS, daysInStage, isFinishedStage } from "../lib/card-metrics";
 import { COLUMN_PAGE_SIZE, type BoardPayload } from "../lib/board-index";
 import {
@@ -384,7 +385,10 @@ export function ApplicationsBoard({
 
   if (!mounted) return <div className="h-full" />;
 
-  if (phone) {
+  // The board only renders after mount (client), so reading the media query here is hydration-safe;
+  // it keeps a hard reload on a phone from painting one frame of the desktop board before the
+  // parent's useBelowMd() update lands.
+  if (phone || matchesBelowMd()) {
     return (
       <PhoneBoard
         stages={stages}
