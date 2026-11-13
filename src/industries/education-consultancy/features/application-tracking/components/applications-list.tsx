@@ -692,7 +692,7 @@ export function ApplicationsList(p: ApplicationsListProps) {
                 <td
                   style={{ left: CHECKBOX_WIDTH }}
                   data-testid="footer-student"
-                  className={`sticky bottom-0 z-30 ${NAME_EDGE} h-9 border-t border-ds-border bg-ds-sunken px-3 text-[13px] font-normal text-ds-faint shadow-[inset_-1px_0_0_var(--ds-border)]`}
+                  className={`sticky bottom-0 z-30 ${NAME_EDGE} h-9 border-t border-ds-border bg-ds-sunken px-3 text-[13px] font-medium text-ds-faint shadow-[inset_-1px_0_0_var(--ds-border)]`}
                 >
                   <div className={NAME_CLIP}>{footerFor("student", summary)}</div>
                 </td>
@@ -700,7 +700,7 @@ export function ApplicationsList(p: ApplicationsListProps) {
                   <td
                     key={k}
                     data-testid={`footer-${k}`}
-                    className="sticky bottom-0 z-20 h-9 overflow-hidden whitespace-nowrap border-t border-ds-border bg-ds-sunken px-3 text-[13px] font-normal text-ds-faint shadow-[inset_-1px_0_0_var(--ds-border)]"
+                    className="sticky bottom-0 z-20 h-9 overflow-hidden whitespace-nowrap border-t border-ds-border bg-ds-sunken px-3 text-[13px] font-medium text-ds-faint shadow-[inset_-1px_0_0_var(--ds-border)]"
                   >
                     {footerFor(k, summary)}
                   </td>
@@ -720,6 +720,7 @@ export function ApplicationsList(p: ApplicationsListProps) {
         pageSize={pageSize}
         sizes={LIST_PAGE_SIZES}
         testId="list-showing"
+        padLeft16
         onPage={p.onPage}
         onPageSize={p.onPageSize}
       />

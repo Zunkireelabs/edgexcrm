@@ -16,6 +16,7 @@ export function GridPagination({
   onPageSize,
   sizes = [10, 25, 50, 100],
   testId = "leads-showing",
+  padLeft16 = false,
 }: {
   total: number;
   /** 0-based index of the first row on this page. */
@@ -30,9 +31,11 @@ export function GridPagination({
   /** "Rows per page" choices (Leads: 10/25/50/100; Applications List: 25/50/100). */
   sizes?: readonly number[];
   testId?: string;
+  /** Applications List mockup: 16px left inset (Leads keeps 12px). */
+  padLeft16?: boolean;
 }) {
   return (
-    <div className="flex h-12 shrink-0 items-center justify-between border-t border-ds-border bg-ds-surface px-3 text-sm font-medium text-ds-muted">
+    <div className={padLeft16 ? "flex h-12 shrink-0 items-center justify-between border-t border-ds-border bg-ds-surface pl-4 pr-3 text-sm font-medium text-ds-muted" : "flex h-12 shrink-0 items-center justify-between border-t border-ds-border bg-ds-surface px-3 text-sm font-medium text-ds-muted"}>
       <span className="tabular-nums" data-testid={testId}>
         {total === 0 ? "Showing 0 of 0" : `Showing ${(start + 1).toLocaleString()}–${end.toLocaleString()} of ${total.toLocaleString()}`}
       </span>
