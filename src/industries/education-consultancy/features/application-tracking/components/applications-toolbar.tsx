@@ -226,7 +226,7 @@ function PhoneViewToggle({ view, onView }: { view: "board" | "list"; onView: (v:
 
 /** Phone chip row: shared chips + Filter trigger grow to 32px, the Filter chip gets the mockup's dashed border. */
 const PHONE_ROW =
-  "contents max-md:flex max-md:min-w-0 max-md:flex-1 max-md:items-center max-md:gap-2 max-md:overflow-x-auto max-md:[scrollbar-width:none]! max-md:[&::-webkit-scrollbar]:hidden! max-md:[mask-image:linear-gradient(90deg,#000_calc(100%-16px),transparent)] max-md:[&_[data-testid=filter-chip]]:h-8 max-md:[&_[data-testid=applications-filter-trigger]]:h-8 max-md:[&_[data-testid=applications-filter-trigger]]:border max-md:[&_[data-testid=applications-filter-trigger]]:border-dashed max-md:[&_[data-testid=applications-filter-trigger]]:border-ds-ghost max-md:[&_[data-testid=applications-filter-trigger]]:rounded-[8px] max-md:[&_[data-testid=applications-filter-trigger]]:text-[13px]";
+  "contents max-md:flex max-md:min-w-0 max-md:flex-1 max-md:items-center max-md:gap-2 max-md:overflow-x-auto max-md:[scrollbar-width:none]! max-md:[&::-webkit-scrollbar]:hidden! max-md:mask-r-from-[calc(100%-16px)] max-md:[&_[data-testid=filter-chip]]:h-8 max-md:[&_[data-testid=applications-filter-trigger]]:h-8 max-md:[&_[data-testid=applications-filter-trigger]]:border max-md:[&_[data-testid=applications-filter-trigger]]:border-dashed max-md:[&_[data-testid=applications-filter-trigger]]:border-ds-ghost max-md:[&_[data-testid=applications-filter-trigger]]:rounded-[8px] max-md:[&_[data-testid=applications-filter-trigger]]:text-[13px]";
 const PHONE_CHIP_ICON =
   "inline-flex size-8 shrink-0 items-center justify-center rounded-[8px] border border-ds-border bg-ds-surface text-ds-muted md:hidden";
 
