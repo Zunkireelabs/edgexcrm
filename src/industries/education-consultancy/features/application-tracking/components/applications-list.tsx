@@ -768,7 +768,7 @@ export function ApplicationsList(p: ApplicationsListProps) {
               </button>
             }
             side="top"
-            width={260}
+            width={280}
             placeholder="Assign counsellor…"
             groups={counsellorGroups}
             onPick={(v) => void bulk({ assigned_to: v === UNASSIGN ? null : v }, "updated")}
