@@ -257,3 +257,73 @@ describe("ApplicationsList", () => {
     await waitFor(() => expect(p.onPage).toHaveBeenCalledWith(2));
   });
 });
+
+// EDGEX-141 Phase 5: below md the List is stacked 72px rows, not a table.
+describe("ApplicationsList phone (below md)", () => {
+  const ymd = (offsetDays: number) => new Date(Date.now() + offsetDays * DAY).toISOString().slice(0, 10);
+
+  it("renders rows, not a table: no checkboxes, bulk bar, column menu, footer or page-size picker", async () => {
+    render(<ApplicationsList {...props({ phone: true })} />);
+    await waitFor(() => expect(screen.getAllByTestId("list-phone-row")).toHaveLength(25));
+    expect(document.querySelector("table")).toBeNull();
+    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+    expect(screen.queryByTestId("list-bulk-bar")).toBeNull();
+    expect(screen.queryByTestId("list-footer")).toBeNull();
+    expect(screen.queryByTestId("column-header-student")).toBeNull();
+    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(rowsShown()).toHaveLength(0);
+  });
+
+  it("each row: student + age pill, university · program, stage + deadline + counsellor; tap opens the detail", async () => {
+    const rows = [
+      app(0, { assigned_to: "u1", application_deadline: ymd(9), stage_changed_at: new Date(Date.now() - 17 * DAY).toISOString() }),
+      app(1, { assigned_to: null, leads: { id: "l1", first_name: "Priya", last_name: "Magar", email: null, assigned_to: null } as Application["leads"], application_deadline: ymd(-2), stage_changed_at: new Date(Date.now() - 33 * DAY).toISOString() }),
+      app(2, { application_deadline: ymd(40), stage_id: "s2" }),
+      app(3, { application_deadline: null }),
+    ];
+    render(<ApplicationsList {...props({ phone: true, fetchPage: makeFetchPage(rows) })} />);
+    await waitFor(() => expect(screen.getAllByTestId("list-phone-row")).toHaveLength(4));
+    const [r0, r1, r2, r3] = screen.getAllByTestId("list-phone-row");
+    expect(r0).toHaveAttribute("href", "/applications/a0");
+    expect(r0).toHaveTextContent("Student 0");
+    expect(r0).toHaveTextContent("Uni 0 · Prog 0");
+    expect(r0).toHaveTextContent("Need to start");
+    expect(r0).toHaveTextContent("Asha Tamang");
+    expect(within(r0).getByTestId("age-pill")).toHaveAttribute("data-tone", "amber");
+    expect(within(r0).getByTestId("deadline")).toHaveAttribute("data-tone", "soon");
+    expect(within(r0).getByTestId("deadline")).toHaveTextContent("Deadline in 9d");
+    expect(r1).toHaveTextContent("Set counsellor");
+    expect(within(r1).getByTestId("age-pill")).toHaveAttribute("data-tone", "red");
+    expect(within(r1).getByTestId("deadline")).toHaveAttribute("data-tone", "past");
+    expect(within(r1).getByTestId("deadline")).toHaveTextContent("Deadline passed");
+    expect(r2).toHaveTextContent("Applied");
+    expect(within(r2).getByTestId("deadline")).toHaveAttribute("data-tone", "neutral");
+    expect(within(r3).queryByTestId("deadline")).toBeNull();
+  });
+
+  it("sticky pager '1–25 of 30' with prev/next on the same server paging and stored page size", async () => {
+    const fetchPage = makeFetchPage();
+    const onPage = vi.fn();
+    const { rerender } = render(<ApplicationsList {...props({ phone: true, fetchPage, onPage })} />);
+    await waitFor(() => expect(screen.getByTestId("list-showing")).toHaveTextContent("1–25 of 30"));
+    expect(fetchPage).toHaveBeenLastCalledWith(0, 25);
+    expect(screen.getByLabelText("Previous page")).toBeDisabled();
+    fireEvent.click(screen.getByLabelText("Next page"));
+    expect(onPage).toHaveBeenCalledWith(2);
+    rerender(<ApplicationsList {...props({ phone: true, fetchPage, onPage, page: 2 })} />);
+    await waitFor(() => expect(screen.getByTestId("list-showing")).toHaveTextContent("26–30 of 30"));
+    expect(fetchPage).toHaveBeenLastCalledWith(25, 25);
+    expect(screen.getByLabelText("Next page")).toBeDisabled();
+    rerender(<ApplicationsList {...props({ phone: true, fetchPage, onPage, page: 1, pageSize: 50 })} />);
+    await waitFor(() => expect(fetchPage).toHaveBeenLastCalledWith(0, 50));
+  });
+
+  it("no results: the no-matches state with Clear filters, no pager", async () => {
+    const onClearFilters = vi.fn();
+    render(<ApplicationsList {...props({ phone: true, fetchPage: makeFetchPage([]), filtersActive: true, onClearFilters })} />);
+    await screen.findByTestId("list-no-matches");
+    expect(screen.queryByTestId("list-phone-pager")).toBeNull();
+    fireEvent.click(screen.getByTestId("list-clear-filters"));
+    expect(onClearFilters).toHaveBeenCalled();
+  });
+});

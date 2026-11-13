@@ -18,6 +18,9 @@ import {
   BookOpenIcon,
   CalendarCheckIcon,
   CalendarIcon,
+  CaretLeftIcon,
+  CaretRightIcon,
+  ClockIcon,
   FileTextIcon,
   GlobeIcon,
   GraduationCapIcon,
@@ -39,7 +42,7 @@ import { formatAgo } from "@/components/dashboard/leads/table/format-ago";
 import { normalizeDestinations } from "@/lib/leads/destination-normalize";
 import type { Application, ApplicationStage } from "@/types/database";
 import { SORT_BY_FIELD, sortFieldOf, type ApplicationSort, type ApplicationSortField } from "../lib/applications-query";
-import { LIST_PAGE_SIZES, deadlineTone, ymdInTz, type ListSummary } from "../lib/board-index";
+import { LIST_PAGE_SIZES, daysUntilDeadline, deadlineTone, ymdInTz, type ListSummary } from "../lib/board-index";
 import { ageTone, daysInStage, initialsOf, isFinishedStage, resolveCounsellor, type AgeTone } from "../lib/card-metrics";
 import {
   LIST_COLUMNS,
@@ -119,6 +122,12 @@ export interface ApplicationsListProps {
   onLoaded?: (p: { total: number; truncated: boolean }) => void;
   /** Test seam. */
   fetchImpl?: typeof fetch;
+  /**
+   * Below md (EDGEX-141 Phase 5, mockup state 6): 72px stacked rows instead of the table, a sticky
+   * "1–25 of N" pager; no checkboxes, bulk bar, column menu, footer summaries or page-size picker.
+   * Same server paging and the user's stored page size.
+   */
+  phone?: boolean;
 }
 
 const AGE_CLASS: Record<AgeTone, string> = {
@@ -349,6 +358,80 @@ const Row = memo(function Row({ app, keys, selected, anySelected, selectable, on
   );
 });
 
+/** Phone age pill (the board card's `.age`): neutral has no fill. */
+const PHONE_AGE_CLASS: Record<AgeTone, string> = {
+  neutral: "text-[rgba(0,0,0,.63)]",
+  amber: "bg-ds-warn-soft text-ds-warn",
+  red: "bg-ds-bad-soft text-ds-bad",
+};
+
+/** "Deadline 2 Dec" / "Deadline in 9d" (≤14d, amber) / "Deadline passed" (red); null when unset. */
+export function phoneDeadline(deadline: string | null, today: string): { text: string; tone: "past" | "soon" | "neutral" } | null {
+  const tone = deadlineTone(deadline, today);
+  if (tone === "none") return null;
+  if (tone === "past") return { text: "Deadline passed", tone };
+  if (tone === "soon") {
+    const d = daysUntilDeadline(deadline, today) ?? 0;
+    return { text: d === 0 ? "Deadline today" : `Deadline in ${d}d`, tone };
+  }
+  return { text: `Deadline ${formatDay(deadline)}`, tone };
+}
+
+function PhoneRow({ app, href, c }: { app: Application; href: string; c: CellCtx }) {
+  const name = studentName(app);
+  const st = c.stageById.get(app.placed_stage_id ?? app.stage_id);
+  const days = daysInStage(app.stage_changed_at, c.now);
+  const tone = ageTone(days, isFinishedStage(st));
+  const dl = phoneDeadline(app.application_deadline, c.today);
+  const who = resolveCounsellor(app, c.assigneeNames);
+  const col = who ? colorFor(who.name) : null;
+  return (
+    <Link
+      href={href}
+      prefetch={false}
+      data-testid="list-phone-row"
+      data-app-id={app.id}
+      className="-mx-4 flex min-h-[72px] flex-col justify-center gap-[3px] border-b border-ds-divider px-4 py-2.5 text-[13px] leading-[1.4] font-normal text-ds-text active:bg-ds-hover"
+    >
+      <span className="flex items-center gap-2">
+        <span className="min-w-0 flex-1 truncate text-[14px] font-medium text-ds-ink">{name}</span>
+        <span data-testid="age-pill" data-tone={tone} className={`inline-flex h-5 shrink-0 items-center gap-1 rounded-[6px] px-1.5 text-[12px] font-medium tabular-nums ${PHONE_AGE_CLASS[tone]}`}>
+          <ClockIcon className="size-3" />
+          {days}d
+        </span>
+      </span>
+      <span className="truncate text-ds-muted">
+        {app.university_name}
+        {app.program_name ? ` · ${app.program_name}` : ""}
+      </span>
+      <span className="flex min-w-0 items-center gap-1.5 text-[12.5px] text-ds-text">
+        <span className="size-2 shrink-0 rounded-full" style={{ background: st?.color ?? "#9a9ea5" }} />
+        <span className="shrink-0 whitespace-nowrap">{st?.name ?? "—"}</span>
+        {dl && (
+          <span data-testid="deadline" data-tone={dl.tone} className={`min-w-0 truncate ${dl.tone === "past" ? "text-ds-bad" : dl.tone === "soon" ? "text-ds-warn" : "text-ds-faint"}`}>
+            · {dl.text}
+          </span>
+        )}
+        <span className="ml-auto inline-flex min-w-0 shrink items-center gap-1.5 whitespace-nowrap pl-1 text-ds-muted">
+          {who && col ? (
+            <>
+              <span className="inline-flex size-[18px] shrink-0 items-center justify-center rounded-full text-[9px] font-semibold" style={{ background: col.bg, color: col.fg }}>
+                {who.initials}
+              </span>
+              <span className="truncate">{who.name}</span>
+            </>
+          ) : (
+            <span className="text-[rgba(0,0,0,.42)]">Set counsellor</span>
+          )}
+        </span>
+      </span>
+    </Link>
+  );
+}
+
+const PHONE_PAGER_BTN =
+  "inline-flex size-8 items-center justify-center rounded-[8px] border border-ds-border bg-ds-surface text-ds-text disabled:opacity-45";
+
 const BULK_BTN = "flex h-7 items-center gap-1.5 rounded-[8px] px-2.5 text-[13px] font-medium text-[#e6e8ea] hover:bg-[#2c2f33] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/40 data-[state=open]:bg-[#2c2f33]";
 const BULK_DIV = "mx-1 h-4 w-px bg-[#3b3f44]";
 const UNASSIGN = "__none__";
@@ -554,6 +637,74 @@ export function ApplicationsList(p: ApplicationsListProps) {
   const summary = current?.summary ?? null;
   const showEmpty = !loading && !failed && current !== null && total === 0;
   const headState = headerCheckState(selected, pageIds);
+
+  if (p.phone) {
+    return (
+      <div className="relative flex flex-col" data-testid="applications-list" data-variant="phone">
+        {showEmpty ? (
+          <div className="flex flex-col items-center px-6 pt-14 pb-10 text-center" data-testid="list-no-matches">
+            <div className="mb-3 flex size-10 items-center justify-center rounded-[12px] bg-ds-hover text-ds-faint">
+              <MagnifyingGlassIcon className="size-4" />
+            </div>
+            <h3 className="mb-1 text-[15px] font-semibold text-ds-ink">{p.filtersActive ? "No applications match these filters" : "No applications yet"}</h3>
+            <p className="mb-3.5 text-sm font-normal text-ds-muted">
+              {p.filtersActive ? "Try removing a filter, or check the spelling of your search." : "Add an application to see it here."}
+            </p>
+            {p.filtersActive && (
+              <button
+                type="button"
+                data-testid="list-clear-filters"
+                onClick={p.onClearFilters}
+                className="inline-flex h-8 items-center rounded-[8px] px-2.5 text-sm font-medium text-ds-ink shadow-[inset_0_0_0_1px_var(--ds-border)]"
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="-mx-4 mt-2 border-t border-ds-border px-4" data-testid="list-phone-rows">
+            {rows.length === 0
+              ? Array.from({ length: 6 }).map((_, i) => (
+                  <div key={`sk-${i}`} aria-hidden className="-mx-4 flex h-[72px] flex-col justify-center gap-2 border-b border-ds-divider px-4">
+                    <span className="block h-2.5 w-2/5 animate-pulse rounded-full bg-ds-hover" />
+                    <span className="block h-2.5 w-3/5 animate-pulse rounded-full bg-ds-hover" />
+                  </div>
+                ))
+              : rows.map((app) => <PhoneRow key={app.id} app={app} href={p.detailHref(app.id)} c={cellCtx} />)}
+          </div>
+        )}
+        {total > 0 && (
+          <div
+            data-testid="list-phone-pager"
+            className="sticky bottom-[-16px] z-10 -mx-4 mt-auto flex h-[52px] items-center gap-2 border-t border-ds-border bg-ds-surface px-4 text-[13px] text-ds-muted tabular-nums"
+          >
+            <span data-testid="list-showing">
+              <b className="font-medium text-ds-ink">
+                {(win.start + 1).toLocaleString()}–{win.end.toLocaleString()}
+              </b>{" "}
+              of {total.toLocaleString()}
+              {current?.truncated ? "+" : ""}
+            </span>
+            <span className="flex-1" />
+            <button type="button" aria-label="Previous page" disabled={win.page <= 1} onClick={() => p.onPage(win.page - 1)} className={PHONE_PAGER_BTN}>
+              <CaretLeftIcon className="size-[15px]" />
+            </button>
+            <button type="button" aria-label="Next page" disabled={win.page >= win.totalPages} onClick={() => p.onPage(win.page + 1)} className={PHONE_PAGER_BTN}>
+              <CaretRightIcon className="size-[15px]" />
+            </button>
+          </div>
+        )}
+        {failed && (
+          <div role="alert" className="mx-auto mt-3 w-fit rounded-[8px] bg-ds-bad-soft px-3 py-1.5 text-sm text-ds-bad">
+            Couldn&apos;t load applications.{" "}
+            <button type="button" className="underline" onClick={() => setReload((n) => n + 1)}>
+              Retry
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col" data-testid="applications-list">

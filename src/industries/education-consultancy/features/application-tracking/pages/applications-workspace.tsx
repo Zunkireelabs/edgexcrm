@@ -577,7 +577,7 @@ export function ApplicationsWorkspace({
           )}
         </div>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col -mx-0" data-testid="list-area">
+        <div className="flex min-h-0 flex-1 flex-col -mx-0 max-md:flex-none" data-testid="list-area">
           {prefsReady && (
             <ApplicationsList
               key={selectedPipelineId}
@@ -603,6 +603,7 @@ export function ApplicationsWorkspace({
               filtersActive={anythingActive}
               onClearFilters={clearFilters}
               onChanged={handleRefresh}
+              phone={phone}
             />
           )}
         </div>
