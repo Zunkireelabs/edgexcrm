@@ -16,7 +16,7 @@ import { PlusIcon } from "@/components/icons";
 import { ApplicationCard } from "./application-card";
 import { ShowMoreButton } from "./column-show-more";
 import { ListPicker, type PickerGroup } from "./list-picker";
-import { COLUMN_PAGE_SIZE } from "../lib/board-index";
+import { columnMoreCount } from "../lib/board-moves";
 import { isFinishedStage } from "../lib/card-metrics";
 import { moveCardBetweenColumns, openingStageId, stripOrder, type PhoneColumnState } from "../lib/phone-board";
 import type { Application, ApplicationStage } from "@/types/database";
@@ -307,7 +307,7 @@ export function PhoneBoard({
                 )}
                 {col.total === 0 && <div className="py-6 text-center text-[13px] text-ds-faint">No applications in {stage.name}</div>}
                 <ShowMoreButton
-                  count={Math.min(COLUMN_PAGE_SIZE, Math.max(0, col.total - col.nextOffset))}
+                  count={columnMoreCount(col)}
                   loading={col.loading}
                   onClick={() => void loadPage(stage.id)}
                   className="h-9"

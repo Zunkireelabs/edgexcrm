@@ -230,6 +230,20 @@ describe("Move to stage sheet", () => {
     expect(toastMock.success).toHaveBeenLastCalledWith("Moved back to Applied");
   });
 
+  it("EDGEX-170: moving a card into a small, fully loaded column shows no 'Show N more'", async () => {
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ data: { status: "offer" } }) });
+    renderBoard({ canManage: true, phone: true });
+    await screen.findByTestId("stage-strip");
+    const first = within(columnOf("s1")).getAllByTestId("application-card")[0];
+    fireEvent.click(within(first).getByTestId("card-move"));
+    const sheet = await screen.findByTestId("move-stage-sheet");
+    fireEvent.click(within(sheet).getAllByRole("option")[2]); // Offer (1 card)
+    await waitFor(() => expect(pillCount("Offer")).toBe("2"));
+    fireEvent.click(screen.getAllByTestId("stage-pill").find((p) => p.textContent?.startsWith("Offer"))!);
+    expect(within(columnOf("s2")).getAllByTestId("application-card")).toHaveLength(2);
+    expect(within(columnOf("s2")).queryByTestId("column-show-more")).toBeNull();
+  });
+
   it("a failed PATCH keeps the card and its counts, and toasts an error", async () => {
     fetchMock.mockResolvedValue({ ok: false, status: 500, json: async () => ({}) });
     renderBoard({ canManage: true, phone: true });

@@ -29,7 +29,8 @@ import { ApplicationCardOverlay } from "./application-card";
 import { PhoneBoard } from "./phone-board";
 import { matchesBelowMd } from "../hooks/use-below-md";
 import { STUCK_DAYS, daysInStage, isFinishedStage } from "../lib/card-metrics";
-import { COLUMN_PAGE_SIZE, type BoardPayload } from "../lib/board-index";
+import { type BoardPayload } from "../lib/board-index";
+import { applyMoveCounts, columnMoreCount } from "../lib/board-moves";
 import {
   EMPTY_PREFS,
   isStageCollapsed,
@@ -328,11 +329,10 @@ export function ApplicationsBoard({
       }
       // Counts follow the move at once (the refresh below then brings the server's exact numbers).
       const wasStuck = !isFinishedStage(stageMap.get(sourceCol)) && daysInStage(app.stage_changed_at) >= STUCK_DAYS;
-      setColumns((prev) => ({
-        ...prev,
-        [sourceCol]: { ...prev[sourceCol], total: Math.max(0, prev[sourceCol].total - 1), stuck: Math.max(0, prev[sourceCol].stuck - (wasStuck ? 1 : 0)), nextOffset: Math.max(0, prev[sourceCol].nextOffset - 1) },
-        [targetCol]: { ...prev[targetCol], total: prev[targetCol].total + 1 },
-      }));
+      setColumns((prev) => {
+        const counts = applyMoveCounts(prev[sourceCol], prev[targetCol], { wasStuck, wasLoaded: true });
+        return { ...prev, [sourceCol]: counts.src, [targetCol]: counts.dst };
+      });
 
       try {
         const res = await fetch(`/api/v1/applications/${appId}`, {
@@ -474,7 +474,7 @@ export function ApplicationsBoard({
         applications={col.cards}
         total={col.total}
         stuck={col.stuck}
-        moreCount={Math.min(COLUMN_PAGE_SIZE, Math.max(0, col.total - col.nextOffset))}
+        moreCount={columnMoreCount(col)}
         loadingMore={col.loading}
         onShowMore={() => loadPage(stage.id)}
         finished={isFinished}

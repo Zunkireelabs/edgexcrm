@@ -3,6 +3,7 @@
 
 import type { Application, ApplicationStage } from "@/types/database";
 import { STUCK_DAYS, daysInStage, isFinishedStage } from "./card-metrics";
+import { applyMoveCounts } from "./board-moves";
 
 /** The columns' client state, as the board keeps it (cards loaded so far + the server's numbers). */
 export interface PhoneColumnState {
@@ -42,16 +43,10 @@ export function moveCardBetweenColumns(
   const original = src.cards.find((c) => c.id === appId);
   const wasStuck =
     !!original && !isFinishedStage(args.fromStage) && daysInStage(original.stage_changed_at, args.now ?? Date.now()) >= STUCK_DAYS;
-  const wasLoaded = !!original;
+  const counts = applyMoveCounts(src, dst, { wasStuck, wasLoaded: !!original });
   return {
     ...columns,
-    [from]: {
-      ...src,
-      cards: src.cards.filter((c) => c.id !== appId),
-      total: Math.max(0, src.total - 1),
-      stuck: Math.max(0, src.stuck - (wasStuck ? 1 : 0)),
-      nextOffset: wasLoaded ? Math.max(0, src.nextOffset - 1) : src.nextOffset,
-    },
-    [to]: { ...dst, cards: [moved, ...dst.cards.filter((c) => c.id !== appId)], total: dst.total + 1 },
+    [from]: { ...counts.src, cards: src.cards.filter((c) => c.id !== appId) },
+    [to]: { ...counts.dst, cards: [moved, ...dst.cards.filter((c) => c.id !== appId)] },
   };
 }
