@@ -28,6 +28,7 @@ import { DEFAULT_LIST_PAGE_SIZE, type BoardPayload, type ListSummary } from "../
 import { LIST_DEFAULT_KEYS, loadListLayout, loadPageSize, parsePage, resetListLayout, saveListLayout, savePageSize } from "../lib/list-view";
 import { resolvePipelineSelection } from "../lib/pipeline-selection";
 import { useEmptyStateSlot } from "../hooks/use-empty-state-slot";
+import { useBelowMd } from "../hooks/use-below-md";
 import { applicationDetailHref, boardStateQuery, decodeApplicationParams, withParam, withPipelineSwitch } from "../lib/applications-url";
 import type { BoardTotals } from "../lib/board-data";
 import { DEFAULT_APPLICATION_SORT } from "../lib/applications-query";
@@ -92,6 +93,8 @@ export function ApplicationsWorkspace({
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const isAdmin = role === "owner" || role === "admin";
+  // Behaviour switches below md (sheets, no drag, rows instead of a table). Layout uses max-md: classes.
+  const phone = useBelowMd();
 
   // ?view=list keeps the List view across reloads and the detail back link (Phase 4).
   const view: View = searchParams.get("view") === "list" ? "list" : "board";
@@ -349,13 +352,13 @@ export function ApplicationsWorkspace({
   const settingsPipeline = settingsState ? allPipelines.find((p) => p.id === settingsState.pipelineId) ?? null : null;
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 gap-3">
-      {/* Header */}
-      <div className="flex items-center gap-2.5 shrink-0">
+    <div className="flex flex-col flex-1 min-h-0 gap-3 max-md:gap-0">
+      {/* Header (phone: title, pipeline button, 32px ink "+"; count pill and gear hidden) */}
+      <div className="flex items-center gap-2.5 shrink-0 max-md:h-8 max-md:gap-2">
         <h1 className="text-[20px] font-semibold tracking-[-0.02em] text-[#101112]">Applications</h1>
         <span
           data-testid="header-count"
-          className="rounded-full bg-[#f6f7f9] px-2 py-0.5 text-[12px] text-[#6b6f76] tabular-nums"
+          className="rounded-full bg-[#f6f7f9] px-2 py-0.5 text-[12px] text-[#6b6f76] tabular-nums max-md:hidden"
         >
           {(() => {
             const n = `${board.total.toLocaleString()}${board.truncated ? "+" : ""}`;
@@ -363,7 +366,7 @@ export function ApplicationsWorkspace({
           })()}
         </span>
         <div className="flex-1" />
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 max-md:min-w-0">
           <ApplicationPipelineSelector
             pipelines={allPipelines}
             stages={stages}
@@ -373,6 +376,7 @@ export function ApplicationsWorkspace({
             selectedPipelineId={selectedPipelineId}
             selectedCount={pipelineTotal}
             isAdmin={isAdmin}
+            phone={phone}
             onSelect={handlePipelineChange}
             onOpenSettings={(id) => setSettingsState({ pipelineId: id, addStage: false })}
             onCreate={() => setCreateOpen(true)}
@@ -383,7 +387,7 @@ export function ApplicationsWorkspace({
               title="Pipeline settings"
               aria-label="Pipeline settings"
               onClick={() => setSettingsState({ pipelineId: selectedPipeline.id, addStage: false })}
-              className="inline-flex h-[30px] w-[30px] items-center justify-center rounded-[8px] border border-[#e8e9eb] bg-white text-[#2b2d2f] hover:bg-[#f6f7f9]"
+              className="inline-flex h-[30px] w-[30px] items-center justify-center rounded-[8px] border border-[#e8e9eb] bg-white text-[#2b2d2f] hover:bg-[#f6f7f9] max-md:hidden"
             >
               <GearIcon className="h-[15px] w-[15px]" />
             </button>
@@ -391,10 +395,13 @@ export function ApplicationsWorkspace({
           {canManageApplications && (
             <button
               type="button"
+              aria-label="Add application"
+              title="Add application"
+              data-testid="header-add"
               onClick={() => openAdd(null)}
-              className="inline-flex h-[30px] items-center gap-1.5 rounded-[8px] bg-[#0f0f10] px-2.5 text-[13px] font-medium text-white transition-colors hover:bg-[#0f0f10]/90"
+              className="inline-flex h-[30px] items-center gap-1.5 rounded-[8px] bg-[#0f0f10] px-2.5 text-[13px] font-medium text-white transition-colors hover:bg-[#0f0f10]/90 max-md:size-8 max-md:shrink-0 max-md:justify-center max-md:gap-0 max-md:px-0 max-md:text-[0px]"
             >
-              <PlusIcon className="h-3 w-3 shrink-0" />
+              <PlusIcon className="h-3 w-3 shrink-0 max-md:size-[15px]" />
               Add application
             </button>
           )}
@@ -445,10 +452,13 @@ export function ApplicationsWorkspace({
       {isDefaultSelected && noPipelineTotal > 0 && (
         <div
           data-testid="no-pipeline-note"
-          className="flex shrink-0 items-center gap-2 rounded-[8px] bg-[#fafaf9] px-2.5 py-[7px] text-[12px] text-[#6b6f76] shadow-[0_0_0_1px_rgba(0,0,0,.06)]"
+          className={`flex shrink-0 items-center gap-2 rounded-[8px] bg-[#fafaf9] px-2.5 py-[7px] text-[12px] text-[#6b6f76] shadow-[0_0_0_1px_rgba(0,0,0,.06)] max-md:mt-2 max-md:h-[30px] max-md:py-0 max-md:whitespace-nowrap${filtersActive ? " max-md:hidden" : ""}`}
         >
-          <InfoIcon className="h-[14px] w-[14px] shrink-0 text-[#9a9ea5]" />
-          <span>
+          <InfoIcon className="h-[14px] w-[14px] shrink-0 text-[#9a9ea5] max-md:size-[13px]" />
+          <span className="min-w-0 truncate md:hidden" data-testid="no-pipeline-note-phone">
+            <b className="font-semibold text-[#101112]">{noPipelineTotal}</b> with no pipeline, shown in their stage
+          </span>
+          <span className="max-md:hidden">
             <b className="font-semibold text-[#101112]">{noPipelineTotal}</b>{" "}
             {noPipelineTotal === 1 ? "application has no pipeline yet — it's" : "applications have no pipeline yet — they're"} shown
             here under Default.
