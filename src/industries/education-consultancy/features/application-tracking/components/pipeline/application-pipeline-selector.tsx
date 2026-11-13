@@ -9,6 +9,10 @@ interface ApplicationPipelineSelectorProps {
   stages: ApplicationStage[];
   /** application count per stage id (placement-based). */
   stageTotals: Record<string, number>;
+  /** Client placement counts per pipeline id — the same source the board and the button use. */
+  pipelineCounts: Record<string, number> | Map<string, number>;
+  /** Apps with no pipeline of their own that are shown under Default. */
+  noPipelineCount: number;
   selectedPipelineId: string;
   /** Count shown on the button: what the board renders for the selected pipeline. */
   selectedCount: number;
@@ -22,6 +26,8 @@ export function ApplicationPipelineSelector({
   pipelines,
   stages,
   stageTotals,
+  pipelineCounts,
+  noPipelineCount,
   selectedPipelineId,
   selectedCount,
   isAdmin,
@@ -95,6 +101,7 @@ export function ApplicationPipelineSelector({
             {filtered.map((p) => {
               const ps = stages.filter((s) => s.pipeline_id === p.id).sort((a, b) => a.position - b.position);
               const total = ps.reduce((n, s) => n + (stageTotals[s.id] ?? 0), 0);
+              const appCount = pipelineCounts instanceof Map ? pipelineCounts.get(p.id) ?? 0 : pipelineCounts[p.id] ?? 0;
               return (
                 <div key={p.id} className="group relative">
                   <button
@@ -118,8 +125,8 @@ export function ApplicationPipelineSelector({
                         )}
                       </span>
                       <span className="mt-px block text-[12px] text-[#6b6f76] tabular-nums">
-                        {p.application_count} {p.application_count === 1 ? "application" : "applications"} · {p.stage_count}{" "}
-                        {p.stage_count === 1 ? "stage" : "stages"}
+                        {appCount} {appCount === 1 ? "application" : "applications"} · {ps.length} {ps.length === 1 ? "stage" : "stages"}
+                        {p.is_default && noPipelineCount > 0 ? ` · ${noPipelineCount} with no pipeline` : ""}
                       </span>
                       <span className="mt-[7px] flex h-1 gap-px overflow-hidden rounded-full bg-[#f0f1f2]">
                         {total > 0

@@ -8,6 +8,7 @@ import {
   MagnifyingGlassIcon,
   ArrowsDownUpIcon,
   ColumnsIcon,
+  CaretLeftIcon,
   GearIcon,
   InfoIcon,
 } from "@/components/icons";
@@ -140,7 +141,7 @@ export function ApplicationsWorkspace({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const { placements, noPipelineCount } = useMemo(
+  const { placements, countByPipeline, noPipelineCount } = useMemo(
     () => resolveBoardPlacement(applications, stages, allPipelines),
     [applications, stages, allPipelines],
   );
@@ -384,6 +385,8 @@ export function ApplicationsWorkspace({
             pipelines={allPipelines}
             stages={stages}
             stageTotals={stageTotals}
+            pipelineCounts={countByPipeline}
+            noPipelineCount={noPipelineCount}
             selectedPipelineId={selectedPipelineId}
             selectedCount={filteredApplications.length}
             isAdmin={isAdmin}
@@ -409,7 +412,7 @@ export function ApplicationsWorkspace({
               className="inline-flex h-[30px] items-center gap-1.5 rounded-[8px] bg-[#0f0f10] px-2.5 text-[13px] font-medium text-white transition-colors hover:bg-[#0f0f10]/90"
             >
               <PlusIcon className="h-3 w-3 shrink-0" />
-              Add application
+              <span>Add application</span>
             </button>
           )}
         </div>
@@ -521,15 +524,16 @@ export function ApplicationsWorkspace({
                 No applications in {selectedPipeline?.name ?? "this board"} yet
               </h3>
               <p className="mb-3.5 max-w-[340px] text-[13px] text-[#6b6f76]">
-                Applications you add or move here will show up in their stage.
+                Add an application, or move one here from another pipeline.
               </p>
               <div className="pointer-events-auto flex gap-2">
                 {!isDefaultSelected && defaultPipeline && (
                   <button
                     type="button"
                     onClick={() => handlePipelineChange(defaultPipeline.id)}
-                    className="inline-flex h-[30px] items-center rounded-[8px] border border-[#e8e9eb] bg-white px-2.5 text-[13px] font-medium text-[#2b2d2f] hover:bg-[#f6f7f9]"
+                    className="inline-flex h-[30px] items-center gap-1.5 rounded-[8px] border border-[#e8e9eb] bg-white px-2.5 text-[13px] font-medium text-[#2b2d2f] hover:bg-[#f6f7f9]"
                   >
+                    <CaretLeftIcon className="h-3 w-3" />
                     Back to Default pipeline
                   </button>
                 )}
@@ -540,7 +544,7 @@ export function ApplicationsWorkspace({
                     className="inline-flex h-[30px] items-center gap-1.5 rounded-[8px] bg-[#0f0f10] px-2.5 text-[13px] font-medium text-white hover:bg-[#0f0f10]/90"
                   >
                     <PlusIcon className="h-3 w-3" />
-                    Add application
+                    <span>Add application</span>
                   </button>
                 )}
               </div>
@@ -601,6 +605,7 @@ export function ApplicationsWorkspace({
             router.refresh();
           }}
           pipeline={settingsPipeline}
+          stages={stages.filter((s) => s.pipeline_id === settingsPipeline.id)}
           stageAppCounts={stageTotals}
           startAddingStage={settingsState?.addStage}
           key={settingsPipeline.id}

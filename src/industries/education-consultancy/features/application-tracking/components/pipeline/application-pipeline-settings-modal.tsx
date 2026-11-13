@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors, closestCenter } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -9,12 +9,21 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CaretDownIcon, DotsSixVerticalIcon, DotsThreeIcon, PlusIcon } from "@/components/icons";
 import { toast } from "sonner";
-import type { ApplicationPipelineWithCounts, ApplicationStageWithCount } from "@/types/database";
+import {
+  diffToOps,
+  runSettingsOps,
+  type DraftStage,
+  type DraftState,
+  type OpRequest,
+} from "../../lib/pipeline-settings-ops";
+import type { ApplicationPipelineWithCounts, ApplicationStage } from "@/types/database";
 
 interface ApplicationPipelineSettingsModalProps {
   open: boolean;
   onClose: () => void;
   pipeline: ApplicationPipelineWithCounts;
+  /** This pipeline's stages as the workspace already has them: the modal opens with them (no empty first paint). */
+  stages: ApplicationStage[];
   /** Placement-based application count per stage id (matches the board). Falls back to the API's count. */
   stageAppCounts?: Record<string, number>;
   /** Open with the "add stage" row ready (the board's add-stage box). */
@@ -26,9 +35,16 @@ const PALETTE = [
   "#eab308", "#f97316", "#ef4444", "#ec4899", "#a855f7", "#6366f1",
 ];
 
-const isFinished = (s: ApplicationStageWithCount) => s.is_terminal || s.terminal_type != null;
+const isFinished = (s: DraftStage) => s.is_terminal || s.terminal_type != null;
 
-type StagePatch = Partial<{ name: string; color: string; is_default: boolean; is_terminal: boolean; terminal_type: "won" | "lost" | null }>;
+const toDraftStage = (s: ApplicationStage): DraftStage => ({
+  key: s.id, name: s.name, color: s.color, is_default: s.is_default, is_terminal: s.is_terminal, terminal_type: s.terminal_type,
+});
+const toDraft = (name: string, is_default: boolean, stages: ApplicationStage[]): DraftState => ({
+  name, is_default, stages: [...stages].sort((a, b) => a.position - b.position).map(toDraftStage),
+});
+
+type StagePatch = Partial<Pick<DraftStage, "name" | "color" | "is_default" | "is_terminal" | "terminal_type">>;
 
 function StageRow({
   stage,
@@ -36,12 +52,12 @@ function StageRow({
   onPatch,
   onDelete,
 }: {
-  stage: ApplicationStageWithCount;
+  stage: DraftStage;
   count: number;
-  onPatch: (s: ApplicationStageWithCount, patch: StagePatch) => void;
-  onDelete: (s: ApplicationStageWithCount) => void;
+  onPatch: (s: DraftStage, patch: StagePatch) => void;
+  onDelete: (s: DraftStage) => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: stage.id });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: stage.key });
   const [name, setName] = useState(stage.name);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -111,7 +127,8 @@ function StageRow({
       {stage.is_default ? (
         <span className="inline-flex h-5 items-center rounded-[6px] bg-[#eaf2fa] px-[7px] text-[11px] font-medium text-[#2272B4]">Start</span>
       ) : (
-        !finished && (
+        !finished &&
+        !stage.key.startsWith("new:") && (
           <button
             type="button"
             onClick={() => onPatch(stage, { is_default: true })}
@@ -184,160 +201,138 @@ export function ApplicationPipelineSettingsModal({
   open,
   onClose,
   pipeline,
+  stages: stagesProp,
   stageAppCounts,
   startAddingStage,
 }: ApplicationPipelineSettingsModalProps) {
-  const [name, setName] = useState(pipeline.name);
-  const [isDefault, setIsDefault] = useState(pipeline.is_default);
-  const [stages, setStages] = useState<ApplicationStageWithCount[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  // Everything below edits a local draft; nothing reaches the API until "Save changes".
+  const [original, setOriginal] = useState<DraftState>(() => toDraft(pipeline.name, pipeline.is_default, stagesProp));
+  const [draft, setDraft] = useState<DraftState>(original);
   const [isSaving, setIsSaving] = useState(false);
   const [adding, setAdding] = useState(!!startAddingStage);
   const [newName, setNewName] = useState("");
-  const [deleteConfirm, setDeleteConfirm] = useState<ApplicationStageWithCount | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<DraftStage | null>(null);
+  const [discardAsk, setDiscardAsk] = useState(false);
+  const [deletePipelineAsk, setDeletePipelineAsk] = useState(false);
   const newInputRef = useRef<HTMLInputElement>(null);
+  const newCounter = useRef(0);
+
+  const ops = useMemo(() => diffToOps(original, draft), [original, draft]);
+  const dirty = ops.length > 0;
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty;
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const base = `/api/v1/application-pipelines/${pipeline.id}`;
 
-  const countOf = (s: ApplicationStageWithCount) => stageAppCounts?.[s.id] ?? s.application_count ?? 0;
+  const countOf = (s: DraftStage) => stageAppCounts?.[s.key] ?? 0;
 
-  const fetchDetails = async () => {
+  const request: OpRequest = async (method, path, body) => {
+    const res = await fetch(path, {
+      method,
+      headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    return { ok: res.ok, status: res.status, json: await res.json().catch(() => null) };
+  };
+
+  /** Refresh from the server. Replaces the draft too unless the user has unsaved edits (or `force`). */
+  const refresh = async (force = false) => {
     try {
       const res = await fetch(base);
       const json = await res.json();
-      if (json.data) {
-        setName(json.data.name);
-        setIsDefault(json.data.is_default);
-        setStages(json.data.stages || []);
-      }
+      if (!json.data) return;
+      const fresh = toDraft(json.data.name, json.data.is_default, json.data.stages ?? []);
+      setOriginal(fresh);
+      if (force || !dirtyRef.current) setDraft(fresh);
     } catch {
-      toast.error("Failed to load pipeline details");
-    } finally {
-      setIsLoading(false);
+      /* keep the props-seeded draft */
     }
   };
 
   useEffect(() => {
-    if (open) void fetchDetails();
+    if (open) void refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, pipeline.id]);
 
   useEffect(() => {
     if (adding) newInputRef.current?.focus();
-  }, [adding, isLoading]);
+  }, [adding]);
 
-  const active = stages.filter((s) => !isFinished(s));
-  const finished = stages.filter(isFinished);
+  const active = draft.stages.filter((s) => !isFinished(s));
+  const finished = draft.stages.filter(isFinished);
 
-  const patchStage = async (stage: ApplicationStageWithCount, patch: StagePatch) => {
-    try {
-      const res = await fetch(`${base}/stages/${stage.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(patch),
-      });
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({}));
-        throw new Error(json?.error?.message || "Failed to update stage");
-      }
-      await fetchDetails();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to update stage");
-      void fetchDetails();
-    }
-  };
+  const updateStage = (stage: DraftStage, patch: StagePatch) =>
+    setDraft((d) => ({
+      ...d,
+      stages: d.stages.map((s) => {
+        if (s.key === stage.key) {
+          const next = { ...s, ...patch };
+          if (patch.terminal_type === null) next.is_terminal = false;
+          else if (patch.terminal_type) next.is_terminal = true;
+          return next;
+        }
+        return patch.is_default ? { ...s, is_default: false } : s;
+      }),
+    }));
 
-  const reorderGroup = async (group: ApplicationStageWithCount[], event: DragEndEvent) => {
+  const reorderGroup = (group: DraftStage[], event: DragEndEvent) => {
     const { active: a, over } = event;
     if (!over || a.id === over.id) return;
     const moved = arrayMove(
       group,
-      group.findIndex((s) => s.id === a.id),
-      group.findIndex((s) => s.id === over.id),
+      group.findIndex((s) => s.key === a.id),
+      group.findIndex((s) => s.key === over.id),
     );
-    const next = group === active ? [...moved, ...finished] : [...active, ...moved];
-    setStages(next);
-    try {
-      const res = await fetch(`${base}/stages/reorder`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stage_ids: next.map((s) => s.id) }),
-      });
-      if (!res.ok) throw new Error("Failed to reorder");
-    } catch {
-      toast.error("Failed to save stage order");
-      void fetchDetails();
-    }
+    setDraft((d) => ({ ...d, stages: group === active ? [...moved, ...finished] : [...active, ...moved] }));
   };
 
-  const addStage = async () => {
+  const addStage = () => {
     const n = newName.trim();
     if (!n) return;
-    try {
-      const res = await fetch(`${base}/stages`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: n, color: "#3b82f6", is_terminal: false, terminal_type: null, is_default: false }),
-      });
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({}));
-        throw new Error(json?.error?.message || "Failed to add stage");
-      }
-      setNewName("");
-      setAdding(false);
-      toast.success("Stage added");
-      await fetchDetails();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to add stage");
-    }
+    const stage: DraftStage = {
+      key: `new:${++newCounter.current}`, name: n, color: "#3b82f6", is_default: false, is_terminal: false, terminal_type: null,
+    };
+    setDraft((d) => ({ ...d, stages: [...d.stages, stage] }));
+    setNewName("");
+    setAdding(false);
   };
 
-  const deleteStage = async (stage: ApplicationStageWithCount) => {
-    try {
-      const res = await fetch(`${base}/stages/${stage.id}`, { method: "DELETE" });
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({}));
-        throw new Error(res.status === 409 ? `Move the applications out of ${stage.name} first` : json?.error?.message || "Failed to delete stage");
-      }
-      toast.success("Stage deleted");
-      setDeleteConfirm(null);
-      await fetchDetails();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to delete stage");
-    }
+  const removeStage = (stage: DraftStage) => {
+    setDraft((d) => ({ ...d, stages: d.stages.filter((s) => s.key !== stage.key) }));
+    setDeleteConfirm(null);
+  };
+
+  const requestClose = () => {
+    if (isSaving) return;
+    if (dirty) setDiscardAsk(true);
+    else onClose();
   };
 
   const handleSave = async () => {
-    if (!name.trim()) {
+    if (!draft.name.trim()) {
       toast.error("Pipeline name is required");
       return;
     }
+    if (!dirty) return onClose();
     setIsSaving(true);
-    try {
-      const res = await fetch(base, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), is_default: isDefault }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error?.message || "Failed to save");
+    const result = await runSettingsOps(ops, pipeline.id, request);
+    if (result.ok) {
       toast.success("Pipeline updated");
-      onClose();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to save pipeline");
-    } finally {
       setIsSaving(false);
+      onClose();
+      return;
     }
+    toast.error(`Couldn't save: ${result.failed.label}. ${result.message}`);
+    await refresh(true); // show what the server actually has; the modal stays open
+    setIsSaving(false);
   };
 
   const handleDeletePipeline = async () => {
+    setDeletePipelineAsk(false);
     try {
-      const res = await fetch(base, { method: "DELETE" });
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({}));
-        throw new Error(json?.error?.message || "Failed to delete");
-      }
+      const res = await request("DELETE", base);
+      if (!res.ok) throw new Error((res.json as { error?: { message?: string } } | null)?.error?.message || "Failed to delete");
       toast.success("Pipeline deleted");
       onClose();
     } catch (e) {
@@ -345,20 +340,21 @@ export function ApplicationPipelineSettingsModal({
     }
   };
 
+  const pipelineAppCount = original.stages.reduce((n, s) => n + countOf(s), 0);
   const hasRequiredTerminals =
     finished.some((s) => s.terminal_type === "won") && finished.some((s) => s.terminal_type === "lost");
   const deleteCount = deleteConfirm ? countOf(deleteConfirm) : 0;
 
-  const group = (label: string, list: ApplicationStageWithCount[]) => (
+  const group = (label: string, list: DraftStage[]) => (
     <>
       <div className="my-3 mb-1.5 flex items-center gap-2 text-[11.5px] text-[#6b6f76] after:h-px after:flex-1 after:bg-[#f0f1f2]">
         <b className="font-semibold text-[#2b2d2f]">{label}</b>
         {list.length}
       </div>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => reorderGroup(list, e)}>
-        <SortableContext items={list.map((s) => s.id)} strategy={verticalListSortingStrategy}>
+        <SortableContext items={list.map((s) => s.key)} strategy={verticalListSortingStrategy}>
           {list.map((s) => (
-            <StageRow key={`${s.id}:${s.name}`} stage={s} count={countOf(s)} onPatch={patchStage} onDelete={setDeleteConfirm} />
+            <StageRow key={`${s.key}:${s.name}`} stage={s} count={countOf(s)} onPatch={updateStage} onDelete={setDeleteConfirm} />
           ))}
         </SortableContext>
       </DndContext>
@@ -367,7 +363,7 @@ export function ApplicationPipelineSettingsModal({
 
   return (
     <>
-      <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <Dialog open={open} onOpenChange={(o) => !o && requestClose()}>
         <DialogContent className="max-h-[calc(100vh-64px)] sm:max-w-[640px] flex flex-col overflow-hidden" data-testid="pipeline-settings-modal">
           <DialogHeader>
             <DialogTitle>Pipeline settings</DialogTitle>
@@ -375,17 +371,13 @@ export function ApplicationPipelineSettingsModal({
           </DialogHeader>
 
           <div className="min-h-0 flex-1 overflow-y-auto">
-            {isLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
-              </div>
-            ) : (
+            {(
               <>
                 <div className="mb-3.5 flex flex-col gap-1.5">
                   <label htmlFor="app-pipeline-settings-name" className="text-[12px] font-medium text-[#6b6f76]">
                     Name
                   </label>
-                  <Input id="app-pipeline-settings-name" value={name} onChange={(e) => setName(e.target.value)} />
+                  <Input id="app-pipeline-settings-name" value={draft.name} onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} />
                 </div>
 
                 <label className="mb-4 flex cursor-pointer items-center gap-2.5 rounded-[10px] px-3 py-2.5 shadow-[inset_0_0_0_1px_#e8e9eb]">
@@ -395,16 +387,16 @@ export function ApplicationPipelineSettingsModal({
                   </span>
                   <input
                     type="checkbox"
-                    checked={isDefault}
+                    checked={draft.is_default}
                     disabled={pipeline.is_default}
-                    onChange={(e) => setIsDefault(e.target.checked)}
+                    onChange={(e) => setDraft((d) => ({ ...d, is_default: e.target.checked }))}
                     className="h-4 w-4"
                   />
                 </label>
 
                 <div className="mb-1 flex items-center gap-2">
                   <h3 className="text-[13px] font-semibold text-[#101112]">
-                    Stages <span className="font-normal text-[#9a9ea5]">{stages.length}</span>
+                    Stages <span className="font-normal text-[#9a9ea5]">{draft.stages.length}</span>
                   </h3>
                 </div>
 
@@ -416,14 +408,14 @@ export function ApplicationPipelineSettingsModal({
                       value={newName}
                       onChange={(e) => setNewName(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter") void addStage();
+                        if (e.key === "Enter") addStage();
                         if (e.key === "Escape") setAdding(false);
                       }}
                       placeholder="New stage name"
                       maxLength={100}
                       className="h-7 flex-1 rounded-[6px] bg-white px-2 text-[13px] shadow-[inset_0_0_0_1px_#2272B4] outline-none"
                     />
-                    <Button size="sm" onClick={() => void addStage()} disabled={!newName.trim()}>
+                    <Button size="sm" onClick={addStage} disabled={!newName.trim()}>
                       Add
                     </Button>
                   </div>
@@ -450,12 +442,12 @@ export function ApplicationPipelineSettingsModal({
           <DialogFooter className="flex-col gap-2 sm:flex-row">
             <button
               type="button"
-              onClick={handleDeletePipeline}
-              disabled={pipeline.is_default || pipeline.application_count > 0}
+              onClick={() => setDeletePipelineAsk(true)}
+              disabled={pipeline.is_default || pipelineAppCount > 0}
               title={
                 pipeline.is_default
                   ? "The default pipeline can't be deleted"
-                  : pipeline.application_count > 0
+                  : pipelineAppCount > 0
                     ? "Move its applications out first"
                     : undefined
               }
@@ -463,10 +455,10 @@ export function ApplicationPipelineSettingsModal({
             >
               Delete pipeline
             </button>
-            <Button type="button" variant="outline" onClick={onClose}>
+            <Button type="button" variant="outline" onClick={requestClose}>
               Cancel
             </Button>
-            <Button type="button" onClick={handleSave} disabled={isSaving}>
+            <Button type="button" onClick={handleSave} disabled={isSaving || !dirty}>
               {isSaving ? "Saving..." : "Save changes"}
             </Button>
           </DialogFooter>
@@ -489,7 +481,7 @@ export function ApplicationPipelineSettingsModal({
                 {deleteCount > 0 ? "OK" : "Cancel"}
               </Button>
               {deleteCount === 0 && (
-                <Button variant="destructive" onClick={() => void deleteStage(deleteConfirm)}>
+                <Button variant="destructive" onClick={() => removeStage(deleteConfirm)}>
                   Delete stage
                 </Button>
               )}
@@ -497,6 +489,45 @@ export function ApplicationPipelineSettingsModal({
           </DialogContent>
         </Dialog>
       )}
+      <Dialog open={discardAsk} onOpenChange={setDiscardAsk}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>Discard changes?</DialogTitle>
+            <DialogDescription>You have unsaved pipeline edits. Closing now throws them away.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDiscardAsk(false)}>
+              Keep editing
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setDiscardAsk(false);
+                onClose();
+              }}
+            >
+              Discard
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deletePipelineAsk} onOpenChange={setDeletePipelineAsk}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>Delete {pipeline.name}?</DialogTitle>
+            <DialogDescription>This removes the pipeline and its stages. It can&apos;t be undone.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeletePipelineAsk(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeletePipeline}>
+              Delete pipeline
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

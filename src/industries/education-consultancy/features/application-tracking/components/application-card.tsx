@@ -146,18 +146,18 @@ export function ApplicationCard({
         )}
       </div>
 
-      <div className="flex min-w-0 items-center gap-2 px-3 py-[3px] text-[13px] leading-[1.4] text-[#2b2d2f]">
+      <div className="flex min-w-0 items-center gap-2 overflow-hidden px-3 py-[3px] text-[13px] leading-[1.4] whitespace-nowrap text-[#2b2d2f]">
         <CalendarIcon className="h-[14px] w-[14px] shrink-0 text-[#9a9ea5]" />
         {application.intake_term ? (
-          <span className="shrink-0">{application.intake_term}</span>
+          <span className="min-w-0 truncate">{application.intake_term}</span>
         ) : (
-          <span className="text-[rgba(0,0,0,.42)]">Set intake</span>
+          <span className="shrink-0 text-[rgba(0,0,0,.42)]">Set intake</span>
         )}
         {countries.length > 0 && (
           <>
-            <span className="text-[#6b6f76]">·</span>
+            <span className="shrink-0 text-[#6b6f76]">·</span>
             <MapPinIcon className="h-[14px] w-[14px] shrink-0 text-[#9a9ea5]" />
-            <span className="truncate text-[#6b6f76]">{countries.join(", ")}</span>
+            <span className="min-w-0 truncate text-[#6b6f76]">{countries.join(", ")}</span>
           </>
         )}
       </div>
