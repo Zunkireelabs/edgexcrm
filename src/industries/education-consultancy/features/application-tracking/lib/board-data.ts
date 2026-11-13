@@ -34,6 +34,8 @@ export interface BoardTotals {
   facets: BoardFacets;
   /** True when the unfiltered read failed and the numbers above fell back to the filtered rows. */
   degraded: boolean;
+  /** The unfiltered read hit the row ceiling: totals are lower bounds ("T+"). */
+  truncated?: boolean;
 }
 
 /** No chips, no search, All tab: the main query already IS the unfiltered read (M3). */

@@ -35,6 +35,7 @@ const EXEMPT_SITES: Record<string, "rpc-only" | "auth-only"> = {
   "src/app/(main)/(dashboard)/classes/page.tsx": "rpc-only", // visibleLeadsBase() call site
   "src/app/(main)/(dashboard)/applications/page.tsx": "rpc-only", // resolveApplicationsScope() -> visibleLeadsBase() call site
   "src/app/(main)/api/v1/applications/route.ts": "rpc-only", // GET: resolveApplicationsScope() -> visibleLeadsBase() call site (EDGEX-141 Phase 3)
+  "src/app/(main)/api/v1/applications/board-page/route.ts": "rpc-only", // resolveApplicationsScope() -> visibleLeadsBase() call site (EDGEX-141 Phase 3)
   "src/app/(main)/api/v1/sms/blasts/[id]/preview/route.ts": "rpc-only", // resolveAudience() -> visibleLeadsBase() call site
   "src/app/(main)/api/v1/sms/blasts/[id]/audience-count/route.ts": "rpc-only", // resolveAudience() -> visibleLeadsBase() call site (F-12)
   "src/app/(main)/api/v1/sms/blasts/[id]/audience-preview/route.ts": "rpc-only", // resolveAudience() -> visibleLeadsBase() call site (Phase 3B)
