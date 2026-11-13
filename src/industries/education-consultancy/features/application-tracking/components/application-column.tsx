@@ -6,10 +6,12 @@ import { PlusIcon } from "@/components/icons";
 import { ApplicationCard } from "./application-card";
 import { ShowMoreButton, useRevealedCards } from "./column-show-more";
 import { StageColumnMenu } from "./stage-column-menu";
-import { daysInStage } from "../lib/card-metrics";
+import { STUCK_DAYS, daysInStage } from "../lib/card-metrics";
 import type { Application, ApplicationStage } from "@/types/database";
 
 interface ApplicationColumnProps {
+  /** Column width in px (Narrow 232 / Wide 268). */
+  width?: number;
   stage: ApplicationStage;
   applications: Application[];
   finished: boolean;
@@ -31,6 +33,7 @@ interface ApplicationColumnProps {
 }
 
 export function ApplicationColumn({
+  width = 268,
   stage,
   applications,
   finished,
@@ -52,15 +55,16 @@ export function ApplicationColumn({
   const { visible, showMore, nextBatch } = useRevealedCards(applications);
 
   // One stage-specific fact from loaded data. Required-document data does not exist, so no "missing docs".
-  const stuck = finished ? 0 : applications.filter((a) => daysInStage(a.stage_changed_at) >= 30).length;
-  const fact = stuck > 0 ? `${stuck} stuck 30d+` : null;
+  const stuck = finished ? 0 : applications.filter((a) => daysInStage(a.stage_changed_at) >= STUCK_DAYS).length;
+  const fact = stuck > 0 ? `${stuck} stuck ${STUCK_DAYS}d+` : null;
 
   return (
     <div
       ref={setNodeRef}
       data-testid="board-column"
       data-stage-id={stage.id}
-      className={`relative flex max-h-full w-[268px] shrink-0 flex-col rounded-[16px] bg-[#FBFBFB] ${isOver ? "ring-2 ring-[#2272B4]/20" : ""}`}
+      style={{ width }}
+      className={`relative flex max-h-full shrink-0 flex-col rounded-[16px] bg-[#FBFBFB] ${isOver ? "ring-2 ring-[#2272B4]/20" : ""}`}
     >
       <div className="mt-1 flex h-9 shrink-0 items-center gap-2 py-2 pr-2 pl-[14px]">
         <span className="h-[9px] w-[9px] shrink-0 rounded-full" style={{ backgroundColor: stage.color }} />

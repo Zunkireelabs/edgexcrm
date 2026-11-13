@@ -3,22 +3,13 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import {
   PlusIcon,
-  SquaresFourIcon,
-  ListIcon,
-  MagnifyingGlassIcon,
-  ArrowsDownUpIcon,
   ColumnsIcon,
   CaretLeftIcon,
   GearIcon,
   InfoIcon,
 } from "@/components/icons";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { FilterDropdown } from "@/components/ui/filter-dropdown";
-import {
-  ApplicationsFilterMenu,
-  ApplicationsFilterChips,
-  type ApplicationsFilterField,
-} from "../components/applications-filter-menu";
+import { ApplicationsToolbar } from "../components/applications-toolbar";
 import {
   ApplicationsColumnManager,
 } from "../components/applications-column-manager";
@@ -40,7 +31,15 @@ import {
   defaultPipelineOf,
   resolveBoardPlacement,
 } from "../lib/board-placement";
-import { resolvePipelineSelection, withPipelineParam } from "../lib/pipeline-selection";
+import { resolvePipelineSelection } from "../lib/pipeline-selection";
+import { decodeApplicationParams, withParam, withPipelineSwitch, type TabCounts } from "../lib/applications-url";
+import { DEFAULT_APPLICATION_SORT } from "../lib/applications-query";
+import { COLUMN_WIDTH_PX, DEFAULT_COLUMN_WIDTH, readColumnWidth, writeColumnWidth, type ColumnWidth } from "../lib/board-view-prefs";
+import { applicationFields, APPLICATION_MOST_USED_KEYS } from "@/lib/filters/registry/applications";
+import { useAdvancedFilters } from "@/lib/filters/use-advanced-filters";
+import { isEmptyTree } from "@/lib/filters/serialize";
+import type { FilterOption } from "@/components/ui/filter-dropdown";
+import type { FieldDef, FilterTree } from "@/lib/filters/types";
 import type { Application, ApplicationStage, ApplicationPipelineWithCounts, UserRole } from "@/types/database";
 import { normalizeDestinations } from "@/lib/leads/destination-normalize";
 
@@ -53,6 +52,12 @@ interface ApplicationsWorkspaceTeamMember {
 interface ApplicationsWorkspaceProps {
   stages: ApplicationStage[];
   applications: Application[];
+  /** Header total + tab counts for the selected pipeline, with no chips/search applied. */
+  tabCounts: TabCounts;
+  /** Unfiltered application count per stage (delete-stage message, settings modal). */
+  stageTotals: Record<string, number>;
+  /** "That filter couldn't be read" / "Counsellor can't be combined with OR yet" chip text. */
+  filterError?: string | null;
   canManageApplications: boolean;
   teamMembers: ApplicationsWorkspaceTeamMember[];
   pipelines?: ApplicationPipelineWithCounts[];
@@ -62,21 +67,7 @@ interface ApplicationsWorkspaceProps {
 }
 
 type View = "board" | "list";
-type SortField = "created_at" | "updated_at" | "university_name" | "application_deadline";
-type SortDir = "asc" | "desc";
-
-const SORT_OPTIONS = [
-  { value: "created_at:desc", label: "Newest first" },
-  { value: "created_at:asc", label: "Oldest first" },
-  { value: "updated_at:desc", label: "Recently updated" },
-  { value: "university_name:asc", label: "University A–Z" },
-  { value: "university_name:desc", label: "University Z–A" },
-  { value: "application_deadline:asc", label: "Deadline (soonest)" },
-  { value: "application_deadline:desc", label: "Deadline (latest)" },
-];
-
-// Applications-only toolbar button style — deliberately duplicated from Leads'
-// TOOLBAR_BTN rather than shared, so the two pages can never affect each other.
+// Applications-only button style for the list view's "Edit columns".
 const TOOLBAR_BTN =
   "inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-[8px] border transition-colors border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b]";
 
@@ -85,6 +76,9 @@ const COLUMNS_STORAGE_KEY = "edgex-applications-visible-columns";
 export function ApplicationsWorkspace({
   stages: initialStages,
   applications: initialApplications,
+  tabCounts,
+  stageTotals,
+  filterError = null,
   canManageApplications,
   teamMembers,
   pipelines,
@@ -122,7 +116,7 @@ export function ApplicationsWorkspace({
       } catch {
         /* ignore */
       }
-      router.replace(`${pathname}?${withPipelineParam(searchParams.toString(), pipelineId)}`, { scroll: false });
+      router.replace(`${pathname}?${withPipelineSwitch(searchParams.toString(), pipelineId)}`, { scroll: false });
     },
     [router, searchParams, pathname, tenantId],
   );
@@ -133,7 +127,7 @@ export function ApplicationsWorkspace({
     try {
       const saved = localStorage.getItem(`application_pipeline_selected_${tenantId}`);
       if (saved && saved !== defaultPipeline?.id && allPipelines.some((p) => p.id === saved)) {
-        router.replace(`${pathname}?${withPipelineParam(searchParams.toString(), saved)}`, { scroll: false });
+        router.replace(`${pathname}?${withPipelineSwitch(searchParams.toString(), saved)}`, { scroll: false });
       }
     } catch {
       /* ignore */
@@ -158,32 +152,28 @@ export function ApplicationsWorkspace({
     [applications, placements, selectedPipelineId],
   );
 
-  const stageTotals = useMemo(() => {
-    const t: Record<string, number> = {};
-    for (const a of applications) {
-      const sid = placements.get(a.id)?.stageId;
-      if (sid) t[sid] = (t[sid] ?? 0) + 1;
-    }
-    return t;
-  }, [applications, placements]);
-
-  const [search, setSearch] = useState("");
-  // Stage filter belongs to the pipeline it was picked on, so it never leaks into another pipeline.
-  const [stageFilterState, setStageFilterState] = useState({ pipelineId: selectedPipelineId, value: "all" });
-  const stageFilter = stageFilterState.pipelineId === selectedPipelineId ? stageFilterState.value : "all";
-  const setStageFilter = useCallback(
-    (value: string) => setStageFilterState({ pipelineId: selectedPipelineId, value }),
-    [selectedPipelineId],
+  // ── toolbar state: the URL is the source of truth (?f= ?q= ?sort= ?tab=) ──────────────────────
+  const fieldCtx = useMemo(() => ({ tz: "UTC", now: new Date(0), industryId: "education_consultancy", permissions: {} }), []);
+  const registry = useMemo(() => applicationFields(fieldCtx), [fieldCtx]);
+  const { tree, setTree } = useAdvancedFilters(registry);
+  const urlState = useMemo(
+    () => decodeApplicationParams({ q: searchParams.get("q") ?? undefined, sort: searchParams.get("sort") ?? undefined, tab: searchParams.get("tab") ?? undefined }, fieldCtx),
+    [searchParams, fieldCtx],
   );
-  const [countryFilter, setCountryFilter] = useState("all");
-  const [createdByFilter, setCreatedByFilter] = useState<string[]>([]);
-  const [sortValue, setSortValue] = useState("created_at:desc");
-  const [sortField, sortDir] = sortValue.split(":") as [SortField, SortDir];
-
-  const memberMap = useMemo(
-    () => new Map(teamMembers.map((m) => [m.user_id, m])),
-    [teamMembers],
+  const { q, sort, tab } = urlState;
+  const pushParam = useCallback(
+    (key: string, value: string | null) => {
+      const qs = withParam(searchParams.toString(), key, value);
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    },
+    [router, pathname, searchParams],
   );
+  const [columnWidth, setColumnWidth] = useState<ColumnWidth>(DEFAULT_COLUMN_WIDTH);
+  // localStorage is read after mount (no SSR mismatch); deferred like the column prefs below.
+  useEffect(() => {
+    const id = setTimeout(() => setColumnWidth(readColumnWidth(userId)), 0);
+    return () => clearTimeout(id);
+  }, [userId]);
 
   const assigneeNames = useMemo(
     () => Object.fromEntries(teamMembers.map((m) => [m.user_id, m.name])),
@@ -219,138 +209,39 @@ export function ApplicationsWorkspace({
     }
   }
 
-  const stageOptions = useMemo(() => [
-    { value: "all", label: "All stages" },
-    ...filteredStages.map((s) => ({ value: s.id, label: s.name })),
-  ], [filteredStages]);
+  // The server already filtered + sorted `applications`; the board just lays out the selected pipeline.
+  const filteredApplications = pipelineApplications;
+  const filtersActive = !isEmptyTree(tree) || q !== "";
 
-  const countryOptions = useMemo(() => {
-    const countries = normalizeDestinations(pipelineApplications.flatMap((a) => a.countries ?? []));
-    return [
-      { value: "all", label: "All countries" },
-      ...countries.map((c) => ({ value: c, label: c })),
-    ];
-  }, [pipelineApplications]);
+  const pickerFields = useMemo<FieldDef[]>(
+    () => Object.values(registry).filter((f) => f.filterable && !f.hiddenFromPicker),
+    [registry],
+  );
+  const optionCtx = useMemo(() => {
+    const present = (pick: (a: Application) => string[]) =>
+      Array.from(new Set(applications.flatMap(pick))).sort((a, b) => a.localeCompare(b));
+    const options: Record<string, FilterOption[]> = {
+      counsellor: teamMembers
+        .map((m) => ({ value: m.user_id, label: m.name || m.email.split("@")[0], description: m.email }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+      stage: filteredStages.map((st) => ({ value: st.id, label: st.name, color: st.color })),
+      intake: present((a) => (a.intake_term ? [a.intake_term] : [])).map((v) => ({ value: v, label: v })),
+      country: normalizeDestinations(applications.flatMap((a) => a.countries ?? [])).map((c) => ({ value: c, label: c })),
+    };
+    return {
+      getOptions: (f: FieldDef): FilterOption[] => options[f.key] ?? f.options?.map((o) => ({ value: o.value, label: o.label })) ?? [],
+      countSources: {},
+    };
+  }, [applications, filteredStages, teamMembers]);
 
-  // Per-creator counts — cross-filtered: reflects Stage + Country but deliberately
-  // excludes Created By itself, so selecting a person never collapses everyone
-  // else's count to 0 (same convention as Leads' "Assigned To" counselorCounts).
-  const createdByCounts = useMemo(() => {
-    const m = new Map<string, number>();
-    pipelineApplications.forEach((a) => {
-      const matchesStage = stageFilter === "all" || placements.get(a.id)?.stageId === stageFilter;
-      const matchesCountry = countryFilter === "all" || normalizeDestinations(a.countries ?? []).includes(countryFilter);
-      if (matchesStage && matchesCountry) {
-        const key = a.created_by ?? "unknown";
-        m.set(key, (m.get(key) ?? 0) + 1);
-      }
-    });
-    return m;
-  }, [pipelineApplications, placements, stageFilter, countryFilter]);
-
-  // Only creators actually present in the data (same principle as countryOptions) —
-  // avoids listing every tenant member when most have created zero applications.
-  const createdByOptions = useMemo(() => {
-    const creatorIds = Array.from(new Set(pipelineApplications.map((a) => a.created_by).filter((v): v is string => !!v)));
-    const known = creatorIds
-      .filter((id) => (createdByCounts.get(id) ?? 0) > 0)
-      .map((id) => {
-        const member = memberMap.get(id);
-        const name = member?.name || member?.email?.split("@")[0] || "Unknown";
-        const email = member?.email ?? "";
-        return {
-          value: id,
-          label: `${name} (${createdByCounts.get(id) ?? 0})`,
-          description: email,
-        };
-      })
-      .sort((a, b) => a.label.localeCompare(b.label));
-    const unknownCount = createdByCounts.get("unknown") ?? 0;
-    return unknownCount > 0
-      ? [...known, { value: "unknown", label: `Unknown (${unknownCount})`, description: "No creator recorded" }]
-      : known;
-  }, [pipelineApplications, createdByCounts, memberMap]);
-
-  const filteredApplications = useMemo(() => {
-    let result = pipelineApplications;
-
-    if (search) {
-      const q = search.toLowerCase();
-      result = result.filter((a) =>
-        a.university_name.toLowerCase().includes(q) ||
-        a.program_name.toLowerCase().includes(q)
-      );
-    }
-    if (stageFilter !== "all") result = result.filter((a) => placements.get(a.id)?.stageId === stageFilter);
-    if (countryFilter !== "all") result = result.filter((a) => normalizeDestinations(a.countries ?? []).includes(countryFilter));
-    if (createdByFilter.length > 0) {
-      result = result.filter((a) => createdByFilter.includes(a.created_by ?? "unknown"));
-    }
-
-    result = [...result].sort((a, b) => {
-      let aVal: string | null = null;
-      let bVal: string | null = null;
-
-      if (sortField === "university_name") {
-        aVal = a.university_name.toLowerCase();
-        bVal = b.university_name.toLowerCase();
-      } else if (sortField === "application_deadline") {
-        aVal = a.application_deadline ?? "";
-        bVal = b.application_deadline ?? "";
-      } else if (sortField === "updated_at") {
-        aVal = a.updated_at;
-        bVal = b.updated_at;
-      } else {
-        aVal = a.created_at;
-        bVal = b.created_at;
-      }
-
-      const cmp = (aVal ?? "") < (bVal ?? "") ? -1 : (aVal ?? "") > (bVal ?? "") ? 1 : 0;
-      return sortDir === "asc" ? cmp : -cmp;
-    });
-
-    return result;
-  }, [pipelineApplications, placements, search, stageFilter, countryFilter, createdByFilter, sortField, sortDir]);
-
-  // Scoped to Stage + Country + Created By — Search stays independent so clearing
-  // filters never unexpectedly wipes out what the user typed in the search box.
-  const activeFieldFilterCount = [
-    stageFilter !== "all" ? 1 : 0,
-    countryFilter !== "all" ? 1 : 0,
-    createdByFilter.length > 0 ? 1 : 0,
-  ].reduce((a, b) => a + b, 0);
-
-  const clearFieldFilters = () => {
-    setStageFilter("all");
-    setCountryFilter("all");
-    setCreatedByFilter([]);
-  };
-
-  const filterFields: ApplicationsFilterField[] = [
-    {
-      id: "stage",
-      label: "Stage",
-      value: stageFilter,
-      onChange: setStageFilter,
-      options: stageOptions,
+  const handleTreeChange = useCallback((next: FilterTree) => setTree(next), [setTree]);
+  const handleColumnWidth = useCallback(
+    (w: ColumnWidth) => {
+      setColumnWidth(w);
+      writeColumnWidth(userId, w);
     },
-    {
-      id: "createdBy",
-      label: "Created By",
-      multiple: true,
-      value: createdByFilter,
-      onChange: setCreatedByFilter,
-      options: createdByOptions,
-    },
-    {
-      id: "country",
-      label: "Country",
-      value: countryFilter,
-      onChange: setCountryFilter,
-      options: countryOptions,
-      searchable: false,
-    },
-  ];
+    [userId],
+  );
 
   const handleRefresh = useCallback(() => {
     router.refresh();
@@ -377,7 +268,7 @@ export function ApplicationsWorkspace({
           data-testid="header-count"
           className="rounded-full bg-[#f6f7f9] px-2 py-0.5 text-[12px] text-[#6b6f76] tabular-nums"
         >
-          {filteredApplications.length}
+          {filtersActive ? `${filteredApplications.length} of ${tabCounts[tab]}` : filteredApplications.length}
         </span>
         <div className="flex-1" />
         <div className="flex items-center gap-2">
@@ -418,62 +309,32 @@ export function ApplicationsWorkspace({
         </div>
       </div>
 
-      {/* Toolbar */}
-      <div className="shrink-0">
-        <div className="flex flex-wrap items-center gap-2 py-1">
-          <div className="relative w-52">
-            <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search university / program..."
-              className="w-full h-7 pl-7 pr-3 rounded-[8px] border border-gray-300 bg-white text-xs text-gray-600 placeholder:text-gray-400 outline-none focus:ring-1 focus:ring-ring"
-            />
-          </div>
-
-          {view === "list" && (
-            <button type="button" onClick={() => setColumnDialogOpen(true)} className={TOOLBAR_BTN}>
-              <ColumnsIcon className="h-3 w-3 shrink-0" />
-              Edit columns
-            </button>
-          )}
-
-          <button
-            type="button"
-            onClick={() => setView(view === "board" ? "list" : "board")}
-            className={TOOLBAR_BTN}
-          >
-            {view === "board" ? (
-              <ListIcon className="h-3 w-3 shrink-0" />
-            ) : (
-              <SquaresFourIcon className="h-3 w-3 shrink-0" />
-            )}
-            {view === "board" ? "List view" : "Board view"}
+      {/* Toolbar: tabs + search + sort + chips (all URL-backed) */}
+      <ApplicationsToolbar
+        tab={tab}
+        tabCounts={tabCounts}
+        onTab={(t) => pushParam("tab", t === "all" ? null : t)}
+        q={q}
+        onSearch={(value) => pushParam("q", value || null)}
+        sort={sort}
+        onSort={(s2) => pushParam("sort", s2 === DEFAULT_APPLICATION_SORT ? null : s2)}
+        fields={pickerFields}
+        tree={tree}
+        onTreeChange={handleTreeChange}
+        optionCtx={optionCtx}
+        mostUsedKeys={APPLICATION_MOST_USED_KEYS}
+        filterError={filterError}
+        columnWidth={columnWidth}
+        onColumnWidth={handleColumnWidth}
+        view={view}
+        onView={setView}
+        listActions={
+          <button type="button" onClick={() => setColumnDialogOpen(true)} className={TOOLBAR_BTN}>
+            <ColumnsIcon className="h-3 w-3 shrink-0" />
+            Edit columns
           </button>
-
-          <div className="flex-1" />
-
-          <ApplicationsFilterMenu
-            fields={filterFields}
-            activeCount={activeFieldFilterCount}
-            onClearAll={clearFieldFilters}
-          />
-
-          <FilterDropdown
-            label="Sort"
-            value={sortValue}
-            onChange={setSortValue}
-            options={SORT_OPTIONS}
-            icon={<ArrowsDownUpIcon className="h-3 w-3" />}
-            searchable={false}
-          />
-        </div>
-
-        {activeFieldFilterCount > 0 && (
-          <ApplicationsFilterChips fields={filterFields} onClearAll={clearFieldFilters} />
-        )}
-      </div>
+        }
+      />
 
       {isDefaultSelected && noPipelineCount > 0 && (
         <div
@@ -507,6 +368,7 @@ export function ApplicationsWorkspace({
               selectedPipeline && setSettingsState({ pipelineId: selectedPipeline.id, addStage: !!opts?.addStage })
             }
             assigneeNames={assigneeNames}
+            columnWidth={COLUMN_WIDTH_PX[columnWidth]}
           />
           {pipelineIsEmpty && filteredStages.length > 0 && (
             <div

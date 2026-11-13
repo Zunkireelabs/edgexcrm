@@ -1,5 +1,8 @@
 import type { ApplicationStage } from "@/types/database";
 
+/** A stage older than this many days is "stuck": the red age pill, the "Stuck 30d+" tab and the column footer all use it. */
+export const STUCK_DAYS = 30;
+
 export type AgeTone = "neutral" | "amber" | "red";
 
 export function isFinishedStage(stage: Pick<ApplicationStage, "is_terminal" | "terminal_type"> | undefined | null): boolean {
@@ -16,7 +19,7 @@ export function daysInStage(stageChangedAt: string, now: number = Date.now()): n
 /** Age pill thresholds: neutral <14d, amber 14-29d, red 30d+; always neutral on finished stages. */
 export function ageTone(days: number, finished: boolean): AgeTone {
   if (finished) return "neutral";
-  if (days >= 30) return "red";
+  if (days >= STUCK_DAYS) return "red";
   if (days >= 14) return "amber";
   return "neutral";
 }

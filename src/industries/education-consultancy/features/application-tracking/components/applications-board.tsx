@@ -64,6 +64,8 @@ function findAppColumn(columns: ColumnsState, appId: string): string | null {
 }
 
 interface ApplicationsBoardProps {
+  /** Column width in px (Narrow 232 / Wide 268). */
+  columnWidth?: number;
   /** The selected pipeline's stages, in position order. */
   stages: ApplicationStage[];
   applications: Application[];
@@ -83,6 +85,7 @@ interface ApplicationsBoardProps {
 }
 
 export function ApplicationsBoard({
+  columnWidth,
   stages,
   applications,
   placements,
@@ -303,6 +306,7 @@ export function ApplicationsBoard({
     return (
       <ApplicationColumn
         key={stage.id}
+        width={columnWidth}
         stage={stage}
         applications={apps}
         finished={isFinished}
