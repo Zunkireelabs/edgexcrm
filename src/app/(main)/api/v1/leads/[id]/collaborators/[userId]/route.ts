@@ -23,7 +23,8 @@ export async function DELETE(
 
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
-  if (auth.permissions.baseTier !== "owner" && auth.permissions.baseTier !== "admin") {
+  const isOwnerOrAdmin = auth.permissions.baseTier === "owner" || auth.permissions.baseTier === "admin";
+  if (!isOwnerOrAdmin && userId !== auth.userId) {
     return apiForbidden();
   }
 
