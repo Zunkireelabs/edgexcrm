@@ -37,6 +37,7 @@ import { syncOriginMembership } from "@/lib/leads/branch-membership";
 import { processEmailForwardRules } from "@/lib/email/email-forward";
 import { processFormAutoresponder } from "@/lib/email/form-autoresponder";
 import { processFormSmsAutoresponder } from "@/lib/sms/form-autoresponder";
+import { dispatchNotificationEmail, newLeadEvent } from "@/lib/email/notify";
 import { assignDisplayIds } from "@/lib/leads/assign-display-ids";
 import {
   extractDestinationsFromCustomFields,
@@ -719,6 +720,21 @@ export async function POST(
     { ...leadPayload, id: leadId } as Lead,
     { isResubmission: false }
   ).catch(() => {});
+
+  // Email every Owner/Admin that a new lead landed in the New Lead (intake) stage. Only this brand-new-insert path
+  // calls it (the dedupe / idempotency-replay paths return earlier); a form routed to another stage is skipped inside
+  // the event, and the ledger makes a repeat harmless. Never blocks or fails the submission.
+  void dispatchNotificationEmail(newLeadEvent, {
+    tenantId: tenant.id,
+    leadId,
+    firstName: leadPayload.first_name as string | null,
+    lastName: leadPayload.last_name as string | null,
+    email: leadPayload.email as string | null,
+    phone: leadPayload.phone as string | null,
+    source: (formConfig as FormConfig).name || "Web form",
+    listId: routedListId,
+    isFinal: true,
+  }).catch(() => {});
 
   return cors(apiSuccess({ lead_id: leadId }, 201));
 }

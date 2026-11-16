@@ -13,6 +13,7 @@ const {
   getLeadMembershipMock,
   syncOriginMembershipMock,
   addLeadCollaboratorMock,
+  isLeadCollaboratorMock,
   assignDisplayIdsMock,
   getPipelineLandingStageMock,
   createAuditLogMock,
@@ -27,6 +28,7 @@ const {
   getLeadMembershipMock: vi.fn(async () => [] as Array<{ branch_id: string; assigned_to: string | null; is_origin: boolean }>),
   syncOriginMembershipMock: vi.fn(async () => {}),
   addLeadCollaboratorMock: vi.fn(async () => {}),
+  isLeadCollaboratorMock: vi.fn(async () => false),
   assignDisplayIdsMock: vi.fn(async () => {}),
   getPipelineLandingStageMock: vi.fn(async () => null as { id: string; slug: string } | null),
   createAuditLogMock: vi.fn(async () => {}),
@@ -43,7 +45,7 @@ vi.mock("@/lib/leads/branch-membership", () => ({
   syncOriginMembership: syncOriginMembershipMock,
   branchMemberIds: fetchBranchMemberIdsMock,
 }));
-vi.mock("@/lib/leads/collaborators", () => ({ addLeadCollaborator: addLeadCollaboratorMock }));
+vi.mock("@/lib/leads/collaborators", () => ({ addLeadCollaborator: addLeadCollaboratorMock, isLeadCollaborator: isLeadCollaboratorMock }));
 vi.mock("@/lib/leads/assign-display-ids", () => ({ assignDisplayIds: assignDisplayIdsMock }));
 vi.mock("@/lib/leads/pipeline-stage", () => ({ getPipelineLandingStage: getPipelineLandingStageMock }));
 vi.mock("@/lib/api/audit", () => ({ createAuditLog: createAuditLogMock, emitEvent: emitEventMock }));

@@ -30,6 +30,7 @@ import { requirePermission } from "@/lib/api/integration-permissions";
 import { validate, required, isEmail } from "@/lib/api/validation";
 import { buildIlikeOrFilter } from "@/lib/api/search-filter";
 import type { Lead } from "@/types/database";
+import { dispatchNotificationEmail, newLeadEvent } from "@/lib/email/notify";
 
 // GET /api/v1/integrations/crm/leads
 export const GET = withIntegrationErrorBoundary(async function GET(request: NextRequest) {
@@ -345,6 +346,21 @@ export const POST = withIntegrationErrorBoundary(async function POST(request: Ne
     destinationListId: (leadPayload.list_id as string | null | undefined) ?? null,
     leadIds: [(lead as Lead).id],
   }).catch((err) => console.error("[crm/leads] assignDisplayIds failed", err));
+
+  // Email every Owner/Admin about the new lead. Integration leads are created with no stage yet, so "no stage" counts
+  // as New Lead here (ticket: "any source"). Brand-new insert only (dedupe returned earlier); never blocks ingestion.
+  void dispatchNotificationEmail(newLeadEvent, {
+    tenantId,
+    leadId: (lead as Lead).id,
+    firstName: (lead as Lead).first_name,
+    lastName: (lead as Lead).last_name,
+    email: (lead as Lead).email,
+    phone: (lead as Lead).phone,
+    source: (lead as Lead).intake_source || "Integration",
+    listId: (leadPayload.list_id as string | null | undefined) ?? null,
+    isFinal: true,
+    treatNoStageAsNew: true,
+  }).catch(() => {});
 
   // New lead — record submission
   let submissionId: string | undefined;

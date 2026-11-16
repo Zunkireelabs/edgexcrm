@@ -32,6 +32,8 @@ vi.mock("@/lib/leads/pipeline-resolution", () => ({
 }));
 vi.mock("@/lib/leads/assign-display-ids", () => ({ assignDisplayIds: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("@/lib/leads/branch-membership", () => ({ syncOriginMembership: syncOriginMembershipMock }));
+// New-lead admin email (src/lib/email/notify) is not under test here — keep it off the network and the database.
+vi.mock("@/lib/email/notify", () => ({ dispatchNotificationEmail: vi.fn(async () => ({ sent: 0, failed: 0, duplicates: 0 })), newLeadEvent: { id: "new_lead" } }));
 
 const GLOBAL = "11111111-1111-1111-1111-111111111111";
 

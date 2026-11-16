@@ -153,7 +153,7 @@ export function EditableField({
         ) : field.type === "tel" ? (
           // Same country-code dropdown + number box the forms use; stored as "+977-98…".
           <div className={invalid ? "rounded-md ring-1 ring-red-500" : undefined}>
-            <PhoneInput value={value} onChange={onChange} placeholder={field.placeholder ?? "Phone number"} />
+            <PhoneInput value={value} onChange={onChange} placeholder={field.placeholder ?? "Phone number"} disabled={disabled} />
           </div>
         ) : (
           <>
@@ -166,7 +166,7 @@ export function EditableField({
               placeholder={field.placeholder ?? `Enter ${field.label.toLowerCase()}`}
               className={`h-9 text-sm ${redBorder}`}
               readOnly={!!readOnlyNote}
-              disabled={!!readOnlyNote}
+              disabled={!!readOnlyNote || !!disabled}
             />
             {readOnlyNote && <p className="mt-1 text-xs text-muted-foreground">{readOnlyNote}</p>}
           </>

@@ -63,6 +63,7 @@ import { resolveLeadBranch, creationBranchForAssignee } from "@/lib/leads/branch
 import { getPipelineLandingStage } from "@/lib/leads/pipeline-stage";
 import { isAssigneePermittedForStage } from "@/industries/education-consultancy/lead-assignment-by-stage";
 import { processEmailForwardRules } from "@/lib/email/email-forward";
+import { dispatchNotificationEmail, newLeadEvent } from "@/lib/email/notify";
 import { processFormAutoresponder } from "@/lib/email/form-autoresponder";
 import { processFormSmsAutoresponder } from "@/lib/sms/form-autoresponder";
 import { assignDisplayIds } from "@/lib/leads/assign-display-ids";
@@ -254,6 +255,17 @@ export async function GET(request: NextRequest) {
 
   const filterPlan = planFilter(filterTree, filterRegistry, compileCtx);
   if (!filterPlan.ok) return apiValidationError(filterPlan.errors);
+
+  // The toolbar search box rides alongside ?f= (leads-table.tsx sends both), but with ?f= the tree above comes
+  // from the URL alone, so a typed search used to be silently dropped (client report, Admizz 2026-11-05: "search
+  // doesn't work when filters are on"). Apply it as its OWN condition on top of the tree — never folded into the
+  // tree: the tree can be an OR group or already at max depth, and a `contains` search is deliberately not
+  // expressible to lead_aggregates() (see treeToAggregateParams). Without ?f= the legacy tree already carries
+  // the search (legacyLeadsParamsToTree), so this stays null there and it is never applied twice.
+  const fModeSearch = rawFilterParam !== null ? (search ?? "").trim() : "";
+  const fModeSearchTree: FilterTree | null = fModeSearch
+    ? { conjunction: "and", conditions: [{ id: "legacy:search", field: "search", op: "contains", value: fModeSearch }] }
+    : null;
 
   // Sort — allow-listed against the field registry's sortColumns (folded in from
   // the former standalone SORT_COLUMNS map), never interpolated. id is always the
@@ -545,7 +557,9 @@ export async function GET(request: NextRequest) {
     // of which branch (visibleLeadsBase RPC vs plain service query) built it.
     // `stage`/`list`/`funnel`/branch/pipeline/shared-pool SCOPE filters above
     // and below this call are deliberately untouched.
-    return compileFilter(q, tree, filterRegistry, compileCtx);
+    const compiled = compileFilter(q, tree, filterRegistry, compileCtx);
+    // Chained filters AND, so this narrows the list, the count and every facet built from this query.
+    return fModeSearchTree ? compileFilter(compiled, fModeSearchTree, filterRegistry, compileCtx) : compiled;
   };
 
   const DAY_MS = 24 * 60 * 60 * 1000;
@@ -660,7 +674,8 @@ export async function GET(request: NextRequest) {
     const effectiveProspectIndustryNone = rawFilterParam !== null ? false : industryFilter === "__none__";
     const effectiveFormConfigId = rawFilterParam !== null ? (aggParams?.formConfigId ?? null) : (formFilter && formFilter !== "all" && UUID_RE.test(formFilter) ? formFilter : null);
     const effectiveCreatedAfter = rawFilterParam !== null ? (aggParams?.createdAfter ?? null) : createdAfter;
-    const effectiveSearch = rawFilterParam !== null ? null : (search ? search.replace(/[,().]/g, "") : null);
+    // Search is not expressible in the ?f= tree, so it is always read from its own param (list and counts must agree).
+    const effectiveSearch = search ? search.replace(/[,().]/g, "") : null;
 
     const baseFacetParams = {
       tenantId: auth.tenantId,
@@ -1964,6 +1979,21 @@ async function handlePost(request: NextRequest) {
       lead: lead as Lead,
       newStageId: resolved.stageId,
     }).catch((err) => log.error({ err }, "Email rule on create failed"));
+
+    // Email every Owner/Admin that a new lead landed in the New Lead (intake) stage. This block only runs for a
+    // brand-new insert (update / merge / race-lost paths returned earlier); a lead created into another stage is
+    // skipped inside the event, and the ledger makes a repeat harmless. Never blocks lead creation.
+    void dispatchNotificationEmail(newLeadEvent, {
+      tenantId,
+      leadId: lead.id,
+      firstName: (lead as Lead).first_name,
+      lastName: (lead as Lead).last_name,
+      email: (lead as Lead).email,
+      phone: (lead as Lead).phone,
+      source: (formConfig as FormConfig | null)?.name || (lead as Lead).intake_source || (dashAuth ? "Manual" : "API"),
+      listId: (lead as Lead).list_id ?? null,
+      isFinal: true,
+    }).catch(() => {});
 
     if (formConfig) {
       void processFormAutoresponder(

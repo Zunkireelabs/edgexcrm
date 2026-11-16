@@ -188,6 +188,9 @@ interface ContactCardProps {
   convertedContactId?: string | null;
   convertedContactName?: string | null;
   onConvertClick?: () => void;
+  /** Non-assignee collaborators (EDGEX-175): disables the Email/Phone edit inputs.
+   * UI-only defense — the backend PATCH gate is the real enforcement. */
+  restrictContactFields?: boolean;
 }
 
 // Small leading icon for each contact line, so email / phone / place read at a glance.
@@ -246,6 +249,7 @@ export function ContactCard({
   convertedContactId,
   convertedContactName,
   onConvertClick,
+  restrictContactFields = false,
 }: ContactCardProps) {
   const fullName = isEditing && draft
     ? [draft.first_name, draft.last_name].filter(Boolean).join(" ") || "—"
@@ -352,6 +356,7 @@ export function ContactCard({
                   value={draft.email}
                   placeholder="email@example.com"
                   onChange={(e) => onDraftChange?.("email", e.target.value)}
+                  disabled={restrictContactFields}
                 />
                 {editErrors.email && (
                   <p className="text-xs text-destructive mt-1">{editErrors.email}</p>
@@ -366,6 +371,7 @@ export function ContactCard({
                     placeholder="Phone number"
                     size="sm"
                     error={!!editErrors.phone}
+                    disabled={restrictContactFields}
                   />
                 ) : (
                   <Input
@@ -374,6 +380,7 @@ export function ContactCard({
                     value={draft.phone}
                     placeholder="+977 98..."
                     onChange={(e) => onDraftChange?.("phone", e.target.value)}
+                    disabled={restrictContactFields}
                   />
                 )}
                 {editErrors.phone && (

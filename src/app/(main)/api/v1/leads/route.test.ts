@@ -785,6 +785,72 @@ describe("GET /api/v1/leads — ?f= compiles through the SAME compileFilter() as
     expect(fCalls).toEqual(legacyCalls);
   });
 
+  // Client report (Admizz, 2026-11-05): "search doesn't work when filters are on". With ?f= the typed search
+  // (?search=) used to be dropped by the route.
+  it("?f= tree + ?search= applies BOTH — identical to the legacy ?status= + ?search= calls", async () => {
+    const legacyCalls: Call[] = [];
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: legacyCalls }));
+    const { GET } = await import("./route");
+    await GET(fakeReq({ status: "contacted", search: "akash" }));
+
+    const fCalls: Call[] = [];
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: fCalls }));
+    const res = await GET(fakeReq({ [FILTER_PARAM]: encodedTreeFor({ status: "contacted" }), search: "akash" }));
+    expect(res.status).toBe(200);
+
+    expect(fCalls.some(([m, a]) => m === "or" && String(a[0]).includes("akash"))).toBe(true);
+    expect(fCalls).toEqual(legacyCalls);
+  });
+
+  it("?f= OR tree + ?search= : the search narrows on its own — it is ANDed with the OR group, not folded into it", async () => {
+    const calls: Call[] = [];
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: calls }));
+    const { GET } = await import("./route");
+    const orTree = {
+      conjunction: "or" as const,
+      conditions: [
+        { id: "c1", field: "status", op: "is" as const, value: "contacted" },
+        { id: "c2", field: "status", op: "is" as const, value: "new" },
+      ],
+    };
+    const res = await GET(fakeReq({ [FILTER_PARAM]: encodeFilterTree(orTree), search: "akash" }));
+    expect(res.status).toBe(200);
+    const orCalls = calls.filter(([m]) => m === "or").map(([, a]) => String(a[0]));
+    expect(orCalls.filter((c) => c.includes("akash")).length).toBe(1);
+    expect(orCalls.some((c) => c.includes("status.eq.contacted") && c.includes("status.eq.new"))).toBe(true);
+  });
+
+  it("?search= without ?f= is applied exactly once (not doubled by the new ?f= path)", async () => {
+    const calls: Call[] = [];
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: calls }));
+    const { GET } = await import("./route");
+    await GET(fakeReq({ search: "akash" }));
+    expect(calls.filter(([m, a]) => m === "or" && String(a[0]).includes("akash")).length).toBe(1);
+  });
+
+  it("?f= without ?search= is unchanged (no search condition is added)", async () => {
+    const calls: Call[] = [];
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: calls }));
+    const { GET } = await import("./route");
+    await GET(fakeReq({ [FILTER_PARAM]: encodedTreeFor({ status: "contacted" }) }));
+    expect(calls.some(([m, a]) => m === "or" && String(a[0]).toLowerCase().includes("first_name"))).toBe(false);
+  });
+
+  it("?facets=source with ?f= + ?search= passes the search to lead_aggregates (counts match the searched list)", async () => {
+    const rpcCalls: [string, Record<string, unknown>][] = [];
+    createClientMock.mockResolvedValue({
+      rpc: (name: string, params: Record<string, unknown>) => {
+        rpcCalls.push([name, params]);
+        return Promise.resolve({ data: [], error: null });
+      },
+    });
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ facets: "source", [FILTER_PARAM]: encodedTreeFor({ status: "contacted" }), search: "akash" }));
+    expect(res.status).toBe(200);
+    expect(rpcCalls.some(([, params]) => params.p_search === "akash")).toBe(true);
+  });
+
   it("?tag=vip and its equivalent ?f= tree produce byte-identical query calls (native .contains() path)", async () => {
     const legacyCalls: Call[] = [];
     createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: legacyCalls }));

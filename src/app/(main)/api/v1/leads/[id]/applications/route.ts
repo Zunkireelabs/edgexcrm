@@ -193,7 +193,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   // Profile-completeness gate — client request 2026-09-23: name/email/phone/
-  // study info + a document must be on file before a lead can formally apply.
+  // the consent-form fields (no documents) must be on file before a lead can formally apply.
   const profileCheck = await checkLeadProfileCompleteness(supabase, auth.tenantId, id);
   if (!profileCheck.complete) {
     return apiError(
