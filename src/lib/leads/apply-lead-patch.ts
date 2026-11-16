@@ -109,7 +109,7 @@ const ADMIN_ONLY_FIELDS = ["assigned_to", "owner_id", "branch_id"];
 // not Stage), and phone/email (EDGEX-175: read-only for collaborators).
 const COLLABORATOR_BLOCKED_FIELDS = new Set([
   "assigned_to", "owner_id", "branch_id", "entity_id",
-  "list_id", "pipeline_id", "stage_id",
+  "list_id", "pipeline_id",
   "phone", "email",
 ]);
 

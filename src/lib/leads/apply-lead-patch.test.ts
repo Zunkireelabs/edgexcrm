@@ -355,8 +355,19 @@ describe("applyLeadPatch — governance branches", () => {
       expect(outcome.kind).toBe("ok");
     });
 
+    // The Status dropdown (KeyInfoSection) actually PATCHes stage_id, not status — a
+    // collaborator must be able to change it. list_id is the separate Stage/Revert/
+    // Send-to-next control and stays blocked (see "forbidden from setting %s" below).
+    it("a collaborator may PATCH stage_id (what the Status dropdown actually sends)", async () => {
+      await setFakeDb({ leads: leadRow, ...stageFixture });
+      isLeadCollaboratorMock.mockResolvedValue(true);
+      const auth = fixtureAuth({ permissions: { leadScope: "own", canEditLeads: true } as ResolvedPermissions });
+      const { applyLeadPatch } = await import("./apply-lead-patch");
+      const outcome = await applyLeadPatch(auth, "lead-1", { stage_id: "stage-contacted" }, OPTS);
+      expect(outcome.kind).toBe("ok");
+    });
+
     it.each([
-      ["stage_id", "x"],
       ["list_id", "x"],
       ["assigned_to", "x"],
       ["branch_id", "x"],
