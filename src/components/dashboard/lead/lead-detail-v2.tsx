@@ -937,6 +937,7 @@ export function LeadDetailV2({
             projectBoardEnabled={projectBoardEnabled}
             submissionHistory={submissionHistory}
             onLeadUpdate={(patch) => setCurrentLead((prev) => ({ ...prev, ...patch } as Lead))}
+            restrictContactFields={collaboratorOnlyEdit}
             onSaveItinerary={async (itinerary) => {
               // Merge against live state (not the stale `lead` prop) so saving the
               // itinerary doesn't clobber trip fields saved earlier this session.

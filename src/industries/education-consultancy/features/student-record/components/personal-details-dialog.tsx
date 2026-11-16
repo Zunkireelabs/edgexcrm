@@ -369,6 +369,8 @@ interface PersonalDetailsDialogProps {
    * missing (consent-form fields such as "First Name", "Email", "Phone", "Field of Study", "Passport Number"). The core ones show in red until filled.
    */
   missingBeforeApplications?: string[];
+  /** Non-admin, non-assignee collaborator — disables Email/Phone in the Core Identity section (mirrors ContactCard's inline-edit restriction). */
+  restrictContactFields?: boolean;
 }
 
 /** Shown above a list that is still loading (or failed to load): it cannot be edited until it is known, so it can never be saved over the stored rows. */
@@ -390,7 +392,7 @@ function ListsLoadNote({ status, onRetry }: { status: "loading" | "ready" | "err
   );
 }
 
-export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHistory, onLeadUpdate, canUploadDocuments, openInEditMode, isAdmin = false, missingBeforeApplications }: PersonalDetailsDialogProps) {
+export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHistory, onLeadUpdate, canUploadDocuments, openInEditMode, isAdmin = false, missingBeforeApplications, restrictContactFields = false }: PersonalDetailsDialogProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [values, setValues] = useState<FieldValues>(() => personalDetailsFromLead(lead));
@@ -705,6 +707,7 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
                     value={(isEditing ? coreIdentityDraft : coreIdentity)[field.key]}
                     onChange={(v) => handleCoreChange(field.key, v)}
                     invalid={redKeys.has(field.key)}
+                    disabled={restrictContactFields && (field.key === "email" || field.key === "phone")}
                   />
                 ))}
               </FieldGrid>
