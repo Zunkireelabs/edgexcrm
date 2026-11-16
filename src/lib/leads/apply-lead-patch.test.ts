@@ -6,6 +6,7 @@ const resolvePositionSlugMock = vi.fn(async () => null as string | null);
 const getLeadMembershipMock = vi.fn(async () => [] as Array<{ branch_id: string; assigned_to: string | null; is_origin: boolean }>);
 const syncOriginMembershipMock = vi.fn(async () => {});
 const addLeadCollaboratorMock = vi.fn(async () => {});
+const isLeadCollaboratorMock = vi.fn(async () => false);
 const assignDisplayIdsMock = vi.fn(async () => {});
 const getPipelineLandingStageMock = vi.fn(async () => null as { id: string; slug: string } | null);
 const createAuditLogMock = vi.fn(async () => {});
@@ -29,6 +30,7 @@ vi.mock("@/lib/leads/branch-membership", () => ({
 }));
 vi.mock("@/lib/leads/collaborators", () => ({
   addLeadCollaborator: addLeadCollaboratorMock,
+  isLeadCollaborator: isLeadCollaboratorMock,
 }));
 vi.mock("@/industries/_shared/features/outreach/lib/stage-auto-enroll", () => ({
   onLeadsEnteredStageSafe: onLeadsEnteredStageMock,
@@ -135,8 +137,13 @@ function makeFakeDb(opts: FakeDbOptions) {
 
     if (table === "pipeline_stages") {
       const id = state.eq.id as string | undefined;
-      const row = id ? (opts.pipelineStages ?? {})[id] ?? null : null;
-      return { data: row, error: null };
+      if (id) return { data: (opts.pipelineStages ?? {})[id] ?? null, error: null };
+      const slug = state.eq.slug as string | undefined;
+      if (slug) {
+        const match = Object.entries(opts.pipelineStages ?? {}).find(([, row]) => (row as { slug?: string }).slug === slug);
+        return { data: match ? { id: match[0], ...(match[1] as object) } : null, error: null };
+      }
+      return { data: null, error: null };
     }
 
     if (table === "lead_assignment_history") {
@@ -295,6 +302,7 @@ beforeEach(() => {
   getLeadMembershipMock.mockReset().mockResolvedValue([]);
   syncOriginMembershipMock.mockClear();
   addLeadCollaboratorMock.mockClear();
+  isLeadCollaboratorMock.mockReset().mockResolvedValue(false);
   assignDisplayIdsMock.mockClear();
   getPipelineLandingStageMock.mockReset().mockResolvedValue(null);
   createAuditLogMock.mockClear();
@@ -321,6 +329,82 @@ describe("applyLeadPatch — governance branches", () => {
     const { applyLeadPatch } = await import("./apply-lead-patch");
     const outcome = await applyLeadPatch(auth, "lead-1", { assigned_to: "other-user", branch_id: "branch-2" }, OPTS);
     expect(outcome).toEqual({ kind: "forbidden" });
+  });
+
+  // EDGEX-174/175: non-assignee collaborators get a narrower allowance — status yes,
+  // assignment/stage/phone/email no — layered inside applyLeadPatch, not requireLeadAccess.
+  describe("non-assignee collaborator (EDGEX-174/175)", () => {
+    const leadRow = { id: "lead-1", pipeline_id: "pipe-1", assigned_to: "other-user", branch_id: null, list_id: null, status: "s" };
+    const stageFixture = { pipelineStages: { "stage-contacted": { slug: "contacted", pipeline_id: "pipe-1", is_terminal: false } } };
+
+    it("a non-collaborator, non-assignee own-scope member still gets a flat 403", async () => {
+      await setFakeDb({ leads: leadRow, ...stageFixture });
+      isLeadCollaboratorMock.mockResolvedValue(false);
+      const auth = fixtureAuth({ permissions: { leadScope: "own", canEditLeads: true } as ResolvedPermissions });
+      const { applyLeadPatch } = await import("./apply-lead-patch");
+      const outcome = await applyLeadPatch(auth, "lead-1", { status: "contacted" }, OPTS);
+      expect(outcome.kind).toBe("forbidden");
+    });
+
+    it("a collaborator may PATCH status", async () => {
+      await setFakeDb({ leads: leadRow, ...stageFixture });
+      isLeadCollaboratorMock.mockResolvedValue(true);
+      const auth = fixtureAuth({ permissions: { leadScope: "own", canEditLeads: true } as ResolvedPermissions });
+      const { applyLeadPatch } = await import("./apply-lead-patch");
+      const outcome = await applyLeadPatch(auth, "lead-1", { status: "contacted" }, OPTS);
+      expect(outcome.kind).toBe("ok");
+    });
+
+    // The Status dropdown (KeyInfoSection) actually PATCHes stage_id, not status — a
+    // collaborator must be able to change it. list_id is the separate Stage/Revert/
+    // Send-to-next control and stays blocked (see "forbidden from setting %s" below).
+    it("a collaborator may PATCH stage_id (what the Status dropdown actually sends)", async () => {
+      await setFakeDb({ leads: leadRow, ...stageFixture });
+      isLeadCollaboratorMock.mockResolvedValue(true);
+      const auth = fixtureAuth({ permissions: { leadScope: "own", canEditLeads: true } as ResolvedPermissions });
+      const { applyLeadPatch } = await import("./apply-lead-patch");
+      const outcome = await applyLeadPatch(auth, "lead-1", { stage_id: "stage-contacted" }, OPTS);
+      expect(outcome.kind).toBe("ok");
+    });
+
+    it.each([
+      ["list_id", "x"],
+      ["assigned_to", "x"],
+      ["branch_id", "x"],
+      ["owner_id", "x"],
+      ["entity_id", "x"],
+      ["pipeline_id", "x"],
+      ["phone", "+977 9800000000"],
+      ["email", "new@example.com"],
+    ])(
+      "a collaborator is forbidden from setting %s",
+      async (field, value) => {
+        await setFakeDb({ leads: leadRow, ...stageFixture });
+        isLeadCollaboratorMock.mockResolvedValue(true);
+        const auth = fixtureAuth({ permissions: { leadScope: "own", canEditLeads: true } as ResolvedPermissions });
+        const { applyLeadPatch } = await import("./apply-lead-patch");
+        const outcome = await applyLeadPatch(auth, "lead-1", { [field]: value }, OPTS);
+        expect(outcome.kind).toBe("forbidden");
+      },
+    );
+
+    it("a collaborator may PATCH other profile fields (first_name, custom_fields, tags)", async () => {
+      await setFakeDb({ leads: leadRow });
+      isLeadCollaboratorMock.mockResolvedValue(true);
+      const auth = fixtureAuth({ permissions: { leadScope: "own", canEditLeads: true } as ResolvedPermissions });
+      const { applyLeadPatch } = await import("./apply-lead-patch");
+      const outcome = await applyLeadPatch(auth, "lead-1", { first_name: "New Name", tags: ["vip"] }, OPTS);
+      expect(outcome.kind).toBe("ok");
+    });
+
+    it("the assignee (not just a collaborator) keeps full edit access, including phone/email", async () => {
+      await setFakeDb({ leads: { ...leadRow, assigned_to: "user-1" } });
+      isLeadCollaboratorMock.mockResolvedValue(false);
+      const auth = fixtureAuth({ permissions: { leadScope: "own", canEditLeads: true } as ResolvedPermissions });
+      const { applyLeadPatch } = await import("./apply-lead-patch");
+      const outcome = await applyLeadPatch(auth, "lead-1", { phone: "+977 9800000000", email: "new@example.com" }, OPTS);
+      expect(outcome.kind).toBe("ok");
+    });
   });
 
   it("§4.2 — a team-scoped manager CAN touch a lead assigned to their own branch member, even if the lead's own branch_id is stale/wrong", async () => {
