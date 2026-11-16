@@ -291,7 +291,7 @@ export function KeyInfoSection({
           {!isInIntakeList && !isOtherContact && (
           <div>
             <p className="text-xs text-muted-foreground mb-1.5">Status</p>
-            {canEditLeadWorkingData({ isAdmin, leadScope, isOwnScopeEditor: canEdit && !!userId && userId === assignedTo }) ? (
+            {canEditLeadWorkingData({ isAdmin, leadScope, isOwnScopeEditor: canEdit && !!isEditor }) ? (
               <Select
                 value={effectiveStageId}
                 onValueChange={industryId === "education_consultancy" ? setPendingStageId : onStageChange}
