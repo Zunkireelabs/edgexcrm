@@ -29,6 +29,8 @@ const draft = {
   last_name: "K",
   email: "a@example.com",
   phone: "+977-9800000000",
+  city: "",
+  nationality: "",
 };
 
 describe("ContactCard — restrictContactFields (EDGEX-175)", () => {

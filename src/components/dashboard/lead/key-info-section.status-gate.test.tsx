@@ -41,6 +41,7 @@ function renderSection(extra: Record<string, unknown>) {
       onStageChange={() => {}}
       onAssignmentChange={() => {}}
       industryId="it_agency"
+      isAdmin={false}
       {...extra}
     />,
   );
