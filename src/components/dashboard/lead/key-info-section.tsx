@@ -466,7 +466,7 @@ export function KeyInfoSection({
           {/* Lead Collaborators — visible to all, editable by admin/owner only.
               Skipped for Other-tagged walk-ins (no collaboration flow for Contacts). */}
           {!isOtherContact && (
-            <CollaboratorsBlock leadId={lead.id} teamMembers={teamMembers} canManage={isAdmin} />
+            <CollaboratorsBlock leadId={lead.id} teamMembers={teamMembers} canManage={isAdmin} currentUserId={userId} />
           )}
 
           {/* Branches */}
