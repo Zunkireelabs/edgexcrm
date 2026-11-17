@@ -69,6 +69,7 @@ const NOTIFICATION_META: Record<string, { Icon: LucideIcon; tint: string; action
   "lead.assigned": { Icon: UserPlus, tint: "bg-blue-50 text-blue-600", action: "View lead" },
   "lead.unassigned": { Icon: UserMinus, tint: "bg-amber-50 text-amber-600", action: "View lead" },
   "lead.created": { Icon: Sparkles, tint: "bg-emerald-50 text-emerald-600", action: "View lead" },
+  "lead.consent_signed": { Icon: CircleCheck, tint: "bg-green-50 text-green-600", action: "View lead" },
   "lead.stage_changed": { Icon: ArrowRightLeft, tint: "bg-purple-50 text-purple-600", action: "View lead" },
   "invite.accepted": { Icon: UserCheck, tint: "bg-green-50 text-green-600", action: "View team" },
   "team.member_joined": { Icon: UserCheck, tint: "bg-green-50 text-green-600", action: "View team" },

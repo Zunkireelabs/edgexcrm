@@ -23,6 +23,33 @@ export async function resolveRecipients(
   }
 
   const userIds = [...new Set(((data ?? []) as { user_id: string }[]).map((r) => r.user_id))];
+  return toRecipients(db, tenantId, userIds);
+}
+
+/**
+ * One specific person (e.g. the user who sent a consent link) instead of a whole role. They only count if they are
+ * still a member of THIS tenant — a removed member, or a user id from another tenant, resolves to nothing.
+ */
+export async function resolveUserRecipients(
+  db: NotifyDb,
+  tenantId: string,
+  userIds: readonly string[]
+): Promise<NotifyRecipient[]> {
+  if (userIds.length === 0) return [];
+  const { data, error } = await db
+    .from("tenant_users")
+    .select("user_id, role")
+    .eq("tenant_id", tenantId)
+    .in("user_id", [...userIds]);
+  if (error) {
+    logger.error({ err: error, tenantId }, "notify: could not verify tenant membership for recipients");
+    return [];
+  }
+  const members = [...new Set(((data ?? []) as { user_id: string }[]).map((r) => r.user_id))];
+  return toRecipients(db, tenantId, members);
+}
+
+async function toRecipients(db: NotifyDb, tenantId: string, userIds: string[]): Promise<NotifyRecipient[]> {
   const looked = await Promise.all(
     userIds.map(async (userId): Promise<NotifyRecipient | null> => {
       try {
