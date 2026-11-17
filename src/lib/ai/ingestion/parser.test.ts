@@ -89,6 +89,25 @@ describe("parseFileBytes — mime routing", () => {
     );
   });
 
+  it("keeps the provider's real reason in the unsupported error (it used to be discarded)", async () => {
+    parseOfficeMock.mockResolvedValue({ content: [], toText: () => "" });
+    generateTextMock.mockRejectedValue(new Error("provider does not support file parts"));
+
+    await expect(parseFileBytes(new Uint8Array([1, 2, 3]), "application/pdf")).rejects.toThrow(
+      /provider does not support file parts/,
+    );
+  });
+
+  it("rethrows a quota/rate-limit (429) from scanned-PDF OCR as-is, NOT as 'unsupported'", async () => {
+    parseOfficeMock.mockResolvedValue({ content: [], toText: () => "" });
+    const quota = Object.assign(new Error("You exceeded your current quota"), { statusCode: 429 });
+    generateTextMock.mockRejectedValue(quota);
+
+    const p = parseFileBytes(new Uint8Array([1, 2, 3]), "application/pdf");
+    await expect(p).rejects.toBe(quota);
+    await expect(p).rejects.not.toBeInstanceOf(ScannedPdfUnsupportedError);
+  });
+
   it("routes images through vision OCR", async () => {
     generateTextMock.mockResolvedValue({ text: "image transcription" });
     const result = await parseFileBytes(new Uint8Array([1, 2, 3]), "image/png");
