@@ -38,8 +38,13 @@ export interface NotifyMessage {
 export interface NotificationEmailEvent<P, C = undefined> {
   /** Stable key, stored in the ledger. Never rename a shipped event id (it would re-send history). */
   id: string;
-  /** Tenant roles that receive this alert (tenant_users.role). */
+  /** Tenant roles that receive this alert (tenant_users.role). Ignored when `recipients` is set. */
   roles: readonly string[];
+  /**
+   * Optional: name the recipients directly (e.g. the one user who sent a consent link) instead of by role.
+   * Use `resolveUserRecipients` so membership of the tenant is still verified.
+   */
+  recipients?(payload: P, db: NotifyDb): Promise<NotifyRecipient[]>;
   tenantId(payload: P): string;
   /** The thing the alert is about (lead id, …). With `id` + recipient this is the de-duplication key. */
   entityId(payload: P): string;

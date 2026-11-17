@@ -41,3 +41,16 @@ describe("resolveRecipients", () => {
     expect(await resolveRecipients(fakeDb(null, {}), "t1", ["owner"])).toEqual([]);
   });
 });
+
+import { resolveUserRecipients } from "./recipients";
+
+describe("resolveUserRecipients", () => {
+  it("returns only the named member, verified against the tenant", async () => {
+    const out = await resolveUserRecipients(fakeDb([{ user_id: "a", role: "counselor" }], { a: "One@X.com" }), "t1", ["a"]);
+    expect(out).toEqual([{ userId: "a", email: "one@x.com", name: "Name a" }]);
+  });
+  it("returns [] when the user is not a member of the tenant, or no ids are given", async () => {
+    expect(await resolveUserRecipients(fakeDb([], { a: "one@x.com" }), "t1", ["a"])).toEqual([]);
+    expect(await resolveUserRecipients(fakeDb([], {}), "t1", [])).toEqual([]);
+  });
+});

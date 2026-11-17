@@ -26,6 +26,7 @@ import { chunkDocument, estimateTokens } from "@/lib/ai/ingestion/chunker";
 import { embedTexts, EMBEDDING_MODEL, EMBEDDING_DIM } from "@/lib/ai/embeddings";
 import { startTrace } from "@/lib/ai/telemetry";
 import { isIngestionEnabledForTenant } from "@/lib/ai/flag";
+import { isTransientProviderError } from "@/lib/ai/ingestion/transient-errors";
 
 const CHUNK_INSERT_BATCH_SIZE = 100;
 const MAX_PROCESSING_ERROR_LENGTH = 500;
@@ -53,7 +54,11 @@ async function fetchAndParse(storageKey: string, mimeType: string): Promise<Pars
   } catch (err) {
     // A storage failure (getBytes) is retriable by Inngest's default policy;
     // a parse failure is not (same bytes in -> same failure out) — same
-    // split kb-ingest.ts uses for the file case.
+    // split kb-ingest.ts uses for the file case. A provider quota/rate-limit
+    // (429) or 5xx during OCR is ALSO temporary and says nothing about the
+    // file, so let it propagate as a normal error and Inngest retries it
+    // instead of the document going straight to a permanent Failed.
+    if (isTransientProviderError(err)) throw err;
     const message = err instanceof Error ? err.message : "Failed to parse document";
     throw new NonRetriableError(message, { cause: err });
   }
