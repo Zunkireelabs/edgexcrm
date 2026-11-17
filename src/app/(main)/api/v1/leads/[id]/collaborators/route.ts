@@ -5,6 +5,8 @@ import { apiSuccess, apiUnauthorized, apiForbidden, apiNotFound, apiServiceUnava
 import { createRequestLogger } from "@/lib/logger";
 import { createAuditLog } from "@/lib/api/audit";
 import { touchLeadUpdatedAt } from "@/lib/leads/touch-updated-at";
+import { getLeadMembership } from "@/lib/leads/branch-membership";
+import { canManageLeadCollaborators } from "@/lib/leads/collaborator-access";
 
 export async function GET(
   request: NextRequest,
@@ -25,7 +27,7 @@ export async function GET(
 
   const { data: lead } = await supabase
     .from("leads")
-    .select("id")
+    .select("id, assigned_to, branch_id")
     .eq("id", id)
     .eq("tenant_id", auth.tenantId)
     .is("deleted_at", null)
@@ -81,7 +83,9 @@ export async function POST(
 
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
-  if (auth.permissions.baseTier !== "owner" && auth.permissions.baseTier !== "admin") {
+  // Owner/admin, or a branch manager (team scope) for a lead in their own branch (checked below).
+  const isOwnerOrAdmin = auth.permissions.baseTier === "owner" || auth.permissions.baseTier === "admin";
+  if (!isOwnerOrAdmin && auth.permissions.leadScope !== "team") {
     return apiForbidden();
   }
 
@@ -99,6 +103,11 @@ export async function POST(
     .is("deleted_at", null)
     .single();
   if (!lead) return apiNotFound("Lead");
+
+  if (!isOwnerOrAdmin) {
+    const leadMembership = await getLeadMembership(supabase, auth.tenantId, id);
+    if (!canManageLeadCollaborators(auth, lead as unknown as { assigned_to: string | null; branch_id: string | null }, leadMembership)) return apiForbidden();
+  }
 
   // Verify target user belongs to same tenant
   const { data: membership } = await supabase
