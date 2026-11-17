@@ -153,7 +153,7 @@ describe("ApplicantDocumentsCard", () => {
 
     await waitFor(() => expect(screen.getByText("passport.pdf")).toBeInTheDocument());
     expect(screen.queryByText("Processing")).not.toBeInTheDocument();
-    expect(screen.queryByText("Failed")).not.toBeInTheDocument();
+    expect(screen.queryByText("AI couldn't read this file")).not.toBeInTheDocument();
   });
 
   it("shows a Processing badge while the document is queued or processing", async () => {
@@ -173,9 +173,22 @@ describe("ApplicantDocumentsCard", () => {
     render(<ApplicantDocumentsCard leadId="lead-1" canManage={true} currentUserId="user-1" isAdmin={false} />);
 
     await waitFor(() => expect(screen.getByText("passport.pdf")).toBeInTheDocument());
-    const badge = screen.getByText("Failed");
+    const badge = screen.getByText("AI couldn't read this file");
     expect(badge).toBeInTheDocument();
-    expect(badge).toHaveAttribute("title", "OCR could not read the scanned page");
+    expect(badge).toHaveAttribute("title", "File is saved. OCR could not read the scanned page");
+  });
+
+  it("shows an amber 'Not readable by AI yet' badge (not a red failure) when the error is a temporary quota/429", async () => {
+    global.fetch = mockFetch([
+      { ...PASSPORT_DOC, status: "failed", processing_error: 'OpenAI embeddings request failed (429): "You have no quota"' },
+    ]) as unknown as typeof fetch;
+
+    render(<ApplicantDocumentsCard leadId="lead-1" canManage={true} currentUserId="user-1" isAdmin={false} />);
+
+    await waitFor(() => expect(screen.getByText("passport.pdf")).toBeInTheDocument());
+    const badge = screen.getByText("Not readable by AI yet");
+    expect(badge.getAttribute("title")).toMatch(/File is saved/);
+    expect(screen.queryByText("AI couldn't read this file")).not.toBeInTheDocument();
   });
 
   it("deletes a document and removes it from the list", async () => {

@@ -17,6 +17,7 @@ import { generateText } from "ai";
 import { parseOffice } from "officeparser";
 import { model, aiRequestProviderOptions } from "@/lib/ai/provider";
 import type { ParsedDocument } from "./chunker";
+import { isTransientProviderError } from "./transient-errors";
 
 const OCR_PROMPT =
   "Transcribe this page faithfully to Markdown. Preserve tables. Output only the transcription — " +
@@ -37,8 +38,10 @@ export interface ParsedResult extends ParsedDocument {
 }
 
 export class ScannedPdfUnsupportedError extends Error {
-  constructor() {
-    super("Scanned PDF OCR not supported yet");
+  // Keeps the provider's real reason (it used to be discarded, which hid a quota 429 behind "not supported yet").
+  constructor(cause?: unknown) {
+    const reason = cause instanceof Error && cause.message ? `: ${cause.message}` : "";
+    super(`Scanned PDF OCR not supported yet${reason}`, cause === undefined ? undefined : { cause });
   }
 }
 
@@ -82,8 +85,11 @@ async function ocrScannedPdf(bytes: Uint8Array): Promise<ParsedResult> {
       ],
     });
     return { text, ocrUsage: { inputTokens: usage?.inputTokens ?? 0, outputTokens: usage?.outputTokens ?? 0 } };
-  } catch {
-    throw new ScannedPdfUnsupportedError();
+  } catch (err) {
+    // Quota / rate-limit / vendor 5xx is temporary and says nothing about the file — surface it as-is so the caller
+    // can retry instead of treating the PDF as permanently unsupported.
+    if (isTransientProviderError(err)) throw err;
+    throw new ScannedPdfUnsupportedError(err);
   }
 }
 
