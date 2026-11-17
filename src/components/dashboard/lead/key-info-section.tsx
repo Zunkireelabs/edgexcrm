@@ -463,10 +463,10 @@ export function KeyInfoSection({
           </div>
           )}
 
-          {/* Lead Collaborators — visible to all, editable by admin/owner only.
+          {/* Lead Collaborators — visible to all, editable by admin/owner and branch managers (team scope; the API checks the lead is in their branch).
               Skipped for Other-tagged walk-ins (no collaboration flow for Contacts). */}
           {!isOtherContact && (
-            <CollaboratorsBlock leadId={lead.id} teamMembers={teamMembers} canManage={isAdmin} currentUserId={userId} />
+            <CollaboratorsBlock leadId={lead.id} teamMembers={teamMembers} canManage={isAdmin || leadScope === "team"} currentUserId={userId} />
           )}
 
           {/* Branches */}
