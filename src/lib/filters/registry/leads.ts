@@ -1,4 +1,5 @@
 import { and, or, pgLike, pgVal } from "../pgrst";
+import { operatorsForField } from "../operators";
 import { FilterCompileError, type CompileCtx, type FieldDef, type FieldRegistry, type FilterCondition } from "../types";
 
 // Mirrors DEFAULT_FOLLOW_UP_STALE_DAYS in
@@ -300,12 +301,13 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       // is_not_empty is safe on top of is_any_of: the embedSelect above is an
       // `!inner` join, so any row that survives it already has >=1
       // collaborator — is_not_empty just states that fact explicitly.
-      // is_none_of is still NOT offered: excluding SPECIFIC people has no
-      // equivalent to the emptyColumn escape hatch (a count alone can't say
-      // WHO) — it would still need the NOT-EXISTS-shaped query this field's
-      // is_empty was rewritten specifically to avoid. See compile.ts's
-      // requireOperator for the enforced rejection.
-      operators: ["is_any_of", "is_not_empty", "is_empty"],
+      // is_none_of (Nov 2026, migration 282) — "leads where NONE of these people is a collaborator". It is NOT
+      // compilable as an embedded filter (compile.ts's requireOperator still rejects it there, deliberately), so it
+      // is lifted out of the tree and answered in SQL by the leads list route — see splitCollaboratorNoneOf in
+      // collaborator-split.ts. Only the leads list supports it: every other consumer of this registry (the email /
+      // SMS / outreach audience builders) must drop it from the operator picker via withoutCollaboratorExclusion()
+      // below, and their server side keeps rejecting it (422) — a wrong exclusion there would message the wrong people.
+      operators: ["is_any_of", "is_none_of", "is_not_empty", "is_empty"],
       group: "Basic",
       filterable: true,
     },
@@ -525,4 +527,15 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
   const registry: FieldRegistry = {};
   for (const field of fields) registry[field.key] = field;
   return registry;
+}
+
+/**
+ * The registry's fields with Collaborators' "is none of" removed — for every surface that does NOT run the leads
+ * list's SQL exclusion path (email / SMS / outreach audience builders). Those server paths reject the operator
+ * too; this just keeps it out of their pickers.
+ */
+export function withoutCollaboratorExclusion(fields: FieldDef[]): FieldDef[] {
+  return fields.map((f) =>
+    f.key === "collaborators" ? { ...f, operators: operatorsForField(f).filter((op) => op !== "is_none_of") } : f
+  );
 }

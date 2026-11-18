@@ -35,7 +35,7 @@ import { branchMemberIds, syncOriginMembership } from "@/lib/leads/branch-member
 import { POSITION_ROUTE_MAP } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
 import { addLeadCollaborator } from "@/lib/leads/collaborators";
 import { visibleLeadsBase } from "@/lib/leads/visibility-query";
-import { splitCollaboratorAnyOf } from "@/lib/filters/collaborator-split";
+import { splitCollaboratorAnyOf, splitCollaboratorNoneOf } from "@/lib/filters/collaborator-split";
 import { getSourceFacet, getDestinationFacet, getCollaboratorFacet } from "@/lib/leads/aggregates";
 import { countFacetOptions, type FacetOption } from "@/lib/leads/facet-counts";
 import { treeForFacetOption } from "@/lib/filters/facet-tree";
@@ -253,7 +253,17 @@ export async function GET(request: NextRequest) {
     filterTree = legacyLeadsParamsToTree(searchParams);
   }
 
-  const filterPlan = planFilter(filterTree, filterRegistry, compileCtx);
+  // Collaborators "is none of" (migration 282) cannot be compiled as an embedded filter at all, so it is lifted out of
+  // the tree here — BEFORE planFilter, which (correctly) rejects it on a relation field — and applied in SQL for every
+  // role. When nothing is lifted, `noneSplit.rest === filterTree` and everything below behaves exactly as before.
+  // Shapes it can't lift (OR trees, two of them, a bad uuid, …) stay in the tree, so planFilter still 422s them.
+  // NOTE: `filterTree` (the FULL tree) is still what the facet/aggregate code below reads — treeToAggregateParams
+  // rejects an exclusion, so aggregate-backed facets return "no number" rather than a wrong one.
+  const noneSplit = splitCollaboratorNoneOf(filterTree);
+  const collaboratorExclusion = noneSplit.excludeIds
+    ? { excludeIds: noneSplit.excludeIds, includeIds: noneSplit.includeIds }
+    : null;
+  const filterPlan = planFilter(noneSplit.rest, filterRegistry, compileCtx);
   if (!filterPlan.ok) return apiValidationError(filterPlan.errors);
 
   // The toolbar search box rides alongside ?f= (leads-table.tsx sends both), but with ?f= the tree above comes
@@ -398,9 +408,11 @@ export async function GET(request: NextRequest) {
   // condition is lifted out of the tree and applied in SQL by
   // leads_visible_to_user_with_collaborators() (migration 255); only the REST of the tree is compiled,
   // and no collaborators embed is selected for it. Owner/admin (plain table) keep the embed filter.
-  const listSplit = useVisibilityRpc
-    ? splitCollaboratorAnyOf(filterTree)
-    : { collaboratorIds: null as string[] | null, rest: filterTree };
+  const listSplit = collaboratorExclusion
+    ? { collaboratorIds: null as string[] | null, rest: noneSplit.rest }
+    : useVisibilityRpc
+      ? splitCollaboratorAnyOf(filterTree)
+      : { collaboratorIds: null as string[] | null, rest: filterTree };
   const listPlan = listSplit.collaboratorIds ? planFilter(listSplit.rest, filterRegistry, compileCtx) : filterPlan;
   // planFilter already accepted the full tree, and removing a condition can't make the rest invalid.
   const listEmbeds = listPlan.ok ? listPlan.embeds : filterPlan.embeds;
@@ -478,11 +490,19 @@ export async function GET(request: NextRequest) {
     // Own / branch scope: the Collaborators "is any of" condition is applied in SQL, not as an
     // embedded-resource filter over the RPC (see listSplit above). The list reuses the split computed
     // once there; a facet variant (own axis swapped for one person) is split the same way.
-    const split = variant
-      ? useVisibilityRpc
-        ? splitCollaboratorAnyOf(variant.tree)
-        : { collaboratorIds: null as string[] | null, rest: variant.tree }
-      : listSplit;
+    // Collaborators "is none of": lifted per tree (the list's, or a facet variant's) and run over the SQL function for
+    // every role. A variant whose own axis was swapped (the Collaborator facet) has no exclusion left to lift.
+    const variantNone = variant ? splitCollaboratorNoneOf(variant.tree) : noneSplit;
+    const exclusion = variantNone.excludeIds
+      ? { excludeIds: variantNone.excludeIds, includeIds: variantNone.includeIds }
+      : null;
+    const split = exclusion
+      ? { collaboratorIds: null as string[] | null, rest: variantNone.rest }
+      : variant
+        ? useVisibilityRpc
+          ? splitCollaboratorAnyOf(variant.tree)
+          : { collaboratorIds: null as string[] | null, rest: variant.tree }
+        : listSplit;
     const tree = split.rest;
     let cols = selectColumns;
     if (variant) {
@@ -494,10 +514,16 @@ export async function GET(request: NextRequest) {
       // A head:true count never reads rows, so select only what the embeds need.
       cols = ["id", ...variantPlan.embeds].join(",");
     }
-    let q = useVisibilityRpc
-      ? visibleLeadsBase({ user: userClient, service: supabase }, auth.tenantId, scope, execOpts, {
-          collaboratorIds: split.collaboratorIds,
-        }).select(cols)
+    let q = useVisibilityRpc || exclusion
+      ? visibleLeadsBase(
+          { user: userClient, service: supabase },
+          auth.tenantId,
+          // An exclusion outside own/branch scope (owner/admin, shared pool) takes the unrestricted function; the
+          // shared-pool / admin-branch member filters below still apply on top, exactly as on the plain query.
+          useVisibilityRpc ? scope : undefined,
+          execOpts,
+          { collaboratorIds: split.collaboratorIds, collaboratorExclusion: exclusion },
+        ).select(cols)
       : supabase.from("leads").select(cols, execOpts).eq("tenant_id", auth.tenantId);
 
     q = onlyDeleted ? q.not("deleted_at", "is", null) : q.is("deleted_at", null);

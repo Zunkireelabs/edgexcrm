@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AdvancedFilterBar } from "@/components/filters/advanced-filter-bar";
 import type { FilterOption } from "@/components/filters/types";
-import { leadFields } from "@/lib/filters/registry/leads";
+import { leadFields, withoutCollaboratorExclusion } from "@/lib/filters/registry/leads";
 import { conditionSchema } from "@/lib/filters/schema";
 import { EMPTY_TREE, type CompileCtx, type FilterCondition, type FilterTree } from "@/lib/filters/types";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
@@ -44,13 +44,15 @@ export function AudienceFilterPicker({ industryId, isAdmin, onChange }: Audience
 
   const fields = useMemo(
     () =>
-      Object.values(
-        leadFields({
-          tz: "UTC",
-          now: new Date(0),
-          industryId,
-          permissions: {},
-        } satisfies CompileCtx),
+      withoutCollaboratorExclusion(
+        Object.values(
+          leadFields({
+            tz: "UTC",
+            now: new Date(0),
+            industryId,
+            permissions: {},
+          } satisfies CompileCtx),
+        ),
       ),
     [industryId],
   );

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { compileFilter, planFilter, type QueryBuilder } from "../compile";
 import { FilterCompileError, type CompileCtx, type FilterCondition, type FilterTree } from "../types";
-import { leadFields } from "./leads";
+import { leadFields, withoutCollaboratorExclusion } from "./leads";
 import { legacyLeadsParamsToTree } from "../legacy-leads-params";
 
 // Spot-checks that the leads registry's legacy-facing fields (status, source,
@@ -270,10 +270,21 @@ describe("leads registry — legacy value-shape equivalence", () => {
     if (!plan.ok) expect(plan.errors.collaborators?.[0]).toMatch(/cannot mix/);
   });
 
-  it("collaborators: is_none_of is still rejected — not even in the field's operators list, since a count alone can't say WHO (stays out of scope even with mig 210's counter)", () => {
+  it("collaborators: is_none_of is offered (migration 282) but is NOT compilable as an embedded filter — planFilter still rejects it, so a request only works when the leads route lifts it out into SQL first (splitCollaboratorNoneOf)", () => {
+    expect(registry.collaborators.operators).toContain("is_none_of");
     const plan = planFilter(andTree(cond("c1", "collaborators", "is_none_of", ["11111111-2222-4333-8444-555555555555"])), registry, ctx);
     expect(plan.ok).toBe(false);
-    if (!plan.ok) expect(plan.errors.collaborators?.[0]).toMatch(/operator is_none_of is not allowed/);
+    if (!plan.ok) expect(plan.errors.collaborators?.[0]).toMatch(/is_none_of is not supported on relation fields/);
+  });
+
+  it("withoutCollaboratorExclusion drops only Collaborators' is_none_of (audience builders must not offer it)", () => {
+    const fields = withoutCollaboratorExclusion(Object.values(registry));
+    const collab = fields.find((f) => f.key === "collaborators")!;
+    expect(collab.operators).toEqual(["is_any_of", "is_not_empty", "is_empty"]);
+    // other fields keep theirs (Assigned to has none_of)
+    expect(fields.find((f) => f.key === "assignees")!.operators).toContain("is_none_of");
+    // the source registry object is not mutated
+    expect(registry.collaborators.operators).toContain("is_none_of");
   });
 
   it("tags has_all matches route.ts's .contains('tags', [tagFilter]) via the native path", () => {

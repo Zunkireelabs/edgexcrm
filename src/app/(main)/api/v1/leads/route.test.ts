@@ -1470,3 +1470,187 @@ describe("GET /api/v1/leads — ?f= compiles through the SAME compileFilter() as
     expect(body.data).toEqual({ facet: "source", options: [] });
   });
 });
+
+// Collaborators "is none of" (migration 282; client request Manish/Admizz Nov 2026). The exclusion cannot be an
+// embedded filter, so for EVERY role it is lifted out of the tree and the whole request runs over a SQL function.
+// Asserted by SHAPE (mocked chains can't prove SQL): which rpc is called, with which args, and that nothing
+// embed-shaped reaches the PostgREST builder.
+describe("GET /api/v1/leads — Collaborators 'is none of' runs in SQL for every role (migration 282)", () => {
+  const A = "11111111-1111-1111-1111-111111111111";
+  const B = "22222222-2222-2222-2222-222222222222";
+  const treeParam = (conditions: Array<{ id: string; field: string; op: string; value?: unknown }>, conjunction: "and" | "or" = "and") =>
+    encodeFilterTree({ conjunction, conditions } as Parameters<typeof encodeFilterTree>[0]);
+
+  function recordingRpc(rpcCalls: RpcCall[], chainCalls: Call[], count = 5) {
+    return (name: string, params: unknown, opts: unknown) => {
+      rpcCalls.push([name, params, opts]);
+      const record = (m: string) => (...args: unknown[]) => { chainCalls.push([m, args]); return chain; };
+      const chain: Record<string, unknown> = {
+        select: record("select"), is: record("is"), not: record("not"), eq: record("eq"), in: record("in"), or: record("or"), order: record("order"),
+        range: () => Promise.resolve({ data: [], error: null, count }),
+      };
+      return chain;
+    };
+  }
+
+  beforeEach(() => {
+    authenticateRequestMock.mockReset();
+    createServiceClientMock.mockReset();
+    createClientMock.mockReset();
+    getFeatureAccessMock.mockReset();
+    branchMemberIdsMock.mockReset();
+    getFeatureAccessMock.mockReturnValue(false);
+    branchMemberIdsMock.mockResolvedValue([]);
+    createClientMock.mockResolvedValue(fakeUserClient([]));
+  });
+
+  it("owner/admin: the tenant-wide SQL function on the SERVICE client with the exclude list — no embed, no plain leads read", async () => {
+    authenticateRequestMock.mockResolvedValue(authFixture({ userId: "admin-1", role: "owner", permissions: permissions({ leadScope: "all" }) }));
+    const rpcCalls: RpcCall[] = [];
+    const chainCalls: Call[] = [];
+    createServiceClientMock.mockResolvedValue({ rpc: recordingRpc(rpcCalls, chainCalls, 42), from: () => { throw new Error("must not read leads directly"); } });
+
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ [FILTER_PARAM]: treeParam([{ id: "c", field: "collaborators", op: "is_none_of", value: [A, B] }]) }));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(rpcCalls).toEqual([["leads_for_tenant_with_collaborator_filter", { p_tenant: "tenant-1", p_exclude_ids: [A, B] }, { count: "exact" }]]);
+    expect(JSON.stringify(chainCalls)).not.toContain("lead_collaborators");
+    expect(body.meta.total).toBe(42);
+  });
+
+  it("branch manager: the filtered visibility RPC on the USER client (same visibility as before), exclude list passed", async () => {
+    authenticateRequestMock.mockResolvedValue(
+      authFixture({ userId: "user-1", branchId: "branch-1", branchMemberIds: ["u1"], permissions: permissions({ leadScope: "team" }) }),
+    );
+    const rpcCalls: RpcCall[] = [];
+    const chainCalls: Call[] = [];
+    createClientMock.mockResolvedValue({ rpc: recordingRpc(rpcCalls, chainCalls) });
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
+
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ [FILTER_PARAM]: treeParam([{ id: "c", field: "collaborators", op: "is_none_of", value: [A] }]) }));
+
+    expect(res.status).toBe(200);
+    expect(rpcCalls).toEqual([
+      ["leads_visible_to_user_with_collaborator_filter", { p_tenant: "tenant-1", p_scope: "branch", p_branch_id: "branch-1", p_exclude_ids: [A] }, { count: "exact" }],
+    ]);
+    expect(JSON.stringify(chainCalls)).not.toContain("lead_collaborators");
+  });
+
+  it("counselor (own scope): the filtered visibility RPC with p_scope 'own' and their own userId", async () => {
+    authenticateRequestMock.mockResolvedValue(authFixture({ userId: "user-1", permissions: permissions({ leadScope: "own" }) }));
+    const rpcCalls: RpcCall[] = [];
+    createClientMock.mockResolvedValue({ rpc: recordingRpc(rpcCalls, []) });
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
+
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ [FILTER_PARAM]: treeParam([{ id: "c", field: "collaborators", op: "is_none_of", value: [A] }]) }));
+
+    expect(res.status).toBe(200);
+    expect(rpcCalls[0][0]).toBe("leads_visible_to_user_with_collaborator_filter");
+    expect(rpcCalls[0][1]).toMatchObject({ p_tenant: "tenant-1", p_user: "user-1", p_scope: "own", p_exclude_ids: [A] });
+  });
+
+  it("is none of + is any of together: both lists reach SQL (the any_of is not left behind as an embed)", async () => {
+    authenticateRequestMock.mockResolvedValue(authFixture({ userId: "admin-1", role: "owner", permissions: permissions({ leadScope: "all" }) }));
+    const rpcCalls: RpcCall[] = [];
+    const chainCalls: Call[] = [];
+    createServiceClientMock.mockResolvedValue({ rpc: recordingRpc(rpcCalls, chainCalls), from: () => { throw new Error("no direct read"); } });
+
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ [FILTER_PARAM]: treeParam([
+      { id: "a", field: "collaborators", op: "is_any_of", value: [A] },
+      { id: "c", field: "collaborators", op: "is_none_of", value: [B] },
+    ]) }));
+
+    expect(res.status).toBe(200);
+    expect(rpcCalls[0][1]).toEqual({ p_tenant: "tenant-1", p_include_ids: [A], p_exclude_ids: [B] });
+    expect(JSON.stringify(chainCalls)).not.toContain("lead_collaborators");
+  });
+
+  it("other filters still apply on top of the SQL function (status here)", async () => {
+    authenticateRequestMock.mockResolvedValue(authFixture({ userId: "admin-1", role: "owner", permissions: permissions({ leadScope: "all" }) }));
+    const chainCalls: Call[] = [];
+    createServiceClientMock.mockResolvedValue({ rpc: recordingRpc([], chainCalls), from: () => { throw new Error("no direct read"); } });
+
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ [FILTER_PARAM]: treeParam([
+      { id: "s", field: "status", op: "is", value: "contacted" },
+      { id: "c", field: "collaborators", op: "is_none_of", value: [A] },
+    ]) }));
+
+    expect(res.status).toBe(200);
+    expect(JSON.stringify(chainCalls)).toContain("contacted");
+  });
+
+  it("a shape that can't be lifted (inside an OR tree) is a clean 422 — never a silently wrong list", async () => {
+    authenticateRequestMock.mockResolvedValue(authFixture({ userId: "admin-1", role: "owner", permissions: permissions({ leadScope: "all" }) }));
+    createServiceClientMock.mockResolvedValue({ rpc: () => { throw new Error("must not run"); }, from: () => { throw new Error("must not run"); } });
+
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ [FILTER_PARAM]: treeParam([
+      { id: "c", field: "collaborators", op: "is_none_of", value: [A] },
+      { id: "s", field: "status", op: "is", value: "new" },
+    ], "or") }));
+
+    expect(res.status).toBe(422);
+  });
+
+  it("a malformed uuid in the exclude list is a clean 422", async () => {
+    authenticateRequestMock.mockResolvedValue(authFixture({ userId: "admin-1", role: "owner", permissions: permissions({ leadScope: "all" }) }));
+    createServiceClientMock.mockResolvedValue({ rpc: () => { throw new Error("must not run"); }, from: () => { throw new Error("must not run"); } });
+
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ [FILTER_PARAM]: treeParam([{ id: "c", field: "collaborators", op: "is_none_of", value: ["not-a-uuid"] }]) }));
+
+    expect(res.status).toBe(422);
+  });
+
+  it("without an exclusion, owner/admin still reads leads directly (the existing path is untouched)", async () => {
+    authenticateRequestMock.mockResolvedValue(authFixture({ userId: "admin-1", role: "owner", permissions: permissions({ leadScope: "all" }) }));
+    const leadsCalls: Call[] = [];
+    createServiceClientMock.mockResolvedValue({ ...fakeDb({ leadsCalls }), rpc: () => { throw new Error("no rpc without an exclusion"); } });
+
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ [FILTER_PARAM]: treeParam([{ id: "a", field: "collaborators", op: "is_any_of", value: [A] }]) }));
+
+    expect(res.status).toBe(200);
+    expect(leadsCalls.some(([m, a]) => m === "select" && String(a[0]).includes("lead_collaborators!inner(user_id)"))).toBe(true);
+  });
+
+  it("facet counts keep the exclusion: every per-person count runs over the same SQL function", async () => {
+    authenticateRequestMock.mockResolvedValue(authFixture({ userId: "admin-1", role: "owner", permissions: permissions({ leadScope: "all" }) }));
+    const rpcCalls: RpcCall[] = [];
+    createServiceClientMock.mockResolvedValue({
+      from: (table: string) => {
+        if (table === "tenant_users") {
+          return { select: () => ({ eq: () => Promise.resolve({ data: [{ user_id: "u1" }], error: null }) }) };
+        }
+        throw new Error(`unexpected direct read of ${table}`);
+      },
+      rpc: (name: string, params: unknown, opts: unknown) => {
+        rpcCalls.push([name, params, opts]);
+        const chain: Record<string, unknown> = {};
+        for (const m of ["select", "is", "not", "eq", "in", "or", "order"]) chain[m] = () => chain;
+        chain.range = () => Promise.resolve({ data: [], error: null, count: 3 });
+        chain.then = (resolve: (v: { data: null; error: null; count: number }) => void) => resolve({ data: null, error: null, count: 3 });
+        return chain;
+      },
+    });
+
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({
+      facets: "assignee",
+      [FILTER_PARAM]: treeParam([{ id: "c", field: "collaborators", op: "is_none_of", value: [A] }]),
+    }));
+
+    expect(res.status).toBe(200);
+    expect(rpcCalls.length).toBeGreaterThan(0);
+    for (const [name, params] of rpcCalls) {
+      expect(name).toBe("leads_for_tenant_with_collaborator_filter");
+      expect(params).toMatchObject({ p_tenant: "tenant-1", p_exclude_ids: [A] });
+    }
+  });
+});
