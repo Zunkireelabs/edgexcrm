@@ -1357,6 +1357,18 @@ export function getSystemActivityDescription(
     return "Note edited";
   }
 
+  // The audit row stores the collaborator's user id; resolve it so the line says who. If the id can't be
+  // resolved (account gone, not in the team list) the line stays as it was.
+  if (activity.action === "lead.collaborator_added") {
+    const name = nameOf(changes.collaborator?.new);
+    return name ? `Collaborator added: ${name}` : "Collaborator added";
+  }
+
+  if (activity.action === "lead.collaborator_removed") {
+    const name = nameOf(changes.collaborator?.old);
+    return name ? `Collaborator removed: ${name}` : "Collaborator removed";
+  }
+
   if (activity.action === "lead.branch_shared") {
     const branch = changes.branch?.new as string | null;
     const name = nameOf(changes.assigned_to?.new);
