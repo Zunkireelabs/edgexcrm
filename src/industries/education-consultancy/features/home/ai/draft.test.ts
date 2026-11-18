@@ -30,7 +30,7 @@ describe("draft facts and prompt", () => {
   it("forbid sending, invented numbers and he/she", () => {
     expect(system).toContain("you never send anything");
     expect(system).toContain("must appear in the facts");
-    expect(system).toContain("never use he, she");
+    expect(system).toContain("Never use he, she");
   });
   it("WhatsApp has no subject; email asks for one", () => {
     expect(system).toContain("no subject");
@@ -106,9 +106,9 @@ describe("S4: names only, never he/she", () => {
   const base: DraftRaw = { text: "Hi Sita, please send your bank statement.", subject: null, why: "The deadline is in 6 days.", followUp: { title: "Check for the statement", inDays: 3 } };
   it("the prompt says so, for English and Nepali, including the reason and the task", () => {
     const { system } = buildDraftPrompt({ channel: "whatsapp", tone: "new", kind: "x", facts, previous: null, todayLabel: "t" });
-    expect(system).toContain("Names only");
+    expect(system).toContain("You are writing TO the lead");
     expect(system).toContain("in English or in Nepali");
-    expect(system).toContain("reason (why) and the follow-up task");
+    expect(system).toContain("In the reason (why), the follow-up task and any skip reason");
   });
   it("a draft, reason or task with he/she/his/her is refused", () => {
     expect(draftOk({ ...base, why: "Her Australia interest is clear." }, facts)).toBe(false);
@@ -179,7 +179,7 @@ describe("P1: check-ins are short, specific and don't end on a stock line", () =
   it("over 400 characters is refused", () => {
     const long = { ...good, text: "Hi Sita, " + "asking how your plans are coming along. ".repeat(10) };
     expect(long.text.length).toBeGreaterThan(400);
-    expect(draftChecks(long, facts, ci).map((c) => c.check)).toEqual(["length"]);
+    expect(draftChecks(long, facts, ci).map((c) => c.check)).toContain("length");
   });
   it.each([
     "If you have any questions or would like to pick up where we left off, just reply here and I'll be happy to help.",
@@ -204,7 +204,7 @@ describe("P1: check-ins are short, specific and don't end on a stock line", () =
   });
   it("the prompt asks for at most 2 sentences, under 280 characters, one specific detail, one question, and names the stock lines", () => {
     const { system } = buildDraftPrompt({ channel: "whatsapp", tone: "new", kind: "x", rowKind: "going_quiet", facts, previous: null, todayLabel: "t" });
-    for (const t of ["AT MOST 2 sentences", "under 280 characters", "ONE specific detail", "single question you end with", "just reply here", "Never write 'check in'"]) expect(system).toContain(t);
+    for (const t of ["AT MOST 2 sentences after the greeting", "under 280 characters", "ONE specific fact", "single question you end with", "just reply here", "Never open with a stock line"]) expect(system).toContain(t);
     expect(buildDraftPrompt({ channel: "whatsapp", tone: "new", kind: "x", rowKind: "reply_waiting", facts, previous: null, todayLabel: "t" }).system).not.toContain("AT MOST 2 sentences");
   });
 });
@@ -297,14 +297,38 @@ describe("Q1b: check-ins stop sounding alike", () => {
   it.each(["Hi Sita, it's Rita from Admizz. I wanted to check in on your file.", "Hi Sita, just checking in.", "Hi Sita, Rita here. Just wanted to see how the IELTS prep is going?"])("'%s' is refused as a stock opening", (text) => {
     expect(draftChecks(mk(text), facts, { rowKind: "going_quiet" }).map((c) => c.check)).toContain("stock_opening");
   });
-  it("only check-ins are held to it", () => {
-    expect(draftChecks(mk("Hi Sita, I wanted to check in on the checklist."), facts, { rowKind: "reply_waiting" })).toEqual([]);
+  it("F7: '5 December' matches a fact that holds 2026-12-05 (leading zeros do not count)", () => {
+    const f = [...facts, "Application: Deakin, Master of IT, stage Documents, deadline 2026-12-05 (25 days from today)"];
+    expect(draftChecks({ ...mk("Hi Sita, is the Deakin file ready before 5 December?"), why: "Deadline is 5 December." }, f, { rowKind: "reply_waiting" })).toEqual([]);
+  });
+  it("F1: every kind is held to it, not only a check-in", () => {
+    expect(draftChecks(mk("Hi Sita, I wanted to check in on the checklist."), facts, { rowKind: "reply_waiting" }).map((c) => c.check)).toContain("stock_opening");
+  });
+  it.each(["Hi Sita, I remember you were looking at Australia. Which course?", "Hi Sita, I hope you're doing well! Is the IELTS booked?", "Hi Sita, hope you're doing well. Any news?", "Hi Sita, how is your decision process going?", "Hi Sita, it's been a while. Which country?", "Hi Sita, it's been some time.", "Hi Sita, since we last spoke, did the bank statement come?"])("F1: '%s' is a stock opening", (text) => {
+    expect(draftChecks(mk(text), facts, { rowKind: "reply_waiting" }).map((c) => c.check)).toContain("stock_opening");
+  });
+  it("F1: a check-in has at most 2 sentences after the greeting (and the counsellor's own line)", () => {
+    const three = "Hi Sita, Rita here. Australia is a good fit for nursing. Your IELTS is booked. Which date is it?";
+    expect(draftChecks(mk(three), facts, { rowKind: "going_quiet" }).map((c) => c.check)).toContain("sentences");
+    expect(draftChecks(mk("Hi Sita, Rita here. Is your IELTS in December booked yet?"), facts, { rowKind: "going_quiet" })).toEqual([]);
+    expect(draftChecks(mk("Hi Sita, Is the IELTS in December booked? Did your father agree on the fee?"), facts, { rowKind: "going_quiet" })).toEqual([]);
+  });
+  it("F2: the lead's name is in the greeting once, never again in the message", () => {
+    expect(draftChecks(mk("Hi Sita, how are Sita's plans for Australia?"), facts, { rowKind: "going_quiet" }).map((c) => c.check)).toContain("name_repeat");
+    expect(draftChecks(mk("Hi Sita, how are your plans for Australia?"), facts, { rowKind: "going_quiet" })).toEqual([]);
+  });
+  it("F3: a skip reason that doubles the name or copies the note is refused; plain words pass", () => {
+    const sk = (reason: string, quote: string): DraftRaw => ({ skip: { reason, quote }, text: "", subject: null, why: "", followUp: { title: "", inDays: 1 } });
+    const f = [...facts, "Counsellor note 1 (6 days ago): Sita doesnoyt have any plans abroad."];
+    expect(draftChecks(sk("Sita says Sita doesnoyt have any plans abroad", "doesnoyt have any plans abroad"), f, { allowSkip: true }).map((c) => c.check)).toContain("skip_reason");
+    expect(draftChecks(sk("Doesnoyt have any plans abroad", "doesnoyt have any plans abroad"), f, { allowSkip: true }).map((c) => c.check)).toContain("skip_reason");
+    expect(draftChecks(sk("No plans to study abroad for now", "doesnoyt have any plans abroad"), f, { allowSkip: true })).toEqual([]);
   });
   it("the prompt bans the openers and ties the single question to the one detail", () => {
     const { system } = buildDraftPrompt({ channel: "whatsapp", tone: "new", kind: "x", rowKind: "going_quiet", facts, previous: null, todayLabel: "t" });
-    expect(system).toContain("Never write 'check in', 'checking in', 'wanted to'");
+    expect(system).toContain("'check in', 'checking in', 'wanted to', 'just wanted', 'I remember', 'I hope you'");
     expect(system).toContain("Open with just 'Hi <name>, <counsellor> here.'");
-    expect(system).toContain("must be about that detail");
+    expect(system).toContain("must name that fact");
   });
 });
 
@@ -318,7 +342,8 @@ describe("Q1(c): the facts carry the lead's name where the note said he / she, a
   it("the last thing the model reads is the lead's name and the rule, including for family and the skip reason", () => {
     const { prompt } = buildDraftPrompt({ channel: "whatsapp", tone: "new", kind: "x", rowKind: "going_quiet", facts, previous: null, todayLabel: "t" });
     const tail = prompt.slice(prompt.lastIndexOf("Reminder:"));
-    expect(tail).toContain("write Sita or Sita's. Never he, she, his, her or him");
+    expect(tail).toContain("write the name Sita only in the greeting");
+    expect(tail).toContain("write Sita or Sita's, never he, she, his, her or him");
     expect(tail).toContain("\"Sita's father\", not \"her father\"");
     expect(tail).toContain("skip reason");
     expect(tail).toContain("Do not write 'check in'");

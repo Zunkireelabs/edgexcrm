@@ -210,8 +210,8 @@ export function ManagerHome({ data }: { data: ManagerData }) {
         <MissedCallbacksSheet key={i.key} item={i} nextStageByLead={data.own.nextStageByLead} tz={data.tz} rows={rows} />
       ))}
       <h1 className="eh-h1">{data.greeting}</h1>
-      <CallPrepPanel key={rows.prepItem?.key ?? "none"} item={rows.prepItem} onClose={() => rows.setPrepItem(null)} onCall={(it) => { rows.setPrepItem(null); rows.setOpenLog(it.key); }} />
-      <DraftPanel key={rows.draftItem?.key ?? "none"} item={rows.draftItem} onClose={() => rows.setDraftItem(null)} onSent={() => rows.router.refresh()} />
+      <CallPrepPanel key={`prep-${rows.prepItem?.key ?? "none"}`} item={rows.prepItem} onClose={() => rows.setPrepItem(null)} onCall={(it) => { rows.setPrepItem(null); rows.setOpenLog(it.key); }} />
+      <DraftPanel key={`draft-${rows.draftItem?.key ?? "none"}`} item={rows.draftItem} onClose={() => rows.setDraftItem(null)} onSent={() => rows.router.refresh()} />
       <p className="eh-lede">{data.lede}</p>
       {data.own.aiOn ? <OrcaReadCard scope="business" initial={data.read} tz={data.tz} title={`Orca's read on ${data.branchName ?? data.shortName}`} canAsk={data.own.canAskOrca} /> : null}
       <div className="eh-cols">

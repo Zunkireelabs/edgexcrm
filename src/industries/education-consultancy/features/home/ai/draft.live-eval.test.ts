@@ -3,7 +3,7 @@ import type { DraftContext } from "../server/draft-context";
 import { draftChecks, draftFacts, writeDraft, type DraftRaw } from "./draft";
 
 /**
- * Q1(c): the FIRST-TRY pass rate of the live model on 20 fixed, invented fact sets whose notes say he / she / his / her (the thing the
+ * Q1(c): the FIRST-TRY pass rate of the live model on 23 fixed, invented fact sets whose notes say he / she / his / her (the thing the
  * model kept copying). Opt-in, because it calls the real provider: `RUN_LIVE_DRAFT_EVAL=1 npx vitest run <this file>` with the provider key in
  * the environment. Skipped everywhere else (CI never calls a model). Invented people only: no customer data.
  */
@@ -37,10 +37,14 @@ const SETS: Array<{ name: string; c: DraftContext; expectSkip: boolean }> = [
   { name: "message from lead", expectSkip: false, c: ctx("Kiran", { lead: { ...dest(["UK"]), firstName: "Kiran", fullName: "Kiran Test" }, notes: [note("He said he would send his passport scan by Friday.", 5)], messages: [{ direction: "inbound", text: "Sir, which intake is better, January or May?", at: new Date(NOW.getTime() - 5 * 86_400_000).toISOString(), channel: "whatsapp" }], lastReplyChannel: "whatsapp" }) },
   { name: "ielts retake", expectSkip: false, c: ctx("Binita", { lead: { ...dest(["Canada"]), firstName: "Binita", fullName: "Binita Test" }, notes: [note("Her IELTS was 5.5, she wants to retake. Her coaching class starts Monday.", 14)] }) },
   { name: "family decision", expectSkip: false, c: ctx("Hari", { lead: { ...dest(["Japan"], { fieldOfStudy: "Engineering" }), firstName: "Hari", fullName: "Hari Test" }, notes: [note("He is deciding with his wife whether to go alone or with her.", 18)] }) },
+  // F5: three real-shaped notes (the shapes that failed on the Admizz copy). Invented people and words, no customer data.
+  { name: "real-shaped: Kristi plans", expectSkip: false, c: ctx("Kristi", { lead: { ...dest(["Australia"], { fieldOfStudy: "Nursing" }), firstName: "Kristi", fullName: "Kristi Test" }, notes: [note("Kristi is thinking about Australia for nursing. She said her family will decide after the results.", 12)] }) },
+  { name: "real-shaped: Abhishek family", expectSkip: false, c: ctx("Abhishek", { lead: { ...dest(["Canada"]), firstName: "Abhishek", fullName: "Abhishek Test" }, notes: [note("Abhishek is discussing with his family about going to Canada. Father is worried about the cost.", 9)] }) },
+  { name: "real-shaped: Nisha typo", expectSkip: true, c: ctx("Nisha", { lead: { ...dest(["Australia"]), firstName: "Nisha", fullName: "Nisha Test" }, notes: [note("Nisha doesnoyt have any plans regarding abroad.", 33)] }) },
 ];
 
 describe.skipIf(!process.env.RUN_LIVE_DRAFT_EVAL)("Q1(c) live first-try pass rate", () => {
-  it("20 fixed fact sets with he / she notes", async () => {
+  it("23 fixed fact sets with he / she notes (20 + 3 real-shaped)", async () => {
     const rows = await Promise.all(
       SETS.map(async (s) => {
         const facts = draftFacts(s.c, IN);
@@ -58,7 +62,7 @@ describe.skipIf(!process.env.RUN_LIVE_DRAFT_EVAL)("Q1(c) live first-try pass rat
     );
     const passed = rows.filter((r) => r.fails.length === 0).length;
     const skipRight = rows.filter((r) => r.skipped === r.expectSkip).length;
-    console.log(`FIRST-TRY CHECK PASS: ${passed}/20 (${(passed / 20) * 100}%)  SKIP DECISION RIGHT: ${skipRight}/20\n` + rows.map((r) => `${r.fails.length ? "FAIL " + r.fails.join(",") : "ok"} | skip=${r.skipped}/${r.expectSkip} | ${r.name} | ${r.text}`).join("\n"));
-    expect(rows).toHaveLength(20);
+    console.log(`FIRST-TRY CHECK PASS: ${passed}/${rows.length} (${Math.round((passed / rows.length) * 100)}%)  SKIP DECISION RIGHT: ${skipRight}/${rows.length}\n` + rows.map((r) => `${r.fails.length ? "FAIL " + r.fails.join(",") : "ok"} | skip=${r.skipped}/${r.expectSkip} | ${r.name} | ${r.text}`).join("\n"));
+    expect(rows).toHaveLength(SETS.length);
   }, 120_000);
 });

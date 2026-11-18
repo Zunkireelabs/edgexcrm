@@ -9,6 +9,8 @@ const FACTS = [
   F("item:b", "Mina KC (reply waiting): 2 days", "/leads/b"),
   F("kind:new_uncalled", "2 new lead not yet calleds on your Do next list", "/home#do-next", "Open 2 →"),
   F("look:u1", "Asha: 1 vs usual 31 calls, notes and stage moves (On leave · expected)", "/pulse", "Open in Pulse →"),
+  // Not a row on Home: a week number. A point that also cites it adds something the rows do not show (F4a).
+  F("week:calls", "In the last 7 days, calls: 12", "/home#week", "See why →"),
 ];
 
 describe("validatePoints: the number check", () => {
@@ -17,7 +19,7 @@ describe("validatePoints: the number check", () => {
     expect(r).toEqual([]);
   });
   it("keeps a point whose numbers are all in the facts", () => {
-    const r = validatePoints([{ claim: "Call Sujan Rai first", reason: "He has waited 38 min", factIds: ["item:a"] }], FACTS);
+    const r = validatePoints([{ claim: "Call Sujan Rai first", reason: "He has waited 38 min", factIds: ["item:a", "week:calls"] }], FACTS);
     expect(r).toHaveLength(1);
     expect(r[0].claim).toBe("Call Sujan Rai first");
   });
@@ -31,7 +33,7 @@ describe("validatePoints: the number check", () => {
     expect(validatePoints([{ claim: "x", reason: "y", factIds: ["item:a", "item:ZZZ"] }], FACTS)).toEqual([]);
   });
   it("keeps at most 3 points", () => {
-    const pts = Array.from({ length: 5 }, (_, i) => ({ claim: `point ${i === 0 ? "" : "x"}`.trim() || "p", reason: "r", factIds: ["item:a"] }));
+    const pts = Array.from({ length: 5 }, (_, i) => ({ claim: `point ${i === 0 ? "" : "x"}`.trim() || "p", reason: "r", factIds: ["item:a", "week:calls"] }));
     expect(validatePoints(pts, FACTS)).toHaveLength(3);
   });
   it("nothing worth saying gives an empty list (the card does not show)", () => {
@@ -39,17 +41,33 @@ describe("validatePoints: the number check", () => {
   });
 });
 
+describe("F4: a point must add to the rows Home already shows", () => {
+  it("(a) a point about only rows, with no number the rows don't carry, is dropped", () => {
+    expect(validatePoints([{ claim: "Sujan Rai has waited 38 min", reason: "Mina KC has waited 2 days", factIds: ["item:a", "item:b"] }], FACTS)).toEqual([]);
+    expect(validatePoints([{ claim: "Sujan Rai is waiting", reason: "A new lead", factIds: ["item:a"] }], FACTS)).toEqual([]);
+  });
+  it("(a) a point that also cites a non-row fact, or carries a number the row doesn't show, stays", () => {
+    expect(validatePoints([{ claim: "Sujan Rai is waiting", reason: "Your 12 calls this week left no time", factIds: ["item:a", "week:calls"] }], FACTS)).toHaveLength(1);
+    expect(validatePoints([{ claim: "Sujan Rai is waiting", reason: "You made 12 calls", factIds: ["item:a"] }], FACTS)).toHaveLength(1);
+  });
+  it("(b) 'not contacted any' is dropped unless a cited fact says none, with the same number", () => {
+    const facts = [F("need:k", "Kamana: 1 day since the last call", "/home#need-k"), F("impact:c", "Calls: 0 today, 3 days ago 14", "/home#impact"), F("week:x", "In the last 7 days, calls: 12", "/home#week")];
+    expect(validatePoints([{ claim: "Kamana has not contacted any leads for over 3 days", reason: "Calls dropped", factIds: ["need:k", "week:x"] }], facts)).toEqual([]);
+    expect(validatePoints([{ claim: "No calls today", reason: "Down from 14", factIds: ["impact:c"] }], facts)).toHaveLength(1);
+  });
+});
+
 describe("validatePoints: links come from ids, never from the model", () => {
   it("the link is the first cited fact's href and label, built by us", () => {
-    const [p] = validatePoints([{ claim: "Call Sujan Rai", reason: "waiting", factIds: ["item:a"] }], FACTS);
+    const [p] = validatePoints([{ claim: "Call Sujan Rai", reason: "waiting", factIds: ["item:a", "week:calls"] }], FACTS);
     expect(p.link).toEqual({ href: "/leads/a", label: "Open →" });
   });
   it("several cited rows say so", () => {
-    const [p] = validatePoints([{ claim: "Two people are waiting", reason: "Sujan Rai and Mina KC", factIds: ["item:a", "item:b"] }], FACTS);
+    const [p] = validatePoints([{ claim: "Two people are waiting", reason: "Sujan Rai and Mina KC", factIds: ["item:a", "item:b", "week:calls"] }], FACTS);
     expect(p.link).toEqual({ href: "/leads/a", label: "Open first of 2 →" });
   });
   it("a Pulse fact opens Pulse", () => {
-    expect(validatePoints([{ claim: "Asha is away", reason: "On leave", factIds: ["look:u1"] }], FACTS)[0].link).toEqual({ href: "/pulse", label: "Open in Pulse →" });
+    expect(validatePoints([{ claim: "Asha is away", reason: "On leave", factIds: ["look:u1", "week:calls"] }], FACTS)[0].link).toEqual({ href: "/pulse", label: "Open in Pulse →" });
   });
   it("R2: a point whose cited facts have no link is DROPPED, not shown bare", () => {
     const noLink = [{ id: "x", text: "551 reminders", href: "", linkLabel: "" }];

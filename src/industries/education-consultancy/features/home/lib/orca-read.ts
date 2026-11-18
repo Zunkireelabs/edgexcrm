@@ -68,6 +68,10 @@ export function validatePoints(raw: RawReadPoint[], facts: Fact[]): ReadPoint[] 
     if (![...numbersIn(p.claim), ...numbersIn(p.reason)].every((n) => known.has(n))) continue;
     // S6: the label counts only ITEM facts (real leads/rows). A per-kind count is context, never a thing to open: it is not counted
     // and not chosen for the link while an item fact is cited.
+    // F4(a): a point built only from rows Home already shows below the card, with no number those rows don't carry, repeats them.
+    if (repeatsRows(p, cited)) continue;
+    // F4(b): a claim of absence ("not contacted any", "no calls") must be backed by the facts it cites.
+    if (absenceFlaw(p, cited)) continue;
     const linked = cited.filter((f) => f.href);
     const items = linked.filter((f) => f.id.startsWith("item:"));
     const first = items[0] ?? linked[0];
@@ -78,6 +82,35 @@ export function validatePoints(raw: RawReadPoint[], facts: Fact[]): ReadPoint[] 
     if (out.length === READ_MAX_POINTS) break;
   }
   return out;
+}
+
+/** Facts that are rows Home shows right below the card (Needs you, Needs a look, Do next): a point about only these repeats them. */
+const isRowFact = (f: Fact) => /^(?:need|look|item):/.test(f.id) && f.id !== "look:others";
+
+/**
+ * F4(a): true when every cited fact is a row Home already shows and the point holds no number that those rows don't show.
+ * Numbers are checked against the facts as a whole already, so a number outside the cited rows is what a comparison or a
+ * deadline brings; without one the point only restates the row.
+ */
+export function repeatsRows(p: Pick<RawReadPoint, "claim" | "reason">, cited: Fact[]): boolean {
+  if (cited.length === 0 || !cited.every(isRowFact)) return false;
+  const shown = new Set(cited.flatMap((f) => numbersIn(f.text)));
+  return [...numbersIn(p.claim), ...numbersIn(p.reason)].every((n) => shown.has(n));
+}
+
+const ABSENCE = /\b(?:not|never|hasn't|haven't|didn't|hasn\u2019t|haven\u2019t|didn\u2019t)\b[^.]{0,40}\bany\b|\bno (?:calls?|leads?|contacts?|activity|follow-?ups?|messages?|emails?)\b|\bnone\b|\bzero\b|\b0 (?:calls?|leads?|contacts?|follow)/i;
+const ABSENCE_IN_FACT = /\b(?:no|none|not|never|zero|nobody|without|haven't|hasn't)\b|(?<![\d.])0(?![\d.])/i;
+
+/**
+ * F4(b): "has not contacted any leads for over 3 days" must match its facts. A claim of absence is refused unless a cited fact
+ * itself says "no / none / not / 0", and every number in it is in a cited fact (not just somewhere in the facts).
+ */
+export function absenceFlaw(p: Pick<RawReadPoint, "claim" | "reason">, cited: Fact[]): boolean {
+  const text = `${p.claim} ${p.reason}`;
+  if (!ABSENCE.test(text)) return false;
+  if (!cited.some((f) => ABSENCE_IN_FACT.test(f.text))) return true;
+  const own = new Set(cited.flatMap((f) => numbersIn(f.text)));
+  return numbersIn(text).some((n) => !own.has(n));
 }
 
 /**

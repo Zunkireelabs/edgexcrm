@@ -10,7 +10,7 @@ import { HOME_AI_TIMEOUT_MS } from "./usage";
 export const draftSchema = z.object({
   skip: z
     .object({
-      reason: z.string().trim().min(1).max(400).describe("One short sentence (under 150 characters) for the counsellor: why not to send this message. Names only, no he or she."),
+      reason: z.string().trim().min(1).max(400).describe("One short sentence (under 150 characters) for the counsellor, in plain words of your own: why not to send this message, e.g. 'No plans to study abroad for now'. Do not copy the note's wording or its typos (the quote does that). Use the lead's name at most once, never he or she."),
       quote: z.string().trim().min(1).max(400).describe("The EXACT words from a counsellor note or message that make sending wrong. Copy them, do not rephrase."),
     })
     .nullable()
@@ -67,16 +67,18 @@ export function buildDraftPrompt(p: { channel: DraftChannel; tone: DraftTone; ki
   const system =
     "You draft ONE message from a counsellor at an education consultancy to a student or lead. A human will read, edit and send it: you never send anything. " +
     "Be warm, plain and specific, and use only the facts given. Do not invent facts, dates, fees, scores or numbers: every number you write must appear in the facts. " +
-    "Refer to the lead by first name. Names only: never use he, she, his, her or him about anyone, in English or in Nepali (repeat the name instead of a pronoun), and the same goes for the reason (why) and the follow-up task. " +
-    "The counsellor notes below may say he or she. Never copy that: use the name, even when the note you are drawing on says he or she. " +
+    "You are writing TO the lead: say 'you' and 'your' in the message (\"your IELTS\", \"your family\"). Greet with the first name once ('Hi Aman,') and then NEVER use the lead's name again in the message, not even as 'Aman's'. " +
+    "Never use he, she, his, her or him about anyone, in English or in Nepali. In the reason (why), the follow-up task and any skip reason (these are for the counsellor, not the lead) use the lead's name instead of a pronoun. " +
+    "The counsellor notes below may say he or she. Never copy that. " +
     "Introduce the counsellor as 'their first name from the Company' using the Company and counsellor first name in the facts, never 'our office', 'our team' or 'the education team'; if the counsellor name is unknown, do not sign with a name. " +
     "Never say when something happened (yesterday, last week, 'N days ago') unless a fact states that timing; use the timing in the facts exactly. " +
     (p.channel === "whatsapp" ? "Channel: WhatsApp. 2 to 4 short sentences, no subject (subject = null). " : "Channel: email. A subject and a short body. ") +
     `Reason for the message: ${p.kind}. ` +
+    "Never open with a stock line: not 'check in', 'checking in', 'wanted to', 'just wanted', 'I remember', 'I hope you', 'hope you're doing well', 'it's been a while', 'it's been some time', 'since we last', 'how is your decision process going'. Go straight to the one specific fact. " +
     (p.rowKind === "going_quiet"
-      ? "This is a check-in, so keep it short: AT MOST 2 sentences and under 280 characters. " +
-        "Open with just 'Hi <name>, <counsellor> here.' or go straight to the point. Never write 'check in', 'checking in', 'wanted to' or 'just wanted'. " +
-        "Take ONE specific detail from this person's last counsellor note or message when there is one (their course, a question they asked, something they said), and make the whole message about that one detail: the single question you end with must be about that detail, not a general 'are you still interested'. " +
+      ? "This is a check-in, so keep it short: AT MOST 2 sentences after the greeting and under 280 characters. " +
+        "Open with just 'Hi <name>, <counsellor> here.' or go straight to the point. " +
+        "Take ONE specific fact from this person's last counsellor note or message when there is one (a country, a course, an exam, a date or a person), and make the whole message about it: the single question you end with must name that fact, not a general 'are you still interested'. " +
         "Do NOT use stock closing lines such as 'just reply here', 'happy to help', 'if you have any questions', 'pick up where we left off' or 'feel free to reach out'. No two messages should sound alike. "
       : "") +
     (p.allowSkip
@@ -86,11 +88,11 @@ export function buildDraftPrompt(p: { channel: DraftChannel; tone: DraftTone; ki
       : "Always write the message and set skip to null. ") +
     (TONE_RULE[p.tone] ? TONE_RULE[p.tone] + " " : "") +
     "Also give one sentence on why this message (why), and one follow-up task for the counsellor (followUp). " +
-    "Pronouns slip into the reason (why), the follow-up task and the skip reason most often. Write 'Aman is waiting for results', never 'Aman is waiting for his results'; write 'Check on Aman\'s IELTS booking', never 'Check his IELTS booking'. Before you answer, read the message, the reason, the follow-up task and any skip reason once more, and rewrite any that holds he, she, his, her or him. " +
+    "Pronouns slip into the reason (why), the follow-up task and the skip reason most often. Write 'Aman is waiting for results', never 'Aman is waiting for his results'; write 'Check on Aman\'s IELTS booking', never 'Check his IELTS booking'. The skip reason is plain words of your own (\"No plans to study abroad for now\"), never the note copied. Before you answer, read the message, the reason, the follow-up task and any skip reason once more, and rewrite any that holds he, she, his, her or him. " +
     (p.fix?.length ? ` Your previous attempt was rejected: ${p.fix.join("; ")}. Write it again without that.` : "");
   // Last thing the model reads: the one rule it keeps slipping on, with the lead's own name in it.
   const lead = p.facts.find((f) => f.startsWith("Lead first name: "))?.slice("Lead first name: ".length).trim();
-  const reminder = lead ? `\n\nReminder: in the message, the reason (why), the follow-up task and any skip reason, write ${lead} or ${lead}'s. Never he, she, his, her or him, not even for ${lead}'s family ("${lead}'s father", not "her father"), and not in a reason like "Rina said she is not interested" (write "Rina is not interested").${p.rowKind === "going_quiet" ? " Do not write 'check in', 'checking in' or 'wanted to' anywhere in the message, and do not work out a new date or number: use only the ones in the facts." : ""}` : "";
+  const reminder = lead ? `\n\nReminder: the message speaks TO ${lead}: say "you" and "your", and write the name ${lead} only in the greeting, never again in the message. In the reason (why), the follow-up task and any skip reason write ${lead} or ${lead}'s, never he, she, his, her or him, not even for the family ("${lead}'s father", not "her father"), and not in a reason like "Rina said she is not interested" (write "Rina is not interested").${p.rowKind === "going_quiet" ? " Do not write 'check in', 'checking in' or 'wanted to' anywhere in the message, and do not work out a new date or number: use only the ones in the facts." : ""}` : "";
   const prompt = `Today is ${p.todayLabel}.\nFacts:\n${p.facts.map((x) => `- ${x}`).join("\n")}${p.previous ? `\n\nPrevious message:\n${stripPrivate(p.previous)}` : ""}${reminder}`;
   return { system, prompt };
 }
@@ -110,7 +112,7 @@ function badNumbers(raw: Pick<DraftRaw, "text" | "subject" | "why">, facts: stri
 
 export interface CheckFailure {
   /** The name logged on the server (never any text). */
-  check: "number" | "time_word" | "pronoun" | "length" | "stock_closing" | "empty" | "skip_quote" | "stock_opening";
+  check: "number" | "time_word" | "pronoun" | "length" | "stock_closing" | "empty" | "skip_quote" | "stock_opening" | "sentences" | "name_repeat" | "skip_reason";
   /** What the retry tells the model, exactly. Contains the offending word/number, which is the model's own output, not lead data. */
   fix: string;
 }
@@ -133,7 +135,29 @@ export interface DraftCheckOpts {
 }
 
 /** Phrases that made 10 check-ins read as one template ("wanted to check in"). A check-in using one is refused. */
-const STOCK_OPENINGS: RegExp[] = [/\bcheck(?:ing)?[ -]in\b/i, /\bjust wanted\b/i, /\bwanted to (?:check|see|ask|follow|touch|know|make sure)/i];
+const STOCK_OPENINGS: RegExp[] = [
+  /\bcheck(?:ing)?[ -]in\b/i, /\bjust wanted\b/i, /\bwanted to (?:check|see|ask|follow|touch|know|make sure)/i,
+  /\bI remember\b/i, /\bI hope you\b/i, /\bhope you(?:'|\u2019)?re doing well\b/i, /\bdecision process\b/i,
+  /\bit(?:'|\u2019)?s been (?:a while|some time)\b/i, /\bsince we last\b/i,
+];
+
+/** The lead's first name, as the facts give it. */
+const leadNameOf = (facts: string[]) => facts.find((f) => f.startsWith("Lead first name: "))?.slice("Lead first name: ".length).trim() || null;
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/** How many times `name` appears as a word (so "Kristi's" counts). */
+function nameCount(text: string, name: string): number {
+  return (text.match(new RegExp(`(?<![\\p{L}\\p{N}])${escapeRe(name)}(?![\\p{L}\\p{N}])`, "giu")) ?? []).length;
+}
+
+/** A check-in is at most this many sentences after the greeting (and the counsellor's "Kamana here." line). */
+export const CHECK_IN_MAX_SENTENCES = 2;
+/** Sentences in a message after "Hi Name," and a short "<counsellor> here." / "<counsellor> from <company>." introduction. */
+export function sentencesAfterGreeting(text: string): number {
+  let t = text.trim().replace(/^(?:hi|hello|hey|namaste|dear)\s+[^,!.\n]{1,40}[,!.]?\s*/i, "");
+  const intro = /^[^.!?\n]{1,50}\b(?:here|from \w+)\b[^.!?\n]{0,20}[.!]\s*/i.exec(t);
+  if (intro) t = t.slice(intro[0].length);
+  return t.split(/[.!?]+(?:\s+|$)/).filter((x) => x.trim().length > 0).length;
+}
 
 /** Lower-case, one space, straight quotes: so a quote the model copied matches the note it came from. */
 const flat = (s: string) => s.toLowerCase().replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"').replace(/\s+/g, " ").trim();
@@ -151,6 +175,9 @@ export function draftChecks(raw: DraftRaw, facts: string[], opts: DraftCheckOpts
     // "Don't send" is shown to the counsellor with the note's own words, so the words must really be in a note or message, and the reason
     // follows the same no-he/she, no-invented-number rules as a draft.
     if (!quoteIsInNotes(raw.skip.quote, facts)) out.push({ check: "skip_quote", fix: "the quote must be the exact words from a counsellor note or message; if no note rules this message out, write the message instead of skipping" });
+    const lead = leadNameOf(facts);
+    if (lead && nameCount(raw.skip.reason, lead) > 1) out.push({ check: "skip_reason", fix: `the reason names ${lead} more than once: write it in plain words of your own, e.g. "No plans to study abroad for now"` });
+    else if (flat(raw.skip.quote).length >= 12 && flat(raw.skip.reason).includes(flat(raw.skip.quote).replace(/[.!?]+$/, ""))) out.push({ check: "skip_reason", fix: "the reason copies the note: write it in plain words of your own, e.g. \"No plans to study abroad for now\"" });
     if (hasGenderedPronoun([raw.skip.reason])) out.push({ check: "pronoun", fix: "do not use he, she, his, her or him anywhere, including the reason: use the person's name instead" });
     const known = new Set(facts.flatMap(numbersIn));
     const nb = numbersIn(raw.skip.reason).filter((n) => !known.has(n));
@@ -163,9 +190,14 @@ export function draftChecks(raw: DraftRaw, facts: string[], opts: DraftCheckOpts
   if (nb.length) out.push({ check: "number", fix: `the number ${nb.join(", ")} is not in the facts: do not write it, use only numbers from the facts` });
   const tw = unbackedTimeWords(texts, facts);
   if (tw.length) out.push({ check: "time_word", fix: `no '${tw.join("', '")}': no fact says when that happened, so do not say when` });
+  // F1: the stock openings are refused for every kind, not only a check-in.
+  if (STOCK_OPENINGS.some((re) => re.test(raw.text))) out.push({ check: "stock_opening", fix: "do not open with a stock line ('check in', 'wanted to', 'I remember', 'I hope you', 'it's been a while', 'decision process'): greet with the name, then go straight to the one specific fact" });
+  // F2: the message speaks TO the lead, so the lead's name is in the greeting once and nowhere else.
+  const lead = leadNameOf(facts);
+  if (lead && nameCount(raw.text, lead) > 1) out.push({ check: "name_repeat", fix: `you are writing to ${lead}: use ${lead} only in the greeting, then say "you" and "your", never ${lead}'s or ${lead} again` });
   if (opts.rowKind === "going_quiet") {
     if (raw.text.length > CHECK_IN_MAX_CHARS) out.push({ check: "length", fix: `it is too long (${raw.text.length} characters): at most 2 short sentences, under 280 characters` });
-    if (STOCK_OPENINGS.some((re) => re.test(raw.text))) out.push({ check: "stock_opening", fix: "do not write 'check in', 'checking in' or 'wanted to': open with just the name, or go straight to the one specific detail" });
+    if (sentencesAfterGreeting(raw.text) > CHECK_IN_MAX_SENTENCES) out.push({ check: "sentences", fix: `it has ${sentencesAfterGreeting(raw.text)} sentences after the greeting: write at most 2, the second a single question that names the one fact from the note` });
     if (STOCK_CLOSINGS.some((re) => re.test(raw.text))) out.push({ check: "stock_closing", fix: "do not end with a stock line like 'just reply here', 'happy to help' or 'if you have any questions': end with one concrete question about something specific to this person" });
   }
   if (hasGenderedPronoun(texts)) out.push({ check: "pronoun", fix: "do not use he, she, his, her or him anywhere, including the reason and the task: use the person's name instead" });

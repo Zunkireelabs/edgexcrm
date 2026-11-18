@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { NextRequest } from "next/server";
 
 const authMock = vi.fn();
@@ -32,7 +32,10 @@ const req = (b: unknown) => new NextRequest("http://x/api/v1/home/call-prep", { 
 const CHUNK = (score: number) => ({ chunkId: "c", kbItemId: "k", knowledgeBaseId: "kb", chunkIndex: 0, content: "4 partner universities take nursing students in February 2027. IELTS 7.0 is needed.", score, title: "Australia partners 2027.pdf", type: "file", url: null, createdVia: "human", page: 3 });
 
 describe("POST /api/v1/home/call-prep", () => {
+  // F8: the lead was created "yesterday" relative to this fixed day, so the test never depends on the real date.
   beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-20T08:00:00.000Z"));
     vi.clearAllMocks();
     authMock.mockResolvedValue({ userId: "u1", tenantId: "t1", industryId: "education_consultancy" });
     visibleMock.mockResolvedValue({ id: "L1" });
@@ -43,6 +46,8 @@ describe("POST /api/v1/home/call-prep", () => {
     restateMock.mockResolvedValue({ text: "4 partner universities take nursing students in February 2027.", usage: {} });
     retrieveMock.mockResolvedValue({ chunks: [CHUNK(0.03)], degraded: false });
   });
+
+  afterEach(() => { vi.useRealTimers(); });
 
   it("404 for a lead this person can't see: nothing loaded, no model, no search", async () => {
     visibleMock.mockResolvedValue(null);

@@ -74,9 +74,9 @@ export function EducationHome({ data }: { data: HomeData }) {
       {visibleAll.filter((i) => i.children).map((i) => (
         <MissedCallbacksSheet key={i.key} item={i} nextStageByLead={data.nextStageByLead} tz={data.tz} rows={rows} />
       ))}
-      <CallPrepPanel key={rows.prepItem?.key ?? "none"} item={rows.prepItem} onClose={() => rows.setPrepItem(null)} onCall={(it) => { rows.setPrepItem(null); rows.setOpenLog(it.key); }} />
+      <CallPrepPanel key={`prep-${rows.prepItem?.key ?? "none"}`} item={rows.prepItem} onClose={() => rows.setPrepItem(null)} onCall={(it) => { rows.setPrepItem(null); rows.setOpenLog(it.key); }} />
       <BatchPanel key={rows.batchOpen ? "open" : "closed"} entries={batch.entries} open={rows.batchOpen} onClose={() => { rows.setBatchOpen(false); run.reset(); }} run={run} onSent={() => rows.router.refresh()} />
-      <DraftPanel key={rows.draftItem?.key ?? "none"} item={rows.draftItem} onClose={() => rows.setDraftItem(null)} onSent={() => rows.router.refresh()} />
+      <DraftPanel key={`draft-${rows.draftItem?.key ?? "none"}`} item={rows.draftItem} onClose={() => rows.setDraftItem(null)} onSent={() => rows.router.refresh()} />
       <h1 className="eh-h1">{data.greeting}</h1>
       <p className="eh-lede">
         {data.lede}

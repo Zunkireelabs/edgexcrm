@@ -31,7 +31,12 @@ describe("Q10 / Q11: the read prompt", () => {
   it("a point about a row Home already shows must add what the row cannot", () => {
     expect(system).toContain("must add what the row cannot show by itself");
     expect(system).toContain("how it compares with the usual, a deadline, or the one lead to start with and why");
-    expect(system).toContain("Two strong points are better than three");
+    expect(system).toContain("Two strong points are better than one weak one");
+  });
+  it("F4(c): one plain sentence of reason, no filler words, no made-up days", () => {
+    expect(system).toContain("ONE plain sentence");
+    for (const w of ["indicating", "suggesting", "significant", "urgent"]) expect(system).toContain(`'${w}'`);
+    expect(system).toContain("Never work out a number of days yourself");
   });
   it("counts: the plural rule is in the prompt, and a rejected attempt is told exactly what was wrong", () => {
     expect(system).toContain("never '1 leads'");
