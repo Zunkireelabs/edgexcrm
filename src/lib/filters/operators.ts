@@ -1,10 +1,13 @@
 import type { FieldDef, FilterFieldType, FilterOperator } from "./types";
 
 // The operator x field-type mapping table. `is_none_of` is deliberately absent
-// from `relation` — see compile.ts: `!inner` + `not.in` on an embedded relation
+// from the DEFAULT `relation` set — see compile.ts: `!inner` + `not.in` on an embedded relation
 // means "has *a* row that isn't X", which is semantically wrong (and duplicates
-// parent rows), not "has none of X". The UI must never offer it for a relation
-// field, and the compiler 422s it if a caller tries anyway.
+// parent rows), not "has none of X". The compiler still 422s it on a relation field.
+// The ONE exception is the leads list's Collaborators field (registry/leads.ts lists it explicitly, migration 282):
+// there the leads route lifts it out of the tree and answers it in SQL (collaborator-split.ts) before the
+// compiler ever sees it. Every other surface that shares that registry hides it again
+// (withoutCollaboratorExclusion) and still 422s it.
 export const OPERATORS_BY_TYPE: Record<FilterFieldType, FilterOperator[]> = {
   text: ["is", "is_not", "is_empty", "is_not_empty", "contains", "not_contains", "starts_with", "ends_with"],
   number: ["is", "is_not", "is_empty", "is_not_empty", "gt", "gte", "lt", "lte", "between"],
