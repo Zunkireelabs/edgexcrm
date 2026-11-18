@@ -1,5 +1,6 @@
 "use client";
 
+import { isTransientErrorMessage } from "@/lib/ai/ingestion/transient-errors";
 import { notifyDocumentsChanged } from "./documents-events";
 import { replaceDocumentFile } from "./replace-document";
 import { formatRelativeTime } from "@/lib/date";
@@ -420,14 +421,28 @@ function DocumentStatusBadge({ status, processingError }: { status: string; proc
     );
   }
   if (status === "failed") {
+    // A quota / rate-limit failure is temporary and the file itself is fine (it is stored and viewable) — say so,
+    // instead of a bare red "Failed" that reads like the upload broke. Retry (the icon) re-runs processing.
+    if (isTransientErrorMessage(processingError)) {
+      return (
+        <Badge
+          variant="secondary"
+          className="text-[10px] px-1.5 py-0 gap-1 bg-amber-50 text-amber-700 border-amber-200"
+          title={`File is saved. The AI could not read it yet (temporary provider issue) — use Retry. ${processingError ?? ""}`.trim()}
+        >
+          <WarningCircleIcon className="h-2.5 w-2.5" />
+          Not readable by AI yet
+        </Badge>
+      );
+    }
     return (
       <Badge
         variant="secondary"
         className="text-[10px] px-1.5 py-0 gap-1 bg-red-50 text-red-700 border-red-200"
-        title={processingError ?? "Processing failed"}
+        title={processingError ? `File is saved. ${processingError}` : "File is saved, but the AI could not read it."}
       >
         <WarningCircleIcon className="h-2.5 w-2.5" />
-        Failed
+        AI couldn&apos;t read this file
       </Badge>
     );
   }

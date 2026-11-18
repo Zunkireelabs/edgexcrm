@@ -380,6 +380,8 @@ interface PersonalDetailsDialogProps {
   layout?: "classic" | "sections";
   /** Edit profile: J / K pressed with typed changes → Discard confirm → this carries on to the next / previous lead. */
   onNavKey?: (dir: "next" | "prev") => void;
+  /** Non-admin, non-assignee collaborator — disables Email/Phone in the Core Identity section (mirrors ContactCard's inline-edit restriction). */
+  restrictContactFields?: boolean;
 }
 
 /** One entry of Edit profile's section list. At phone width the list is a sideways-scrolling chip row, so the active one scrolls into view. */
@@ -418,7 +420,7 @@ function ListsLoadNote({ status, onRetry }: { status: "loading" | "ready" | "err
   );
 }
 
-export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHistory, onLeadUpdate, canUploadDocuments, openInEditMode, isAdmin = false, missingBeforeApplications, layout = "classic", onNavKey }: PersonalDetailsDialogProps) {
+export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHistory, onLeadUpdate, canUploadDocuments, openInEditMode, isAdmin = false, missingBeforeApplications, layout = "classic", onNavKey, restrictContactFields = false }: PersonalDetailsDialogProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [values, setValues] = useState<FieldValues>(() => personalDetailsFromLead(lead));
@@ -749,6 +751,7 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
           onChange={(v) => handleCoreChange(field.key, v)}
           invalid={redKeys.has(field.key)}
           needed={needed(field.label)}
+          disabled={restrictContactFields && (field.key === "email" || field.key === "phone")}
         />
       ))}
     </FieldGrid>

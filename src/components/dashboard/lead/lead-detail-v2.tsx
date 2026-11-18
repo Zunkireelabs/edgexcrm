@@ -318,6 +318,7 @@ export function LeadDetailV2({
 
   const isAssignee = userId === currentLead.assigned_to;
   const isEditor = isAdmin || isAssignee || isCollaboratorUser;
+  const collaboratorOnlyEdit = isCollaboratorUser && !isAdmin && !isAssignee;
 
   const {
     leaving, gateMissing, setGateMissing, pendingProspectMove, setPendingProspectMove, pendingAssignGate, setPendingAssignGate,
@@ -627,6 +628,7 @@ export function LeadDetailV2({
             editErrors={editErrors}
             onDraftChange={updateDraft}
             industryId={tenant.industry_id}
+            restrictContactFields={collaboratorOnlyEdit}
             onTagChange={(tags) => setCurrentLead((prev) => ({ ...prev, tags } as Lead))}
             detailsSlot={
               // Study Interest: education_consultancy only, skipped for Other-tagged
@@ -751,6 +753,7 @@ export function LeadDetailV2({
             projectBoardEnabled={projectBoardEnabled}
             submissionHistory={submissionHistory}
             onLeadUpdate={(patch) => setCurrentLead((prev) => ({ ...prev, ...patch } as Lead))}
+            restrictContactFields={collaboratorOnlyEdit}
             onSaveItinerary={async (itinerary) => {
               // Merge against live state (not the stale `lead` prop) so saving the
               // itinerary doesn't clobber trip fields saved earlier this session.

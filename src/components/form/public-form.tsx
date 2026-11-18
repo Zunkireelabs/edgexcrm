@@ -23,6 +23,7 @@ import {
   normalizePhoneForStorage,
 } from "@/lib/phone-utils";
 import { COUNTRY_CODES, DEFAULT_DIAL_CODE } from "@/lib/country-codes";
+import { getInitialFormData } from "@/lib/form-defaults";
 import {
   CheckCircleIcon,
   CircleNotchIcon,
@@ -57,7 +58,11 @@ interface PublicFormProps {
 
 export function PublicForm({ tenant, formConfig }: PublicFormProps) {
   const [currentStep, setCurrentStep] = useState(0);
-  const [formData, setFormData] = useState<Record<string, string | boolean | number | string[]>>({});
+  // Start from real defaults (e.g. a country select whose placeholder names
+  // "Nepal (NP)" really holds Nepal) so what looks selected is what gets submitted.
+  const [formData, setFormData] = useState<Record<string, string | boolean | number | string[]>>(
+    () => getInitialFormData(formConfig.steps || [])
+  );
   const [fileData, setFileData] = useState<Record<string, File>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);

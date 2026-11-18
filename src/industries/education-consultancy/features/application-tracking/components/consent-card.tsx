@@ -218,8 +218,11 @@ export function ConsentCard({
   const consent = consentApi ?? ownConsent;
   const [open, setOpen] = useState(false); // collapsible: collapsed by default
   const {
-    feeStatus, feeAmount, feeNotes, savedFeeStatus, feeDirty, feeSaving, feeIsReported, canReportFee, setFeeStatus, setFeeAmount, setFeeNotes, saveFee,
+    feeStatus, feeAmount, feeNotes, savedFeeStatus, feeDirty, feeSaving, feeIsReported, canReportFee, setFeeStatus, setFeeAmount, setFeeNotes, saveFee: saveFeeRaw,
   } = fee;
+  // Once a fee is saved the box shows it read-only; "Edit" re-opens the form, and a save closes it again.
+  const [feeEditing, setFeeEditing] = useState(false);
+  const saveFee = async (override?: FeeStatus) => { if ((await saveFeeRaw(override)) !== false) setFeeEditing(false); };
   const { loading, creatingLink, overrideProfile, handleCreateAndCopyLink, handleCopyLink, handleResend, openDialog } = consent;
 
   if (loading) {
@@ -338,7 +341,40 @@ export function ConsentCard({
               )}
             </div>
 
-            {canManageFee ? (
+            {savedFeeStatus !== "" && !feeEditing && (canManageFee || canReportFee) ? (
+              <div className="space-y-2" data-testid="fee-readonly">
+                <div className="text-sm space-y-1">
+                  <p>
+                    <span className="text-xs text-muted-foreground">Fee Paid?: </span>
+                    {savedFeeStatus === "claimed" ? "Reported (verify)" : <span className="capitalize">{savedFeeStatus}</span>}
+                    {(savedFeeStatus === "paid" || savedFeeStatus === "claimed") && feeAmount !== "" && (
+                      <span className="text-muted-foreground"> · {feeAmount}</span>
+                    )}
+                  </p>
+                  {feeNotes && <p className="text-xs text-muted-foreground">{feeNotes}</p>}
+                </div>
+                {!canManageFee && feeIsReported && (
+                  <p className="text-xs text-muted-foreground">
+                    You reported this fee. The Account will verify it — you can keep working in the meantime.
+                  </p>
+                )}
+                <div className="flex gap-2">
+                  {canManageFee && feeIsReported && (
+                    <>
+                      <Button size="sm" onClick={() => saveFee("paid")} disabled={feeSaving} className="h-7 text-xs">
+                        Confirm fee received
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => saveFee("unpaid")} disabled={feeSaving} className="h-7 text-xs">
+                        Reject
+                      </Button>
+                    </>
+                  )}
+                  <Button size="sm" variant="outline" onClick={() => setFeeEditing(true)} className="h-7 text-xs">
+                    Edit
+                  </Button>
+                </div>
+              </div>
+            ) : canManageFee ? (
               <>
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Fee Paid?</Label>

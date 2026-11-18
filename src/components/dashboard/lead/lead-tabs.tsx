@@ -50,6 +50,8 @@ interface LeadTabsProps {
   submissionHistory?: LeadSubmissionSnapshot[];
   /** Keeps the parent's lead state in sync after the Student Details popup actually saves Study Interest/Academic fields, so the old Study Interest panel reflects it without a reload. */
   onLeadUpdate?: (patch: Partial<Lead>) => void;
+  /** Non-admin, non-assignee collaborator — disables Email/Phone in Student Details (mirrors ContactCard's inline-edit restriction). */
+  restrictContactFields?: boolean;
 }
 
 export interface LeadTabsRef {
@@ -63,7 +65,7 @@ export interface LeadTabsRef {
 
 export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
   function LeadTabs(
-    { lead, notes, activities, teamMemberEmails, teamMemberNames, customFields, activeTab, onTabChange, onNotesChange, onCustomFieldsChange, checklists, onChecklistsChange, isAdmin, canEdit, canManageNotes, currentUserId, industryId, tenantName, tenantLogoUrl, onSaveItinerary, projectBoardEnabled, submissionHistory, onLeadUpdate },
+    { lead, notes, activities, teamMemberEmails, teamMemberNames, customFields, activeTab, onTabChange, onNotesChange, onCustomFieldsChange, checklists, onChecklistsChange, isAdmin, canEdit, canManageNotes, currentUserId, industryId, tenantName, tenantLogoUrl, onSaveItinerary, projectBoardEnabled, submissionHistory, onLeadUpdate, restrictContactFields },
     ref
   ) {
     const activitiesPanelRef = useRef<ActivitiesPanelRef>(null);
@@ -248,6 +250,7 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
           openInEditMode={personalDetailsOpenInEditMode}
           isAdmin={isAdmin}
           missingBeforeApplications={missingBeforeApplications}
+          restrictContactFields={restrictContactFields}
         />
       )}
       </>

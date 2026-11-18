@@ -298,7 +298,7 @@ export function KeyInfoSection({
           {!isInIntakeList && !isOtherContact && (
           <div>
             <p className="text-xs text-muted-foreground mb-1.5">Status</p>
-            {canEditLeadWorkingData({ isAdmin, leadScope, isOwnScopeEditor: canEdit && !!userId && userId === assignedTo }) ? (
+            {canEditLeadWorkingData({ isAdmin, leadScope, isOwnScopeEditor: canEdit && !!isEditor }) ? (
               <Select
                 value={effectiveStageId}
                 onValueChange={industryId === "education_consultancy" ? setPendingStageId : onStageChange}
@@ -470,10 +470,10 @@ export function KeyInfoSection({
           </div>
           )}
 
-          {/* Lead Collaborators — visible to all, editable by admin/owner only.
+          {/* Lead Collaborators — visible to all, editable by admin/owner and branch managers (team scope; the API checks the lead is in their branch).
               Skipped for Other-tagged walk-ins (no collaboration flow for Contacts). */}
           {!isOtherContact && (
-            <CollaboratorsBlock leadId={lead.id} teamMembers={teamMembers} canManage={isAdmin} />
+            <CollaboratorsBlock leadId={lead.id} teamMembers={teamMembers} canManage={isAdmin || leadScope === "team"} currentUserId={userId} />
           )}
 
           {/* Branches */}

@@ -29,9 +29,10 @@ interface CollaboratorsBlockProps {
   leadId: string;
   teamMembers?: TeamMember[];
   canManage?: boolean;
+  currentUserId?: string;
 }
 
-export function CollaboratorsBlock({ leadId, teamMembers = [], canManage = false }: CollaboratorsBlockProps) {
+export function CollaboratorsBlock({ leadId, teamMembers = [], canManage = false, currentUserId }: CollaboratorsBlockProps) {
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
   const [loading, setLoading] = useState(true);
   const [removingId, setRemovingId] = useState<string | null>(null);
@@ -111,7 +112,7 @@ export function CollaboratorsBlock({ leadId, teamMembers = [], canManage = false
               key={c.user_id}
               className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 bg-muted/30"
             >
-              {canManage && confirmId === c.user_id ? (
+              {(canManage || c.user_id === currentUserId) && confirmId === c.user_id ? (
                 <>
                   <span className="text-xs text-muted-foreground flex-1">
                     Remove <span className="font-medium text-foreground">{c.name}</span>?
@@ -132,7 +133,7 @@ export function CollaboratorsBlock({ leadId, teamMembers = [], canManage = false
                 </>
               ) : (
                 <>
-                  {canManage && (
+                  {(canManage || c.user_id === currentUserId) && (
                     <button
                       onClick={() => setConfirmId(c.user_id)}
                       disabled={!!removingId}

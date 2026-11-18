@@ -5,6 +5,8 @@ import { apiSuccess, apiUnauthorized, apiForbidden, apiNotFound, apiServiceUnava
 import { createRequestLogger } from "@/lib/logger";
 import { createAuditLog } from "@/lib/api/audit";
 import { touchLeadUpdatedAt } from "@/lib/leads/touch-updated-at";
+import { getLeadMembership } from "@/lib/leads/branch-membership";
+import { canManageLeadCollaborators } from "@/lib/leads/collaborator-access";
 
 export async function DELETE(
   request: NextRequest,
@@ -23,7 +25,10 @@ export async function DELETE(
 
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
-  if (auth.permissions.baseTier !== "owner" && auth.permissions.baseTier !== "admin") {
+  const isOwnerOrAdmin = auth.permissions.baseTier === "owner" || auth.permissions.baseTier === "admin";
+  const isSelf = userId === auth.userId;
+  // Owner/admin, the collaborator removing themselves, or a branch manager (team scope) for a lead in their own branch (checked below).
+  if (!isOwnerOrAdmin && !isSelf && auth.permissions.leadScope !== "team") {
     return apiForbidden();
   }
 
@@ -31,12 +36,17 @@ export async function DELETE(
 
   const { data: lead } = await supabase
     .from("leads")
-    .select("id")
+    .select("id, assigned_to, branch_id")
     .eq("id", id)
     .eq("tenant_id", auth.tenantId)
     .is("deleted_at", null)
     .single();
   if (!lead) return apiNotFound("Lead");
+
+  if (!isOwnerOrAdmin && !isSelf) {
+    const leadMembership = await getLeadMembership(supabase, auth.tenantId, id);
+    if (!canManageLeadCollaborators(auth, lead as unknown as { assigned_to: string | null; branch_id: string | null }, leadMembership)) return apiForbidden();
+  }
 
   const { data: existing } = await supabase
     .from("lead_collaborators")

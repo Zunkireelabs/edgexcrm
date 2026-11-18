@@ -5,7 +5,7 @@ import { requireAdmin, requireLeadAccess, resolvePositionSlug, type AuthContext 
 import { getLeadMembership, syncOriginMembership } from "@/lib/leads/branch-membership";
 import { assignmentBranchTarget, branchMoveOnAssignment } from "@/lib/leads/branch-resolution";
 import { isAdminAssignmentTarget } from "@/lib/leads/branch-assign-policy";
-import { addLeadCollaborator } from "@/lib/leads/collaborators";
+import { addLeadCollaborator, isLeadCollaborator } from "@/lib/leads/collaborators";
 import { canAccessPipeline, canAccessList } from "@/lib/api/permissions";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
@@ -107,6 +107,15 @@ export const UPDATABLE_FIELDS = [
 // Blocked for plain counselors/viewers but NOT for team-scoped branch managers
 // (who have their own §4.2 guard below).
 const ADMIN_ONLY_FIELDS = ["assigned_to", "owner_id", "branch_id"];
+
+// Non-assignee collaborators may PATCH everything EXCEPT: assignment/ownership/branch,
+// stage/list/pipeline (Stage stays assignee-or-admin-only — EDGEX-174 is Status only,
+// not Stage), and phone/email (EDGEX-175: read-only for collaborators).
+const COLLABORATOR_BLOCKED_FIELDS = new Set([
+  "assigned_to", "owner_id", "branch_id", "entity_id",
+  "list_id", "pipeline_id",
+  "phone", "email",
+]);
 
 export interface ApplyLeadPatchOpts {
   requestId: string;
@@ -271,7 +280,14 @@ export async function applyLeadPatch(
   }
 
   if (!isSelfCheckInAssign && !isCrossBranchPooledAssign && !requireLeadAccess(auth, existingLead, patchMembership)) {
-    return { kind: "forbidden" };
+    const isCollaborator = await isLeadCollaborator(supabase, auth.tenantId, leadId, auth.userId);
+    if (!isCollaborator) {
+      return { kind: "forbidden" };
+    }
+    const blockedField = Object.keys(body).find((field) => COLLABORATOR_BLOCKED_FIELDS.has(field));
+    if (blockedField) {
+      return { kind: "forbidden", message: "A collaborator cannot edit this field." };
+    }
   }
 
   // Plain counselors cannot update admin-only fields.
