@@ -11,7 +11,7 @@ import { getLeadFullName } from "@/components/dashboard/lead/lead-name";
 import { consentProfileKey } from "@/lib/consent/readiness";
 import { hasProspectQualification } from "@/lib/leads/prospect-qualification";
 import { isOtherLead } from "@/lib/leads/lead-type";
-import { canEditLeadWorkingData } from "@/lib/leads/lead-edit-scope";
+import { leadWorkGates } from "./lib/work-gates";
 import type { Lead, LeadList, PipelineStage } from "@/types/database";
 import { initialsOf } from "../record-preview/parts";
 import { usePreviewData } from "../record-preview/use-preview-data";
@@ -79,7 +79,8 @@ export function LeftColumn(p: LeftColumnProps) {
   const isOther = isOtherLead(lead.tags, "education_consultancy");
   const currentList = [...p.activeLeadLists, ...p.leadLists].find((l) => l.id === lead.list_id) ?? null;
   const isArchived = !!currentList?.is_archive;
-  const canWork = canEditLeadWorkingData({ isAdmin: p.isAdmin, leadScope: p.leadScope, isOwnScopeEditor: p.canEdit && p.isEditor });
+  // canWork = stage moves / Archive (assignee rule); canStatus = Status only, which a collaborator may also change (#670).
+  const { canWork, canStatus } = leadWorkGates({ isAdmin: p.isAdmin, leadScope: p.leadScope, canEdit: p.canEdit, isEditor: p.isEditor, userId: p.userId, assignedTo: lead.assigned_to });
   const canFields = p.canEdit || p.isEditor;
   const canPickCounsellor = p.isAdmin || p.leadScope === "team" || (p.canAssign && (!lead.assigned_to || p.userId === lead.assigned_to));
 
@@ -240,7 +241,7 @@ export function LeftColumn(p: LeftColumnProps) {
       </div>
 
       <StageCard
-        model={model} statuses={statuses} statusId={lead.stage_id} canChangeStatus={canWork && !isOther}
+        model={model} statuses={statuses} statusId={lead.stage_id} canChangeStatus={canStatus && !isOther}
         onStatus={(s) => void p.actions.patchLead(
           { stage_id: s.id, ...(s.pipeline_id && s.pipeline_id !== lead.pipeline_id ? { pipeline_id: s.pipeline_id } : {}) },
           "status", { status: s.slug },
