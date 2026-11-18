@@ -14,7 +14,7 @@ import { formatIntake, pickTestScore } from "../record-preview/lib/study-plan";
 import { Picker, type PickerOption } from "./picker";
 import type { Person } from "./use-lead-actions";
 import { Pill } from "./ui";
-import { collaboratorControls, visibleCollaborators, type Collaborator } from "./lib/details-model";
+import { canRemoveCollaborator, collaboratorControls, visibleCollaborators, type Collaborator } from "./lib/details-model";
 
 
 const personName = (m: Person) => m.name || m.email.split("@")[0];
@@ -31,6 +31,8 @@ interface DetailsProps {
   /** May change the counsellor (today's rule); false shows the lock. */
   canPickCounsellor: boolean;
   isAdmin: boolean;
+  /** Branch manager (team scope): may add / remove collaborators on leads in their branch. */
+  isBranchManager?: boolean;
   counsellorOptions: Person[];
   /** Roster for the collaborator picker (admins only; others never open it). */
   roster: Person[];
@@ -93,8 +95,8 @@ export function InlineText({ value, placeholder, onSave, onDone, type = "text" }
   );
 }
 
-/** Collaborators for one lead: read for everyone (the server returns them), add / remove for owner/admin only. */
-function useCollaborators(leadId: string, canManage: boolean) {
+/** Collaborators for one lead: read for everyone (the server returns them), add / remove for owner/admin and branch managers; anyone may remove themselves. */
+function useCollaborators(leadId: string, canManage: boolean, currentUserId: string) {
   const [list, setList] = useState<Collaborator[]>([]);
   useEffect(() => {
     let cancelled = false;
@@ -121,7 +123,7 @@ function useCollaborators(leadId: string, canManage: boolean) {
   }, [canManage, leadId, list]);
 
   const remove = useCallback(async (c: Collaborator) => {
-    if (!canManage) return;
+    if (!canRemoveCollaborator(c.user_id, currentUserId, canManage)) return;
     const prev = list;
     setList((l) => l.filter((x) => x.user_id !== c.user_id));
     try {
@@ -134,7 +136,7 @@ function useCollaborators(leadId: string, canManage: boolean) {
       setList(prev);
       toast.error(err instanceof Error ? err.message : "Failed to remove collaborator");
     }
-  }, [canManage, leadId, list]);
+  }, [canManage, currentUserId, leadId, list]);
 
   return { list, add, remove };
 }
@@ -144,8 +146,8 @@ export function DetailsList(p: DetailsProps) {
   const { destinations: destOptions, fieldsOfStudy, studyLevels } = useEduTaxonomy();
   const [editing, setEditing] = useState<string | null>(null);
   const [tagOptions, setTagOptions] = useState<string[]>([]);
-  const cc = collaboratorControls(p.isAdmin);
-  const collab = useCollaborators(lead.id, cc.canAdd);
+  const cc = collaboratorControls(p.isAdmin, p.isBranchManager);
+  const collab = useCollaborators(lead.id, cc.canAdd, p.currentUserId);
 
   const assigned = lead.assigned_to;
   const counsellorName = assigned ? (assigned === p.currentUserId ? "You" : p.memberNames[assigned] ?? "Unknown") : null;
@@ -215,7 +217,7 @@ export function DetailsList(p: DetailsProps) {
               lock={cc.lockTooltip ?? undefined}
             >
               {shownCollaborators.length === 0 ? <span className="text-black/50">None</span> : shownCollaborators.map((c) => (
-                <Pill key={c.user_id} avatar={<Avatar initials={initialsOf(c.name)} size={18} />} onRemove={cc.canRemove ? () => void collab.remove(c) : undefined} removeLabel={`Remove ${c.name}`}>{c.name}</Pill>
+                <Pill key={c.user_id} avatar={<Avatar initials={initialsOf(c.name)} size={18} />} onRemove={canRemoveCollaborator(c.user_id, p.currentUserId, cc.canRemove) ? () => void collab.remove(c) : undefined} removeLabel={`Remove ${c.name}`}>{c.name}</Pill>
               ))}
               {cc.canAdd && (
                 <button type="button" aria-label="Add collaborator" title="Add collaborator" onClick={() => setEditing("collaborators")} className="inline-flex size-6 items-center justify-center rounded-[6px] text-[#9a9ea5] opacity-0 outline-none hover:bg-[#eef0f3] hover:text-[#101112] focus-visible:opacity-100 group-hover/row:opacity-100">

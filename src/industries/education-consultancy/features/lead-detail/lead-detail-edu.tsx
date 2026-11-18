@@ -396,6 +396,7 @@ export function LeadDetailEdu(props: LeadDetailEduProps) {
           canUploadDocuments={getFeatureAccess(tenant.industry_id, FEATURES.APPLICANT_DOCUMENTS) && canEdit}
           openInEditMode isAdmin={isAdmin} missingBeforeApplications={missingBeforeApplications}
           onNavKey={(dir) => void goLead(dir)}
+          restrictContactFields={isCollaboratorUser && !isAdmin && userId !== lead.assigned_to}
         />
       )}
 

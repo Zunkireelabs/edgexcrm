@@ -79,7 +79,7 @@ export function LeftColumn(p: LeftColumnProps) {
   const isOther = isOtherLead(lead.tags, "education_consultancy");
   const currentList = [...p.activeLeadLists, ...p.leadLists].find((l) => l.id === lead.list_id) ?? null;
   const isArchived = !!currentList?.is_archive;
-  const canWork = canEditLeadWorkingData({ isAdmin: p.isAdmin, leadScope: p.leadScope, isOwnScopeEditor: p.canEdit && p.userId === lead.assigned_to });
+  const canWork = canEditLeadWorkingData({ isAdmin: p.isAdmin, leadScope: p.leadScope, isOwnScopeEditor: p.canEdit && p.isEditor });
   const canFields = p.canEdit || p.isEditor;
   const canPickCounsellor = p.isAdmin || p.leadScope === "team" || (p.canAssign && (!lead.assigned_to || p.userId === lead.assigned_to));
 
@@ -268,7 +268,7 @@ export function LeftColumn(p: LeftColumnProps) {
       </div>
       <DetailsList
         lead={lead} currentUserId={p.userId} memberNames={p.memberNames} branchName={data?.branch_name ?? null} sourceName={sourceName} intake={data?.intake ?? null}
-        canEdit={canFields} canPickCounsellor={canPickCounsellor} isAdmin={p.isAdmin}
+        canEdit={canFields} canPickCounsellor={canPickCounsellor} isAdmin={p.isAdmin} isBranchManager={p.leadScope === "team"}
         counsellorOptions={p.stageScopedAssignees ?? p.assignableMembers} roster={p.roster}
         onAssign={(id) => void p.actions.changeAssignment(id)} onPatch={p.actions.patchLead} hideStudy={isOther}
       />
