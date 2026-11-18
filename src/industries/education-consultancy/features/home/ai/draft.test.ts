@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDraftPrompt, draftChecks, draftFacts, draftNumbersOk, draftOk, draftSchema, produceDraft, quoteIsInNotes, type DraftRaw } from "./draft";
+import { buildDraftPrompt, draftChecks, draftFacts, draftNumbersOk, draftOk, draftSchema, produceDraft, quoteIsInNotes, sentencesAfterGreeting, type DraftRaw } from "./draft";
 import type { DraftContext } from "../server/draft-context";
 
 const CTX: DraftContext = {
@@ -312,6 +312,13 @@ describe("Q1b: check-ins stop sounding alike", () => {
     expect(draftChecks(mk(three), facts, { rowKind: "going_quiet" }).map((c) => c.check)).toContain("sentences");
     expect(draftChecks(mk("Hi Sita, Rita here. Is your IELTS in December booked yet?"), facts, { rowKind: "going_quiet" })).toEqual([]);
     expect(draftChecks(mk("Hi Sita, Is the IELTS in December booked? Did your father agree on the fee?"), facts, { rowKind: "going_quiet" })).toEqual([]);
+  });
+  it("an intro line is skipped only when it holds the counsellor's name: 'Your offer from Deakin arrived.' counts as a sentence", () => {
+    const text = "Hi Sita, Your offer from Deakin arrived. Is your IELTS booked? Which date is it?";
+    expect(sentencesAfterGreeting(text, "Rita")).toBe(3);
+    expect(draftChecks(mk(text), facts, { rowKind: "going_quiet" }).map((c) => c.check)).toContain("sentences");
+    expect(sentencesAfterGreeting("Hi Sita, Rita from Admizz here. Is your IELTS booked? Which date is it?", "Rita")).toBe(2);
+    expect(sentencesAfterGreeting("Hi Sita, Rita here. Is your IELTS booked?", null)).toBe(2); // no counsellor name known: nothing is skipped
   });
   it("F2: the lead's name is in the greeting once, never again in the message", () => {
     expect(draftChecks(mk("Hi Sita, how are Sita's plans for Australia?"), facts, { rowKind: "going_quiet" }).map((c) => c.check)).toContain("name_repeat");

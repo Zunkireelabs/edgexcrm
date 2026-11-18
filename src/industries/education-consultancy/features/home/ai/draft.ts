@@ -142,6 +142,7 @@ const STOCK_OPENINGS: RegExp[] = [
 ];
 
 /** The lead's first name, as the facts give it. */
+const counsellorNameOf = (facts: string[]) => facts.find((f) => f.startsWith("Counsellor first name: "))?.slice("Counsellor first name: ".length).trim() || null;
 const leadNameOf = (facts: string[]) => facts.find((f) => f.startsWith("Lead first name: "))?.slice("Lead first name: ".length).trim() || null;
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 /** How many times `name` appears as a word (so "Kristi's" counts). */
@@ -151,11 +152,14 @@ function nameCount(text: string, name: string): number {
 
 /** A check-in is at most this many sentences after the greeting (and the counsellor's "Kamana here." line). */
 export const CHECK_IN_MAX_SENTENCES = 2;
-/** Sentences in a message after "Hi Name," and a short "<counsellor> here." / "<counsellor> from <company>." introduction. */
-export function sentencesAfterGreeting(text: string): number {
+/**
+ * Sentences in a message after "Hi Name," and a short introduction line. The intro line is skipped ONLY when it holds the counsellor's own
+ * first name ("Rita here." / "Rita from Admizz."): "Your offer from Deakin arrived." is a real sentence and counts. No counsellor name in the facts = nothing is skipped.
+ */
+export function sentencesAfterGreeting(text: string, counsellorFirstName: string | null = null): number {
   let t = text.trim().replace(/^(?:hi|hello|hey|namaste|dear)\s+[^,!.\n]{1,40}[,!.]?\s*/i, "");
-  const intro = /^[^.!?\n]{1,50}\b(?:here|from \w+)\b[^.!?\n]{0,20}[.!]\s*/i.exec(t);
-  if (intro) t = t.slice(intro[0].length);
+  const intro = counsellorFirstName ? /^[^.!?\n]{1,50}\b(?:here|from \w+)\b[^.!?\n]{0,20}[.!]\s*/i.exec(t) : null;
+  if (intro && nameCount(intro[0], counsellorFirstName as string) > 0) t = t.slice(intro[0].length);
   return t.split(/[.!?]+(?:\s+|$)/).filter((x) => x.trim().length > 0).length;
 }
 
@@ -197,7 +201,8 @@ export function draftChecks(raw: DraftRaw, facts: string[], opts: DraftCheckOpts
   if (lead && nameCount(raw.text, lead) > 1) out.push({ check: "name_repeat", fix: `you are writing to ${lead}: use ${lead} only in the greeting, then say "you" and "your", never ${lead}'s or ${lead} again` });
   if (opts.rowKind === "going_quiet") {
     if (raw.text.length > CHECK_IN_MAX_CHARS) out.push({ check: "length", fix: `it is too long (${raw.text.length} characters): at most 2 short sentences, under 280 characters` });
-    if (sentencesAfterGreeting(raw.text) > CHECK_IN_MAX_SENTENCES) out.push({ check: "sentences", fix: `it has ${sentencesAfterGreeting(raw.text)} sentences after the greeting: write at most 2, the second a single question that names the one fact from the note` });
+    const nSentences = sentencesAfterGreeting(raw.text, counsellorNameOf(facts));
+    if (nSentences > CHECK_IN_MAX_SENTENCES) out.push({ check: "sentences", fix: `it has ${nSentences} sentences after the greeting: write at most 2, the second a single question that names the one fact from the note` });
     if (STOCK_CLOSINGS.some((re) => re.test(raw.text))) out.push({ check: "stock_closing", fix: "do not end with a stock line like 'just reply here', 'happy to help' or 'if you have any questions': end with one concrete question about something specific to this person" });
   }
   if (hasGenderedPronoun(texts)) out.push({ check: "pronoun", fix: "do not use he, she, his, her or him anywhere, including the reason and the task: use the person's name instead" });
