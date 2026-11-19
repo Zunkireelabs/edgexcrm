@@ -2,12 +2,13 @@
 // Processes events of type 'inbox.inbound_received' from the events queue:
 //   1. Idempotent message insert (partial-unique ON CONFLICT DO NOTHING)
 //   2. find-or-create conversation (channel_id, external_contact_id)
-//   3. Decision D: phone auto-link via normalizePhone (single match only, tenant-scoped)
+//   3. Decision D: phone auto-link via normalizePhone, then (web chat) email auto-link via
+//      normalizeEmail — single match only, tenant-scoped, never creates a lead
 //   4. Bump unread_count + last_message_*
 
 import { createServiceClient } from "@/lib/supabase/server";
 import { logger } from "@/lib/logger";
-import { normalizePhone } from "@/lib/leads/dedup";
+import { normalizeEmail, normalizePhone } from "@/lib/leads/dedup";
 import { NotificationTypes, getTenantAdminRecipients, upsertThreadNotification } from "@/lib/notifications";
 import { decryptToken } from "./crypto";
 import { resolveAndStoreAttachments } from "./media";
@@ -19,6 +20,8 @@ interface InboundEventPayload {
   provider: string;
   external_contact_id: string;
   contact_phone: string | null;
+  /** Present for web chat (Chatwoot); absent on events queued before this field existed. */
+  contact_email?: string | null;
   contact_display_name: string | null;
   provider_message_id: string;
   provider_timestamp: string | null;
@@ -168,7 +171,7 @@ async function processOneEvent(
     // against a concurrent manual link or another inbound event harmless (whichever write
     // lands second finds 0 rows and no-ops) rather than silently clobbering a human's choice.
     if (!convLeadId) {
-      const retryLeadId = await resolveLeadByPhone(supabase, p.tenant_id, p.contact_phone);
+      const retryLeadId = await resolveLeadForContact(supabase, p.tenant_id, p.contact_phone, p.contact_email ?? null);
       if (retryLeadId) {
         const { data: linked } = await supabase
           .from("conversations")
@@ -183,7 +186,7 @@ async function processOneEvent(
     }
   } else {
     // Create new conversation; attempt phone-based lead linkage (Decision D)
-    const resolvedLeadId = await resolveLeadByPhone(supabase, p.tenant_id, p.contact_phone);
+    const resolvedLeadId = await resolveLeadForContact(supabase, p.tenant_id, p.contact_phone, p.contact_email ?? null);
 
     const { data: newConv, error: createErr } = await supabase
       .from("conversations")
@@ -194,6 +197,8 @@ async function processOneEvent(
         external_contact_id: p.external_contact_id,
         contact_phone: p.contact_phone ?? null,
         contact_display_name: p.contact_display_name ?? null,
+        // Web chat visitors often give an email, not a phone: keep it on the conversation.
+        ...(p.contact_email ? { meta: { contact_email: p.contact_email } } : {}),
         lead_id: resolvedLeadId,
         unread_count: 0,
         last_message_at: p.provider_timestamp ?? new Date().toISOString(),
@@ -410,4 +415,41 @@ async function resolveLeadByPhone(
 
   if (!matches || matches.length !== 1) return null;
   return (matches[0] as { id: string }).id;
+}
+
+// Web chat: match an incoming email to exactly ONE existing lead via the generated
+// normalized_email column (same column lib/leads/dedup.ts resolves on).
+// 0 or >1 matches → null. Never auto-creates a lead.
+async function resolveLeadByEmail(
+  supabase: Awaited<ReturnType<typeof createServiceClient>>,
+  tenantId: string,
+  rawEmail: string | null
+): Promise<string | null> {
+  const normalized = normalizeEmail(rawEmail);
+  if (!normalized) return null;
+
+  const { data: matches } = await supabase
+    .from("leads")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .is("deleted_at", null)
+    .eq("is_final", true)
+    .eq("normalized_email", normalized);
+
+  if (!matches || matches.length !== 1) return null;
+  return (matches[0] as { id: string }).id;
+}
+
+// Phone first (existing behaviour, unchanged); email only when the phone gave no single
+// match AND the provider supplied an email, so WhatsApp traffic issues no extra query.
+async function resolveLeadForContact(
+  supabase: Awaited<ReturnType<typeof createServiceClient>>,
+  tenantId: string,
+  rawPhone: string | null,
+  rawEmail: string | null
+): Promise<string | null> {
+  const byPhone = await resolveLeadByPhone(supabase, tenantId, rawPhone);
+  if (byPhone) return byPhone;
+  if (!rawEmail) return null;
+  return resolveLeadByEmail(supabase, tenantId, rawEmail);
 }

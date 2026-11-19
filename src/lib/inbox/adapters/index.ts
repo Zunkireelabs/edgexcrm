@@ -3,12 +3,14 @@ import { sandboxAdapter } from "./sandbox";
 import { whatsappAdapter } from "./whatsapp";
 import { messengerAdapter } from "./messenger";
 import { instagramAdapter } from "./instagram";
+import { chatwootAdapter } from "./chatwoot";
 
 const registry: Record<InboxProvider, ChannelAdapter> = {
   sandbox: sandboxAdapter,
   whatsapp: whatsappAdapter,
   messenger: messengerAdapter,
   instagram: instagramAdapter,
+  chatwoot: chatwootAdapter,
   // 'email' is reserved in the provider enum but not routed through this adapter system
   email: sandboxAdapter, // placeholder — never called for email
 };

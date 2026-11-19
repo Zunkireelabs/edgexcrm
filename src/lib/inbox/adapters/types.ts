@@ -1,7 +1,7 @@
 // Channel adapter contract — every provider implements this interface.
 // The send/receive code never branches on provider name; it reads capability flags instead.
 
-export type InboxProvider = 'whatsapp' | 'messenger' | 'instagram' | 'sandbox' | 'email';
+export type InboxProvider = 'whatsapp' | 'messenger' | 'instagram' | 'sandbox' | 'email' | 'chatwoot';
 
 export interface ChannelCapabilities {
   /** Hours the session window stays open after last customer message (24 for WhatsApp) */
@@ -57,6 +57,8 @@ export interface NormalizedInbound {
   contactPhone: string | null;
   /** Display name from provider (may be absent) */
   contactDisplayName: string | null;
+  /** Email the visitor gave, when the provider has one (web chat). Optional so existing adapters are unchanged. */
+  contactEmail?: string | null;
   /** External message ID for idempotency */
   providerMessageId: string;
   /** ISO timestamp from provider (may be absent) */
