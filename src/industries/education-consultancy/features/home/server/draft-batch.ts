@@ -106,7 +106,7 @@ export async function draftOneForBatch(p: {
     const produced = await produceDraft({ channel, tone: "new", kind: DRAFT_REASONS[entry.kind], rowKind: entry.kind, allowSkip: true, facts: factLines, previous: null, todayLabel: `${WEEKDAY[new Date(`${today}T00:00:00Z`).getUTCDay()]} ${today}` });
     for (const usage of produced.usages) await recordHomeUsage(db, { surface: "home_batch", kind: "fast", userId: auth.userId, runId: crypto.randomUUID(), usage }).catch(() => {});
     // P2: which check tripped, by name only (no text), at warn so dev shows it; a first-try pass logs nothing.
-    if (produced.failed.some((f) => f.length)) logger.warn({ rowKind: entry.kind, attempts: produced.failed, shown: !!produced.raw }, "home batch draft checks failed");
+    if (produced.failed.some((f) => f.length)) logger.warn({ rowKind: entry.kind, attempts: produced.failed, shown: !!produced.raw, styleFlags: produced.styleFlags }, produced.styleFlags ? "home batch draft shown_with_style_flags" : "home batch draft checks failed");
     const raw = produced.raw;
     if (!raw) return { ...card, draft: null };
     if (raw.skip) {

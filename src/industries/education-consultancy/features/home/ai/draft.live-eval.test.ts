@@ -41,6 +41,10 @@ const SETS: Array<{ name: string; c: DraftContext; expectSkip: boolean }> = [
   { name: "real-shaped: Kristi plans", expectSkip: false, c: ctx("Kristi", { lead: { ...dest(["Australia"], { fieldOfStudy: "Nursing" }), firstName: "Kristi", fullName: "Kristi Test" }, notes: [note("Kristi is thinking about Australia for nursing. She said her family will decide after the results.", 12)] }) },
   { name: "real-shaped: Abhishek family", expectSkip: false, c: ctx("Abhishek", { lead: { ...dest(["Canada"]), firstName: "Abhishek", fullName: "Abhishek Test" }, notes: [note("Abhishek is discussing with his family about going to Canada. Father is worried about the cost.", 9)] }) },
   { name: "real-shaped: Nisha typo", expectSkip: true, c: ctx("Nisha", { lead: { ...dest(["Australia"]), firstName: "Nisha", fullName: "Nisha Test" }, notes: [note("Nisha doesnoyt have any plans regarding abroad.", 33)] }) },
+  // B10: THIN real-shaped sets: one fact (what the lead is interested in) plus unanswered calls, no counsellor notes.
+  { name: "thin: UK engineering", expectSkip: false, c: ctx("Sushil", { lead: { ...dest(["UK"], { fieldOfStudy: "Engineering" }), firstName: "Sushil", fullName: "Sushil Test" }, lastCall: { at: new Date(NOW.getTime() - 4 * 86_400_000).toISOString(), outcome: "no_answer" }, notes: [] }) },
+  { name: "thin: USA", expectSkip: false, c: ctx("Parash", { lead: { ...dest(["USA"]), firstName: "Parash", fullName: "Parash Test" }, lastCall: { at: new Date(NOW.getTime() - 4 * 86_400_000).toISOString(), outcome: "no_answer" }, notes: [] }) },
+  { name: "thin: Australia", expectSkip: false, c: ctx("Rajan", { lead: { ...dest(["Australia"], { fieldOfStudy: "Business" }), firstName: "Rajan", fullName: "Rajan Test" }, lastCall: { at: new Date(NOW.getTime() - 4 * 86_400_000).toISOString(), outcome: "no_answer" }, notes: [] }) },
 ];
 
 describe.skipIf(!process.env.RUN_LIVE_DRAFT_EVAL)("Q1(c) live first-try pass rate", () => {
@@ -59,7 +63,7 @@ describe.skipIf(!process.env.RUN_LIVE_DRAFT_EVAL)("Q1(c) live first-try pass rat
           return r;
         };
         const p = await produceDraft({ channel: "whatsapp", tone: "new", kind: "the lead has gone quiet since the last contact and the counsellor is checking in", rowKind: "going_quiet", allowSkip: true, facts, previous: null, todayLabel: "Tuesday 2026-11-10" }, write);
-        return { text: p.raw?.skip ? "" : (p.raw?.text ?? ""), name: s.name, expectSkip: s.expectSkip, firstOk: p.failed[0]?.length === 0, finalOk: p.raw !== null, skipped: !!p.raw?.skip, firstSkipped: attempts[0]?.includes(":: SKIP"), attempts };
+        return { styleFlags: p.styleFlags, text: p.raw?.skip ? "" : (p.raw?.text ?? ""), name: s.name, expectSkip: s.expectSkip, firstOk: p.failed[0]?.length === 0, finalOk: p.raw !== null, skipped: !!p.raw?.skip, firstSkipped: attempts[0]?.includes(":: SKIP"), attempts };
       }),
     );
     const n = rows.length;
@@ -74,9 +78,11 @@ describe.skipIf(!process.env.RUN_LIVE_DRAFT_EVAL)("Q1(c) live first-try pass rat
       const k = afterGreeting(r.text, IN.counsellorFirstName).toLowerCase().split(/\s+/).slice(0, 6).join(" ");
       starts.set(k, [...(starts.get(k) ?? []), r.name]);
     }
+    const flagged = rows.filter((r) => r.styleFlags?.length);
+    const thin = rows.filter((r) => r.name.startsWith("thin:")).map((r) => `THIN FINAL ${r.name}: ${r.finalOk ? r.text : "EMPTY"}${r.styleFlags?.length ? ` [style flags: ${r.styleFlags.join(",")}]` : ""}`);
     const alike = [...starts].filter(([, v]) => v.length > 1).map(([k, v]) => `WARNING: ${v.length} cards start "${k}": ${v.join(", ")}`);
-    console.log(alike.join("\n") + (alike.length ? "\n" : "") +
-      `FIRST-TRY CHECK PASS: ${first}/${n} (${Math.round((first / n) * 100)}%)  FINAL AFTER RETRY: ${final}/${n} (${Math.round((final / n) * 100)}%)  EMPTY CARDS: ${empty}  SKIP DECISION RIGHT: ${skipRight}/${n}\n` +
+    console.log(alike.join("\n") + (alike.length ? "\n" : "") + thin.join("\n") + `\nSHOWN WITH STYLE FLAGS: ${flagged.length}\n` +
+      `FIRST-TRY CHECK PASS: ${first}/${n} (${Math.round((first / n) * 100)}%)  FINAL AFTER RETRY: ${final}/${n} (${Math.round((final / n) * 100)}%)  EMPTY CARDS: ${empty} (of ${n})  SKIP DECISION RIGHT: ${skipRight}/${n}\n` +
         rows.filter((r) => !r.firstOk || !r.finalOk).map((r) => `${r.name} (expectSkip=${r.expectSkip}, final ${r.finalOk ? "ok" : "EMPTY"})\n  ` + r.attempts.join("\n  ")).join("\n"),
     );
     expect(rows).toHaveLength(SETS.length);

@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
     }, writeDraft);
     for (const usage of produced.usages) await recordHomeUsage(db, { surface: "home_draft", kind: "fast", userId: auth.userId, runId: crypto.randomUUID(), usage }).catch(() => {});
     // C1: which check tripped, by name only (no text), so we can see what the model keeps getting wrong.
-    if (produced.failed.some((f) => f.length)) logger.warn({ rowKind: kind, attempts: produced.failed, shown: !!produced.raw }, "home draft checks failed");
+    if (produced.failed.some((f) => f.length)) logger.warn({ rowKind: kind, attempts: produced.failed, shown: !!produced.raw, styleFlags: produced.styleFlags }, produced.styleFlags ? "home draft shown_with_style_flags" : "home draft checks failed");
     const raw = produced.raw;
     if (!raw) return apiSuccess({ ai: true, ...base, draft: null });
 

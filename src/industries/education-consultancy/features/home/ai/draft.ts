@@ -149,7 +149,7 @@ const STOCK_OPENINGS: RegExp[] = [
 ];
 
 /** B9: the template the B8 examples created ("expressed interest in studying in X: have you made any decisions about your applications?"). Refused for check-ins, with the exact phrase in the retry. */
-const STOCK_QUIET: RegExp[] = [/\bany plans or decisions\b/i, /\bexpressed (?:an )?interest\b/i, /\byou were interested in\b/i];
+const STOCK_QUIET: RegExp[] = [/\bany plans or decisions\b/i];
 
 /** The lead's first name, as the facts give it. */
 const counsellorNameOf = (facts: string[]) => facts.find((f) => f.startsWith("Counsellor first name: "))?.slice("Counsellor first name: ".length).trim() || null;
@@ -285,7 +285,12 @@ export interface ProducedDraft {
   usages: Array<{ inputTokens?: number; outputTokens?: number }>;
   /** Names of the checks that failed on each attempt (no text), for the server log. */
   failed: string[][];
+  /** B10: set when the shown draft still fails STYLE checks only (the last attempt was kept rather than emptying the card). Log it as shown_with_style_flags. */
+  styleFlags?: string[];
 }
+
+/** B10: style checks never empty a card: after the one retry the last attempt is SHOWN. Everything else (number, time_word, pronoun, skip_*, empty) is safety and blocks. */
+const STYLE_CHECKS: ReadonlySet<CheckFailure["check"]> = new Set<CheckFailure["check"]>(["stock_opening", "stock_closing", "sentences", "length", "name_repeat"]);
 
 /**
  * C1: write a draft, and when a check fails retry ONCE telling the model exactly what was wrong. Only a second failure (or a provider
@@ -306,12 +311,17 @@ export async function produceDraft(p: WriteDraftInput, write: typeof writeDraft 
         return out;
       }
       fix = fails.map((f) => f.fix);
-      if (attempt === 1 && fails.every((f) => f.check === "pronoun") && !raw.skip) {
+      if (attempt === 1 && !raw.skip) {
+        // Last attempt: repair a pronoun that is only in the why / task, then show it if only STYLE checks remain.
+        const opts = { rowKind: p.rowKind, allowSkip: p.allowSkip };
         const lead = leadNameOf(p.facts);
-        for (const mode of ["clause", "name"] as const) {
-          const patched = repairPronounInWhy(raw, lead, mode);
-          if (patched && draftChecks(patched, p.facts, { rowKind: p.rowKind, allowSkip: p.allowSkip }).length === 0) {
-            out.raw = patched;
+        const candidates = fails.some((f) => f.check === "pronoun") ? (["clause", "name"] as const).map((m) => repairPronounInWhy(raw, lead, m)) : [raw];
+        for (const c of candidates) {
+          if (!c) continue;
+          const left = draftChecks(c, p.facts, opts);
+          if (left.every((f) => STYLE_CHECKS.has(f.check))) {
+            out.raw = c;
+            if (left.length) out.styleFlags = left.map((f) => f.check);
             break;
           }
         }

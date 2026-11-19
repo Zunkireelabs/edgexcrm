@@ -345,17 +345,33 @@ describe("Q1b: check-ins stop sounding alike", () => {
     expect(r.raw?.why).toBe("Sita is considering the UK.");
     expect(repairPronounInWhy({ ...bad, text: "Hi Sita, she is there." }, "Sita")).toBeNull();
   });
-  it("B9: the new shared template phrases are refused for a check-in, naming the phrase; the prompt bans inventing applications", () => {
-    for (const t of ["Hi Sita, Rita here. You expressed interest in the UK: have you made any decisions yet?", "Hi Sita, Rita here. You were interested in Australia. Which course?", "Hi Sita, Rita here. Any plans or decisions about the UK?"]) {
-      const f = draftChecks(mk(t), facts, { rowKind: "going_quiet" }).filter((c) => c.check === "stock_opening");
-      expect(f.length).toBe(1);
-      expect(f[0].fix).toMatch(/do not write '/);
-    }
-    // too broad, removed: a specific question with "any updates" is fine
+  it("B9/B10: 'any plans or decisions' is refused for a check-in, naming the phrase; the prompt bans inventing applications", () => {
+    const f = draftChecks(mk("Hi Sita, Rita here. Any plans or decisions about the UK?"), facts, { rowKind: "going_quiet" }).filter((c) => c.check === "stock_opening");
+    expect(f.length).toBe(1);
+    expect(f[0].fix).toMatch(/do not write '/);
+    expect(draftChecks(mk("Hi Sita, Rita here. Any plans or decisions about the UK?"), facts, { rowKind: "reply_waiting" }).map((c) => c.check)).not.toContain("stock_opening");
+    // B10: the natural opener is fine again, and "any updates" in a specific question too
+    expect(draftChecks(mk("Hi Sita, Rita here. You were interested in studying in the UK: which course are you thinking of?"), facts, { rowKind: "going_quiet" })).toEqual([]);
+    expect(draftChecks(mk("Hi Sita, Rita here. You expressed interest in the UK: which course are you thinking of?"), facts, { rowKind: "going_quiet" })).toEqual([]);
     expect(draftChecks(mk("Hi Sita, Rita here. Has your father shared any updates on the cost yet?"), facts, { rowKind: "going_quiet" }).map((c) => c.check)).not.toContain("stock_opening");
     expect(draftChecks(mk("Hi Sita, Rita here. I know you are nervous about the interview. Which day is it?"), facts, { rowKind: "going_quiet" }).map((c) => c.check)).toContain("stock_opening");
     const { system } = buildDraftPrompt({ channel: "whatsapp", tone: "new", kind: "x", rowKind: "going_quiet", facts, previous: null, todayLabel: "t" });
     expect(system).toContain("Never mention applications, documents, fees or a visa unless a fact says the lead has one");
+  });
+  it("B10: a draft that fails only STYLE checks on both attempts is SHOWN with style flags, never emptied", async () => {
+    const styled: DraftRaw = mk("Hi Sita, Rita here. I wanted to ask which course you like. Do you have a date? Is it booked?");
+    const r = await produceDraft({ channel: "whatsapp", tone: "new", kind: "x", rowKind: "going_quiet", facts, previous: null, todayLabel: "t" }, (async () => ({ raw: styled, usage: {} })) as never);
+    expect(r.raw).toBe(styled);
+    expect(r.styleFlags).toEqual(expect.arrayContaining(["stock_opening"]));
+    expect(r.failed).toHaveLength(2);
+  });
+  it("B10: a SAFETY failure (time word, number, pronoun in the text, skip quote) still returns null", async () => {
+    for (const text of ["Hi Sita, Rita here. I called yesterday: did you get my message?", "Hi Sita, Rita here. Your fee is 9999: is it paid?", "Hi Sita, Rita here. Is her IELTS booked?"]) {
+      const r = await produceDraft({ channel: "whatsapp", tone: "new", kind: "x", rowKind: "going_quiet", facts, previous: null, todayLabel: "t" }, (async () => ({ raw: mk(text), usage: {} })) as never);
+      expect(r.raw).toBeNull();
+    }
+    const bad: DraftRaw = { skip: { reason: "No plans", quote: "words that are in no note" }, text: "", subject: null, why: "", followUp: { title: "", inDays: 1 } };
+    expect((await produceDraft({ channel: "whatsapp", tone: "new", kind: "x", rowKind: "going_quiet", allowSkip: true, facts, previous: null, todayLabel: "t" }, (async () => ({ raw: bad, usage: {} })) as never)).raw).toBeNull();
   });
   it("B9: a pronoun in the task (and the why) after the retry is repaired; if the clause drop still fails, the name swap is used", async () => {
     const bad: DraftRaw = { ...mk("Hi Sita, Rita here. Your IELTS is in December: is it booked yet?"), why: "Sita's IELTS is in December, and her coaching class starts Monday.", followUp: { title: "Check on her coaching class", inDays: 3 } };
