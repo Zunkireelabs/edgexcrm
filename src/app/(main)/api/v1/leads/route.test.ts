@@ -595,6 +595,45 @@ describe("GET /api/v1/leads — sort/count/list/funnel/recycle-bin (LEADS-SERVER
     ]);
   });
 
+  // Column-header sorts (Nov 2026): each is a plain stored column allow-listed in the field registry; blanks sort last.
+  it.each([
+    ["phone", ["phone"]],
+    ["ref_code", ["ref_code"]],
+    ["location", ["country", "city"]],
+    ["source", ["intake_source"]],
+    ["intake_medium", ["intake_medium"]],
+    ["archived_at", ["archived_at"]],
+  ])("?sort=%s orders by %j with blanks last, then id", async (sortKey, columns) => {
+    const calls: Call[] = [];
+    getFeatureAccessMock.mockReturnValue(false);
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: calls }));
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ sort: sortKey, order: "asc" }));
+    expect(res.status).toBe(200);
+    expect(calls.filter(([m]) => m === "order")).toEqual([
+      ...columns.map((c) => ["order", [c, { ascending: true, nullsFirst: false }]]),
+      // The tiebreaker is always id DESC, whatever the sort direction (see route.ts).
+      ["order", ["id", { ascending: false }]],
+    ]);
+  });
+
+  it("descending still puts blanks last for a header-sorted column", async () => {
+    const calls: Call[] = [];
+    getFeatureAccessMock.mockReturnValue(false);
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: calls }));
+    const { GET } = await import("./route");
+    await GET(fakeReq({ sort: "phone", order: "desc" }));
+    expect(calls.filter(([m]) => m === "order")[0]).toEqual(["order", ["phone", { ascending: false, nullsFirst: false }]]);
+  });
+
+  it.each(["assigned_to", "stage_id", "tags", "branch_id", "not_a_column"])("?sort=%s (not allow-listed) is a clean 422", async (sortKey) => {
+    getFeatureAccessMock.mockReturnValue(false);
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ sort: sortKey }));
+    expect(res.status).toBe(422);
+  });
+
   it("?count=0 skips the exact count and returns the -1 sentinel, never a false 0", async () => {
     getFeatureAccessMock.mockReturnValue(false);
     createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
