@@ -66,10 +66,12 @@ export function validatePoints(raw: RawReadPoint[], facts: Fact[]): ReadPoint[] 
     const cited = p.factIds.map((id) => byId.get(id)).filter((f): f is Fact => !!f);
     if (cited.length === 0 || cited.length !== p.factIds.length) continue;
     if (![...numbersIn(p.claim), ...numbersIn(p.reason)].every((n) => known.has(n))) continue;
+    // B9: filler words are refused outright (the server retries once with the exact word first; here it is the last line of defence).
+    if (fillerFlaws(p.claim, p.reason).length > 0) continue;
     // S6: the label counts only ITEM facts (real leads/rows). A per-kind count is context, never a thing to open: it is not counted
     // and not chosen for the link while an item fact is cited.
     // F4(a): a point built only from rows Home already shows below the card, with no number those rows don't carry, repeats them.
-    if (repeatsRows(p, cited)) continue;
+    if (repeatsRows(p, cited, facts)) continue;
     // F4(b): a claim of absence ("not contacted any", "no calls") must be backed by the facts it cites.
     if (absenceFlaw(p, cited)) continue;
     const linked = cited.filter((f) => f.href);
@@ -84,18 +86,34 @@ export function validatePoints(raw: RawReadPoint[], facts: Fact[]): ReadPoint[] 
   return out;
 }
 
-/** Facts that are rows Home shows right below the card (Needs you, Needs a look, Do next): a point about only these repeats them. */
-const isRowFact = (f: Fact) => /^(?:need|look|item):/.test(f.id) && f.id !== "look:others";
+/**
+ * Facts Home itself renders: the rows right below the card (Needs you, Needs a look, Do next) and the "Your last 7 days" side card
+ * (calls made + usual, first-hour rate, moved forward: `week:*`). Per-kind counts (`kind:*`), "N others are on track" and Pulse's
+ * impact numbers are NOT shown as such. (The Today card has no fact id: counsellorFacts never hands the model its entries.)
+ */
+const isShownFact = (f: Fact) => (/^(?:need|look|item):/.test(f.id) && f.id !== "look:others") || f.id.startsWith("week:");
 
 /**
- * F4(a): true when every cited fact is a row Home already shows and the point holds no number that those rows don't show.
- * Numbers are checked against the facts as a whole already, so a number outside the cited rows is what a comparison or a
- * deadline brings; without one the point only restates the row.
+ * F4(a) + B9: a point repeats Home unless it holds at least ONE number that (a) no fact Home already shows carries and (b) a fact
+ * the point cites does carry (a comparison with a real second number, a count across rows that is itself a fact). Citing an extra
+ * non-row fact, or saying "usual" without a number, is not enough. A point with no number at all adds nothing measurable: dropped.
+ * `all` is every fact the model was given (for the side-card numbers); without it only the cited facts are compared.
  */
-export function repeatsRows(p: Pick<RawReadPoint, "claim" | "reason">, cited: Fact[]): boolean {
-  if (cited.length === 0 || !cited.every(isRowFact)) return false;
-  const shown = new Set(cited.flatMap((f) => numbersIn(f.text)));
-  return [...numbersIn(p.claim), ...numbersIn(p.reason)].every((n) => shown.has(n));
+export function repeatsRows(p: Pick<RawReadPoint, "claim" | "reason">, cited: Fact[], all: Fact[] = cited): boolean {
+  if (cited.length === 0) return false;
+  // Shown = the cited rows plus the whole side card (it is on screen whatever the point cites).
+  const shown = new Set([...cited.filter(isShownFact), ...all.filter((f) => f.id.startsWith("week:"))].flatMap((f) => numbersIn(f.text)));
+  const fromCitedOthers = new Set(cited.filter((f) => !isShownFact(f)).flatMap((f) => numbersIn(f.text)));
+  return ![...numbersIn(p.claim), ...numbersIn(p.reason)].some((n) => !shown.has(n) && fromCitedOthers.has(n));
+}
+
+/**
+ * B9: filler the model keeps writing with no number behind it ("indicating a significant drop", "unusual compared to the usual").
+ * Returns the exact words found, so a retry can name them. Empty = fine.
+ */
+const FILLER = /\b(?:indicating|suggesting|suggests|significantly|significant|concerning|engagement|outreach efforts|outreach activity|unusual compared|compared to the usual activity|limited|notable|noteworthy)\b/gi;
+export function fillerFlaws(...texts: string[]): string[] {
+  return [...new Set(texts.flatMap((t) => [...t.matchAll(FILLER)].map((m) => m[0].toLowerCase())))];
 }
 
 const ABSENCE = /\b(?:not|never|hasn't|haven't|didn't|hasn\u2019t|haven\u2019t|didn\u2019t)\b[^.]{0,40}\bany\b|\bno (?:calls?|leads?|contacts?|activity|follow-?ups?|messages?|emails?)\b|\bnone\b|\bzero\b|\b0 (?:calls?|leads?|contacts?|follow)/i;

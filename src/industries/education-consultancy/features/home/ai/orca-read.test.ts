@@ -38,6 +38,12 @@ describe("Q10 / Q11: the read prompt", () => {
     for (const w of ["indicating", "suggesting", "significant", "urgent"]) expect(system).toContain(`'${w}'`);
     expect(system).toContain("Never work out a number of days yourself");
   });
+  it("B9: two good examples, one bad example marked as what not to write, and the wider filler list", () => {
+    expect(system).toContain("GOOD (adds something)");
+    expect(system).toContain("BAD, never write this");
+    expect(system).toContain("indicating a significant drop in outreach activity");
+    for (const w of ["outreach efforts", "limited", "notable", "noteworthy"]) expect(system).toContain(`'${w}'`);
+  });
   it("counts: the plural rule is in the prompt, and a rejected attempt is told exactly what was wrong", () => {
     expect(system).toContain("never '1 leads'");
     expect(buildReadPrompt("me", [], "t", ["wrong count words: '1 leads'"]).system).toContain("Your previous attempt was rejected: wrong count words: '1 leads'");

@@ -345,6 +345,16 @@ describe("Q1b: check-ins stop sounding alike", () => {
     expect(r.raw?.why).toBe("Sita is considering the UK.");
     expect(repairPronounInWhy({ ...bad, text: "Hi Sita, she is there." }, "Sita")).toBeNull();
   });
+  it("B9: the new shared template phrases are refused for a check-in, naming the phrase; the prompt bans inventing applications", () => {
+    for (const t of ["Hi Sita, Rita here. You expressed interest in the UK: have you made any decisions yet?", "Hi Sita, Rita here. Any updates on the UK?", "Hi Sita, Rita here. You were interested in Australia. Which course?", "Hi Sita, Rita here. Any plans or decisions about the UK?"]) {
+      const f = draftChecks(mk(t), facts, { rowKind: "going_quiet" }).filter((c) => c.check === "stock_opening");
+      expect(f.length).toBe(1);
+      expect(f[0].fix).toMatch(/do not write '/);
+    }
+    expect(draftChecks(mk("Hi Sita, Rita here. Any updates on the UK?"), facts, { rowKind: "reply_waiting" }).map((c) => c.check)).not.toContain("stock_opening");
+    const { system } = buildDraftPrompt({ channel: "whatsapp", tone: "new", kind: "x", rowKind: "going_quiet", facts, previous: null, todayLabel: "t" });
+    expect(system).toContain("Never mention applications, documents, fees or a visa unless a fact says the lead has one");
+  });
   it("B8: the prompt shows three good examples and says never start with I", () => {
     const { system } = buildDraftPrompt({ channel: "whatsapp", tone: "new", kind: "x", rowKind: "going_quiet", facts, previous: null, todayLabel: "t" });
     expect(system).toContain("Hi Sita, Kamana here. Your +2 results");

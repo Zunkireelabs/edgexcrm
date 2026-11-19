@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { DraftContext } from "../server/draft-context";
-import { draftChecks, draftFacts, produceDraft, writeDraft } from "./draft";
+import { afterGreeting, draftChecks, draftFacts, produceDraft, writeDraft } from "./draft";
 
 /**
  * Q1(c): the FIRST-TRY pass rate of the live model on 23 fixed, invented fact sets whose notes say he / she / his / her (the thing the
@@ -59,7 +59,7 @@ describe.skipIf(!process.env.RUN_LIVE_DRAFT_EVAL)("Q1(c) live first-try pass rat
           return r;
         };
         const p = await produceDraft({ channel: "whatsapp", tone: "new", kind: "the lead has gone quiet since the last contact and the counsellor is checking in", rowKind: "going_quiet", allowSkip: true, facts, previous: null, todayLabel: "Tuesday 2026-11-10" }, write);
-        return { name: s.name, expectSkip: s.expectSkip, firstOk: p.failed[0]?.length === 0, finalOk: p.raw !== null, skipped: !!p.raw?.skip, firstSkipped: attempts[0]?.includes(":: SKIP"), attempts };
+        return { text: p.raw?.skip ? "" : (p.raw?.text ?? ""), name: s.name, expectSkip: s.expectSkip, firstOk: p.failed[0]?.length === 0, finalOk: p.raw !== null, skipped: !!p.raw?.skip, firstSkipped: attempts[0]?.includes(":: SKIP"), attempts };
       }),
     );
     const n = rows.length;
@@ -67,7 +67,15 @@ describe.skipIf(!process.env.RUN_LIVE_DRAFT_EVAL)("Q1(c) live first-try pass rat
     const final = rows.filter((r) => r.finalOk).length;
     const empty = n - final;
     const skipRight = rows.filter((r) => r.finalOk && r.skipped === r.expectSkip).length;
-    console.log(
+    // B9(d): cards that open alike. Warn when 2+ final messages share their first 6 words after the greeting/intro.
+    const starts = new Map<string, string[]>();
+    for (const r of rows) {
+      if (!r.text) continue;
+      const k = afterGreeting(r.text, IN.counsellorFirstName).toLowerCase().split(/\s+/).slice(0, 6).join(" ");
+      starts.set(k, [...(starts.get(k) ?? []), r.name]);
+    }
+    const alike = [...starts].filter(([, v]) => v.length > 1).map(([k, v]) => `WARNING: ${v.length} cards start "${k}": ${v.join(", ")}`);
+    console.log(alike.join("\n") + (alike.length ? "\n" : "") +
       `FIRST-TRY CHECK PASS: ${first}/${n} (${Math.round((first / n) * 100)}%)  FINAL AFTER RETRY: ${final}/${n} (${Math.round((final / n) * 100)}%)  EMPTY CARDS: ${empty}  SKIP DECISION RIGHT: ${skipRight}/${n}\n` +
         rows.filter((r) => !r.firstOk || !r.finalOk).map((r) => `${r.name} (expectSkip=${r.expectSkip}, final ${r.finalOk ? "ok" : "EMPTY"})\n  ` + r.attempts.join("\n  ")).join("\n"),
     );

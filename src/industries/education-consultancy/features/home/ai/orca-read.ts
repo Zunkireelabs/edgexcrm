@@ -16,7 +16,10 @@ export function buildReadPrompt(scope: ReadScope, facts: Fact[], todayLabel: str
     "Get counts right: '1 lead', '2 leads', '1 call', '3 calls'; never '1 leads' or '2 lead'. " +
     "Many facts are rows that Home already shows right below this card. A point about such a row must add what the row cannot show by itself: how it compares with the usual, a deadline, or the one lead to start with and why. " +
     "If a point would only repeat the row (the same count, a vague reason such as 'they have been waiting a long time'), leave it out; a point that only restates a row's own number is dropped by our code. Two strong points are better than one weak one, and one is fine: never fill up to three. " +
-    "The reason is ONE plain sentence of fact. Never use filler such as 'indicating', 'suggesting', 'significant', 'urgent', 'concerning' or 'engagement'. " +
+    "Home also shows a 'Your last 7 days' card (calls made, usual, first-hour rate, moved forward): a point that only repeats those numbers is dropped too. A point must hold a number that neither the rows nor that card show, such as a deadline or a count across rows. " +
+    "GOOD (adds something): \"Start with Mina KC: the Deakin deadline is in 3 days and 2 documents are still missing.\" GOOD: \"4 of your 6 call-backs are overdue: clear them before new leads.\" " +
+    "BAD, never write this: \"There have been 0 calls made in the last 7 days. This is well below the usual count of 33 calls, indicating a significant drop in outreach activity.\" (it repeats the card and uses filler). " +
+    "The reason is ONE plain sentence of fact. Never use filler such as 'indicating', 'suggesting', 'significant', 'urgent', 'concerning', 'engagement', 'outreach efforts', 'limited', 'notable' or 'noteworthy'. " +
     "Say 'has not contacted any leads', 'no calls' or '0' only when a fact says exactly that, with the same number of days. Never work out a number of days yourself. " +
     "If nothing is worth saying, return no points. Plain words, no jargon, no emoji." +
     (fix.length ? ` Your previous attempt was rejected: ${fix.join("; ")}. Write it again without that.` : "");

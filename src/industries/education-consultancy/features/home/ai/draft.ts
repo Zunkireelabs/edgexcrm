@@ -74,10 +74,11 @@ export function buildDraftPrompt(p: { channel: DraftChannel; tone: DraftTone; ki
     "Never say when something happened (yesterday, last week, 'N days ago') unless a fact states that timing; use the timing in the facts exactly. " +
     (p.channel === "whatsapp" ? "Channel: WhatsApp. 2 to 4 short sentences, no subject (subject = null). " : "Channel: email. A subject and a short body. ") +
     `Reason for the message: ${p.kind}. ` +
-    "Every message has this shape: 'Hi <Name>, <Counsellor> here. <the one fact as a plain statement>: <one question naming that fact>?' Good examples: " +
+    "Every message is 'Hi <Name>, <Counsellor> here.' then the one specific fact and one question that names it. Vary the shape from message to message. Good examples: " +
     "\"Hi Sita, Kamana here. Your +2 results come out next month: have you shortlisted nursing colleges in Australia yet?\" " +
     "\"Hi Pooja, Kamana here. Has your college released your transcript for the USA biology applications yet?\" " +
-    "\"Hi Suman, Kamana here. Business analytics or data science: which course outline did you like more?\" " +
+    "\"Hi Suman, Kamana here. You were weighing business analytics against data science. Which course outline did you like more?\" " +
+    "Never mention applications, documents, fees or a visa unless a fact says the lead has one. " +
     "Start the sentence after the greeting with the fact itself, never with I. " +
     "Never open with a stock line: not 'check in', 'checking in', 'wanted to', 'just wanted', 'I remember', 'I hope you', 'hope you're doing well', 'it's been a while', 'it's been some time', 'since we last', 'how is your decision process going'. Go straight to the one specific fact. " +
     (p.rowKind === "going_quiet"
@@ -146,6 +147,9 @@ const STOCK_OPENINGS: RegExp[] = [
   /\bit(?:'|\u2019)?s been (?:a while|some time)\b/i, /\bsince we last\b/i,
 ];
 
+/** B9: the template the B8 examples created ("expressed interest in studying in X: have you made any decisions about your applications?"). Refused for check-ins, with the exact phrase in the retry. */
+const STOCK_QUIET: RegExp[] = [/\bmade any decisions?\b/i, /\bany updates\b/i, /\bany plans or decisions\b/i, /\bexpressed (?:an )?interest\b/i, /\byou were interested in\b/i];
+
 /** The lead's first name, as the facts give it. */
 const counsellorNameOf = (facts: string[]) => facts.find((f) => f.startsWith("Counsellor first name: "))?.slice("Counsellor first name: ".length).trim() || null;
 const leadNameOf = (facts: string[]) => facts.find((f) => f.startsWith("Lead first name: "))?.slice("Lead first name: ".length).trim() || null;
@@ -161,7 +165,7 @@ export const CHECK_IN_MAX_SENTENCES = 2;
  * Sentences in a message after "Hi Name," and a short introduction line. The intro line is skipped ONLY when it holds the counsellor's own
  * first name ("Rita here." / "Rita from Admizz."): "Your offer from Deakin arrived." is a real sentence and counts. No counsellor name in the facts = nothing is skipped.
  */
-function afterGreeting(text: string, counsellorFirstName: string | null): string {
+export function afterGreeting(text: string, counsellorFirstName: string | null): string {
   let t = text.trim().replace(/^(?:hi|hello|hey|namaste|dear)\s+[^,!.\n]{1,40}[,!.]?\s*/i, "");
   const intro = counsellorFirstName ? /^[^.!?\n]{1,50}\b(?:here|from \w+)\b[^.!?\n]{0,20}[.!]\s*/i.exec(t) : null;
   if (intro && nameCount(intro[0], counsellorFirstName as string) > 0) t = t.slice(intro[0].length);
@@ -224,6 +228,8 @@ export function draftChecks(raw: DraftRaw, facts: string[], opts: DraftCheckOpts
   const lead = leadNameOf(facts);
   if (lead && nameCount(raw.text, lead) > 1) out.push({ check: "name_repeat", fix: `you are writing to ${lead}: use ${lead} only in the greeting, then say "you" and "your", never ${lead}'s or ${lead} again` });
   if (opts.rowKind === "going_quiet") {
+    const quiet = STOCK_QUIET.map((re) => re.exec(raw.text)?.[0]).filter((m): m is string => !!m);
+    if (quiet.length) out.push({ check: "stock_opening", fix: `do not write '${quiet.join("', '")}': it is a stock phrase every check-in now shares. Name the one specific fact from the note and ask about it` });
     if (raw.text.length > CHECK_IN_MAX_CHARS) out.push({ check: "length", fix: `it is too long (${raw.text.length} characters): at most 2 short sentences, under 280 characters` });
     const nSentences = sentencesAfterGreeting(raw.text, counsellorNameOf(facts));
     if (nSentences > CHECK_IN_MAX_SENTENCES) out.push({ check: "sentences", fix: `it has ${nSentences} sentences after the greeting: write at most 2, the second a single question that names the one fact from the note` });

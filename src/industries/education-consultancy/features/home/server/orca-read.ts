@@ -5,7 +5,7 @@ import { MODELS, ACTIVE_PROVIDER } from "@/lib/ai/models";
 import type { TenantConfig } from "@/types/database";
 import { homeOverBudget, recordHomeUsage } from "../ai/usage";
 import { writeRead } from "../ai/orca-read";
-import { counsellorFacts, managerFacts, pluralFlaws, validatePoints, type Fact, type ReadPoint, type ReadScope } from "../lib/orca-read";
+import { counsellorFacts, managerFacts, fillerFlaws, pluralFlaws, validatePoints, type Fact, type ReadPoint, type ReadScope } from "../lib/orca-read";
 import { leadsOfPersonHref } from "../../pulse/lib/leads-links";
 import { resolveHomeScope, type HomeScope } from "../lib/scope";
 import { localDate } from "../lib/time";
@@ -65,9 +65,15 @@ export async function makeRead(p: {
       await recordHomeUsage(db, { surface: "home_read", kind: "agent", userId: p.auth.userId, runId, usage: first.usage }).catch(() => {});
       points = validatePoints(first.points, p.facts);
       // Q11: "1 leads" is a wrong count. Retry ONCE telling the model exactly what was wrong (as the drafts do); a point that is still wrong is dropped, never repaired.
+      // B9: banned filler words get the same one retry, naming the exact words (checked on the raw points, since validatePoints drops them).
       const flawed = pluralFlaws(...points.flatMap((x) => [x.claim, x.reason]));
-      if (flawed.length) {
-        const again = await writeRead(p.scope, p.facts, forDate, [`wrong count words: ${flawed.map((f) => `'${f}'`).join(", ")}; write '1 lead', '2 leads', '1 call', '3 calls'`]);
+      const filler = fillerFlaws(...first.points.flatMap((x) => [x.claim, x.reason]));
+      const fix = [
+        ...(flawed.length ? [`wrong count words: ${flawed.map((f) => `'${f}'`).join(", ")}; write '1 lead', '2 leads', '1 call', '3 calls'`] : []),
+        ...(filler.length ? [`banned filler words: ${filler.map((f) => `'${f}'`).join(", ")}; state the plain fact with its number, no 'indicating' or 'significant'`] : []),
+      ];
+      if (fix.length) {
+        const again = await writeRead(p.scope, p.facts, forDate, fix);
         await recordHomeUsage(db, { surface: "home_read", kind: "agent", userId: p.auth.userId, runId, usage: again.usage }).catch(() => {});
         points = validatePoints(again.points, p.facts);
       }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ASK_CHIPS, counsellorFacts, linkWords, managerFacts, madeAtLabel, pluralFlaws, READ_MAX_REFRESHES, refreshesLeft, validatePoints, type Fact } from "./orca-read";
+import { ASK_CHIPS, counsellorFacts, fillerFlaws, linkWords, managerFacts, madeAtLabel, pluralFlaws, READ_MAX_REFRESHES, refreshesLeft, validatePoints, type Fact } from "./orca-read";
 import type { DoNextItem } from "./types";
 import type { NeedsYouRow } from "./needs-you";
 
@@ -11,6 +11,7 @@ const FACTS = [
   F("look:u1", "Asha: 1 vs usual 31 calls, notes and stage moves (On leave · expected)", "/pulse", "Open in Pulse →"),
   // Not a row on Home: a week number. A point that also cites it adds something the rows do not show (F4a).
   F("week:calls", "In the last 7 days, calls: 12", "/home#week", "See why →"),
+  F("kind:overdue", "call-back overdue: 5", "/home#do-next", "Open 5 →"),
 ];
 
 describe("validatePoints: the number check", () => {
@@ -19,7 +20,7 @@ describe("validatePoints: the number check", () => {
     expect(r).toEqual([]);
   });
   it("keeps a point whose numbers are all in the facts", () => {
-    const r = validatePoints([{ claim: "Call Sujan Rai first", reason: "He has waited 38 min", factIds: ["item:a", "week:calls"] }], FACTS);
+    const r = validatePoints([{ claim: "Call Sujan Rai first", reason: "You have 2 new leads uncalled", factIds: ["item:a", "kind:new_uncalled"] }], FACTS);
     expect(r).toHaveLength(1);
     expect(r[0].claim).toBe("Call Sujan Rai first");
   });
@@ -33,7 +34,7 @@ describe("validatePoints: the number check", () => {
     expect(validatePoints([{ claim: "x", reason: "y", factIds: ["item:a", "item:ZZZ"] }], FACTS)).toEqual([]);
   });
   it("keeps at most 3 points", () => {
-    const pts = Array.from({ length: 5 }, (_, i) => ({ claim: `point ${i === 0 ? "" : "x"}`.trim() || "p", reason: "r", factIds: ["item:a", "week:calls"] }));
+    const pts = Array.from({ length: 5 }, (_, i) => ({ claim: `point ${i === 0 ? "" : "x"}`.trim() || "p", reason: "2 are waiting", factIds: ["item:a", "kind:new_uncalled"] }));
     expect(validatePoints(pts, FACTS)).toHaveLength(3);
   });
   it("nothing worth saying gives an empty list (the card does not show)", () => {
@@ -47,8 +48,10 @@ describe("F4: a point must add to the rows Home already shows", () => {
     expect(validatePoints([{ claim: "Sujan Rai is waiting", reason: "A new lead", factIds: ["item:a"] }], FACTS)).toEqual([]);
   });
   it("(a) a point that also cites a non-row fact, or carries a number the row doesn't show, stays", () => {
-    expect(validatePoints([{ claim: "Sujan Rai is waiting", reason: "Your 12 calls this week left no time", factIds: ["item:a", "week:calls"] }], FACTS)).toHaveLength(1);
-    expect(validatePoints([{ claim: "Sujan Rai is waiting", reason: "You made 12 calls", factIds: ["item:a"] }], FACTS)).toHaveLength(1);
+    expect(validatePoints([{ claim: "Sujan Rai is waiting", reason: "You have 2 new leads uncalled", factIds: ["item:a", "kind:new_uncalled"] }], FACTS)).toHaveLength(1);
+    // B9: a number only the side card shows, or no number at all, is not new
+    expect(validatePoints([{ claim: "Sujan Rai is waiting", reason: "Your 12 calls this week left no time", factIds: ["item:a", "week:calls"] }], FACTS)).toEqual([]);
+    expect(validatePoints([{ claim: "Sujan Rai is waiting", reason: "A usual busy day", factIds: ["item:a", "kind:new_uncalled"] }], FACTS)).toEqual([]);
   });
   it("(b) 'not contacted any' is dropped unless a cited fact says none, with the same number", () => {
     const facts = [F("need:k", "Kamana: 1 day since the last call", "/home#need-k"), F("impact:c", "Calls: 0 today, 3 days ago 14", "/home#impact"), F("week:x", "In the last 7 days, calls: 12", "/home#week")];
@@ -57,17 +60,42 @@ describe("F4: a point must add to the rows Home already shows", () => {
   });
 });
 
+describe("B9: filler and repeats of Home", () => {
+  const FACTS9 = [
+    F("item:s", "Sushil Sunar (lead who has not picked up): 3 unanswered calls", "/leads/s"),
+    F("item:p", "Parash Kunwar (lead who has not picked up): 3 unanswered calls", "/leads/p"),
+    F("week:calls", "In the last 7 days, calls made: 0 (usual 33)", "/home#week", "See why →"),
+    F("kind:callback_overdue", "call-back overdue: 4", "/home#do-next", "Open 4 →"),
+  ];
+  it("real failure 1: two rows restated with 'unusual compared to the usual' is dropped", () => {
+    expect(validatePoints([{ claim: "You have 2 leads who have not picked up.", reason: "Sushil Sunar and Parash Kunwar each have 3 unanswered calls, which is unusual compared to the usual activity.", factIds: ["item:s", "item:p", "week:calls"] }], [...FACTS9, F("x", "2 leads", "/h")])).toEqual([]);
+  });
+  it("real failure 2: the 'Your last 7 days' card restated with 'indicating a significant drop' is dropped", () => {
+    expect(validatePoints([{ claim: "There have been 0 calls made in the last 7 days.", reason: "This is well below the usual count of 33 calls, indicating a significant drop in outreach activity.", factIds: ["week:calls"] }], FACTS9)).toEqual([]);
+    // even without the filler words, it only repeats the side card
+    expect(validatePoints([{ claim: "There have been 0 calls made in the last 7 days.", reason: "The usual count is 33 calls.", factIds: ["week:calls"] }], FACTS9)).toEqual([]);
+  });
+  it("a point with a real new number (a count across rows that is itself a fact) is kept", () => {
+    expect(validatePoints([{ claim: "Clear your 4 overdue call-backs first.", reason: "Sushil Sunar has 3 unanswered calls.", factIds: ["kind:callback_overdue", "item:s"] }], FACTS9)).toHaveLength(1);
+  });
+  it("a filler word drops the point, and fillerFlaws names the exact words for the retry", () => {
+    expect(validatePoints([{ claim: "Clear your 4 overdue call-backs first.", reason: "This is a significant backlog.", factIds: ["kind:callback_overdue"] }], FACTS9)).toEqual([]);
+    expect(fillerFlaws("indicating a Significant drop", "outreach activity is limited")).toEqual(["indicating", "significant", "outreach activity", "limited"]);
+    expect(fillerFlaws("Clear your 4 overdue call-backs first.")).toEqual([]);
+  });
+});
+
 describe("validatePoints: links come from ids, never from the model", () => {
   it("the link is the first cited fact's href and label, built by us", () => {
-    const [p] = validatePoints([{ claim: "Call Sujan Rai", reason: "waiting", factIds: ["item:a", "week:calls"] }], FACTS);
+    const [p] = validatePoints([{ claim: "Call Sujan Rai", reason: "2 are waiting", factIds: ["item:a", "kind:new_uncalled"] }], FACTS);
     expect(p.link).toEqual({ href: "/leads/a", label: "Open →" });
   });
   it("several cited rows say so", () => {
-    const [p] = validatePoints([{ claim: "Two people are waiting", reason: "Sujan Rai and Mina KC", factIds: ["item:a", "item:b", "week:calls"] }], FACTS);
+    const [p] = validatePoints([{ claim: "Two people are waiting", reason: "Sujan Rai and Mina KC, with 5 call-backs overdue", factIds: ["item:a", "item:b", "kind:overdue"] }], FACTS);
     expect(p.link).toEqual({ href: "/leads/a", label: "Open first of 2 →" });
   });
   it("a Pulse fact opens Pulse", () => {
-    expect(validatePoints([{ claim: "Asha is away", reason: "On leave", factIds: ["look:u1", "week:calls"] }], FACTS)[0].link).toEqual({ href: "/pulse", label: "Open in Pulse →" });
+    expect(validatePoints([{ claim: "Asha is away", reason: "On leave, 2 uncalled", factIds: ["look:u1", "kind:new_uncalled"] }], FACTS)[0].link).toEqual({ href: "/pulse", label: "Open in Pulse →" });
   });
   it("R2: a point whose cited facts have no link is DROPPED, not shown bare", () => {
     const noLink = [{ id: "x", text: "551 reminders", href: "", linkLabel: "" }];
@@ -177,7 +205,7 @@ describe("S6: the label counts only item facts", () => {
     expect(p.link).toEqual({ href: "/leads/a", label: "Open first of 2 →" });
   });
   it("a point citing only the per-kind fact and ONE lead is that lead's plain label", () => {
-    const [p] = validatePoints([{ claim: "Call Sujan Rai", reason: "38 min", factIds: ["kind:new_uncalled", "item:a"] }], facts);
+    const [p] = validatePoints([{ claim: "Call Sujan Rai", reason: "You have 2 to call", factIds: ["kind:new_uncalled", "item:a"] }], facts);
     expect(p.link).toEqual({ href: "/leads/a", label: "Open →" });
   });
   it("the per-kind text has no filler about rows or lists", () => {
