@@ -120,11 +120,22 @@ describe("POST /api/v1/home/draft", () => {
     expect(facts).toContain("do not sign with a name");
     expect(facts).not.toMatch(/admizzintern/);
   });
-  it("S2/S4: a draft saying 'yesterday' (no fact) or 'her' is refused", async () => {
+  it("S2: a draft saying 'yesterday' (no fact) is refused", async () => {
     writeMock.mockResolvedValue({ ...OK, raw: { ...OK.raw, text: "Hi Sita, I called yesterday." } });
     const { POST } = await import("./route");
     expect((await (await POST(req(BODY))).json()).data.draft).toBeNull();
+  });
+  it("S4/B8: a pronoun left only in the WHY after the retry is repaired, the card is kept", async () => {
     writeMock.mockResolvedValue({ ...OK, raw: { ...OK.raw, why: "Her deadline is close." } });
+    const { POST } = await import("./route");
+    const d = (await (await POST(req(BODY))).json()).data;
+    expect(d.draft).not.toBeNull();
+    expect(d.draft.why).toBe("Sita's deadline is close.");
+    expect(d.draft.why).not.toMatch(/\b(he|she|his|her|hers|him)\b/i);
+  });
+  it("S4/B8: a pronoun in the message TEXT is still refused (never patched)", async () => {
+    writeMock.mockResolvedValue({ ...OK, raw: { ...OK.raw, text: "Hi Sita, is her IELTS booked?" } });
+    const { POST } = await import("./route");
     expect((await (await POST(req(BODY))).json()).data.draft).toBeNull();
   });
 
