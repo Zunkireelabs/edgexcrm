@@ -97,15 +97,22 @@ function isNegative(op: FilterCondition["op"]): boolean {
 
 // True when a condition on an embed-kind field actually needs the join —
 // i.e. must add its relation to .select() and scope its predicate with
-// referencedTable. False for is_empty answered via a denormalized
-// emptyColumn (see the FieldSource doc comment in types.ts): that predicate
-// targets a plain column on the BASE table, so every embed-kind special case
-// (select-embed collection, referencedTable, the OR-group relation-mixing
-// guard) must treat it exactly like any other base-table condition, not like
-// a real relation filter.
+// referencedTable. False for is_empty AND is_not_empty answered via a
+// denormalized emptyColumn (see the FieldSource doc comment in types.ts):
+// those predicates target a plain column on the BASE table, so every
+// embed-kind special case (select-embed collection, referencedTable, the
+// OR-group relation-mixing guard) must treat them exactly like any other
+// base-table condition, not like a real relation filter.
+//
+// is_not_empty used to be an `!inner` embed. Over an RPC base (branch / own
+// scope — leads_visible_to_user()) PostgREST resolves an embedded filter
+// against the RPC's own `pgrst_call` alias, so a branch manager using
+// Collaborators "is not empty" got a 503 "Failed to fetch leads" (found by the
+// Nov 2026 stage smoke test; same family as the 2026-08-25 prod incident). The
+// counter answers it with no join at all.
 function needsEmbedJoin(field: FieldDef, cond: FilterCondition): boolean {
   if (field.source.kind !== "embed") return false;
-  return !(cond.op === "is_empty" && field.source.emptyColumn);
+  return !((cond.op === "is_empty" || cond.op === "is_not_empty") && field.source.emptyColumn);
 }
 
 // ── UUID-shaped value guard for `type: "uuid"` fields ───────────────────────
@@ -478,6 +485,10 @@ function renderCondition(field: FieldDef, cond: FilterCondition, ctx: CompileCtx
       // isEmbedJoinCondition() below treats this case as non-embed.
       if (cond.op === "is_empty" && field.source.emptyColumn) {
         return `${field.source.emptyColumn}.eq.0`;
+      }
+      // is_not_empty: the same counter, the other side of the check (count > 0) — no join, works over an RPC base.
+      if (cond.op === "is_not_empty" && field.source.emptyColumn) {
+        return `${field.source.emptyColumn}.gt.0`;
       }
       // The embedded resource's OWN column only — never relation-prefixed.
       // The caller is responsible for including that relation in the select

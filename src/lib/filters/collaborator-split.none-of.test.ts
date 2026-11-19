@@ -33,6 +33,13 @@ describe("splitCollaboratorNoneOf", () => {
     expect(r.rest.conditions).toEqual([empty]);
   });
 
+  it("is_not_empty beside it stays in the tree (it reads the counter column now, not an embed) — 'has some collaborator, but none of X'", () => {
+    const notEmpty = cond("n", "collaborators", "is_not_empty");
+    const r = splitCollaboratorNoneOf(and(notEmpty, cond("c", "collaborators", "is_none_of", [A])));
+    expect(r.excludeIds).toEqual([A]);
+    expect(r.rest.conditions).toEqual([notEmpty]);
+  });
+
   it("does NOT lift when nothing is excluded (an any_of alone is the existing path)", () => {
     const t = and(cond("a", "collaborators", "is_any_of", [A]));
     expect(splitCollaboratorNoneOf(t)).toEqual({ excludeIds: null, includeIds: null, rest: t });
@@ -42,7 +49,6 @@ describe("splitCollaboratorNoneOf", () => {
     ["an OR tree", or(cond("c", "collaborators", "is_none_of", [A]), cond("s", "status", "is", "new"))],
     ["two none_of conditions", and(cond("c1", "collaborators", "is_none_of", [A]), cond("c2", "collaborators", "is_none_of", [B]))],
     ["two any_of conditions beside it (one would stay behind as an embed)", and(cond("a1", "collaborators", "is_any_of", [A]), cond("a2", "collaborators", "is_any_of", [B]), cond("c", "collaborators", "is_none_of", [B]))],
-    ["is_not_empty beside it (an embed filter would stay behind)", and(cond("n", "collaborators", "is_not_empty"), cond("c", "collaborators", "is_none_of", [A]))],
     ["a malformed uuid in none_of", and(cond("c", "collaborators", "is_none_of", [A, "not-a-uuid"]))],
     ["an empty none_of list", and(cond("c", "collaborators", "is_none_of", []))],
     ["a malformed any_of beside a valid none_of", and(cond("a", "collaborators", "is_any_of", ["nope"]), cond("c", "collaborators", "is_none_of", [A]))],

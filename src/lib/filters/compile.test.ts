@@ -464,9 +464,10 @@ describe("is_empty on a relation field — rejected without an emptyColumn, safe
     expect(result).toEqual({ ok: true, embeds: [] });
   });
 
-  it("WITH emptyColumn: is_not_empty and is_any_of on the SAME field still use the real !inner join, unaffected by the escape hatch existing", () => {
+  it("WITH emptyColumn: is_not_empty reads the counter (count > 0, no embed); is_any_of on the SAME field still uses the real !inner join", () => {
     const notEmpty = planFilter(andTree(cond("c1", "collaborators_with_count", "is_not_empty")), registry, ctx);
-    expect(notEmpty).toEqual({ ok: true, embeds: ["lead_collaborators!inner(user_id)"] });
+    expect(notEmpty).toEqual({ ok: true, embeds: [] });
+    expect(compile(andTree(cond("c1", "collaborators_with_count", "is_not_empty"))).calls).toEqual(["or(collaborator_count.gt.0)"]);
     const b = compile(andTree(cond("c1", "collaborators_with_count", "is_any_of", ["11111111-1111-1111-1111-111111111111"])));
     expect(b.orPayloads()).toEqual(["user_id.in.(11111111-1111-1111-1111-111111111111)"]);
     expect(b.orReferencedTables).toEqual(["lead_collaborators"]);
