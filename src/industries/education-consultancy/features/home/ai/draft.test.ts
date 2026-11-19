@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDraftPrompt, draftChecks, draftFacts, draftNumbersOk, draftOk, draftSchema, produceDraft, quoteIsInNotes, sentencesAfterGreeting, type DraftRaw } from "./draft";
+import { buildDraftPrompt, draftChecks, draftFacts, draftNumbersOk, draftOk, draftSchema, produceDraft, quoteIsInNotes, repairPronounInWhy, sentencesAfterGreeting, type DraftRaw } from "./draft";
 import type { DraftContext } from "../server/draft-context";
 
 const CTX: DraftContext = {
@@ -329,7 +329,27 @@ describe("Q1b: check-ins stop sounding alike", () => {
     const f = [...facts, "Counsellor note 1 (6 days ago): Sita doesnoyt have any plans abroad."];
     expect(draftChecks(sk("Sita says Sita doesnoyt have any plans abroad", "doesnoyt have any plans abroad"), f, { allowSkip: true }).map((c) => c.check)).toContain("skip_reason");
     expect(draftChecks(sk("Doesnoyt have any plans abroad", "doesnoyt have any plans abroad"), f, { allowSkip: true }).map((c) => c.check)).toContain("skip_reason");
+    // B8: a short plain fact that matches the note is a fine reason
+    const f2 = [...facts, "Counsellor note 1 (6 days ago): Sita is already in Korea, working there."];
+    expect(draftChecks(sk("Sita is already in Korea, working there.", "Sita is already in Korea, working there."), f2, { allowSkip: true })).toEqual([]);
     expect(draftChecks(sk("No plans to study abroad for now", "doesnoyt have any plans abroad"), f, { allowSkip: true })).toEqual([]);
+  });
+  it("B8: a first sentence starting with I is refused; the fact-first shape passes", () => {
+    for (const t of ["Hi Sita, Rita here. I wanted to ask about your IELTS.", "Hi Sita, I noticed your file is quiet. Which country?", "Hi Sita, Rita here. I'd like to know about your IELTS."])
+      expect(draftChecks(mk(t), facts, { rowKind: "going_quiet" }).map((c) => c.check)).toContain("stock_opening");
+    expect(draftChecks(mk("Hi Sita, Rita here. Your IELTS is in December: is it booked yet?"), facts, { rowKind: "going_quiet" })).toEqual([]);
+  });
+  it("B8: a pronoun left in the reason after the retry is rebuilt without the clause, the card is kept", async () => {
+    const bad: DraftRaw = { ...mk("Hi Sita, Rita here. Your IELTS is in December: is it booked yet?"), why: "Sita is considering the UK where her brother studies." };
+    const r = await produceDraft({ channel: "whatsapp", tone: "new", kind: "x", rowKind: "going_quiet", facts, previous: null, todayLabel: "t" }, (async () => ({ raw: bad, usage: {} })) as never);
+    expect(r.raw?.why).toBe("Sita is considering the UK.");
+    expect(repairPronounInWhy({ ...bad, text: "Hi Sita, she is there." }, "Sita")).toBeNull();
+  });
+  it("B8: the prompt shows three good examples and says never start with I", () => {
+    const { system } = buildDraftPrompt({ channel: "whatsapp", tone: "new", kind: "x", rowKind: "going_quiet", facts, previous: null, todayLabel: "t" });
+    expect(system).toContain("Hi Sita, Kamana here. Your +2 results");
+    expect(system).toContain("never with I");
+    expect(system).toContain("Bibek's brother studies in Leeds");
   });
   it("the prompt bans the openers and ties the single question to the one detail", () => {
     const { system } = buildDraftPrompt({ channel: "whatsapp", tone: "new", kind: "x", rowKind: "going_quiet", facts, previous: null, todayLabel: "t" });

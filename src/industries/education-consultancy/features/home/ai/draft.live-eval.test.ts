@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { DraftContext } from "../server/draft-context";
-import { draftChecks, draftFacts, writeDraft, type DraftRaw } from "./draft";
+import { draftChecks, draftFacts, produceDraft, writeDraft } from "./draft";
 
 /**
  * Q1(c): the FIRST-TRY pass rate of the live model on 23 fixed, invented fact sets whose notes say he / she / his / her (the thing the
@@ -44,25 +44,33 @@ const SETS: Array<{ name: string; c: DraftContext; expectSkip: boolean }> = [
 ];
 
 describe.skipIf(!process.env.RUN_LIVE_DRAFT_EVAL)("Q1(c) live first-try pass rate", () => {
-  it("23 fixed fact sets with he / she notes (20 + 3 real-shaped)", async () => {
+  it("fixed fact sets with he / she notes: first-try rate, final rate after the one retry, empty cards", async () => {
     const rows = await Promise.all(
       SETS.map(async (s) => {
         const facts = draftFacts(s.c, IN);
-        let raw: DraftRaw;
-        try {
-          ({ raw } = await writeDraft({ channel: "whatsapp", tone: "new", kind: "the lead has gone quiet since the last contact and the counsellor is checking in", rowKind: "going_quiet", allowSkip: true, facts, previous: null, todayLabel: "Tuesday 2026-11-10" }));
-        } catch (e) {
-          return { name: s.name, skipped: false, expectSkip: s.expectSkip, fails: ["schema"], len: 0, text: `${String(e).slice(0, 90)} | ${String((e as { cause?: unknown }).cause ?? "").slice(0, 300).replace(/\s+/g, " ")}` };
-        }
-        const fails = draftChecks(raw as DraftRaw, facts, { rowKind: "going_quiet", allowSkip: true }).map((f) => f.check);
+        const attempts: string[] = [];
         const pn = (t: string) => /\b(he|she|his|her|hers|him)\b/i.test(t);
-        const where = [pn(raw.text) && "text", pn(raw.why) && "why", pn(raw.followUp.title) && "task", raw.skip && pn(raw.skip.reason) && "skip-reason"].filter(Boolean).join("+");
-        return { name: s.name, skipped: !!raw.skip, expectSkip: s.expectSkip, fails: fails.map((f) => (f === "pronoun" ? `pronoun[${where}]` : f)), len: raw.text.length, text: raw.skip ? `SKIP: ${raw.skip.quote} // reason: ${raw.skip.reason}` : `${raw.text} // why: ${raw.why} // task: ${raw.followUp.title}` };
+        const write: typeof writeDraft = async (i) => {
+          const r = await writeDraft(i);
+          const raw = r.raw;
+          const where = [pn(raw.text) && "text", pn(raw.why) && "why", pn(raw.followUp.title) && "task", raw.skip && pn(raw.skip.reason) && "skip-reason"].filter(Boolean).join("+");
+          const fails = draftChecks(raw, facts, { rowKind: "going_quiet", allowSkip: true }).map((f) => (f.check === "pronoun" ? `pronoun[${where}]` : f.check));
+          attempts.push(`${fails.length ? "FAIL " + fails.join(",") : "ok"} :: ${raw.skip ? `SKIP: ${raw.skip.quote} // reason: ${raw.skip.reason}` : `${raw.text} // why: ${raw.why} // task: ${raw.followUp.title}`}`);
+          return r;
+        };
+        const p = await produceDraft({ channel: "whatsapp", tone: "new", kind: "the lead has gone quiet since the last contact and the counsellor is checking in", rowKind: "going_quiet", allowSkip: true, facts, previous: null, todayLabel: "Tuesday 2026-11-10" }, write);
+        return { name: s.name, expectSkip: s.expectSkip, firstOk: p.failed[0]?.length === 0, finalOk: p.raw !== null, skipped: !!p.raw?.skip, firstSkipped: attempts[0]?.includes(":: SKIP"), attempts };
       }),
     );
-    const passed = rows.filter((r) => r.fails.length === 0).length;
-    const skipRight = rows.filter((r) => r.skipped === r.expectSkip).length;
-    console.log(`FIRST-TRY CHECK PASS: ${passed}/${rows.length} (${Math.round((passed / rows.length) * 100)}%)  SKIP DECISION RIGHT: ${skipRight}/${rows.length}\n` + rows.map((r) => `${r.fails.length ? "FAIL " + r.fails.join(",") : "ok"} | skip=${r.skipped}/${r.expectSkip} | ${r.name} | ${r.text}`).join("\n"));
+    const n = rows.length;
+    const first = rows.filter((r) => r.firstOk).length;
+    const final = rows.filter((r) => r.finalOk).length;
+    const empty = n - final;
+    const skipRight = rows.filter((r) => r.finalOk && r.skipped === r.expectSkip).length;
+    console.log(
+      `FIRST-TRY CHECK PASS: ${first}/${n} (${Math.round((first / n) * 100)}%)  FINAL AFTER RETRY: ${final}/${n} (${Math.round((final / n) * 100)}%)  EMPTY CARDS: ${empty}  SKIP DECISION RIGHT: ${skipRight}/${n}\n` +
+        rows.filter((r) => !r.firstOk || !r.finalOk).map((r) => `${r.name} (expectSkip=${r.expectSkip}, final ${r.finalOk ? "ok" : "EMPTY"})\n  ` + r.attempts.join("\n  ")).join("\n"),
+    );
     expect(rows).toHaveLength(SETS.length);
-  }, 120_000);
+  }, 180_000);
 });

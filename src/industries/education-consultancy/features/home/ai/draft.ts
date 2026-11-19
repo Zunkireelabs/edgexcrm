@@ -10,16 +10,16 @@ import { HOME_AI_TIMEOUT_MS } from "./usage";
 export const draftSchema = z.object({
   skip: z
     .object({
-      reason: z.string().trim().min(1).max(400).describe("One short sentence (under 150 characters) for the counsellor, in plain words of your own: why not to send this message, e.g. 'No plans to study abroad for now'. Do not copy the note's wording or its typos (the quote does that). Use the lead's name at most once, never he or she."),
+      reason: z.string().trim().min(1).max(400).describe("One short sentence (under 150 characters) for the counsellor, in plain words of your own: why not to send this message, e.g. 'No plans to study abroad for now'. Do not copy the note's wording or its typos (the quote does that). Use the lead's name at most once, never he or she. A short plain fact is fine, e.g. 'Already in Korea, working there'."),
       quote: z.string().trim().min(1).max(400).describe("The EXACT words from a counsellor note or message that make sending wrong. Copy them, do not rephrase."),
     })
     .nullable()
     .describe("Null when the message should be sent. Set it ONLY when a counsellor note or message shows this message would be wrong or pointless (see the rules); then text and why may be empty."),
   text: z.string().trim().max(1200).describe("The message, ready to send. Empty only when skip is set."),
   subject: z.string().trim().max(150).nullable().describe("Email only. Null for WhatsApp."),
-  why: z.string().trim().max(300).describe("One sentence: why this message, using only the facts. Use the lead's name, NEVER he, she, his, her or him. Empty only when skip is set."),
+  why: z.string().trim().max(300).describe("One sentence: why this message, using only the facts. Use the lead's name as a possessive, NEVER he, she, his, her or him: write \"Bibek's brother studies in Leeds, and Bibek is weighing the UK.\" Empty only when skip is set."),
   followUp: z.object({
-    title: z.string().trim().max(120).describe("A short task for the counsellor to check back, e.g. 'Check for the bank statement on Thursday'. Say 'Check Aman\'s results', never 'his results': the lead\'s name, never he, she, his, her or him. Empty only when skip is set."),
+    title: z.string().trim().max(120).describe("A short task for the counsellor to check back, e.g. 'Check for the bank statement on Thursday'. Say 'Check Aman\'s results', never 'his results', and 'Ask about Bibek\'s brother in Leeds': the lead\'s name, never he, she, his, her or him. Empty only when skip is set."),
     inDays: z.number().int().min(1).max(7),
   }),
 });
@@ -74,6 +74,11 @@ export function buildDraftPrompt(p: { channel: DraftChannel; tone: DraftTone; ki
     "Never say when something happened (yesterday, last week, 'N days ago') unless a fact states that timing; use the timing in the facts exactly. " +
     (p.channel === "whatsapp" ? "Channel: WhatsApp. 2 to 4 short sentences, no subject (subject = null). " : "Channel: email. A subject and a short body. ") +
     `Reason for the message: ${p.kind}. ` +
+    "Every message has this shape: 'Hi <Name>, <Counsellor> here. <the one fact as a plain statement>: <one question naming that fact>?' Good examples: " +
+    "\"Hi Sita, Kamana here. Your +2 results come out next month: have you shortlisted nursing colleges in Australia yet?\" " +
+    "\"Hi Pooja, Kamana here. Has your college released your transcript for the USA biology applications yet?\" " +
+    "\"Hi Suman, Kamana here. Business analytics or data science: which course outline did you like more?\" " +
+    "Start the sentence after the greeting with the fact itself, never with I. " +
     "Never open with a stock line: not 'check in', 'checking in', 'wanted to', 'just wanted', 'I remember', 'I hope you', 'hope you're doing well', 'it's been a while', 'it's been some time', 'since we last', 'how is your decision process going'. Go straight to the one specific fact. " +
     (p.rowKind === "going_quiet"
       ? "This is a check-in, so keep it short: AT MOST 2 sentences after the greeting and under 280 characters. " +
@@ -88,7 +93,7 @@ export function buildDraftPrompt(p: { channel: DraftChannel; tone: DraftTone; ki
       : "Always write the message and set skip to null. ") +
     (TONE_RULE[p.tone] ? TONE_RULE[p.tone] + " " : "") +
     "Also give one sentence on why this message (why), and one follow-up task for the counsellor (followUp). " +
-    "Pronouns slip into the reason (why), the follow-up task and the skip reason most often. Write 'Aman is waiting for results', never 'Aman is waiting for his results'; write 'Check on Aman\'s IELTS booking', never 'Check his IELTS booking'. The skip reason is plain words of your own (\"No plans to study abroad for now\"), never the note copied. Before you answer, read the message, the reason, the follow-up task and any skip reason once more, and rewrite any that holds he, she, his, her or him. " +
+    "Pronouns slip into the reason (why), the follow-up task and the skip reason most often. Write 'Aman is waiting for results', never 'Aman is waiting for his results'; write 'Check on Aman\'s IELTS booking', never 'Check his IELTS booking'. A good reason: \"Bibek's brother studies in Leeds, and Bibek is weighing the UK.\" (the name with a possessive, never his or her). The skip reason is plain words of your own (\"No plans to study abroad for now\"), never the note copied. Before you answer, read the message, the reason, the follow-up task and any skip reason once more, and rewrite any that holds he, she, his, her or him. " +
     (p.fix?.length ? ` Your previous attempt was rejected: ${p.fix.join("; ")}. Write it again without that.` : "");
   // Last thing the model reads: the one rule it keeps slipping on, with the lead's own name in it.
   const lead = p.facts.find((f) => f.startsWith("Lead first name: "))?.slice("Lead first name: ".length).trim();
@@ -156,10 +161,14 @@ export const CHECK_IN_MAX_SENTENCES = 2;
  * Sentences in a message after "Hi Name," and a short introduction line. The intro line is skipped ONLY when it holds the counsellor's own
  * first name ("Rita here." / "Rita from Admizz."): "Your offer from Deakin arrived." is a real sentence and counts. No counsellor name in the facts = nothing is skipped.
  */
-export function sentencesAfterGreeting(text: string, counsellorFirstName: string | null = null): number {
+function afterGreeting(text: string, counsellorFirstName: string | null): string {
   let t = text.trim().replace(/^(?:hi|hello|hey|namaste|dear)\s+[^,!.\n]{1,40}[,!.]?\s*/i, "");
   const intro = counsellorFirstName ? /^[^.!?\n]{1,50}\b(?:here|from \w+)\b[^.!?\n]{0,20}[.!]\s*/i.exec(t) : null;
   if (intro && nameCount(intro[0], counsellorFirstName as string) > 0) t = t.slice(intro[0].length);
+  return t;
+}
+export function sentencesAfterGreeting(text: string, counsellorFirstName: string | null = null): number {
+  const t = afterGreeting(text, counsellorFirstName);
   return t.split(/[.!?]+(?:\s+|$)/).filter((x) => x.trim().length > 0).length;
 }
 
@@ -172,6 +181,18 @@ export function quoteIsInNotes(quote: string, facts: string[]): boolean {
   return q.length > 0 && facts.filter((f) => /^(?:Counsellor note|Message) \d/.test(f)).some((f) => flat(f).includes(q));
 }
 
+/** True when the reason contains the quote AND the quote carries odd wording (a typo like "doesnoyt", a digit, a tripled letter): then the reason is the note copied. */
+function copiesNoteTypos(reason: string, quote: string): boolean {
+  const r = flat(reason);
+  const q = flat(quote).replace(/[.!?]+$/, "");
+  if (q.length < 12 || !r.includes(q)) return false;
+  // Odd wording = a token with no vowel, a digit, or a letter tripled; ordinary plain-English notes carry none of these.
+  const odd = q.split(/[^\p{L}\p{N}']+/u).filter((w) => w.length > 2 && (/^[^aeiouy]+$/i.test(w) || /\d/.test(w) || /(.)\1\1/.test(w)));
+  return odd.length > 0 || TYPO_HINT.test(q);
+}
+/** Typos seen in real notes ("doesnoyt"): a word glued to a stray letter before a contraction ending. */
+const TYPO_HINT = /\b\w*(?:oyt|n't[a-z]|dont|doesnt|didnt)\w*\b/i;
+
 export function draftChecks(raw: DraftRaw, facts: string[], opts: DraftCheckOpts = {}): CheckFailure[] {
   const out: CheckFailure[] = [];
   if (raw.skip && !opts.allowSkip) return [{ check: "empty", fix: "write the message; do not skip" }];
@@ -181,7 +202,8 @@ export function draftChecks(raw: DraftRaw, facts: string[], opts: DraftCheckOpts
     if (!quoteIsInNotes(raw.skip.quote, facts)) out.push({ check: "skip_quote", fix: "the quote must be the exact words from a counsellor note or message; if no note rules this message out, write the message instead of skipping" });
     const lead = leadNameOf(facts);
     if (lead && nameCount(raw.skip.reason, lead) > 1) out.push({ check: "skip_reason", fix: `the reason names ${lead} more than once: write it in plain words of your own, e.g. "No plans to study abroad for now"` });
-    else if (flat(raw.skip.quote).length >= 12 && flat(raw.skip.reason).includes(flat(raw.skip.quote).replace(/[.!?]+$/, ""))) out.push({ check: "skip_reason", fix: "the reason copies the note: write it in plain words of your own, e.g. \"No plans to study abroad for now\"" });
+    // B8: a short plain fact that happens to match the note is a fine reason; only a copy that carries the note's own typos is refused.
+    else if (copiesNoteTypos(raw.skip.reason, raw.skip.quote)) out.push({ check: "skip_reason", fix: "the reason copies the note's own wording and typos: write it in plain words of your own, e.g. \"No plans to study abroad for now\"" });
     if (hasGenderedPronoun([raw.skip.reason])) out.push({ check: "pronoun", fix: "do not use he, she, his, her or him anywhere, including the reason: use the person's name instead" });
     const known = new Set(facts.flatMap(numbersIn));
     const nb = numbersIn(raw.skip.reason).filter((n) => !known.has(n));
@@ -196,6 +218,8 @@ export function draftChecks(raw: DraftRaw, facts: string[], opts: DraftCheckOpts
   if (tw.length) out.push({ check: "time_word", fix: `no '${tw.join("', '")}': no fact says when that happened, so do not say when` });
   // F1: the stock openings are refused for every kind, not only a check-in.
   if (STOCK_OPENINGS.some((re) => re.test(raw.text))) out.push({ check: "stock_opening", fix: "do not open with a stock line ('check in', 'wanted to', 'I remember', 'I hope you', 'it's been a while', 'decision process'): greet with the name, then go straight to the one specific fact" });
+  // B8: the model's real habit is "I wanted / I remember / I noticed / I hope": the first sentence after the greeting must not start with I.
+  if (/^I(?:['\u2019](?:d|m|ll|ve)\b|\s+(?:wanted|remember|noticed|notice|hope|saw|thought|wonder|was|am|just|know|would|wish|see|understand|can|could|will|have|had|like|love|think|do|did)\b)/i.test(afterGreeting(raw.text, counsellorNameOf(facts)))) out.push({ check: "stock_opening", fix: "the first sentence after the greeting must not start with 'I' ('I wanted', 'I remember', 'I noticed', 'I hope'): start with the fact itself, e.g. 'Hi Sita, Kamana here. Your +2 results come out next month: have you shortlisted nursing colleges yet?'" });
   // F2: the message speaks TO the lead, so the lead's name is in the greeting once and nowhere else.
   const lead = leadNameOf(facts);
   if (lead && nameCount(raw.text, lead) > 1) out.push({ check: "name_repeat", fix: `you are writing to ${lead}: use ${lead} only in the greeting, then say "you" and "your", never ${lead}'s or ${lead} again` });
@@ -229,6 +253,25 @@ export async function writeDraft(p: WriteDraftInput): Promise<{ raw: DraftRaw; u
   return { raw: object, usage };
 }
 
+/**
+ * B8: after the retry, a pronoun left ONLY in the reason or the follow-up task must not cost the whole card. The reason is rebuilt without
+ * the clause that holds the pronoun ("Bibek is considering the UK where his brother is" -> "Bibek is considering the UK"); when nothing
+ * clean is left, the pronouns are swapped for the name. Returns null when the pronoun is in the message itself (that is never patched).
+ */
+export function repairPronounInWhy(raw: DraftRaw, leadName: string | null): DraftRaw | null {
+  if (hasGenderedPronoun([raw.text, raw.subject ?? ""])) return null;
+  const name = leadName ?? "the lead";
+  const fixOne = (t: string): string => {
+    if (!hasGenderedPronoun([t])) return t;
+    const kept = t.split(/\s*(?:[,;]|\b(?:where|who|and|but|because|while|so)\b)\s*/i).filter((c) => c.trim() && !hasGenderedPronoun([c]));
+    const joined = kept.join(", ").trim().replace(/[.!?]+$/, "");
+    return joined.length >= 12 ? `${joined}.` : neutralizePronouns(t, name);
+  };
+  const why = fixOne(raw.why);
+  const title = hasGenderedPronoun([raw.followUp.title]) ? neutralizePronouns(raw.followUp.title, name) : raw.followUp.title;
+  return { ...raw, why, followUp: { ...raw.followUp, title } };
+}
+
 export interface ProducedDraft {
   raw: DraftRaw | null;
   usages: Array<{ inputTokens?: number; outputTokens?: number }>;
@@ -255,6 +298,10 @@ export async function produceDraft(p: WriteDraftInput, write: typeof writeDraft 
         return out;
       }
       fix = fails.map((f) => f.fix);
+      if (attempt === 1 && fails.every((f) => f.check === "pronoun") && !raw.skip) {
+        const patched = repairPronounInWhy(raw, leadNameOf(p.facts));
+        if (patched && draftChecks(patched, p.facts, { rowKind: p.rowKind, allowSkip: p.allowSkip }).length === 0) out.raw = patched;
+      }
     } catch {
       out.failed.push(["provider"]);
       if (attempt === 1) break;
