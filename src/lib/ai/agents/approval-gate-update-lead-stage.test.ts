@@ -99,7 +99,9 @@ const LEAD_LISTS: Record<
     name: "Qualified",
     is_archive: false,
     sort_order: 20,
-    pipeline_id: null,
+    // A real core stage always has a pipeline; a pipeline-less target now triggers ensureListPipeline() (creates rows),
+    // which this fake DB doesn't model.
+    pipeline_id: "pipe-1",
     access: { mode: "all" },
   },
 };

@@ -1,3 +1,4 @@
+import { ensureListPipeline } from "@/lib/leads/ensure-list-pipeline";
 import { createServiceClient } from "@/lib/supabase/server";
 import { validate, isPhoneForCountry } from "@/lib/api/validation";
 import { normalizePhoneForStorage } from "@/lib/phone-utils";
@@ -32,7 +33,8 @@ import {
 } from "@/lib/leads/prospect-qualification";
 import { PERSONAL_DETAIL_COLUMNS, coercePersonalDetailsPayload } from "@/lib/leads/personal-details";
 import { STUDENT_RECORD_COLUMNS, coerceStudentRecordPayload } from "@/lib/leads/student-record-columns";
-import { normalizeDestinations, normalizeFieldOfStudy, normalizeDegreeLevel } from "@/lib/leads/destination-normalize";
+import { normalizeFieldOfStudy, normalizeDegreeLevel } from "@/lib/leads/destination-normalize";
+import { canonicalizeDestinationsForTenant } from "@/lib/leads/destination-catalog";
 import type { Lead } from "@/types/database";
 
 /** Every column a lead update may write. Exported so the Student Details contract test can prove the pop-up only sends these. */
@@ -623,7 +625,12 @@ export async function applyLeadPatch(
   // Study Interest panel Save button), a fourth place these fields could be
   // written with a flag emoji / off-canon casing if left alone.
   if (Array.isArray(updatePayload.destinations)) {
-    updatePayload.destinations = normalizeDestinations(updatePayload.destinations as string[]);
+    // Also re-spelled in the tenant's catalog spelling ("uk" -> "UK") — see lib/leads/destination-catalog.ts.
+    updatePayload.destinations = await canonicalizeDestinationsForTenant(
+      supabase,
+      auth.tenantId,
+      updatePayload.destinations as string[],
+    );
   }
   if (updatePayload.field_of_study !== undefined) {
     updatePayload.field_of_study = normalizeFieldOfStudy(updatePayload.field_of_study as string | null);
@@ -655,11 +662,16 @@ export async function applyLeadPatch(
   // isRevert declared earlier (backward-move detection for the assignee check); the
   // block below still handles the no-explicit-assignee fallback (auto-resolve + origin guard).
   if (updatePayload.list_id !== undefined && updatePayload.list_id !== null) {
-    const { data: targetList } = await supabase
+    const { data: targetListRow } = await supabase
       .from("lead_lists")
       .select("id, slug, name, pipeline_id, is_archive, sort_order")
       .eq("id", updatePayload.list_id as string)
       .maybeSingle();
+    const targetList = targetListRow ? { ...targetListRow } : null;
+    // A Stage an admin created from Add/Edit stages has no pipeline (statuses) yet — build it now so the move works.
+    if (targetList && !targetList.pipeline_id) {
+      targetList.pipeline_id = await ensureListPipeline(supabase, auth.tenantId, targetList);
+    }
     if (targetList) {
       updatePayload.lead_type = targetList.slug === "prospects" ? "prospect" : "lead";
       newListName = targetList.name;
@@ -777,9 +789,9 @@ export async function applyLeadPatch(
           }
         }
       } else {
-        updatePayload.pipeline_id = null;
-        updatePayload.stage_id = null;
-        updatePayload.status = null;
+        // Never blank the lead's pipeline (leads.pipeline_id is NOT NULL → opaque 503). ensureListPipeline() should
+        // have built one above; if it could not, say so clearly instead.
+        return { kind: "validation", errors: { list_id: ["This stage isn't set up yet. Please try again."] } };
       }
     }
   }

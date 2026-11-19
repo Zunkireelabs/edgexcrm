@@ -1,3 +1,4 @@
+import { ensureListPipeline } from "@/lib/leads/ensure-list-pipeline";
 import { NextRequest } from "next/server";
 import { authenticateRequest, requireAdmin } from "@/lib/api/auth";
 import { getFeatureAccess } from "@/industries/_loader";
@@ -200,6 +201,21 @@ export async function POST(request: NextRequest) {
     return apiServiceUnavailable("Failed to create lead list");
   }
 
-  log.info({ listId: (created as LeadList).id }, "Lead list created");
-  return apiSuccess(created as LeadList, 201);
+  // Every Stage needs its own hidden pipeline (its statuses), or moving a lead into it fails. Best-effort: if it
+  // can't be built here, the first move into the stage builds it (ensureListPipeline is idempotent).
+  const createdList = created as LeadList;
+  try {
+    const pipelineId = await ensureListPipeline(await createServiceClient(), auth.tenantId, {
+      id: createdList.id,
+      slug: createdList.slug,
+      name: createdList.name,
+      pipeline_id: createdList.pipeline_id ?? null,
+    });
+    if (pipelineId) createdList.pipeline_id = pipelineId;
+  } catch (err) {
+    log.error({ err, listId: createdList.id }, "Failed to create the new stage's pipeline");
+  }
+
+  log.info({ listId: createdList.id }, "Lead list created");
+  return apiSuccess(createdList, 201);
 }
