@@ -245,9 +245,22 @@ describe("leads registry — legacy value-shape equivalence", () => {
     expect(plan).toEqual({ ok: true, embeds: ["lead_collaborators!inner(user_id)"] });
   });
 
-  it("collaborators: is_not_empty is safe on the !inner join (any surviving row already has >=1 collaborator) and still carries referencedTable", () => {
+  // Found by the Nov 2026 stage smoke test: as an !inner embed, is_not_empty 503'd ("Failed to fetch leads") for branch
+  // managers / counselors, whose queries run over the leads_visible_to_user() RPC (an embedded filter is resolved against
+  // pgrst_call there). It now reads the same mig 210 counter as is_empty — a plain base column, no embed, no join.
+  it("collaborators: is_not_empty compiles to the counter column (count > 0), NOT the !inner join — no embed added, no referencedTable", () => {
     const plan = planFilter(andTree(cond("c1", "collaborators", "is_not_empty")), registry, ctx);
-    expect(plan).toEqual({ ok: true, embeds: ["lead_collaborators!inner(user_id)"] });
+    expect(plan).toEqual({ ok: true, embeds: [] });
+
+    const b = compile(andTree(cond("c1", "collaborators", "is_not_empty")));
+    // A plain .or(...) with NO { referencedTable } option — the base-table path (is_empty does the same).
+    expect(b.calls).toEqual(["or(collaborator_count.gt.0)"]);
+  });
+
+  it("collaborators: is_not_empty never needs the embed, so it works beside is_any_of lifted to SQL (branch / own scope)", () => {
+    const tree = andTree(cond("c1", "collaborators", "is_not_empty"), cond("c2", "status", "is", "new"));
+    const plan = planFilter(tree, registry, ctx);
+    expect(plan).toEqual({ ok: true, embeds: [] });
   });
 
   it("collaborators: is_empty compiles to the mig 210 counter column, NOT the !inner join — no embed added, no referencedTable", () => {

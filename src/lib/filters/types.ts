@@ -96,7 +96,7 @@ export type FieldSource =
   | { kind: "jsonb"; column: "custom_fields"; path: string }
   | { kind: "promoted"; column: string; jsonb: { column: "custom_fields"; path: string } }
   // emptyColumn: an optional denormalized column on the BASE table (never the
-  // embedded relation) that answers "is_empty" without a join — e.g. a
+  // embedded relation) that answers "is_empty" / "is_not_empty" without a join — e.g. a
   // maintained collaborator_count on `leads` for the Collaborators field. The
   // embed's own !inner join can only express "a matching row exists", never
   // "no matching row exists" (see compile.ts's embed-case comment) — this is

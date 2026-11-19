@@ -66,9 +66,9 @@ export function splitCollaboratorAnyOf(tree: FilterTree): CollaboratorSplit {
 // an explicit "not supported", never a silently-wrong result):
 //   * top-level AND tree only (same rule as splitCollaboratorAnyOf);
 //   * exactly ONE collaborators "is_none_of" condition, all values real uuids, at least one;
-//   * AND at most ONE collaborators "is_any_of" (lifted with it, as the include list) — a second one, or a
-//     collaborators "is_not_empty" (an embed filter), would stay behind as an embedded filter over the RPC
-//     base and 503, so then nothing is lifted at all. "is_empty" is fine: it reads a plain column.
+//   * AND at most ONE collaborators "is_any_of" (lifted with it, as the include list) — a second one would stay
+//     behind as an embedded filter over the RPC base and 503, so then nothing is lifted at all. "is_empty" and
+//     "is_not_empty" are fine: both read the plain collaborator_count column (no embed), so they stay in the tree.
 //
 // When this returns excludeIds, the CALLER must run the SQL path for the whole request.
 
@@ -97,8 +97,10 @@ export function splitCollaboratorNoneOf(tree: FilterTree): CollaboratorExclusion
 
   const anyOf = collab.filter((c) => c.op === "is_any_of");
   if (anyOf.length > 1) return untouched;
-  // Anything else on the field besides none_of / one any_of / is_empty would stay behind as an embed filter.
-  if (collab.some((c) => c.op !== "is_none_of" && c.op !== "is_any_of" && c.op !== "is_empty")) return untouched;
+  // Anything else on the field besides none_of / one any_of / is_empty / is_not_empty would stay behind as an embed filter.
+  if (collab.some((c) => c.op !== "is_none_of" && c.op !== "is_any_of" && c.op !== "is_empty" && c.op !== "is_not_empty")) {
+    return untouched;
+  }
 
   const excludeIds = allUuids(noneOf[0].value);
   if (!excludeIds) return untouched;

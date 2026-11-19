@@ -297,16 +297,18 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
         relation: "lead_collaborators",
         column: "user_id",
         embedSelect: "lead_collaborators!inner(user_id)",
-        // Mig 210: a trigger-maintained counter on leads, used ONLY for
-        // is_empty. The !inner join above can prove a collaborator EXISTS,
-        // never that none does — this sidesteps that instead of trying to
-        // express "no matching row" through the join at all. See its comment
-        // in compile.ts's "embed" render case for the full reasoning.
+        // Mig 210: a trigger-maintained counter on leads, used for is_empty
+        // (count = 0) and is_not_empty (count > 0). The !inner join above can
+        // prove a collaborator EXISTS, never that none does — this sidesteps
+        // that instead of trying to express "no matching row" through the join
+        // at all. See its comment in compile.ts's "embed" render case.
         emptyColumn: "collaborator_count",
       },
-      // is_not_empty is safe on top of is_any_of: the embedSelect above is an
-      // `!inner` join, so any row that survives it already has >=1
-      // collaborator — is_not_empty just states that fact explicitly.
+      // is_not_empty answers from the same counter as is_empty (collaborator_count > 0) — no join, so it also works
+      // for branch managers / counselors, whose queries run over the leads_visible_to_user() RPC where an embedded
+      // `!inner` filter 503s (42703 pgrst_call). It used to be an embed; the Nov 2026 stage smoke test caught the
+      // branch-manager 503. is_any_of is still the only embed-backed operator here (and is lifted into SQL for RPC
+      // callers — see collaborator-split.ts).
       // is_none_of (Nov 2026, migration 282) — "leads where NONE of these people is a collaborator". It is NOT
       // compilable as an embedded filter (compile.ts's requireOperator still rejects it there, deliberately), so it
       // is lifted out of the tree and answered in SQL by the leads list route — see splitCollaboratorNoneOf in
