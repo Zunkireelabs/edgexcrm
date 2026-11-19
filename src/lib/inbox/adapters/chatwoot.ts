@@ -21,6 +21,8 @@ import type {
   SendResult,
   StatusEventResult,
 } from "./types";
+import { chatwootBaseUrl, chatwootRequest, parseChatwootChannelRef } from "../chatwoot-api";
+import { resolveChatwootAgentToken } from "../chatwoot-agents";
 
 /** Reject webhooks whose timestamp is further than this from "now" (replay protection). */
 export const CHATWOOT_SIGNATURE_TOLERANCE_SECONDS = 300;
@@ -164,6 +166,15 @@ export const chatwootAdapter: ChannelAdapter = {
   },
 
   /**
+   * Reply AS the counselor, so the visitor sees their name: returns that counselor's own Chatwoot
+   * credential (created on first use), or null to send with the channel's shared team identity.
+   * See chatwoot-agents.ts. sendMessage() falls back to the team identity if this throws.
+   */
+  resolveSenderToken({ channel, userId, db }) {
+    return resolveChatwootAgentToken({ db, channel, userId });
+  },
+
+  /**
    * Post the counselor's reply into the visitor's Chatwoot conversation, so it appears in
    * their website bubble. Throws on any failure: sendMessage() (send-message.ts) catches it
    * and marks the message "failed" with the error, instead of showing a reply that was never
@@ -199,42 +210,6 @@ export const chatwootAdapter: ChannelAdapter = {
     return { providerMessageId: String(sent.id), sentAt: new Date().toISOString() };
   },
 };
-
-// ── Sending helpers ──────────────────────────────────────────────────────────
-
-const CHATWOOT_REQUEST_TIMEOUT_MS = 10_000;
-
-/** Server-side config, never taken from a tenant-editable field (that would allow SSRF). */
-function chatwootBaseUrl(): string {
-  const raw = process.env.CHATWOOT_BASE_URL?.trim();
-  if (!raw) throw new Error("CHATWOOT_BASE_URL is not set");
-  if (!/^https?:\/\//.test(raw)) throw new Error("CHATWOOT_BASE_URL must start with http:// or https://");
-  return raw.replace(/\/+$/, "");
-}
-
-function parseChatwootChannelRef(externalAccountId: string): { accountId: string; inboxId: string } {
-  const match = /^(\d+):(\d+)$/.exec(externalAccountId);
-  if (!match) throw new Error("Website chat channel has an invalid Chatwoot account/inbox reference");
-  return { accountId: match[1], inboxId: match[2] };
-}
-
-async function chatwootRequest<T>(method: "GET" | "POST", url: string, apiToken: string, body?: unknown): Promise<T> {
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json", api_access_token: apiToken },
-      body: body === undefined ? undefined : JSON.stringify(body),
-      signal: AbortSignal.timeout(CHATWOOT_REQUEST_TIMEOUT_MS),
-    });
-  } catch (err) {
-    const timedOut = err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError");
-    throw new Error(timedOut ? "Chatwoot did not respond in time" : "Could not reach Chatwoot");
-  }
-  // Only the status is reported: the response body and request headers (token) never reach logs or the UI.
-  if (!response.ok) throw new Error(`Chatwoot returned HTTP ${response.status}`);
-  return (await response.json()) as T;
-}
 
 interface ChatwootContactConversation {
   id: number;
