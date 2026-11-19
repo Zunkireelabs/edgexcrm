@@ -16,7 +16,7 @@ const FACTS = [
   // Not a row on Home, so a point citing it adds something the row does not show (F4a).
   { id: "impact:r", text: "Replies: 4, 9 the week before", href: "/home#impact", linkLabel: "See why →" },
 ];
-const point = (claim: string) => ({ claim, reason: "The row shows 120 and 1.", factIds: ["need:a", "impact:r"] });
+const point = (claim: string) => ({ claim, reason: "The row shows 120 and 1, and replies are 4.", factIds: ["need:a", "impact:r"] });
 const P = { auth: { userId: "u1", tenantId: "t1" } as never, scope: "business" as const, facts: FACTS, tz: "UTC", now: new Date("2026-11-10T01:00:00Z"), refreshes: 0, opened: true };
 
 describe("Q11: makeRead retries once on a wrong count", () => {

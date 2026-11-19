@@ -78,6 +78,7 @@ export function buildDraftPrompt(p: { channel: DraftChannel; tone: DraftTone; ki
     "\"Hi Sita, Kamana here. Your +2 results come out next month: have you shortlisted nursing colleges in Australia yet?\" " +
     "\"Hi Pooja, Kamana here. Has your college released your transcript for the USA biology applications yet?\" " +
     "\"Hi Suman, Kamana here. You were weighing business analytics against data science. Which course outline did you like more?\" " +
+    "\"Hi Dipesh, Kamana here. Your father wanted to see the fee sheet: has your father had a chance to look at it yet?\" (a family member is \"your father\", never the lead's name again) " +
     "Never mention applications, documents, fees or a visa unless a fact says the lead has one. " +
     "Start the sentence after the greeting with the fact itself, never with I. " +
     "Never open with a stock line: not 'check in', 'checking in', 'wanted to', 'just wanted', 'I remember', 'I hope you', 'hope you're doing well', 'it's been a while', 'it's been some time', 'since we last', 'how is your decision process going'. Go straight to the one specific fact. " +
@@ -148,7 +149,7 @@ const STOCK_OPENINGS: RegExp[] = [
 ];
 
 /** B9: the template the B8 examples created ("expressed interest in studying in X: have you made any decisions about your applications?"). Refused for check-ins, with the exact phrase in the retry. */
-const STOCK_QUIET: RegExp[] = [/\bmade any decisions?\b/i, /\bany updates\b/i, /\bany plans or decisions\b/i, /\bexpressed (?:an )?interest\b/i, /\byou were interested in\b/i];
+const STOCK_QUIET: RegExp[] = [/\bany plans or decisions\b/i, /\bexpressed (?:an )?interest\b/i, /\byou were interested in\b/i];
 
 /** The lead's first name, as the facts give it. */
 const counsellorNameOf = (facts: string[]) => facts.find((f) => f.startsWith("Counsellor first name: "))?.slice("Counsellor first name: ".length).trim() || null;
@@ -264,11 +265,12 @@ export async function writeDraft(p: WriteDraftInput): Promise<{ raw: DraftRaw; u
  * the clause that holds the pronoun ("Bibek is considering the UK where his brother is" -> "Bibek is considering the UK"); when nothing
  * clean is left, the pronouns are swapped for the name. Returns null when the pronoun is in the message itself (that is never patched).
  */
-export function repairPronounInWhy(raw: DraftRaw, leadName: string | null): DraftRaw | null {
+export function repairPronounInWhy(raw: DraftRaw, leadName: string | null, mode: "clause" | "name" = "clause"): DraftRaw | null {
   if (hasGenderedPronoun([raw.text, raw.subject ?? ""])) return null;
   const name = leadName ?? "the lead";
   const fixOne = (t: string): string => {
     if (!hasGenderedPronoun([t])) return t;
+    if (mode === "name") return neutralizePronouns(t, name);
     const kept = t.split(/\s*(?:[,;]|\b(?:where|who|and|but|because|while|so)\b)\s*/i).filter((c) => c.trim() && !hasGenderedPronoun([c]));
     const joined = kept.join(", ").trim().replace(/[.!?]+$/, "");
     return joined.length >= 12 ? `${joined}.` : neutralizePronouns(t, name);
@@ -305,8 +307,14 @@ export async function produceDraft(p: WriteDraftInput, write: typeof writeDraft 
       }
       fix = fails.map((f) => f.fix);
       if (attempt === 1 && fails.every((f) => f.check === "pronoun") && !raw.skip) {
-        const patched = repairPronounInWhy(raw, leadNameOf(p.facts));
-        if (patched && draftChecks(patched, p.facts, { rowKind: p.rowKind, allowSkip: p.allowSkip }).length === 0) out.raw = patched;
+        const lead = leadNameOf(p.facts);
+        for (const mode of ["clause", "name"] as const) {
+          const patched = repairPronounInWhy(raw, lead, mode);
+          if (patched && draftChecks(patched, p.facts, { rowKind: p.rowKind, allowSkip: p.allowSkip }).length === 0) {
+            out.raw = patched;
+            break;
+          }
+        }
       }
     } catch {
       out.failed.push(["provider"]);

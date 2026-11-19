@@ -346,14 +346,23 @@ describe("Q1b: check-ins stop sounding alike", () => {
     expect(repairPronounInWhy({ ...bad, text: "Hi Sita, she is there." }, "Sita")).toBeNull();
   });
   it("B9: the new shared template phrases are refused for a check-in, naming the phrase; the prompt bans inventing applications", () => {
-    for (const t of ["Hi Sita, Rita here. You expressed interest in the UK: have you made any decisions yet?", "Hi Sita, Rita here. Any updates on the UK?", "Hi Sita, Rita here. You were interested in Australia. Which course?", "Hi Sita, Rita here. Any plans or decisions about the UK?"]) {
+    for (const t of ["Hi Sita, Rita here. You expressed interest in the UK: have you made any decisions yet?", "Hi Sita, Rita here. You were interested in Australia. Which course?", "Hi Sita, Rita here. Any plans or decisions about the UK?"]) {
       const f = draftChecks(mk(t), facts, { rowKind: "going_quiet" }).filter((c) => c.check === "stock_opening");
       expect(f.length).toBe(1);
       expect(f[0].fix).toMatch(/do not write '/);
     }
-    expect(draftChecks(mk("Hi Sita, Rita here. Any updates on the UK?"), facts, { rowKind: "reply_waiting" }).map((c) => c.check)).not.toContain("stock_opening");
+    // too broad, removed: a specific question with "any updates" is fine
+    expect(draftChecks(mk("Hi Sita, Rita here. Has your father shared any updates on the cost yet?"), facts, { rowKind: "going_quiet" }).map((c) => c.check)).not.toContain("stock_opening");
+    expect(draftChecks(mk("Hi Sita, Rita here. I know you are nervous about the interview. Which day is it?"), facts, { rowKind: "going_quiet" }).map((c) => c.check)).toContain("stock_opening");
     const { system } = buildDraftPrompt({ channel: "whatsapp", tone: "new", kind: "x", rowKind: "going_quiet", facts, previous: null, todayLabel: "t" });
     expect(system).toContain("Never mention applications, documents, fees or a visa unless a fact says the lead has one");
+  });
+  it("B9: a pronoun in the task (and the why) after the retry is repaired; if the clause drop still fails, the name swap is used", async () => {
+    const bad: DraftRaw = { ...mk("Hi Sita, Rita here. Your IELTS is in December: is it booked yet?"), why: "Sita's IELTS is in December, and her coaching class starts Monday.", followUp: { title: "Check on her coaching class", inDays: 3 } };
+    const r = await produceDraft({ channel: "whatsapp", tone: "new", kind: "x", rowKind: "going_quiet", facts, previous: null, todayLabel: "t" }, (async () => ({ raw: bad, usage: {} })) as never);
+    expect(r.raw).not.toBeNull();
+    expect(r.raw?.followUp.title).toBe("Check on Sita's coaching class");
+    expect(r.raw?.why).not.toMatch(/\b(he|she|his|her|hers|him)\b/i);
   });
   it("B8: the prompt shows three good examples and says never start with I", () => {
     const { system } = buildDraftPrompt({ channel: "whatsapp", tone: "new", kind: "x", rowKind: "going_quiet", facts, previous: null, todayLabel: "t" });
