@@ -24,6 +24,13 @@ import { AddApplicationSheet } from "../components/add-application-sheet";
 import { ApplicationPipelineSelector } from "../components/pipeline/application-pipeline-selector";
 import type { Application, ApplicationStage, ApplicationPipelineWithCounts, UserRole } from "@/types/database";
 import { normalizeDestinations } from "@/lib/leads/destination-normalize";
+import {
+  sortApplications,
+  nextSort,
+  isApplicationSortField,
+  type ApplicationSortField,
+  type ApplicationSortDir,
+} from "../lib/applications-sort";
 
 interface ApplicationsWorkspaceTeamMember {
   user_id: string;
@@ -42,8 +49,8 @@ interface ApplicationsWorkspaceProps {
 }
 
 type View = "board" | "list";
-type SortField = "created_at" | "updated_at" | "university_name" | "application_deadline";
-type SortDir = "asc" | "desc";
+type SortField = ApplicationSortField;
+type SortDir = ApplicationSortDir;
 
 const SORT_OPTIONS = [
   { value: "created_at:desc", label: "Newest first" },
@@ -53,6 +60,17 @@ const SORT_OPTIONS = [
   { value: "university_name:desc", label: "University Z–A" },
   { value: "application_deadline:asc", label: "Deadline (soonest)" },
   { value: "application_deadline:desc", label: "Deadline (latest)" },
+  // The column headers in List view sort by these too — listed so the dropdown always shows what is active.
+  { value: "student:asc", label: "Student A–Z" },
+  { value: "student:desc", label: "Student Z–A" },
+  { value: "program:asc", label: "Program A–Z" },
+  { value: "program:desc", label: "Program Z–A" },
+  { value: "intake:asc", label: "Intake (earliest)" },
+  { value: "intake:desc", label: "Intake (latest)" },
+  { value: "country:asc", label: "Country A–Z" },
+  { value: "country:desc", label: "Country Z–A" },
+  { value: "status:asc", label: "Status (pipeline order)" },
+  { value: "status:desc", label: "Status (reverse order)" },
 ];
 
 // Applications-only toolbar button style — deliberately duplicated from Leads'
@@ -106,6 +124,19 @@ export function ApplicationsWorkspace({
   const memberMap = useMemo(
     () => new Map(teamMembers.map((m) => [m.user_id, m])),
     [teamMembers],
+  );
+
+  // Status sorts by pipeline stage order — looked up from every stage (the list may span pipelines).
+  const stageById = useMemo(() => new Map(stages.map((s) => [s.id, s])), [stages]);
+
+  // Column-header click (List view): a new column sorts ascending, the same column flips direction.
+  const handleHeaderSort = useCallback(
+    (clicked: ApplicationSortField) => {
+      const current = isApplicationSortField(sortField) ? { field: sortField, dir: sortDir } : { field: "created_at" as const, dir: "desc" as const };
+      const next = nextSort(current, clicked);
+      setSortValue(`${next.field}:${next.dir}`);
+    },
+    [sortField, sortDir],
   );
 
   const assigneeNames = useMemo(
@@ -214,30 +245,9 @@ export function ApplicationsWorkspace({
       result = result.filter((a) => createdByFilter.includes(a.created_by ?? "unknown"));
     }
 
-    result = [...result].sort((a, b) => {
-      let aVal: string | null = null;
-      let bVal: string | null = null;
-
-      if (sortField === "university_name") {
-        aVal = a.university_name.toLowerCase();
-        bVal = b.university_name.toLowerCase();
-      } else if (sortField === "application_deadline") {
-        aVal = a.application_deadline ?? "";
-        bVal = b.application_deadline ?? "";
-      } else if (sortField === "updated_at") {
-        aVal = a.updated_at;
-        bVal = b.updated_at;
-      } else {
-        aVal = a.created_at;
-        bVal = b.created_at;
-      }
-
-      const cmp = (aVal ?? "") < (bVal ?? "") ? -1 : (aVal ?? "") > (bVal ?? "") ? 1 : 0;
-      return sortDir === "asc" ? cmp : -cmp;
-    });
-
-    return result;
-  }, [applications, search, stageFilter, countryFilter, createdByFilter, sortField, sortDir, selectedPipelineId]);
+    // One comparator for the toolbar dropdown AND the column headers (see ../lib/applications-sort.ts).
+    return sortApplications(result, sortField, sortDir, { stageById });
+  }, [applications, search, stageFilter, countryFilter, createdByFilter, sortField, sortDir, selectedPipelineId, stageById]);
 
   // Scoped to Stage + Country + Created By — Search stays independent so clearing
   // filters never unexpectedly wipes out what the user typed in the search box.
@@ -391,6 +401,9 @@ export function ApplicationsWorkspace({
             applications={filteredApplications}
             stages={filteredStages}
             visibleKeys={visibleColumnKeys}
+            sortField={sortField}
+            sortDir={sortDir}
+            onSort={handleHeaderSort}
           />
         </div>
       )}

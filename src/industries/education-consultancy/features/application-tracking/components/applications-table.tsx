@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import { StatusBadge } from "./status-badge";
+import type { ApplicationSortDir, ApplicationSortField } from "../lib/applications-sort";
 import type { Application, ApplicationStage } from "@/types/database";
 import { normalizeDestinations } from "@/lib/leads/destination-normalize";
 
@@ -22,6 +24,58 @@ interface ApplicationsTableProps {
   stages: ApplicationStage[];
   /** Which of APPLICATION_COLUMNS to render, in addition to the always-shown Student column. */
   visibleKeys?: string[];
+  /** Header sorting — when onSort is given, every column header is a sort button. Sorting itself is done by the parent. */
+  sortField?: ApplicationSortField;
+  sortDir?: ApplicationSortDir;
+  onSort?: (field: ApplicationSortField) => void;
+}
+
+// The sort field behind each column header (Student is always shown; the rest are APPLICATION_COLUMNS keys).
+const COLUMN_SORT_FIELD: Record<string, ApplicationSortField> = {
+  student: "student",
+  university: "university_name",
+  program: "program",
+  intake: "intake",
+  country: "country",
+  status: "status",
+  deadline: "application_deadline",
+};
+
+function SortableTh({
+  label,
+  columnKey,
+  sortField,
+  sortDir,
+  onSort,
+}: {
+  label: string;
+  columnKey: string;
+  sortField?: ApplicationSortField;
+  sortDir?: ApplicationSortDir;
+  onSort?: (field: ApplicationSortField) => void;
+}) {
+  const field = COLUMN_SORT_FIELD[columnKey];
+  const cls = "px-4 py-3 text-left font-medium";
+  if (!onSort || !field) return <th className={cls}>{label}</th>;
+
+  const active = sortField === field;
+  const Icon = !active ? ArrowUpDown : sortDir === "asc" ? ArrowUp : ArrowDown;
+  return (
+    <th className={cls} aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : "none"}>
+      <button
+        type="button"
+        onClick={() => onSort(field)}
+        title={`Sort by ${label}`}
+        className="group inline-flex items-center gap-1.5 uppercase tracking-wide hover:text-foreground transition-colors"
+      >
+        {label}
+        <Icon
+          className={`h-3 w-3 shrink-0 transition-opacity ${active ? "text-foreground opacity-100" : "opacity-40 group-hover:opacity-100"}`}
+          aria-hidden
+        />
+      </button>
+    </th>
+  );
 }
 
 function formatDate(dateString: string | null): string {
@@ -43,6 +97,9 @@ export function ApplicationsTable({
   applications,
   stages,
   visibleKeys = APPLICATION_DEFAULT_COLUMN_KEYS,
+  sortField,
+  sortDir,
+  onSort,
 }: ApplicationsTableProps) {
   const router = useRouter();
   const stageMap = new Map(stages.map((s) => [s.id, s]));
@@ -61,13 +118,13 @@ export function ApplicationsTable({
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b bg-muted/30 text-xs text-muted-foreground uppercase tracking-wide">
-            <th className="px-4 py-3 text-left font-medium">Student</th>
-            {show("university") && <th className="px-4 py-3 text-left font-medium">University</th>}
-            {show("program") && <th className="px-4 py-3 text-left font-medium">Program</th>}
-            {show("intake") && <th className="px-4 py-3 text-left font-medium">Intake</th>}
-            {show("country") && <th className="px-4 py-3 text-left font-medium">Country</th>}
-            {show("status") && <th className="px-4 py-3 text-left font-medium">Status</th>}
-            {show("deadline") && <th className="px-4 py-3 text-left font-medium">Deadline</th>}
+            <SortableTh label="Student" columnKey="student" sortField={sortField} sortDir={sortDir} onSort={onSort} />
+            {show("university") && <SortableTh label="University" columnKey="university" sortField={sortField} sortDir={sortDir} onSort={onSort} />}
+            {show("program") && <SortableTh label="Program" columnKey="program" sortField={sortField} sortDir={sortDir} onSort={onSort} />}
+            {show("intake") && <SortableTh label="Intake" columnKey="intake" sortField={sortField} sortDir={sortDir} onSort={onSort} />}
+            {show("country") && <SortableTh label="Country" columnKey="country" sortField={sortField} sortDir={sortDir} onSort={onSort} />}
+            {show("status") && <SortableTh label="Status" columnKey="status" sortField={sortField} sortDir={sortDir} onSort={onSort} />}
+            {show("deadline") && <SortableTh label="Deadline" columnKey="deadline" sortField={sortField} sortDir={sortDir} onSort={onSort} />}
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
