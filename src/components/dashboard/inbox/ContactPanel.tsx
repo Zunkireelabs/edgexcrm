@@ -2,7 +2,9 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { User, Phone, ExternalLink, UserPlus, RefreshCw, UserCircle } from "lucide-react";
+import { User, Phone, Mail, ExternalLink, UserPlus, RefreshCw, UserCircle } from "lucide-react";
+import { buildLeadFromConversation, conversationContactEmail, type ConversationForLead } from "@/lib/inbox/lead-from-conversation";
+import { providerLabel } from "@/lib/inbox/provider-label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -122,20 +124,21 @@ export function ContactPanel({ conversation, tenantId, userRole, onConversationU
 
   const handleConvertToLead = async () => {
     if (!conversation) return;
-    const phone = conversation.contact_phone as string | null;
-    const name = conversation.contact_display_name as string | null;
-    const nameParts = name ? name.split(" ") : ["Unknown"];
-    const firstName = nameParts[0] ?? "Unknown";
-    const lastName = nameParts.slice(1).join(" ") || null;
+
+    // Name, phone, and (for website chat) email + source come from one tested helper.
+    const leadFields = buildLeadFromConversation({
+      provider: conversation.provider as string,
+      contact_display_name: conversation.contact_display_name as string | null,
+      contact_phone: conversation.contact_phone as string | null,
+      meta: conversation.meta as ConversationForLead["meta"],
+    });
 
     const res = await fetch("/api/v1/leads", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         tenant_id: tenantId,
-        first_name: firstName,
-        last_name: lastName,
-        phone: phone ?? undefined,
+        ...leadFields,
         is_final: true,
       }),
     });
@@ -185,8 +188,14 @@ export function ContactPanel({ conversation, tenantId, userRole, onConversationU
               <span>{conversation.contact_phone as string}</span>
             </div>
           )}
+          {conversationContactEmail(conversation.meta as ConversationForLead["meta"]) && (
+            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+              <Mail className="w-3 h-3" />
+              <span>{conversationContactEmail(conversation.meta as ConversationForLead["meta"])}</span>
+            </div>
+          )}
           <Badge variant="outline" className="text-xs">
-            {conversation.provider as string}
+            {providerLabel(conversation.provider as string)}
           </Badge>
         </div>
       </div>
