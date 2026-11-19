@@ -33,6 +33,7 @@ import {
   touchLastActivity,
 } from "@/lib/leads/dedup";
 import { reviveArchivedLead } from "@/lib/leads/revive-archived";
+import { canonicalizeDestinationsForTenant } from "@/lib/leads/destination-catalog";
 import { resolveLeadPipelineAndStage } from "@/lib/leads/pipeline-resolution";
 import { syncOriginMembership } from "@/lib/leads/branch-membership";
 import { processEmailForwardRules } from "@/lib/email/email-forward";
@@ -273,11 +274,16 @@ export async function POST(
   // the real `destinations` key directly stored whatever raw text (incl. a flag emoji) an
   // admin had typed into that option's value, unlike a form using an older synonym key.
   const explicitDestinations = Array.isArray(body.destinations) ? (body.destinations as string[]) : [];
-  const resolvedDestinations = explicitDestinations.length > 0
+  const rawResolvedDestinations = explicitDestinations.length > 0
     ? normalizeDestinations(explicitDestinations)
     : tenant.industry_id === "education_consultancy"
       ? extractDestinationsFromCustomFields(resolvedCustomFields)
       : [];
+  // Re-spell in the tenant's own catalog spelling ("uk" -> "UK") so the lead matches the pickers / Add Application list
+  // (client report, Nov 2026). Education tenants only; fail-safe — a catalog lookup problem never blocks a submission.
+  const resolvedDestinations = tenant.industry_id === "education_consultancy"
+    ? await canonicalizeDestinationsForTenant(supabase, tenant.id, rawResolvedDestinations)
+    : rawResolvedDestinations;
 
   // Same normalization for field_of_study/degree_level — degree_level was previously never
   // read at all in this route, so a form using any key name for that question silently lost

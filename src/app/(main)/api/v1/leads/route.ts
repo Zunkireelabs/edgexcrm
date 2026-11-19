@@ -68,7 +68,8 @@ import { processFormAutoresponder } from "@/lib/email/form-autoresponder";
 import { processFormSmsAutoresponder } from "@/lib/sms/form-autoresponder";
 import { assignDisplayIds } from "@/lib/leads/assign-display-ids";
 import { coerceAcademicPayload, hasProspectQualification, canBypassProspectQualification } from "@/lib/leads/prospect-qualification";
-import { normalizeDestinations, normalizeFieldOfStudy, normalizeDegreeLevel } from "@/lib/leads/destination-normalize";
+import { normalizeFieldOfStudy, normalizeDegreeLevel } from "@/lib/leads/destination-normalize";
+import { canonicalizeDestinationsForTenant } from "@/lib/leads/destination-catalog";
 import { onLeadsEnteredStageSafe } from "@/industries/_shared/features/outreach/lib/stage-auto-enroll";
 
 const CORS_HEADERS = {
@@ -1174,7 +1175,9 @@ async function handlePost(request: NextRequest) {
     company_email: body.company_email || null,
     // Education-only structured fields — normalized the same way as the public
     // submit route so every ingestion path produces identical, clean values.
-    destinations: Array.isArray(body.destinations) ? normalizeDestinations(body.destinations) : [],
+    destinations: Array.isArray(body.destinations)
+      ? await canonicalizeDestinationsForTenant(supabase, tenant.id, body.destinations)
+      : [],
     field_of_study: normalizeFieldOfStudy(body.field_of_study as string | null | undefined),
     degree_level: normalizeDegreeLevel(body.degree_level as string | null | undefined),
     intake_term: (body.intake_term as string | null | undefined)?.trim() || null,

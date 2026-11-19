@@ -33,7 +33,8 @@ import {
 } from "@/lib/leads/prospect-qualification";
 import { PERSONAL_DETAIL_COLUMNS, coercePersonalDetailsPayload } from "@/lib/leads/personal-details";
 import { STUDENT_RECORD_COLUMNS, coerceStudentRecordPayload } from "@/lib/leads/student-record-columns";
-import { normalizeDestinations, normalizeFieldOfStudy, normalizeDegreeLevel } from "@/lib/leads/destination-normalize";
+import { normalizeFieldOfStudy, normalizeDegreeLevel } from "@/lib/leads/destination-normalize";
+import { canonicalizeDestinationsForTenant } from "@/lib/leads/destination-catalog";
 import type { Lead } from "@/types/database";
 
 /** Every column a lead update may write. Exported so the Student Details contract test can prove the pop-up only sends these. */
@@ -624,7 +625,12 @@ export async function applyLeadPatch(
   // Study Interest panel Save button), a fourth place these fields could be
   // written with a flag emoji / off-canon casing if left alone.
   if (Array.isArray(updatePayload.destinations)) {
-    updatePayload.destinations = normalizeDestinations(updatePayload.destinations as string[]);
+    // Also re-spelled in the tenant's catalog spelling ("uk" -> "UK") — see lib/leads/destination-catalog.ts.
+    updatePayload.destinations = await canonicalizeDestinationsForTenant(
+      supabase,
+      auth.tenantId,
+      updatePayload.destinations as string[],
+    );
   }
   if (updatePayload.field_of_study !== undefined) {
     updatePayload.field_of_study = normalizeFieldOfStudy(updatePayload.field_of_study as string | null);

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { AuthContext } from "@/lib/api/auth";
 import type { ResolvedPermissions } from "@/lib/api/permissions";
+import { resetDestinationCatalogCache } from "@/lib/leads/destination-catalog";
 
 const resolvePositionSlugMock = vi.fn(async () => null as string | null);
 const getLeadMembershipMock = vi.fn(async () => [] as Array<{ branch_id: string; assigned_to: string | null; is_origin: boolean }>);
@@ -98,6 +99,7 @@ interface FakeDbOptions {
   tenantUsers?: RowMap; // keyed by user_id
   leadLists?: RowMap; // keyed by id
   pipelineStages?: RowMap; // keyed by id
+  countries?: Array<{ name: string }>; // the tenant's destination-country catalog (Settings → Destination Countries)
   leadAssignmentHistory?: Array<{ lead_id: string; to_user_id: string; from_user_id: string | null }>;
   tenants?: Record<string, unknown>;
   defaultBranchId?: string; // the tenant's is_default branch ("Global" for Admizz)
@@ -137,6 +139,10 @@ function makeFakeDb(opts: FakeDbOptions) {
       const id = state.eq.id as string | undefined;
       const row = id ? (opts.leadLists ?? {})[id] ?? null : null;
       return { data: row, error: null };
+    }
+
+    if (table === "countries") {
+      return { data: opts.countries ?? null, error: null };
     }
 
     if (table === "pipeline_stages") {
@@ -302,6 +308,7 @@ function fixtureAuth(overrides: Partial<AuthContext> = {}): AuthContext {
 const OPTS = { requestId: "req-1", ip: null, userAgent: null };
 
 beforeEach(() => {
+  resetDestinationCatalogCache();
   resolvePositionSlugMock.mockReset().mockResolvedValue(null);
   getLeadMembershipMock.mockReset().mockResolvedValue([]);
   syncOriginMembershipMock.mockClear();
@@ -1211,3 +1218,39 @@ describe("applyLeadPatch — student record columns (migrations 236 + 239)", () 
   });
 });
 
+
+
+// Client report (Manish / Admizz, Nov 2026): a lead's destinations were saved as "uk" / "nepal" while the tenant's
+// catalog spells "UK" / "Nepal", so no picker matched. Saving a lead's destinations re-spells them in the catalog's
+// spelling (lib/leads/destination-catalog.ts); a catalog problem must never block the save.
+describe("applyLeadPatch — destinations are saved in the tenant's catalog spelling", () => {
+  const ownerAuth = () => fixtureAuth({ role: "owner", permissions: { baseTier: "owner", leadScope: "all" } as ResolvedPermissions });
+  const LEAD = { id: "lead-1", pipeline_id: "pipe-1", assigned_to: "user-1", branch_id: null, list_id: null };
+
+  it("re-spells known destinations in the catalog's spelling (the Nepal-UK lead)", async () => {
+    await setFakeDb({ leads: LEAD, countries: [{ name: "Nepal" }, { name: "UK" }, { name: "USA" }] });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(ownerAuth(), "lead-1", { destinations: ["uk", "nepal"] }, OPTS);
+    expect(outcome.kind).toBe("ok");
+    if (outcome.kind !== "ok") return;
+    expect(outcome.lead.destinations).toEqual(["UK", "Nepal"]);
+  });
+
+  it("keeps a destination the catalog doesn't know, and still drops decoration/duplicates", async () => {
+    await setFakeDb({ leads: LEAD, countries: [{ name: "UK" }] });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(ownerAuth(), "lead-1", { destinations: ["🇬🇧 uk", "UK", "Narnia"] }, OPTS);
+    expect(outcome.kind).toBe("ok");
+    if (outcome.kind !== "ok") return;
+    expect(outcome.lead.destinations).toEqual(["UK", "Narnia"]);
+  });
+
+  it("a catalog that can't be read falls back to the old behaviour — the save still succeeds", async () => {
+    await setFakeDb({ leads: LEAD }); // no countries table rows -> lookup yields nothing
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(ownerAuth(), "lead-1", { destinations: ["🇬🇧 uk"] }, OPTS);
+    expect(outcome.kind).toBe("ok");
+    if (outcome.kind !== "ok") return;
+    expect(outcome.lead.destinations).toEqual(["uk"]);
+  });
+});
