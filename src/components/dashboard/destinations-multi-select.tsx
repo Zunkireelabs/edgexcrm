@@ -4,7 +4,7 @@ import { useId, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { normalizeDestinations } from "@/lib/leads/destination-normalize";
+import { canonicalizeDestinations } from "@/lib/leads/destination-normalize";
 
 // Shared by every "Interested Destination(s)" picker across the CRM (Add Lead,
 // lead detail Study Interest panel, lead Qualify dialog, leads-table Qualify
@@ -35,7 +35,15 @@ export function DestinationsMultiSelect({
   // which of the 6+ callers passed in the dirty array — a checkbox for an
   // already-present destination always shows checked, so it can never be added a
   // second time through this picker.
-  const cleanSelected = normalizeDestinations(selected);
+  //
+  // It ALSO re-spells every value the catalog knows in the CATALOG's spelling (case/whitespace-insensitive): a lead
+  // saved with "uk" now shows UK ticked, ticking/unticking UK works, and saving writes "UK" back — previously "uk"
+  // matched no checkbox, nothing showed ticked, and UK could not be ticked at all (client report, Nov 2026).
+  const cleanSelected = canonicalizeDestinations(selected, options);
+  // Selected values the catalog has no entry for (a destination since removed from Settings, or free text from a
+  // form) get their own checkbox, so they can always be unticked — before, they showed in the button text but had no
+  // checkbox, so they could never be removed.
+  const extraSelected = cleanSelected.filter((v) => !options.includes(v));
 
   // Toggle membership lives here, not in each caller — this is the one place
   // that logic should exist now that rendering is already centralized. Operates
@@ -68,7 +76,7 @@ export function DestinationsMultiSelect({
       </button>
       {open && (
         <div className="border border-input rounded-md p-2 grid grid-cols-2 gap-1.5 bg-background shadow-sm">
-          {options.map((dest) => (
+          {[...options, ...extraSelected].map((dest) => (
             <div key={dest} className="flex items-center gap-2">
               <Checkbox
                 id={`${instanceId}-${dest}`}
