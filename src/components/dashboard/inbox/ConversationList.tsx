@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { ChatTextIcon, PhoneIcon, UserIcon } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { providerLabel } from "@/lib/inbox/provider-label";
 
 type ConversationRow = Record<string, unknown>;
 
@@ -27,17 +28,6 @@ interface ConversationListProps {
   onFilterAssignee: (v: "all" | "mine" | "unassigned") => void;
   onFilterChannel: (v: string | "all") => void;
   currentUserId: string;
-}
-
-function providerLabel(provider: string) {
-  const map: Record<string, string> = {
-    sandbox: "Sandbox",
-    whatsapp: "WhatsApp",
-    messenger: "Messenger",
-    instagram: "Instagram",
-    email: "Email",
-  };
-  return map[provider] ?? provider;
 }
 
 function formatRelative(ts: string | null | undefined): string {

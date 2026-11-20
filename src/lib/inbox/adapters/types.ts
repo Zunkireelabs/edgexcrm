@@ -1,7 +1,7 @@
 // Channel adapter contract — every provider implements this interface.
 // The send/receive code never branches on provider name; it reads capability flags instead.
 
-export type InboxProvider = 'whatsapp' | 'messenger' | 'instagram' | 'sandbox' | 'email';
+export type InboxProvider = 'whatsapp' | 'messenger' | 'instagram' | 'sandbox' | 'email' | 'chatwoot';
 
 export interface ChannelCapabilities {
   /** Hours the session window stays open after last customer message (24 for WhatsApp) */
@@ -57,6 +57,8 @@ export interface NormalizedInbound {
   contactPhone: string | null;
   /** Display name from provider (may be absent) */
   contactDisplayName: string | null;
+  /** Email the visitor gave, when the provider has one (web chat). Optional so existing adapters are unchanged. */
+  contactEmail?: string | null;
   /** External message ID for idempotency */
   providerMessageId: string;
   /** ISO timestamp from provider (may be absent) */
@@ -184,4 +186,18 @@ export interface ChannelAdapter {
     mimeType: string,
     filename: string | null
   ): Promise<{ providerMediaId: string }>;
+
+  /**
+   * Optional: the provider credential to send with when a specific EdgeX person is replying, so
+   * the customer sees THAT person (website chat shows the sender's name). `channel.access_token`
+   * is the channel's own (decrypted) credential. Return null to keep using it. May throw:
+   * sendMessage() catches that and falls back to the channel's credential, so a reply is never
+   * blocked by this. Only called for human replies.
+   */
+  resolveSenderToken?(args: {
+    channel: InboxChannel;
+    userId: string;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    db: import("@supabase/supabase-js").SupabaseClient<any>;
+  }): Promise<string | null>;
 }

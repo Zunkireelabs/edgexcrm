@@ -69,6 +69,8 @@ async function makeLead(phone: string | null, overrides: Record<string, unknown>
 async function enqueueInboundEvent(params: {
   externalContactId: string;
   contactPhone: string | null;
+  /** Web chat only; omitted entirely for WhatsApp-style events (the field is optional on the payload). */
+  contactEmail?: string | null;
   providerMessageId?: string;
   channelId?: string;
   attachments?: unknown[];
@@ -87,6 +89,7 @@ async function enqueueInboundEvent(params: {
         provider: "whatsapp",
         external_contact_id: params.externalContactId,
         contact_phone: params.contactPhone,
+        ...(params.contactEmail !== undefined ? { contact_email: params.contactEmail } : {}),
         contact_display_name: null,
         provider_message_id: params.providerMessageId ?? crypto.randomUUID(),
         provider_timestamp: new Date().toISOString(),
@@ -477,5 +480,99 @@ describe("S2-A: inbound media resolve + persist", () => {
     // what matters is that none of the calls through this stub were for graph.facebook.com.
     const graphCalls = fetchMock.mock.calls.filter(([u]) => String(u).includes("graph.facebook.com"));
     expect(graphCalls).toHaveLength(0);
+  });
+});
+
+// Website chat (Chatwoot, docs/CHATWOOT-WEBSITE-CHAT-BRIEF.md): visitors usually give an
+// email, not a phone number. Email linking only runs when phone gave no single match and
+// the event carries contact_email; WhatsApp events (no contact_email) behave exactly as before.
+describe("web chat email linking", () => {
+  async function runAndReadConversation(externalContactId: string, event: Parameters<typeof enqueueInboundEvent>[0]) {
+    const eventId = await enqueueInboundEvent(event);
+    const { processInboundEventsByIds } = await import("./process-inbound");
+    const result = await processInboundEventsByIds([eventId]);
+    expect(result.errors).toBe(0);
+    const { data } = await db
+      .from("conversations")
+      .select("lead_id, meta")
+      .eq("channel_id", channelId)
+      .eq("external_contact_id", externalContactId)
+      .single();
+    return data as { lead_id: string | null; meta: { contact_email?: string } | null };
+  }
+
+  it("links to the one lead whose email matches, ignoring case and surrounding spaces, and keeps the email on the conversation", async (ctx) => {
+    if (!localDbAvailable) { ctx.skip(); return; }
+
+    const leadId = await makeLead(null, { email: "sita.web@example.test" });
+    const conv = await runAndReadConversation("cw-contact-1", {
+      externalContactId: "cw-contact-1",
+      contactPhone: null,
+      contactEmail: "  Sita.Web@Example.TEST ",
+    });
+
+    expect(conv.lead_id).toBe(leadId);
+    expect(conv.meta?.contact_email).toBe("  Sita.Web@Example.TEST ");
+  });
+
+  it("two leads with the same email → no link (ambiguous, never auto-pick)", async (ctx) => {
+    if (!localDbAvailable) { ctx.skip(); return; }
+
+    await makeLead(null, { email: "shared.web@example.test" });
+    await makeLead(null, { email: "shared.web@example.test" });
+    const conv = await runAndReadConversation("cw-contact-2", {
+      externalContactId: "cw-contact-2",
+      contactPhone: null,
+      contactEmail: "shared.web@example.test",
+    });
+
+    expect(conv.lead_id).toBeNull();
+  });
+
+  it("a soft-deleted or non-final lead is never matched by email", async (ctx) => {
+    if (!localDbAvailable) { ctx.skip(); return; }
+
+    await makeLead(null, { email: "gone.web@example.test", deleted_at: new Date().toISOString() });
+    await makeLead(null, { email: "draft.web@example.test", is_final: false });
+    const gone = await runAndReadConversation("cw-contact-3", { externalContactId: "cw-contact-3", contactPhone: null, contactEmail: "gone.web@example.test" });
+    const draft = await runAndReadConversation("cw-contact-4", { externalContactId: "cw-contact-4", contactPhone: null, contactEmail: "draft.web@example.test" });
+
+    expect(gone.lead_id).toBeNull();
+    expect(draft.lead_id).toBeNull();
+  });
+
+  it("phone still wins: a phone match is used even when the email points at a different lead", async (ctx) => {
+    if (!localDbAvailable) { ctx.skip(); return; }
+
+    const phoneLead = await makeLead("+9779812340001");
+    await makeLead(null, { email: "other.web@example.test" });
+    const conv = await runAndReadConversation("cw-contact-5", {
+      externalContactId: "cw-contact-5",
+      contactPhone: "+9779812340001",
+      contactEmail: "other.web@example.test",
+    });
+
+    expect(conv.lead_id).toBe(phoneLead);
+  });
+
+  it("falls back to email when the phone matches no lead", async (ctx) => {
+    if (!localDbAvailable) { ctx.skip(); return; }
+
+    const emailLead = await makeLead(null, { email: "fallback.web@example.test" });
+    const conv = await runAndReadConversation("cw-contact-6", {
+      externalContactId: "cw-contact-6",
+      contactPhone: "+9779812340002",
+      contactEmail: "fallback.web@example.test",
+    });
+
+    expect(conv.lead_id).toBe(emailLead);
+  });
+
+  it("a visitor with no phone and no email stays unlinked and keeps no email on the conversation", async (ctx) => {
+    if (!localDbAvailable) { ctx.skip(); return; }
+
+    const conv = await runAndReadConversation("cw-contact-7", { externalContactId: "cw-contact-7", contactPhone: null, contactEmail: null });
+    expect(conv.lead_id).toBeNull();
+    expect(conv.meta?.contact_email).toBeUndefined();
   });
 });

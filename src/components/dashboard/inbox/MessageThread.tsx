@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { providerLabel } from "@/lib/inbox/provider-label";
 
 type ConversationRow = Record<string, unknown>;
 type MessageRow = Record<string, unknown>;
@@ -204,7 +205,9 @@ export function MessageThread({
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-sm truncate">{displayName}</p>
           <p className="text-xs text-muted-foreground">
-            {conversation.provider as string} · {conversation.external_contact_id as string}
+            {providerLabel(conversation.provider as string)}
+            {/* A Chatwoot contact id means nothing to a counselor; other providers show the phone/ID. */}
+            {conversation.provider !== "chatwoot" && <> · {conversation.external_contact_id as string}</>}
           </p>
         </div>
       </div>
