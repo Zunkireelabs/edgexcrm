@@ -63,6 +63,23 @@ export const TIMEZONES = [
   { id: "America/Los_Angeles", label: "US West (Los Angeles)" },
 ] as const;
 
+/** Older spellings some browsers still report (Chrome on Mac says "Asia/Katmandu" for Nepal) -> the name we list. */
+const TIMEZONE_ALIASES: Record<string, string> = {
+  "Asia/Katmandu": "Asia/Kathmandu",
+  "Asia/Calcutta": "Asia/Kolkata",
+  "Asia/Dacca": "Asia/Dhaka",
+  "Etc/UTC": "UTC",
+  "Etc/GMT": "UTC",
+  "GMT": "UTC",
+};
+
+/** The listed time zone id for what a browser reported, or null when it is not one we offer. */
+export function listedTimezone(reported: string | null | undefined): string | null {
+  if (!reported) return null;
+  const name = TIMEZONE_ALIASES[reported] ?? reported;
+  return TIMEZONES.some((t) => t.id === name) ? name : null;
+}
+
 /**
  * When the team is "in". Off by default: with it off the chat always shows as online (the team user is kept
  * online in Chatwoot), so an admin should turn it on and set the real hours. Days are 0 = Sunday ... 6 = Saturday.

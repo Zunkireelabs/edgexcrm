@@ -179,6 +179,30 @@ describe("WebsiteChatCard", () => {
     expect(sent.officeHours.days).toEqual([1, 2, 3, 4, 5, 0]); // Sunday added to the default Mon to Fri
   });
 
+  it("turning office hours on picks the admin's own time zone, even when the browser uses an older spelling", async () => {
+    vi.spyOn(Intl, "DateTimeFormat").mockImplementation((() => ({ resolvedOptions: () => ({ timeZone: "Asia/Katmandu" }) })) as never);
+    const fetchMock = mockFetch([{ body: { data: connected } }, { body: { data: connected } }]);
+    render(<WebsiteChatCard />);
+
+    fireEvent.click(await screen.findByLabelText(/outside office hours/));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    const [, init] = fetchMock.mock.calls[1] as unknown as [string, RequestInit];
+    expect(JSON.parse(init.body as string).officeHours.timezone).toBe("Asia/Kathmandu");
+  });
+
+  it("keeps UTC when the browser's zone is not one we offer", async () => {
+    vi.spyOn(Intl, "DateTimeFormat").mockImplementation((() => ({ resolvedOptions: () => ({ timeZone: "Pacific/Auckland" }) })) as never);
+    const fetchMock = mockFetch([{ body: { data: connected } }, { body: { data: connected } }]);
+    render(<WebsiteChatCard />);
+
+    fireEvent.click(await screen.findByLabelText(/outside office hours/));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    const [, init] = fetchMock.mock.calls[1] as unknown as [string, RequestInit];
+    expect(JSON.parse(init.body as string).officeHours.timezone).toBe("UTC");
+  });
+
   it("a hidden field can no longer be marked required", async () => {
     mockFetch([{ body: { data: connected } }]);
     render(<WebsiteChatCard />);

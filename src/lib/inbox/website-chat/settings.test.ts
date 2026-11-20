@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import {
   buildWidgetSnippet,
   DEFAULT_OFFICE_HOURS,
+  listedTimezone,
   toChatwootInbox,
   withSettingDefaults,
   contrastWithWhite,
@@ -267,5 +268,24 @@ describe("withSettingDefaults", () => {
     const filled = withSettingDefaults(old);
     expect(filled.officeHours).toEqual(DEFAULT_OFFICE_HOURS);
     expect(filled.websiteHost).toBe("admizzeducation.com");
+  });
+});
+
+describe("listedTimezone", () => {
+  it("accepts the zones we list, as they are", () => {
+    expect(listedTimezone("Asia/Kathmandu")).toBe("Asia/Kathmandu");
+    expect(listedTimezone("Europe/London")).toBe("Europe/London");
+  });
+
+  it("maps the older spellings browsers still report (Chrome on Mac says Asia/Katmandu for Nepal)", () => {
+    expect(listedTimezone("Asia/Katmandu")).toBe("Asia/Kathmandu");
+    expect(listedTimezone("Asia/Calcutta")).toBe("Asia/Kolkata");
+    expect(listedTimezone("Etc/UTC")).toBe("UTC");
+  });
+
+  it("says null for a zone we do not offer, or nothing", () => {
+    expect(listedTimezone("Pacific/Auckland")).toBeNull();
+    expect(listedTimezone("")).toBeNull();
+    expect(listedTimezone(undefined)).toBeNull();
   });
 });

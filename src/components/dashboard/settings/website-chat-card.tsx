@@ -20,6 +20,7 @@ import {
   BRAND_COLORS,
   contrastWithWhite,
   FORM_FIELD_KEYS,
+  listedTimezone,
   MIN_COLOR_CONTRAST,
   normalizeHexColor,
   TIMEZONES,
@@ -144,8 +145,8 @@ export function WebsiteChatCard() {
     if (!draft) return;
     let next = { ...draft.officeHours, ...patch };
     if (patch.enabled === true && next.timezone === "UTC") {
-      const mine = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      if (TIMEZONES.some((t) => t.id === mine)) next = { ...next, timezone: mine };
+      const mine = listedTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+      if (mine) next = { ...next, timezone: mine };
     }
     setDraft({ ...draft, officeHours: next });
   }
