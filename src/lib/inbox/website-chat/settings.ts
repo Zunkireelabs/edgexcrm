@@ -1,7 +1,8 @@
 // Website chat settings: what an admin can change, the rules for each value, and how they map to
 // Chatwoot's web widget. Pure functions only (no network, no database), so every rule is unit-tested.
 //
-// Decisions (v1): the bubble colour is one of a fixed set of brand colours, file uploads are always
+// Decisions (v1): the bubble colour is one of a fixed set of colours, or a custom colour that is dark
+// enough for white text to be readable (see MIN_COLOR_CONTRAST), file uploads are always
 // off (EdgeX cannot show attachments yet), the message box is always shown (it is built into
 // Chatwoot's pre-chat form and cannot be removed). Business hours, photos and branding are not here.
 
@@ -17,6 +18,25 @@ export const BRAND_COLORS = [
 
 export type BrandColorId = (typeof BRAND_COLORS)[number]["id"];
 
+/** Chatwoot paints white text on the chosen colour, so it must be dark enough to read (WCAG AA, normal text). */
+export const MIN_COLOR_CONTRAST = 4.5;
+
+/** "#001353", "001353" or "#013" -> "#001353" (upper case), or null when it is not a hex colour. */
+export function normalizeHexColor(input: string): string | null {
+  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(input.trim());
+  if (!m) return null;
+  const h = m[1].length === 3 ? m[1].split("").map((c) => c + c).join("") : m[1];
+  return `#${h.toUpperCase()}`;
+}
+
+/** WCAG contrast ratio of white text on this "#RRGGBB" colour: 1 (invisible) to 21 (black). */
+export function contrastWithWhite(hex: string): number {
+  const [r, g, b] = [1, 3, 5]
+    .map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+    .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+  return 1.05 / (0.2126 * r + 0.7152 * g + 0.0722 * b + 0.05);
+}
+
 export const REPLY_TIMES = ["in_a_few_minutes", "in_a_few_hours", "in_a_day"] as const;
 export type ReplyTime = (typeof REPLY_TIMES)[number];
 
@@ -28,15 +48,55 @@ export interface FormFieldSetting {
   required: boolean;
 }
 
+/** Time zones the card offers (IANA names; Chatwoot accepts these). A short list keeps the choice obvious. */
+export const TIMEZONES = [
+  { id: "UTC", label: "UTC" },
+  { id: "Asia/Kathmandu", label: "Nepal (Kathmandu)" },
+  { id: "Asia/Kolkata", label: "India (Kolkata)" },
+  { id: "Asia/Dhaka", label: "Bangladesh (Dhaka)" },
+  { id: "Asia/Dubai", label: "UAE (Dubai)" },
+  { id: "Asia/Singapore", label: "Singapore" },
+  { id: "Australia/Sydney", label: "Australia (Sydney)" },
+  { id: "Europe/London", label: "UK (London)" },
+  { id: "America/New_York", label: "US East (New York)" },
+  { id: "America/Chicago", label: "US Central (Chicago)" },
+  { id: "America/Los_Angeles", label: "US West (Los Angeles)" },
+] as const;
+
+/**
+ * When the team is "in". Off by default: with it off the chat always shows as online (the team user is kept
+ * online in Chatwoot), so an admin should turn it on and set the real hours. Days are 0 = Sunday ... 6 = Saturday.
+ */
+export interface OfficeHoursSetting {
+  enabled: boolean;
+  timezone: string;
+  days: number[];
+  /** "HH:MM", 24 hours. */
+  open: string;
+  close: string;
+}
+
+export const DEFAULT_OFFICE_HOURS: OfficeHoursSetting = {
+  enabled: false,
+  timezone: "UTC",
+  days: [1, 2, 3, 4, 5],
+  open: "09:00",
+  close: "17:00",
+};
+
+const TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
 export interface WebsiteChatSettings {
   /** The one site allowed to show the bubble, stored as a bare host, e.g. "admizzeducation.com". */
   websiteHost: string;
-  color: BrandColorId;
+  /** A BRAND_COLORS id (for example "teal") or a custom "#RRGGBB" that passes MIN_COLOR_CONTRAST. */
+  color: string;
   title: string;
   tagline: string;
   replyTime: ReplyTime;
   formIntro: string;
   fields: Record<FormFieldKey, FormFieldSetting>;
+  officeHours: OfficeHoursSetting;
 }
 
 export const DEFAULT_WEBSITE_CHAT_SETTINGS: Omit<WebsiteChatSettings, "websiteHost"> = {
@@ -50,7 +110,18 @@ export const DEFAULT_WEBSITE_CHAT_SETTINGS: Omit<WebsiteChatSettings, "websiteHo
     phone: { show: true, required: true },
     email: { show: true, required: false },
   },
+  officeHours: DEFAULT_OFFICE_HOURS,
 };
+
+/** Settings saved before a field existed come back without it; fill the gaps with the defaults. */
+export function withSettingDefaults(stored: Partial<WebsiteChatSettings> & { websiteHost: string }): WebsiteChatSettings {
+  return {
+    ...DEFAULT_WEBSITE_CHAT_SETTINGS,
+    ...stored,
+    fields: { ...DEFAULT_WEBSITE_CHAT_SETTINGS.fields, ...stored.fields },
+    officeHours: { ...DEFAULT_OFFICE_HOURS, ...stored.officeHours },
+  };
+}
 
 const MAX_TITLE = 60;
 const MAX_TAGLINE = 120;
@@ -115,7 +186,11 @@ export function mergeWebsiteChatSettings(
     return { ok: false, errors: { body: ["Request body must be a JSON object"] } };
   }
   const b = input as Record<string, unknown>;
-  const next: WebsiteChatSettings = { ...current, fields: { ...current.fields } };
+  const next: WebsiteChatSettings = {
+    ...current,
+    fields: { ...current.fields },
+    officeHours: { ...DEFAULT_OFFICE_HOURS, ...current.officeHours, days: [...(current.officeHours?.days ?? DEFAULT_OFFICE_HOURS.days)] },
+  };
 
   if (b.websiteHost !== undefined) {
     const host = typeof b.websiteHost === "string" ? normalizeWebsiteHost(b.websiteHost) : null;
@@ -124,8 +199,20 @@ export function mergeWebsiteChatSettings(
   }
 
   if (b.color !== undefined) {
-    if (BRAND_COLORS.some((c) => c.id === b.color)) next.color = b.color as BrandColorId;
-    else errors.color = ["Pick one of the listed colours"];
+    if (typeof b.color === "string" && BRAND_COLORS.some((c) => c.id === b.color)) {
+      next.color = b.color;
+    } else {
+      const hex = typeof b.color === "string" ? normalizeHexColor(b.color) : null;
+      if (!hex) {
+        errors.color = ["Pick a listed colour, or enter one like #001353"];
+      } else if (contrastWithWhite(hex) < MIN_COLOR_CONTRAST) {
+        errors.color = [
+          `That colour is too light for white text (${contrastWithWhite(hex).toFixed(1)}:1, it needs at least ${MIN_COLOR_CONTRAST}:1). Pick a darker one.`,
+        ];
+      } else {
+        next.color = hex;
+      }
+    }
   }
 
   if (b.replyTime !== undefined) {
@@ -161,6 +248,12 @@ export function mergeWebsiteChatSettings(
     }
   }
 
+  if (b.officeHours !== undefined) {
+    const hours = readOfficeHours(b.officeHours, next.officeHours);
+    if (typeof hours === "string") errors.officeHours = [hours];
+    else next.officeHours = hours;
+  }
+
   // A hidden field can never be required, and the visitor must always leave a way to reach them.
   for (const key of FORM_FIELD_KEYS) {
     if (!next.fields[key].show) next.fields[key].required = false;
@@ -172,8 +265,44 @@ export function mergeWebsiteChatSettings(
   return Object.keys(errors).length > 0 ? { ok: false, errors } : { ok: true, settings: next };
 }
 
-function colorHex(id: BrandColorId): string {
-  return BRAND_COLORS.find((c) => c.id === id)?.hex ?? BRAND_COLORS[0].hex;
+/** Applies what was sent on top of the current hours. Returns the new hours, or a message saying what is wrong. */
+function readOfficeHours(input: unknown, current: OfficeHoursSetting): OfficeHoursSetting | string {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return "Office hours must be an object";
+  const b = input as Record<string, unknown>;
+  const next: OfficeHoursSetting = { ...current, days: [...current.days] };
+
+  if (b.enabled !== undefined) {
+    if (typeof b.enabled !== "boolean") return "Office hours on/off must be true or false";
+    next.enabled = b.enabled;
+  }
+  if (b.timezone !== undefined) {
+    if (typeof b.timezone !== "string" || !TIMEZONES.some((t) => t.id === b.timezone)) return "Pick one of the listed time zones";
+    next.timezone = b.timezone;
+  }
+  if (b.days !== undefined) {
+    const days = b.days;
+    if (!Array.isArray(days) || !days.every((d) => Number.isInteger(d) && d >= 0 && d <= 6)) return "Days must be numbers from 0 (Sunday) to 6 (Saturday)";
+    next.days = [...new Set(days as number[])].sort((a, c) => a - c);
+  }
+  for (const key of ["open", "close"] as const) {
+    if (b[key] === undefined) continue;
+    if (typeof b[key] !== "string" || !TIME_PATTERN.test(b[key] as string)) return `The ${key} time must look like 09:00`;
+    next[key] = b[key] as string;
+  }
+
+  if (next.enabled) {
+    if (next.days.length === 0) return "Pick at least one day the team is available";
+    if (next.close <= next.open) return "The closing time must be after the opening time";
+  }
+  return next;
+}
+
+/** The "#RRGGBB" Chatwoot gets. A stored custom colour that is no longer valid falls back to the first listed colour. */
+function colorHex(color: string): string {
+  const preset = BRAND_COLORS.find((c) => c.id === color);
+  if (preset) return preset.hex;
+  const hex = normalizeHexColor(color);
+  return hex && contrastWithWhite(hex) >= MIN_COLOR_CONTRAST ? hex : BRAND_COLORS[0].hex;
 }
 
 /** The host the bubble is allowed on while chat is switched off: nothing can ever match it. */
@@ -230,6 +359,26 @@ export function toChatwootChannel(settings: WebsiteChatSettings, enabled: boolea
     // Chatwoot's default flags are attachments + emoji + end-conversation; attachments stay off.
     selected_feature_flags: ["emoji_picker", "end_conversation"],
     allowed_domains: enabled ? allowedDomainsFor(settings.websiteHost) : CHAT_OFF_ALLOWED_DOMAINS,
+  };
+}
+
+/**
+ * The inbox-level fields Chatwoot takes next to `channel`. `name` is what the chat header shows on the form
+ * screen, so it follows the title. Working hours are sent even while off; Chatwoot ignores them until enabled.
+ */
+export function toChatwootInbox(settings: WebsiteChatSettings) {
+  const hours = { ...DEFAULT_OFFICE_HOURS, ...settings.officeHours };
+  const [openHour, openMinutes] = hours.open.split(":").map(Number);
+  const [closeHour, closeMinutes] = hours.close.split(":").map(Number);
+  return {
+    name: settings.title,
+    working_hours_enabled: hours.enabled,
+    timezone: hours.timezone,
+    working_hours: [0, 1, 2, 3, 4, 5, 6].map((day) =>
+      hours.days.includes(day)
+        ? { day_of_week: day, closed_all_day: false, open_all_day: false, open_hour: openHour, open_minutes: openMinutes, close_hour: closeHour, close_minutes: closeMinutes }
+        : { day_of_week: day, closed_all_day: true, open_all_day: false }
+    ),
   };
 }
 

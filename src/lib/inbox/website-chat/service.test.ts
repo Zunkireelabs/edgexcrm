@@ -3,7 +3,7 @@ import { randomBytes } from "crypto";
 
 vi.mock("@/lib/logger", () => ({ logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() } }));
 
-import { connectWebsiteChat, updateWebsiteChat, loadWebsiteChat, WebsiteChatError } from "./service";
+import { connectWebsiteChat, updateWebsiteChat, loadWebsiteChat, uploadWebsiteChatLogo, removeWebsiteChatLogo, WebsiteChatError } from "./service";
 import { decryptToken } from "../crypto";
 import { DEFAULT_WEBSITE_CHAT_SETTINGS } from "./settings";
 
@@ -11,8 +11,15 @@ const calls: Array<{ method: string; url: string; token: string; body: unknown }
 let failOn: string | null = null;
 
 function fakeFetch(responses: Record<string, unknown>) {
-  return vi.fn(async (url: string, init: { method: string; headers: Record<string, string>; body?: string }) => {
-    calls.push({ method: init.method, url, token: init.headers.api_access_token, body: init.body ? JSON.parse(init.body) : undefined });
+  return vi.fn(async (url: string, init: { method: string; headers: Record<string, string>; body?: string | FormData }) => {
+    // A file upload arrives as FormData: record which parts were sent instead of parsing JSON.
+    const body =
+      init.body instanceof FormData
+        ? { form: Object.fromEntries([...init.body.entries()].map(([k, v]) => [k, v instanceof Blob ? `file:${v.type}` : v])) }
+        : init.body
+          ? JSON.parse(init.body)
+          : undefined;
+    calls.push({ method: init.method, url, token: init.headers.api_access_token, body });
     if (failOn && url.includes(failOn)) return new Response("secret failure detail", { status: 500 });
     const key = Object.keys(responses).find((k) => url.endsWith(k));
     return new Response(JSON.stringify(key ? responses[key] : {}), { status: 200 });
@@ -85,13 +92,20 @@ describe("connectWebsiteChat", () => {
       "POST /platform/api/v1/accounts/7/account_users",
       "POST /api/v1/accounts/7/inboxes",
       "POST /api/v1/accounts/7/inbox_members",
+      "POST /api/v1/profile/availability",
+      "POST /api/v1/profile/auto_offline",
       "POST /api/v1/accounts/7/webhooks",
     ]);
     // Platform calls use the platform token; account calls use the new team user's token.
     expect(calls[0].token).toBe("platform-token");
     expect(calls[3].token).toBe("team-token");
     expect((calls[3].body as { channel: { type: string } }).channel.type).toBe("web_widget");
-    expect(calls[5].body).toEqual({ webhook: { url: "https://crm.example.com/api/webhooks/chatwoot", subscriptions: ["message_created"] } });
+    // The inbox is named after the chat title (the form screen's header), and starts with office hours off.
+    expect(calls[3].body).toMatchObject({ name: "Chat with Admizz Education", working_hours_enabled: false });
+    // The shared team user is kept online (as itself, with its own token) so the chat does not say "away".
+    expect(calls[5]).toMatchObject({ token: "team-token", body: { profile: { account_id: 7, availability: "online" } } });
+    expect(calls[6]).toMatchObject({ token: "team-token", body: { profile: { account_id: 7, auto_offline: false } } });
+    expect(calls[7].body).toEqual({ webhook: { url: "https://crm.example.com/api/webhooks/chatwoot", subscriptions: ["message_created"] } });
     // The made-up team email can never receive mail.
     expect((calls[1].body as { email: string }).email).toMatch(/@chat\.invalid$/);
 
@@ -102,7 +116,7 @@ describe("connectWebsiteChat", () => {
     expect(decryptToken(row.access_token)).toBe("team-token");
     expect(decryptToken(row.meta.webhook_secret_enc)).toBe("whsec");
 
-    expect(state).toMatchObject({ connected: true, enabled: true });
+    expect(state).toMatchObject({ connected: true, enabled: true, logoUrl: null });
     expect(state.snippet).toContain("site-token");
     expect(state.snippet).not.toContain("team-token");
   });
@@ -169,8 +183,14 @@ describe("updateWebsiteChat", () => {
 
     const state = await updateWebsiteChat({ db: db as never, tenantId: "tenant-A", settings, enabled: false });
 
-    expect(calls).toHaveLength(1);
+    expect(calls.map((c) => `${c.method} ${c.url.replace("https://inbox.example.com", "")}`)).toEqual([
+      "PATCH /api/v1/accounts/7/inboxes/9",
+      "POST /api/v1/profile/availability",
+      "POST /api/v1/profile/auto_offline",
+    ]);
     expect(calls[0]).toMatchObject({ method: "PATCH", token: "team-token" });
+    // The inbox name follows the title, and the working hours go with it.
+    expect(calls[0].body).toMatchObject({ name: settings.title, working_hours_enabled: false });
     expect(calls[0].url).toBe("https://inbox.example.com/api/v1/accounts/7/inboxes/9");
     expect((calls[0].body as { channel: Record<string, unknown> }).channel).not.toHaveProperty("type");
     expect((calls[0].body as { channel: { allowed_domains: string } }).channel.allowed_domains).toContain(".invalid");
@@ -193,6 +213,36 @@ describe("updateWebsiteChat", () => {
     expect(db.updated).toHaveLength(0);
   });
 
+  it("still saves when keeping the team user online fails (the chat just keeps saying away)", async () => {
+    vi.stubGlobal("fetch", fakeFetch({}));
+    failOn = "/profile/";
+    const { encryptToken } = await import("../crypto");
+    const db = fakeDb({ ...stored(), access_token: encryptToken("team-token") });
+
+    const state = await updateWebsiteChat({ db: db as never, tenantId: "tenant-A", settings: stored().meta.website_chat.settings, enabled: true });
+
+    expect(state.enabled).toBe(true);
+    expect(db.updated).toHaveLength(1);
+  });
+
+  it("sends the office hours as Chatwoot's 7 day entries", async () => {
+    vi.stubGlobal("fetch", fakeFetch({}));
+    const { encryptToken } = await import("../crypto");
+    const db = fakeDb({ ...stored(), access_token: encryptToken("team-token") });
+    const settings = {
+      ...stored().meta.website_chat.settings,
+      officeHours: { enabled: true, timezone: "Asia/Kathmandu", days: [0, 1, 2], open: "10:30", close: "18:00" },
+    };
+
+    await updateWebsiteChat({ db: db as never, tenantId: "tenant-A", settings, enabled: true });
+
+    const body = calls[0].body as { working_hours_enabled: boolean; timezone: string; working_hours: Array<Record<string, unknown>> };
+    expect(body).toMatchObject({ working_hours_enabled: true, timezone: "Asia/Kathmandu" });
+    expect(body.working_hours).toHaveLength(7);
+    expect(body.working_hours[1]).toEqual({ day_of_week: 1, closed_all_day: false, open_all_day: false, open_hour: 10, open_minutes: 30, close_hour: 18, close_minutes: 0 });
+    expect(body.working_hours[5]).toEqual({ day_of_week: 5, closed_all_day: true, open_all_day: false });
+  });
+
   it("says not connected when there is no channel", async () => {
     await expect(
       updateWebsiteChat({ db: fakeDb(null) as never, tenantId: "tenant-A", settings: stored().meta.website_chat.settings, enabled: true })
@@ -202,7 +252,7 @@ describe("updateWebsiteChat", () => {
 
 describe("loadWebsiteChat", () => {
   it("reports not connected without a channel, and never returns tokens or secrets when connected", async () => {
-    expect(await loadWebsiteChat(fakeDb(null) as never, "tenant-A")).toEqual({ connected: false, enabled: false, settings: null, snippet: null });
+    expect(await loadWebsiteChat(fakeDb(null) as never, "tenant-A")).toEqual({ connected: false, enabled: false, settings: null, snippet: null, logoUrl: null });
 
     const state = await loadWebsiteChat(
       fakeDb({
@@ -217,5 +267,75 @@ describe("loadWebsiteChat", () => {
     expect(json).not.toContain("ENCRYPTED");
     expect(json).not.toContain("ENC-SECRET");
     expect(state.snippet).toContain("site-token");
+  });
+});
+
+describe("website chat logo", () => {
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+  const row = async (logoUrl: string | null = null) => {
+    const { encryptToken } = await import("../crypto");
+    return {
+      id: "chan-1",
+      external_account_id: "7:9",
+      access_token: encryptToken("team-token"),
+      meta: {
+        website_chat: { settings: { ...DEFAULT_WEBSITE_CHAT_SETTINGS, websiteHost: "admizzeducation.com" }, enabled: true, websiteToken: "site-token", logoUrl },
+      },
+    };
+  };
+
+  it("uploads the file as the inbox avatar and remembers where Chatwoot put it", async () => {
+    vi.stubGlobal("fetch", fakeFetch({ "/api/v1/accounts/7/inboxes/9": { avatar_url: "https://inbox.example.com/rails/logo.png" } }));
+    const db = fakeDb(await row());
+
+    const state = await uploadWebsiteChatLogo({ db: db as never, tenantId: "tenant-A", file: { bytes: png, type: "image/png", name: "chat-logo.png" } });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ method: "PATCH", token: "team-token", body: { form: { avatar: "file:image/png" } } });
+    expect(calls[0].url).toBe("https://inbox.example.com/api/v1/accounts/7/inboxes/9");
+    expect(state.logoUrl).toBe("https://inbox.example.com/rails/logo.png");
+    expect((db.updated[0].patch as { meta: { website_chat: { logoUrl: string } } }).meta.website_chat.logoUrl).toBe("https://inbox.example.com/rails/logo.png");
+    expect(db.updated[0].filters).toEqual([["id", "chan-1"], ["tenant_id", "tenant-A"]]);
+  });
+
+  it("does not save in EdgeX when Chatwoot refuses the file, and does not leak the reason", async () => {
+    vi.stubGlobal("fetch", fakeFetch({}));
+    failOn = "/inboxes/9";
+    const db = fakeDb(await row());
+    const err = await uploadWebsiteChatLogo({ db: db as never, tenantId: "tenant-A", file: { bytes: png, type: "image/png", name: "chat-logo.png" } }).catch((e) => e);
+    expect(err).toBeInstanceOf(WebsiteChatError);
+    expect(err.message).not.toContain("500");
+    expect(db.updated).toHaveLength(0);
+  });
+
+  it("removes the logo", async () => {
+    vi.stubGlobal("fetch", fakeFetch({}));
+    const db = fakeDb(await row("https://inbox.example.com/rails/logo.png"));
+
+    const state = await removeWebsiteChatLogo({ db: db as never, tenantId: "tenant-A" });
+
+    expect(calls[0]).toMatchObject({ method: "DELETE", token: "team-token" });
+    expect(calls[0].url).toBe("https://inbox.example.com/api/v1/accounts/7/inboxes/9/avatar");
+    expect(state.logoUrl).toBeNull();
+    expect((db.updated[0].patch as { meta: { website_chat: { logoUrl: null } } }).meta.website_chat.logoUrl).toBeNull();
+  });
+
+  it("says not connected when there is no channel", async () => {
+    await expect(uploadWebsiteChatLogo({ db: fakeDb(null) as never, tenantId: "tenant-A", file: { bytes: png, type: "image/png", name: "x.png" } })).rejects.toMatchObject({
+      code: "not_connected",
+    });
+    await expect(removeWebsiteChatLogo({ db: fakeDb(null) as never, tenantId: "tenant-A" })).rejects.toMatchObject({ code: "not_connected" });
+  });
+});
+
+describe("settings saved before office hours existed", () => {
+  it("load fills in the default (off) office hours", async () => {
+    const { officeHours: _omitted, ...oldSettings } = { ...DEFAULT_WEBSITE_CHAT_SETTINGS, websiteHost: "a.com" };
+    void _omitted;
+    const state = await loadWebsiteChat(
+      fakeDb({ id: "chan-1", external_account_id: "7:9", access_token: "x", meta: { website_chat: { settings: oldSettings, enabled: true, websiteToken: "t" } } }) as never,
+      "tenant-A"
+    );
+    expect(state.settings?.officeHours).toMatchObject({ enabled: false });
   });
 });

@@ -6,41 +6,10 @@
 // signed-in session; nothing in the request can point at another tenant.
 
 import { NextRequest } from "next/server";
-import { authenticateRequest, requireAdmin, type AuthContext } from "@/lib/api/auth";
-import {
-  apiForbidden,
-  apiNotFound,
-  apiConflict,
-  apiSuccess,
-  apiUnauthorized,
-  apiValidationError,
-  apiInternalError,
-  apiServiceUnavailable,
-} from "@/lib/api/response";
-import { scopedClient, type ScopedClient } from "@/lib/supabase/scoped";
-import { logger } from "@/lib/logger";
+import { apiSuccess, apiValidationError } from "@/lib/api/response";
 import { mergeWebsiteChatSettings, normalizeWebsiteHost } from "@/lib/inbox/website-chat/settings";
 import { connectWebsiteChat, loadWebsiteChat, updateWebsiteChat, WebsiteChatError } from "@/lib/inbox/website-chat/service";
-
-type Guard = { ok: true; auth: AuthContext; db: ScopedClient } | { ok: false; response: Response };
-
-async function guard(): Promise<Guard> {
-  if (process.env.INBOX_CHATWOOT_ENABLED !== "true") return { ok: false, response: apiNotFound("Website chat") };
-  const auth = await authenticateRequest();
-  if (!auth) return { ok: false, response: apiUnauthorized() };
-  if (!requireAdmin(auth)) return { ok: false, response: apiForbidden("Only an owner or admin can manage website chat") };
-  return { ok: true, auth, db: await scopedClient(auth) };
-}
-
-function errorResponse(err: unknown) {
-  if (err instanceof WebsiteChatError) {
-    if (err.code === "already_connected") return apiConflict(err.message);
-    if (err.code === "not_connected") return apiNotFound("Website chat");
-    return apiServiceUnavailable(err.message);
-  }
-  logger.error({ err: err instanceof Error ? err.message : String(err) }, "website chat route failed");
-  return apiInternalError();
-}
+import { errorResponse, guard } from "@/lib/inbox/website-chat/route-helpers";
 
 export async function GET() {
   const g = await guard();

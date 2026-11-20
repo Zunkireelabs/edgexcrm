@@ -17,13 +17,23 @@ export function parseChatwootChannelRef(externalAccountId: string): { accountId:
   return { accountId: match[1], inboxId: match[2] };
 }
 
-export async function chatwootRequest<T>(method: "GET" | "POST" | "PATCH", url: string, apiToken: string, body?: unknown): Promise<T> {
+/**
+ * A FormData body is sent as a file upload (multipart); the runtime sets the Content-Type with its boundary, so
+ * it must not be set by hand. Anything else is sent as JSON.
+ */
+export async function chatwootRequest<T>(
+  method: "GET" | "POST" | "PATCH" | "DELETE",
+  url: string,
+  apiToken: string,
+  body?: unknown
+): Promise<T> {
   let response: Response;
   try {
+    const isUpload = typeof FormData !== "undefined" && body instanceof FormData;
     response = await fetch(url, {
       method,
-      headers: { "Content-Type": "application/json", api_access_token: apiToken },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      headers: isUpload ? { api_access_token: apiToken } : { "Content-Type": "application/json", api_access_token: apiToken },
+      body: body === undefined ? undefined : isUpload ? (body as FormData) : JSON.stringify(body),
       signal: AbortSignal.timeout(CHATWOOT_REQUEST_TIMEOUT_MS),
     });
   } catch (err) {
@@ -32,5 +42,7 @@ export async function chatwootRequest<T>(method: "GET" | "POST" | "PATCH", url: 
   }
   // Only the status is reported: the response body and request headers (token) never reach logs or the UI.
   if (!response.ok) throw new Error(`Chatwoot returned HTTP ${response.status}`);
-  return (await response.json()) as T;
+  // Some calls (for example removing a logo) answer with no body.
+  const text = await response.text();
+  return (text ? JSON.parse(text) : {}) as T;
 }

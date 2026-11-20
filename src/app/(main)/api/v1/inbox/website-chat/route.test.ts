@@ -127,7 +127,8 @@ describe("PATCH", () => {
   });
 
   it("rejects an invalid colour and a non-boolean enabled with 422", async () => {
-    expect((await PATCH(req({ color: "#123456" }))).status).toBe(422);
+    expect((await PATCH(req({ color: "not-a-colour" }))).status).toBe(422);
+    expect((await PATCH(req({ color: "#FDED22" }))).status).toBe(422); // yellow: white text would be unreadable
     expect((await PATCH(req({ enabled: "yes" }))).status).toBe(422);
     expect(service.updateWebsiteChat).not.toHaveBeenCalled();
   });

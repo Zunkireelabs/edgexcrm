@@ -15,6 +15,8 @@ import {
   buildWidgetSnippet,
   DEFAULT_WEBSITE_CHAT_SETTINGS,
   toChatwootChannel,
+  toChatwootInbox,
+  withSettingDefaults,
   type WebsiteChatSettings,
 } from "./settings";
 
@@ -28,6 +30,8 @@ interface StoredWebsiteChat {
   settings: WebsiteChatSettings;
   enabled: boolean;
   websiteToken: string;
+  /** The inbox logo's address on the Chatwoot server, once one is uploaded. */
+  logoUrl?: string | null;
 }
 
 interface ChannelRow {
@@ -52,6 +56,8 @@ export interface WebsiteChatState {
   settings: WebsiteChatSettings | null;
   /** The code to paste on the website. Null until connected. */
   snippet: string | null;
+  /** The logo shown at the top of the chat window, if one was uploaded. */
+  logoUrl: string | null;
 }
 
 function requirePlatformToken(): string {
@@ -64,6 +70,24 @@ function appBaseUrl(): string {
   const base = (process.env.NEXT_PUBLIC_APP_URL ?? "").trim().replace(/\/+$/, "");
   if (!/^https?:\/\//.test(base)) throw new WebsiteChatError("Website chat is not set up on this server (missing app address)", "not_configured");
   return base;
+}
+
+/**
+ * Chatwoot shows "We are away" unless an agent is online. Counsellors answer from EdgeX, not from Chatwoot, so the
+ * shared team user never is. Keep it online and stop Chatwoot logging it out when nothing is connected.
+ * Best effort: a failure is logged, the settings are still saved, and the chat just keeps saying "away".
+ */
+async function keepTeamOnline(baseUrl: string, accountId: string | number, apiToken: string, tenantId: string): Promise<void> {
+  try {
+    await chatwootRequest("POST", `${baseUrl}/api/v1/profile/availability`, apiToken, {
+      profile: { account_id: Number(accountId), availability: "online" },
+    });
+    await chatwootRequest("POST", `${baseUrl}/api/v1/profile/auto_offline`, apiToken, {
+      profile: { account_id: Number(accountId), auto_offline: false },
+    });
+  } catch (err) {
+    logger.error({ err: err instanceof Error ? err.message : String(err), tenantId }, "website chat: could not keep the team user online");
+  }
 }
 
 async function findChannel(db: Db, tenantId: string): Promise<ChannelRow | null> {
@@ -79,12 +103,13 @@ async function findChannel(db: Db, tenantId: string): Promise<ChannelRow | null>
 export async function loadWebsiteChat(db: Db, tenantId: string): Promise<WebsiteChatState> {
   const channel = await findChannel(db, tenantId);
   const stored = channel?.meta?.website_chat;
-  if (!channel || !stored) return { connected: false, enabled: false, settings: null, snippet: null };
+  if (!channel || !stored) return { connected: false, enabled: false, settings: null, snippet: null, logoUrl: null };
   return {
     connected: true,
     enabled: stored.enabled,
-    settings: stored.settings,
+    settings: withSettingDefaults(stored.settings),
     snippet: buildWidgetSnippet(chatwootBaseUrl(), stored.websiteToken),
+    logoUrl: stored.logoUrl ?? null,
   };
 }
 
@@ -142,12 +167,13 @@ export async function connectWebsiteChat(input: ConnectWebsiteChatInput): Promis
       "POST",
       `${baseUrl}/api/v1/accounts/${account.id}/inboxes`,
       teamUser.access_token,
-      { name: "Website chat", channel: { type: "web_widget", ...toChatwootChannel(settings, true) } }
+      { ...toChatwootInbox(settings), channel: { type: "web_widget", ...toChatwootChannel(settings, true) } }
     );
     await chatwootRequest("POST", `${baseUrl}/api/v1/accounts/${account.id}/inbox_members`, teamUser.access_token, {
       inbox_id: inbox.id,
       user_ids: [teamUser.id],
     });
+    await keepTeamOnline(baseUrl, account.id, teamUser.access_token, tenantId);
 
     // 4. The webhook that sends visitor messages to EdgeX. Chatwoot makes the signing secret.
     const webhookResponse = await chatwootRequest<{ payload?: { webhook?: { secret?: string } }; webhook?: { secret?: string } }>(
@@ -176,7 +202,7 @@ export async function connectWebsiteChat(input: ConnectWebsiteChatInput): Promis
       throw new Error(`Could not save the channel: ${error.message}`);
     }
 
-    return { connected: true, enabled: true, settings, snippet: buildWidgetSnippet(baseUrl, inbox.website_token) };
+    return { connected: true, enabled: true, settings, snippet: buildWidgetSnippet(baseUrl, inbox.website_token), logoUrl: null };
   } catch (err) {
     if (err instanceof WebsiteChatError) throw err;
     logger.error({ err: err instanceof Error ? err.message : String(err), tenantId }, "website chat: connect failed");
@@ -201,14 +227,19 @@ export async function updateWebsiteChat(input: UpdateWebsiteChatInput): Promise<
   const baseUrl = chatwootBaseUrl();
   const { accountId, inboxId } = parseChatwootChannelRef(channel.external_account_id);
 
+  const apiToken = decryptToken(channel.access_token);
   try {
-    await chatwootRequest("PATCH", `${baseUrl}/api/v1/accounts/${accountId}/inboxes/${inboxId}`, decryptToken(channel.access_token), {
+    await chatwootRequest("PATCH", `${baseUrl}/api/v1/accounts/${accountId}/inboxes/${inboxId}`, apiToken, {
+      ...toChatwootInbox(settings),
       channel: toChatwootChannel(settings, enabled),
     });
   } catch (err) {
     logger.error({ err: err instanceof Error ? err.message : String(err), tenantId }, "website chat: update failed");
     throw new WebsiteChatError("Could not save your changes. Please try again.", "chatwoot_failed");
   }
+
+  // Also heals tenants connected before this existed: the team user is made online on the next save.
+  await keepTeamOnline(baseUrl, accountId, apiToken, tenantId);
 
   const next: StoredWebsiteChat = { ...stored, settings, enabled };
   const { error } = await db
@@ -224,5 +255,75 @@ export async function updateWebsiteChat(input: UpdateWebsiteChatInput): Promise<
     throw new WebsiteChatError("Could not save your changes. Please try again.", "chatwoot_failed");
   }
 
-  return { connected: true, enabled, settings, snippet: buildWidgetSnippet(baseUrl, stored.websiteToken) };
+  return { connected: true, enabled, settings, snippet: buildWidgetSnippet(baseUrl, stored.websiteToken), logoUrl: stored.logoUrl ?? null };
+}
+
+export interface WebsiteChatLogoInput {
+  db: Db;
+  tenantId: string;
+  /** Already checked by the caller: a PNG, JPEG or WebP of a safe size. */
+  file: { bytes: Uint8Array; type: string; name: string };
+}
+
+/** Saves what happened to the logo on the channel row, after Chatwoot has accepted it. */
+async function storeLogoUrl(db: Db, channel: ChannelRow, stored: StoredWebsiteChat, tenantId: string, logoUrl: string | null) {
+  const { error } = await db
+    .from("inbox_channels")
+    .update({ meta: { ...channel.meta, website_chat: { ...stored, logoUrl } } })
+    .eq("id", channel.id)
+    .eq("tenant_id", tenantId);
+  if (error) {
+    logger.error({ err: error.message, tenantId }, "website chat: logo saved in Chatwoot but not in EdgeX");
+    throw new WebsiteChatError("Could not save the logo. Please try again.", "chatwoot_failed");
+  }
+}
+
+/** Sets the logo shown at the top of the chat window (the inbox avatar in Chatwoot). */
+export async function uploadWebsiteChatLogo(input: WebsiteChatLogoInput): Promise<WebsiteChatState> {
+  const { db, tenantId, file } = input;
+  const channel = await findChannel(db, tenantId);
+  const stored = channel?.meta?.website_chat;
+  if (!channel || !stored || !channel.access_token) throw new WebsiteChatError("Website chat is not connected", "not_connected");
+
+  const baseUrl = chatwootBaseUrl();
+  const { accountId, inboxId } = parseChatwootChannelRef(channel.external_account_id);
+
+  let logoUrl: string | null;
+  try {
+    const form = new FormData();
+    form.append("avatar", new Blob([file.bytes as BlobPart], { type: file.type }), file.name);
+    const inbox = await chatwootRequest<{ avatar_url?: string }>(
+      "PATCH",
+      `${baseUrl}/api/v1/accounts/${accountId}/inboxes/${inboxId}`,
+      decryptToken(channel.access_token),
+      form
+    );
+    logoUrl = inbox.avatar_url || null;
+  } catch (err) {
+    logger.error({ err: err instanceof Error ? err.message : String(err), tenantId }, "website chat: logo upload failed");
+    throw new WebsiteChatError("Could not upload the logo. Please try again.", "chatwoot_failed");
+  }
+
+  await storeLogoUrl(db, channel, stored, tenantId, logoUrl);
+  return { connected: true, enabled: stored.enabled, settings: withSettingDefaults(stored.settings), snippet: buildWidgetSnippet(baseUrl, stored.websiteToken), logoUrl };
+}
+
+/** Removes the logo again. */
+export async function removeWebsiteChatLogo(input: Omit<WebsiteChatLogoInput, "file">): Promise<WebsiteChatState> {
+  const { db, tenantId } = input;
+  const channel = await findChannel(db, tenantId);
+  const stored = channel?.meta?.website_chat;
+  if (!channel || !stored || !channel.access_token) throw new WebsiteChatError("Website chat is not connected", "not_connected");
+
+  const baseUrl = chatwootBaseUrl();
+  const { accountId, inboxId } = parseChatwootChannelRef(channel.external_account_id);
+  try {
+    await chatwootRequest("DELETE", `${baseUrl}/api/v1/accounts/${accountId}/inboxes/${inboxId}/avatar`, decryptToken(channel.access_token));
+  } catch (err) {
+    logger.error({ err: err instanceof Error ? err.message : String(err), tenantId }, "website chat: logo removal failed");
+    throw new WebsiteChatError("Could not remove the logo. Please try again.", "chatwoot_failed");
+  }
+
+  await storeLogoUrl(db, channel, stored, tenantId, null);
+  return { connected: true, enabled: stored.enabled, settings: withSettingDefaults(stored.settings), snippet: buildWidgetSnippet(baseUrl, stored.websiteToken), logoUrl: null };
 }

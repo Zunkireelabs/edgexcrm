@@ -18,7 +18,11 @@ import { Globe } from "lucide-react";
 import { toast } from "sonner";
 import {
   BRAND_COLORS,
+  contrastWithWhite,
   FORM_FIELD_KEYS,
+  MIN_COLOR_CONTRAST,
+  normalizeHexColor,
+  TIMEZONES,
   type FormFieldKey,
   type ReplyTime,
   type WebsiteChatSettings,
@@ -29,6 +33,7 @@ interface WebsiteChatState {
   enabled: boolean;
   settings: WebsiteChatSettings | null;
   snippet: string | null;
+  logoUrl: string | null;
 }
 
 const API_PATH = "/api/v1/inbox/website-chat";
@@ -38,6 +43,8 @@ const REPLY_TIME_LABELS: Record<ReplyTime, string> = {
   in_a_few_hours: "Typically replies in a few hours",
   in_a_day: "Typically replies in a day",
 };
+
+const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 const FIELD_LABELS: Record<FormFieldKey, string> = {
   name: "Name",
@@ -60,10 +67,14 @@ export function WebsiteChatCard() {
   const [draft, setDraft] = useState<WebsiteChatSettings | null>(null);
   const [websiteHost, setWebsiteHost] = useState("");
   const [busy, setBusy] = useState(false);
+  // What the admin typed in the custom colour box. Kept apart from draft.color, which only ever holds a
+  // listed colour or a custom colour that passed the readability check.
+  const [customText, setCustomText] = useState("");
 
   const apply = useCallback((next: WebsiteChatState) => {
     setState(next);
     setDraft(next.settings);
+    setCustomText(next.settings?.color.startsWith("#") ? next.settings.color : "");
   }, []);
 
   useEffect(() => {
@@ -97,6 +108,65 @@ export function WebsiteChatCard() {
   }
 
   if (!available || !state) return null;
+
+  /** Logo changes apply at once and never touch what the admin has typed but not saved yet. */
+  async function changeLogo(request: Promise<Response>, success: string) {
+    setBusy(true);
+    try {
+      const res = await request;
+      if (!res.ok) {
+        toast.error(await readError(res, "Something went wrong. Please try again."));
+        return;
+      }
+      const next = (await res.json()).data as WebsiteChatState;
+      setState((prev) => (prev ? { ...prev, logoUrl: next.logoUrl } : prev));
+      toast.success(success);
+    } catch {
+      toast.error("Something went wrong. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function uploadLogo(file: File | undefined) {
+    if (!file) return;
+    if (file.size > 1024 * 1024) {
+      toast.error("That image is too big. Use one under 1 MB.");
+      return;
+    }
+    const form = new FormData();
+    form.append("logo", file);
+    void changeLogo(fetch(`${API_PATH}/logo`, { method: "POST", body: form }), "Logo saved");
+  }
+
+  /** Turning office hours on pre-selects the admin's own time zone, so the hours are not silently set in UTC. */
+  function setHours(patch: Partial<WebsiteChatSettings["officeHours"]>) {
+    if (!draft) return;
+    let next = { ...draft.officeHours, ...patch };
+    if (patch.enabled === true && next.timezone === "UTC") {
+      const mine = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (TIMEZONES.some((t) => t.id === mine)) next = { ...next, timezone: mine };
+    }
+    setDraft({ ...draft, officeHours: next });
+  }
+
+  const customHex = normalizeHexColor(customText);
+  const customContrast = customHex ? contrastWithWhite(customHex) : null;
+  const customProblem =
+    customText.trim() === ""
+      ? null
+      : !customHex
+        ? "Enter a colour like #001353."
+        : (customContrast ?? 0) < MIN_COLOR_CONTRAST
+          ? `Too light for white text (${customContrast?.toFixed(1)}:1, needs ${MIN_COLOR_CONTRAST}:1). Pick a darker colour.`
+          : null;
+
+  /** Only a readable colour reaches the draft, so Save can never send one the server would refuse. */
+  function chooseCustomColour(text: string) {
+    setCustomText(text);
+    const hex = normalizeHexColor(text);
+    if (hex && contrastWithWhite(hex) >= MIN_COLOR_CONTRAST && draft) setDraft({ ...draft, color: hex });
+  }
 
   const header = (
     <CardHeader>
@@ -171,6 +241,40 @@ export function WebsiteChatCard() {
         <div className="space-y-3">
           <h3 className="text-sm font-medium">How the bubble looks</h3>
           <div className="space-y-1.5">
+            <Label>Logo</Label>
+            <div className="flex flex-wrap items-center gap-3">
+              {state.logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element -- the logo lives on the chat server, not a known image host
+                <img src={state.logoUrl} alt="Chat logo" className="h-14 w-14 rounded-[14px] border object-cover" />
+              ) : (
+                <div className="flex h-14 w-14 items-center justify-center rounded-[14px] border border-dashed text-xs text-muted-foreground">None</div>
+              )}
+              <div className="flex flex-wrap items-center gap-2">
+                <Button asChild size="sm" variant="outline" disabled={busy}>
+                  <label className="cursor-pointer">
+                    {state.logoUrl ? "Change logo" : "Upload logo"}
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      aria-label="Upload a logo"
+                      className="sr-only"
+                      onChange={(e) => {
+                        uploadLogo(e.target.files?.[0]);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                </Button>
+                {state.logoUrl && (
+                  <Button size="sm" variant="ghost" disabled={busy} onClick={() => void changeLogo(fetch(`${API_PATH}/logo`, { method: "DELETE" }), "Logo removed")}>
+                    Remove
+                  </Button>
+                )}
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">A square PNG, JPG or WebP under 1 MB. It shows at the top of the chat window.</p>
+          </div>
+          <div className="space-y-1.5">
             <Label>Colour</Label>
             <div className="flex flex-wrap gap-2">
               {BRAND_COLORS.map((c) => (
@@ -186,6 +290,29 @@ export function WebsiteChatCard() {
                 />
               ))}
             </div>
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <input
+                type="color"
+                aria-label="Pick a custom colour"
+                value={customHex ?? "#001353"}
+                onChange={(e) => chooseCustomColour(e.target.value)}
+                className={`h-7 w-7 cursor-pointer rounded-full border-2 bg-transparent p-0 ${draft.color.startsWith("#") ? "border-foreground" : "border-transparent"}`}
+              />
+              <Input
+                aria-label="Custom colour"
+                placeholder="#001353"
+                maxLength={7}
+                value={customText}
+                onChange={(e) => chooseCustomColour(e.target.value)}
+                className="h-8 w-28"
+              />
+              <span className="text-xs text-muted-foreground">or enter your brand colour</span>
+            </div>
+            {customText.trim() !== "" && (
+              <p className={`text-xs ${customProblem ? "text-destructive" : "text-muted-foreground"}`}>
+                {customProblem ?? `Readable: white text on this colour is ${customContrast?.toFixed(1)}:1.`}
+              </p>
+            )}
           </div>
           <div className="grid gap-3 sm:grid-cols-2 max-w-2xl">
             <div className="space-y-1.5">
@@ -254,6 +381,68 @@ export function WebsiteChatCard() {
           <p className="text-xs text-muted-foreground">
             The message box always shows. It is built into the chat engine and cannot be removed. The number box has a country picker.
           </p>
+        </div>
+
+        <div className="space-y-3">
+          <h3 className="text-sm font-medium">Office hours</h3>
+          <div className="flex items-center gap-2">
+            <Switch
+              id="website-chat-hours"
+              checked={draft.officeHours.enabled}
+              onCheckedChange={(enabled) => setHours({ enabled })}
+            />
+            <Label htmlFor="website-chat-hours" className="text-sm font-normal">
+              Show &quot;away&quot; outside office hours
+            </Label>
+          </div>
+          {draft.officeHours.enabled ? (
+            <div className="space-y-3 max-w-2xl">
+              <div className="flex flex-wrap gap-1.5" role="group" aria-label="Days the team is available">
+                {DAY_LABELS.map((label, day) => {
+                  const on = draft.officeHours.days.includes(day);
+                  return (
+                    <button
+                      key={label}
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => setHours({ days: on ? draft.officeHours.days.filter((d) => d !== day) : [...draft.officeHours.days, day] })}
+                      className={`rounded-md border px-2.5 py-1 text-xs ${on ? "border-foreground bg-foreground text-background" : "text-muted-foreground"}`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="website-chat-open">Opens</Label>
+                  <Input id="website-chat-open" type="time" value={draft.officeHours.open} onChange={(e) => setHours({ open: e.target.value })} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="website-chat-close">Closes</Label>
+                  <Input id="website-chat-close" type="time" value={draft.officeHours.close} onChange={(e) => setHours({ close: e.target.value })} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Time zone</Label>
+                  <Select value={draft.officeHours.timezone} onValueChange={(timezone) => setHours({ timezone })}>
+                    <SelectTrigger aria-label="Time zone">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TIMEZONES.map((t) => (
+                        <SelectItem key={t.id} value={t.id}>
+                          {t.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">Outside these hours visitors see that the team is away, and can still leave a message.</p>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">Off: the chat always shows the team as online. Turn it on and set your real hours so visitors are not misled at night.</p>
+          )}
         </div>
 
         <div className="space-y-1 text-xs text-muted-foreground">

@@ -80,12 +80,103 @@ describe("WebsiteChatCard", () => {
     render(<WebsiteChatCard />);
 
     expect(await screen.findByText(/SNIPPET/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("switch"));
+    fireEvent.click(screen.getByLabelText("Chat on")); // not the office hours switch
 
     await screen.findByText("Chat off");
     const [, init] = fetchMock.mock.calls[1] as unknown as [string, RequestInit];
     expect(init.method).toBe("PATCH");
     expect(JSON.parse(init.body as string)).toEqual({ enabled: false });
+  });
+
+  it("accepts a readable custom colour and sends it when saving", async () => {
+    const fetchMock = mockFetch([{ body: { data: connected } }, { body: { data: connected } }]);
+    render(<WebsiteChatCard />);
+
+    fireEvent.change(await screen.findByLabelText("Custom colour"), { target: { value: "#001353" } });
+    expect(screen.getByText(/Readable: white text on this colour is 17\.2:1/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    const [, init] = fetchMock.mock.calls[1] as unknown as [string, RequestInit];
+    expect(JSON.parse(init.body as string).color).toBe("#001353");
+  });
+
+  it("warns about a colour too light for white text and never sends it", async () => {
+    const fetchMock = mockFetch([{ body: { data: connected } }, { body: { data: connected } }]);
+    render(<WebsiteChatCard />);
+
+    fireEvent.change(await screen.findByLabelText("Custom colour"), { target: { value: "#FDED22" } });
+    expect(screen.getByText(/Too light for white text \(1\.2:1, needs 4\.5:1\)/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    const [, init] = fetchMock.mock.calls[1] as unknown as [string, RequestInit];
+    expect(JSON.parse(init.body as string).color).toBe(DEFAULT_WEBSITE_CHAT_SETTINGS.color);
+  });
+
+  it("uploads a logo and shows it, without losing what was typed but not saved", async () => {
+    const withLogo = { ...connected, logoUrl: "https://chat.example.com/logo.png" };
+    const fetchMock = mockFetch([{ body: { data: { ...connected, logoUrl: null } } }, { body: { data: withLogo } }]);
+    render(<WebsiteChatCard />);
+
+    const title = (await screen.findByLabelText("Title")) as HTMLInputElement;
+    fireEvent.change(title, { target: { value: "Chat with Admizz" } });
+    fireEvent.change(screen.getByLabelText("Upload a logo"), { target: { files: [new File([new Uint8Array([1, 2, 3])], "logo.png", { type: "image/png" })] } });
+
+    expect(await screen.findByAltText("Chat logo")).toHaveAttribute("src", "https://chat.example.com/logo.png");
+    const [url, init] = fetchMock.mock.calls[1] as unknown as [string, RequestInit];
+    expect(url).toBe("/api/v1/inbox/website-chat/logo");
+    expect(init.method).toBe("POST");
+    expect(init.body).toBeInstanceOf(FormData);
+    expect(((init.body as FormData).get("logo") as File).name).toBe("logo.png");
+    expect(title.value).toBe("Chat with Admizz"); // the unsaved edit is still there
+    expect(toast.success).toHaveBeenCalledWith("Logo saved");
+  });
+
+  it("refuses a logo over 1 MB before sending anything", async () => {
+    const fetchMock = mockFetch([{ body: { data: connected } }]);
+    render(<WebsiteChatCard />);
+
+    const big = new File([new Uint8Array(1024 * 1024 + 1)], "big.png", { type: "image/png" });
+    fireEvent.change(await screen.findByLabelText("Upload a logo"), { target: { files: [big] } });
+
+    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining("too big"));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("removes the logo", async () => {
+    const fetchMock = mockFetch([
+      { body: { data: { ...connected, logoUrl: "https://chat.example.com/logo.png" } } },
+      { body: { data: { ...connected, logoUrl: null } } },
+    ]);
+    render(<WebsiteChatCard />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
+
+    await waitFor(() => expect(screen.queryByAltText("Chat logo")).not.toBeInTheDocument());
+    const [url, init] = fetchMock.mock.calls[1] as unknown as [string, RequestInit];
+    expect(url).toBe("/api/v1/inbox/website-chat/logo");
+    expect(init.method).toBe("DELETE");
+  });
+
+  it("shows the office hours only when turned on, says what off means, and sends them when saving", async () => {
+    const fetchMock = mockFetch([{ body: { data: connected } }, { body: { data: connected } }]);
+    render(<WebsiteChatCard />);
+
+    expect(await screen.findByText(/always shows the team as online/)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Opens")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText(/outside office hours/));
+    fireEvent.change(await screen.findByLabelText("Opens"), { target: { value: "10:00" } });
+    fireEvent.change(screen.getByLabelText("Closes"), { target: { value: "18:00" } });
+    fireEvent.click(screen.getByRole("button", { name: "Sun" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    const [, init] = fetchMock.mock.calls[1] as unknown as [string, RequestInit];
+    const sent = JSON.parse(init.body as string);
+    expect(sent.officeHours).toMatchObject({ enabled: true, open: "10:00", close: "18:00" });
+    expect(sent.officeHours.days).toEqual([1, 2, 3, 4, 5, 0]); // Sunday added to the default Mon to Fri
   });
 
   it("a hidden field can no longer be marked required", async () => {

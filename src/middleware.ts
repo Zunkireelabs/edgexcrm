@@ -43,6 +43,12 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Skip auth for the website chat widget script (public/chat-widget/): customer websites load it with a
+  // plain <script> tag, so it must never redirect to /login. It is a static file with no data in it.
+  if (request.nextUrl.pathname.startsWith("/chat-widget/")) {
+    return NextResponse.next();
+  }
+
   return await updateSession(request);
 }
 
