@@ -44,9 +44,17 @@ Chatwoot runs as 4 parts: web (Rails), background worker (Sidekiq), Postgres wit
       **stage** database. **[OK needed]** Both are additive. 283 is service-role-only on purpose (it holds credentials).
 - [ ] Set on the stage server: `INBOX_CHATWOOT_ENABLED=true`, `CHATWOOT_BASE_URL`, `CHATWOOT_PLATFORM_TOKEN`, and
       confirm `INBOX_TOKEN_ENC_KEY` is already set (it also protects the WhatsApp channel tokens). **[OK needed]**
-- [ ] Create the **channel row**: provider `chatwoot`, `external_account_id` = `<chatwoot account id>:<inbox id>`, the
-      team admin's API token (encrypted) as `access_token`, and the webhook secret (encrypted) in `meta.webhook_secret_enc`.
-      There is no settings screen yet, so this needs a small script. **[OK needed]** (writes to a shared database).
+- [ ] Set `NEXT_PUBLIC_APP_URL` on the stage server to the public EdgeX address (Chatwoot's webhook is created with it,
+      and it must be public HTTPS). **[OK needed]**
+- [ ] Connect the tenant from the **Website chat** card (Settings > Communications, owner/admin only): enter the website
+      address and press Connect. This replaces the old setup script. It creates the tenant's Chatwoot account, the shared
+      team user, the website inbox, the webhook, and the channel row (credentials encrypted), and shows the code to paste
+      on the website. **[OK needed]** (writes to a shared database and to the stage Chatwoot).
+- [ ] On the card, set the colour, wording and form fields for Admizz, then copy the code for Phase 4.
+- [ ] Check the switch: **Chat off** must make the bubble stop loading on the website (it works by changing the inbox's
+      allowed sites to an address nothing matches). Not verified in a browser yet.
+- [ ] Note: if Connect fails half-way it leaves unused objects in Chatwoot (harmless). Press Connect again; clean up the
+      leftovers in Chatwoot's super admin later.
 - [ ] Merge the EdgeX branch into `stage` (never straight to `main`); wait for CI (lint, typecheck, build).
       Check CI passes: the developer's laptop build fails on an old file, unrelated to this work.
 - [ ] End-to-end test on the stage site: bubble on a test page, a chat arrives in the stage Inbox, link to a lead,

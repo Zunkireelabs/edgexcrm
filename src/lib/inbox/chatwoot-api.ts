@@ -17,7 +17,7 @@ export function parseChatwootChannelRef(externalAccountId: string): { accountId:
   return { accountId: match[1], inboxId: match[2] };
 }
 
-export async function chatwootRequest<T>(method: "GET" | "POST", url: string, apiToken: string, body?: unknown): Promise<T> {
+export async function chatwootRequest<T>(method: "GET" | "POST" | "PATCH", url: string, apiToken: string, body?: unknown): Promise<T> {
   let response: Response;
   try {
     response = await fetch(url, {
