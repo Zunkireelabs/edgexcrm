@@ -44,6 +44,14 @@ export interface VisibleLeadsExtra {
    * Why not an embed filter on the RPC: PostgREST resolves it against `pgrst_call` (42703).
    */
   collaboratorIds?: readonly string[] | null;
+  /**
+   * Collaborators "is none of" (migration 282). When present, the WHOLE request runs over a SQL function that
+   * applies the include / exclude lists — for EVERY role, owner/admin included (an exclusion has no embedded-filter
+   * form). Own/branch -> leads_visible_to_user_with_collaborator_filter() (calls leads_visible_to_user(), same
+   * visibility); owner/admin -> leads_for_tenant_with_collaborator_filter() (service role, one tenant).
+   * Takes precedence over `collaboratorIds`; when absent, behaviour is exactly as before.
+   */
+  collaboratorExclusion?: { excludeIds: readonly string[]; includeIds?: readonly string[] | null } | null;
 }
 
 export function visibleLeadsBase(
@@ -53,6 +61,31 @@ export function visibleLeadsBase(
   rpcOpts?: { count?: "exact" | "planned" | "estimated"; head?: boolean },
   extra?: VisibleLeadsExtra,
 ) {
+  const exclusion = extra?.collaboratorExclusion && extra.collaboratorExclusion.excludeIds.length > 0 ? extra.collaboratorExclusion : null;
+  if (exclusion) {
+    // Unused (null) args are OMITTED, never sent as an explicit null — see the note above this function.
+    const filterArgs: Record<string, string | string[]> = { p_exclude_ids: [...exclusion.excludeIds] };
+    if (exclusion.includeIds && exclusion.includeIds.length > 0) filterArgs.p_include_ids = [...exclusion.includeIds];
+
+    if (scope?.restrictToSelf) {
+      if (!scope.userId) {
+        throw new Error("visibleLeadsBase: scope.restrictToSelf requires scope.userId");
+      }
+      const params: Record<string, string | string[]> = { p_tenant: tenantId, p_user: scope.userId, p_scope: "own", ...filterArgs };
+      if (scope.userBranchId) params.p_user_branch_id = scope.userBranchId;
+      if (scope.crossBranchPoolListSlug) params.p_cross_pool_slug = scope.crossBranchPoolListSlug;
+      return clients.user.rpc("leads_visible_to_user_with_collaborator_filter", params, rpcOpts);
+    }
+    if (scope?.branchId) {
+      return clients.user.rpc(
+        "leads_visible_to_user_with_collaborator_filter",
+        { p_tenant: tenantId, p_scope: "branch", p_branch_id: scope.branchId, ...filterArgs },
+        rpcOpts,
+      );
+    }
+    return clients.service.rpc("leads_for_tenant_with_collaborator_filter", { p_tenant: tenantId, ...filterArgs }, rpcOpts);
+  }
+
   const collaboratorIds = extra?.collaboratorIds && extra.collaboratorIds.length > 0 ? [...extra.collaboratorIds] : null;
   // Same arguments either way — the collaborators variant only adds p_collaborator_ids.
   const rpcName = collaboratorIds ? "leads_visible_to_user_with_collaborators" : "leads_visible_to_user";

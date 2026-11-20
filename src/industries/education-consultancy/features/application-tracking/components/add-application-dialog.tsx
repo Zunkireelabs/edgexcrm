@@ -21,6 +21,7 @@ import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 import { useApplicationStatusOptions } from "../hooks/use-application-status-options";
 import { useBlockingNotice } from "@/components/dashboard/blocking-notice";
 import { DestinationsMultiSelect } from "@/components/dashboard/destinations-multi-select";
+import { countryOptionsForLead } from "@/lib/leads/destination-normalize";
 import type { ApplicationStage, Lead } from "@/types/database";
 
 interface AddApplicationDialogProps {
@@ -166,11 +167,10 @@ export function AddApplicationDialog({
     if (created) setProgramName(created.name);
   }
 
-  // Country options: if lead has declared destinations, restrict to those;
-  // otherwise show the full tenant countries catalog.
-  const availableCountryOptions = leadDestinations.length > 0
-    ? countryOptions.filter((c) => leadDestinations.includes(c))
-    : countryOptions;
+  // Country options: if lead has declared destinations, restrict to those (matched ignoring case — a lead saved with
+  // "uk" matches the catalog's "UK"); otherwise — or when none of them match the catalog — the full tenant catalog,
+  // so the required Destination field can never be an empty list (client report, Nov 2026).
+  const availableCountryOptions = countryOptionsForLead(leadDestinations, countryOptions);
 
   async function handleSubmit(e?: React.FormEvent) {
     e?.preventDefault();

@@ -58,6 +58,17 @@ export function describeAuditEvent(
 
   if (action === "lead.merged") return { kind: "updated", verb: "Merged a duplicate record", object: null };
   if (action === "lead.note_edited") return { kind: "note", verb: "Edited a note", object: null };
+  // Stage #678 (Nov 2026): the audit row stores the collaborator's user id; resolve it so the line says who. If the id
+  // can't be resolved (account gone, not in the team list) the line stays plain. (Stage's own wording, "Collaborator
+  // added: Name", lives in the old Activity panel; this feed reads "<actor> <verb> <object>".)
+  if (action === "lead.collaborator_added") {
+    const who = changes.collaborator?.new ? assigneeLabel(String(changes.collaborator.new)) : null;
+    return who ? { kind: "assigned", verb: "Added collaborator", object: who } : { kind: "assigned", verb: "Added a collaborator", object: null };
+  }
+  if (action === "lead.collaborator_removed") {
+    const who = changes.collaborator?.old ? assigneeLabel(String(changes.collaborator.old)) : null;
+    return who ? { kind: "unassigned", verb: "Removed collaborator", object: who } : { kind: "unassigned", verb: "Removed a collaborator", object: null };
+  }
   if (action === "lead.branch_shared") {
     const branch = changes.branch?.new as string | null;
     return { kind: "assigned", verb: `Shared to ${branch || "a branch"}`, object: null };

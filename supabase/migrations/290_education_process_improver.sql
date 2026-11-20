@@ -1,4 +1,4 @@
--- Migration 289: EDGEX-109 P4a — Orca, the process improver: the fixed menu of SQL cuts it may read, and two badge columns on a change.
+-- Migration 290: EDGEX-109 P4a — Orca, the process improver: the fixed menu of SQL cuts it may read, and two badge columns on a change.
 -- ROLLBACK: DROP FUNCTION IF EXISTS public.education_process_breakdown(UUID, TEXT, TEXT, TIMESTAMPTZ, TIMESTAMPTZ, TEXT);
 --           ALTER TABLE public.process_changes DROP CONSTRAINT IF EXISTS process_changes_needs_check, DROP CONSTRAINT IF EXISTS process_changes_turns_on_check;
 --           ALTER TABLE public.process_changes DROP COLUMN IF EXISTS needs, DROP COLUMN IF EXISTS turns_on;
@@ -10,7 +10,7 @@
 -- below, anything else raises. No free SQL ever reaches the database from the model.
 --
 -- 1. education_process_breakdown(p_tenant, p_key, p_cut, p_from, p_to, p_tz) -> JSONB { cut, groups: [ {key, label, n, ...} ], ... }.
---    Reuses the definitions of education_process_metrics() (migration 288): the same cohort (leads that ARRIVED in the window, not
+--    Reuses the definitions of education_process_metrics() (migration 289): the same cohort (leads that ARRIVED in the window, not
 --    deleted, not a walk-in), the same first-owner time, the same first CONTACT (activity or human note), the same working-hour deadline.
 --    It returns COUNTS, MINUTES AND IDS OF LISTS/BRANCHES/POSITIONS ONLY: never a lead id, a name, a phone number or a message.
 --    new_lead_first_call cuts: by_weekday | office_split | by_hour_band | by_branch | by_owner_position | wait_percentiles | intake_leftovers
@@ -224,7 +224,7 @@ END $$;
 REVOKE ALL ON FUNCTION public.education_process_breakdown(UUID, TEXT, TEXT, TIMESTAMPTZ, TIMESTAMPTZ, TEXT) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.education_process_breakdown(UUID, TEXT, TEXT, TIMESTAMPTZ, TIMESTAMPTZ, TEXT) TO service_role;
 
-INSERT INTO public.schema_migrations (version) VALUES ('289_education_process_improver.sql')
+INSERT INTO public.schema_migrations (version) VALUES ('290_education_process_improver.sql')
   ON CONFLICT (version) DO NOTHING;
 
 COMMIT;

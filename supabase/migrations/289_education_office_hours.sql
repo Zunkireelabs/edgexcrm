@@ -1,16 +1,16 @@
--- Migration 288: EDGEX-109 P3a — office hours as a tenant setting, one working-time clock, and the live process driving the product.
+-- Migration 289: EDGEX-109 P3a — office hours as a tenant setting, one working-time clock, and the live process driving the product.
 -- ROLLBACK: DROP FUNCTION IF EXISTS public.education_home_impact(UUID, UUID, TIMESTAMPTZ, TIMESTAMPTZ, TEXT, BOOLEAN);
---           then restore education_home_impact(5 args) by re-running its CREATE OR REPLACE from 284_education_home_contact.sql,
---           and education_process_metrics() by re-running its CREATE OR REPLACE from 287_education_process_changes.sql;
+--           then restore education_home_impact(5 args) by re-running its CREATE OR REPLACE from 285_education_home_contact.sql,
+--           and education_process_metrics() by re-running its CREATE OR REPLACE from 288_education_process_changes.sql;
 --           DROP FUNCTION IF EXISTS public.education_working_deadline(UUID, TIMESTAMPTZ, INT), public.education_working_deadline_oh(JSONB, TEXT, TIMESTAMPTZ, INT),
 --             public.education_in_office_hours(JSONB, TEXT, TIMESTAMPTZ), public.education_office_hours(UUID), public.education_office_hours_evidence(UUID);
 --           DROP TABLE IF EXISTS public.tenant_office_hours;  (and delete this file's row from schema_migrations)
 --
 -- WHY (real Admizz data, 90 days of calls and notes): Sun 1,533 · Mon 1,264 · Tue 1,613 · Wed 1,513 · Thu 1,548 · Fri 801 · Sat 11. The team
--- works Sunday to Friday, 9:30-17:30 or so. The 287 clock (9-18 EVERY day) counted the Saturday leads as late.
+-- works Sunday to Friday, 9:30-17:30 or so. The 288 clock (9-18 EVERY day) counted the Saturday leads as late.
 --
 -- 1. tenant_office_hours: one row per tenant. days smallint[] (0 = Sunday ... 6 = Saturday, non-empty), start_min / end_min = minutes after
---    midnight in the TENANT's timezone (tenants.timezone). RLS like 286/287: tenant members read, only the service role writes.
+--    midnight in the TENANT's timezone (tenants.timezone). RLS like 287/288: tenant members read, only the service role writes.
 -- 2. education_office_hours_evidence(tenant): { by_weekday[7] (Sunday first), by_hour[24], total, window_days } over the last 90 days of
 --    lead_activities (call, meeting) + human lead_notes, in the tenant's timezone. EMAILS ARE EXCLUDED: one Admizz day holds 2,966 bulk
 --    emails at 08:00 that say nothing about when people work.
@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS public.tenant_office_hours (
   CONSTRAINT tenant_office_hours_hours_chk CHECK (start_min >= 0 AND start_min < end_min AND end_min <= 1440)
 );
 
--- RLS like 286/287: readable by tenant members, every write is server-only (service role).
+-- RLS like 287/288: readable by tenant members, every write is server-only (service role).
 ALTER TABLE public.tenant_office_hours ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "tenant_office_hours_select" ON public.tenant_office_hours;
 CREATE POLICY "tenant_office_hours_select" ON public.tenant_office_hours FOR SELECT USING (tenant_id IN (SELECT get_user_tenant_ids()));
@@ -178,7 +178,7 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   );
 $$;
 
--- education_process_metrics(): replaced (same signature). Differences from 287: office hours come from education_office_hours(), the working
+-- education_process_metrics(): replaced (same signature). Differences from 288: office hours come from education_office_hours(), the working
 -- deadline from education_working_deadline_oh(), and `office_hours` / `outside_office_hours` use the real days and hours.
 CREATE OR REPLACE FUNCTION public.education_process_metrics(
   p_tenant UUID, p_key TEXT, p_from TIMESTAMPTZ, p_to TIMESTAMPTZ, p_tz TEXT
@@ -220,8 +220,8 @@ BEGIN
       ) fa ON TRUE
     ),
     fc AS (
-      -- First CONTACT at/after created_at: lead_activities row OR human lead_notes row (ai_tool_call_id IS NULL). Migration 284.
-      -- `wdeadline` = created_at + 60 WORKING minutes on the tenant's office hours (migration 288, education_working_deadline_oh):
+      -- First CONTACT at/after created_at: lead_activities row OR human lead_notes row (ai_tool_call_id IS NULL). Migration 285.
+      -- `wdeadline` = created_at + 60 WORKING minutes on the tenant's office hours (migration 289, education_working_deadline_oh):
       -- the clock starts at created_at if it falls inside office hours on a working day, else at the next opening.
       SELECT c.id,
              public.education_working_deadline_oh(v_oh, p_tz, c.created_at, 60) AS wdeadline,
@@ -233,7 +233,7 @@ BEGIN
              c.created_at
       FROM c
     ),
-    -- Call-backs: the EXACT definition of education_home_impact() (migration 284), over the same window, whole tenant (no branch).
+    -- Call-backs: the EXACT definition of education_home_impact() (migration 285), over the same window, whole tenant (no branch).
     booked AS (
       SELECT a.lead_id, a.created_at AS booked_at,
              a.created_at + make_interval(mins => COALESCE((t.config -> 'team_performance_thresholds' ->> 'callback_reminder_minutes')::INT, 10)) AS due_at
@@ -371,7 +371,7 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   ),
   recv AS (
     SELECT l.id, COALESCE(l.assigned_at, l.created_at) AS at,
-           -- "within the hour": clock time (p_working false, today's behaviour) or 60 office minutes (migration 288).
+           -- "within the hour": clock time (p_working false, today's behaviour) or 60 office minutes (migration 289).
            CASE WHEN p_working
                 THEN public.education_working_deadline_oh((SELECT j FROM oh), p_tz, COALESCE(l.assigned_at, l.created_at), 60)
                 ELSE COALESCE(l.assigned_at, l.created_at) + INTERVAL '60 minutes'
@@ -468,7 +468,7 @@ GRANT EXECUTE ON FUNCTION public.education_process_metrics(UUID, TEXT, TIMESTAMP
 REVOKE ALL ON FUNCTION public.education_home_impact(UUID, UUID, TIMESTAMPTZ, TIMESTAMPTZ, TEXT, BOOLEAN) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.education_home_impact(UUID, UUID, TIMESTAMPTZ, TIMESTAMPTZ, TEXT, BOOLEAN) TO service_role;
 
-INSERT INTO public.schema_migrations (version) VALUES ('288_education_office_hours.sql')
+INSERT INTO public.schema_migrations (version) VALUES ('289_education_office_hours.sql')
   ON CONFLICT (version) DO NOTHING;
 
 COMMIT;

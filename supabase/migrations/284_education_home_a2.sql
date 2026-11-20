@@ -1,4 +1,4 @@
--- Migration 283: EDGEX-87 A2 — education Home for owners / managers ("Needs you", Nudge, "Is the new Home helping?").
+-- Migration 284: EDGEX-87 A2 — education Home for owners / managers ("Needs you", Nudge, "Is the new Home helping?").
 -- ROLLBACK: DROP FUNCTION IF EXISTS public.education_home_impact(UUID, UUID, TIMESTAMPTZ, TIMESTAMPTZ, TEXT);
 --           DROP TABLE IF EXISTS public.lead_nudges; DROP TABLE IF EXISTS public.home_settings;
 --           (and delete this file's row from schema_migrations)
@@ -20,7 +20,7 @@
 --                  changes.callback_due_at.new; only exists after A1).
 --      deadlines   applications whose deadline fell in the period and has passed: `missed` = not submitted. Submitted =
 --                  applied_date set, OR terminal stage, OR stage at / after the pipeline's submit stage
---                  (application_stages.is_submit_stage, migration 282). A pipeline with no submit stage is "unknown"
+--                  (application_stages.is_submit_stage, migration 283). A pipeline with no submit stage is "unknown"
 --                  and counted in neither number (never a false alarm).
 --
 -- Additive only. Before/after counts: home_settings (new) 0 rows, lead_nudges (new) 0 rows, 1 new function.
@@ -134,7 +134,7 @@ $$;
 REVOKE ALL ON FUNCTION public.education_home_impact(UUID, UUID, TIMESTAMPTZ, TIMESTAMPTZ, TEXT) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.education_home_impact(UUID, UUID, TIMESTAMPTZ, TIMESTAMPTZ, TEXT) TO service_role;
 
-INSERT INTO public.schema_migrations (version) VALUES ('283_education_home_a2.sql')
+INSERT INTO public.schema_migrations (version) VALUES ('284_education_home_a2.sql')
   ON CONFLICT (version) DO NOTHING;
 
 COMMIT;

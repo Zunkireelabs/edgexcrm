@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { AuthContext } from "@/lib/api/auth";
 import type { ResolvedPermissions } from "@/lib/api/permissions";
+import { resetDestinationCatalogCache } from "@/lib/leads/destination-catalog";
 
 const resolvePositionSlugMock = vi.fn(async () => null as string | null);
 const getLeadMembershipMock = vi.fn(async () => [] as Array<{ branch_id: string; assigned_to: string | null; is_origin: boolean }>);
@@ -8,6 +9,7 @@ const syncOriginMembershipMock = vi.fn(async () => {});
 const addLeadCollaboratorMock = vi.fn(async () => {});
 const isLeadCollaboratorMock = vi.fn(async () => false);
 const assignDisplayIdsMock = vi.fn(async () => {});
+const ensureListPipelineMock = vi.fn(async () => null as string | null);
 const getPipelineLandingStageMock = vi.fn(async () => null as { id: string; slug: string } | null);
 const createAuditLogMock = vi.fn(async () => {});
 const emitEventMock = vi.fn(async () => "event-1");
@@ -37,6 +39,9 @@ vi.mock("@/industries/_shared/features/outreach/lib/stage-auto-enroll", () => ({
 }));
 vi.mock("@/lib/leads/assign-display-ids", () => ({
   assignDisplayIds: assignDisplayIdsMock,
+}));
+vi.mock("@/lib/leads/ensure-list-pipeline", () => ({
+  ensureListPipeline: (...a: unknown[]) => (ensureListPipelineMock as unknown as (...x: unknown[]) => unknown)(...a),
 }));
 vi.mock("@/lib/leads/pipeline-stage", () => ({
   getPipelineLandingStage: getPipelineLandingStageMock,
@@ -94,6 +99,7 @@ interface FakeDbOptions {
   tenantUsers?: RowMap; // keyed by user_id
   leadLists?: RowMap; // keyed by id
   pipelineStages?: RowMap; // keyed by id
+  countries?: Array<{ name: string }>; // the tenant's destination-country catalog (Settings → Destination Countries)
   leadAssignmentHistory?: Array<{ lead_id: string; to_user_id: string; from_user_id: string | null }>;
   tenants?: Record<string, unknown>;
   defaultBranchId?: string; // the tenant's is_default branch ("Global" for Admizz)
@@ -133,6 +139,10 @@ function makeFakeDb(opts: FakeDbOptions) {
       const id = state.eq.id as string | undefined;
       const row = id ? (opts.leadLists ?? {})[id] ?? null : null;
       return { data: row, error: null };
+    }
+
+    if (table === "countries") {
+      return { data: opts.countries ?? null, error: null };
     }
 
     if (table === "pipeline_stages") {
@@ -298,6 +308,7 @@ function fixtureAuth(overrides: Partial<AuthContext> = {}): AuthContext {
 const OPTS = { requestId: "req-1", ip: null, userAgent: null };
 
 beforeEach(() => {
+  resetDestinationCatalogCache();
   resolvePositionSlugMock.mockReset().mockResolvedValue(null);
   getLeadMembershipMock.mockReset().mockResolvedValue([]);
   syncOriginMembershipMock.mockClear();
@@ -305,6 +316,7 @@ beforeEach(() => {
   isLeadCollaboratorMock.mockReset().mockResolvedValue(false);
   assignDisplayIdsMock.mockClear();
   getPipelineLandingStageMock.mockReset().mockResolvedValue(null);
+  ensureListPipelineMock.mockReset().mockResolvedValue(null);
   createAuditLogMock.mockClear();
   emitEventMock.mockClear();
   createNotificationsExceptMock.mockClear();
@@ -492,8 +504,8 @@ describe("applyLeadPatch — governance branches", () => {
         list_id: "list-b", status: "s", lead_type: "lead",
       },
       leadLists: {
-        "list-a": { id: "list-a", slug: "list-a", name: "List A", pipeline_id: null, is_archive: false, sort_order: 10, access: { mode: "all" } },
-        "list-b": { id: "list-b", slug: "list-b", name: "List B", pipeline_id: null, is_archive: false, sort_order: 20, access: { mode: "all" } },
+        "list-a": { id: "list-a", slug: "list-a", name: "List A", pipeline_id: "pipe-x", is_archive: false, sort_order: 10, access: { mode: "all" } },
+        "list-b": { id: "list-b", slug: "list-b", name: "List B", pipeline_id: "pipe-x", is_archive: false, sort_order: 20, access: { mode: "all" } },
       },
       leadAssignmentHistory: [{ lead_id: "lead-1", to_user_id: "user-1", from_user_id: "prev-holder" }],
       tenantUsers: {
@@ -516,8 +528,8 @@ describe("applyLeadPatch — governance branches", () => {
     await setFakeDb({
       leads: { id: "lead-1", pipeline_id: "pipe-1", assigned_to: "user-1", branch_id: null, list_id: "list-b", status: "s" },
       leadLists: {
-        "list-a": { id: "list-a", slug: "list-a", name: "List A", pipeline_id: null, is_archive: false, sort_order: 10 },
-        "list-b": { id: "list-b", slug: "list-b", name: "List B", pipeline_id: null, is_archive: false, sort_order: 20 },
+        "list-a": { id: "list-a", slug: "list-a", name: "List A", pipeline_id: "pipe-x", is_archive: false, sort_order: 10 },
+        "list-b": { id: "list-b", slug: "list-b", name: "List B", pipeline_id: "pipe-x", is_archive: false, sort_order: 20 },
       },
       leadAssignmentHistory: [{ lead_id: "lead-1", to_user_id: "user-1", from_user_id: "prev-holder" }],
       tenantUsers: {
@@ -539,8 +551,8 @@ describe("applyLeadPatch — governance branches", () => {
     await setFakeDb({
       leads: { id: "lead-1", pipeline_id: "pipe-1", assigned_to: "user-1", branch_id: null, list_id: "list-b", status: "s" },
       leadLists: {
-        "list-a": { id: "list-a", slug: "list-a", name: "List A", pipeline_id: null, is_archive: false, sort_order: 10 },
-        "list-b": { id: "list-b", slug: "list-b", name: "List B", pipeline_id: null, is_archive: false, sort_order: 20 },
+        "list-a": { id: "list-a", slug: "list-a", name: "List A", pipeline_id: "pipe-x", is_archive: false, sort_order: 10 },
+        "list-b": { id: "list-b", slug: "list-b", name: "List B", pipeline_id: "pipe-x", is_archive: false, sort_order: 20 },
       },
       leadAssignmentHistory: [], // no prior handoff recorded for user-1
       tenantUsers: {
@@ -578,7 +590,7 @@ describe("applyLeadPatch — governance branches", () => {
       leads: { id: "lead-1", pipeline_id: "pipe-1", assigned_to: "user-1", branch_id: null, list_id: "list-qualified", status: "s" },
       leadLists: {
         "list-qualified": { id: "list-qualified", slug: "qualified", name: "Qualified", is_archive: false, sort_order: 10 },
-        "list-prospects": { id: "list-prospects", slug: "prospects", name: "Prospects", pipeline_id: null, is_archive: false, sort_order: 20, access: { mode: "all" } },
+        "list-prospects": { id: "list-prospects", slug: "prospects", name: "Prospects", pipeline_id: "pipe-x", is_archive: false, sort_order: 20, access: { mode: "all" } },
       },
     });
     const auth = fixtureAuth({ permissions: { leadScope: "own" } as ResolvedPermissions });
@@ -595,7 +607,7 @@ describe("applyLeadPatch — governance branches", () => {
       leads: { id: "lead-1", pipeline_id: "pipe-1", assigned_to: "user-1", branch_id: null, list_id: "list-qualified", status: "s" },
       leadLists: {
         "list-qualified": { id: "list-qualified", slug: "qualified", name: "Qualified", is_archive: false, sort_order: 10 },
-        "list-prospects": { id: "list-prospects", slug: "prospects", name: "Prospects", pipeline_id: null, is_archive: false, sort_order: 20, access: { mode: "all" } },
+        "list-prospects": { id: "list-prospects", slug: "prospects", name: "Prospects", pipeline_id: "pipe-x", is_archive: false, sort_order: 20, access: { mode: "all" } },
       },
     });
     const auth = fixtureAuth({ permissions: { leadScope: "own" } as ResolvedPermissions });
@@ -608,8 +620,8 @@ describe("applyLeadPatch — governance branches", () => {
     await setFakeDb({
       leads: { id: "lead-1", pipeline_id: "pipe-1", assigned_to: "user-1", branch_id: null, list_id: "list-applications", status: "s", lead_type: "prospect" },
       leadLists: {
-        "list-prospects": { id: "list-prospects", slug: "prospects", name: "Prospects", pipeline_id: null, is_archive: false, sort_order: 20, access: { mode: "all" } },
-        "list-applications": { id: "list-applications", slug: "applications", name: "Applications", pipeline_id: null, is_archive: false, sort_order: 30, access: { mode: "all" } },
+        "list-prospects": { id: "list-prospects", slug: "prospects", name: "Prospects", pipeline_id: "pipe-x", is_archive: false, sort_order: 20, access: { mode: "all" } },
+        "list-applications": { id: "list-applications", slug: "applications", name: "Applications", pipeline_id: "pipe-x", is_archive: false, sort_order: 30, access: { mode: "all" } },
       },
       leadAssignmentHistory: [{ lead_id: "lead-1", to_user_id: "user-1", from_user_id: "prev-holder" }],
       tenantUsers: {
@@ -630,9 +642,9 @@ describe("applyLeadPatch — governance branches", () => {
     await setFakeDb({
       leads: { id: "lead-1", pipeline_id: "pipe-1", assigned_to: "user-1", branch_id: null, list_id: "list-staging", status: "s", lead_type: "lead" },
       leadLists: {
-        "list-prospects": { id: "list-prospects", slug: "prospects", name: "Prospects", pipeline_id: null, is_archive: false, sort_order: 20, access: { mode: "all" } },
+        "list-prospects": { id: "list-prospects", slug: "prospects", name: "Prospects", pipeline_id: "pipe-x", is_archive: false, sort_order: 20, access: { mode: "all" } },
         // staging list whose sort_order is (oddly) ABOVE Prospects — must still not look like a revert
-        "list-staging": { id: "list-staging", slug: "migration-qc", name: "Migration QC", pipeline_id: null, is_archive: false, is_staging: true, sort_order: 99, access: { mode: "all" } },
+        "list-staging": { id: "list-staging", slug: "migration-qc", name: "Migration QC", pipeline_id: "pipe-x", is_archive: false, is_staging: true, sort_order: 99, access: { mode: "all" } },
       },
     });
     const auth = fixtureAuth({ permissions: { leadScope: "own" } as ResolvedPermissions });
@@ -651,7 +663,7 @@ describe("applyLeadPatch — governance branches", () => {
     leads: { id: "lead-1", pipeline_id: "pipe-1", assigned_to: "user-1", branch_id: null, list_id: "list-qualified", status: "s" },
     leadLists: {
       "list-qualified": { id: "list-qualified", slug: "qualified", name: "Qualified", is_archive: false, sort_order: 10 },
-      "list-prospects": { id: "list-prospects", slug: "prospects", name: "Prospects", pipeline_id: null, is_archive: false, sort_order: 20, access: { mode: "all" } },
+      "list-prospects": { id: "list-prospects", slug: "prospects", name: "Prospects", pipeline_id: "pipe-x", is_archive: false, sort_order: 20, access: { mode: "all" } },
     },
   };
 
@@ -659,9 +671,9 @@ describe("applyLeadPatch — governance branches", () => {
     const APPLICATIONS_DB = (currentListId: string) => ({
       leads: { id: "lead-1", pipeline_id: "pipe-1", assigned_to: "user-1", branch_id: null, list_id: currentListId, status: "s", lead_type: "prospect" },
       leadLists: {
-        "list-prospects": { id: "list-prospects", slug: "prospects", name: "Prospects", pipeline_id: null, is_archive: false, sort_order: 20, access: { mode: "all" } },
-        "list-applications": { id: "list-applications", slug: "applications", name: "Applications", pipeline_id: null, is_archive: false, sort_order: 30, access: { mode: "all" } },
-        "list-enrolled": { id: "list-enrolled", slug: "enrolled", name: "Enrolled", pipeline_id: null, is_archive: false, sort_order: 40, access: { mode: "all" } },
+        "list-prospects": { id: "list-prospects", slug: "prospects", name: "Prospects", pipeline_id: "pipe-x", is_archive: false, sort_order: 20, access: { mode: "all" } },
+        "list-applications": { id: "list-applications", slug: "applications", name: "Applications", pipeline_id: "pipe-x", is_archive: false, sort_order: 30, access: { mode: "all" } },
+        "list-enrolled": { id: "list-enrolled", slug: "enrolled", name: "Enrolled", pipeline_id: "pipe-x", is_archive: false, sort_order: 40, access: { mode: "all" } },
       },
     });
 
@@ -781,6 +793,43 @@ describe("applyLeadPatch — governance branches", () => {
     expect(outcome.lead.pipeline_id).toBe("pipe-new");
     expect(outcome.lead.stage_id).toBe("stage-landing");
     expect(outcome.lead.status).toBe("new");
+  });
+
+  // Client report (Manish, Nov 2026): a Stage created from "Add/Edit stages" ("Enrolled") has no pipeline, so moving a
+  // lead into it used to write pipeline_id = NULL and fail ("Failed to update lead").
+  const ENROLLED_DB = {
+    leads: { id: "lead-1", pipeline_id: "pipe-old", assigned_to: "user-2", branch_id: null, list_id: "list-current", status: "new", stage_id: "stage-cur", lead_type: "lead" },
+    leadLists: {
+      "list-current": { id: "list-current", slug: "applications", name: "Applications", pipeline_id: "pipe-old", is_archive: false, sort_order: 30 },
+      "list-enrolled": { id: "list-enrolled", slug: "enrolled", name: "Enrolled", pipeline_id: null, is_archive: false, sort_order: 99, access: { mode: "all" } },
+    },
+  };
+
+  it("a move into a stage with no pipeline builds one first, then lands the lead on it", async () => {
+    await setFakeDb(ENROLLED_DB);
+    ensureListPipelineMock.mockResolvedValue("pipe-enrolled");
+    getPipelineLandingStageMock.mockResolvedValue({ id: "stage-new", slug: "new" });
+    const auth = fixtureAuth({ role: "owner", permissions: { baseTier: "owner", leadScope: "all" } as ResolvedPermissions });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(auth, "lead-1", { list_id: "list-enrolled" }, OPTS);
+
+    expect(ensureListPipelineMock).toHaveBeenCalledTimes(1);
+    expect(outcome.kind).toBe("ok");
+    if (outcome.kind !== "ok") return;
+    expect(outcome.lead.pipeline_id).toBe("pipe-enrolled");
+    expect(outcome.lead.stage_id).toBe("stage-new");
+    expect(outcome.lead.status).toBe("new");
+  });
+
+  it("if the stage's pipeline can't be built it says so clearly and never blanks the lead's pipeline", async () => {
+    const db = await setFakeDb(ENROLLED_DB);
+    ensureListPipelineMock.mockResolvedValue(null);
+    const auth = fixtureAuth({ role: "owner", permissions: { baseTier: "owner", leadScope: "all" } as ResolvedPermissions });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(auth, "lead-1", { list_id: "list-enrolled" }, OPTS);
+
+    expect(outcome.kind).toBe("validation");
+    expect(((db._updates.leads ?? []) as Array<Record<string, unknown>>).some((u) => u.pipeline_id === null)).toBe(false);
   });
 
   it("System Activity — a stage move records who holds the lead (even when the assignee didn't change), and undo data is untouched", async () => {
@@ -1319,5 +1368,40 @@ describe("applyLeadPatch — aiSuggested (Orca proposed it, the person ticked it
     await new Promise((r) => setTimeout(r, 0));
     const audit = createAuditLogMock.mock.calls.map((c) => (c as unknown[])[0] as unknown as { changes: Record<string, unknown> }).find((a) => a.changes.ielts_score);
     expect(audit?.changes.ai_suggested).toBeUndefined();
+  });
+});
+
+// Client report (Manish / Admizz, Nov 2026): a lead's destinations were saved as "uk" / "nepal" while the tenant's
+// catalog spells "UK" / "Nepal", so no picker matched. Saving a lead's destinations re-spells them in the catalog's
+// spelling (lib/leads/destination-catalog.ts); a catalog problem must never block the save.
+describe("applyLeadPatch — destinations are saved in the tenant's catalog spelling", () => {
+  const ownerAuth = () => fixtureAuth({ role: "owner", permissions: { baseTier: "owner", leadScope: "all" } as ResolvedPermissions });
+  const LEAD = { id: "lead-1", pipeline_id: "pipe-1", assigned_to: "user-1", branch_id: null, list_id: null };
+
+  it("re-spells known destinations in the catalog's spelling (the Nepal-UK lead)", async () => {
+    await setFakeDb({ leads: LEAD, countries: [{ name: "Nepal" }, { name: "UK" }, { name: "USA" }] });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(ownerAuth(), "lead-1", { destinations: ["uk", "nepal"] }, OPTS);
+    expect(outcome.kind).toBe("ok");
+    if (outcome.kind !== "ok") return;
+    expect(outcome.lead.destinations).toEqual(["UK", "Nepal"]);
+  });
+
+  it("keeps a destination the catalog doesn't know, and still drops decoration/duplicates", async () => {
+    await setFakeDb({ leads: LEAD, countries: [{ name: "UK" }] });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(ownerAuth(), "lead-1", { destinations: ["🇬🇧 uk", "UK", "Narnia"] }, OPTS);
+    expect(outcome.kind).toBe("ok");
+    if (outcome.kind !== "ok") return;
+    expect(outcome.lead.destinations).toEqual(["UK", "Narnia"]);
+  });
+
+  it("a catalog that can't be read falls back to the old behaviour — the save still succeeds", async () => {
+    await setFakeDb({ leads: LEAD }); // no countries table rows -> lookup yields nothing
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(ownerAuth(), "lead-1", { destinations: ["🇬🇧 uk"] }, OPTS);
+    expect(outcome.kind).toBe("ok");
+    if (outcome.kind !== "ok") return;
+    expect(outcome.lead.destinations).toEqual(["uk"]);
   });
 });

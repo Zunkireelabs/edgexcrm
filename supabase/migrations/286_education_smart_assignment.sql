@@ -1,4 +1,4 @@
--- Migration 285: EDGEX-87 A3 — smart lead assignment (rule-based, explainable, learns from results). NOT an LLM.
+-- Migration 286: EDGEX-87 A3 — smart lead assignment (rule-based, explainable, learns from results). NOT an LLM.
 -- ROLLBACK: DROP FUNCTION IF EXISTS public.education_assignment_stats_refresh(UUID, INT, INT);
 --           DROP TABLE IF EXISTS public.lead_assignment_stats; DROP TABLE IF EXISTS public.lead_assignment_decisions;
 --           DROP TABLE IF EXISTS public.lead_assignment_settings;
@@ -16,7 +16,7 @@
 --                              list whose slug is 'qualified' and every list after it by sort_order, archive lists excluded)
 --      speed_n / median_first_contact_min   for leads received in the last p_speed_days (default 30): minutes from
 --                              coalesce(assigned_at, created_at) to the first CONTACT = a lead_activities row OR a human
---                              lead_notes row (ai_tool_call_id IS NULL). Same definition as home/lib/contact.ts and migration 284.
+--                              lead_notes row (ai_tool_call_id IS NULL). Same definition as home/lib/contact.ts and migration 285.
 --      flag_7d                 Pulse's 7-day red / amber / green flag, written by the nightly job (not by this function).
 --    Attribution is to the CURRENT holder (assigned_to), and only CURRENT tenant members get rows; leads held by people who
 --    left (no tenant_users row) are ignored. Leads reassigned away count for their current holder. That is an
@@ -165,7 +165,7 @@ $$;
 REVOKE ALL ON FUNCTION public.education_assignment_stats_refresh(UUID, INT, INT) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.education_assignment_stats_refresh(UUID, INT, INT) TO service_role;
 
-INSERT INTO public.schema_migrations (version) VALUES ('285_education_smart_assignment.sql')
+INSERT INTO public.schema_migrations (version) VALUES ('286_education_smart_assignment.sql')
   ON CONFLICT (version) DO NOTHING;
 
 COMMIT;

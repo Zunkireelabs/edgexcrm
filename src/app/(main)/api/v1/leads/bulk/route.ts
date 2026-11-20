@@ -1,3 +1,4 @@
+import { ensureListPipeline } from "@/lib/leads/ensure-list-pipeline";
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, requireAdmin, getClientIp } from "@/lib/api/auth";
@@ -223,6 +224,10 @@ export async function PATCH(request: NextRequest) {
       return apiValidationError({ archive_reason: ["Archive reason is required when moving to an archive list"] });
     }
     targetList = listCheck;
+    // A Stage an admin created from Add/Edit stages has no pipeline (statuses) yet — build it now so the move works.
+    if (!targetList.pipeline_id) {
+      targetList.pipeline_id = await ensureListPipeline(supabase, auth.tenantId, targetList);
+    }
   }
 
   // Validate stage_id belongs to the target list's pipeline (e.g. Archive restore,

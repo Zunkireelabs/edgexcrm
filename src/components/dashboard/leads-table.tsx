@@ -65,6 +65,8 @@ import {
   GlobeIcon,
   CalendarIcon,
   ArrowsDownUpIcon,
+  ArrowUpIcon,
+  ArrowDownIcon,
   XIcon,
   CaretLeftIcon,
   CaretRightIcon,
@@ -120,6 +122,7 @@ import {
   type LeadColumnCtx,
 } from "@/components/dashboard/leads/columns-registry";
 import { loadColumnPrefs, saveColumnPrefs, clearColumnPrefs } from "@/lib/leads/column-prefs";
+import { SORT_FIELD_TO_API, COLUMN_SORT_FIELD, DESC_FIRST_SORT_FIELDS, HEADER_SORT_LABELS, type SortField } from "@/lib/leads/sort-fields";
 import { STAGE_FRONTLINE, allowedAssigneePositionsForStage } from "@/lib/leads/stage-assignee-positions";
 import { buildIntakeTermOptions } from "@/lib/intake-options";
 import { ColumnManagerDialog } from "@/components/dashboard/leads/column-manager-dialog";
@@ -138,24 +141,9 @@ import { DESTINATION_SYNONYM_KEYS } from "@/lib/leads/destination-normalize";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 import { DEFAULT_FOLLOW_UP_STALE_DAYS } from "@/industries/education-consultancy/features/team-performance/lib/thresholds";
 
-type SortField = "activity" | "created" | "updated" | "name" | "email" | "follow_up_needed";
 type SortDirection = "asc" | "desc";
 
-// UI sort field -> GET /api/v1/leads `sort` param. Values are matched against the
-// lead field registry's FieldDef key (src/lib/filters/registry/leads.ts) since the
-// API resolves `sort` by looking up that key directly, not a raw column name — see
-// route.ts's `filterRegistry[sortKey]` lookup. follow_up_needed reuses that FieldDef's
-// sortColumns/sortNullsFirst rather than re-deriving the sort rule here.
-// callback_due is NOT a sort option — it's an automatic, unconditional display-order
-// float applied after whatever sort is active (see the displayLeads partition below).
-const SORT_FIELD_TO_API: Record<SortField, string> = {
-  activity: "last_activity_at",
-  created: "created_at",
-  updated: "updated_at",
-  name: "first_name",
-  email: "email",
-  follow_up_needed: "follow_up_needed",
-};
+
 
 interface TeamMember {
   user_id: string;
@@ -291,16 +279,35 @@ function withResizableTh(
   ctx: LeadColumnCtx,
   width: number | undefined,
   onResizeStart: (e: ReactMouseEvent<HTMLSpanElement>, key: string) => void,
+  // Present only for a column that can be sorted by header click (see COLUMN_SORT_FIELD).
+  sort?: { active: boolean; direction: SortDirection; onClick: () => void },
 ): ReactNode {
   const thElement = col.renderTh(ctx);
   if (!isValidElement(thElement)) return thElement;
   const props = thElement.props as { className?: string; style?: CSSProperties; children?: ReactNode };
+  const SortIcon = !sort?.active ? ArrowsDownUpIcon : sort.direction === "asc" ? ArrowUpIcon : ArrowDownIcon;
   return cloneElement(thElement as ReactElement<Record<string, unknown>>, {
     className: `${props.className ?? ""} relative`,
     style: width ? resizedCellStyle(props.style, width) : props.style,
+    ...(sort ? { "aria-sort": sort.active ? (sort.direction === "asc" ? "ascending" : "descending") : "none" } : {}),
     children: (
       <>
-        {props.children}
+        {sort ? (
+          <button
+            type="button"
+            onClick={sort.onClick}
+            title={`Sort by ${col.label}`}
+            className="group inline-flex items-center gap-1 text-left hover:text-gray-900"
+          >
+            {props.children}
+            <SortIcon
+              className={`h-3 w-3 shrink-0 transition-opacity ${sort.active ? "text-gray-900 opacity-100" : "opacity-0 group-hover:opacity-60"}`}
+              aria-hidden
+            />
+          </button>
+        ) : (
+          props.children
+        )}
         <span
           onMouseDown={(e) => onResizeStart(e, col.key)}
           className="absolute right-0 top-0 h-full w-1.5 -mr-0.5 cursor-col-resize select-none touch-none z-10 hover:bg-blue-400/50 active:bg-blue-500/60"
@@ -336,6 +343,7 @@ function SortPopover({
   setSortDirection,
   industryId,
   align = "start",
+  extended = false,
 }: {
   sortField: SortField;
   sortDirection: "asc" | "desc";
@@ -343,6 +351,8 @@ function SortPopover({
   setSortDirection: (direction: "asc" | "desc") => void;
   industryId?: string | null;
   align?: "start" | "end";
+  /** Server-paginated lists only: also list the column-header sorts (legacy client-side lists can't sort by them). */
+  extended?: boolean;
 }) {
   return (
     <Popover>
@@ -377,6 +387,12 @@ function SortPopover({
                 {industryId === "education_consultancy" && (
                   <SelectItem value="follow_up_needed">Follow-up needed</SelectItem>
                 )}
+                {extended &&
+                  HEADER_SORT_LABELS.map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
               </SelectContent>
             </Select>
             {/* Direction toggle */}
@@ -596,6 +612,18 @@ export function LeadsTable({
     () => (Object.keys(SORT_FIELD_TO_API) as SortField[]).find((f) => SORT_FIELD_TO_API[f] === LEADS_V2_DEFAULT_SORT.key) ?? "activity",
   );
   const [sortDirection, setSortDirection] = useState<SortDirection>(LEADS_V2_DEFAULT_SORT.direction);
+  // Column-header click: the same column flips direction; a new column starts ascending (descending for dates/scores).
+  const handleHeaderSort = useCallback(
+    (field: SortField) => {
+      if (field === sortField) {
+        setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+      } else {
+        setSortField(field);
+        setSortDirection(DESC_FIRST_SORT_FIELDS.has(field) ? "desc" : "asc");
+      }
+    },
+    [sortField],
+  );
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -3185,6 +3213,7 @@ export function LeadsTable({
             setSortDirection={setSortDirection}
             industryId={industryId}
             align="end"
+            extended={serverPaginated}
           />
 
           {/* Export — owner/admin always; members only if their position grants it */}
@@ -3573,9 +3602,20 @@ export function LeadsTable({
               {/* Anchor: avatar */}
               <th className="px-2 py-2 text-left w-8"></th>
               {/* Data columns from registry */}
-              {visibleColumns.map((col) =>
-                withResizableTh(col, columnCtx, columnWidths[col.key], handleColumnResizeStart)
-              )}
+              {visibleColumns.map((col) => {
+                // Header sort: server-paginated lists only (the server does the sorting), and only for columns
+                // that map to a real stored value.
+                const headerSortField = serverPaginated ? COLUMN_SORT_FIELD[col.key] : undefined;
+                return withResizableTh(
+                  col,
+                  columnCtx,
+                  columnWidths[col.key],
+                  handleColumnResizeStart,
+                  headerSortField
+                    ? { active: sortField === headerSortField, direction: sortDirection, onClick: () => handleHeaderSort(headerSortField) }
+                    : undefined,
+                );
+              })}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">

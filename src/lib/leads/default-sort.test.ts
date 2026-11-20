@@ -21,7 +21,10 @@ describe("v2 leads default sort (EDGEX-122)", () => {
     const src = readFileSync("src/components/dashboard/leads-table.tsx", "utf8");
     expect(src).toContain("LEADS_V2_DEFAULT_SORT.key");
     expect(src).toContain("useState<SortDirection>(LEADS_V2_DEFAULT_SORT.direction)");
-    expect(src).toContain(`: "${LEADS_V2_DEFAULT_SORT.key}"`);
+    // SORT_FIELD_TO_API moved out of the component into lib/leads/sort-fields.ts (stage #681 click-to-sort).
+    expect(src).toContain("SORT_FIELD_TO_API");
+    const map = readFileSync("src/lib/leads/sort-fields.ts", "utf8");
+    expect(map).toContain(`: "${LEADS_V2_DEFAULT_SORT.key}"`);
   });
 
   it("server first page is wired to the constant", () => {

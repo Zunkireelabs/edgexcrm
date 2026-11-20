@@ -1,62 +1,63 @@
 import { describe, it, expect } from "vitest";
-import { readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { OFFICE_END_HOUR, OFFICE_START_HOUR } from "./lib/working-hours";
+import { PROCESS_KEYS } from "./lib/keys";
+import { FEATURES, INDUSTRIES } from "../../../_registry";
+import { getFeatureAccess } from "../../../_loader";
 
-const dir = join(process.cwd(), "supabase/migrations");
-const sql = readFileSync(join(dir, "287_education_process_changes.sql"), "utf8");
-const m286 = readFileSync(join(dir, "286_education_processes.sql"), "utf8");
-const fnOf = (s: string) => s.slice(s.indexOf("CREATE OR REPLACE FUNCTION public.education_process_metrics("), s.indexOf("REVOKE ALL ON FUNCTION public.education_process_metrics"));
+const sql = readFileSync(join(process.cwd(), "supabase/migrations/287_education_processes.sql"), "utf8");
 
+// Migration text guards: the DB is the last line of defence, so the invariants must be IN the migration, not only in app code.
 describe("migration 287 text guards", () => {
-  it("is the only file numbered 287, transactional, with a rollback line and a ledger row", () => {
-    expect(readdirSync(dir).filter((f) => f.startsWith("287_"))).toEqual(["287_education_process_changes.sql"]);
-    expect(sql).toMatch(/^-- ROLLBACK:/m);
-    expect(sql).toMatch(/\nBEGIN;\n/);
-    expect(sql).toMatch(/\nCOMMIT;\n$/);
-    expect(sql).toContain("INSERT INTO public.schema_migrations (version) VALUES ('287_education_process_changes.sql')");
+  it("a live or retired version's spec is immutable, enforced by a BEFORE UPDATE trigger", () => {
+    expect(sql).toMatch(/OLD\.status IN \('live', 'retired'\) AND NEW\.spec IS DISTINCT FROM OLD\.spec/);
+    expect(sql).toMatch(/RAISE EXCEPTION/);
+    expect(sql).toMatch(/CREATE TRIGGER trg_process_versions_guard_spec\s+BEFORE UPDATE ON public\.process_versions/);
   });
-  it("one open draft per process, enforced by a partial unique index", () => {
-    expect(sql).toMatch(/CREATE UNIQUE INDEX IF NOT EXISTS uniq_process_versions_one_draft ON public\.process_versions \(process_id\) WHERE status = 'draft'/);
+  it("at most one live version per process (partial unique index)", () => {
+    expect(sql).toMatch(/CREATE UNIQUE INDEX IF NOT EXISTS uniq_process_versions_one_live ON public\.process_versions \(process_id\) WHERE status = 'live'/);
   });
-  it("process_changes: tenant + process + version FKs cascade, RLS like 286", () => {
-    expect(sql).toMatch(/tenant_id\s+UUID NOT NULL REFERENCES public\.tenants\(id\) ON DELETE CASCADE/);
-    expect(sql).toMatch(/process_id\s+UUID NOT NULL REFERENCES public\.processes\(id\) ON DELETE CASCADE/);
-    expect(sql).toMatch(/version_id\s+UUID NOT NULL REFERENCES public\.process_versions\(id\) ON DELETE CASCADE/);
-    expect(sql).toContain("ALTER TABLE public.process_changes ENABLE ROW LEVEL SECURITY");
-    expect(sql).toMatch(/CREATE POLICY "process_changes_select" ON public\.process_changes FOR SELECT USING \(tenant_id IN \(SELECT get_user_tenant_ids\(\)\)\)/);
-    expect(sql).toMatch(/CREATE POLICY "process_changes_service_all" ON public\.process_changes FOR ALL USING \(auth\.role\(\) = 'service_role'\)/);
+  it("unique keys: (tenant, key), (process, version), snapshot PK (process, day)", () => {
+    expect(sql).toMatch(/UNIQUE \(tenant_id, key\)/);
+    expect(sql).toMatch(/UNIQUE \(process_id, version\)/);
+    expect(sql).toMatch(/PRIMARY KEY \(process_id, day\)/);
   });
-  it("process_changes: the value sets match the app", () => {
-    expect(sql).toMatch(/field\s+TEXT NOT NULL CHECK \(field IN \('target', 'wording', 'who'\)\)/);
-    expect(sql).toMatch(/author_kind\s+TEXT NOT NULL CHECK \(author_kind IN \('person', 'agent'\)\)/);
-    expect(sql).toMatch(/status\s+TEXT NOT NULL DEFAULT 'open' CHECK \(status IN \('open', 'taken', 'not_taken'\)\)/);
-    expect(sql).toMatch(/taken\s+BOOLEAN NOT NULL DEFAULT TRUE/);
-    expect(sql).toMatch(/part IN \('trigger', 'done', 'exceptions'\) OR part LIKE 'step:%'/);
+  it("RLS on all three tables: tenant SELECT via get_user_tenant_ids, writes service-role only", () => {
+    for (const t of ["processes", "process_versions", "process_metric_snapshots"]) {
+      expect(sql).toContain(`ALTER TABLE public.${t} ENABLE ROW LEVEL SECURITY`);
+      expect(sql).toMatch(new RegExp(`CREATE POLICY "${t}_select" ON public\\.${t} FOR SELECT USING \\(tenant_id IN \\(SELECT get_user_tenant_ids\\(\\)\\)\\)`));
+      expect(sql).toMatch(new RegExp(`CREATE POLICY "${t}_service_all" ON public\\.${t} FOR ALL USING \\(auth\\.role\\(\\) = 'service_role'\\)`));
+    }
   });
-  it("rejection columns are added, nullable", () => {
-    for (const c of ["rejected_reason TEXT", "rejected_by     UUID REFERENCES auth.users(id) ON DELETE SET NULL", "rejected_at     TIMESTAMPTZ"]) expect(sql).toContain(`ADD COLUMN IF NOT EXISTS ${c}`);
+  it("status and source are constrained; keys match the four processes", () => {
+    expect(sql).toContain("CHECK (status IN ('draft', 'live', 'retired', 'rejected'))");
+    expect(sql).toContain("CHECK (source IN ('system', 'person', 'agent'))");
+    for (const k of PROCESS_KEYS) expect(sql).toContain(`'${k}'`);
   });
-  it("replaces education_process_metrics with the SAME signature and grants", () => {
-    expect(sql).toMatch(/CREATE OR REPLACE FUNCTION public\.education_process_metrics\(\s*p_tenant UUID, p_key TEXT, p_from TIMESTAMPTZ, p_to TIMESTAMPTZ, p_tz TEXT\s*\)\s*RETURNS JSONB/);
-    expect(sql).toContain("GRANT EXECUTE ON FUNCTION public.education_process_metrics(UUID, TEXT, TIMESTAMPTZ, TIMESTAMPTZ, TEXT) TO service_role");
+  it("the metrics function handles every key, is service-role only, and starts with a rollback line", () => {
+    for (const k of PROCESS_KEYS) expect(sql).toContain(`p_key = '${k}'`);
+    expect(sql).toMatch(/REVOKE ALL ON FUNCTION public\.education_process_metrics\(UUID, TEXT, TIMESTAMPTZ, TIMESTAMPTZ, TEXT\) FROM PUBLIC/);
+    expect(sql).toMatch(/GRANT EXECUTE ON FUNCTION public\.education_process_metrics\(UUID, TEXT, TIMESTAMPTZ, TIMESTAMPTZ, TEXT\) TO service_role/);
+    expect(sql.split("\n")[1]).toMatch(/^-- ROLLBACK:/);
   });
-  it("the new function keeps every key the old one returned and adds only within_1wh", () => {
-    const keys = (s: string) => new Set([...fnOf(s).matchAll(/^\s+'([a-z0-9_]+)',/gm)].map((m) => m[1]));
-    const old = keys(m286);
-    const neu = keys(sql);
-    for (const k of old) expect(neu.has(k), k).toBe(true);
-    expect([...neu].filter((k) => !old.has(k))).toEqual(["within_1wh"]);
+  it("reuses Home's definitions: human notes + activities as contact, walk-in tags, call-back SQL from migration 285", () => {
+    expect(sql).toContain("n.ai_tool_call_id IS NULL");
+    expect(sql).toContain("ARRAY['other', 'parent']");
+    expect(sql).toContain("callback_reminder_minutes");
+    expect(sql).toContain("g.changes ? 'assigned_to'");
   });
-  it("the working clock uses the same office hours as the app twin", () => {
-    expect(sql).toContain(`v_office_start CONSTANT INT := ${OFFICE_START_HOUR}`);
-    expect(sql).toContain(`v_office_end   CONSTANT INT := ${OFFICE_END_HOUR}`);
-    expect(sql).toMatch(/'within_1wh', \(SELECT count\(\*\) FROM fc WHERE at IS NOT NULL AND at <= wstart \+ INTERVAL '60 minutes'\)/);
-    expect(sql).toMatch(/< v_office_start\s+THEN date_trunc\('day', c\.created_at AT TIME ZONE p_tz\) \+ make_interval\(hours => v_office_start\)/);
-    expect(sql).toMatch(/>= v_office_end\s+THEN date_trunc\('day', c\.created_at AT TIME ZONE p_tz\) \+ INTERVAL '1 day' \+ make_interval\(hours => v_office_start\)/);
+  it("is transactional and records itself in schema_migrations", () => {
+    expect(sql).toMatch(/^BEGIN;$/m);
+    expect(sql).toMatch(/^COMMIT;$/m);
+    expect(sql).toContain("287_education_processes.sql");
   });
-  it("the function body is otherwise identical to 286 (only the wstart column and within_1wh differ)", () => {
-    const strip = (s: string) => fnOf(s).split("\n").filter((l) => !/wstart|within_1wh|^\s*(WHEN EXTRACT|THEN date_trunc|ELSE c\.created_at AT|END\) AT TIME ZONE|-- `wstart`|-- 09:00 \(same day|\(\(CASE)/.test(l)).join("\n");
-    expect(strip(sql)).toBe(strip(m286));
+});
+
+describe("feature gate (the same function the sidebar, page and API use)", () => {
+  it("education_consultancy has Processes", () => {
+    expect(getFeatureAccess(INDUSTRIES.EDUCATION_CONSULTANCY, FEATURES.PROCESSES)).toBe(true);
+  });
+  it.each(["it_agency", "travel_agency", "construction", "general", "real_estate", null, undefined])("%s does not", (industry) => {
+    expect(getFeatureAccess(industry as string | null | undefined, FEATURES.PROCESSES)).toBe(false);
   });
 });

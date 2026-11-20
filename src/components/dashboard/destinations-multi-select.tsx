@@ -3,7 +3,7 @@
 import { useId } from "react";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Label } from "@/components/ui/label";
-import { normalizeDestinations } from "@/lib/leads/destination-normalize";
+import { canonicalizeDestinations } from "@/lib/leads/destination-normalize";
 
 // Shared by every "Interested Destination(s)" picker across the CRM (Add Lead,
 // lead detail Study Interest panel, lead Qualify dialog, leads-table Qualify
@@ -34,7 +34,13 @@ export function DestinationsMultiSelect({
   // which of the 6+ callers passed in the dirty array — a checkbox for an
   // already-present destination always shows checked, so it can never be added a
   // second time through this picker.
-  const cleanSelected = normalizeDestinations(selected);
+  //
+  // It ALSO re-spells every value the catalog knows in the CATALOG's spelling (case/whitespace-insensitive): a lead
+  // saved with "uk" shows UK ticked, and saving writes "UK" back (stage #682, client report Nov 2026).
+  const cleanSelected = canonicalizeDestinations(selected, options);
+  // Selected values the catalog has no entry for (a destination since removed from Settings, or free text from a form)
+  // still get an option, so they can always be unticked.
+  const extraSelected = cleanSelected.filter((v) => !options.includes(v));
 
   const instanceId = useId();
   return (
@@ -46,9 +52,9 @@ export function DestinationsMultiSelect({
       <SearchableSelect
         multiple
         id={`${instanceId}-trigger`}
-        options={options.map((dest) => ({ value: dest, label: dest }))}
+        options={[...options, ...extraSelected].map((dest) => ({ value: dest, label: dest }))}
         value={cleanSelected}
-        onValueChange={(next) => onChange(normalizeDestinations(next))}
+        onValueChange={(next) => onChange(canonicalizeDestinations(next, options))}
         placeholder="Select destinations"
         searchPlaceholder="Search destinations…"
         disabled={disabled}

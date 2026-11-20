@@ -1,4 +1,4 @@
--- Migration 286: EDGEX-109 P1 — Processes: records, immutable versions, nightly metric snapshots, and the metrics SQL.
+-- Migration 287: EDGEX-109 P1 — Processes: records, immutable versions, nightly metric snapshots, and the metrics SQL.
 -- ROLLBACK: DROP FUNCTION IF EXISTS public.education_process_metrics(UUID, TEXT, TIMESTAMPTZ, TIMESTAMPTZ, TEXT);
 --           DROP FUNCTION IF EXISTS public.education_lead_terminal(UUID, UUID, TEXT);
 --           DROP TABLE IF EXISTS public.process_metric_snapshots; ALTER TABLE public.processes DROP CONSTRAINT IF EXISTS processes_live_version_fk;
@@ -14,7 +14,7 @@
 -- 3. process_metric_snapshots: one row per process per day (nightly job), the metrics JSON as of that night, for trends and
 --    before -> after.
 -- 4. education_process_metrics(p_tenant, p_key, p_from, p_to, p_tz): the deterministic numbers behind each process, one function,
---    JSONB out. Reuses Home's definitions: a WORKABLE lead (home/lib/workable.ts) and CONTACT = activity or human note (migration 284,
+--    JSONB out. Reuses Home's definitions: a WORKABLE lead (home/lib/workable.ts) and CONTACT = activity or human note (migration 285,
 --    home/lib/contact.ts). Walk-ins (tags other / parent) and deleted leads never count.
 --    Window: p_from/p_to apply to the "new lead" cohort (created in the window) and to call-backs (due in the window). The other three
 --    processes are current-state counts and ignore the window.
@@ -175,7 +175,7 @@ BEGIN
       ) fa ON TRUE
     ),
     fc AS (
-      -- First CONTACT at/after created_at: lead_activities row OR human lead_notes row (ai_tool_call_id IS NULL). Migration 284.
+      -- First CONTACT at/after created_at: lead_activities row OR human lead_notes row (ai_tool_call_id IS NULL). Migration 285.
       SELECT c.id,
              (SELECT min(t) FROM (
                 SELECT min(a.created_at) AS t FROM lead_activities a WHERE a.tenant_id = p_tenant AND a.lead_id = c.id AND a.created_at >= c.created_at
@@ -185,7 +185,7 @@ BEGIN
              c.created_at
       FROM c
     ),
-    -- Call-backs: the EXACT definition of education_home_impact() (migration 284), over the same window, whole tenant (no branch).
+    -- Call-backs: the EXACT definition of education_home_impact() (migration 285), over the same window, whole tenant (no branch).
     booked AS (
       SELECT a.lead_id, a.created_at AS booked_at,
              a.created_at + make_interval(mins => COALESCE((t.config -> 'team_performance_thresholds' ->> 'callback_reminder_minutes')::INT, 10)) AS due_at
@@ -310,7 +310,7 @@ END $$;
 REVOKE ALL ON FUNCTION public.education_process_metrics(UUID, TEXT, TIMESTAMPTZ, TIMESTAMPTZ, TEXT) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.education_process_metrics(UUID, TEXT, TIMESTAMPTZ, TIMESTAMPTZ, TEXT) TO service_role;
 
-INSERT INTO public.schema_migrations (version) VALUES ('286_education_processes.sql')
+INSERT INTO public.schema_migrations (version) VALUES ('287_education_processes.sql')
   ON CONFLICT (version) DO NOTHING;
 
 COMMIT;

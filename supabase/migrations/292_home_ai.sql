@@ -1,4 +1,4 @@
--- Migration 291: Home Part B (EDGEX-87), the AI layer on Home: home_reads (Orca's read, B2), ai_drafts (note fills the record
+-- Migration 292: Home Part B (EDGEX-87), the AI layer on Home: home_reads (Orca's read, B2), ai_drafts (note fills the record
 -- B1, drafts B3, call prep B4, batch B5, the "is Home helping" numbers B6), and the five home_* values on
 -- ai_usage_events.surface so Home's spend is metered (budget.ts sums them with 'assistant': one cap).
 --
@@ -81,7 +81,7 @@ DROP POLICY IF EXISTS "ai_drafts_update_own" ON ai_drafts;
 CREATE POLICY "ai_drafts_update_own" ON ai_drafts
   FOR UPDATE USING (tenant_id IN (SELECT get_user_tenant_ids()) AND user_id = auth.uid());
 
-INSERT INTO public.schema_migrations (version) VALUES ('291_home_ai.sql')
+INSERT INTO public.schema_migrations (version) VALUES ('292_home_ai.sql')
   ON CONFLICT (version) DO NOTHING;
 
 COMMIT;

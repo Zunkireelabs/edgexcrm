@@ -21,7 +21,7 @@ import { HtmlSourceEditor } from "@/industries/_shared/features/email/components
 import { Button } from "@/components/ui/button";
 import { AdvancedFilterBar } from "@/components/filters/advanced-filter-bar";
 import type { FilterOption, HierarchicalFieldGroups } from "@/components/filters/types";
-import { leadFields } from "@/lib/filters/registry/leads";
+import { leadFields, withoutCollaboratorExclusion } from "@/lib/filters/registry/leads";
 import { isOffFunnelLeadList } from "@/lib/leads/list-funnel";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 import { EMPTY_TREE, type CompileCtx, type FilterCondition, type FilterTree } from "@/lib/filters/types";
@@ -183,7 +183,7 @@ export function BlastComposer({ blast, onSent, canSendEmail, isAdmin }: BlastCom
     () => leadFields({ tz: "UTC", now: new Date(0), industryId: "education_consultancy", permissions: {} } satisfies CompileCtx),
     []
   );
-  const fields = useMemo(() => Object.values(registry), [registry]);
+  const fields = useMemo(() => withoutCollaboratorExclusion(Object.values(registry)), [registry]);
 
   const [forms, setForms] = useState<{ id: string; name: string }[]>([]);
   const [sourceFacet, setSourceFacet] = useState<{ name: string; count: number }[]>([]);

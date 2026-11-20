@@ -1,4 +1,4 @@
--- Migration 290: EDGEX-109 P4a round 2 — a process change may turn smart assignment on in SHADOW mode first.
+-- Migration 291: EDGEX-109 P4a round 2 — a process change may turn smart assignment on in SHADOW mode first.
 -- ROLLBACK: ALTER TABLE public.process_changes DROP CONSTRAINT IF EXISTS process_changes_turns_on_check;
 --           UPDATE public.process_changes SET turns_on = NULL WHERE turns_on = 'smart_assignment_shadow';   -- only if any row uses it
 --           ALTER TABLE public.process_changes ADD CONSTRAINT process_changes_turns_on_check CHECK (turns_on IS NULL OR turns_on IN ('smart_assignment_auto'));
@@ -18,7 +18,7 @@ ALTER TABLE public.process_changes DROP CONSTRAINT IF EXISTS process_changes_tur
 ALTER TABLE public.process_changes
   ADD CONSTRAINT process_changes_turns_on_check CHECK (turns_on IS NULL OR turns_on IN ('smart_assignment_shadow', 'smart_assignment_auto'));
 
-INSERT INTO public.schema_migrations (version) VALUES ('290_process_changes_turns_on_shadow.sql')
+INSERT INTO public.schema_migrations (version) VALUES ('291_process_changes_turns_on_shadow.sql')
   ON CONFLICT (version) DO NOTHING;
 
 COMMIT;

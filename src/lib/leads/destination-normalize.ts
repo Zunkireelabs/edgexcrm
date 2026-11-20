@@ -137,3 +137,54 @@ export function resolveDegreeLevel(
   const raw = explicit || extractSingleFromCustomFields(customFields, DEGREE_LEVEL_SYNONYM_KEYS);
   return normalizeDegreeLevel(raw);
 }
+
+// ── Catalog matching (case-insensitive) ─────────────────────────────────────────────────────────
+//
+// A lead's destination is FREE TEXT saved by a form / import / person ("uk", "🇬🇧 UK", " Nepal "), while the pickers
+// and the Add Application country list show the tenant's OWN catalog spelling ("UK", "Nepal"). Comparing the two with
+// `===` / `.includes()` made a lead holding "uk" match no checkbox: nothing showed as ticked, "UK" couldn't be ticked
+// (the picker's dedupe kept the first-seen "uk"), and the Add Application sheet — which keeps only catalog entries
+// that EXACTLY equal one of the lead's values — showed an EMPTY Destination list (client report, Manish / Admizz,
+// Nov 2026, a lead from the Nepal-UK form).
+//
+// Rule: match ignoring case, surrounding whitespace and flag/emoji decoration, and ALWAYS answer in the catalog's own
+// spelling. A value with no catalog match is kept exactly as given — never rewritten to a hardcoded spelling (that
+// broke a tenant once, see cleanValue above), never dropped.
+
+const catalogKey = (s: string): string => stripDecoration(s).trim().toLowerCase();
+
+/** The catalog's own spelling of `value`, or null when the catalog has no entry for it (ignoring case/decoration). */
+export function matchToCatalog(value: string, catalog: readonly string[]): string | null {
+  const key = catalogKey(value);
+  if (!key) return null;
+  return catalog.find((c) => catalogKey(c) === key) ?? null;
+}
+
+/** Case/decoration-insensitive equality of two destination strings. */
+export function sameDestination(a: string, b: string): boolean {
+  const ka = catalogKey(a);
+  return ka !== "" && ka === catalogKey(b);
+}
+
+/**
+ * Cleans a lead's destinations and re-spells every one the catalog knows in the CATALOG's spelling; unknown values
+ * are kept as cleaned. Deduplicates on the final spelling. With an empty catalog (not loaded / lookup failed) this is
+ * exactly normalizeDestinations().
+ */
+export function canonicalizeDestinations(values: readonly string[], catalog: readonly string[]): string[] {
+  const cleaned = normalizeDestinations([...values]);
+  if (catalog.length === 0) return cleaned;
+  return normalizeDestinations(cleaned.map((v) => matchToCatalog(v, catalog) ?? v));
+}
+
+/**
+ * The countries to offer in the Add Application sheet for a lead: the catalog entries the lead's declared
+ * destinations point to (matched ignoring case) — and when NONE of them match, the WHOLE catalog, so a required
+ * Destination field can never dead-end on an empty list.
+ */
+export function countryOptionsForLead(leadDestinations: readonly string[], catalog: readonly string[]): string[] {
+  if (leadDestinations.length === 0) return [...catalog];
+  const wanted = new Set(leadDestinations.map(catalogKey).filter(Boolean));
+  const narrowed = catalog.filter((c) => wanted.has(catalogKey(c)));
+  return narrowed.length > 0 ? narrowed : [...catalog];
+}

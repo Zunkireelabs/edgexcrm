@@ -30,3 +30,20 @@ describe("describeAuditEvent: no raw action key ever reaches the UI", () => {
     expect(ev("lead.deleted").verb).toBe("Deleted the lead");
   });
 });
+
+// Stage #678: collaborator add/remove lines say who (the audit row stores the user id). The education lead page's
+// Activity tab, Overview and record preview all read through this function, so it is ported here.
+describe("describeAuditEvent: collaborator added / removed say who", () => {
+  it("added: names the person added", () => {
+    expect(ev("lead.collaborator_added", { collaborator: { old: null, new: "u1" } })).toEqual({ kind: "assigned", verb: "Added collaborator", object: "Farhan Ali" });
+  });
+  it("removed: names the person removed", () => {
+    expect(ev("lead.collaborator_removed", { collaborator: { old: "u1", new: null } })).toEqual({ kind: "unassigned", verb: "Removed collaborator", object: "Farhan Ali" });
+  });
+  it("an id that can't be resolved (account gone) keeps a plain line, and never shows the raw action key", () => {
+    const added = ev("lead.collaborator_added", { collaborator: { old: null, new: "gone" } });
+    expect(added).toEqual({ kind: "assigned", verb: "Added a collaborator", object: null });
+    expect(ev("lead.collaborator_removed", {}).verb).toBe("Removed a collaborator");
+    expect(`${added.verb}`).not.toMatch(/lead\.collaborator/);
+  });
+});

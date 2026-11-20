@@ -1,4 +1,4 @@
--- Migration 282: EDGEX-87 A1 — education Home "Do next" (counsellor Home).
+-- Migration 283: EDGEX-87 A1 — education Home "Do next" (counsellor Home).
 -- ROLLBACK: DROP TABLE IF EXISTS public.home_item_snoozes;
 --           DROP TRIGGER IF EXISTS trg_leads_assigned_at ON public.leads; DROP FUNCTION IF EXISTS public.set_lead_assigned_at();
 --           DROP INDEX IF EXISTS public.uniq_application_stages_submit_per_pipeline;
@@ -88,7 +88,7 @@ DROP POLICY IF EXISTS "home_item_snoozes_service_all" ON public.home_item_snooze
 CREATE POLICY "home_item_snoozes_service_all" ON public.home_item_snoozes
   FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
 
-INSERT INTO public.schema_migrations (version) VALUES ('282_education_home_a1.sql')
+INSERT INTO public.schema_migrations (version) VALUES ('283_education_home_a1.sql')
   ON CONFLICT (version) DO NOTHING;
 
 COMMIT;

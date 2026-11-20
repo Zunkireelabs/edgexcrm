@@ -1,5 +1,5 @@
--- Migration 284: EDGEX-87 A2b — "contact" includes notes in education_home_impact().
--- ROLLBACK: re-run the CREATE OR REPLACE FUNCTION public.education_home_impact(...) from migration 283 (calls-only
+-- Migration 285: EDGEX-87 A2b — "contact" includes notes in education_home_impact().
+-- ROLLBACK: re-run the CREATE OR REPLACE FUNCTION public.education_home_impact(...) from migration 284 (calls-only
 --           first_hour, activity-only callbacks). No table or column changes, so nothing else to undo.
 --
 -- Staff log contact as NOTES (real Admizz data, last 21 days: 913 lead_notes vs 133 call activities), so counting only
@@ -101,7 +101,7 @@ $$;
 REVOKE ALL ON FUNCTION public.education_home_impact(UUID, UUID, TIMESTAMPTZ, TIMESTAMPTZ, TEXT) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.education_home_impact(UUID, UUID, TIMESTAMPTZ, TIMESTAMPTZ, TEXT) TO service_role;
 
-INSERT INTO public.schema_migrations (version) VALUES ('284_education_home_contact.sql')
+INSERT INTO public.schema_migrations (version) VALUES ('285_education_home_contact.sql')
   ON CONFLICT (version) DO NOTHING;
 
 COMMIT;

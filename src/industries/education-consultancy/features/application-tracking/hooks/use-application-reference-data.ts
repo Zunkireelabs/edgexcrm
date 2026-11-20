@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
+import { sameDestination } from "@/lib/leads/destination-normalize";
 
 export interface AgentOption {
   id: string;
@@ -70,8 +71,9 @@ export function getCollegeSuggestions(colleges: PartnerCollegeOption[], countrie
   if (countries.length === 0) return colleges.map((c) => c.name);
   return [...colleges]
     .sort((a, b) => {
-      const aMatch = (a.country && countries.includes(a.country)) || !a.country;
-      const bMatch = (b.country && countries.includes(b.country)) || !b.country;
+      // Case-insensitive: a college tagged "UK" must rank first for a destination saved as "uk".
+      const aMatch = (a.country && countries.some((c) => sameDestination(c, a.country as string))) || !a.country;
+      const bMatch = (b.country && countries.some((c) => sameDestination(c, b.country as string))) || !b.country;
       return aMatch === bMatch ? 0 : aMatch ? -1 : 1;
     })
     .map((c) => c.name);

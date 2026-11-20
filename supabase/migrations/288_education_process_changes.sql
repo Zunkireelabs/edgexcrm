@@ -1,8 +1,8 @@
--- Migration 287: EDGEX-109 P2a — Processes: suggested changes, review/reject, and the "1 working hour" metric.
+-- Migration 288: EDGEX-109 P2a — Processes: suggested changes, review/reject, and the "1 working hour" metric.
 -- ROLLBACK: DROP INDEX IF EXISTS public.uniq_process_versions_one_draft;
 --           ALTER TABLE public.process_versions DROP COLUMN IF EXISTS rejected_reason, DROP COLUMN IF EXISTS rejected_by, DROP COLUMN IF EXISTS rejected_at;
 --           DROP TABLE IF EXISTS public.process_changes;
---           and restore education_process_metrics() by re-running its CREATE OR REPLACE from 286_education_processes.sql
+--           and restore education_process_metrics() by re-running its CREATE OR REPLACE from 287_education_processes.sql
 --           (and delete this file's row from schema_migrations)
 --
 -- 1. process_changes: a draft is a list of CHANGES, one row each (one author per change, edits audited, the same rows serve Orca in P4).
@@ -22,7 +22,7 @@ BEGIN;
 -- A pre-existing second draft would make the unique index fail with an opaque error; say why instead.
 DO $$ BEGIN
   IF EXISTS (SELECT 1 FROM public.process_versions WHERE status = 'draft' GROUP BY process_id HAVING count(*) > 1) THEN
-    RAISE EXCEPTION 'migration 287: a process has more than one draft version; reject or approve the extras first';
+    RAISE EXCEPTION 'migration 288: a process has more than one draft version; reject or approve the extras first';
   END IF;
 END $$;
 
@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS public.process_changes (
 CREATE INDEX IF NOT EXISTS idx_process_changes_version ON public.process_changes (version_id);
 CREATE INDEX IF NOT EXISTS idx_process_changes_tenant_process ON public.process_changes (tenant_id, process_id, created_at DESC);
 
--- RLS like 286: readable by tenant members, every write is server-only (service role).
+-- RLS like 287: readable by tenant members, every write is server-only (service role).
 ALTER TABLE public.process_changes ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "process_changes_select" ON public.process_changes;
 CREATE POLICY "process_changes_select" ON public.process_changes FOR SELECT USING (tenant_id IN (SELECT get_user_tenant_ids()));
@@ -103,8 +103,8 @@ BEGIN
       ) fa ON TRUE
     ),
     fc AS (
-      -- First CONTACT at/after created_at: lead_activities row OR human lead_notes row (ai_tool_call_id IS NULL). Migration 284.
-      -- `wstart` = the WORKING clock start (migration 287): created_at when it falls inside office hours (tenant tz), else the next
+      -- First CONTACT at/after created_at: lead_activities row OR human lead_notes row (ai_tool_call_id IS NULL). Migration 285.
+      -- `wstart` = the WORKING clock start (migration 288): created_at when it falls inside office hours (tenant tz), else the next
       -- 09:00 (same day if before 09:00, next day if at/after 18:00). EVERY day counts as a working day (no weekend rule yet).
       SELECT c.id,
              ((CASE
@@ -122,7 +122,7 @@ BEGIN
              c.created_at
       FROM c
     ),
-    -- Call-backs: the EXACT definition of education_home_impact() (migration 284), over the same window, whole tenant (no branch).
+    -- Call-backs: the EXACT definition of education_home_impact() (migration 285), over the same window, whole tenant (no branch).
     booked AS (
       SELECT a.lead_id, a.created_at AS booked_at,
              a.created_at + make_interval(mins => COALESCE((t.config -> 'team_performance_thresholds' ->> 'callback_reminder_minutes')::INT, 10)) AS due_at
@@ -248,7 +248,7 @@ END $$;
 REVOKE ALL ON FUNCTION public.education_process_metrics(UUID, TEXT, TIMESTAMPTZ, TIMESTAMPTZ, TEXT) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.education_process_metrics(UUID, TEXT, TIMESTAMPTZ, TIMESTAMPTZ, TEXT) TO service_role;
 
-INSERT INTO public.schema_migrations (version) VALUES ('287_education_process_changes.sql')
+INSERT INTO public.schema_migrations (version) VALUES ('288_education_process_changes.sql')
   ON CONFLICT (version) DO NOTHING;
 
 COMMIT;

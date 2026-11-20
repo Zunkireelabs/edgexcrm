@@ -32,6 +32,8 @@ import {
   emitSubmissionAudit,
   touchLastActivity,
 } from "@/lib/leads/dedup";
+import { reviveArchivedLead } from "@/lib/leads/revive-archived";
+import { canonicalizeDestinationsForTenant } from "@/lib/leads/destination-catalog";
 import { resolveLeadPipelineAndStage } from "@/lib/leads/pipeline-resolution";
 import { syncOriginMembership } from "@/lib/leads/branch-membership";
 import { processEmailForwardRules } from "@/lib/email/email-forward";
@@ -273,11 +275,16 @@ export async function POST(
   // the real `destinations` key directly stored whatever raw text (incl. a flag emoji) an
   // admin had typed into that option's value, unlike a form using an older synonym key.
   const explicitDestinations = Array.isArray(body.destinations) ? (body.destinations as string[]) : [];
-  const resolvedDestinations = explicitDestinations.length > 0
+  const rawResolvedDestinations = explicitDestinations.length > 0
     ? normalizeDestinations(explicitDestinations)
     : tenant.industry_id === "education_consultancy"
       ? extractDestinationsFromCustomFields(resolvedCustomFields)
       : [];
+  // Re-spell in the tenant's own catalog spelling ("uk" -> "UK") so the lead matches the pickers / Add Application list
+  // (client report, Nov 2026). Education tenants only; fail-safe — a catalog lookup problem never blocks a submission.
+  const resolvedDestinations = tenant.industry_id === "education_consultancy"
+    ? await canonicalizeDestinationsForTenant(supabase, tenant.id, rawResolvedDestinations)
+    : rawResolvedDestinations;
 
   // Same normalization for field_of_study/degree_level — degree_level was previously never
   // read at all in this route, so a form using any key name for that question silently lost
@@ -361,35 +368,50 @@ export async function POST(
       requestId,
     });
     void touchLastActivity(supabase, { leadId: canonicalId, tenantId: tenant.id });
+
+    // An ARCHIVED lead that re-registers goes back to "New" (where a brand-new form lead lands) instead of sitting
+    // unseen in Archive. Never throws — a failure leaves the lead exactly as it was, like any resubmission.
+    let revived = false;
+    try {
+      const result = await reviveArchivedLead(supabase, {
+        tenantId: tenant.id,
+        lead: { id: canonicalId, list_id: canonical.list_id ?? null, assigned_to: canonical.assigned_to ?? null },
+        formTargetListId: formConfig.attribution?.target_list_id ?? null,
+        landing: { pipelineId: resolved.pipelineId, stageId: resolved.stageId, statusSlug: resolved.statusSlug },
+        requestId,
+        ipAddress: ip,
+        userAgent,
+      });
+      revived = result.revived;
+    } catch (err) {
+      log.error({ err }, "Failed to move re-registered archived lead back to New");
+    }
+
     (async () => {
       try {
         const fn = (body.first_name as string | null) || null;
         const ln = (body.last_name as string | null) || null;
         const leadName = `${fn || ""} ${ln || ""}`.trim() || "A lead";
-        if (canonical.assigned_to) {
-          await upsertThreadNotification({
-            tenantId: tenant.id,
-            userId: canonical.assigned_to,
-            type: NotificationTypes.LEAD_CREATED,
-            title: "Resubmission from existing lead",
-            message: leadName,
-            link: `/leads/${canonicalId}`,
-          });
-        } else {
-          const adminIds = await getTenantAdminRecipients(supabase, tenant.id);
-          await Promise.all(
-            adminIds.map((adminId) =>
-              upsertThreadNotification({
-                tenantId: tenant.id,
-                userId: adminId,
-                type: NotificationTypes.LEAD_CREATED,
-                title: "Resubmission from existing lead",
-                message: leadName,
-                link: `/leads/${canonicalId}`,
-              })
-            )
-          );
+        const title = revived ? "Archived lead re-registered" : "Resubmission from existing lead";
+        // A revived lead tells the previous owner AND the admins — the owner of an archived lead is often not
+        // watching it, which is how re-interested leads were being missed.
+        const recipients = new Set<string>();
+        if (canonical.assigned_to) recipients.add(canonical.assigned_to);
+        if (revived || !canonical.assigned_to) {
+          for (const adminId of await getTenantAdminRecipients(supabase, tenant.id)) recipients.add(adminId);
         }
+        await Promise.all(
+          [...recipients].map((userId) =>
+            upsertThreadNotification({
+              tenantId: tenant.id,
+              userId,
+              type: NotificationTypes.LEAD_CREATED,
+              title,
+              message: leadName,
+              link: `/leads/${canonicalId}`,
+            })
+          )
+        );
       } catch (err) {
         log.error({ err }, "Failed to send resubmission notification");
       }

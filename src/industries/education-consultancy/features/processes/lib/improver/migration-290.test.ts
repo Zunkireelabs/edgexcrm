@@ -3,13 +3,13 @@ import { join } from "node:path";
 import { describe, it, expect } from "vitest";
 import { CUTS } from "./breakdown";
 
-// Migration 289 is written, not applied by the executor: these checks keep its shape honest (additive, transactional, rollback line, the
+// Migration 290 is written, not applied by the executor: these checks keep its shape honest (additive, transactional, rollback line, the
 // fixed menu of cuts the TypeScript offers, service-role only).
-const sql = readFileSync(join(process.cwd(), "supabase/migrations/289_education_process_improver.sql"), "utf8");
+const sql = readFileSync(join(process.cwd(), "supabase/migrations/290_education_process_improver.sql"), "utf8");
 
-describe("migration 289", () => {
+describe("migration 290", () => {
   it("is transactional, carries a rollback line and drops/deletes nothing existing", () => {
-    expect(sql).toMatch(/^-- Migration 289:/m);
+    expect(sql).toMatch(/^-- Migration 290:/m);
     expect(sql).toMatch(/^-- ROLLBACK:/m);
     expect(sql).toMatch(/^BEGIN;$/m);
     expect(sql).toMatch(/^COMMIT;$/m);
