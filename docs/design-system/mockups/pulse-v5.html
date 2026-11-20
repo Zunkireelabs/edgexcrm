@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Pulse v4 – EdgeX Design System v2</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ===== EdgeX Design System v2 tokens ===== */
+:root{
+  --canvas:#f6f6f5; --surface:#fff; --sunken:#fafaf9; --hover:#f4f4f3; --selected:#efefee;
+  --border:#e8e8e6; --divider:#f0f0ee;
+  --ink:#141414; --text:#3a3a38; --muted:#73736f; --faint:#a3a39e; --ghost:#d6d6d2;
+  --accent:#2272B4; --accent-soft:#eaf2fa;
+  --good:#127a4a; --good-soft:#e9f6ef; --bad:#b42318; --bad-soft:#fdeeec; --warn:#a15c07; --warn-soft:#fdf3e3;
+  --ai:#5b47d6; --ai-soft:#f3f1fd; --ai-line:#d9d3fa;
+  --r-sm:8px; --r-md:12px; --r-lg:16px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,system-ui,sans-serif;background:#e4e4e2;color:var(--text);font-size:13px;line-height:1.5;font-feature-settings:"tnum" 1,"cv11" 1,"ss01" 1;-webkit-font-smoothing:antialiased}
+svg.i{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+svg.s{width:14px;height:14px}
+.scene{margin:28px auto;width:1440px;background:var(--canvas);border-radius:14px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.scene-h{background:#141414;color:#fff;padding:10px 18px;font-size:12px}.scene-h b{margin-right:10px;font-weight:600}.scene-h span{color:#a3a3a3}
+.app{display:flex;min-height:900px}
+/* ---- sidebar ---- */
+.side{width:232px;padding:14px 10px;flex-shrink:0;display:flex;flex-direction:column;gap:2px}
+.org{display:flex;align-items:center;justify-content:space-between;padding:6px 8px 10px}
+.org b{font-size:14px;font-weight:600;color:var(--ink)}.org i{font-style:normal;color:var(--accent)}
+.qa{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:7px 10px;color:var(--ink);font-weight:500;margin-bottom:10px;box-shadow:0 1px 1px rgba(0,0,0,.03)}
+.qa .k{margin-left:auto;color:var(--faint);font-size:11px}
+.ng{display:flex;align-items:center;justify-content:space-between;padding:12px 8px 4px;color:var(--faint);font-size:12px;font-weight:500}
+.ni{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:8px;color:var(--text);font-size:13.5px}
+.ni svg{color:var(--muted)}
+.ni.on{background:var(--selected);color:var(--ink);font-weight:500}.ni.on svg{color:var(--ink)}
+.ni .b{margin-left:auto;font-size:11.5px;color:var(--muted)}
+.ni .dot{margin-left:auto;min-width:18px;height:18px;border-radius:9px;background:var(--ink);color:#fff;font-size:10.5px;display:grid;place-items:center;padding:0 5px;font-weight:600}
+.side .grow{flex:1}
+.me{display:flex;align-items:center;gap:9px;padding:8px;border-radius:10px}
+.me .av{width:26px;height:26px}
+/* ---- main frame ---- */
+.frame{flex:1;margin:8px 8px 8px 0;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);display:flex;flex-direction:column;min-width:0}
+.bar{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--divider)}
+.crumb{display:flex;align-items:center;gap:8px;color:var(--ink);font-weight:500}
+.search{margin-left:auto;display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:9px;padding:5px 10px;color:var(--faint);width:280px}
+.search .k{margin-left:auto;font-size:11px}
+.ib{width:30px;height:30px;border-radius:8px;border:1px solid var(--border);display:grid;place-items:center;color:var(--muted)}
+.body{padding:28px 36px 40px;overflow:hidden}
+/* ---- type ---- */
+.h1{font-size:26px;font-weight:600;color:var(--ink);letter-spacing:-.02em}
+.lede{color:var(--muted);font-size:14px;margin-top:4px}
+.lede b{color:var(--ink);font-weight:500}
+.h2{font-size:15px;font-weight:600;color:var(--ink)}
+.cap{font-size:11px;font-weight:500;letter-spacing:.06em;color:var(--faint);text-transform:uppercase}
+.meta{color:var(--muted);font-size:12.5px}
+/* ---- controls ---- */
+.row{display:flex;align-items:center}
+.seg{display:inline-flex;background:var(--sunken);border:1px solid var(--border);border-radius:10px;padding:2px}
+.seg div{padding:5px 11px;border-radius:8px;color:var(--muted);font-weight:500;font-size:12.5px}
+.seg .on{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.btn{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:9px;border:1px solid var(--border);background:var(--surface);color:var(--ink);font-weight:500;font-size:12.5px;white-space:nowrap}
+.btn.pri{background:var(--ink);border-color:var(--ink);color:#fff}
+.btn.ghost{border-color:transparent;background:none;color:var(--muted)}
+.lnk{color:var(--accent);font-weight:500;font-size:12.5px}
+.pill{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 12px;border-radius:999px;border:1px solid var(--border);color:var(--text);font-weight:500;font-size:12.5px;background:var(--surface)}
+.pill.on{background:var(--ink);border-color:var(--ink);color:#fff}
+.pill .n{color:var(--faint);font-weight:500}.pill.on .n{color:#a3a3a3}
+.av{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;color:#fff;font-size:10.5px;font-weight:600;flex-shrink:0}
+/* ---- metric strip ---- */
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--border);border-radius:var(--r-md);margin-top:22px}
+.m{padding:16px 18px;position:relative}
+.m+.m{border-left:1px solid var(--divider)}
+.m .top{display:flex;justify-content:space-between;align-items:center}
+.m .lbl{color:var(--muted);font-weight:500;font-size:12.5px}
+.chg{font-size:12px;font-weight:600}
+.chg.up{color:var(--good)}.chg.dn{color:var(--bad)}.chg.flat{color:var(--faint)}
+.m .v{display:flex;align-items:flex-end;justify-content:space-between;margin-top:6px}
+.m .num{font-size:30px;font-weight:600;color:var(--ink);letter-spacing:-.02em;line-height:1}
+.m .def{color:var(--faint);font-size:12px;margin-top:8px}
+.conv{position:absolute;left:-1px;top:50%;transform:translate(-50%,-50%);background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:1px 8px;font-size:11px;color:var(--muted);font-weight:500;white-space:nowrap;z-index:1}
+/* ---- attention list ---- */
+.att{margin-top:30px}
+.att-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.cnt{display:inline-grid;place-items:center;min-width:20px;height:20px;border-radius:10px;background:var(--bad-soft);color:var(--bad);font-size:11.5px;font-weight:600;padding:0 6px;margin-left:8px}
+.list{border-top:1px solid var(--divider)}
+.sec{padding:14px 4px 6px}
+.it{display:grid;grid-template-columns:28px 1fr auto 20px;gap:12px;align-items:center;padding:11px 4px;border-bottom:1px solid var(--divider)}
+.it .ic{width:24px;height:24px;display:grid;place-items:center;border-radius:7px}
+.ic.bad{color:var(--bad)}.ic.warn{color:var(--warn)}.ic.good{color:var(--good)}.ic.info{color:var(--muted)}
+.it .ln{color:var(--text);font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.it .ln b{color:var(--ink);font-weight:500}
+.it .ln .sep{color:var(--ghost);margin:0 7px}
+.it .fig{color:var(--muted);font-size:13px;margin-right:6px}
+.it .fig b{color:var(--ink);font-weight:500}
+.it .chev{color:var(--faint)}
+.it.open{align-items:start;background:linear-gradient(var(--sunken),var(--sunken))}
+.exp{grid-column:2 / 4;padding:4px 0 6px}
+.exp p{color:var(--text);font-size:13.5px;max-width:760px}
+.exp .meta{margin-top:8px}
+.exp .imp{color:var(--good);font-weight:500;font-size:12.5px;margin-top:6px}
+.exp .links{display:flex;gap:18px;margin-top:8px}
+/* ---- scoreboard ---- */
+.sb{margin-top:34px}
+.tbl{border:1px solid var(--border);border-radius:var(--r-md);overflow:hidden;margin-top:12px}
+table{border-collapse:separate;border-spacing:0;width:100%}
+th,td{white-space:nowrap}
+thead th{background:var(--sunken);font-weight:500;color:var(--muted);font-size:12px;text-align:right;padding:0 8px;height:34px;border-bottom:1px solid var(--border)}
+thead tr.g th{height:26px;font-size:10.5px;letter-spacing:.06em;font-weight:500;color:var(--faint);text-align:left;border-bottom:0;padding-top:6px;text-transform:uppercase}
+.sp{box-shadow:inset 1px 0 0 var(--divider)}
+th.l,td.l{text-align:left}
+td{padding:8px 8px;height:50px;border-bottom:1px solid var(--divider);text-align:right;color:var(--ink);font-size:13.5px}
+.who{display:flex;align-items:center;gap:10px;min-width:188px}.who .two{display:flex;flex-direction:column;line-height:1.3;align-items:flex-start}
+.nm{font-weight:500;color:var(--ink)}.sub{color:var(--faint);font-size:12px}
+.z{color:var(--ghost)}
+.d{display:inline-block;width:36px;text-align:right;font-size:11.5px;font-weight:600;margin-left:4px}
+.d.up{color:var(--good)}.d.dn{color:var(--bad)}.d.am{color:var(--warn)}
+.flag{font-size:12px;font-weight:500;color:var(--bad)}
+.flag.am{color:var(--warn)}.flag.gd{color:var(--good)}
+tr.gr td{height:34px;background:var(--sunken);color:var(--muted);font-size:12px;font-weight:500}
+tr.gr td.l{color:var(--text);font-weight:600}
+tr.tot td{height:42px;background:var(--sunken);font-weight:600;border-bottom:0}
+tr.rowflag td:first-child{box-shadow:inset 2px 0 0 var(--bad)}
+tr.rowflag-am td:first-child{box-shadow:inset 2px 0 0 var(--warn)}
+.foot{display:flex;justify-content:space-between;color:var(--faint);font-size:12px;margin-top:10px}
+/* ---- AI language ---- */
+.ai-mark{display:inline-flex;align-items:center;gap:5px;color:var(--ai);font-size:12px;font-weight:500}
+.ai-mark svg{width:13px;height:13px}
+.ai-tag{display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 7px;border-radius:6px;background:var(--ai-soft);color:var(--ai);font-size:11px;font-weight:500}
+.ai-tag svg{width:11px;height:11px}
+.ai-prose{border-left:2px solid var(--ai-line);padding-left:12px}
+.conf{display:inline-flex;gap:2px;align-items:flex-end;margin-right:4px}.conf i{width:3px;background:var(--good);border-radius:1px;display:block}
+/* ---- panels ---- */
+.split{display:grid;grid-template-columns:1fr 360px}
+.rail{border-left:1px solid var(--divider);padding:20px;display:flex;flex-direction:column;gap:14px}
+.msg-u{align-self:flex-end;background:var(--sunken);border:1px solid var(--border);border-radius:12px;padding:7px 11px;color:var(--ink);max-width:260px}
+.composer{margin-top:auto;border:1px solid var(--border);border-radius:12px;padding:10px 12px;color:var(--faint);display:flex;justify-content:space-between}
+/* ---- drawer ---- */
+.wrap{position:relative}.shade{position:absolute;inset:0;background:rgba(20,20,20,.18)}
+.drawer{position:absolute;top:0;right:0;bottom:0;width:600px;background:var(--surface);border-left:1px solid var(--border);box-shadow:-12px 0 32px rgba(0,0,0,.06);padding:22px 24px;overflow:hidden}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--border);border-radius:var(--r-md);margin:16px 0}
+.tile{padding:12px 14px}.tile+.tile{border-left:1px solid var(--divider)}
+.tile .num{font-size:22px;font-weight:600;color:var(--ink)}
+.tl div{display:grid;grid-template-columns:110px 1fr;gap:12px;padding:8px 0;border-bottom:1px solid var(--divider);color:var(--text)}
+.tl span{color:var(--faint);font-size:12px}.tl p{margin:0}
+/* sheet */
+.sheet{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;padding:24px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-md);padding:18px}
+.sw{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.sw div{width:76px}
+.sw i{display:block;height:36px;border-radius:8px;border:1px solid rgba(0,0,0,.06)}
+.sw span{display:block;font-size:11px;color:var(--muted);margin-top:4px}
+.ts div{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid var(--divider);padding:6px 0}
+.ts span{color:var(--faint);font-size:11px}
+
+/* ===== v5: AI layer with subtle gradients (AI surfaces only) ===== */
+:root{--ai-grad:linear-gradient(135deg,#2272B4 0%,#7c5cf0 100%)}
+.brief{margin-top:22px;border:1px solid #d9e3f3;border-radius:16px;padding:18px 20px 16px;background:linear-gradient(180deg,#f4f8fe 0%,#fbfbff 45%,#fff 100%);position:relative;overflow:hidden;box-shadow:0 1px 2px rgba(34,114,180,.05),0 8px 24px -12px rgba(91,71,214,.18)}
+.brief:before{content:"";position:absolute;left:0;right:0;top:0;height:2px;background:var(--ai-grad)}
+.bhd{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.bt{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:600;color:var(--ink)}
+.badge{width:28px;height:28px;border-radius:9px;background:var(--ai-grad);display:grid;place-items:center;color:#fff;box-shadow:0 4px 12px -4px rgba(91,71,214,.55)}
+.badge svg{width:15px;height:15px;stroke-width:2}
+.prev{height:20px;padding:0 7px;border-radius:6px;background:#fff;border:1px solid #e3def9;color:var(--ai);font-size:11px;font-weight:500;display:inline-flex;align-items:center}
+.bi{display:grid;grid-template-columns:30px 1fr auto;gap:12px;padding:12px 0;border-top:1px solid #e9eef7;align-items:start}
+.bi:first-of-type{border-top:0}
+.tg{width:28px;height:28px;border-radius:9px;display:grid;place-items:center}
+.tg.r{background:#fdeeec;color:var(--bad)}.tg.g{background:#e9f6ef;color:var(--good)}.tg.b{background:var(--accent-soft);color:var(--accent)}
+.bi p{color:var(--text);font-size:14px}.bi p b{color:var(--ink);font-weight:600}
+.ev{color:var(--muted);font-size:12.5px;margin-top:3px}.ev b{color:#55554f;font-weight:500;margin-right:6px}
+.go{color:var(--muted);font-weight:500;font-size:13px;display:inline-flex;gap:6px;align-items:center;white-space:nowrap;padding-top:2px}
+.ask{margin-top:8px;display:flex;align-items:center;gap:8px;border:1px solid transparent;background:linear-gradient(#fff,#fff) padding-box,var(--ai-grad) border-box;border-radius:12px;padding:8px 10px;color:var(--faint)}
+.ask .ic2{width:22px;height:22px;border-radius:7px;background:var(--ai-grad);display:grid;place-items:center;color:#fff}.ask .ic2 svg{width:12px;height:12px;stroke-width:2.2}
+.ask .chip{color:var(--text);background:var(--sunken);border:1px solid var(--border);border-radius:8px;padding:2px 9px;font-size:12px}
+.sugg{display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 7px;border-radius:6px;background:linear-gradient(135deg,rgba(34,114,180,.08),rgba(124,92,240,.12));color:var(--ai);font-size:11px;font-weight:500;margin-left:8px;vertical-align:1px}
+.sugg svg{width:11px;height:11px;stroke-width:2.2}
+.rnote{display:inline-flex;align-items:center;gap:4px;margin-top:3px;height:20px;padding:0 7px 0 5px;border-radius:6px;background:linear-gradient(135deg,rgba(34,114,180,.07),rgba(124,92,240,.11));color:#4a3cc0;font-size:11.5px;font-weight:500;white-space:nowrap}
+.rnote svg{width:11px;height:11px;stroke-width:2.2;color:var(--ai)}
+.read{margin:6px 0 4px;padding:12px 14px;border-radius:12px;background:linear-gradient(135deg,rgba(34,114,180,.06),rgba(124,92,240,.08));}
+.read .lb{display:flex;align-items:center;gap:6px;color:var(--ai);font-size:12px;font-weight:500;margin-bottom:4px}
+.read .lb svg{width:12px;height:12px;stroke-width:2.2}
+.read p{font-size:14.5px;line-height:1.55;color:var(--ink);max-width:980px}
+</style></head><body>
+<svg width="0" height="0" style="position:absolute">
+ <symbol id="spark" viewBox="0 0 24 24"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></symbol>
+ <symbol id="home" viewBox="0 0 24 24"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+ <symbol id="inbox" viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></symbol>
+ <symbol id="check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+ <symbol id="pulse" viewBox="0 0 24 24"><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/></symbol>
+ <symbol id="grid" viewBox="0 0 24 24"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></symbol>
+ <symbol id="book" viewBox="0 0 24 24"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></symbol>
+ <symbol id="users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+ <symbol id="kanban" viewBox="0 0 24 24"><path d="M6 5v11M12 5v6M18 5v14"/></symbol>
+ <symbol id="contact" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="12" cy="10" r="3"/><path d="M7 21v-2a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2"/></symbol>
+ <symbol id="archive" viewBox="0 0 24 24"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8M10 12h4"/></symbol>
+ <symbol id="cap" viewBox="0 0 24 24"><path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z"/><path d="M22 10v6M6 12.5V16a6 3 0 0 0 12 0v-3.5"/></symbol>
+ <symbol id="userc" viewBox="0 0 24 24"><path d="m16 11 2 2 4-4"/><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></symbol>
+ <symbol id="form" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4M10 13H8M16 17H8"/></symbol>
+ <symbol id="mega" viewBox="0 0 24 24"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></symbol>
+ <symbol id="send" viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></symbol>
+ <symbol id="gear" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></symbol>
+ <symbol id="plus" viewBox="0 0 24 24"><path d="M5 12h14M12 5v14"/></symbol>
+ <symbol id="chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+ <symbol id="right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+ <symbol id="search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+ <symbol id="bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></symbol>
+ <symbol id="down" viewBox="0 0 24 24"><path d="M16 17h6v-6"/><path d="m22 17-8.5-8.5-5 5L2 7"/></symbol>
+ <symbol id="up" viewBox="0 0 24 24"><path d="M16 7h6v6"/><path d="m22 7-8.5 8.5-5-5L2 17"/></symbol>
+ <symbol id="alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4M12 17h.01"/></symbol>
+ <symbol id="clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+ <symbol id="layers" viewBox="0 0 24 24"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/></symbol>
+ <symbol id="dl" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5M12 15V3"/></symbol>
+ <symbol id="side" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></symbol>
+ <symbol id="x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+ <symbol id="arrow" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></symbol>
+</svg>
+
+<template id="sidebar">
+  <aside class="side">
+    <div class="org"><b>EdgeX<i>edu</i></b><svg class="i" style="color:var(--faint)"><use href="#side"/></svg></div>
+    <div class="qa"><svg class="i"><use href="#plus"/></svg>Quick action<span class="k">⌘ J</span></div>
+    <div class="ni"><svg class="i"><use href="#home"/></svg>Home</div>
+    <div class="ni"><svg class="i"><use href="#inbox"/></svg>Inbox<span class="dot">4</span></div>
+    <div class="ni"><svg class="i"><use href="#check"/></svg>My tasks<span class="b">7</span></div>
+    <div class="ng">Insights<svg class="i s"><use href="#chev"/></svg></div>
+    <div class="ni on"><svg class="i"><use href="#pulse"/></svg>Pulse</div>
+    <div class="ni"><svg class="i"><use href="#grid"/></svg>Dashboards</div>
+    <div class="ni"><svg class="i"><use href="#book"/></svg>Knowledge base</div>
+    <div class="ng">Leads<svg class="i s"><use href="#chev"/></svg></div>
+    <div class="ni"><svg class="i"><use href="#users"/></svg>All leads<span class="b">16.5k</span></div>
+    <div class="ni"><svg class="i"><use href="#kanban"/></svg>Pipeline</div>
+    <div class="ni"><svg class="i"><use href="#layers"/></svg>Organise</div>
+    <div class="ni"><svg class="i"><use href="#contact"/></svg>Contacts</div>
+    <div class="ng">Students<svg class="i s"><use href="#chev"/></svg></div>
+    <div class="ni"><svg class="i"><use href="#cap"/></svg>Applications</div>
+    <div class="ni"><svg class="i"><use href="#book"/></svg>Classes</div>
+    <div class="ni"><svg class="i"><use href="#userc"/></svg>Check-in</div>
+    <div class="ng">Grow<svg class="i s" style="transform:rotate(-90deg)"><use href="#chev"/></svg></div>
+    <div class="grow"></div>
+    <div class="ni"><svg class="i"><use href="#archive"/></svg>Archive</div>
+    <div class="ni"><svg class="i"><use href="#gear"/></svg>Settings</div>
+    <div class="me"><span class="av" style="background:#141414">SS</span><div><div style="color:var(--ink);font-weight:500;font-size:13px">Sadin Shrestha</div><div class="sub">Admizz Education</div></div></div>
+  </aside>
+</template>
+
+<!-- ================= S1 ================= -->
+<section class="scene" id="s1">
+<div class="scene-h"><b>S1 · Pulse v5, this week</b><span>The v4 calm layout plus the AI layer you approved: briefing card, Suggested tags, row notes, subtle gradients on AI surfaces only. Until Orca is switched on, the AI slots are filled from the real numbers by rules ("Preview").</span></div>
+<div class="app"><div data-side></div>
+ <div class="frame">
+  <div class="bar"><div class="crumb"><svg class="i"><use href="#pulse"/></svg>Pulse</div>
+   <div class="search"><svg class="i"><use href="#search"/></svg>Search leads, students, people<span class="k">⌘ K</span></div>
+   <span class="ib"><svg class="i"><use href="#bell"/></svg></span></div>
+  <div class="body">
+   <div class="row" style="justify-content:space-between;align-items:flex-end">
+    <div><div class="h1">This week at Admizz</div>
+     <div class="lede"><b>412</b> new leads · <b>31</b> students reached Applications · <b>3</b> things need you</div></div>
+    <div class="row" style="gap:8px"><div class="seg"><div>Today</div><div class="on">7 days</div><div>30 days</div><div>Custom</div></div>
+     <span class="btn">All branches<svg class="i s"><use href="#chev"/></svg></span><span class="btn ghost"><svg class="i s"><use href="#dl"/></svg>Export</span></div>
+   </div>
+
+
+   <div class="brief">
+    <div class="bhd"><div class="bt"><span class="badge"><svg class="i"><use href="#spark"/></svg></span>This week's briefing<span class="prev" title="Written from your data by rules. Full AI explanations switch on with Orca.">Preview</span></div>
+     <span class="meta">Orca · 9:00 AM · from 2,316 activity records</span></div>
+    <div class="read"><div class="lb"><svg class="i"><use href="#spark"/></svg>Orca's read</div>
+     <p>Conversions are up, but the pipeline behind them is thinning. Prospects fell 12% because one Kathmandu TeleCaller stopped working on Wednesday, and Butwal's intake is waiting more than two days for a first call. Fix those two and next week's Applications hold.</p></div>
+    <div class="bi"><span class="tg r"><svg class="i"><use href="#down"/></svg></span><div><p><b>Prospects fell 12%, and Kathmandu accounts for nearly all of it.</b> Asha Tamang's activity stopped on Wednesday. Her 34 leads have had no call or note since.</p><div class="ev"><b>Evidence</b>Kathmandu −7 of the team's −13 · Asha 18 calls vs her usual 82</div></div><span class="go">34 leads<svg class="i s"><use href="#arrow"/></svg></span></div>
+    <div class="bi"><span class="tg g"><svg class="i"><use href="#up"/></svg></span><div><p><b>Esha Thapa delivered 9 of the 31 students to Applications</b>, 80% above her usual.</p><div class="ev"><b>What works</b>She calls new Prospects within 2h. The team median is 19h.</div></div><span class="go">9 students<svg class="i s"><use href="#arrow"/></svg></span></div>
+    <div class="bi"><span class="tg b"><svg class="i"><use href="#archive"/></svg></span><div><p><b>More leads are leaving Qualified: 15 this week, up from 5.</b> The top reason is "Not reachable".</p><div class="ev"><b>Pattern</b>11 of the 15 had only one call attempt.</div></div><span class="go">15 leads<svg class="i s"><use href="#arrow"/></svg></span></div>
+    <div class="ask"><span class="ic2"><svg class="i"><use href="#spark"/></svg></span>Ask about this week…<span class="chip">Why did Kathmandu drop?</span><span class="chip">Compare branches this month</span></div>
+   </div>
+   <div class="metrics">
+    <div class="m"><div class="top"><span class="lbl">New leads</span><span class="chg up">+18%</span></div>
+     <div class="v"><span class="num">412</span><svg width="96" height="28"><polyline points="0,20 16,18 32,21 48,15 64,8 80,10 96,7" fill="none" stroke="#2272B4" stroke-width="1.6"/></svg></div><div class="def">349 last week</div></div>
+    <div class="m"><div class="top"><span class="lbl">Moved to Prospects</span><span class="chg dn">−12%</span></div>
+     <div class="v"><span class="num">96</span><svg width="96" height="28"><polyline points="0,8 16,7 32,9 48,10 64,17 80,19 96,21" fill="none" stroke="#2272B4" stroke-width="1.6"/></svg></div><div class="def">109 last week · <span style="color:var(--muted)">23% of qualified</span></div></div>
+    <div class="m"><div class="top"><span class="lbl">Students to Applications</span><span class="chg up">+24%</span></div>
+     <div class="v"><span class="num">31</span><svg width="96" height="28"><polyline points="0,22 16,20 32,17 48,16 64,13 80,10 96,6" fill="none" stroke="#2272B4" stroke-width="1.6"/></svg></div><div class="def">25 last week · <span style="color:var(--muted)">32% of Prospects</span></div></div>
+    <div class="m"><div class="top"><span class="lbl">Applications filed</span><span class="chg up">+9%</span></div>
+     <div class="v"><span class="num">47</span><svg width="96" height="28"><polyline points="0,17 16,16 32,15 48,16 64,11 80,12 96,9" fill="none" stroke="#2272B4" stroke-width="1.6"/></svg></div><div class="def">19 universities · <span style="color:var(--muted)">1.5 per student</span></div></div>
+   </div>
+
+   <div class="att">
+    <div class="att-h"><div class="row"><span class="h2">Needs your attention</span><span class="cnt">3</span></div>
+     <div class="row" style="gap:6px"><span class="pill on">All <span class="n">6</span></span><span class="pill">Needs action <span class="n">3</span></span><span class="pill">Heads-up <span class="n">2</span></span><span class="pill">Wins <span class="n">1</span></span></div></div>
+    <div class="list">
+     <div class="sec cap">Needs action · 3</div>
+     <div class="it open"><span class="ic bad"><svg class="i"><use href="#down"/></svg></span>
+      <div><div class="ln"><b>Asha Tamang</b><span class="sep">·</span>activity down 79% since Wednesday<span class="sugg"><svg class="i"><use href="#spark"/></svg>Suggested</span></div></div>
+      <div class="row"><span class="fig"><b>34</b> leads untouched</span><span class="btn pri">Reassign 12 to Anil KC</span></div><span class="chev"><svg class="i"><use href="#chev"/></svg></span>
+      <div class="exp"><div class="read" style="margin:2px 0 0"><div class="lb"><svg class="i"><use href="#spark"/></svg>Why Orca suggests this</div><p style="font-size:13.5px">Calls, notes and stage moves all dropped together from Wednesday, which usually means an absence. Her 12 Qualified leads are next in line for a follow-up and would wait longest. Anil KC has the lightest load this week.</p></div>
+       <div class="meta">18 calls vs usual 82 · 13 notes vs usual 54 · TeleCaller, Kathmandu · Anil KC has the lightest load this week</div>
+       <div class="links"><span class="lnk">See the 34 leads →</span><span class="lnk">Asha's week →</span><span class="btn ghost" style="margin-left:auto;height:24px">Dismiss</span></div></div></div>
+     <div class="it"><span class="ic warn"><svg class="i"><use href="#clock"/></svg></span>
+      <div class="ln"><b>63 new leads</b><span class="sep">·</span>untouched for over 48 hours, 41 of them in Butwal<span class="sugg"><svg class="i"><use href="#spark"/></svg>Suggested</span></div>
+      <div class="row"><span class="btn">Spread across TeleCallers</span></div><span class="chev"><svg class="i"><use href="#right"/></svg></span></div>
+     <div class="it"><span class="ic warn"><svg class="i"><use href="#alert"/></svg></span>
+      <div class="ln"><b>Binod Rai</b><span class="sep">·</span>received 104 new leads, his usual is 28</div>
+      <div class="row"><span class="fig">3.7× usual</span><span class="btn">Rebalance</span></div><span class="chev"><svg class="i"><use href="#right"/></svg></span></div>
+     <div class="sec cap">Heads-up · 2</div>
+     <div class="it"><span class="ic info"><svg class="i"><use href="#archive"/></svg></span>
+      <div class="ln"><b>Qualified</b><span class="sep">·</span>15 leads moved back or archived, up from 5</div>
+      <div class="row"><span class="fig">Top reason <b>Not reachable</b></span></div><span class="chev"><svg class="i"><use href="#right"/></svg></span></div>
+     <div class="it"><span class="ic info"><svg class="i"><use href="#down"/></svg></span>
+      <div class="ln"><b>Kathmandu</b><span class="sep">·</span>Prospects down 46% against its usual</div>
+      <div class="row"><span class="fig"><b>8</b> vs usual 15</span></div><span class="chev"><svg class="i"><use href="#right"/></svg></span></div>
+     <div class="sec cap">Wins · 1</div>
+     <div class="it"><span class="ic good"><svg class="i"><use href="#up"/></svg></span>
+      <div class="ln"><b>Esha Thapa</b><span class="sep">·</span>delivered 9 students to Applications, 80% above her usual</div>
+      <div class="row"><span class="fig">Top counsellor this week</span></div><span class="chev"><svg class="i"><use href="#right"/></svg></span></div>
+    </div>
+   </div>
+
+   <div class="sb">
+    <div class="row" style="justify-content:space-between"><div><div class="h2">Team scoreboard</div><div class="meta" style="margin-top:2px">Click a number for the exact leads. Hover for usual and last week.</div></div>
+     <div class="row" style="gap:8px"><div class="seg"><div class="on">By role</div><div>By branch</div><div>Everyone</div></div><span class="btn">Sort: Moved forward<svg class="i s"><use href="#chev"/></svg></span></div></div>
+    <div class="tbl"><table>
+     <thead><tr class="g"><th class="l"></th><th class="l sp">Intake</th><th class="l sp" colspan="5">Moved to</th><th class="l sp" colspan="3">Activity</th><th class="l sp" colspan="3">Results · delivered</th></tr>
+      <tr><th class="l">Person</th><th class="sp">Received</th><th class="sp">Pre-qual.</th><th>Qualified</th><th>Prospects</th><th>Apps</th><th>Back</th><th class="sp">Status</th><th>Notes</th><th>Calls</th><th class="sp">Prospects</th><th>Students</th><th>Filed</th></tr></thead>
+     <tbody id="sbody"></tbody></table></div>
+    <div class="foot"><span><b style="color:var(--muted)">Not in scores</b> · no bulk moves this week</span><span><span class="d up" style="width:auto">+30%</span> / <span class="d dn" style="width:auto">−47%</span> vs usual, shown when 25%+ off · <span class="z">0</span> none · <span class="z">–</span> not this role</span></div>
+   </div>
+  </div>
+ </div></div>
+</section>
+
+<!-- ================= S2 ================= -->
+<section class="scene" id="s2">
+<div class="scene-h"><b>S2 · The same page when the AI layer is on (EDGEX-83, later)</b><span>AI is quiet: a small violet mark, a byline, a confidence level, and a docked Orca panel. No gradients, no glow.</span></div>
+<div class="app"><div data-side></div>
+ <div class="frame"><div class="split">
+  <div class="body" style="padding-right:28px">
+   <div class="row" style="justify-content:space-between;align-items:flex-end">
+    <div><div class="h1">This week at Admizz</div>
+     <div class="lede"><b>412</b> new leads · <b>31</b> students reached Applications · <b>3</b> things need you</div></div>
+    <div class="seg"><div>Today</div><div class="on">7 days</div><div>30 days</div></div></div>
+   <div class="ai-prose" style="margin-top:20px">
+    <div class="row" style="gap:8px;margin-bottom:6px"><span class="ai-mark"><svg class="i"><use href="#spark"/></svg>Orca's read</span><span class="meta">· 9:00 AM · from 2,316 activity records</span></div>
+    <p style="font-size:14.5px;color:var(--ink);max-width:700px">Conversions are up, but the pipeline behind them is thinning. Prospects fell 12% because one Kathmandu TeleCaller stopped working on Wednesday, and Butwal's NEB-fair intake is waiting more than two days for a first call. Fix those two and next week's Applications hold.</p>
+   </div>
+   <div class="att" style="margin-top:24px">
+    <div class="att-h"><div class="row"><span class="h2">Needs your attention</span><span class="cnt">3</span></div><span class="btn pri">Approve all 3</span></div>
+    <div class="list">
+     <div class="it open"><span class="ic bad"><svg class="i"><use href="#down"/></svg></span>
+      <div><div class="ln"><b>Asha Tamang</b><span class="sep">·</span>activity down 79% since Wednesday <span class="ai-tag" style="margin-left:6px"><svg class="i"><use href="#spark"/></svg>Suggested</span></div></div>
+      <div class="row"><span class="btn pri">Reassign 12 to Anil KC</span></div><span class="chev"><svg class="i"><use href="#chev"/></svg></span>
+      <div class="exp"><p class="ai-prose">Everything dropped at once, so this looks like an absence, not a performance problem. Check in with Asha before any nudge. Anil KC has room for her 12 Qualified leads this week.</p>
+       <div class="meta" style="margin-top:8px"><span class="conf"><i style="height:5px"></i><i style="height:8px"></i><i style="height:11px"></i><i style="height:14px;background:var(--ghost)"></i></span>Likely · 18 calls vs usual 82 · same pattern seen 3 times this year, 2 were leave</div>
+       <div class="links"><span class="lnk">Why Orca thinks so →</span><span class="lnk">Draft a check-in →</span><span class="btn ghost" style="margin-left:auto;height:24px">Dismiss</span></div></div></div>
+     <div class="it"><span class="ic warn"><svg class="i"><use href="#clock"/></svg></span>
+      <div class="ln"><b>63 new leads</b><span class="sep">·</span>untouched over 48h, 41 in Butwal <span class="ai-tag" style="margin-left:6px"><svg class="i"><use href="#spark"/></svg>Suggested</span></div>
+      <div class="row"><span class="btn">Spread 30 to Pokhara</span></div><span class="chev"><svg class="i"><use href="#right"/></svg></span></div>
+     <div class="it"><span class="ic info"><svg class="i"><use href="#archive"/></svg></span>
+      <div class="ln"><b>Qualified</b><span class="sep">·</span>14 of 22 "Not reachable" archives had one call attempt</div>
+      <div class="row"><span class="btn">Add a 2nd-attempt rule</span></div><span class="chev"><svg class="i"><use href="#right"/></svg></span></div>
+    </div></div>
+  </div>
+  <div class="rail">
+   <div class="row" style="justify-content:space-between"><span class="ai-mark" style="font-size:13px;color:var(--ink)"><svg class="i" style="color:var(--ai)"><use href="#spark"/></svg>Ask Orca</span><svg class="i" style="color:var(--faint)"><use href="#x"/></svg></div>
+   <div class="msg-u">Why did Kathmandu drop?</div>
+   <div><div class="meta" style="margin-bottom:6px">Finished in 3 steps</div>
+    <p style="color:var(--ink)">Kathmandu moved 8 leads to Prospects against a usual 15. Six of the missing seven sit with Asha Tamang, idle since Wednesday. The other Kathmandu staff are on their usual pace.</p>
+    <div class="card" style="margin-top:10px;padding:12px"><div class="meta">Prospects per day · Kathmandu</div>
+     <svg width="290" height="70"><line x1="0" y1="30" x2="290" y2="30" stroke="#d6d6d2" stroke-dasharray="3 3"/><polyline points="0,28 48,26 96,30 144,44 192,56 240,60 290,58" fill="none" stroke="#2272B4" stroke-width="1.8"/></svg>
+     <div class="meta">Dashed = usual</div></div>
+    <div class="links" style="display:flex;gap:14px;margin-top:8px"><span class="lnk">Asha's leads →</span><span class="lnk">Kathmandu team →</span></div></div>
+   <div class="composer">Ask about this week…<svg class="i"><use href="#arrow"/></svg></div>
+  </div>
+ </div></div></div>
+</section>
+
+<!-- ================= S3 ================= -->
+<section class="scene" id="s3">
+<div class="scene-h"><b>S3 · Person view (click a name) and the evidence drawer (click a number)</b><span>Same components, same rhythm. Every number is a door to the records.</span></div>
+<div class="wrap" style="height:780px;background:var(--canvas)"><div style="padding:30px 40px;opacity:.35" class="h1">Pulse</div><div class="shade"></div>
+ <div class="drawer" style="right:600px;width:520px;border-right:1px solid var(--border)">
+  <div class="row" style="justify-content:space-between"><div class="row" style="gap:12px"><span class="av" style="background:#2563eb;width:40px;height:40px;font-size:13px">AT</span><div><div class="h2" style="font-size:17px">Asha Tamang</div><div class="meta">TeleCaller · Kathmandu · holds 61 leads</div></div></div><span class="ib"><svg class="i"><use href="#x"/></svg></span></div>
+  <div class="tiles">
+   <div class="tile"><div class="meta">Calls</div><div class="num">18</div><div class="chg dn">−78% vs 82</div></div>
+   <div class="tile"><div class="meta">Notes</div><div class="num">13</div><div class="chg dn">−76% vs 54</div></div>
+   <div class="tile"><div class="meta">Moved</div><div class="num">4</div><div class="chg dn">−80% vs 20</div></div>
+   <div class="tile"><div class="meta">Untouched</div><div class="num">34</div><div class="chg dn">3+ days</div></div></div>
+  <div class="meta" style="margin-bottom:6px">Daily activity · dashed line is her usual</div>
+  <svg width="470" height="84"><line x1="0" y1="20" x2="470" y2="20" stroke="#d6d6d2" stroke-dasharray="3 3"/>
+   <g fill="#c9dbee"><rect x="4" y="14" width="54" height="64" rx="5"/><rect x="70" y="18" width="54" height="60" rx="5"/></g>
+   <g fill="#e5a59e"><rect x="136" y="56" width="54" height="22" rx="5"/><rect x="202" y="70" width="54" height="8" rx="3"/><rect x="268" y="72" width="54" height="6" rx="3"/><rect x="334" y="73" width="54" height="5" rx="2"/><rect x="400" y="72" width="54" height="6" rx="3"/></g></svg>
+  <div class="meta row" style="justify-content:space-around;margin-bottom:14px"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div>
+  <div class="cap" style="margin-bottom:4px">What she did</div>
+  <div class="tl"><div><span>Wed 30 Oct, 3:10 PM</span><p>Moved <b style="color:var(--ink);font-weight:500">Rajan Gautam</b> to Qualified</p></div><div><span>Wed 30 Oct, 1:02 PM</span><p>Note on <b style="color:var(--ink);font-weight:500">Manisha Joshi</b>: "called"</p></div><div><span>Tue 29 Oct, 5:48 PM</span><p>Call to <b style="color:var(--ink);font-weight:500">Sujan Rai</b>, no answer</p></div><div><span>Mon 28 Oct</span><p>Received <b style="color:var(--ink);font-weight:500">21 new leads</b></p></div></div>
+ </div>
+ <div class="drawer">
+  <div class="meta">Pulse › Esha Thapa › To Applications</div>
+  <div class="row" style="justify-content:space-between;margin:6px 0 2px"><div class="h2" style="font-size:17px">9 students delivered to Applications</div><span class="ib"><svg class="i"><use href="#x"/></svg></span></div>
+  <div class="meta">30 Oct – 5 Nov · credited to whoever held the lead before the move</div>
+  <table style="margin-top:16px">
+   <thead><tr><th class="l" style="background:none">Student</th><th class="l" style="background:none">Move</th><th style="background:none">When</th></tr></thead>
+   <tbody>
+    <tr><td class="l"><div class="nm">Aarati Poudel</div><div class="sub">ADZ-10422 · Australia · now with Gita Karki</div></td><td class="l" style="color:var(--muted)">Prospects → Applications</td><td style="color:var(--muted)">Sun 3 Nov</td></tr>
+    <tr><td class="l"><div class="nm">Suman Adhikari</div><div class="sub">ADZ-10398 · UK · now with Gita Karki</div></td><td class="l" style="color:var(--muted)">Prospects → Applications</td><td style="color:var(--muted)">Sat 2 Nov</td></tr>
+    <tr><td class="l"><div class="nm">Prakriti Bhandari</div><div class="sub">ADZ-10377 · Canada · now with Hari Basnet</div></td><td class="l" style="color:var(--muted)">Prospects → Applications</td><td style="color:var(--muted)">Fri 1 Nov</td></tr>
+    <tr><td class="l"><div class="nm">Roshan Karki</div><div class="sub">ADZ-10301 · Australia · now with Gita Karki</div></td><td class="l" style="color:var(--muted)">Qualified → Applications</td><td style="color:var(--muted)">Thu 31 Oct</td></tr>
+    <tr><td class="l"><div class="nm">Elina Tamang</div><div class="sub">ADZ-10288 · Japan · now with Gita Karki</div></td><td class="l" style="color:var(--muted)">Prospects → Applications</td><td style="color:var(--muted)">Thu 31 Oct</td></tr>
+   </tbody></table>
+  <div class="row" style="justify-content:space-between;margin-top:14px"><span class="meta">Showing 5 of 9</span><span class="lnk">Open all 9 in Leads →</span></div>
+ </div>
+</div>
+</section>
+
+<!-- ================= S4 ================= -->
+<section class="scene" id="s4">
+<div class="scene-h"><b>S4 · Design System v2: tokens and core components</b><span>The source of truth the rest of EdgeX migrates to.</span></div>
+<div class="sheet">
+ <div class="card"><div class="h2">Colour</div><div class="meta">Neutral canvas, ink for the one main action, blue for links and data, violet only for AI.</div>
+  <div class="sw"><div><i style="background:#f6f6f5"></i><span>canvas</span></div><div><i style="background:#fff"></i><span>surface</span></div><div><i style="background:#141414"></i><span>ink · action</span></div><div><i style="background:#73736f"></i><span>muted</span></div>
+   <div><i style="background:#2272B4"></i><span>accent · data</span></div><div><i style="background:#127a4a"></i><span>good</span></div><div><i style="background:#b42318"></i><span>bad</span></div><div><i style="background:#a15c07"></i><span>warn</span></div><div><i style="background:#5b47d6"></i><span>AI only</span></div></div></div>
+ <div class="card"><div class="h2">Type · Inter, 3 weights</div><div class="ts" style="margin-top:8px">
+  <div><span class="h1" style="font-size:26px">Page title</span><span>26 / 600</span></div><div><span class="h2">Section title</span><span>15 / 600</span></div>
+  <div><span style="font-size:14px;color:var(--ink)">Body large · lede</span><span>14 / 400</span></div><div><span style="font-size:13px">Body · rows · cells</span><span>13–13.5 / 400</span></div>
+  <div><span class="meta">Meta · captions</span><span>12.5 / 400</span></div><div><span class="cap">Section label</span><span>11 / 500 caps</span></div></div></div>
+ <div class="card"><div class="h2">Space, radius, lines</div><div class="meta" style="margin-top:6px">4px grid · page padding 36 · section gap 30 · row 44–46 · control 30 high · radius 8 / 12 / 16 · 1px borders, shadows only on overlays.</div>
+  <div class="row" style="gap:8px;margin-top:12px"><span class="btn pri">Primary</span><span class="btn">Secondary</span><span class="btn ghost">Ghost</span><span class="lnk">Link →</span></div>
+  <div class="row" style="gap:6px;margin-top:10px"><span class="pill on">All <span class="n">6</span></span><span class="pill">Needs action <span class="n">3</span></span><div class="seg"><div class="on">7 days</div><div>30 days</div></div></div></div>
+ <div class="card" style="grid-column:span 2"><div class="h2">Attention row: the core pattern</div><div class="meta">Icon · subject · what happened ......... key figure · the action, carrying the concrete value · expand</div>
+  <div class="list" style="margin-top:10px"><div class="it"><span class="ic bad"><svg class="i"><use href="#down"/></svg></span><div class="ln"><b>Asha Tamang</b><span class="sep">·</span>activity down 79% since Wednesday</div><div class="row"><span class="fig"><b>34</b> leads untouched</span><span class="btn pri">Reassign 12 to Anil KC</span></div><span class="chev"><svg class="i"><use href="#right"/></svg></span></div></div></div>
+ <div class="card"><div class="h2">AI, quietly</div><div class="meta">Violet appears only where Orca wrote or suggested something, with provenance every time.</div>
+  <div style="margin-top:12px;display:flex;flex-direction:column;gap:10px;align-items:flex-start"><span class="ai-mark"><svg class="i"><use href="#spark"/></svg>Orca's read</span><span class="ai-tag"><svg class="i"><use href="#spark"/></svg>Suggested</span>
+   <div class="ai-prose" style="font-size:13px;color:var(--ink)">AI-written prose carries a thin violet rule and a byline.</div>
+   <div class="meta"><span class="conf"><i style="height:5px"></i><i style="height:8px"></i><i style="height:11px"></i><i style="height:14px;background:var(--ghost)"></i></span>Likely · from 312 records</div></div></div>
+</div>
+</section>
+
+<script>
+// inject sidebar
+document.querySelectorAll('[data-side]').forEach(n=>{n.replaceWith(document.getElementById('sidebar').content.cloneNode(true))});
+// scoreboard rows
+const R=[
+ ['g','TeleCallers 2','137','0','29','0','0','4','41','83','101','–','–','–'],
+ ['p','Binod Rai','Pokhara','#d97706','am','104','+271%','am','0','26','0','0','3','34','','70','','83','','–','','–','','–','','3.7× intake','am'],
+ ['p','Asha Tamang','Kathmandu','#2563eb','bad','33','','','0','3','0','0','1','7','−81%','13','−76%','18','−78%','–','','–','','–','','Down 79%','bad'],
+ ['g','Executives 2','29','7','0','10','0','8','29','79','121','–','–','–'],
+ ['p','Dipa Gurung','Pokhara','#16a34a','','26','+30%','up','7','0','5','0','6','26','+32%','43','','59','','–','','–','','–','','',''],
+ ['p','Chirag Shah','Kathmandu','#4f46e5','','3','−87%','dn','0','0','5','0','2','3','−87%','36','','62','+15%','–','','–','','–','','',''],
+ ['g','Counsellors 2','10','0','0','0','12','1','18','68','98','10','12','–'],
+ ['p','Esha Thapa','Kathmandu','#dc2626','gd','8','−47%','dn','0','0','0','9','1','12','','35','','52','','8','−46%','9','+80%','–','','Top counsellor','gd'],
+ ['p','Farhan Ali','Lalitpur','#7c3aed','','2','','','0','0','0','3','0','6','','33','','46','','2','','3','','–','','',''],
+ ['g','App Executives 2','12','–','–','–','–','0','9','48','67','–','–','17'],
+ ['p','Gita Karki','Kathmandu','#1d4ed8','','11','+83%','up','–','–','–','–','0','6','','25','','31','','–','','–','','16','+78%','',''],
+ ['p','Hari Basnet','Lalitpur','#be123c','','1','','','–','–','–','–','0','3','','23','','36','','–','','–','','1','−60%','',''],
+ ['t','Team total · 8 people','188','7','29','10','12','13','97','278','387','10','12','17'],
+];
+const cell=(v,cls='')=>`<td class="${cls}${v==='0'||v==='–'?' z':''}">${v}</td>`;
+const dcell=(v,d,cls='')=>{const z=(v==='0'||v==='–');const dc=d?(d.startsWith('+')?(d==='+271%'?'am':'up'):'dn'):'';return `<td class="${cls}${z?' z':''}">${v}<span class="d ${dc}">${d||''}</span></td>`};
+let h='';
+for(const r of R){
+ if(r[0]==='g'||r[0]==='t'){const tr=r[0]==='g'?'gr':'tot';
+  h+=`<tr class="${tr}"><td class="l">${r[1]}</td>${dcell(r[2],'','sp')}${cell(r[3],'sp')}${cell(r[4])}${cell(r[5])}${cell(r[6])}${cell(r[7])}${dcell(r[8],'','sp')}${dcell(r[9],'')}${dcell(r[10],'')}${dcell(r[11],'','sp')}${dcell(r[12],'')}${dcell(r[13],'')}</tr>`;continue;}
+ const [_,n,br,col,flagc,rec,recd,,pq,q,p,a,b,st,std,no,nod,ca,cad,pr,prd,ta,tad,fi,fid,flag,fk]=r;
+ const rowc=fk==='bad'?'rowflag':fk==='am'?'rowflag-am':'';
+ const NOTES={'Asha Tamang':'Stopped Wednesday · check in first','Binod Rai':'Over capacity · 3.7× intake','Esha Thapa':'Fastest to call new Prospects'};const fl='';const rn=NOTES[n]?`<span class="rnote"><svg class="i"><use href="#spark"/></svg>${NOTES[n]}</span>`:'';
+ h+=`<tr class="${rowc}"><td class="l"><div class="who"><span class="av" style="background:${col}">${n.split(' ').map(x=>x[0]).join('')}</span><div class="two"><span class="nm">${n}</span><span class="sub">${br}${fl}</span>${rn}</div></div></td>${dcell(rec,recd,'sp')}${cell(pq,'sp')}${cell(q)}${cell(p)}${cell(a)}${cell(b)}${dcell(st,std,'sp')}${dcell(no,nod)}${dcell(ca,cad)}${dcell(pr,prd,'sp')}${dcell(ta,tad)}${dcell(fi,fid)}</tr>`;
+}
+document.getElementById('sbody').innerHTML=h;
+const s=new URLSearchParams(location.search).get('scene');
+if(s){document.querySelectorAll('.scene').forEach(e=>{if(e.id!==s)e.remove()});}
+</script>
+</body></html>

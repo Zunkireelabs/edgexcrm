@@ -14,7 +14,7 @@ import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { assignDisplayIds } from "@/lib/leads/assign-display-ids";
 import { onLeadsEnteredStageSafe } from "@/industries/_shared/features/outreach/lib/stage-auto-enroll";
 import { getPipelineLandingStage } from "@/lib/leads/pipeline-stage";
-import { holderChange } from "@/lib/leads/stage-move-audit";
+import { holderChange, listIdsChange } from "@/lib/leads/stage-move-audit";
 import { checkApplicationsReadiness, applicationsGateMessage, applicationsGateApplies } from "@/lib/leads/applications-readiness";
 import { createRequestLogger } from "@/lib/logger";
 import {
@@ -33,7 +33,10 @@ import {
 } from "@/lib/leads/prospect-qualification";
 import { PERSONAL_DETAIL_COLUMNS, coercePersonalDetailsPayload } from "@/lib/leads/personal-details";
 import { STUDENT_RECORD_COLUMNS, coerceStudentRecordPayload } from "@/lib/leads/student-record-columns";
-import { normalizeDestinations, normalizeFieldOfStudy, normalizeDegreeLevel } from "@/lib/leads/destination-normalize";
+import { coerceCallbackDue } from "@/lib/leads/callback-due";
+import { recordHumanAssignment } from "@/industries/education-consultancy/features/home/server/assignment/outcome-record";
+import { normalizeFieldOfStudy, normalizeDegreeLevel } from "@/lib/leads/destination-normalize";
+import { canonicalizeDestinationsForTenant } from "@/lib/leads/destination-catalog";
 import type { Lead } from "@/types/database";
 
 /** Every column a lead update may write. Exported so the Student Details contract test can prove the pop-up only sends these. */
@@ -95,6 +98,8 @@ export const UPDATABLE_FIELDS = [
   "sat_score",
   "gre_gmat_score",
   "on_hold",
+  // Manually booked call-back (EDGEX-87): ISO time or null; validated by coerceCallbackDue below.
+  "callback_due_at",
   // Student personal / passport / citizenship details (migration 234) — normalised below.
   ...PERSONAL_DETAIL_COLUMNS,
   // Student record: qualification details (migration 236) + financial (migration 239) — validated below.
@@ -118,6 +123,22 @@ export interface ApplyLeadPatchOpts {
   requestId: string;
   ip: string | null;
   userAgent: string | null;
+  /**
+   * A non-human actor writing THROUGH a real user's AuthContext (smart assignment runs as the tenant owner: there is no
+   * session-less lead writer). When set, and ONLY then: the audit row is stamped `via` + `decision_id` (the lead timeline
+   * shows the actor's label instead of the user's name), the assignee's notification and email name the actor instead of
+   * the user, and the user's self-suppression is dropped so they can be the assignee too. Every other behaviour
+   * (permissions, chain-of-custody, list routing, collaborators of the NEW assignee) is identical to a human edit.
+   */
+  systemActor?: { key: string; label: string; decisionId: string };
+  /**
+   * The values in this patch were proposed by Orca and the person ticked them (Home Part B, B1). Stamped on the AUDIT row only
+   * as `ai_suggested`, the same way `via` is, so the timeline can say so and undo's `previousValues` is untouched. Does not
+   * change permissions or who is notified.
+   */
+  aiSuggested?: boolean;
+  /** Wording for the notification the PREVIOUS assignee gets when this patch takes the lead off them (default: "reassigned to someone else"). */
+  previousHolderNotice?: (leadName: string) => { title: string; message: string };
 }
 
 export type ApplyLeadPatchOutcome =
@@ -151,7 +172,7 @@ export async function applyLeadPatch(
   rawBody: Record<string, unknown>,
   opts: ApplyLeadPatchOpts,
 ): Promise<ApplyLeadPatchOutcome> {
-  const { requestId, ip, userAgent } = opts;
+  const { requestId, ip, userAgent, systemActor, aiSuggested } = opts;
   const body: Record<string, unknown> = { ...rawBody };
 
   // Country-aware phone format check — education_consultancy only, format-only
@@ -624,7 +645,12 @@ export async function applyLeadPatch(
   // Study Interest panel Save button), a fourth place these fields could be
   // written with a flag emoji / off-canon casing if left alone.
   if (Array.isArray(updatePayload.destinations)) {
-    updatePayload.destinations = normalizeDestinations(updatePayload.destinations as string[]);
+    // Also re-spelled in the tenant's catalog spelling ("uk" -> "UK") — see lib/leads/destination-catalog.ts.
+    updatePayload.destinations = await canonicalizeDestinationsForTenant(
+      supabase,
+      auth.tenantId,
+      updatePayload.destinations as string[],
+    );
   }
   if (updatePayload.field_of_study !== undefined) {
     updatePayload.field_of_study = normalizeFieldOfStudy(updatePayload.field_of_study as string | null);
@@ -648,6 +674,12 @@ export async function applyLeadPatch(
     return { kind: "validation", errors: studentRecord.errors };
   }
   Object.assign(updatePayload, studentRecord.values);
+
+  if (updatePayload.callback_due_at !== undefined) {
+    const cb = coerceCallbackDue(updatePayload.callback_due_at);
+    if (!cb.ok) return { kind: "validation", errors: { callback_due_at: [cb.error] } };
+    updatePayload.callback_due_at = cb.value;
+  }
 
   // Mirror lead_type on list move (keeps existing education UI working during transition)
   // Also resolve list names for the audit log so the activity timeline can render them.
@@ -1111,6 +1143,7 @@ export async function applyLeadPatch(
     // the move did not change the assignee (client request). A separate key — NOT assigned_to — so it can't be
     // mistaken for an assignment change; added after previousValues so undo is unaffected.
     changes.holder = holderChange(updated.assigned_to as string | null | undefined);
+    changes.list_ids = listIdsChange((existingLead as Record<string, unknown>).list_id as string | null, updated.list_id as string | null);
     if (updated.archive_reason) {
       changes.archive_reason = { old: null, new: updated.archive_reason };
     }
@@ -1131,7 +1164,12 @@ export async function applyLeadPatch(
           action: "lead.updated",
           entityType: "lead",
           entityId: leadId,
-          changes,
+          // `via` / `decision_id` are added to the AUDIT row only (not to `changes`, which feeds undo's previousValues).
+          changes: {
+            ...changes,
+            ...(systemActor ? { via: { old: null, new: systemActor.key }, decision_id: { old: null, new: systemActor.decisionId } } : {}),
+            ...(aiSuggested ? { ai_suggested: { old: null, new: true } } : {}),
+          },
           ipAddress: ip,
           userAgent,
           requestId,
@@ -1226,6 +1264,11 @@ export async function applyLeadPatch(
 
   const leadName = `${updated.first_name || ""} ${updated.last_name || ""}`.trim() || "A lead";
 
+  // Smart assignment (shadow mode): remember whether a human agreed with its pick. Best-effort, never blocks or alters the edit.
+  if (assignedChanged && updated.assigned_to && !systemActor) {
+    void recordHumanAssignment({ tenantId: auth.tenantId, leadId, assignedTo: updated.assigned_to as string, actorId: auth.userId });
+  }
+
   // Create notifications for assignment changes (self-suppressed)
   if (assignedChanged) {
     const assignNotifications = [];
@@ -1236,7 +1279,7 @@ export async function applyLeadPatch(
         userId: updated.assigned_to,
         type: NotificationTypes.LEAD_ASSIGNED,
         title: "Lead assigned to you",
-        message: `${leadName} has been assigned to you`,
+        message: systemActor ? `${systemActor.label} assigned you ${leadName}` : `${leadName} has been assigned to you`,
         link: `/leads/${leadId}`,
       });
 
@@ -1253,7 +1296,7 @@ export async function applyLeadPatch(
           if (assignee?.user?.email && tenant) {
             sendLeadAssignedEmail({
               to: assignee.user.email,
-              assignerEmail: auth.email || "admin",
+              assignerEmail: systemActor ? systemActor.label : auth.email || "admin",
               tenantName: tenant.name,
               leadId,
               leadName,
@@ -1274,13 +1317,12 @@ export async function applyLeadPatch(
         tenantId: auth.tenantId,
         userId: existingLead.assigned_to,
         type: NotificationTypes.LEAD_UNASSIGNED,
-        title: "Lead reassigned",
-        message: `${leadName} has been reassigned to someone else`,
+        ...(opts.previousHolderNotice?.(leadName) ?? { title: "Lead reassigned", message: `${leadName} has been reassigned to someone else` }),
         link: `/leads/${leadId}`,
       });
     }
 
-    createNotificationsExcept(auth.userId, assignNotifications);
+    createNotificationsExcept(systemActor ? "" : auth.userId, assignNotifications);
   }
 
   // Notify on stage change (assignee + admins on terminal stages)

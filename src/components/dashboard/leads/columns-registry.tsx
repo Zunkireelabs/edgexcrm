@@ -1,8 +1,10 @@
 "use client";
 
+import { holderLabel } from "@/lib/leads/facet-labels";
 import React from "react";
 import Link from "next/link";
-import { Eye, RotateCcw } from "lucide-react";
+import type { Icon } from "@/components/icons";
+import { EyeIcon, ArrowCounterClockwiseIcon } from "@/components/icons";
 import { TruncatedText } from "@/components/ui/truncated-text";
 import { prospectIndustryLabel } from "@/industries/it-agency/leads/prospect-industries";
 import { MoveToListSelector } from "@/components/dashboard/leads/move-to-list-selector";
@@ -51,6 +53,23 @@ export interface LeadColumnCtx {
   onAssignChange?: (leadId: string, memberId: string | null) => Promise<void>;
 }
 
+/** Sort keys the table's sort state understands (leads-table.tsx SortField). */
+export type V2SortField = "activity" | "created" | "updated" | "name" | "email" | "follow_up_needed";
+
+/** Leads table v2 (EDGEX-117) presentation for a column. Populated by table/v2-columns.tsx. */
+export interface LeadColumnV2 {
+  width: number;
+  icon?: Icon;
+  /** Header title when it differs from `label`, e.g. "Assigned to". */
+  label?: string;
+  /** Cell content (the grid supplies the td). Omitted: the legacy renderTd children are reused. */
+  cell?: (lead: Lead, ctx: LeadColumnCtx) => React.ReactNode;
+  /** Omitted when the list API cannot sort this column. */
+  sort?: V2SortField;
+  /** Key in the filter registry, for "Filter by …". */
+  filterFieldKey?: string;
+}
+
 export interface LeadColumn {
   key: string;
   label: string;
@@ -62,6 +81,7 @@ export interface LeadColumn {
   tdClassName?: string;
   renderTh: (ctx: LeadColumnCtx) => React.ReactNode;
   renderTd: (lead: Lead, ctx: LeadColumnCtx) => React.ReactNode;
+  v2?: LeadColumnV2;
 }
 
 // ─── follow-up-needed / callback-due row badges (education_consultancy only, ───
@@ -214,7 +234,7 @@ const STATIC_COLUMNS: LeadColumn[] = [
               title="Preview"
               className="hidden md:@[110px]/name:inline-flex shrink-0 items-center justify-center h-6 w-6 rounded text-gray-500 opacity-0 group-hover/name:opacity-100 hover:bg-gray-100 hover:text-gray-700 transition-opacity"
             >
-              <Eye size={14} />
+              <EyeIcon size={14} />
             </button>
           </div>
           {/* Mobile: email + preview icon */}
@@ -229,7 +249,7 @@ const STATIC_COLUMNS: LeadColumn[] = [
               }}
               className="shrink-0 p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
             >
-              <Eye size={14} />
+              <EyeIcon size={14} />
             </button>
           </div>
         </td>
@@ -282,7 +302,7 @@ const STATIC_COLUMNS: LeadColumn[] = [
                 onClick={() => ctx.onRestore!(lead.id)}
                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] border border-emerald-300 text-[10px] font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors"
               >
-                <RotateCcw className="w-3 h-3" />
+                <ArrowCounterClockwiseIcon className="w-3 h-3" />
                 Restore
               </button>
             ) : (
@@ -402,9 +422,7 @@ const STATIC_COLUMNS: LeadColumn[] = [
       </th>
     ),
     renderTd: (lead, ctx) => {
-      const assignedEmail = lead.assigned_to ? ctx.memberMap[lead.assigned_to] : null;
-      const assignedName = lead.assigned_to ? ctx.memberNames?.[lead.assigned_to] : null;
-      const label = assignedName || (assignedEmail ? assignedEmail.split("@")[0] : "");
+      const label = holderLabel(lead.assigned_to, ctx.memberNames, ctx.memberMap);
 
       // Education: same read-only AssigneeChip visual as other industries, but never
       // routed through AssigneeSelector — protects counselor / shared-pool /

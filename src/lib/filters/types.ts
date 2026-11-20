@@ -91,12 +91,12 @@ export const EMPTY_TREE: FilterTree = { conjunction: "and", conditions: [] };
 // injection defense for column position (see pgrst.ts for value escaping).
 export type FieldSource =
   | { kind: "column"; column: string }
-  | { kind: "columns"; columns: string[]; fullNamePairs?: boolean } // the search field
+  | { kind: "columns"; columns: string[]; fullNamePairs?: boolean } // the search field; fullNamePairs = multi-word values must match every word against first/last name (see renderColumnsPredicate)
   | { kind: "array_column"; column: string } // tags, destinations
   | { kind: "jsonb"; column: "custom_fields"; path: string }
   | { kind: "promoted"; column: string; jsonb: { column: "custom_fields"; path: string } }
   // emptyColumn: an optional denormalized column on the BASE table (never the
-  // embedded relation) that answers "is_empty" without a join — e.g. a
+  // embedded relation) that answers "is_empty" / "is_not_empty" without a join — e.g. a
   // maintained collaborator_count on `leads` for the Collaborators field. The
   // embed's own !inner join can only express "a matching row exists", never
   // "no matching row exists" (see compile.ts's embed-case comment) — this is
@@ -145,6 +145,9 @@ export interface FieldDef {
   // — never offered in FilterFieldPicker. Still fully filterable/compilable;
   // this only affects manual "+ Add filter" selection.
   hiddenFromPicker?: boolean;
+  // A condition whose value is machine data (e.g. `workable`'s terminal-stage plan) shows this text as its whole chip and is
+  // not editable (it can only be removed); the value is never printed.
+  fixedChipLabel?: string;
   sortable?: boolean;
   sortColumns?: string[]; // multi-column sort (e.g. first_name -> [first_name, last_name])
   // Postgres's own ASC/DESC null-ordering default (NULLS LAST for ASC, NULLS

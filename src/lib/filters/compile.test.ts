@@ -464,9 +464,10 @@ describe("is_empty on a relation field — rejected without an emptyColumn, safe
     expect(result).toEqual({ ok: true, embeds: [] });
   });
 
-  it("WITH emptyColumn: is_not_empty and is_any_of on the SAME field still use the real !inner join, unaffected by the escape hatch existing", () => {
+  it("WITH emptyColumn: is_not_empty reads the counter (count > 0, no embed); is_any_of on the SAME field still uses the real !inner join", () => {
     const notEmpty = planFilter(andTree(cond("c1", "collaborators_with_count", "is_not_empty")), registry, ctx);
-    expect(notEmpty).toEqual({ ok: true, embeds: ["lead_collaborators!inner(user_id)"] });
+    expect(notEmpty).toEqual({ ok: true, embeds: [] });
+    expect(compile(andTree(cond("c1", "collaborators_with_count", "is_not_empty"))).calls).toEqual(["or(collaborator_count.gt.0)"]);
     const b = compile(andTree(cond("c1", "collaborators_with_count", "is_any_of", ["11111111-1111-1111-1111-111111111111"])));
     expect(b.orPayloads()).toEqual(["user_id.in.(11111111-1111-1111-1111-111111111111)"]);
     expect(b.orReferencedTables).toEqual(["lead_collaborators"]);
@@ -713,11 +714,100 @@ describe("columns-kind field (multi-column search)", () => {
     expect(b.calls[0]).toBe("or(or(first_name.ilike.%jane%,last_name.ilike.%jane%))");
   });
 
-  it("adds full-name token-pair legs for a two-token search, in either order", () => {
-    const b = compile(andTree(cond("c1", "search", "contains", "Jane Smith")));
-    const payload = b.orPayloads()[0];
-    expect(payload).toContain("and(first_name.ilike.%Jane%,last_name.ilike.%Smith%)");
-    expect(payload).toContain("and(first_name.ilike.%Smith%,last_name.ilike.%Jane%)");
+  it("2 words: whole-value legs + AND over each word of OR(first,last) (EDGEX-159)", () => {
+    const b = compile(andTree(cond("c1", "search", "contains", "John Smith")));
+    expect(b.orPayloads()[0]).toBe(
+      'or(first_name.ilike."%John Smith%",last_name.ilike."%John Smith%",and(or(first_name.ilike.%John%,last_name.ilike.%John%),or(first_name.ilike.%Smith%,last_name.ilike.%Smith%)))'
+    );
+  });
+
+  it("3 words: no word is dropped (regression — 'Pulse Lead 3' must not match every 'Pulse Lead N')", () => {
+    const p = compile(andTree(cond("c1", "search", "contains", "Ram Bahadur Thapa"))).orPayloads()[0];
+    for (const t of ["Ram", "Bahadur", "Thapa"]) {
+      expect(p).toContain(`first_name.ilike.%${t}%`);
+      expect(p).toContain(`last_name.ilike.%${t}%`);
+    }
+    const q = compile(andTree(cond("c1", "search", "contains", "Pulse Lead 3"))).orPayloads()[0];
+    expect(q).toContain("first_name.ilike.%3%");
+    expect(q).toContain("last_name.ilike.%3%");
+  });
+
+  it("is order-free: 'Thapa Ram' carries the same per-word legs", () => {
+    const p = compile(andTree(cond("c1", "search", "contains", "Thapa Ram"))).orPayloads()[0];
+    expect(p).toContain("and(or(first_name.ilike.%Thapa%,last_name.ilike.%Thapa%),or(first_name.ilike.%Ram%,last_name.ilike.%Ram%))");
+  });
+
+  it("dedupes repeated words case-insensitively", () => {
+    const p = compile(andTree(cond("c1", "search", "contains", "Ram ram"))).orPayloads()[0];
+    expect(p).toContain("or(first_name.ilike.%Ram%,last_name.ilike.%Ram%)");
+    expect(p.match(/first_name\.ilike\.%[Rr]am%/g)).toHaveLength(1);
+  });
+
+  describe("phone-join leg (registry with a phone column)", () => {
+    const reg: FieldRegistry = {
+      search: { key: "search", label: "Search", type: "text", source: { kind: "columns", columns: ["first_name", "last_name", "email", "phone", "display_id"], fullNamePairs: true }, group: "Basic", filterable: true },
+    };
+    const run = (v: string) => compileFilter(new FakeBuilder(), andTree(cond("c1", "search", "contains", v)), reg, ctx).orPayloads()[0];
+
+    it("all-digit words add phone contains the joined digits", () => {
+      expect(run("9841 234 567")).toContain("phone.ilike.%9841234567%");
+    });
+    it("mixed words do NOT get the phone-join leg", () => {
+      expect(run("Ram 9841")).not.toContain("phone.ilike.%Ram9841%");
+      expect(run("Ram 9841")).not.toContain("phone.ilike.%9841%,");
+    });
+    it("no per-token leg on email/phone/display_id", () => {
+      const p = run("Ram Thapa");
+      expect(p).not.toContain("email.ilike.%Ram%");
+      expect(p).not.toContain("display_id.ilike.%Thapa%");
+    });
+  });
+
+  it("is (3 words, Name field): every split in both orders, nothing dropped", () => {
+    const reg: FieldRegistry = {
+      name: { key: "name", label: "Name", type: "text", source: { kind: "columns", columns: ["first_name", "last_name"], fullNamePairs: true }, group: "Basic", filterable: true },
+    };
+    const p = compileFilter(new FakeBuilder(), andTree(cond("c1", "name", "is", "Ram Bahadur Thapa")), reg, ctx).orPayloads()[0];
+    expect(p).toBe(
+      'or(first_name.eq."Ram Bahadur Thapa",last_name.eq."Ram Bahadur Thapa",' +
+        'and(first_name.eq.Ram,last_name.eq."Bahadur Thapa"),and(last_name.eq.Ram,first_name.eq."Bahadur Thapa"),' +
+        'and(first_name.eq."Ram Bahadur",last_name.eq.Thapa),and(last_name.eq."Ram Bahadur",first_name.eq.Thapa))'
+    );
+  });
+
+  it("starts_with (3 words) splits like is", () => {
+    const p = compile(andTree(cond("c1", "search", "starts_with", "A B C"))).orPayloads()[0];
+    expect(p).toContain('and(first_name.ilike.A%,last_name.ilike."B C%")');
+    expect(p).toContain('and(first_name.ilike."A B%",last_name.ilike.C%)');
+  });
+
+  it("reserved characters in a word stay inside quoted values (or=() stays well-formed)", () => {
+    const p = compile(andTree(cond("c1", "search", "contains", "O'Brien (Ram), Jr."))).orPayloads()[0];
+    expect(p).toContain(`first_name.ilike."%O'Brien%"`);
+    expect(p).toContain(`last_name.ilike."%(Ram),%"`);
+    expect(p).toContain(`first_name.ilike."%Jr.%"`);
+    // Strip quoted strings: no stray top-level comma/paren content may remain.
+    const stripped = p.replace(/"(?:[^"\\]|\\.)*"/g, "Q");
+    expect(stripped).not.toMatch(/[^a-z_.,()A-Z%0-9\-]/);
+    expect((stripped.match(/\(/g) ?? []).length).toBe((stripped.match(/\)/g) ?? []).length);
+  });
+
+  it("more than 8 words: whole-value legs only (never truncated)", () => {
+    const p = compile(andTree(cond("c1", "search", "contains", "a b c d e f g h i"))).orPayloads()[0];
+    expect(p).toBe('or(first_name.ilike."%a b c d e f g h i%",last_name.ilike."%a b c d e f g h i%")');
+  });
+
+  it("exactly 8 words still gets token legs", () => {
+    const p = compile(andTree(cond("c1", "search", "contains", "a b c d e f g h"))).orPayloads()[0];
+    expect(p).toContain("and(or(first_name.ilike.%a%");
+  });
+
+  it("not_contains with 2 words is unchanged: no token legs", () => {
+    const b = compile(andTree(cond("c1", "search", "not_contains", "Jane Smith")));
+    const p = b.orPayloads()[0] ?? b.calls.join("|");
+    expect(p).toBe(
+      'and(or(first_name.is.null,first_name.not.ilike."%Jane Smith%"),or(last_name.is.null,last_name.not.ilike."%Jane Smith%"))'
+    );
   });
 
   it("does not add pair legs for a single-token search", () => {

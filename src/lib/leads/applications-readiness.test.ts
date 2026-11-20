@@ -46,32 +46,32 @@ describe("isFeeEntered", () => {
 
 describe("checkApplicationsReadiness", () => {
   it("ready when fee claimed, profile complete, consent signed", async () => {
-    profile.mockResolvedValue({ complete: true, missing: [] });
+    profile.mockResolvedValue({ complete: true, missing: [], total: 5, filled: 5 });
     const r = await checkApplicationsReadiness(fakeDb({ fee: "claimed", templateActive: true, signed: true }), "t", "l");
     expect(r).toEqual({ ready: true, missing: [] });
   });
 
   it("reports every missing item", async () => {
-    profile.mockResolvedValue({ complete: false, missing: ["Phone"] });
+    profile.mockResolvedValue({ complete: false, missing: ["Phone"], total: 5, filled: 4 });
     const r = await checkApplicationsReadiness(fakeDb({ fee: "unpaid", templateActive: true, signed: false }), "t", "l");
     expect(r.ready).toBe(false);
     expect(r.missing).toEqual(["Processing fee", "Basic info (Phone)", "Consent signed"]);
   });
 
   it("an admin-rejected fee (unpaid) blocks again", async () => {
-    profile.mockResolvedValue({ complete: true, missing: [] });
+    profile.mockResolvedValue({ complete: true, missing: [], total: 5, filled: 5 });
     const r = await checkApplicationsReadiness(fakeDb({ fee: "unpaid", templateActive: false }), "t", "l");
     expect(r.missing).toEqual(["Processing fee"]);
   });
 
   it("skips the consent check when the tenant has no active template", async () => {
-    profile.mockResolvedValue({ complete: true, missing: [] });
+    profile.mockResolvedValue({ complete: true, missing: [], total: 5, filled: 5 });
     const r = await checkApplicationsReadiness(fakeDb({ fee: "paid", templateActive: null }), "t", "l");
     expect(r.ready).toBe(true);
   });
 
   it("consent and basic info stay strict even when the fee is only claimed", async () => {
-    profile.mockResolvedValue({ complete: false, missing: ["a document"] });
+    profile.mockResolvedValue({ complete: false, missing: ["a document"], total: 5, filled: 4 });
     const r = await checkApplicationsReadiness(fakeDb({ fee: "claimed", templateActive: true, signed: false }), "t", "l");
     expect(r.missing).toEqual(["Basic info (a document)", "Consent signed"]);
   });
@@ -79,7 +79,7 @@ describe("checkApplicationsReadiness", () => {
 
 describe("same-request values (fee / basic info sent together with the stage move)", () => {
   it("a fee sent in the same request counts even though the stored fee is empty", async () => {
-    profile.mockResolvedValue({ complete: true, missing: [] });
+    profile.mockResolvedValue({ complete: true, missing: [], total: 5, filled: 5 });
     const r = await checkApplicationsReadiness(
       fakeDb({ fee: null, templateActive: false }), "t", "l", { pre_app_fee_status: "claimed" },
     );
@@ -87,7 +87,7 @@ describe("same-request values (fee / basic info sent together with the stage mov
   });
 
   it("a fee sent in the same request that is NOT acceptable still blocks, even if the stored fee was fine", async () => {
-    profile.mockResolvedValue({ complete: true, missing: [] });
+    profile.mockResolvedValue({ complete: true, missing: [], total: 5, filled: 5 });
     const r = await checkApplicationsReadiness(
       fakeDb({ fee: "paid", templateActive: false }), "t", "l", { pre_app_fee_status: "unpaid" },
     );
@@ -95,14 +95,14 @@ describe("same-request values (fee / basic info sent together with the stage mov
   });
 
   it("falls back to the stored fee when the request does not carry one", async () => {
-    profile.mockResolvedValue({ complete: true, missing: [] });
+    profile.mockResolvedValue({ complete: true, missing: [], total: 5, filled: 5 });
     const r = await checkApplicationsReadiness(fakeDb({ fee: "paid", templateActive: false }), "t", "l", { phone: "123" });
     expect(r.ready).toBe(true);
   });
 
   it("hands the pending values to the basic-info check", async () => {
     profile.mockClear();
-    profile.mockResolvedValue({ complete: true, missing: [] });
+    profile.mockResolvedValue({ complete: true, missing: [], total: 5, filled: 5 });
     const pending = { phone: "+977-9800000000" };
     await checkApplicationsReadiness(fakeDb({ fee: "paid", templateActive: false }), "t", "l", pending);
     expect(profile).toHaveBeenCalledWith(expect.anything(), "t", "l", pending);

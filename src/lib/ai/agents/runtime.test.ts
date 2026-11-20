@@ -403,3 +403,55 @@ describe("runAgent — output_produced eval baseline scoring", () => {
     expect(outputProducedCalls).toHaveLength(0);
   });
 });
+
+describe("runAgent — buildRunTools (EDGEX-109 P4a): a definition's own run-scoped tools", () => {
+  const RUN_TOOL = { description: "run-scoped", execute: vi.fn() };
+  const buildRunTools = vi.fn();
+  const OWN_TOOLS_DEF: AgentDefinition = { ...LEAD_TRIAGE_DEF, key: "process-improver", toolIds: [], buildRunTools };
+
+  beforeEach(() => {
+    buildRunTools.mockReset();
+    buildRunTools.mockReturnValue({ process_read: RUN_TOOL });
+  });
+
+  it("merges them into the run's tools, built once per run with that run's id, trigger and the agent's own db/auth", async () => {
+    const { db } = fakeDb();
+    scopedClientMock.mockResolvedValue(db);
+    const { runAgent } = await import("./runtime");
+
+    const auth = agentAuth({ tenantId: "tenant-9" });
+    await runAgent(OWN_TOOLS_DEF, auth, { event: "cron/process-improver", subjectType: "process", subjectId: "proc-1" });
+
+    expect(buildRunTools).toHaveBeenCalledTimes(1);
+    const ctx = buildRunTools.mock.calls[0][0];
+    expect(ctx).toMatchObject({ runId: "run-123", trigger: { event: "cron/process-improver", subjectType: "process", subjectId: "proc-1" }, db });
+    expect(ctx.agentAuth.tenantId).toBe("tenant-9");
+    expect(Object.keys(generateTextMock.mock.calls[0][0].tools)).toContain("process_read");
+  });
+
+  it("is never built when the kill switch, a paused identity or the budget stops the run (no run, no tools, no model call)", async () => {
+    const { runAgent } = await import("./runtime");
+
+    isAgentsEnabledForTenantMock.mockResolvedValue(false);
+    scopedClientMock.mockResolvedValue(fakeDb().db);
+    expect((await runAgent(OWN_TOOLS_DEF, agentAuth(), TRIGGER)).status).toBe("skipped");
+
+    isAgentsEnabledForTenantMock.mockResolvedValue(true);
+    scopedClientMock.mockResolvedValue(fakeDb({ identityStatus: "paused" }).db);
+    expect((await runAgent(OWN_TOOLS_DEF, agentAuth(), TRIGGER)).status).toBe("skipped");
+
+    checkAgentDailyBudgetMock.mockResolvedValue({ overBudget: true, usedToday: 999_999, limit: 100_000 });
+    scopedClientMock.mockResolvedValue(fakeDb().db);
+    expect((await runAgent(OWN_TOOLS_DEF, agentAuth(), TRIGGER)).status).toBe("cancelled");
+
+    expect(buildRunTools).not.toHaveBeenCalled();
+    expect(generateTextMock).not.toHaveBeenCalled();
+  });
+
+  it("an agent without buildRunTools is unchanged", async () => {
+    scopedClientMock.mockResolvedValue(fakeDb().db);
+    const { runAgent } = await import("./runtime");
+    await runAgent(LEAD_TRIAGE_DEF, agentAuth(), TRIGGER);
+    expect(Object.keys(generateTextMock.mock.calls[0][0].tools)).toEqual([]);
+  });
+});

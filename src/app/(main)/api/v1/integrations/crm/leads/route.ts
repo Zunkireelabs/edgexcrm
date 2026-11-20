@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { requestSmartAssignment } from "@/industries/education-consultancy/features/home/server/assignment/request";
 import {
   gateIntegrationRequest,
   buildLookupMaps,
@@ -416,6 +417,9 @@ export const POST = withIntegrationErrorBoundary(async function POST(request: Ne
       requestId: ctx.requestId,
     });
   }
+
+  // Smart assignment (only when the tenant turned it on, only for a lead created unassigned). Non-blocking.
+  void requestSmartAssignment({ tenantId: ctx.auth.tenantId, leadId: (lead as Lead).id, assignedTo: (lead as Lead).assigned_to });
 
   await Promise.all([
     // integration.lead.created audit suppressed when lead.submission was recorded (A4: combined display)

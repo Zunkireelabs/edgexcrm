@@ -14,65 +14,264 @@ import {
   closestCorners,
 } from "@dnd-kit/core";
 import { toast } from "sonner";
-import { ApplicationColumn } from "./application-column";
-import { ApplicationCard } from "./application-card";
+import { PlusIcon, XIcon } from "@/components/icons";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { ApplicationColumn, SlimColumn } from "./application-column";
+import { ApplicationCardOverlay } from "./application-card";
+import { PhoneBoard } from "./phone-board";
+import { matchesBelowMd } from "../hooks/use-below-md";
+import { STUCK_DAYS, daysInStage, isFinishedStage } from "../lib/card-metrics";
+import { type BoardPayload } from "../lib/board-index";
+import { applyMoveCounts, columnMoreCount } from "../lib/board-moves";
+import {
+  EMPTY_PREFS,
+  isStageCollapsed,
+  readBoardPrefs,
+  setHidden,
+  setTrackTime,
+  toggleCollapse,
+  writeBoardPrefs,
+  type BoardPrefs,
+} from "../lib/board-prefs";
 import type { Application, ApplicationStage } from "@/types/database";
 
-type ColumnsState = Record<string, Application[]>;
+/** One column on the client: the cards loaded so far, plus the server's exact numbers. */
+export interface ColumnState {
+  cards: Application[];
+  /** Filtered count of the whole column (server). */
+  total: number;
+  /** Filtered count stuck STUCK_DAYS+ (server). */
+  stuck: number;
+  /** Index offset of the next page (cards loaded FROM THE INDEX; a pinned moved card isn't one). */
+  nextOffset: number;
+  loading: boolean;
+}
+type ColumnsState = Record<string, ColumnState>;
 
-function groupByStage(applications: Application[], stages: ApplicationStage[]): ColumnsState {
-  const columns: ColumnsState = {};
-  for (const stage of stages) columns[stage.id] = [];
-  for (const app of applications) {
-    if (app.stage_id && columns[app.stage_id]) {
-      columns[app.stage_id].push(app);
+export interface ColumnPage {
+  cards: Application[];
+  total: number;
+  hasMore: boolean;
+}
+
+/** A card the user just dragged into a column: kept visible there until the column itself loads it. */
+export interface Pin {
+  appId: string;
+  stageId: string;
+  card: Application;
+}
+
+export function fromPayload(board: BoardPayload<Application>, pin: Pin | null): ColumnsState {
+  const out: ColumnsState = {};
+  for (const [sid, col] of Object.entries(board.columns)) {
+    let cards = col.cards;
+    if (pin) {
+      if (sid === pin.stageId && !cards.some((c) => c.id === pin.appId)) cards = [pin.card, ...cards];
+      else if (sid !== pin.stageId) cards = cards.filter((c) => c.id !== pin.appId);
     }
+    out[sid] = { cards, total: col.total, stuck: col.stuck, nextOffset: col.cards.length, loading: false };
   }
-  return columns;
+  return out;
+}
+
+/** Two moves this close together that undo each other are a collision flip-flop, not the user (EDGEX-169). */
+const PING_PONG_MS = 50;
+
+export function isPingPong(
+  last: { appId: string; from: string; at: number } | null,
+  appId: string,
+  toCol: string,
+  now: number,
+): boolean {
+  return !!last && last.appId === appId && last.from === toCol && now - last.at < PING_PONG_MS;
+}
+
+/**
+ * Moves the dragged card into the hovered column (on a card: above it; on the column: the top).
+ * Returns `prev` itself (same object, so no rerender) when the card is already there. fromCol is read
+ * from `prev`, not from a render closure, so a stale closure can't disagree with the state it updates.
+ */
+export function moveCardForDrag(
+  prev: ColumnsState,
+  appId: string,
+  overId: string,
+  stageMap: ReadonlyMap<string, unknown>,
+): ColumnsState {
+  const fromCol = findAppColumn(prev, appId);
+  const toCol = stageMap.has(overId) ? overId : findAppColumn(prev, overId);
+  if (!fromCol || !toCol || fromCol === toCol || !prev[toCol]) return prev;
+  const app = prev[fromCol].cards.find((a) => a.id === appId);
+  if (!app) return prev;
+  const from = prev[fromCol].cards.filter((a) => a.id !== appId);
+  const to = [...prev[toCol].cards];
+  const overIdx = to.findIndex((a) => a.id === overId);
+  if (overIdx >= 0) to.splice(overIdx, 0, app);
+  else to.unshift(app); // dropped on the column itself: top, so it is in view
+  return { ...prev, [fromCol]: { ...prev[fromCol], cards: from }, [toCol]: { ...prev[toCol], cards: to } };
 }
 
 function findAppColumn(columns: ColumnsState, appId: string): string | null {
-  for (const [stageId, apps] of Object.entries(columns)) {
-    if (apps.some((a) => a.id === appId)) return stageId;
+  for (const [stageId, col] of Object.entries(columns)) {
+    if (col.cards.some((a) => a.id === appId)) return stageId;
   }
   return null;
 }
 
 interface ApplicationsBoardProps {
+  /** Where a card opens (carries the board's filters for the detail page's back link). */
+  detailHref?: (appId: string) => string;
+  /** Column width in px (Narrow 232 / Wide 268). */
+  columnWidth?: number;
+  /** The selected pipeline's stages, in position order. */
   stages: ApplicationStage[];
-  applications: Application[];
+  /** Server columns: first page of cards + exact filtered totals (EDGEX-141 Phase 3). */
+  board: BoardPayload<Application>;
+  /** Next page of one column, from the same URL state (GET /api/v1/applications/board-page). */
+  fetchPage: (stageId: string, offset: number) => Promise<ColumnPage>;
+  /** Unfiltered application count per stage, for the delete-stage message. */
+  stageTotals: Record<string, number>;
+  pipelineId: string;
+  userId: string;
   canManageApplications: boolean;
+  isAdmin: boolean;
   onRefresh: () => void;
-  /** user_id -> display name, for resolving a card's assignee to a real name. */
+  onAddToStage: (stageId: string) => void;
+  onEditStages: (opts?: { addStage?: boolean }) => void;
+  /** user_id -> display name, for resolving a card's counsellor. */
   assigneeNames?: Record<string, string>;
+  /**
+   * Below md (EDGEX-141 Phase 5): one stage at a time with a stage strip, no drag (no DndContext),
+   * and a Move sheet for admins. Same columns, paging and pinning.
+   */
+  phone?: boolean;
 }
 
-export function ApplicationsBoard({ stages, applications, canManageApplications, onRefresh, assigneeNames }: ApplicationsBoardProps) {
+export function ApplicationsBoard({
+  columnWidth,
+  detailHref,
+  stages,
+  board,
+  fetchPage,
+  stageTotals,
+  pipelineId,
+  userId,
+  canManageApplications,
+  isAdmin,
+  onRefresh,
+  onAddToStage,
+  onEditStages,
+  assigneeNames,
+  phone = false,
+}: ApplicationsBoardProps) {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
-  const [columns, setColumns] = useState<ColumnsState>(() => groupByStage(applications, stages));
+  const [prefs, setPrefs] = useState<BoardPrefs>(EMPTY_PREFS);
+  const pinRef = useRef<Pin | null>(null);
+  const [columns, setColumns] = useState<ColumnsState>(() => fromPayload(board, null));
+  // Columns we already asked the server for (first page of a finished/collapsed column).
+  const requested = useRef<Set<string>>(new Set());
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ApplicationStage | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const prevColumnsRef = useRef<ColumnsState | null>(null);
+  const lastMoveRef = useRef<{ appId: string; from: string; to: string; at: number } | null>(null);
 
-  useEffect(() => { setMounted(true); }, []);
-
+  // Prefs live in localStorage, so they are read after mount (no SSR mismatch).
   useEffect(() => {
-    setColumns(groupByStage(applications, stages));
-  }, [applications, stages]);
+    const id = setTimeout(() => {
+      setPrefs(readBoardPrefs(userId, pipelineId));
+      setMounted(true);
+    }, 0);
+    return () => clearTimeout(id);
+  }, [userId, pipelineId]);
+
+  // A new server payload (URL change, router.refresh() after a move) replaces the columns: every
+  // column is back to its first page, with the server's exact totals. A just-moved card stays pinned
+  // at the top of its new column until that column's own pages include it.
+  useEffect(() => {
+    const pin = pinRef.current;
+    if (pin && (board.columns[pin.stageId]?.cards ?? []).some((c) => c.id === pin.appId)) pinRef.current = null;
+    requested.current = new Set();
+    setColumns(fromPayload(board, pinRef.current));
+  }, [board]);
+
+  const columnsRef = useRef(columns);
+  useEffect(() => {
+    columnsRef.current = columns;
+  }, [columns]);
+  const inFlight = useRef<Set<string>>(new Set());
+
+  /** Appends the next page of one column (dedupes by id, so a pinned card never doubles). */
+  const loadPage = useCallback(
+    async (stageId: string) => {
+      const col = columnsRef.current[stageId];
+      if (!col || inFlight.current.has(stageId)) return;
+      inFlight.current.add(stageId);
+      const offset = col.nextOffset;
+      setColumns((prev) => (prev[stageId] ? { ...prev, [stageId]: { ...prev[stageId], loading: true } } : prev));
+      try {
+        const page = await fetchPage(stageId, offset);
+        setColumns((prev) => {
+          const cur = prev[stageId];
+          if (!cur) return prev;
+          const have = new Set(cur.cards.map((c) => c.id));
+          const fresh = page.cards.filter((c) => !have.has(c.id));
+          return { ...prev, [stageId]: { ...cur, cards: [...cur.cards, ...fresh], total: page.total, nextOffset: offset + page.cards.length, loading: false } };
+        });
+      } catch {
+        setColumns((prev) => (prev[stageId] ? { ...prev, [stageId]: { ...prev[stageId], loading: false } } : prev));
+        toast.error("Couldn't load more applications. Please try again.");
+      } finally {
+        inFlight.current.delete(stageId);
+      }
+    },
+    [fetchPage],
+  );
+
+  // A column that renders expanded with nothing loaded (a finished column the user opened, or an
+  // active one they re-expanded) fetches its first page once.
+  useEffect(() => {
+    if (!mounted) return;
+    for (const stage of stages) {
+      if (prefs.hidden.includes(stage.id) || isStageCollapsed(stage, prefs)) continue;
+      const col = columns[stage.id];
+      if (!col || col.total === 0 || col.nextOffset > 0 || requested.current.has(stage.id)) continue;
+      requested.current.add(stage.id);
+      void loadPage(stage.id);
+    }
+  }, [mounted, prefs, columns, stages, loadPage]);
 
   const stageMap = useMemo(() => new Map(stages.map((s) => [s.id, s])), [stages]);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+  const updatePrefs = useCallback(
+    (fn: (p: BoardPrefs) => BoardPrefs) => {
+      setPrefs((prev) => {
+        const next = fn(prev);
+        writeBoardPrefs(userId, pipelineId, next);
+        return next;
+      });
+    },
+    [userId, pipelineId],
   );
 
-  const activeApp = activeId
-    ? Object.values(columns).flat().find((a) => a.id === activeId) ?? null
-    : null;
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  const allCards = (cols: ColumnsState) => Object.values(cols).flatMap((c) => c.cards);
+  const activeApp = activeId ? allCards(columns).find((a) => a.id === activeId) ?? null : null;
+  const activeStageId = activeId ? findAppColumn(columns, activeId) : null;
 
   function handleDragStart(event: DragStartEvent) {
     if (!canManageApplications) return;
     setActiveId(event.active.id as string);
+    lastMoveRef.current = null;
     prevColumnsRef.current = JSON.parse(JSON.stringify(columns));
   }
 
@@ -82,127 +281,299 @@ export function ApplicationsBoard({ stages, applications, canManageApplications,
 
     const appId = active.id as string;
     const overId = over.id as string;
-    const fromCol = findAppColumn(columns, appId);
-    const toCol = stageMap.has(overId) ? overId : findAppColumn(columns, overId);
-
+    const latest = columnsRef.current;
+    const fromCol = findAppColumn(latest, appId);
+    const toCol = stageMap.has(overId) ? overId : findAppColumn(latest, overId);
     if (!fromCol || !toCol || fromCol === toCol) return;
 
-    setColumns((prev) => {
-      const from = prev[fromCol].filter((a) => a.id !== appId);
-      const app = prev[fromCol].find((a) => a.id === appId);
-      if (!app) return prev;
-      const to = [...prev[toCol!]];
-      const overIdx = to.findIndex((a) => a.id === overId);
-      if (overIdx >= 0) to.splice(overIdx, 0, app);
-      else to.push(app);
-      return { ...prev, [fromCol]: from, [toCol!]: to };
-    });
+    // EDGEX-169: never bounce straight back to the column we left a frame ago.
+    const now = performance.now();
+    const last = lastMoveRef.current;
+    if (isPingPong(last, appId, toCol, now)) return;
+    lastMoveRef.current = { appId, from: fromCol, to: toCol, at: now };
+
+    setColumns((prev) => moveCardForDrag(prev, appId, overId, stageMap));
   }
 
-  const handleDragEnd = useCallback(async (event: DragEndEvent) => {
-    const { active, over } = event;
+  function handleDragCancel() {
     setActiveId(null);
-
-    if (!over) {
-      if (prevColumnsRef.current) setColumns(prevColumnsRef.current);
-      prevColumnsRef.current = null;
-      return;
-    }
-
-    const appId = active.id as string;
-    const overId = over.id as string;
-    const targetCol = stageMap.has(overId) ? overId : findAppColumn(columns, overId);
-
-    if (!targetCol) {
-      if (prevColumnsRef.current) setColumns(prevColumnsRef.current);
-      prevColumnsRef.current = null;
-      return;
-    }
-
-    const app = Object.values(prevColumnsRef.current || columns).flat().find((a) => a.id === appId);
-    if (!app || app.stage_id === targetCol) {
-      prevColumnsRef.current = null;
-      return;
-    }
-
-    try {
-      const res = await fetch(`/api/v1/applications/${appId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stage_id: targetCol }),
-      });
-      if (!res.ok) throw new Error("Failed to move application");
-
-      const { data: updated } = await res.json();
-      const newStatus: string = (updated as Application)?.status ?? app.status;
-
-      setColumns((prev) => {
-        const next = { ...prev };
-        for (const sid of Object.keys(next)) {
-          next[sid] = next[sid].map((a) =>
-            a.id === appId ? { ...a, stage_id: targetCol, status: newStatus } : a
-          );
-        }
-        return next;
-      });
-
-      const newStage = stageMap.get(targetCol);
-      if (newStage?.terminal_type === "won") toast.success("Application enrolled!");
-      else if (newStage?.terminal_type === "lost") toast.error("Application ended.");
-
-      onRefresh();
-    } catch {
-      if (prevColumnsRef.current) setColumns(prevColumnsRef.current);
-      toast.error("Failed to move application. Please try again.");
-    }
-
+    lastMoveRef.current = null;
+    if (prevColumnsRef.current) setColumns(prevColumnsRef.current);
     prevColumnsRef.current = null;
-  }, [columns, stageMap, onRefresh]);
+  }
 
-  const handleOpenDetail = useCallback((app: Application) => {
-    router.push(`/applications/${app.id}`);
-  }, [router]);
+  const handleDragEnd = useCallback(
+    async (event: DragEndEvent) => {
+      const { active, over } = event;
+      setActiveId(null);
+      lastMoveRef.current = null;
 
-  if (!mounted) {
+      const rollback = () => {
+        if (prevColumnsRef.current) setColumns(prevColumnsRef.current);
+        prevColumnsRef.current = null;
+      };
+
+      if (!over) return rollback();
+
+      const appId = active.id as string;
+      const overId = over.id as string;
+      const targetCol = stageMap.has(overId) ? overId : findAppColumn(columns, overId);
+      if (!targetCol) return rollback();
+
+      const origin = prevColumnsRef.current ?? columns;
+      const app = allCards(origin).find((a) => a.id === appId);
+      const sourceCol = findAppColumn(origin, appId);
+      if (!app || !sourceCol || sourceCol === targetCol) {
+        prevColumnsRef.current = null;
+        return;
+      }
+      // Counts follow the move at once (the refresh below then brings the server's exact numbers).
+      const wasStuck = !isFinishedStage(stageMap.get(sourceCol)) && daysInStage(app.stage_changed_at) >= STUCK_DAYS;
+      setColumns((prev) => {
+        const counts = applyMoveCounts(prev[sourceCol], prev[targetCol], { wasStuck, wasLoaded: true });
+        return { ...prev, [sourceCol]: counts.src, [targetCol]: counts.dst };
+      });
+
+      try {
+        const res = await fetch(`/api/v1/applications/${appId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ stage_id: targetCol }),
+        });
+        if (!res.ok) throw new Error("Failed to move application");
+
+        const { data: updated } = await res.json();
+        const newStatus: string = (updated as Application)?.status ?? app.status;
+
+        const moved: Application = { ...app, stage_id: targetCol, stage_changed_at: new Date().toISOString(), status: newStatus };
+        pinRef.current = { appId, stageId: targetCol, card: moved };
+        setColumns((prev) => {
+          const next = { ...prev };
+          for (const sid of Object.keys(next)) {
+            next[sid] = { ...next[sid], cards: next[sid].cards.map((a) => (a.id === appId ? moved : a)) };
+          }
+          return next;
+        });
+
+        const newStage = stageMap.get(targetCol);
+        if (newStage?.terminal_type === "won") toast.success("Application enrolled!");
+        else if (newStage?.terminal_type === "lost") toast.error("Application ended.");
+
+        onRefresh();
+      } catch {
+        rollback();
+        toast.error("Failed to move application. Please try again.");
+      }
+
+      prevColumnsRef.current = null;
+    },
+    [columns, stageMap, onRefresh],
+  );
+
+  const handleOpenDetail = useCallback(
+    (app: Application) => {
+      router.push(detailHref ? detailHref(app.id) : `/applications/${app.id}`);
+    },
+    [router, detailHref],
+  );
+
+  const renameStage = useCallback(
+    async (stage: ApplicationStage, name: string): Promise<boolean> => {
+      try {
+        const res = await fetch(`/api/v1/application-pipelines/${pipelineId}/stages/${stage.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+        });
+        if (!res.ok) {
+          const json = await res.json().catch(() => ({}));
+          throw new Error(json?.error?.message || "Failed to rename stage");
+        }
+        toast.success("Stage renamed");
+        onRefresh();
+        return true;
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Failed to rename stage");
+        return false;
+      }
+    },
+    [pipelineId, onRefresh],
+  );
+
+  const deleteTotal = deleteTarget ? stageTotals[deleteTarget.id] ?? 0 : 0;
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/v1/application-pipelines/${pipelineId}/stages/${deleteTarget.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(
+          res.status === 409
+            ? `Move the applications out of ${deleteTarget.name} first`
+            : json?.error?.message || "Failed to delete stage",
+        );
+      }
+      toast.success("Stage deleted");
+      setDeleteTarget(null);
+      onRefresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to delete stage");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  if (!mounted) return <div className="h-full" />;
+
+  // The board only renders after mount (client), so reading the media query here is hydration-safe;
+  // it keeps a hard reload on a phone from painting one frame of the desktop board before the
+  // parent's useBelowMd() update lands.
+  if (phone || matchesBelowMd()) {
     return (
-      <div className="flex gap-4 overflow-x-auto pb-4 h-full">
-        {stages.map((stage) => (
-          <div key={stage.id} className="flex-shrink-0 w-72 bg-muted/30 rounded-lg animate-pulse h-full" />
-        ))}
-      </div>
+      <PhoneBoard
+        stages={stages}
+        columns={columns}
+        setColumns={setColumns}
+        loadPage={loadPage}
+        pinRef={pinRef}
+        canManageApplications={canManageApplications}
+        trackTime={(id) => !prefs.noAge.includes(id)}
+        assigneeNames={assigneeNames}
+        onOpenDetail={handleOpenDetail}
+        onAddToStage={onAddToStage}
+        onRefresh={onRefresh}
+      />
     );
   }
 
-  return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={closestCorners}
-      onDragStart={handleDragStart}
-      onDragOver={handleDragOver}
-      onDragEnd={handleDragEnd}
-    >
-      <div className="flex gap-4 overflow-x-auto pb-4 h-full">
-        {stages.map((stage) => (
-          <ApplicationColumn
-            key={stage.id}
-            stage={stage}
-            applications={columns[stage.id] ?? []}
-            canDrag={canManageApplications}
-            onOpenDetail={handleOpenDetail}
-            assigneeNames={assigneeNames}
-          />
-        ))}
-      </div>
+  const visibleStages = stages.filter((s) => !prefs.hidden.includes(s.id));
+  const hiddenStages = stages.filter((s) => prefs.hidden.includes(s.id));
+  const active = visibleStages.filter((s) => !isFinishedStage(s));
+  const finished = visibleStages.filter((s) => isFinishedStage(s));
 
-      <DragOverlay>
-        {activeApp ? (
-          <ApplicationCard
-            application={activeApp}
-            disabled
-            assigneeName={activeApp.assigned_to ? assigneeNames?.[activeApp.assigned_to] : undefined}
-          />
-        ) : null}
-      </DragOverlay>
-    </DndContext>
+  const renderStage = (stage: ApplicationStage) => {
+    const col = columns[stage.id] ?? { cards: [], total: 0, stuck: 0, nextOffset: 0, loading: false };
+    const isFinished = isFinishedStage(stage);
+    if (isStageCollapsed(stage, prefs)) {
+      return (
+        <SlimColumn
+          key={stage.id}
+          stage={stage}
+          count={col.total}
+          onExpand={(s) => updatePrefs((p) => toggleCollapse(s, p))}
+        />
+      );
+    }
+    return (
+      <ApplicationColumn
+        key={stage.id}
+        width={columnWidth}
+        stage={stage}
+        applications={col.cards}
+        total={col.total}
+        stuck={col.stuck}
+        moreCount={columnMoreCount(col)}
+        loadingMore={col.loading}
+        onShowMore={() => loadPage(stage.id)}
+        finished={isFinished}
+        canDrag={canManageApplications}
+        canManage={canManageApplications}
+        isAdmin={isAdmin}
+        trackTime={!prefs.noAge.includes(stage.id)}
+        assigneeNames={assigneeNames}
+        onOpenDetail={handleOpenDetail}
+        onAdd={onAddToStage}
+        onRename={renameStage}
+        onTrackTime={(s, on) => updatePrefs((p) => setTrackTime(p, s.id, on))}
+        onCollapse={(s) => updatePrefs((p) => toggleCollapse(s, p))}
+        onHide={(s) => updatePrefs((p) => setHidden(p, s.id, true))}
+        onEditStages={() => onEditStages()}
+        onDelete={setDeleteTarget}
+      />
+    );
+  };
+
+  return (
+    <>
+      {hiddenStages.length > 0 && (
+        <div data-board-chrome className="mb-2 flex shrink-0 flex-wrap items-center gap-1.5 text-[12px] text-[#6b6f76]">
+          <span>{hiddenStages.length} hidden:</span>
+          {hiddenStages.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              title={`Show ${s.name} again`}
+              onClick={() => updatePrefs((p) => setHidden(p, s.id, false))}
+              className="inline-flex h-6 items-center gap-1.5 rounded-[6px] bg-[#f6f7f9] px-2 font-medium text-[#2b2d2f] hover:bg-[#eceef1]"
+            >
+              <span className="h-[7px] w-[7px] rounded-full" style={{ backgroundColor: s.color }} />
+              {s.name}
+              <XIcon className="h-3 w-3 rotate-45 text-[#9a9ea5]" />
+            </button>
+          ))}
+        </div>
+      )}
+
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCorners}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
+      >
+        <div className="flex h-full items-start gap-2 overflow-x-auto pb-1" data-testid="applications-board">
+          {active.map(renderStage)}
+          {finished.length > 0 && <span className="my-1.5 mx-1.5 w-px shrink-0 self-stretch bg-[#e8e9eb]" />}
+          {finished.map(renderStage)}
+          {isAdmin && (
+            <button
+              type="button"
+              title="Add stage"
+              aria-label="Add stage"
+              onClick={() => onEditStages({ addStage: true })}
+              className="inline-flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-[16px] border border-dashed border-[#e6e7ea] text-[#6b6f76] hover:bg-[#f6f7f9] hover:text-[#101112]"
+            >
+              <PlusIcon className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+
+        <DragOverlay>
+          {activeApp ? (
+            <ApplicationCardOverlay
+              application={activeApp}
+              assigneeNames={assigneeNames}
+              finished={isFinishedStage(stageMap.get(activeStageId ?? activeApp.stage_id))}
+            />
+          ) : null}
+        </DragOverlay>
+      </DndContext>
+
+      <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>Delete {deleteTarget?.name}?</DialogTitle>
+            <DialogDescription>
+              {deleteTotal > 0
+                ? `Move the ${deleteTotal} ${deleteTotal === 1 ? "application" : "applications"} out of ${deleteTarget?.name} first.`
+                : "This stage is empty. Deleting it can't be undone."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)}>
+              {deleteTotal > 0 ? "OK" : "Cancel"}
+            </Button>
+            {deleteTotal === 0 && (
+              <Button variant="destructive" disabled={deleting} onClick={confirmDelete}>
+                {deleting ? "Deleting…" : "Delete stage"}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

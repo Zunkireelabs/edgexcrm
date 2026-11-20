@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Home v2 – EDGEX-87 mockup</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --canvas:#f6f6f5; --surface:#fff; --sunken:#fafaf9; --hover:#f4f4f3; --selected:#efefee;
+  --border:#e8e8e6; --divider:#f0f0ee;
+  --ink:#141414; --text:#3a3a38; --muted:#73736f; --faint:#a3a39e; --ghost:#d6d6d2;
+  --accent:#2272B4; --accent-soft:#eaf2fa;
+  --good:#127a4a; --good-soft:#e9f6ef; --bad:#b42318; --bad-soft:#fdeeec; --warn:#a15c07; --warn-soft:#fdf3e3;
+  --ai:#5b47d6; --ai-soft:#f3f1fd; --ai-line:#d9d3fa; --ai-arc:#7c5cf0;
+  --ai-grad:linear-gradient(135deg,#2272B4 0%,#7c5cf0 100%);
+  --ai-wash:linear-gradient(180deg,#f4f8fe 0%,#fbfbff 45%,#fff 100%);
+  --shadow-float:0 10px 15px -3px rgb(0 0 0 / .1),0 4px 6px -4px rgb(0 0 0 / .1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,system-ui,sans-serif;background:#e4e4e2;color:var(--text);font-size:13px;line-height:1.5;font-feature-settings:"tnum" 1,"cv11" 1;-webkit-font-smoothing:antialiased;padding:1px 0}
+svg.p{width:18px;height:18px;fill:currentColor;flex-shrink:0}
+svg.s{width:14px;height:14px}svg.m{width:16px;height:16px}
+.scene{margin:28px auto;width:1440px;background:var(--canvas);border-radius:14px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.scene-h{background:#141414;color:#fff;padding:10px 18px;font-size:12px}.scene-h b{margin-right:10px;font-weight:600}.scene-h span{color:#a3a3a3}
+.app{display:flex;min-height:900px;position:relative}
+/* sidebar (approved shell v2.1) */
+.side{width:232px;padding:10px;flex-shrink:0;display:flex;flex-direction:column;gap:1px}
+.org{display:flex;align-items:center;justify-content:space-between;height:44px;padding:0 8px;margin-top:-10px}
+.org b{font-size:15px;font-weight:600;color:var(--ink);letter-spacing:-.01em}.org i{font-style:normal;color:var(--accent)}.org svg{color:var(--faint)}
+.srch{display:flex;align-items:center;gap:8px;height:32px;padding:0 8px 0 10px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:13px;margin:2px 0 10px}
+.srch svg{color:var(--faint)}
+.srch kbd{margin-left:auto;font:500 11px Inter;color:var(--faint);border:1px solid var(--border);border-radius:5px;padding:0 5px;height:18px;display:grid;place-items:center;background:var(--sunken)}
+.ng{display:flex;align-items:center;justify-content:space-between;padding:14px 8px 4px;color:var(--muted);font-size:12px;font-weight:500}
+.ng svg{color:var(--ghost)}.ng.shut svg{transform:rotate(-90deg)}
+.ni{display:flex;align-items:center;gap:10px;height:32px;padding:0 8px;border-radius:8px;color:var(--text);font-size:13.5px;font-weight:500;white-space:nowrap}
+.ni svg{color:var(--muted)}.ni.on{background:var(--selected);color:var(--ink)}.ni.on svg{color:var(--ink)}
+.ni .b{margin-left:auto;font-size:11.5px;color:var(--muted)}
+.side .grow{flex:1;min-height:16px}
+.foot{border-top:1px solid var(--border);margin:6px -10px 0;padding:8px 10px 0;display:flex;flex-direction:column;gap:1px}
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
+.hdr{height:44px;display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:0 8px 0 12px}
+.hb{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--ink);font-weight:500;font-size:12.5px;white-space:nowrap;position:relative}
+.hb svg{color:var(--muted)}.hb.icon{width:30px;padding:0;justify-content:center}
+.hb .dot{position:absolute;top:5px;right:6px;width:7px;height:7px;border-radius:50%;background:var(--ink);border:1.5px solid var(--surface)}
+.hb.oread{border-color:var(--ai-line)}.hb.orca svg{color:var(--ai)}
+.hb.me{padding:0 8px 0 3px}
+.av{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;color:#fff;font-size:9.5px;font-weight:600;flex-shrink:0}
+.frame{flex:1;margin:0 8px 8px 0;background:var(--surface);border:1px solid var(--border);border-radius:16px;min-width:0;position:relative;overflow:hidden}
+
+/* ---------- Home ---------- */
+.home{padding:28px 32px 40px;max-width:1120px;margin:0 auto}
+.h1{font-size:26px;font-weight:600;color:var(--ink);letter-spacing:-.02em}
+.lede{color:var(--muted);font-size:14px;margin-top:2px}.lede b{color:var(--ink);font-weight:500}
+.top{display:flex;justify-content:space-between;align-items:flex-end;gap:16px}
+.cols{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:28px;margin-top:22px;align-items:start}
+.label{color:var(--muted);font-size:11px;font-weight:500;letter-spacing:.06em;text-transform:uppercase}
+/* Orca read */
+.oread{border:1px solid var(--ai-line);border-radius:16px;background:var(--ai-wash);padding:16px 18px 12px;margin-top:20px;position:relative}
+.oread .oh{display:flex;align-items:center;gap:8px;color:var(--ink);font-weight:600;font-size:13.5px}
+.oread .oh .spk{width:22px;height:22px;border-radius:7px;background:var(--ai-grad);display:grid;place-items:center;color:#fff}
+.oread .oh .mt{color:var(--muted);font-weight:400;font-size:12.5px}
+.oread .oh .r{margin-left:auto;display:flex;gap:2px;color:var(--faint)}
+.oread .oh .r span{width:26px;height:26px;border-radius:7px;display:grid;place-items:center}
+.oread ol{list-style:none;margin:10px 0 0;display:flex;flex-direction:column;gap:8px}
+.oread li{display:flex;gap:10px;align-items:baseline;font-size:14px;color:var(--text);line-height:1.5}
+.oread li .n{flex-shrink:0;width:18px;height:18px;border-radius:50%;background:var(--surface);border:1px solid var(--ai-line);color:var(--ai);font-size:11px;font-weight:600;display:grid;place-items:center;transform:translateY(2px)}
+.oread li b{color:var(--ink);font-weight:500}
+.oread li .go{color:var(--accent);font-weight:500;white-space:nowrap;margin-left:4px}
+.oread .ask{display:flex;align-items:center;gap:8px;margin-top:12px;padding-top:10px;border-top:1px solid var(--ai-line)}
+.oread .ask .in{flex:1;display:flex;align-items:center;gap:8px;height:34px;border:1px solid var(--border);border-radius:10px;background:var(--surface);padding:0 10px;color:var(--faint);font-size:13px}
+.oread .ask .in svg{color:var(--ai)}
+.oread .ask .q{height:28px;padding:0 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:12.5px;display:inline-flex;align-items:center;white-space:nowrap}
+/* section heads */
+.sh{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.sh h2{font-size:16px;font-weight:600;color:var(--ink);letter-spacing:-.01em}
+.sh .c{font-size:12px;color:var(--muted);background:var(--sunken);border:1px solid var(--border);border-radius:9999px;padding:0 7px;height:20px;display:inline-grid;place-items:center;font-variant-numeric:tabular-nums}
+.sh .r{margin-left:auto;display:flex;gap:6px}
+.seg{display:inline-flex;background:var(--sunken);border:1px solid var(--border);border-radius:10px;padding:2px}
+.seg div{padding:3px 10px;border-radius:8px;color:var(--muted);font-weight:500;font-size:12.5px;white-space:nowrap}
+.seg .on{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.seg div i{font-style:normal;color:var(--faint);margin-left:4px}
+.tier{display:flex;align-items:center;gap:8px;margin:16px 0 2px;padding:0 2px}
+.tier .t{font-size:12px;font-weight:600;color:var(--ink)}
+.tier .d{font-size:12px;color:var(--muted)}
+/* action rows */
+.list{border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--surface)}
+.it{display:grid;grid-template-columns:32px minmax(0,1fr) auto;gap:12px;align-items:center;padding:11px 12px 11px 14px;border-top:1px solid var(--divider);position:relative}
+.it:first-child{border-top:0}
+.it .ic{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;background:var(--sunken);border:1px solid var(--border);color:var(--text)}
+.it .ic.bad{background:var(--bad-soft);border-color:#f6d5d1;color:var(--bad)}
+.it .ic.warn{background:var(--warn-soft);border-color:#f3e0bf;color:var(--warn)}
+.it .ic.new{background:var(--accent-soft);border-color:#cfe1f2;color:var(--accent)}
+.it .tl{display:flex;align-items:center;gap:8px;min-width:0}
+.it .nm{color:var(--ink);font-weight:500;font-size:14px;white-space:nowrap}
+.it .wh{color:var(--muted);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.it .wh b{color:var(--text);font-weight:500}
+.it .wh q{color:var(--text);font-style:italic}
+.it .ac{display:flex;gap:6px;align-items:center}
+.chip{display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 7px;border-radius:6px;font-size:11.5px;font-weight:500;white-space:nowrap;border:1px solid var(--border);background:var(--sunken);color:var(--text)}
+.chip.bad{background:var(--bad-soft);border-color:#f6d5d1;color:var(--bad)}
+.chip.warn{background:var(--warn-soft);border-color:#f3e0bf;color:var(--warn)}
+.chip.good{background:var(--good-soft);border-color:#cde9da;color:var(--good)}
+.chip.new{background:var(--accent-soft);border-color:#cfe1f2;color:var(--accent)}
+.chip.ai{background:var(--ai-soft);border-color:var(--ai-line);color:var(--ai)}
+.btn{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 11px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--ink);font-weight:500;font-size:12.5px;white-space:nowrap}
+.btn svg{color:var(--muted)}
+.btn.pri{background:var(--ink);border-color:var(--ink);color:#fff}.btn.pri svg{color:#fff}
+.btn.ai{border-color:var(--ai-line);color:var(--ai);background:var(--surface)}.btn.ai svg{color:var(--ai)}
+.btn.gh{border-color:transparent;background:transparent;color:var(--muted)}
+.btn.ico{width:30px;padding:0;justify-content:center}
+.more{display:flex;align-items:center;gap:6px;padding:10px 14px;color:var(--accent);font-weight:500;font-size:12.5px;border-top:1px solid var(--divider);background:var(--sunken)}
+/* right column cards */
+.card{border:1px solid var(--border);border-radius:12px;background:var(--surface);padding:14px 14px 10px}
+.card+.card{margin-top:16px}
+.card .ch{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.card .ch h3{font-size:13.5px;font-weight:600;color:var(--ink)}
+.card .ch .r{margin-left:auto;color:var(--accent);font-size:12.5px;font-weight:500}
+.ag{display:grid;grid-template-columns:48px minmax(0,1fr);gap:10px;padding:7px 0;border-top:1px solid var(--divider);align-items:baseline}
+.ag:first-of-type{border-top:0}
+.ag .tm{color:var(--ink);font-weight:500;font-size:12.5px;font-variant-numeric:tabular-nums}
+.ag .tm.no{color:var(--faint);font-weight:400}
+.ag .x{color:var(--text);font-size:13px;min-width:0}.ag .x span{display:block;color:var(--muted);font-size:12px}
+.ag.now .tm{color:var(--accent)}
+.met{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:8px 0;border-top:1px solid var(--divider);align-items:baseline}
+.met:first-of-type{border-top:0}
+.met .k{color:var(--text);font-size:13px}
+.met .v{color:var(--ink);font-weight:600;font-size:15px;font-variant-numeric:tabular-nums;text-align:right}
+.met .u{grid-column:1/-1;color:var(--muted);font-size:12px}
+.met .u.bad{color:var(--bad)}.met .u.good{color:var(--good)}.met .u.warn{color:var(--warn)}
+.pp{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:8px;align-items:center;padding:7px 0;border-top:1px solid var(--divider)}
+.pp:first-of-type{border-top:0}
+.pp .x{font-size:13px;color:var(--ink);font-weight:500;min-width:0}.pp .x span{display:block;font-weight:400;color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pp .v{font-size:12.5px;font-variant-numeric:tabular-nums;color:var(--text);text-align:right}
+.fl{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;vertical-align:1px}
+/* sheet */
+.scrim{position:absolute;inset:0;background:rgba(20,20,20,.32);z-index:5}
+.sheet{position:absolute;top:0;right:0;bottom:0;width:560px;background:var(--surface);border-left:1px solid var(--border);box-shadow:var(--shadow-float);z-index:6;display:flex;flex-direction:column}
+.sheet .sh-h{padding:18px 22px 14px;border-bottom:1px solid var(--divider)}
+.sheet .sh-h .t{display:flex;align-items:center;gap:8px;font-size:17px;font-weight:600;color:var(--ink)}
+.sheet .sh-h .t .x{margin-left:auto;color:var(--muted)}
+.sheet .ctx{margin-top:8px;display:flex;flex-wrap:wrap;gap:6px}
+.sheet .bd{padding:18px 22px;flex:1;display:flex;flex-direction:column;gap:14px}
+.draft{border:1px solid var(--ai-line);border-radius:12px;background:var(--ai-wash);padding:14px 16px}
+.draft .dh{display:flex;align-items:center;gap:8px;color:var(--ai);font-size:12.5px;font-weight:500;margin-bottom:8px}
+.draft .dh .r{margin-left:auto;color:var(--muted);font-weight:400}
+.draft p{font-size:14px;color:var(--ink);line-height:1.6}
+.why{font-size:12.5px;color:var(--muted);line-height:1.55}.why b{color:var(--text);font-weight:500}
+.chk{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text)}
+.chk .bx{width:16px;height:16px;border-radius:4px;background:var(--ink);display:grid;place-items:center;color:#fff}
+.sheet .ft{padding:14px 22px;border-top:1px solid var(--divider);display:flex;gap:8px;align-items:center}
+.sheet .ft .n{font-size:12px;color:var(--muted);margin-right:auto}
+/* inline call log */
+.log{background:var(--sunken);border-top:1px solid var(--divider);padding:12px 14px 14px 58px;display:flex;flex-direction:column;gap:10px}
+.log .q{font-size:12.5px;color:var(--muted);font-weight:500}
+.log .opts{display:flex;gap:6px;flex-wrap:wrap}
+.opt{height:28px;padding:0 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);font-size:12.5px;color:var(--text);display:inline-flex;align-items:center;gap:6px;font-weight:500}
+.opt.on{border-color:var(--ink);color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.batch{display:flex;align-items:center;gap:12px;margin:4px 0 2px;padding:10px 12px 10px 14px;border:1px solid var(--ai-line);border-radius:12px;background:var(--ai-wash)}
+.batch .bt{flex:1;font-size:13px;color:var(--text)}.batch .bt b{color:var(--ink);font-weight:500}.batch .bt span{display:block;color:var(--muted);font-size:12px}
+.batch .spk{width:26px;height:26px;border-radius:8px;background:var(--ai-grad);display:grid;place-items:center;color:#fff;flex-shrink:0}
+.sec{display:flex;flex-direction:column;gap:6px}.sec .label{margin-bottom:2px}
+.kv2{display:grid;grid-template-columns:120px 1fr;gap:4px 12px;font-size:13px}.kv2 span:nth-child(odd){color:var(--muted)}.kv2 span:nth-child(even){color:var(--ink)}
+.gap{display:flex;flex-wrap:wrap;gap:6px}
+.note{border:1px solid var(--border);border-radius:10px;background:var(--surface);padding:10px 12px;font-size:13px;color:var(--ink)}
+.fill{border:1px solid var(--ai-line);border-radius:10px;background:var(--surface);padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+.fill .fh{display:flex;align-items:center;gap:6px;color:var(--ai);font-size:12.5px;font-weight:500}.fill .fh .r{margin-left:auto;color:var(--muted);font-weight:400}
+.fr{display:grid;grid-template-columns:18px 130px 1fr;gap:8px;align-items:center;font-size:13px}.fr span:nth-child(2){color:var(--muted)}.fr span:nth-child(3){color:var(--ink);font-weight:500}
+.cb{width:16px;height:16px;border-radius:4px;background:var(--ink);display:grid;place-items:center;color:#fff}.cb.off{background:var(--surface);border:1px solid var(--ghost)}
+.bi{border:1px solid var(--border);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.bi .bh{display:flex;align-items:center;gap:8px}.bi .bh b{color:var(--ink);font-weight:500;font-size:13.5px}.bi .bh .r{margin-left:auto;display:flex;gap:6px;align-items:center}
+.bi p{font-size:13px;color:var(--text);line-height:1.55}
+.opt-banner{margin:0 0 12px;padding:8px 12px;border-radius:10px;border:1px dashed #e8590c;color:#b8470a;font-size:12.5px;background:#fff7f2}
+/* pins + legend */
+.pin{position:absolute;width:20px;height:20px;border-radius:50%;background:#e8590c;color:#fff;font-size:11px;font-weight:700;display:grid;place-items:center;z-index:12;box-shadow:0 0 0 2px #fff}
+.legend{padding:18px 22px 20px;display:grid;grid-template-columns:repeat(2,1fr);gap:10px 32px;border-top:1px solid var(--border);background:var(--surface);font-size:12.5px;color:var(--text);line-height:1.5}
+.legend div{display:flex;gap:10px}.legend div>b:first-child{flex-shrink:0;display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;background:#e8590c;color:#fff;font-size:11px}
+.legend em{font-style:normal;color:var(--muted)}
+/* phone */
+.phone{width:390px;height:820px;border:10px solid #141414;border-radius:36px;overflow:hidden;position:relative;background:var(--canvas)}
+.ph-hdr{height:48px;display:flex;align-items:center;gap:8px;padding:0 12px}
+.ph-frame{margin:0 6px;background:var(--surface);border:1px solid var(--border);border-radius:16px;height:740px;overflow:hidden;padding:18px 14px}
+/* ratings table */
+.rt{width:100%;border-collapse:collapse;background:var(--surface);font-size:13px}
+.rt th{text-align:left;color:var(--muted);font-weight:500;font-size:12px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--sunken)}
+.rt td{padding:10px 16px;border-bottom:1px solid var(--divider);vertical-align:top;color:var(--text)}
+.rt td:first-child{color:var(--ink);font-weight:500;width:300px}
+.rt td.s{font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums;width:60px;text-align:center}
+</style></head><body>
+<svg width="0" height="0" style="position:absolute"><symbol id="P-house" viewBox="0 0 256 256"><path d="M219.31,108.68l-80-80a16,16,0,0,0-22.62,0l-80,80A15.87,15.87,0,0,0,32,120v96a8,8,0,0,0,8,8h64a8,8,0,0,0,8-8V160h32v56a8,8,0,0,0,8,8h64a8,8,0,0,0,8-8V120A15.87,15.87,0,0,0,219.31,108.68ZM208,208H160V152a8,8,0,0,0-8-8H104a8,8,0,0,0-8,8v56H48V120l80-80,80,80Z"></path></symbol>
+<symbol id="P-tray" viewBox="0 0 256 256"><path d="M208,32H48A16,16,0,0,0,32,48V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V48A16,16,0,0,0,208,32Zm0,16V152h-28.7A15.86,15.86,0,0,0,168,156.69L148.69,176H107.31L88,156.69A15.86,15.86,0,0,0,76.69,152H48V48Zm0,160H48V168H76.69L96,187.31A15.86,15.86,0,0,0,107.31,192h41.38A15.86,15.86,0,0,0,160,187.31L179.31,168H208v40Z"></path></symbol>
+<symbol id="P-pulse" viewBox="0 0 256 256"><path d="M240,128a8,8,0,0,1-8,8H204.94l-37.78,75.58A8,8,0,0,1,160,216h-.4a8,8,0,0,1-7.08-5.14L95.35,60.76,63.28,131.31A8,8,0,0,1,56,136H24a8,8,0,0,1,0-16H50.85L88.72,36.69a8,8,0,0,1,14.76.46l57.51,151,31.85-63.71A8,8,0,0,1,200,120h32A8,8,0,0,1,240,128Z"></path></symbol>
+<symbol id="P-squares-four" viewBox="0 0 256 256"><path d="M104,40H56A16,16,0,0,0,40,56v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V56A16,16,0,0,0,104,40Zm0,64H56V56h48v48Zm96-64H152a16,16,0,0,0-16,16v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V56A16,16,0,0,0,200,40Zm0,64H152V56h48v48Zm-96,32H56a16,16,0,0,0-16,16v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V152A16,16,0,0,0,104,136Zm0,64H56V152h48v48Zm96-64H152a16,16,0,0,0-16,16v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V152A16,16,0,0,0,200,136Zm0,64H152V152h48v48Z"></path></symbol>
+<symbol id="P-book-open-text" viewBox="0 0 256 256"><path d="M232,48H160a40,40,0,0,0-32,16A40,40,0,0,0,96,48H24a8,8,0,0,0-8,8V200a8,8,0,0,0,8,8H96a24,24,0,0,1,24,24,8,8,0,0,0,16,0,24,24,0,0,1,24-24h72a8,8,0,0,0,8-8V56A8,8,0,0,0,232,48ZM96,192H32V64H96a24,24,0,0,1,24,24V200A39.81,39.81,0,0,0,96,192Zm128,0H160a39.81,39.81,0,0,0-24,8V88a24,24,0,0,1,24-24h64ZM160,88h40a8,8,0,0,1,0,16H160a8,8,0,0,1,0-16Zm48,40a8,8,0,0,1-8,8H160a8,8,0,0,1,0-16h40A8,8,0,0,1,208,128Zm0,32a8,8,0,0,1-8,8H160a8,8,0,0,1,0-16h40A8,8,0,0,1,208,160Z"></path></symbol>
+<symbol id="P-users" viewBox="0 0 256 256"><path d="M117.25,157.92a60,60,0,1,0-66.5,0A95.83,95.83,0,0,0,3.53,195.63a8,8,0,1,0,13.4,8.74,80,80,0,0,1,134.14,0,8,8,0,0,0,13.4-8.74A95.83,95.83,0,0,0,117.25,157.92ZM40,108a44,44,0,1,1,44,44A44.05,44.05,0,0,1,40,108Zm210.14,98.7a8,8,0,0,1-11.07-2.33A79.83,79.83,0,0,0,172,168a8,8,0,0,1,0-16,44,44,0,1,0-16.34-84.87,8,8,0,1,1-5.94-14.85,60,60,0,0,1,55.53,105.64,95.83,95.83,0,0,1,47.22,37.71A8,8,0,0,1,250.14,206.7Z"></path></symbol>
+<symbol id="P-kanban" viewBox="0 0 256 256"><path d="M216,48H40a8,8,0,0,0-8,8V208a16,16,0,0,0,16,16H88a16,16,0,0,0,16-16V160h48v16a16,16,0,0,0,16,16h40a16,16,0,0,0,16-16V56A8,8,0,0,0,216,48ZM88,208H48V128H88Zm0-96H48V64H88Zm64,32H104V64h48Zm56,32H168V128h40Zm0-64H168V64h40Z"></path></symbol>
+<symbol id="P-funnel" viewBox="0 0 256 256"><path d="M230.6,49.53A15.81,15.81,0,0,0,216,40H40A16,16,0,0,0,28.19,66.76l.08.09L96,139.17V216a16,16,0,0,0,24.87,13.32l32-21.34A16,16,0,0,0,160,194.66V139.17l67.74-72.32.08-.09A15.8,15.8,0,0,0,230.6,49.53ZM40,56h0Zm106.18,74.58A8,8,0,0,0,144,136v58.66L112,216V136a8,8,0,0,0-2.16-5.47L40,56H216Z"></path></symbol>
+<symbol id="P-address-book" viewBox="0 0 256 256"><path d="M83.19,174.4a8,8,0,0,0,11.21-1.6,52,52,0,0,1,83.2,0,8,8,0,1,0,12.8-9.6A67.88,67.88,0,0,0,163,141.51a40,40,0,1,0-53.94,0A67.88,67.88,0,0,0,81.6,163.2,8,8,0,0,0,83.19,174.4ZM112,112a24,24,0,1,1,24,24A24,24,0,0,1,112,112Zm96-88H64A16,16,0,0,0,48,40V64H32a8,8,0,0,0,0,16H48v40H32a8,8,0,0,0,0,16H48v40H32a8,8,0,0,0,0,16H48v24a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V40A16,16,0,0,0,208,24Zm0,192H64V40H208Z"></path></symbol>
+<symbol id="P-graduation-cap" viewBox="0 0 256 256"><path d="M251.76,88.94l-120-64a8,8,0,0,0-7.52,0l-120,64a8,8,0,0,0,0,14.12L32,117.87v48.42a15.91,15.91,0,0,0,4.06,10.65C49.16,191.53,78.51,216,128,216a130,130,0,0,0,48-8.76V240a8,8,0,0,0,16,0V199.51a115.63,115.63,0,0,0,27.94-22.57A15.91,15.91,0,0,0,224,166.29V117.87l27.76-14.81a8,8,0,0,0,0-14.12ZM128,200c-43.27,0-68.72-21.14-80-33.71V126.4l76.24,40.66a8,8,0,0,0,7.52,0L176,143.47v46.34C163.4,195.69,147.52,200,128,200Zm80-33.75a97.83,97.83,0,0,1-16,14.25V134.93l16-8.53ZM188,118.94l-.22-.13-56-29.87a8,8,0,0,0-7.52,14.12L171,128l-43,22.93L25,96,128,41.07,231,96Z"></path></symbol>
+<symbol id="P-chalkboard-teacher" viewBox="0 0 256 256"><path d="M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H53.39a8,8,0,0,0,7.23-4.57,48,48,0,0,1,86.76,0,8,8,0,0,0,7.23,4.57H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40ZM80,144a24,24,0,1,1,24,24A24,24,0,0,1,80,144Zm136,56H159.43a64.39,64.39,0,0,0-28.83-26.16,40,40,0,1,0-53.2,0A64.39,64.39,0,0,0,48.57,200H40V56H216ZM56,96V80a8,8,0,0,1,8-8H192a8,8,0,0,1,8,8v96a8,8,0,0,1-8,8H176a8,8,0,0,1,0-16h8V88H72v8a8,8,0,0,1-16,0Z"></path></symbol>
+<symbol id="P-user-check" viewBox="0 0 256 256"><path d="M144,157.68a68,68,0,1,0-71.9,0c-20.65,6.76-39.23,19.39-54.17,37.17a8,8,0,0,0,12.25,10.3C50.25,181.19,77.91,168,108,168s57.75,13.19,77.87,37.15a8,8,0,0,0,12.25-10.3C183.18,177.07,164.6,164.44,144,157.68ZM56,100a52,52,0,1,1,52,52A52.06,52.06,0,0,1,56,100Zm197.66,33.66-32,32a8,8,0,0,1-11.32,0l-16-16a8,8,0,0,1,11.32-11.32L216,148.69l26.34-26.35a8,8,0,0,1,11.32,11.32Z"></path></symbol>
+<symbol id="P-clipboard-text" viewBox="0 0 256 256"><path d="M168,152a8,8,0,0,1-8,8H96a8,8,0,0,1,0-16h64A8,8,0,0,1,168,152Zm-8-40H96a8,8,0,0,0,0,16h64a8,8,0,0,0,0-16Zm56-64V216a16,16,0,0,1-16,16H56a16,16,0,0,1-16-16V48A16,16,0,0,1,56,32H92.26a47.92,47.92,0,0,1,71.48,0H200A16,16,0,0,1,216,48ZM96,64h64a32,32,0,0,0-64,0ZM200,48H173.25A47.93,47.93,0,0,1,176,64v8a8,8,0,0,1-8,8H88a8,8,0,0,1-8-8V64a47.93,47.93,0,0,1,2.75-16H56V216H200Z"></path></symbol>
+<symbol id="P-megaphone" viewBox="0 0 256 256"><path d="M248,120a48.05,48.05,0,0,0-48-48H160.2c-2.91-.17-53.62-3.74-101.91-44.24A16,16,0,0,0,32,40V200a16,16,0,0,0,26.29,12.25c37.77-31.68,77-40.76,93.71-43.3v31.72A16,16,0,0,0,159.12,214l11,7.33A16,16,0,0,0,194.5,212l11.77-44.36A48.07,48.07,0,0,0,248,120ZM48,199.93V40h0c42.81,35.91,86.63,45,104,47.24v65.48C134.65,155,90.84,164.07,48,199.93Zm131,8,0,.11-11-7.33V168h21.6ZM200,152H168V88h32a32,32,0,1,1,0,64Z"></path></symbol>
+<symbol id="P-chat-text" viewBox="0 0 256 256"><path d="M216,48H40A16,16,0,0,0,24,64V224a15.85,15.85,0,0,0,9.24,14.5A16.13,16.13,0,0,0,40,240a15.89,15.89,0,0,0,10.25-3.78l.09-.07L83,208H216a16,16,0,0,0,16-16V64A16,16,0,0,0,216,48ZM40,224h0ZM216,192H80a8,8,0,0,0-5.23,1.95L40,224V64H216ZM88,112a8,8,0,0,1,8-8h64a8,8,0,0,1,0,16H96A8,8,0,0,1,88,112Zm0,32a8,8,0,0,1,8-8h64a8,8,0,1,1,0,16H96A8,8,0,0,1,88,144Z"></path></symbol>
+<symbol id="P-envelope-simple" viewBox="0 0 256 256"><path d="M224,48H32a8,8,0,0,0-8,8V192a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A8,8,0,0,0,224,48ZM203.43,64,128,133.15,52.57,64ZM216,192H40V74.19l82.59,75.71a8,8,0,0,0,10.82,0L216,74.19V192Z"></path></symbol>
+<symbol id="P-paper-plane-tilt" viewBox="0 0 256 256"><path d="M227.32,28.68a16,16,0,0,0-15.66-4.08l-.15,0L19.57,82.84a16,16,0,0,0-2.49,29.8L102,154l41.3,84.87A15.86,15.86,0,0,0,157.74,248q.69,0,1.38-.06a15.88,15.88,0,0,0,14-11.51l58.2-191.94c0-.05,0-.1,0-.15A16,16,0,0,0,227.32,28.68ZM157.83,231.85l-.05.14,0-.07-40.06-82.3,48-48a8,8,0,0,0-11.31-11.31l-48,48L24.08,98.25l-.07,0,.14,0L216,40Z"></path></symbol>
+<symbol id="P-tree-structure" viewBox="0 0 256 256"><path d="M160,112h48a16,16,0,0,0,16-16V48a16,16,0,0,0-16-16H160a16,16,0,0,0-16,16V64H128a24,24,0,0,0-24,24v32H72v-8A16,16,0,0,0,56,96H24A16,16,0,0,0,8,112v32a16,16,0,0,0,16,16H56a16,16,0,0,0,16-16v-8h32v32a24,24,0,0,0,24,24h16v16a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V160a16,16,0,0,0-16-16H160a16,16,0,0,0-16,16v16H128a8,8,0,0,1-8-8V88a8,8,0,0,1,8-8h16V96A16,16,0,0,0,160,112ZM56,144H24V112H56v32Zm104,16h48v48H160Zm0-112h48V96H160Z"></path></symbol>
+<symbol id="P-calendar-dots" viewBox="0 0 256 256"><path d="M208,32H184V24a8,8,0,0,0-16,0v8H88V24a8,8,0,0,0-16,0v8H48A16,16,0,0,0,32,48V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V48A16,16,0,0,0,208,32ZM72,48v8a8,8,0,0,0,16,0V48h80v8a8,8,0,0,0,16,0V48h24V80H48V48ZM208,208H48V96H208V208Zm-68-76a12,12,0,1,1-12-12A12,12,0,0,1,140,132Zm44,0a12,12,0,1,1-12-12A12,12,0,0,1,184,132ZM96,172a12,12,0,1,1-12-12A12,12,0,0,1,96,172Zm44,0a12,12,0,1,1-12-12A12,12,0,0,1,140,172Zm44,0a12,12,0,1,1-12-12A12,12,0,0,1,184,172Z"></path></symbol>
+<symbol id="P-calendar-check" viewBox="0 0 256 256"><path d="M208,32H184V24a8,8,0,0,0-16,0v8H88V24a8,8,0,0,0-16,0v8H48A16,16,0,0,0,32,48V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V48A16,16,0,0,0,208,32ZM72,48v8a8,8,0,0,0,16,0V48h80v8a8,8,0,0,0,16,0V48h24V80H48V48ZM208,208H48V96H208V208Zm-38.34-85.66a8,8,0,0,1,0,11.32l-48,48a8,8,0,0,1-11.32,0l-24-24a8,8,0,0,1,11.32-11.32L116,164.69l42.34-42.35A8,8,0,0,1,169.66,122.34Z"></path></symbol>
+<symbol id="P-archive" viewBox="0 0 256 256"><path d="M224,48H32A16,16,0,0,0,16,64V88a16,16,0,0,0,16,16v88a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V104a16,16,0,0,0,16-16V64A16,16,0,0,0,224,48ZM208,192H48V104H208ZM224,88H32V64H224V88ZM96,136a8,8,0,0,1,8-8h48a8,8,0,0,1,0,16H104A8,8,0,0,1,96,136Z"></path></symbol>
+<symbol id="P-gear" viewBox="0 0 256 256"><path d="M128,80a48,48,0,1,0,48,48A48.05,48.05,0,0,0,128,80Zm0,80a32,32,0,1,1,32-32A32,32,0,0,1,128,160Zm88-29.84q.06-2.16,0-4.32l14.92-18.64a8,8,0,0,0,1.48-7.06,107.21,107.21,0,0,0-10.88-26.25,8,8,0,0,0-6-3.93l-23.72-2.64q-1.48-1.56-3-3L186,40.54a8,8,0,0,0-3.94-6,107.71,107.71,0,0,0-26.25-10.87,8,8,0,0,0-7.06,1.49L130.16,40Q128,40,125.84,40L107.2,25.11a8,8,0,0,0-7.06-1.48A107.6,107.6,0,0,0,73.89,34.51a8,8,0,0,0-3.93,6L67.32,64.27q-1.56,1.49-3,3L40.54,70a8,8,0,0,0-6,3.94,107.71,107.71,0,0,0-10.87,26.25,8,8,0,0,0,1.49,7.06L40,125.84Q40,128,40,130.16L25.11,148.8a8,8,0,0,0-1.48,7.06,107.21,107.21,0,0,0,10.88,26.25,8,8,0,0,0,6,3.93l23.72,2.64q1.49,1.56,3,3L70,215.46a8,8,0,0,0,3.94,6,107.71,107.71,0,0,0,26.25,10.87,8,8,0,0,0,7.06-1.49L125.84,216q2.16.06,4.32,0l18.64,14.92a8,8,0,0,0,7.06,1.48,107.21,107.21,0,0,0,26.25-10.88,8,8,0,0,0,3.93-6l2.64-23.72q1.56-1.48,3-3L215.46,186a8,8,0,0,0,6-3.94,107.71,107.71,0,0,0,10.87-26.25,8,8,0,0,0-1.49-7.06Zm-16.1-6.5a73.93,73.93,0,0,1,0,8.68,8,8,0,0,0,1.74,5.48l14.19,17.73a91.57,91.57,0,0,1-6.23,15L187,173.11a8,8,0,0,0-5.1,2.64,74.11,74.11,0,0,1-6.14,6.14,8,8,0,0,0-2.64,5.1l-2.51,22.58a91.32,91.32,0,0,1-15,6.23l-17.74-14.19a8,8,0,0,0-5-1.75h-.48a73.93,73.93,0,0,1-8.68,0,8,8,0,0,0-5.48,1.74L100.45,215.8a91.57,91.57,0,0,1-15-6.23L82.89,187a8,8,0,0,0-2.64-5.1,74.11,74.11,0,0,1-6.14-6.14,8,8,0,0,0-5.1-2.64L46.43,170.6a91.32,91.32,0,0,1-6.23-15l14.19-17.74a8,8,0,0,0,1.74-5.48,73.93,73.93,0,0,1,0-8.68,8,8,0,0,0-1.74-5.48L40.2,100.45a91.57,91.57,0,0,1,6.23-15L69,82.89a8,8,0,0,0,5.1-2.64,74.11,74.11,0,0,1,6.14-6.14A8,8,0,0,0,82.89,69L85.4,46.43a91.32,91.32,0,0,1,15-6.23l17.74,14.19a8,8,0,0,0,5.48,1.74,73.93,73.93,0,0,1,8.68,0,8,8,0,0,0,5.48-1.74L155.55,40.2a91.57,91.57,0,0,1,15,6.23L173.11,69a8,8,0,0,0,2.64,5.1,74.11,74.11,0,0,1,6.14,6.14,8,8,0,0,0,5.1,2.64l22.58,2.51a91.32,91.32,0,0,1,6.23,15l-14.19,17.74A8,8,0,0,0,199.87,123.66Z"></path></symbol>
+<symbol id="P-magnifying-glass" viewBox="0 0 256 256"><path d="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z"></path></symbol>
+<symbol id="P-bell" viewBox="0 0 256 256"><path d="M221.8,175.94C216.25,166.38,208,139.33,208,104a80,80,0,1,0-160,0c0,35.34-8.26,62.38-13.81,71.94A16,16,0,0,0,48,200H88.81a40,40,0,0,0,78.38,0H208a16,16,0,0,0,13.8-24.06ZM128,216a24,24,0,0,1-22.62-16h45.24A24,24,0,0,1,128,216ZM48,184c7.7-13.24,16-43.92,16-80a64,64,0,1,1,128,0c0,36.05,8.28,66.73,16,80Z"></path></symbol>
+<symbol id="P-sparkle" viewBox="0 0 256 256"><path d="M197.58,129.06,146,110l-19-51.62a15.92,15.92,0,0,0-29.88,0L78,110l-51.62,19a15.92,15.92,0,0,0,0,29.88L78,178l19,51.62a15.92,15.92,0,0,0,29.88,0L146,178l51.62-19a15.92,15.92,0,0,0,0-29.88ZM137,164.22a8,8,0,0,0-4.74,4.74L112,223.85,91.78,169A8,8,0,0,0,87,164.22L32.15,144,87,123.78A8,8,0,0,0,91.78,119L112,64.15,132.22,119a8,8,0,0,0,4.74,4.74L191.85,144ZM144,40a8,8,0,0,1,8-8h16V16a8,8,0,0,1,16,0V32h16a8,8,0,0,1,0,16H184V64a8,8,0,0,1-16,0V48H152A8,8,0,0,1,144,40ZM248,88a8,8,0,0,1-8,8h-8v8a8,8,0,0,1-16,0V96h-8a8,8,0,0,1,0-16h8V72a8,8,0,0,1,16,0v8h8A8,8,0,0,1,248,88Z"></path></symbol>
+<symbol id="P-sparkle-fill" viewBox="0 0 256 256"><path d="M208,144a15.78,15.78,0,0,1-10.42,14.94L146,178l-19,51.62a15.92,15.92,0,0,1-29.88,0L78,178l-51.62-19a15.92,15.92,0,0,1,0-29.88L78,110l19-51.62a15.92,15.92,0,0,1,29.88,0L146,110l51.62,19A15.78,15.78,0,0,1,208,144ZM152,48h16V64a8,8,0,0,0,16,0V48h16a8,8,0,0,0,0-16H184V16a8,8,0,0,0-16,0V32H152a8,8,0,0,0,0,16Zm88,32h-8V72a8,8,0,0,0-16,0v8h-8a8,8,0,0,0,0,16h8v8a8,8,0,0,0,16,0V96h8a8,8,0,0,0,0-16Z"></path></symbol>
+<symbol id="P-caret-down" viewBox="0 0 256 256"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"></path></symbol>
+<symbol id="P-caret-right" viewBox="0 0 256 256"><path d="M181.66,133.66l-80,80a8,8,0,0,1-11.32-11.32L164.69,128,90.34,53.66a8,8,0,0,1,11.32-11.32l80,80A8,8,0,0,1,181.66,133.66Z"></path></symbol>
+<symbol id="P-sidebar-simple" viewBox="0 0 256 256"><path d="M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40ZM40,56H80V200H40ZM216,200H96V56H216V200Z"></path></symbol>
+<symbol id="P-building-office" viewBox="0 0 256 256"><path d="M248,208H232V96a8,8,0,0,0,0-16H184V48a8,8,0,0,0,0-16H40a8,8,0,0,0,0,16V208H24a8,8,0,0,0,0,16H248a8,8,0,0,0,0-16ZM216,96V208H184V96ZM56,48H168V208H144V160a8,8,0,0,0-8-8H88a8,8,0,0,0-8,8v48H56Zm72,160H96V168h32ZM72,80a8,8,0,0,1,8-8H96a8,8,0,0,1,0,16H80A8,8,0,0,1,72,80Zm48,0a8,8,0,0,1,8-8h16a8,8,0,0,1,0,16H128A8,8,0,0,1,120,80ZM72,120a8,8,0,0,1,8-8H96a8,8,0,0,1,0,16H80A8,8,0,0,1,72,120Zm48,0a8,8,0,0,1,8-8h16a8,8,0,0,1,0,16H128A8,8,0,0,1,120,120Z"></path></symbol>
+<symbol id="P-phone" viewBox="0 0 256 256"><path d="M222.37,158.46l-47.11-21.11-.13-.06a16,16,0,0,0-15.17,1.4,8.12,8.12,0,0,0-.75.56L134.87,160c-15.42-7.49-31.34-23.29-38.83-38.51l20.78-24.71c.2-.25.39-.5.57-.77a16,16,0,0,0,1.32-15.06l0-.12L97.54,33.64a16,16,0,0,0-16.62-9.52A56.26,56.26,0,0,0,32,80c0,79.4,64.6,144,144,144a56.26,56.26,0,0,0,55.88-48.92A16,16,0,0,0,222.37,158.46ZM176,208A128.14,128.14,0,0,1,48,80,40.2,40.2,0,0,1,82.87,40a.61.61,0,0,0,0,.12l21,47L83.2,111.86a6.13,6.13,0,0,0-.57.77,16,16,0,0,0-1,15.7c9.06,18.53,27.73,37.06,46.46,46.11a16,16,0,0,0,15.75-1.14,8.44,8.44,0,0,0,.74-.56L168.89,152l47,21.05h0s.08,0,.11,0A40.21,40.21,0,0,1,176,208Z"></path></symbol>
+<symbol id="P-phone-incoming" viewBox="0 0 256 256"><path d="M144,104V64a8,8,0,0,1,16,0V84.69l34.34-34.35a8,8,0,0,1,11.32,11.32L171.32,96H192a8,8,0,0,1,0,16H152A8,8,0,0,1,144,104Zm79.88,79.08A56.26,56.26,0,0,1,168,232C88.6,232,24,167.4,24,88A56.24,56.24,0,0,1,72.92,32.13a16,16,0,0,1,16.62,9.51l21.12,47.15,0,.12A16,16,0,0,1,109.39,104c-.18.27-.37.52-.57.77L88,129.45c7.49,15.22,23.41,31,38.83,38.51l24.34-20.71a8.12,8.12,0,0,1,.75-.56,16,16,0,0,1,15.17-1.4l.13.06,47.11,21.11A16,16,0,0,1,223.88,183.08Zm-15.88-2s-.07,0-.11,0h0l-47-21.05-24.35,20.71a6.84,6.84,0,0,1-.74.56,16,16,0,0,1-15.75,1.14c-18.73-9.05-37.4-27.58-46.46-46.11a16,16,0,0,1,1-15.7,6.13,6.13,0,0,1,.57-.77L96,95.15l-21-47a.61.61,0,0,1,0-.12A40.2,40.2,0,0,0,40,88,128.14,128.14,0,0,0,168,216,40.21,40.21,0,0,0,208,181.07Z"></path></symbol>
+<symbol id="P-phone-x" viewBox="0 0 256 256"><path d="M146.34,98.34,164.69,80,146.34,61.66a8,8,0,0,1,11.32-11.32L176,68.69l18.34-18.35a8,8,0,0,1,11.32,11.32L187.32,80l18.34,18.34a8,8,0,0,1-11.32,11.32L176,91.31l-18.34,18.35a8,8,0,0,1-11.32-11.32Zm77.54,84.74A56.26,56.26,0,0,1,168,232C88.6,232,24,167.4,24,88A56.26,56.26,0,0,1,72.92,32.12a16,16,0,0,1,16.62,9.52l21.12,47.15,0,.12A16,16,0,0,1,109.39,104c-.18.27-.37.52-.57.77L88,129.45c7.49,15.22,23.41,31,38.83,38.51l24.34-20.71a8.12,8.12,0,0,1,.75-.56,16,16,0,0,1,15.17-1.4l.13.06,47.11,21.11A16,16,0,0,1,223.88,183.08Zm-15.88-2s-.07,0-.11,0h0l-47-21.05-24.35,20.71a8.44,8.44,0,0,1-.74.56,16,16,0,0,1-15.75,1.14c-18.73-9.05-37.4-27.58-46.46-46.11a16,16,0,0,1,1-15.7,6.13,6.13,0,0,1,.57-.77L96,95.15l-21-47a.61.61,0,0,1,0-.12A40.2,40.2,0,0,0,40,88,128.14,128.14,0,0,0,168,216,40.21,40.21,0,0,0,208,181.07Z"></path></symbol>
+<symbol id="P-whatsapp-logo" viewBox="0 0 256 256"><path d="M187.58,144.84l-32-16a8,8,0,0,0-8,.5l-14.69,9.8a40.55,40.55,0,0,1-16-16l9.8-14.69a8,8,0,0,0,.5-8l-16-32A8,8,0,0,0,104,64a40,40,0,0,0-40,40,88.1,88.1,0,0,0,88,88,40,40,0,0,0,40-40A8,8,0,0,0,187.58,144.84ZM152,176a72.08,72.08,0,0,1-72-72A24,24,0,0,1,99.29,80.46l11.48,23L101,118a8,8,0,0,0-.73,7.51,56.47,56.47,0,0,0,30.15,30.15A8,8,0,0,0,138,155l14.61-9.74,23,11.48A24,24,0,0,1,152,176ZM128,24A104,104,0,0,0,36.18,176.88L24.83,210.93a16,16,0,0,0,20.24,20.24l34.05-11.35A104,104,0,1,0,128,24Zm0,192a87.87,87.87,0,0,1-44.06-11.81,8,8,0,0,0-6.54-.67L40,216,52.47,178.6a8,8,0,0,0-.66-6.54A88,88,0,1,1,128,216Z"></path></symbol>
+<symbol id="P-chat-circle-text" viewBox="0 0 256 256"><path d="M168,112a8,8,0,0,1-8,8H96a8,8,0,0,1,0-16h64A8,8,0,0,1,168,112Zm-8,24H96a8,8,0,0,0,0,16h64a8,8,0,0,0,0-16Zm72-8A104,104,0,0,1,79.12,219.82L45.07,231.17a16,16,0,0,1-20.24-20.24l11.35-34.05A104,104,0,1,1,232,128Zm-16,0A88,88,0,1,0,51.81,172.06a8,8,0,0,1,.66,6.54L40,216,77.4,203.53a7.85,7.85,0,0,1,2.53-.42,8,8,0,0,1,4,1.08A88,88,0,0,0,216,128Z"></path></symbol>
+<symbol id="P-check" viewBox="0 0 256 256"><path d="M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z"></path></symbol>
+<symbol id="P-check-circle" viewBox="0 0 256 256"><path d="M173.66,98.34a8,8,0,0,1,0,11.32l-56,56a8,8,0,0,1-11.32,0l-24-24a8,8,0,0,1,11.32-11.32L112,148.69l50.34-50.35A8,8,0,0,1,173.66,98.34ZM232,128A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z"></path></symbol>
+<symbol id="P-clock" viewBox="0 0 256 256"><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm64-88a8,8,0,0,1-8,8H128a8,8,0,0,1-8-8V72a8,8,0,0,1,16,0v48h48A8,8,0,0,1,192,128Z"></path></symbol>
+<symbol id="P-warning" viewBox="0 0 256 256"><path d="M236.8,188.09,149.35,36.22h0a24.76,24.76,0,0,0-42.7,0L19.2,188.09a23.51,23.51,0,0,0,0,23.72A24.35,24.35,0,0,0,40.55,224h174.9a24.35,24.35,0,0,0,21.33-12.19A23.51,23.51,0,0,0,236.8,188.09ZM222.93,203.8a8.5,8.5,0,0,1-7.48,4.2H40.55a8.5,8.5,0,0,1-7.48-4.2,7.59,7.59,0,0,1,0-7.72L120.52,44.21a8.75,8.75,0,0,1,15,0l87.45,151.87A7.59,7.59,0,0,1,222.93,203.8ZM120,144V104a8,8,0,0,1,16,0v40a8,8,0,0,1-16,0Zm20,36a12,12,0,1,1-12-12A12,12,0,0,1,140,180Z"></path></symbol>
+<symbol id="P-warning-circle" viewBox="0 0 256 256"><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm-8-80V80a8,8,0,0,1,16,0v56a8,8,0,0,1-16,0Zm20,36a12,12,0,1,1-12-12A12,12,0,0,1,140,172Z"></path></symbol>
+<symbol id="P-file-text" viewBox="0 0 256 256"><path d="M213.66,82.34l-56-56A8,8,0,0,0,152,24H56A16,16,0,0,0,40,40V216a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V88A8,8,0,0,0,213.66,82.34ZM160,51.31,188.69,80H160ZM200,216H56V40h88V88a8,8,0,0,0,8,8h48V216Zm-32-80a8,8,0,0,1-8,8H96a8,8,0,0,1,0-16h64A8,8,0,0,1,168,136Zm0,32a8,8,0,0,1-8,8H96a8,8,0,0,1,0-16h64A8,8,0,0,1,168,168Z"></path></symbol>
+<symbol id="P-file-x" viewBox="0 0 256 256"><path d="M213.66,82.34l-56-56A8,8,0,0,0,152,24H56A16,16,0,0,0,40,40V216a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V88A8,8,0,0,0,213.66,82.34ZM160,51.31,188.69,80H160ZM200,216H56V40h88V88a8,8,0,0,0,8,8h48V216Zm-42.34-82.34L139.31,152l18.35,18.34a8,8,0,0,1-11.32,11.32L128,163.31l-18.34,18.35a8,8,0,0,1-11.32-11.32L116.69,152,98.34,133.66a8,8,0,0,1,11.32-11.32L128,140.69l18.34-18.35a8,8,0,0,1,11.32,11.32Z"></path></symbol>
+<symbol id="P-user-plus" viewBox="0 0 256 256"><path d="M256,136a8,8,0,0,1-8,8H232v16a8,8,0,0,1-16,0V144H200a8,8,0,0,1,0-16h16V112a8,8,0,0,1,16,0v16h16A8,8,0,0,1,256,136Zm-57.87,58.85a8,8,0,0,1-12.26,10.3C165.75,181.19,138.09,168,108,168s-57.75,13.19-77.87,37.15a8,8,0,0,1-12.25-10.3c14.94-17.78,33.52-30.41,54.17-37.17a68,68,0,1,1,71.9,0C164.6,164.44,183.18,177.07,198.13,194.85ZM108,152a52,52,0,1,0-52-52A52.06,52.06,0,0,0,108,152Z"></path></symbol>
+<symbol id="P-arrow-right" viewBox="0 0 256 256"><path d="M221.66,133.66l-72,72a8,8,0,0,1-11.32-11.32L196.69,136H40a8,8,0,0,1,0-16H196.69L138.34,61.66a8,8,0,0,1,11.32-11.32l72,72A8,8,0,0,1,221.66,133.66Z"></path></symbol>
+<symbol id="P-arrow-up-right" viewBox="0 0 256 256"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"></path></symbol>
+<symbol id="P-dots-three" viewBox="0 0 256 256"><path d="M140,128a12,12,0,1,1-12-12A12,12,0,0,1,140,128Zm56-12a12,12,0,1,0,12,12A12,12,0,0,0,196,116ZM60,116a12,12,0,1,0,12,12A12,12,0,0,0,60,116Z"></path></symbol>
+<symbol id="P-x" viewBox="0 0 256 256"><path d="M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z"></path></symbol>
+<symbol id="P-calendar-blank" viewBox="0 0 256 256"><path d="M208,32H184V24a8,8,0,0,0-16,0v8H88V24a8,8,0,0,0-16,0v8H48A16,16,0,0,0,32,48V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V48A16,16,0,0,0,208,32ZM72,48v8a8,8,0,0,0,16,0V48h80v8a8,8,0,0,0,16,0V48h24V80H48V48ZM208,208H48V96H208V208Z"></path></symbol>
+<symbol id="P-hourglass" viewBox="0 0 256 256"><path d="M200,75.64V40a16,16,0,0,0-16-16H72A16,16,0,0,0,56,40V76a16.07,16.07,0,0,0,6.4,12.8L114.67,128,62.4,167.2A16.07,16.07,0,0,0,56,180v36a16,16,0,0,0,16,16H184a16,16,0,0,0,16-16V180.36a16.09,16.09,0,0,0-6.35-12.77L141.27,128l52.38-39.6A16.05,16.05,0,0,0,200,75.64ZM184,216H72V180l56-42,56,42.35Zm0-140.36L128,118,72,76V40H184Z"></path></symbol>
+<symbol id="P-snowflake" viewBox="0 0 256 256"><path d="M223.77,150.09a8,8,0,0,1-5.86,9.68l-24.64,6,6.46,24.11a8,8,0,0,1-5.66,9.8A8.25,8.25,0,0,1,192,200a8,8,0,0,1-7.72-5.93l-7.72-28.8L136,141.86v46.83l21.66,21.65a8,8,0,0,1-11.32,11.32L128,203.31l-18.34,18.35a8,8,0,0,1-11.32-11.32L120,188.69V141.86L79.45,165.27l-7.72,28.8A8,8,0,0,1,64,200a8.25,8.25,0,0,1-2.08-.27,8,8,0,0,1-5.66-9.8l6.46-24.11-24.64-6a8,8,0,0,1,3.82-15.54l29.45,7.23L112,128,71.36,104.54l-29.45,7.23A7.85,7.85,0,0,1,40,112a8,8,0,0,1-1.91-15.77l24.64-6L56.27,66.07a8,8,0,0,1,15.46-4.14l7.72,28.8L120,114.14V67.31L98.34,45.66a8,8,0,0,1,11.32-11.32L128,52.69l18.34-18.35a8,8,0,0,1,11.32,11.32L136,67.31v46.83l40.55-23.41,7.72-28.8a8,8,0,0,1,15.46,4.14l-6.46,24.11,24.64,6A8,8,0,0,1,216,112a7.85,7.85,0,0,1-1.91-.23l-29.45-7.23L144,128l40.64,23.46,29.45-7.23A8,8,0,0,1,223.77,150.09Z"></path></symbol>
+<symbol id="P-user-switch" viewBox="0 0 256 256"><path d="M253.66,133.66l-24,24a8,8,0,0,1-11.32,0l-24-24a8,8,0,0,1,11.32-11.32L216,132.69V128A88,88,0,0,0,56.49,76.67a8,8,0,0,1-13-9.34A104,104,0,0,1,232,128v4.69l10.34-10.35a8,8,0,0,1,11.32,11.32Zm-41.18,55A104,104,0,0,1,24,128v-4.69L13.66,133.66A8,8,0,0,1,2.34,122.34l24-24a8,8,0,0,1,11.32,0l24,24a8,8,0,0,1-11.32,11.32L40,123.31V128a87.62,87.62,0,0,0,22.24,58.41A79.66,79.66,0,0,1,98.3,157.66a48,48,0,1,1,59.4,0,79.59,79.59,0,0,1,36.08,28.78,89.68,89.68,0,0,0,5.71-7.11,8,8,0,0,1,13,9.34ZM128,152a32,32,0,1,0-32-32A32,32,0,0,0,128,152Zm0,64a88.2,88.2,0,0,0,53.92-18.49,64,64,0,0,0-107.84,0A87.57,87.57,0,0,0,128,216Z"></path></symbol>
+<symbol id="P-list-checks" viewBox="0 0 256 256"><path d="M224,128a8,8,0,0,1-8,8H128a8,8,0,0,1,0-16h88A8,8,0,0,1,224,128ZM128,72h88a8,8,0,0,0,0-16H128a8,8,0,0,0,0,16Zm88,112H128a8,8,0,0,0,0,16h88a8,8,0,0,0,0-16ZM82.34,42.34,56,68.69,45.66,58.34A8,8,0,0,0,34.34,69.66l16,16a8,8,0,0,0,11.32,0l32-32A8,8,0,0,0,82.34,42.34Zm0,64L56,132.69,45.66,122.34a8,8,0,0,0-11.32,11.32l16,16a8,8,0,0,0,11.32,0l32-32a8,8,0,0,0-11.32-11.32Zm0,64L56,196.69,45.66,186.34a8,8,0,0,0-11.32,11.32l16,16a8,8,0,0,0,11.32,0l32-32a8,8,0,0,0-11.32-11.32Z"></path></symbol>
+<symbol id="P-trend-down" viewBox="0 0 256 256"><path d="M240,128v64a8,8,0,0,1-8,8H168a8,8,0,0,1,0-16h44.69L136,107.31l-34.34,34.35a8,8,0,0,1-11.32,0l-72-72A8,8,0,0,1,29.66,58.34L96,124.69l34.34-34.35a8,8,0,0,1,11.32,0L224,172.69V128a8,8,0,0,1,16,0Z"></path></symbol>
+<symbol id="P-trend-up" viewBox="0 0 256 256"><path d="M240,56v64a8,8,0,0,1-16,0V75.31l-82.34,82.35a8,8,0,0,1-11.32,0L96,123.31,29.66,189.66a8,8,0,0,1-11.32-11.32l72-72a8,8,0,0,1,11.32,0L136,140.69,212.69,64H168a8,8,0,0,1,0-16h64A8,8,0,0,1,240,56Z"></path></symbol>
+<symbol id="P-pencil-simple" viewBox="0 0 256 256"><path d="M227.31,73.37,182.63,28.68a16,16,0,0,0-22.63,0L36.69,152A15.86,15.86,0,0,0,32,163.31V208a16,16,0,0,0,16,16H92.69A15.86,15.86,0,0,0,104,219.31L227.31,96a16,16,0,0,0,0-22.63ZM92.69,208H48V163.31l88-88L180.69,120ZM192,108.68,147.31,64l24-24L216,84.68Z"></path></symbol>
+<symbol id="P-arrow-clockwise" viewBox="0 0 256 256"><path d="M240,56v48a8,8,0,0,1-8,8H184a8,8,0,0,1,0-16H211.4L184.81,71.64l-.25-.24a80,80,0,1,0-1.67,114.78,8,8,0,0,1,11,11.63A95.44,95.44,0,0,1,128,224h-1.32A96,96,0,1,1,195.75,60L224,85.8V56a8,8,0,1,1,16,0Z"></path></symbol>
+<symbol id="P-lightning" viewBox="0 0 256 256"><path d="M215.79,118.17a8,8,0,0,0-5-5.66L153.18,90.9l14.66-73.33a8,8,0,0,0-13.69-7l-112,120a8,8,0,0,0,3,13l57.63,21.61L88.16,238.43a8,8,0,0,0,13.69,7l112-120A8,8,0,0,0,215.79,118.17ZM109.37,214l10.47-52.38a8,8,0,0,0-5-9.06L62,132.71l84.62-90.66L136.16,94.43a8,8,0,0,0,5,9.06l52.8,19.8Z"></path></symbol>
+<symbol id="P-sun" viewBox="0 0 256 256"><path d="M120,40V16a8,8,0,0,1,16,0V40a8,8,0,0,1-16,0Zm72,88a64,64,0,1,1-64-64A64.07,64.07,0,0,1,192,128Zm-16,0a48,48,0,1,0-48,48A48.05,48.05,0,0,0,176,128ZM58.34,69.66A8,8,0,0,0,69.66,58.34l-16-16A8,8,0,0,0,42.34,53.66Zm0,116.68-16,16a8,8,0,0,0,11.32,11.32l16-16a8,8,0,0,0-11.32-11.32ZM192,72a8,8,0,0,0,5.66-2.34l16-16a8,8,0,0,0-11.32-11.32l-16,16A8,8,0,0,0,192,72Zm5.66,114.34a8,8,0,0,0-11.32,11.32l16,16a8,8,0,0,0,11.32-11.32ZM48,128a8,8,0,0,0-8-8H16a8,8,0,0,0,0,16H40A8,8,0,0,0,48,128Zm80,80a8,8,0,0,0-8,8v24a8,8,0,0,0,16,0V216A8,8,0,0,0,128,208Zm112-88H216a8,8,0,0,0,0,16h24a8,8,0,0,0,0-16Z"></path></symbol>
+<symbol id="P-paper-plane-right" viewBox="0 0 256 256"><path d="M231.87,114l-168-95.89A16,16,0,0,0,40.92,37.34L71.55,128,40.92,218.67A16,16,0,0,0,56,240a16.15,16.15,0,0,0,7.93-2.1l167.92-96.05a16,16,0,0,0,.05-27.89ZM56,224a.56.56,0,0,0,0-.12L85.74,136H144a8,8,0,0,0,0-16H85.74L56.06,32.16A.46.46,0,0,0,56,32l168,95.83Z"></path></symbol>
+<symbol id="P-circle-fill" viewBox="0 0 256 256"><path d="M232,128A104,104,0,1,1,128,24,104.13,104.13,0,0,1,232,128Z"></path></symbol>
+<symbol id="P-arrow-bend-up-left" viewBox="0 0 256 256"><path d="M232,200a8,8,0,0,1-16,0,88.1,88.1,0,0,0-88-88H51.31l34.35,34.34a8,8,0,0,1-11.32,11.32l-48-48a8,8,0,0,1,0-11.32l48-48A8,8,0,0,1,85.66,61.66L51.31,96H128A104.11,104.11,0,0,1,232,200Z"></path></symbol>
+<symbol id="P-note" viewBox="0 0 256 256"><path d="M88,96a8,8,0,0,1,8-8h64a8,8,0,0,1,0,16H96A8,8,0,0,1,88,96Zm8,40h64a8,8,0,0,0,0-16H96a8,8,0,0,0,0,16Zm32,16H96a8,8,0,0,0,0,16h32a8,8,0,0,0,0-16ZM224,48V156.69A15.86,15.86,0,0,1,219.31,168L168,219.31A15.86,15.86,0,0,1,156.69,224H48a16,16,0,0,1-16-16V48A16,16,0,0,1,48,32H208A16,16,0,0,1,224,48ZM48,208H152V160a8,8,0,0,1,8-8h48V48H48Zm120-40v28.7L196.69,168Z"></path></symbol>
+<symbol id="P-seal-check" viewBox="0 0 256 256"><path d="M225.86,102.82c-3.77-3.94-7.67-8-9.14-11.57-1.36-3.27-1.44-8.69-1.52-13.94-.15-9.76-.31-20.82-8-28.51s-18.75-7.85-28.51-8c-5.25-.08-10.67-.16-13.94-1.52-3.56-1.47-7.63-5.37-11.57-9.14C146.28,23.51,138.44,16,128,16s-18.27,7.51-25.18,14.14c-3.94,3.77-8,7.67-11.57,9.14C88,40.64,82.56,40.72,77.31,40.8c-9.76.15-20.82.31-28.51,8S41,67.55,40.8,77.31c-.08,5.25-.16,10.67-1.52,13.94-1.47,3.56-5.37,7.63-9.14,11.57C23.51,109.72,16,117.56,16,128s7.51,18.27,14.14,25.18c3.77,3.94,7.67,8,9.14,11.57,1.36,3.27,1.44,8.69,1.52,13.94.15,9.76.31,20.82,8,28.51s18.75,7.85,28.51,8c5.25.08,10.67.16,13.94,1.52,3.56,1.47,7.63,5.37,11.57,9.14C109.72,232.49,117.56,240,128,240s18.27-7.51,25.18-14.14c3.94-3.77,8-7.67,11.57-9.14,3.27-1.36,8.69-1.44,13.94-1.52,9.76-.15,20.82-.31,28.51-8s7.85-18.75,8-28.51c.08-5.25.16-10.67,1.52-13.94,1.47-3.56,5.37-7.63,9.14-11.57C232.49,146.28,240,138.44,240,128S232.49,109.73,225.86,102.82Zm-11.55,39.29c-4.79,5-9.75,10.17-12.38,16.52-2.52,6.1-2.63,13.07-2.73,19.82-.1,7-.21,14.33-3.32,17.43s-10.39,3.22-17.43,3.32c-6.75.1-13.72.21-19.82,2.73-6.35,2.63-11.52,7.59-16.52,12.38S132,224,128,224s-9.15-4.92-14.11-9.69-10.17-9.75-16.52-12.38c-6.1-2.52-13.07-2.63-19.82-2.73-7-.1-14.33-.21-17.43-3.32s-3.22-10.39-3.32-17.43c-.1-6.75-.21-13.72-2.73-19.82-2.63-6.35-7.59-11.52-12.38-16.52S32,132,32,128s4.92-9.15,9.69-14.11,9.75-10.17,12.38-16.52c2.52-6.1,2.63-13.07,2.73-19.82.1-7,.21-14.33,3.32-17.43S70.51,56.9,77.55,56.8c6.75-.1,13.72-.21,19.82-2.73,6.35-2.63,11.52-7.59,16.52-12.38S124,32,128,32s9.15,4.92,14.11,9.69,10.17,9.75,16.52,12.38c6.1,2.52,13.07,2.63,19.82,2.73,7,.1,14.33.21,17.43,3.32s3.22,10.39,3.32,17.43c.1,6.75.21,13.72,2.73,19.82,2.63,6.35,7.59,11.52,12.38,16.52S224,124,224,128,219.08,137.15,214.31,142.11ZM173.66,98.34a8,8,0,0,1,0,11.32l-56,56a8,8,0,0,1-11.32,0l-24-24a8,8,0,0,1,11.32-11.32L112,148.69l50.34-50.35A8,8,0,0,1,173.66,98.34Z"></path></symbol>
+<symbol id="P-thumbs-up" viewBox="0 0 256 256"><path d="M234,80.12A24,24,0,0,0,216,72H160V56a40,40,0,0,0-40-40,8,8,0,0,0-7.16,4.42L75.06,96H32a16,16,0,0,0-16,16v88a16,16,0,0,0,16,16H204a24,24,0,0,0,23.82-21l12-96A24,24,0,0,0,234,80.12ZM32,112H72v88H32ZM223.94,97l-12,96a8,8,0,0,1-7.94,7H88V105.89l36.71-73.43A24,24,0,0,1,144,56V80a8,8,0,0,0,8,8h64a8,8,0,0,1,7.94,9Z"></path></symbol>
+<symbol id="P-thumbs-down" viewBox="0 0 256 256"><path d="M239.82,157l-12-96A24,24,0,0,0,204,40H32A16,16,0,0,0,16,56v88a16,16,0,0,0,16,16H75.06l37.78,75.58A8,8,0,0,0,120,240a40,40,0,0,0,40-40V184h56a24,24,0,0,0,23.82-27ZM72,144H32V56H72Zm150,21.29a7.88,7.88,0,0,1-6,2.71H152a8,8,0,0,0-8,8v24a24,24,0,0,1-19.29,23.54L88,150.11V56H204a8,8,0,0,1,7.94,7l12,96A7.87,7.87,0,0,1,222,165.29Z"></path></symbol>
+<symbol id="P-timer" viewBox="0 0 256 256"><path d="M128,40a96,96,0,1,0,96,96A96.11,96.11,0,0,0,128,40Zm0,176a80,80,0,1,1,80-80A80.09,80.09,0,0,1,128,216ZM173.66,90.34a8,8,0,0,1,0,11.32l-40,40a8,8,0,0,1-11.32-11.32l40-40A8,8,0,0,1,173.66,90.34ZM96,16a8,8,0,0,1,8-8h48a8,8,0,0,1,0,16H104A8,8,0,0,1,96,16Z"></path></symbol>
+<symbol id="P-sign-out" viewBox="0 0 256 256"><path d="M120,216a8,8,0,0,1-8,8H48a8,8,0,0,1-8-8V40a8,8,0,0,1,8-8h64a8,8,0,0,1,0,16H56V208h56A8,8,0,0,1,120,216Zm109.66-93.66-40-40a8,8,0,0,0-11.32,11.32L204.69,120H112a8,8,0,0,0,0,16h92.69l-26.35,26.34a8,8,0,0,0,11.32,11.32l40-40A8,8,0,0,0,229.66,122.34Z"></path></symbol>
+<symbol id="P-list" viewBox="0 0 256 256"><path d="M224,128a8,8,0,0,1-8,8H40a8,8,0,0,1,0-16H216A8,8,0,0,1,224,128ZM40,72H216a8,8,0,0,0,0-16H40a8,8,0,0,0,0,16ZM216,184H40a8,8,0,0,0,0,16H216a8,8,0,0,0,0-16Z"></path></symbol>
+</svg>
+<div id="scenes"></div>
+<script>
+const I=(n,c='')=>`<svg class="p ${c}"><use href="#P-${n}"/></svg>`;
+const EDU=[
+ {items:[['home','house','Home'],['inbox','tray','Inbox']]},
+ {label:'Insights',key:'insights',items:[['pulse','pulse','Pulse','admin'],['dash','squares-four','Dashboards'],['kb','book-open-text','Knowledge base']]},
+ {label:'Leads',key:'leads',items:[['all','users','All leads'],['pipe','kanban','Pipeline'],['organise','funnel','Organise','admin'],['contacts','address-book','Contacts']]},
+ {label:'Students',key:'students',items:[['apps','graduation-cap','Applications'],['classes','chalkboard-teacher','Classes'],['checkin','user-check','Check-in','admin']]},
+ {label:'Grow',key:'grow',items:[]},{label:'Team',key:'team',items:[]},
+];
+function sidebar(o){
+  const admin=o.role!=='counsellor';
+  let h=`<aside class="side"><div class="org"><b>EdgeX<i>edu</i></b>${I('sidebar-simple','s')}</div><div class="srch">${I('magnifying-glass','s')}Search<kbd>⌘K</kbd></div>`;
+  for(const g of EDU){
+    const items=g.items.filter(x=>!(x[3]==='admin'&&!admin));
+    if(g.label){ if(!admin&&g.key==='grow'){} h+=`<div class="ng${g.items.length?'':' shut'}">${g.label}${I('caret-down','s')}</div>`;}
+    for(const [k,ic,label] of items) h+=`<div class="ni${k==='home'?' on':''}">${I(ic)}${label}${k==='inbox'&&o.unread?`<span class="b">${o.unread}</span>`:''}</div>`;
+  }
+  h+=`<div class="grow"></div><div class="foot"><div class="ni">${I('archive')}Archive</div>${admin?`<div class="ni">${I('gear')}Settings</div>`:''}</div></aside>`;
+  return h;
+}
+function hdr(o){
+  return `<div class="hdr">${o.ai?`<span class="hb orca">${I('sparkle','s')}Ask Orca</span>`:''}${o.role!=='counsellor'?`<span class="hb">${I('building-office','s')}All branches${I('caret-down','s')}</span>`:''}<span class="hb icon">${I('bell')}<span class="dot"></span></span><span class="hb me"><span class="av" style="background:${o.me[2]}">${o.me[0]}</span>${o.me[1]}${I('caret-down','s')}</span></div>`;
+}
+const app=(o,body,extra='')=>`<div class="app">${sidebar(o)}<div class="main">${hdr(o)}<div class="frame">${body}${extra}</div></div></div>`;
+const RITA=['RK','Rita','#2272B4'], SADIN=['SS','Sadin','#141414'];
+
+/* ---------- counsellor pieces ---------- */
+function orcaCounsellor(){
+  return `<div class="oread"><div class="oh"><span class="spk">${I('sparkle-fill','s')}</span>Orca's read on your day<span class="mt">· made at 7:00 from your leads, calls and tasks</span><span class="r"><span title="Useful">${I('thumbs-up','s')}</span><span title="Not useful">${I('thumbs-down','s')}</span><span title="Refresh">${I('arrow-clockwise','s')}</span></span></div>
+  <ol>
+   <li><span class="n">1</span><span>Start with the <b>2 new leads from the weekend</b>. Neither has had a call yet. Sujan asked about the February intake on the form, so lead with that.<span class="go">Open 2 →</span></span></li>
+   <li><span class="n">2</span><span><b>Sita Gurung's Deakin application closes in 6 days.</b> Her bank statement is the only document missing, so one message today should be enough.<span class="go">Open Sita →</span></span></li>
+   <li><span class="n">3</span><span><b>4 Qualified leads haven't heard from you in 5 to 9 days.</b> That's more than your usual 2. A short check-in for each is drafted when you click.<span class="go">Open 4 →</span></span></li>
+  </ol>
+  <div class="ask"><div class="in">${I('sparkle','s')}Ask about your day…</div><span class="q">Who should I call first?</span><span class="q">What changed since Friday?</span></div></div>`;
+}
+function rowsCounsellor(ai,o={}){
+  const d=(t='Draft')=>ai?`<span class="btn ai">${I('sparkle','s')}${t}</span>`:'';
+  const dots=`<span class="btn gh ico">${I('dots-three')}</span>`;
+  return `
+  <div class="sh"><h2>Do next</h2><span class="c">11</span><span class="r"><div class="seg"><div class="on">All<i>11</i></div><div>Calls<i>6</i></div><div>Messages<i>2</i></div><div>Documents<i>2</i></div><div>Tasks<i>1</i></div></div></span></div>
+  ${ai?`<div class="batch"><span class="spk">${I('sparkle-fill','s')}</span><div class="bt"><b>Orca can prepare 6 of these for you</b><span>4 check-ins, 1 document request, 1 reply. You check each one before anything is sent.</span></div><span class="btn ai">${I('sparkle','s')}Prepare all 6</span></div>`:''}
+  <div class="tier"><span class="t">Now</span><span class="d">new leads, replies waiting, anything overdue</span></div>
+  <div class="list">
+   <div class="it"><span class="ic new">${I('user-plus')}</span><div style="min-width:0"><div class="tl"><span class="nm">Sujan Rai</span><span class="chip new">New · 38 min</span></div><div class="wh">Australia · Feb 2027 intake · Bachelor of Nursing · <b>not called yet</b></div></div><div class="ac">${d('Call prep')}<span class="btn">${I('phone','s')}Call</span>${dots}</div></div>
+   ${o.logOpen?logPanel(ai):''}
+   <div class="it"><span class="ic new">${I('user-plus')}</span><div style="min-width:0"><div class="tl"><span class="nm">Pooja Shrestha</span><span class="chip new">New · Sat 4:10 pm</span></div><div class="wh">UK · Sep 2027 intake · MSc Data Science · <b>not called yet</b></div></div><div class="ac">${d('Call prep')}<span class="btn">${I('phone','s')}Call</span>${dots}</div></div>
+   <div class="it"><span class="ic">${I('whatsapp-logo')}</span><div style="min-width:0"><div class="tl"><span class="nm">Bikram Thapa</span><span class="chip">Replied 2 h ago</span></div><div class="wh"><q>Is IELTS 6.0 enough for the Melbourne course or do I need 6.5?</q></div></div><div class="ac">${d('Draft reply')}<span class="btn">${I('arrow-bend-up-left','s')}Reply</span>${dots}</div></div>
+   <div class="it"><span class="ic bad">${I('phone-x')}</span><div style="min-width:0"><div class="tl"><span class="nm">Anjali Magar</span><span class="chip bad">Overdue 1 day</span></div><div class="wh">Call back was due yesterday at 4:00 pm · last call: no answer</div></div><div class="ac">${d('Draft SMS')}<span class="btn">${I('phone','s')}Call</span>${dots}</div></div>
+  </div>
+  <div class="tier"><span class="t">Today</span><span class="d">booked call-backs, deadlines this week, tasks due</span></div>
+  <div class="list">
+   <div class="it"><span class="ic">${I('clock')}</span><div style="min-width:0"><div class="tl"><span class="nm">Nabin KC</span><span class="chip">Call back 11:30</span></div><div class="wh">You noted: <q>after his class, asking about scholarships</q></div></div><div class="ac"><span class="btn">${I('phone','s')}Call</span>${dots}</div></div>
+   <div class="it"><span class="ic warn">${I('file-x')}</span><div style="min-width:0"><div class="tl"><span class="nm">Sita Gurung</span><span class="chip warn">Closes in 6 days</span></div><div class="wh">Deakin · Master of IT · <b>bank statement missing</b> (3 of 4 documents in)</div></div><div class="ac">${d()}<span class="btn">${I('chat-circle-text','s')}Ask for it</span>${dots}</div></div>
+   <div class="it"><span class="ic">${I('list-checks')}</span><div style="min-width:0"><div class="tl"><span class="nm">Send SOP feedback to Kiran Bhandari</span><span class="chip">Task · due today</span></div><div class="wh">Assigned by Sadin on Friday</div></div><div class="ac"><span class="btn">${I('check','s')}Done</span>${dots}</div></div>
+  </div>
+  <div class="tier"><span class="t">This week</span><span class="d">leads going quiet, files stuck in a stage</span></div>
+  <div class="list">
+   <div class="it"><span class="ic">${I('snowflake')}</span><div style="min-width:0"><div class="tl"><span class="nm">4 Qualified leads going quiet</span><span class="chip">5–9 days since last touch</span></div><div class="wh">Ramesh Adhikari, Dipa Lama, Saroj Karki and 1 more</div></div><div class="ac">${d('Draft check-ins')}<span class="btn">Open 4</span>${dots}</div></div>
+   <div class="it"><span class="ic">${I('hourglass')}</span><div style="min-width:0"><div class="tl"><span class="nm">Manisha Rai</span><span class="chip">In Offer for 18 days</span></div><div class="wh">Your files usually leave Offer in 7 days · RMIT · deposit not marked paid</div></div><div class="ac"><span class="btn">Open</span>${dots}</div></div>
+   <div class="more">Show 2 more${I('caret-down','s')}</div>
+  </div>`;
+}
+function logPanel(ai){
+  return `<div class="log"><div class="q">How did the call with Sujan go?</div><div class="opts"><span class="opt on">${I('phone','s')}Talked</span><span class="opt">No answer</span><span class="opt">Busy, call later</span><span class="opt">Wrong number</span><span class="opt">Not interested</span></div>
+  ${ai?`<div class="q">Your note (type it the way you'd say it)</div><div class="note">wants nursing feb, budget around 25 lakh, no ielts yet planning dec, dad decides, call him wed morning</div>
+  <div class="fill"><div class="fh">${I('sparkle','s')}Orca filled in Sujan's record from your note<span class="r">untick anything wrong</span></div>
+   <div class="fr"><span class="cb">${I('check','s')}</span><span>Budget</span><span>NPR 25 lakh</span></div>
+   <div class="fr"><span class="cb">${I('check','s')}</span><span>English test</span><span>IELTS, planned for Dec 2026</span></div>
+   <div class="fr"><span class="cb">${I('check','s')}</span><span>Decision maker</span><span>Father</span></div>
+   <div class="fr"><span class="cb">${I('check','s')}</span><span>Stage</span><span>Pre-qualified → Qualified</span></div></div>`:''}
+  <div class="q">Next step</div><div class="opts"><span class="opt on">${I('calendar-blank','s')}Call back · Wed 11:00</span>${ai?'':'<span class="opt">Move to Qualified</span>'}<span class="opt">Book an office visit</span>${ai?'':`<span class="opt">${I('note','s')}Add a note</span>`}<span style="margin-left:auto" class="btn pri">Save</span></div></div>`;
+}
+function rightCounsellor(){
+  return `<div class="card"><div class="ch">${I('calendar-blank','m')}<h3>Today</h3><span class="r">Mon 9 Nov</span></div>
+   <div class="ag now"><span class="tm">11:30</span><div class="x">Call back · Nabin KC<span>scholarships, after his class</span></div></div>
+   <div class="ag"><span class="tm">14:00</span><div class="x">Office visit · Pooja Shrestha<span>with her father · Room 2</span></div></div>
+   <div class="ag"><span class="tm">16:30</span><div class="x">Call back · Ramesh Adhikari<span>booked by you last Tuesday</span></div></div>
+   <div class="ag"><span class="tm no">today</span><div class="x">Send SOP feedback to Kiran<span>task from Sadin</span></div></div></div>
+  <div class="card"><div class="ch">${I('pulse','m')}<h3>Your last 7 days</h3></div>
+   <div class="met"><span class="k">Calls made</span><span class="v">38</span><span class="u warn">usual 46 · you were on leave Friday</span></div>
+   <div class="met"><span class="k">New leads called within 1 hour</span><span class="v">5 of 7</span><span class="u good">better than your usual 4 of 7</span></div>
+   <div class="met"><span class="k">Moved to the next stage</span><span class="v">6</span><span class="u">usual 5</span></div></div>`;
+}
+const counsellorHome=(ai,o={})=>`<div class="home"><div class="top"><div><div class="h1">Good morning, Rita</div><div class="lede">Monday 9 November · <b>11</b> things to do · <b>3</b> booked today</div></div></div>${ai?orcaCounsellor():''}<div class="cols"><div>${rowsCounsellor(ai,o)}</div><div>${rightCounsellor()}</div></div></div>`;
+
+/* ---------- manager / owner ---------- */
+function orcaOwner(auto){
+  return `<div class="oread"><div class="oh"><span class="spk">${I('sparkle-fill','s')}</span>Orca's read on Admizz<span class="mt">· made at 7:00 from Pulse, leads and applications</span><span class="r"><span>${I('thumbs-up','s')}</span><span>${I('thumbs-down','s')}</span><span>${I('arrow-clockwise','s')}</span></span></div>
+  <ol>
+   <li><span class="n">1</span><span>${auto?`<b>23 leads came in over the weekend.</b> Your rule assigned each one as it arrived, and 20 have already had a first call.<span class="go">See the 3 →</span>`:`<b>23 leads came in over the weekend and 6 are still unassigned</b>, all from the Australia Feb-intake form. Asha and Chirag both have room.<span class="go">Assign 6 →</span>`}</span></li>
+   <li><span class="n">2</span><span><b>Asha's calls are down 45% on her usual</b> and 14 of her leads have had no call for 4+ days. She wasn't on leave, so this one needs a word.<span class="go">Open in Pulse →</span></span></li>
+   <li><span class="n">3</span><span>Kathmandu's calls are down 18%, but that's <b>Rita's leave on Friday</b>. Expected, not a problem.<span class="go">See why →</span></span></li>
+  </ol>
+  <div class="ask"><div class="in">${I('sparkle','s')}Ask about the business…</div><span class="q">Which branch converts best this month?</span><span class="q">Who needs coaching?</span></div></div>`;
+}
+function needsYou(ai,auto){
+  return `<div class="sh"><h2>Needs you</h2><span class="c">${(ai?4:3)-(auto?1:0)}</span><span class="r"><span class="btn gh">${I('pulse','s')}All in Pulse</span></span></div>
+  <div class="list">
+   ${auto?`<div class="it"><span class="ic new">${I('user-switch')}</span><div style="min-width:0"><div class="tl"><span class="nm">6 new leads were assigned overnight</span><span class="chip">By your rule · FYI</span></div><div class="wh">Asha +3, Chirag +3 (most room at 9 pm) · 5 of 6 already called this morning</div></div><div class="ac"><span class="btn">Undo</span><span class="btn gh">Rule</span></div></div>`:`<div class="it"><span class="ic new">${I('user-plus')}</span><div style="min-width:0"><div class="tl"><span class="nm">Assign 6 new leads</span><span class="chip new">Waiting 14 h</span></div><div class="wh">Suggested: <b>Asha +3, Chirag +3</b> · they have the most room</div></div><div class="ac"><span class="btn pri">Assign as suggested</span><span class="btn">Choose…</span></div></div>`}
+   <div class="it"><span class="ic bad">${I('trend-down')}</span><div style="min-width:0"><div class="tl"><span class="nm">Asha Tamang · 14 leads untouched</span><span class="chip bad">Calls −45%</span></div><div class="wh">No call on them for 4+ days · 21 calls, usual 38</div></div><div class="ac"><span class="btn">${I('bell','s')}Nudge Asha</span><span class="btn">Reassign to Bikash</span></div></div>
+   ${ai?`<div class="it"><span class="ic" style="background:var(--ai-soft);border-color:var(--ai-line);color:var(--ai)">${I('sparkle')}</span><div style="min-width:0"><div class="tl"><span class="nm">3 drafts from Orca to approve</span><span class="chip ai">Follow-up agent</span></div><div class="wh">First messages to new leads in Pokhara · nothing is sent until someone approves</div></div><div class="ac"><span class="btn ai">Review 3</span></div></div>`:''}
+   <div class="it"><span class="ic warn">${I('file-x')}</span><div style="min-width:0"><div class="tl"><span class="nm">2 applications at risk</span><span class="chip warn">Close within 7 days</span></div><div class="wh">Sita Gurung (Rita) · Arun Basnet (Asha) · documents missing on both</div></div><div class="ac"><span class="btn">Open 2</span></div></div>
+  </div>
+  <div class="tier" style="margin-top:22px"><span class="t">Your own to-dos</span><span class="d">3 · leads and tasks assigned to you</span></div>
+  <div class="list">
+   <div class="it"><span class="ic">${I('list-checks')}</span><div style="min-width:0"><div class="tl"><span class="nm">Approve Gita's leave, 12–13 Nov</span><span class="chip">Requested Fri</span></div><div class="wh">Pokhara · 2 others are already off on the 12th</div></div><div class="ac"><span class="btn">Review</span></div></div>
+   <div class="more">Show 2 more${I('caret-down','s')}</div>
+  </div>`;
+}
+function rightOwner(ai){
+  const p=(i,nm,c,sub,v,fl)=>`<div class="pp"><span class="av" style="background:${c}">${i}</span><div class="x">${nm}<span>${sub}</span></div><span class="v"><span class="fl" style="background:${fl}"></span>${v}</span></div>`;
+  return `<div class="card"><div class="ch">${I('users','m')}<h3>Needs a look</h3><span class="r">Open Pulse →</span></div>
+   ${p('AT','Asha Tamang','#b42318','TeleCaller · Kathmandu','21 / 38 calls','var(--bad)')}
+   ${p('RK','Rita Karki','#2272B4','On leave Fri · expected','38 / 46','var(--ghost)')}
+   <div class="pp" style="grid-template-columns:1fr;color:var(--muted);font-size:12.5px"><span><span class="fl" style="background:var(--good)"></span>11 others on track</span></div></div>
+  <div class="card"><div class="ch">${I('trend-up','m')}<h3>Is the new Home helping?</h3></div><div style="color:var(--muted);font-size:12px;margin:-4px 0 4px">Last 3 weeks vs the 4 weeks before it went live</div>
+   <div class="met"><span class="k">New leads called within 1 hour</span><span class="v">71%</span><span class="u good">was 52%</span></div>
+   <div class="met"><span class="k">Call-backs done on the day booked</span><span class="v">84%</span><span class="u good">was 61%</span></div>
+   <div class="met"><span class="k">Deadlines missed</span><span class="v">0</span><span class="u good">was 3</span></div>
+   ${ai?`<div class="met"><span class="k">Orca drafts sent as written</span><span class="v">64%</span><span class="u">28% edited · 8% thrown away</span></div>`:''}</div>`;
+}
+const ownerHome=(ai,auto)=>`<div class="home"><div class="top"><div><div class="h1">Good morning, Sadin</div><div class="lede">Admizz today · <b>23</b> new leads since Friday · <b>${(ai?4:3)-(auto?1:0)}</b> things need you</div></div></div>${ai?orcaOwner(auto):''}<div class="cols"><div>${needsYou(ai,auto)}</div><div>${rightOwner(ai)}</div></div></div>`;
+
+/* ---------- draft sheet ---------- */
+const sheet=`<div class="scrim"></div><div class="sheet"><div class="sh-h"><div class="t">${I('sparkle','m')}Message to Sita Gurung<span class="x">${I('x')}</span></div><div class="ctx"><span class="chip">Deakin · Master of IT</span><span class="chip warn">Closes Sun 15 Nov</span><span class="chip">Missing: bank statement</span></div></div>
+ <div class="bd"><div class="seg" style="align-self:flex-start"><div class="on">WhatsApp</div><div>SMS</div><div>Email</div></div>
+  <div class="draft"><div class="dh">${I('sparkle','s')}Drafted by Orca<span class="r">just now</span></div><p>Hi Sita, this is Rita from Admizz. Your Deakin application is almost ready. We only need your bank statement (the last 3 months) to submit it before the 15 November deadline. Could you send a photo or PDF here by Thursday? Thank you!</p></div>
+  <div style="display:flex;gap:6px;flex-wrap:wrap"><span class="btn">${I('pencil-simple','s')}Edit</span><span class="btn gh">Shorter</span><span class="btn gh">More formal</span><span class="btn gh">In Nepali</span><span class="btn gh">${I('arrow-clockwise','s')}Try again</span></div>
+  <div class="why"><b>Why this message:</b> the deadline is in 6 days and her checklist shows only the bank statement missing. Orca read Sita's application, her document checklist and your last 3 messages to her. Nothing else.</div>
+  <div class="chk"><span class="bx">${I('check','s')}</span>Also add a task for me: check for the statement on Thursday</div></div>
+ <div class="ft"><span class="n">Nothing is sent until you press Send. It's logged on Sita's timeline.</span><span class="btn">Cancel</span><span class="btn pri">${I('paper-plane-right','s')}Send on WhatsApp</span></div></div>`;
+
+const prep=`<div class="scrim"></div><div class="sheet"><div class="sh-h"><div class="t">${I('sparkle','m')}Before you call Sujan Rai<span class="x">${I('x')}</span></div><div class="ctx"><span class="chip new">New · 38 min</span><span class="chip">Facebook ad: Nursing in Australia</span><span class="chip">+977 98•• ••• 412</span></div></div>
+ <div class="bd"><div class="sec"><div class="label">What we know</div><div class="kv2"><span>Wants</span><span>Bachelor of Nursing · Australia · Feb 2027</span><span>Studied</span><span>+2 Science · GPA 3.2</span><span>English test</span><span>none on record</span></div></div>
+  <div class="sec"><div class="label">Ask about (missing on the record)</div><div class="gap"><span class="chip">Budget</span><span class="chip">IELTS / PTE plan</span><span class="chip">Passport</span><span class="chip">Who decides</span></div></div>
+  <div class="draft"><div class="dh">${I('sparkle','s')}Opening line<span class="r">Orca</span></div><p>Hi Sujan, this is Rita from Admizz. You asked about studying nursing in Australia for February. Have you got five minutes to go through your options?</p></div>
+  <div class="draft"><div class="dh">${I('sparkle','s')}From your knowledge base<span class="r">Australia partners 2027.pdf · p. 3</span></div><p style="font-size:13.5px">4 partner universities take Bachelor of Nursing students in February 2027: Deakin, ACU, Federation and CQU. All ask for IELTS 7.0 with no band below 7.0.</p></div>
+  <div class="why">Orca read only Sujan's form answers and your knowledge base. Facts on the record are shown as they are; the two violet boxes are Orca's.</div></div>
+ <div class="ft"><span class="n">After the call, one note fills in the record.</span><span class="btn pri">${I('phone','s')}Call Sujan</span></div></div>`;
+const batch=`<div class="scrim"></div><div class="sheet"><div class="sh-h"><div class="t">${I('sparkle','m')}Check before sending · 6 messages<span class="x">${I('x')}</span></div><div class="ctx"><span class="chip">Qualified leads, 5–9 days quiet</span><span class="chip">Each on the channel they last replied on</span></div></div>
+ <div class="bd" style="gap:10px">
+  ${[['Ramesh Adhikari','WhatsApp · 9 days','Hi Ramesh, Rita from Admizz. Did you get a chance to look at the Canada college list I sent? Happy to walk you through the fees this week.'],['Dipa Lama','SMS · 7 days','Hi Dipa, Rita from Admizz here. Your IELTS date was 2 Nov. How did it go? Once you have your score we can shortlist universities.'],['Saroj Karki','WhatsApp · 6 days','Hi Saroj, just checking in. Last time you said your parents wanted to visit the office. Would Thursday or Friday suit them?'],['Mina Gurung','Email · 5 days','Hi Mina, following up on the Japan language-school options. Shall I book a short call to go through the January intake?']].map(([n,c,t],i)=>`<div class="bi"><div class="bh"><span class="cb${i===3?' off':''}">${i===3?'':I('check','s')}</span><b>${n}</b><span class="chip">${c}</span><span class="r"><span class="btn gh">${I('pencil-simple','s')}Edit</span></span></div><p>${t}</p></div>`).join('')}
+  <div class="more" style="border:1px solid var(--border);border-radius:12px">2 more below: Sita's document request, Bikram's reply${I('caret-down','s')}</div><div class="why">Each draft uses that lead's last notes and messages. Unticked ones are not sent; you can open them later.</div></div>
+ <div class="ft"><span class="n">Each message is logged on the lead's timeline.</span><span class="btn">Cancel</span><span class="btn pri">${I('paper-plane-right','s')}Send 5</span></div></div>`;
+/* ---------- empty + phone ---------- */
+const emptyHome=`<div class="home"><div class="h1">Good afternoon, Rita</div><div class="lede">Monday 9 November · <b>all done</b> · <b>1</b> call booked later</div><div class="cols"><div><div class="sh"><h2>Do next</h2><span class="c">0</span></div><div class="list" style="padding:40px 24px;text-align:center"><div style="width:44px;height:44px;border-radius:12px;margin:0 auto 12px;display:grid;place-items:center;background:var(--good-soft);color:var(--good)">${I('seal-check')}</div><div style="font-size:16px;font-weight:600;color:var(--ink)">You're on top of everything</div><div style="color:var(--muted);margin-top:4px;font-size:13.5px">11 done today. Next up: <b style="color:var(--ink);font-weight:500">3 leads will need a check-in on Wednesday</b>.</div><div style="margin-top:14px;display:flex;gap:8px;justify-content:center"><span class="btn">See what you did today</span><span class="btn">Open my leads</span></div></div></div><div><div class="card"><div class="ch">${I('calendar-blank','m')}<h3>Today</h3><span class="r">Mon 9 Nov</span></div><div class="ag now"><span class="tm">16:30</span><div class="x">Call back · Ramesh Adhikari<span>booked by you last Tuesday</span></div></div></div></div></div></div>`;
+const phone=`<div class="phone"><div class="ph-hdr"><span class="hb icon">${I('list')}</span><span style="flex:1"></span><span class="hb icon">${I('bell')}<span class="dot"></span></span><span class="hb me" style="padding:0 6px 0 3px"><span class="av" style="background:#2272B4">RK</span></span></div><div class="ph-frame">
+ <div class="h1" style="font-size:22px">Good morning, Rita</div><div class="lede" style="font-size:13px"><b>11</b> things to do · next: <b>11:30</b> call back Nabin</div>
+ <div class="oread" style="padding:12px 12px 10px;margin-top:14px"><div class="oh" style="font-size:13px"><span class="spk">${I('sparkle-fill','s')}</span>Orca's read<span class="r" style="color:var(--accent);font-size:12.5px;font-weight:500">All 3 →</span></div><ol><li style="font-size:13px"><span class="n">1</span><span>Start with the <b>2 new leads from the weekend</b>. Neither has had a call yet.</span></li></ol></div>
+ <div class="sh" style="margin-top:16px"><h2>Do next</h2><span class="c">11</span></div>
+ <div class="list">
+  <div class="it" style="grid-template-columns:32px minmax(0,1fr) auto;padding:10px"><span class="ic new">${I('user-plus')}</span><div style="min-width:0"><div class="nm">Sujan Rai</div><div class="wh">New · 38 min · not called</div></div><span class="btn ico">${I('phone','s')}</span></div>
+  <div class="it" style="padding:10px"><span class="ic new">${I('user-plus')}</span><div style="min-width:0"><div class="nm">Pooja Shrestha</div><div class="wh">New · Sat 4:10 pm · not called</div></div><span class="btn ico">${I('phone','s')}</span></div>
+  <div class="it" style="padding:10px"><span class="ic">${I('whatsapp-logo')}</span><div style="min-width:0"><div class="nm">Bikram Thapa</div><div class="wh">Replied 2 h ago · IELTS question</div></div><span class="btn ico">${I('arrow-bend-up-left','s')}</span></div>
+  <div class="it" style="padding:10px"><span class="ic bad">${I('phone-x')}</span><div style="min-width:0"><div class="nm">Anjali Magar</div><div class="wh">Call back overdue 1 day</div></div><span class="btn ico">${I('phone','s')}</span></div>
+  <div class="it" style="padding:10px"><span class="ic warn">${I('file-x')}</span><div style="min-width:0"><div class="nm">Sita Gurung</div><div class="wh">Closes in 6 days · bank statement</div></div><span class="btn ico">${I('chat-circle-text','s')}</span></div>
+  <div class="more">Show 6 more${I('caret-down','s')}</div></div></div></div>`;
+
+/* ---------- scenes ---------- */
+const pin=(n,x,y)=>`<span class="pin" style="left:${x}px;top:${y}px">${n}</span>`;
+const legend=(rows)=>`<div class="legend">${rows.map((r,i)=>`<div><b>${i+1}</b><span>${r}</span></div>`).join('')}</div>`;
+const S=document.getElementById('scenes');
+S.innerHTML=
+`<section class="scene" id="h1"><div class="scene-h"><b>H1 · Counsellor, AI on</b><span>"What should I do now?" One ranked list across leads, inbox, call-backs, documents and tasks. Orca's read sits on top and says what matters and why.</span></div>
+ <div style="position:relative">${app({role:'counsellor',ai:true,me:RITA,unread:2},counsellorHome(true))}
+ ${pin(1,290,146)}${pin(2,282,426)}${pin(3,522,562)}${pin(4,826,566)}${pin(5,636,412)}${pin(6,1052,693)}${pin(7,282,488)}</div>
+ ${legend([
+  '<b>Orca\'s read</b>: up to 3 points, made at 7:00 each morning and saved (not on every page load). Each point links to the exact records. 👍/👎 records whether it helped. <em>Facts come from the database; Orca only words and ranks them.</em>',
+  '<b>Do next</b>: one ranked list from fixed rules, in three tiers. <b>Now</b>: new leads not called, replies waiting, anything overdue. <b>Today</b>: booked call-backs, deadlines within 7 days, tasks due. <b>This week</b>: leads going quiet, files stuck in a stage.',
+  '<b>Each row says why it\'s here</b> (the chip) and has one action. A row leaves the list when the work is done: a call is logged, a reply is sent, a document arrives, a task is ticked.',
+  '<b>Draft</b> (violet = AI): Orca writes the message when you click (not ahead of time, to save cost). Every draft records: sent as is, edited, or thrown away. That is our usage data for deciding on pre-drafting later.',
+  '<b>Filters</b> by kind of work, so a counsellor can do "all my calls" in one go.',
+  '<b>Your last 7 days</b>: your own numbers against your own usual (the same maths as Pulse). It names a reason when there is one (leave). Counsellors see only themselves.','<b>Prepare all</b>: one click and Orca writes every message in the list, for you to check on one screen (H3b). <b>Call prep</b> on new leads gets you ready before you dial (H3c).'
+ ])}</section>`+
+`<section class="scene" id="h2"><div class="scene-h"><b>H2 · Counsellor, AI off (Admizz today)</b><span>The same page without Orca: no read, no Draft buttons, no Ask Orca. Everything else works, because the list and the numbers never depend on AI.</span></div>${app({role:'counsellor',ai:false,me:RITA,unread:2},counsellorHome(false))}</section>`+
+`<section class="scene" id="h3"><div class="scene-h"><b>H3 · Act: click "Draft" on Sita's row</b><span>Orca drafts the message in a side panel. A human edits and sends; nothing goes out on its own. It shows which records it read, and offers a follow-up task.</span></div>${app({role:'counsellor',ai:true,me:RITA,unread:2},counsellorHome(true),sheet)}</section>`+
+`<section class="scene" id="h3b"><div class="scene-h"><b>H3b · "Prepare all 6": Orca does the writing in one go</b><span>One click drafts every message in the list. You read them on one screen, untick any you don't want, and send. This is where most of a counsellor's typing time goes.</span></div>${app({role:'counsellor',ai:true,me:RITA,unread:2},counsellorHome(true),batch)}</section>`+
+`<section class="scene" id="h3c"><div class="scene-h"><b>H3c · "Call prep" on a new lead</b><span>Before the call: what we know, what's missing on the record, an opening line, and facts from your own knowledge base with the source. The counsellor never goes in cold.</span></div>${app({role:'counsellor',ai:true,me:RITA,unread:2},counsellorHome(true),prep)}</section>`+
+`<section class="scene" id="h4"><div class="scene-h"><b>H4 · After the call: one note fills in the record</b><span>Pick how it went, type the note the way you'd say it, and Orca fills in the record (budget, test plan, who decides, stage) for you to check. One Save clears the row and books the call-back. With AI off, it's the two-click version without the note box.</span></div>${app({role:'counsellor',ai:true,me:RITA,unread:2},counsellorHome(true,{logOpen:true}))}</section>`+
+`<section class="scene" id="h5"><div class="scene-h"><b>H5 · Owner / branch manager, AI on</b><span>"Needs you" replaces the to-do list at the top: decisions only, each with a suggested answer. It uses the same rules as Pulse's "Needs your attention", so the two pages never disagree.</span></div>
+ <div style="position:relative">${app({role:'owner',ai:true,me:SADIN,unread:0},ownerHome(true,false))}
+ ${pin(1,290,146)}${pin(2,282,404)}${pin(3,746,510)}${pin(4,300,572)}${pin(5,1052,396)}${pin(6,1052,680)}</div>
+ ${legend([
+  '<b>Orca explains, not just reports</b>: point 3 says a drop is expected (leave), so the owner doesn\'t chase a non-problem. Point 2 says why one needs action.',
+  '<b>Needs you</b>: decisions with a ready answer. "Assign as suggested" uses Pulse\'s spare-capacity rule. A branch manager sees only their branch.',
+  '<b>Nudge</b> (hold accountable): sends Asha a notification naming the 14 leads. If they\'re still untouched tomorrow, the row comes back as "Nudged yesterday, still 14", with Reassign first.',
+  '<b>Orca\'s drafts to approve</b> (from the follow-up agent) only show when AI is on. Approving uses the existing approval gate.',
+  '<b>Needs a look</b> (team): only the people flagged red or amber in Pulse, plus one line for everyone else. Exceptions, not a scoreboard. One click to the full Pulse.',
+  '<b>Is the new Home helping?</b>: speed to first call, call-backs on time, deadlines missed, and how often Orca\'s drafts are sent as written, against the 4 weeks before launch. Example numbers here. This is how we prove it makes Admizz faster.'
+ ])}</section>`+
+`<section class="scene" id="h6"><div class="scene-h"><b>H6 · Owner, AI off</b><span>No read and no Orca drafts. "Needs you", the suggestions and the numbers all still work: they are rules over real data, not AI.</span></div>${app({role:'owner',ai:false,me:SADIN,unread:0},ownerHome(false,false))}</section>`+
+`<section class="scene" id="h8"><div class="scene-h"><b>H8 · OPTION for you: assign new leads automatically</b><span>Instead of leads waiting for a manager (14 hours in H5), a fixed rule assigns them the moment they arrive, to whoever has the most room. The manager sees it as FYI with Undo. It's a rule, not AI.</span></div>${app({role:'owner',ai:true,me:SADIN,unread:0},ownerHome(true,true))}</section>`+
+`<section class="scene" id="h7"><div class="scene-h"><b>H7 · All done (desktop) and the phone</b><span>Empty state says what's coming next instead of a blank box. On a phone: Orca's first point only, then the list with one icon action per row; "Today" moves into the line under the greeting.</span></div><div style="display:flex"><div style="flex:0 0 1000px">${app({role:'counsellor',ai:false,me:RITA,unread:0},emptyHome)}</div><div style="flex:1;display:grid;place-items:center;padding:20px 0">${phone}</div></div></section>`;
+</script></body></html>

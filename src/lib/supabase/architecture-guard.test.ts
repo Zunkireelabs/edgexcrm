@@ -33,7 +33,9 @@ const EXEMPT_SITES: Record<string, "rpc-only" | "auth-only"> = {
   "src/app/(main)/api/v1/leads/route.ts": "rpc-only", // visibleLeadsBase() call site
   "src/app/(main)/api/v1/lead-lists/route.ts": "rpc-only", // visibleLeadsBase() count-only call site
   "src/app/(main)/(dashboard)/classes/page.tsx": "rpc-only", // visibleLeadsBase() call site
-  "src/app/(main)/(dashboard)/applications/page.tsx": "rpc-only", // visibleLeadsBase() call site
+  "src/app/(main)/(dashboard)/applications/page.tsx": "rpc-only", // resolveApplicationsScope() -> visibleLeadsBase() call site
+  "src/app/(main)/api/v1/applications/route.ts": "rpc-only", // GET: resolveApplicationsScope() -> visibleLeadsBase() call site (EDGEX-141 Phase 3)
+  "src/app/(main)/api/v1/applications/board-page/route.ts": "rpc-only", // resolveApplicationsScope() -> visibleLeadsBase() call site (EDGEX-141 Phase 3)
   "src/app/(main)/api/v1/sms/blasts/[id]/preview/route.ts": "rpc-only", // resolveAudience() -> visibleLeadsBase() call site
   "src/app/(main)/api/v1/sms/blasts/[id]/audience-count/route.ts": "rpc-only", // resolveAudience() -> visibleLeadsBase() call site (F-12)
   "src/app/(main)/api/v1/sms/blasts/[id]/audience-preview/route.ts": "rpc-only", // resolveAudience() -> visibleLeadsBase() call site (Phase 3B)
@@ -55,6 +57,7 @@ const EXEMPT_SITES: Record<string, "rpc-only" | "auth-only"> = {
   "src/app/(main)/api/v1/inbox/conversations/[id]/draft/route.ts": "rpc-only", // canAccessConversationLead() -> visibleLeadsBase() call site
   "src/app/(main)/api/v1/inbox/conversations/[id]/attachments/signed-url/route.ts": "rpc-only", // canAccessConversationLead() -> visibleLeadsBase() call site
   "src/app/(main)/(dashboard)/inbox/page.tsx": "rpc-only", // visibleLeadIdsAmong() -> visibleLeadsBase() call site
+  "src/industries/education-consultancy/features/home/server/lead-scope.ts": "rpc-only", // education Home (EDGEX-87 A2c): the user client is only handed to visibleLeadsBase() so a branch manager's counts use the leads list's own branch visibility RPC
   // auth-only: the createClient() binding is only ever used for `.auth.*` calls —
   // never a table read, so there is nothing for RLS-vs-app-filter to protect.
   "src/lib/supabase/server.ts": "auth-only", // getCachedUser() -> supabase.auth.getClaims()

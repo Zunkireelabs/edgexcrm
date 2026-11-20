@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 /**
+ * (Written for gpt-4o-mini; harmless on Claude, which omits optional parameters: a missing key is simply `undefined`.)
  * gpt-4o-mini fills every optional tool parameter with placeholder junk
  * (empty strings, an all-zero UUID) instead of omitting it, regardless of
  * provider/strict-mode settings. Wrap optional zod fields with these so a

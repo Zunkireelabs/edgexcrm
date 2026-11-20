@@ -44,22 +44,32 @@ export function useSavedLeadFilters() {
     }
   }, []);
 
-  /** Returns an error message, or null on success. */
-  const save = useCallback(async (name: string, tree: FilterTree): Promise<string | null> => {
+  /** Creates a saved filter. Returns the created row, or an error message. */
+  const create = useCallback(async (name: string, tree: FilterTree): Promise<{ filter: SavedLeadFilter } | { error: string }> => {
     try {
       const res = await fetch(ENDPOINT, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, filter_tree: tree }),
       });
-      if (!res.ok) return await readError(res, "Could not save the filter");
+      if (!res.ok) return { error: await readError(res, "Could not save the filter") };
       const json = await res.json();
-      setFilters((prev) => [...prev, json.data as SavedLeadFilter]);
-      return null;
+      const filter = json.data as SavedLeadFilter;
+      setFilters((prev) => [...prev, filter]);
+      return { filter };
     } catch {
-      return "Could not save the filter";
+      return { error: "Could not save the filter" };
     }
   }, []);
+
+  /** Returns an error message, or null on success. */
+  const save = useCallback(
+    async (name: string, tree: FilterTree): Promise<string | null> => {
+      const result = await create(name, tree);
+      return "error" in result ? result.error : null;
+    },
+    [create],
+  );
 
   const remove = useCallback(async (id: string): Promise<string | null> => {
     try {
@@ -72,5 +82,5 @@ export function useSavedLeadFilters() {
     }
   }, []);
 
-  return { filters, loading, loaded, load, save, remove };
+  return { filters, loading, loaded, load, save, create, remove };
 }

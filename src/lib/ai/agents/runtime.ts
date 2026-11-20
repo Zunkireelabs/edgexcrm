@@ -163,6 +163,8 @@ export async function runAgent(
     // agent only gets the draft tools it declares. (Previously every agent
     // got all draft tools.)
     ...Object.fromEntries(Object.entries(draftTools).filter(([id]) => def.toolIds.includes(id))),
+    // Tools a definition builds for this run itself (e.g. the process improver's evidence-guarded tools).
+    ...(def.buildRunTools?.({ agentAuth, db, runId, trigger, logger }) ?? {}),
   };
 
   try {

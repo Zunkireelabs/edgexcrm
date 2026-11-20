@@ -20,6 +20,8 @@ interface Props {
   params: Promise<{ id: string }>;
 }
 
+const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function GET(_request: NextRequest, { params }: Props) {
   const { id } = await params;
   const auth = await authenticateRequest();
@@ -129,6 +131,30 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   if (patch.field_of_study !== undefined) {
     patch.field_of_study = normalizeFieldOfStudy(patch.field_of_study as string | null);
   }
+  // The APPLICATION's own counsellor (EDGEX-141 Phase 4, bulk "Assign counsellor"). A uuid of a
+  // member of THIS workspace, or null to clear it (the board then falls back to the lead's
+  // counsellor). Deliberately no notification/email here: this is a field edit, recorded by the
+  // generic application.updated audit row below like every other field.
+  if (body.assigned_to !== undefined) {
+    const raw = body.assigned_to;
+    if (raw !== null && (typeof raw !== "string" || !UUID_SHAPE.test(raw))) {
+      return apiValidationError({ assigned_to: ["Must be a user id or null"] });
+    }
+    if (raw !== null) {
+      const { data: member, error: memberError } = await db
+        .from("tenant_users")
+        .select("user_id")
+        .eq("user_id", raw)
+        .maybeSingle();
+      if (memberError) {
+        log.error({ error: memberError }, "Failed to check assignee membership");
+        return apiError("DB_ERROR", "Failed to update application", 500);
+      }
+      if (!member) return apiValidationError({ assigned_to: ["Not a member of this workspace"] });
+    }
+    patch.assigned_to = raw;
+  }
+
   if (body.countries !== undefined) {
     if (!Array.isArray(body.countries) || !body.countries.every((c) => typeof c === "string")) {
       return apiValidationError({ countries: ["Must be an array of strings"] });

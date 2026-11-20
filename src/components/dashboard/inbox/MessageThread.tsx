@@ -1,7 +1,18 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Send, Bot, CheckCheck, Clock, AlertCircle, ThumbsUp, Paperclip, Download, FileText, X } from "lucide-react";
+import {
+  PaperPlaneTiltIcon,
+  RobotIcon,
+  ChecksIcon,
+  ClockIcon,
+  WarningCircleIcon,
+  ThumbsUpIcon,
+  PaperclipIcon,
+  DownloadIcon,
+  FileTextIcon,
+  XIcon,
+} from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -48,7 +59,7 @@ function AttachmentView({ conversationId, messageId, attachment }: { conversatio
   if (attachment.error) {
     return (
       <div className="flex items-center gap-1.5 text-xs text-destructive bg-destructive/10 rounded-lg px-2 py-1.5">
-        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+        <WarningCircleIcon className="w-3.5 h-3.5 shrink-0" />
         <span>Attachment failed to load{attachment.filename ? `: ${attachment.filename}` : ""}</span>
       </div>
     );
@@ -99,10 +110,10 @@ function AttachmentView({ conversationId, messageId, attachment }: { conversatio
         if (u) window.open(u, "_blank", "noopener,noreferrer");
       }}
     >
-      <FileText className="w-4 h-4 shrink-0 text-muted-foreground" />
+      <FileTextIcon className="w-4 h-4 shrink-0 text-muted-foreground" />
       <span className="flex-1 truncate text-left">{attachment.filename ?? attachment.type}</span>
       <span className="text-muted-foreground shrink-0">{formatSize(attachment.size)}</span>
-      {loadingUrl ? <Clock className="w-3 h-3 shrink-0 animate-pulse" /> : <Download className="w-3 h-3 shrink-0" />}
+      {loadingUrl ? <ClockIcon className="w-3 h-3 shrink-0 animate-pulse" /> : <DownloadIcon className="w-3 h-3 shrink-0" />}
     </button>
   );
 }
@@ -123,10 +134,10 @@ function ImagePreviewLoader({ onVisible, loading }: { onVisible: () => void; loa
 
 function statusIcon(status: string) {
   if (status === "sent" || status === "delivered" || status === "read") {
-    return <CheckCheck className="w-3 h-3 text-blue-500" />;
+    return <ChecksIcon className="w-3 h-3 text-blue-500" />;
   }
-  if (status === "queued") return <Clock className="w-3 h-3 text-muted-foreground" />;
-  if (status === "failed") return <AlertCircle className="w-3 h-3 text-destructive" />;
+  if (status === "queued") return <ClockIcon className="w-3 h-3 text-muted-foreground" />;
+  if (status === "failed") return <WarningCircleIcon className="w-3 h-3 text-destructive" />;
   return null;
 }
 
@@ -234,7 +245,7 @@ export function MessageThread({
               >
                 {isAi && (
                   <div className="flex items-center gap-1 text-xs text-muted-foreground mb-0.5">
-                    <Bot className="w-3 h-3" />
+                    <RobotIcon className="w-3 h-3" />
                     <span>AI suggested</span>
                   </div>
                 )}
@@ -278,7 +289,7 @@ export function MessageThread({
                       className="flex items-center gap-1 text-xs text-amber-700 hover:text-amber-900 font-medium"
                       title="Approve draft"
                     >
-                      <ThumbsUp className="w-3 h-3" />
+                      <ThumbsUpIcon className="w-3 h-3" />
                       Approve
                     </button>
                   )}
@@ -296,14 +307,14 @@ export function MessageThread({
           <div className="flex flex-wrap gap-1.5 mb-2">
             {pendingFiles.map((f, i) => (
               <span key={`${f.name}-${i}`} className="flex items-center gap-1 text-xs bg-muted rounded-full px-2 py-1">
-                <Paperclip className="w-3 h-3" />
+                <PaperclipIcon className="w-3 h-3" />
                 <span className="max-w-[140px] truncate">{f.name}</span>
                 <button
                   type="button"
                   onClick={() => setPendingFiles((prev) => prev.filter((_, idx) => idx !== i))}
                   className="text-muted-foreground hover:text-foreground"
                 >
-                  <X className="w-3 h-3" />
+                  <XIcon className="w-3 h-3" />
                 </button>
               </span>
             ))}
@@ -319,7 +330,7 @@ export function MessageThread({
             className="shrink-0 h-10 w-10"
             title="Attach a file"
           >
-            <Paperclip className="w-4 h-4" />
+            <PaperclipIcon className="w-4 h-4" />
           </Button>
           <Textarea
             ref={textareaRef}
@@ -336,7 +347,7 @@ export function MessageThread({
             disabled={(!draft.trim() && pendingFiles.length === 0) || sending}
             className="shrink-0 h-10 w-10"
           >
-            <Send className="w-4 h-4" />
+            <PaperPlaneTiltIcon className="w-4 h-4" />
           </Button>
         </div>
       </div>

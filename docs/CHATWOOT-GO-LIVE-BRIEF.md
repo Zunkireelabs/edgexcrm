@@ -40,8 +40,8 @@ Chatwoot runs as 4 parts: web (Rails), background worker (Sidekiq), Postgres wit
 
 ## Phase 3: EdgeX on stage
 
-- [ ] Apply migrations **282** (allows the `chatwoot` channel type) and **283** (counselor identity table) to the
-      **stage** database. **[OK needed]** Both are additive. 283 is service-role-only on purpose (it holds credentials).
+- [ ] Apply migrations **294** (allows the `chatwoot` channel type) and **295** (counselor identity table) to the
+      **stage** database. **[OK needed]** Both are additive. 295 is service-role-only on purpose (it holds credentials).
 - [ ] Set on the stage server: `INBOX_CHATWOOT_ENABLED=true`, `CHATWOOT_BASE_URL`, `CHATWOOT_PLATFORM_TOKEN`, and
       confirm `INBOX_TOKEN_ENC_KEY` is already set (it also protects the WhatsApp channel tokens). **[OK needed]**
 - [ ] Set `NEXT_PUBLIC_APP_URL` on the stage server to the public EdgeX address (Chatwoot's webhook is created with it,

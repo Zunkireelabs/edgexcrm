@@ -7,6 +7,7 @@ import { FEATURES, INDUSTRIES } from "@/industries/_registry";
 import { assertLeadVisible } from "@/lib/documents/access";
 import { DOCUMENT_TYPE_LABELS } from "../../features/applicant-documents/labels";
 import type { DocumentType } from "@/lib/documents/constants";
+import { computeMissingDocuments } from "@/lib/documents/missing";
 
 const inputSchema = z.object({
   leadId: optionalUuid(z.string().uuid()).describe("The student's lead id (as returned by search_leads or get_lead)"),
@@ -38,7 +39,7 @@ export const findMissingDocumentsTool: AgentTool<z.infer<typeof inputSchema>> = 
       .maybeSingle();
     const required = ((settingsData as unknown as { required_document_types: string[] } | null)?.required_document_types ?? []) as DocumentType[];
 
-    if (required.length === 0) {
+    if (computeMissingDocuments(required, []).assessable === false) {
       return { missing: [], note: "This tenant has no required-documents checklist configured." };
     }
 
@@ -49,7 +50,7 @@ export const findMissingDocumentsTool: AgentTool<z.infer<typeof inputSchema>> = 
       .is("deleted_at", null);
     const uploadedTypes = new Set(((docData ?? []) as unknown as Array<{ document_type: string }>).map((d) => d.document_type));
 
-    const missing = required.filter((t) => !uploadedTypes.has(t));
+    const { missing } = computeMissingDocuments(required, uploadedTypes);
 
     return {
       missing: missing.map((t) => ({ documentType: t, documentTypeLabel: DOCUMENT_TYPE_LABELS[t] })),

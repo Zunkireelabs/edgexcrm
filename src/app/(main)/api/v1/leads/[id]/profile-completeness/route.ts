@@ -52,5 +52,5 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   if (!requireLeadBranchAccess(auth, leadRow, membership)) return apiNotFound("Lead");
 
   const result = await checkLeadProfileCompleteness(supabase, auth.tenantId, id);
-  return apiSuccess({ complete: result.complete, missing: result.missing });
+  return apiSuccess({ complete: result.complete, missing: result.missing, total: result.total, filled: result.filled });
 }

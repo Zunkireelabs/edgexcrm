@@ -139,10 +139,12 @@ function makeLeadsChain(calls: Call[]) {
   return chain;
 }
 
-function fakeDb(opts: { leadsCalls: Call[]; leadBranchesRows?: Array<{ lead_id: string }> }) {
+function fakeDb(opts: { leadsCalls: Call[]; leadBranchesRows?: Array<{ lead_id: string }>; timezone?: string | null }) {
   return {
     from: (table: string) => {
       if (table === "leads") return makeLeadsChain(opts.leadsCalls);
+      // EDGEX-114: the route reads the tenant's timezone (and config) once per request.
+      if (table === "tenants") return { select: () => ({ eq: () => ({ single: () => Promise.resolve({ data: { config: null } }), maybeSingle: () => Promise.resolve({ data: { timezone: opts.timezone ?? null } }) }) }) };
       if (table === "lead_branches") {
         return {
           select: () => ({
@@ -595,6 +597,45 @@ describe("GET /api/v1/leads — sort/count/list/funnel/recycle-bin (LEADS-SERVER
     ]);
   });
 
+  // Column-header sorts (Nov 2026): each is a plain stored column allow-listed in the field registry; blanks sort last.
+  it.each([
+    ["phone", ["phone"]],
+    ["ref_code", ["ref_code"]],
+    ["location", ["country", "city"]],
+    ["source", ["intake_source"]],
+    ["intake_medium", ["intake_medium"]],
+    ["archived_at", ["archived_at"]],
+  ])("?sort=%s orders by %j with blanks last, then id", async (sortKey, columns) => {
+    const calls: Call[] = [];
+    getFeatureAccessMock.mockReturnValue(false);
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: calls }));
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ sort: sortKey, order: "asc" }));
+    expect(res.status).toBe(200);
+    expect(calls.filter(([m]) => m === "order")).toEqual([
+      ...columns.map((c) => ["order", [c, { ascending: true, nullsFirst: false }]]),
+      // The tiebreaker is always id DESC, whatever the sort direction (see route.ts).
+      ["order", ["id", { ascending: false }]],
+    ]);
+  });
+
+  it("descending still puts blanks last for a header-sorted column", async () => {
+    const calls: Call[] = [];
+    getFeatureAccessMock.mockReturnValue(false);
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: calls }));
+    const { GET } = await import("./route");
+    await GET(fakeReq({ sort: "phone", order: "desc" }));
+    expect(calls.filter(([m]) => m === "order")[0]).toEqual(["order", ["phone", { ascending: false, nullsFirst: false }]]);
+  });
+
+  it.each(["assigned_to", "stage_id", "tags", "branch_id", "not_a_column"])("?sort=%s (not allow-listed) is a clean 422", async (sortKey) => {
+    getFeatureAccessMock.mockReturnValue(false);
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ sort: sortKey }));
+    expect(res.status).toBe(422);
+  });
+
   it("?count=0 skips the exact count and returns the -1 sentinel, never a false 0", async () => {
     getFeatureAccessMock.mockReturnValue(false);
     createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
@@ -785,6 +826,23 @@ describe("GET /api/v1/leads — ?f= compiles through the SAME compileFilter() as
     expect(fCalls).toEqual(legacyCalls);
   });
 
+  // EDGEX-114: a date filter counts days in the TENANT's timezone. A lead at 00:30 Nepal time on 9 Oct is "on 9 Oct".
+  it("an `on` date filter spans the tenant-local day (Asia/Kathmandu), not the UTC day", async () => {
+    const dateTree = { conjunction: "and" as const, conditions: [{ id: "d1", field: "created_at", op: "on" as const, value: "2026-10-09" }] };
+    const run = async (timezone: string | null) => {
+      const calls: Call[] = [];
+      createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: calls, timezone }));
+      const { GET } = await import("./route");
+      const res = await GET(fakeReq({ [FILTER_PARAM]: encodeFilterTree(dateTree) }));
+      expect(res.status).toBe(200);
+      return calls.filter(([m, a]) => m === "or" && String(a[0]).includes("created_at")).map(([, a]) => a[0]);
+    };
+    const day = (from: string, to: string) => [`and(created_at.gte."${from}",created_at.lt."${to}")`];
+    expect(await run("Asia/Kathmandu")).toEqual(day("2026-10-08T18:15:00.000Z", "2026-10-09T18:15:00.000Z"));
+    expect(await run("America/New_York")).toEqual(day("2026-10-09T04:00:00.000Z", "2026-10-10T04:00:00.000Z"));
+    expect(await run(null)).toEqual(day("2026-10-08T18:15:00.000Z", "2026-10-09T18:15:00.000Z")); // default tz
+  });
+
   // Client report (Admizz, 2026-11-05): "search doesn't work when filters are on". With ?f= the typed search
   // (?search=) used to be dropped by the route.
   it("?f= tree + ?search= applies BOTH — identical to the legacy ?status= + ?search= calls", async () => {
@@ -836,20 +894,67 @@ describe("GET /api/v1/leads — ?f= compiles through the SAME compileFilter() as
     expect(calls.some(([m, a]) => m === "or" && String(a[0]).toLowerCase().includes("first_name"))).toBe(false);
   });
 
-  it("?facets=source with ?f= + ?search= passes the search to lead_aggregates (counts match the searched list)", async () => {
+  // EDGEX-163: lead_aggregates()'s p_search is one whole-string ILIKE with no display_id match, so
+  // under a search its Source/Destination counts would contradict the list. They come back null.
+  const noRpcClient = (rpcCalls: [string, Record<string, unknown>][]) => ({
+    rpc: (name: string, params: Record<string, unknown>) => {
+      rpcCalls.push([name, params]);
+      return Promise.resolve({ data: [], error: null });
+    },
+  });
+
+  it("?facets=source with ?f= + ?search= returns null counts and never calls lead_aggregates (the RPC's whole-string search can't match the list)", async () => {
     const rpcCalls: [string, Record<string, unknown>][] = [];
-    createClientMock.mockResolvedValue({
-      rpc: (name: string, params: Record<string, unknown>) => {
-        rpcCalls.push([name, params]);
-        return Promise.resolve({ data: [], error: null });
-      },
-    });
+    createClientMock.mockResolvedValue(noRpcClient(rpcCalls));
     createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
     const { GET } = await import("./route");
     const res = await GET(fakeReq({ facets: "source", [FILTER_PARAM]: encodedTreeFor({ status: "contacted" }), search: "akash" }));
     expect(res.status).toBe(200);
-    expect(rpcCalls.some(([, params]) => params.p_search === "akash")).toBe(true);
+    expect(rpcCalls.filter(([n]) => n === "lead_aggregates")).toHaveLength(0);
   });
+
+  it("?facets=destination&search=Ram Thapa returns destination:null and never calls lead_aggregates", async () => {
+    const rpcCalls: [string, Record<string, unknown>][] = [];
+    createClientMock.mockResolvedValue(noRpcClient(rpcCalls));
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ facets: "destination", search: "Ram Thapa" }));
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data).toEqual({ facets: { destination: null } });
+    expect(rpcCalls.filter(([n]) => n === "lead_aggregates")).toHaveLength(0);
+  });
+
+  it("?facets=source,assignee&search=PS-371 (single word, display id): source is null but assignee is still counted per person from the list's own query", async () => {
+    const rpcCalls: [string, Record<string, unknown>][] = [];
+    createClientMock.mockResolvedValue(noRpcClient(rpcCalls));
+    createServiceClientMock.mockResolvedValue(
+      facetDb({ memberIds: ["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1"], countFor: (calls) => (callsMention(calls, "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1") ? 6 : 0) }),
+    );
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ facets: "source,assignee", search: "PS-371" }));
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data).toEqual({
+      facets: { source: null, assignee: { options: [{ name: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1", count: 6 }] } },
+    });
+    expect(rpcCalls.filter(([n]) => n === "lead_aggregates")).toHaveLength(0);
+  });
+
+  it("legacy single ?facets=source + ?search= returns the null shape { facet, options: [], counts: null }", async () => {
+    const rpcCalls: [string, Record<string, unknown>][] = [];
+    createClientMock.mockResolvedValue(noRpcClient(rpcCalls));
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ facets: "source", search: "Ram Thapa" }));
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data).toEqual({ facet: "source", options: [], counts: null });
+    expect(rpcCalls.filter(([n]) => n === "lead_aggregates")).toHaveLength(0);
+  });
+
+  // "?facets=source with NO search → unchanged" is already proven by the branch-manager test above
+  // ("branch-manager facets=source resolves p_scope…": lead_aggregates IS called) — no duplicate added.
 
   it("?tag=vip and its equivalent ?f= tree produce byte-identical query calls (native .contains() path)", async () => {
     const legacyCalls: Call[] = [];
@@ -1081,6 +1186,42 @@ describe("GET /api/v1/leads — ?f= compiles through the SAME compileFilter() as
       { name: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1", count: 4 },
       { name: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2", count: 4 },
     ]);
+  });
+
+  it("former-collaborator discovery under a ?search= asks lead_aggregates WITHOUT p_search (a search must not hide former collaborators); counts still use the list's own query", async () => {
+    const rpcCalls: RpcCall[] = [];
+    authenticateRequestMock.mockResolvedValue(
+      authFixture({
+        userId: "user-1",
+        branchId: "branch-1",
+        branchMemberIds: ["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1"],
+        permissions: permissions({ leadScope: "team" }),
+      }),
+    );
+    createClientMock.mockResolvedValue({
+      rpc: (name: string, params: unknown, opts: unknown) => {
+        rpcCalls.push([name, params, opts]);
+        if (name === "lead_aggregates") return Promise.resolve({ data: [], error: null });
+        const chain: Record<string, unknown> = {
+          select: () => chain,
+          is: () => chain,
+          not: () => chain,
+          eq: () => chain,
+          in: () => chain,
+          or: () => chain,
+          then: (resolve: (v: { data: null; error: null; count: number }) => void) =>
+            resolve({ data: null, error: null, count: 2 }),
+        };
+        return chain;
+      },
+    });
+    createServiceClientMock.mockResolvedValue(facetDb({ memberIds: ["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1"], countFor: () => 0 }));
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ facets: "collaborator", search: "Ram Thapa" }));
+    expect(res.status).toBe(200);
+    const discovery = rpcCalls.filter(([name]) => name === "lead_aggregates");
+    expect(discovery).toHaveLength(1);
+    expect(discovery[0][1]).not.toHaveProperty("p_search");
   });
 
   it("a malformed ?f= (not valid base64url JSON) is a 422, never an unhandled throw", async () => {
@@ -1468,5 +1609,422 @@ describe("GET /api/v1/leads — ?f= compiles through the SAME compileFilter() as
     const body = await res.json();
     expect(res.status).toBe(200);
     expect(body.data).toEqual({ facet: "source", options: [] });
+  });
+});
+
+// EDGEX-126 footer summary: ?facets=summary -> { stages, needFollowUp } over the WHOLE filtered set.
+describe("GET /api/v1/leads — facets=summary (EDGEX-126 footer)", () => {
+  beforeEach(() => {
+    authenticateRequestMock.mockReset();
+    createServiceClientMock.mockReset();
+    createClientMock.mockReset();
+    getFeatureAccessMock.mockReset();
+    branchMemberIdsMock.mockReset();
+    getFeatureAccessMock.mockReturnValue(false);
+    branchMemberIdsMock.mockResolvedValue([]);
+  });
+
+  const LIST_ROWS = [
+    { dimension: "list", key: "list-a", bucket: "all", cnt: 3 },
+    { dimension: "list", key: "list-b", bucket: "all", cnt: 2 },
+    { dimension: "list", key: "(none)", bucket: "all", cnt: 4 },
+    { dimension: "intake_source", key: "Facebook", bucket: "all", cnt: 9 },
+  ];
+
+  // Any chained builder call returns the chain; awaiting it resolves a head count. lead_aggregates resolves rows.
+  function summaryClient(rpcCalls: RpcCall[], headCount: number) {
+    return {
+      rpc: (name: string, params: unknown, opts: unknown) => {
+        rpcCalls.push([name, params, opts]);
+        if (name === "lead_aggregates") return Promise.resolve({ data: LIST_ROWS, error: null });
+        const chain: Record<string, unknown> = new Proxy(
+          {},
+          {
+            get: (_t, prop) =>
+              prop === "then"
+                ? (resolve: (v: unknown) => void) => resolve({ data: null, error: null, count: headCount })
+                : () => chain,
+          },
+        );
+        return chain;
+      },
+    };
+  }
+
+  function eduDb(countChains: Call[][], headCount: number, opts?: { countFor?: (calls: Call[]) => number }) {
+    return {
+      from: (table: string) => {
+        if (table === "tenants") {
+          return { select: () => ({ eq: () => ({ single: () => Promise.resolve({ data: { config: null }, error: null }) }) }) };
+        }
+        if (table === "lead_lists") {
+          return { select: () => ({ eq: () => Promise.resolve({ data: [{ id: "aaaaaaaa-0000-4000-8000-00000000000a" }, { id: "bbbbbbbb-0000-4000-8000-00000000000b" }, { id: "cccccccc-0000-4000-8000-00000000000c" }], error: null }) }) };
+        }
+        if (table === "leads") {
+          const calls: Call[] = [];
+          countChains.push(calls);
+          const chain = makeLeadsChain(calls) as Record<string, unknown>;
+          chain.then = (resolve: (v: unknown) => void) =>
+            resolve({ data: null, error: null, count: opts?.countFor ? opts.countFor(calls) : headCount });
+          return chain;
+        }
+        throw new Error(`unexpected table ${table}`);
+      },
+    };
+  }
+
+  it("admin: stages = distinct non-empty lists from ONE lead_aggregates call; needFollowUp = ONE head count carrying the follow_up_needed predicate", async () => {
+    const rpcCalls: RpcCall[] = [];
+    const countChains: Call[][] = [];
+    authenticateRequestMock.mockResolvedValue(
+      authFixture({ role: "owner", industryId: "education_consultancy", permissions: permissions({ leadScope: "all" }) }),
+    );
+    createClientMock.mockResolvedValue(summaryClient(rpcCalls, 0));
+    createServiceClientMock.mockResolvedValue(eduDb(countChains, 7));
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ facets: "summary" }));
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data).toEqual({ facets: { summary: { stages: 2, needFollowUp: 7 } } });
+    expect(rpcCalls.filter(([n]) => n === "lead_aggregates")).toHaveLength(1);
+    expect((rpcCalls[0][1] as { p_tenant: string }).p_tenant).toBe("tenant-1");
+    expect(countChains).toHaveLength(1);
+    expect(callsMention(countChains[0], "on_hold.eq.false")).toBe(true);
+    expect(callsMention(countChains[0], "last_touched_at")).toBe(true);
+  });
+
+  it("counselor (own scope): the aggregate runs with p_scope 'own' + their user id, and the follow-up count goes through the visibility RPC — never the whole tenant", async () => {
+    const rpcCalls: RpcCall[] = [];
+    authenticateRequestMock.mockResolvedValue(
+      authFixture({ userId: "counselor-1", industryId: "education_consultancy", permissions: permissions({ leadScope: "own" }) }),
+    );
+    createClientMock.mockResolvedValue(summaryClient(rpcCalls, 4));
+    createServiceClientMock.mockResolvedValue(eduDb([], 0));
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ facets: "summary" }));
+    const body = await res.json();
+    expect(body.data.facets.summary).toEqual({ stages: 2, needFollowUp: 4 });
+    const agg = rpcCalls.find(([n]) => n === "lead_aggregates")!;
+    expect(agg[1]).toMatchObject({ p_scope: "own", p_user: "counselor-1", p_tenant: "tenant-1" });
+    expect(rpcCalls.some(([n]) => n.startsWith("leads_visible_to_user"))).toBe(true);
+  });
+
+  it("an OR tree yields null for both numbers — never a partial or page-scoped guess", async () => {
+    const rpcCalls: RpcCall[] = [];
+    const countChains: Call[][] = [];
+    authenticateRequestMock.mockResolvedValue(
+      authFixture({ role: "owner", industryId: "education_consultancy", permissions: permissions({ leadScope: "all" }) }),
+    );
+    createClientMock.mockResolvedValue(summaryClient(rpcCalls, 0));
+    createServiceClientMock.mockResolvedValue(eduDb(countChains, 7));
+    const orTree = {
+      conjunction: "or" as const,
+      conditions: [
+        { id: "a", field: "status", op: "is" as const, value: "new" },
+        { id: "b", field: "status", op: "is" as const, value: "contacted" },
+      ],
+    };
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ facets: "summary", [FILTER_PARAM]: encodeFilterTree(orTree) }));
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data.facets.summary).toEqual({ stages: null, needFollowUp: null });
+    expect(rpcCalls.filter(([n]) => n === "lead_aggregates")).toHaveLength(0);
+    expect(countChains).toHaveLength(0);
+  });
+
+  it("with a search term the stage count is exact per list (the RPC's p_search has no display-id match): one head count per lead list with that list ANDed on, lists with 0 not counted", async () => {
+    const rpcCalls: RpcCall[] = [];
+    const countChains: Call[][] = [];
+    authenticateRequestMock.mockResolvedValue(
+      authFixture({ role: "owner", industryId: "education_consultancy", permissions: permissions({ leadScope: "all" }) }),
+    );
+    createClientMock.mockResolvedValue(summaryClient(rpcCalls, 0));
+    createServiceClientMock.mockResolvedValue(
+      eduDb(countChains, 0, { countFor: (calls) => (callsMention(calls, "aaaaaaaa-0000-4000-8000-00000000000a") ? 5 : callsMention(calls, "bbbbbbbb-0000-4000-8000-00000000000b") ? 2 : 0) }),
+    );
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ facets: "summary", search: "LOC-ADM" }));
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data.facets.summary.stages).toBe(2);
+    expect(rpcCalls.filter(([n]) => n === "lead_aggregates")).toHaveLength(0);
+    // 3 lists + 1 follow-up count, every one through the list's own chain
+    expect(countChains).toHaveLength(4);
+    for (const c of countChains) expect(callsMention(c, "LOC-ADM")).toBe(true);
+  });
+
+  it("an empty pipeline allowlist returns zeros without touching the aggregate", async () => {
+    const rpcCalls: RpcCall[] = [];
+    authenticateRequestMock.mockResolvedValue(
+      authFixture({ role: "owner", industryId: "education_consultancy", permissions: permissions({ leadScope: "all", pipelineAccess: { ids: new Set() } }) }),
+    );
+    createClientMock.mockResolvedValue(summaryClient(rpcCalls, 0));
+    createServiceClientMock.mockResolvedValue(eduDb([], 0));
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ facets: "summary" }));
+    const body = await res.json();
+    expect(body.data.facets.summary).toEqual({ stages: 0, needFollowUp: 0 });
+    expect(rpcCalls).toEqual([]);
+  });
+});
+
+// Collaborators "is none of" (migration 282; client request Manish/Admizz Nov 2026). The exclusion cannot be an
+// embedded filter, so for EVERY role it is lifted out of the tree and the whole request runs over a SQL function.
+// Asserted by SHAPE (mocked chains can't prove SQL): which rpc is called, with which args, and that nothing
+// embed-shaped reaches the PostgREST builder.
+describe("GET /api/v1/leads — Collaborators 'is none of' runs in SQL for every role (migration 282)", () => {
+  const A = "11111111-1111-1111-1111-111111111111";
+  const B = "22222222-2222-2222-2222-222222222222";
+  const treeParam = (conditions: Array<{ id: string; field: string; op: string; value?: unknown }>, conjunction: "and" | "or" = "and") =>
+    encodeFilterTree({ conjunction, conditions } as Parameters<typeof encodeFilterTree>[0]);
+
+  function recordingRpc(rpcCalls: RpcCall[], chainCalls: Call[], count = 5) {
+    return (name: string, params: unknown, opts: unknown) => {
+      rpcCalls.push([name, params, opts]);
+      const record = (m: string) => (...args: unknown[]) => { chainCalls.push([m, args]); return chain; };
+      const chain: Record<string, unknown> = {
+        select: record("select"), is: record("is"), not: record("not"), eq: record("eq"), in: record("in"), or: record("or"), order: record("order"),
+        range: () => Promise.resolve({ data: [], error: null, count }),
+      };
+      return chain;
+    };
+  }
+
+  beforeEach(() => {
+    authenticateRequestMock.mockReset();
+    createServiceClientMock.mockReset();
+    createClientMock.mockReset();
+    getFeatureAccessMock.mockReset();
+    branchMemberIdsMock.mockReset();
+    getFeatureAccessMock.mockReturnValue(false);
+    branchMemberIdsMock.mockResolvedValue([]);
+    createClientMock.mockResolvedValue(fakeUserClient([]));
+  });
+
+  it("owner/admin: the tenant-wide SQL function on the SERVICE client with the exclude list — no embed, no plain leads read", async () => {
+    authenticateRequestMock.mockResolvedValue(authFixture({ userId: "admin-1", role: "owner", permissions: permissions({ leadScope: "all" }) }));
+    const rpcCalls: RpcCall[] = [];
+    const chainCalls: Call[] = [];
+    createServiceClientMock.mockResolvedValue({ rpc: recordingRpc(rpcCalls, chainCalls, 42), from: () => { throw new Error("must not read leads directly"); } });
+
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ [FILTER_PARAM]: treeParam([{ id: "c", field: "collaborators", op: "is_none_of", value: [A, B] }]) }));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(rpcCalls).toEqual([["leads_for_tenant_with_collaborator_filter", { p_tenant: "tenant-1", p_exclude_ids: [A, B] }, { count: "exact" }]]);
+    expect(JSON.stringify(chainCalls)).not.toContain("lead_collaborators");
+    expect(body.meta.total).toBe(42);
+  });
+
+  it("branch manager: the filtered visibility RPC on the USER client (same visibility as before), exclude list passed", async () => {
+    authenticateRequestMock.mockResolvedValue(
+      authFixture({ userId: "user-1", branchId: "branch-1", branchMemberIds: ["u1"], permissions: permissions({ leadScope: "team" }) }),
+    );
+    const rpcCalls: RpcCall[] = [];
+    const chainCalls: Call[] = [];
+    createClientMock.mockResolvedValue({ rpc: recordingRpc(rpcCalls, chainCalls) });
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
+
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ [FILTER_PARAM]: treeParam([{ id: "c", field: "collaborators", op: "is_none_of", value: [A] }]) }));
+
+    expect(res.status).toBe(200);
+    expect(rpcCalls).toEqual([
+      ["leads_visible_to_user_with_collaborator_filter", { p_tenant: "tenant-1", p_scope: "branch", p_branch_id: "branch-1", p_exclude_ids: [A] }, { count: "exact" }],
+    ]);
+    expect(JSON.stringify(chainCalls)).not.toContain("lead_collaborators");
+  });
+
+  it("counselor (own scope): the filtered visibility RPC with p_scope 'own' and their own userId", async () => {
+    authenticateRequestMock.mockResolvedValue(authFixture({ userId: "user-1", permissions: permissions({ leadScope: "own" }) }));
+    const rpcCalls: RpcCall[] = [];
+    createClientMock.mockResolvedValue({ rpc: recordingRpc(rpcCalls, []) });
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
+
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ [FILTER_PARAM]: treeParam([{ id: "c", field: "collaborators", op: "is_none_of", value: [A] }]) }));
+
+    expect(res.status).toBe(200);
+    expect(rpcCalls[0][0]).toBe("leads_visible_to_user_with_collaborator_filter");
+    expect(rpcCalls[0][1]).toMatchObject({ p_tenant: "tenant-1", p_user: "user-1", p_scope: "own", p_exclude_ids: [A] });
+  });
+
+  it("is none of + is any of together: both lists reach SQL (the any_of is not left behind as an embed)", async () => {
+    authenticateRequestMock.mockResolvedValue(authFixture({ userId: "admin-1", role: "owner", permissions: permissions({ leadScope: "all" }) }));
+    const rpcCalls: RpcCall[] = [];
+    const chainCalls: Call[] = [];
+    createServiceClientMock.mockResolvedValue({ rpc: recordingRpc(rpcCalls, chainCalls), from: () => { throw new Error("no direct read"); } });
+
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ [FILTER_PARAM]: treeParam([
+      { id: "a", field: "collaborators", op: "is_any_of", value: [A] },
+      { id: "c", field: "collaborators", op: "is_none_of", value: [B] },
+    ]) }));
+
+    expect(res.status).toBe(200);
+    expect(rpcCalls[0][1]).toEqual({ p_tenant: "tenant-1", p_include_ids: [A], p_exclude_ids: [B] });
+    expect(JSON.stringify(chainCalls)).not.toContain("lead_collaborators");
+  });
+
+  it("other filters still apply on top of the SQL function (status here)", async () => {
+    authenticateRequestMock.mockResolvedValue(authFixture({ userId: "admin-1", role: "owner", permissions: permissions({ leadScope: "all" }) }));
+    const chainCalls: Call[] = [];
+    createServiceClientMock.mockResolvedValue({ rpc: recordingRpc([], chainCalls), from: () => { throw new Error("no direct read"); } });
+
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ [FILTER_PARAM]: treeParam([
+      { id: "s", field: "status", op: "is", value: "contacted" },
+      { id: "c", field: "collaborators", op: "is_none_of", value: [A] },
+    ]) }));
+
+    expect(res.status).toBe(200);
+    expect(JSON.stringify(chainCalls)).toContain("contacted");
+  });
+
+  it("a shape that can't be lifted (inside an OR tree) is a clean 422 — never a silently wrong list", async () => {
+    authenticateRequestMock.mockResolvedValue(authFixture({ userId: "admin-1", role: "owner", permissions: permissions({ leadScope: "all" }) }));
+    createServiceClientMock.mockResolvedValue({ rpc: () => { throw new Error("must not run"); }, from: () => { throw new Error("must not run"); } });
+
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ [FILTER_PARAM]: treeParam([
+      { id: "c", field: "collaborators", op: "is_none_of", value: [A] },
+      { id: "s", field: "status", op: "is", value: "new" },
+    ], "or") }));
+
+    expect(res.status).toBe(422);
+  });
+
+  it("a malformed uuid in the exclude list is a clean 422", async () => {
+    authenticateRequestMock.mockResolvedValue(authFixture({ userId: "admin-1", role: "owner", permissions: permissions({ leadScope: "all" }) }));
+    createServiceClientMock.mockResolvedValue({ rpc: () => { throw new Error("must not run"); }, from: () => { throw new Error("must not run"); } });
+
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ [FILTER_PARAM]: treeParam([{ id: "c", field: "collaborators", op: "is_none_of", value: ["not-a-uuid"] }]) }));
+
+    expect(res.status).toBe(422);
+  });
+
+  it("without an exclusion, owner/admin still reads leads directly (the existing path is untouched)", async () => {
+    authenticateRequestMock.mockResolvedValue(authFixture({ userId: "admin-1", role: "owner", permissions: permissions({ leadScope: "all" }) }));
+    const leadsCalls: Call[] = [];
+    createServiceClientMock.mockResolvedValue({ ...fakeDb({ leadsCalls }), rpc: () => { throw new Error("no rpc without an exclusion"); } });
+
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ [FILTER_PARAM]: treeParam([{ id: "a", field: "collaborators", op: "is_any_of", value: [A] }]) }));
+
+    expect(res.status).toBe(200);
+    expect(leadsCalls.some(([m, a]) => m === "select" && String(a[0]).includes("lead_collaborators!inner(user_id)"))).toBe(true);
+  });
+
+  it("facet counts keep the exclusion: every per-person count runs over the same SQL function", async () => {
+    authenticateRequestMock.mockResolvedValue(authFixture({ userId: "admin-1", role: "owner", permissions: permissions({ leadScope: "all" }) }));
+    const rpcCalls: RpcCall[] = [];
+    createServiceClientMock.mockResolvedValue({
+      from: (table: string) => {
+        if (table === "tenant_users") {
+          return { select: () => ({ eq: () => Promise.resolve({ data: [{ user_id: "u1" }], error: null }) }) };
+        }
+        throw new Error(`unexpected direct read of ${table}`);
+      },
+      rpc: (name: string, params: unknown, opts: unknown) => {
+        rpcCalls.push([name, params, opts]);
+        const chain: Record<string, unknown> = {};
+        for (const m of ["select", "is", "not", "eq", "in", "or", "order"]) chain[m] = () => chain;
+        chain.range = () => Promise.resolve({ data: [], error: null, count: 3 });
+        chain.then = (resolve: (v: { data: null; error: null; count: number }) => void) => resolve({ data: null, error: null, count: 3 });
+        return chain;
+      },
+    });
+
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({
+      facets: "assignee",
+      [FILTER_PARAM]: treeParam([{ id: "c", field: "collaborators", op: "is_none_of", value: [A] }]),
+    }));
+
+    expect(res.status).toBe(200);
+    expect(rpcCalls.length).toBeGreaterThan(0);
+    for (const [name, params] of rpcCalls) {
+      expect(name).toBe("leads_for_tenant_with_collaborator_filter");
+      expect(params).toMatchObject({ p_tenant: "tenant-1", p_exclude_ids: [A] });
+    }
+  });
+  // Found by the Nov 2026 stage smoke test: Collaborators "is not empty" returned 503 "Failed to fetch leads" for a branch
+  // manager. As an `!inner` embed it ran over the leads_visible_to_user() RPC, where PostgREST resolves an embedded filter
+  // against `pgrst_call` (42703). It now reads the mig 210 counter (collaborator_count > 0): a plain column filter, no embed.
+  it("branch manager + Collaborators is_not_empty: counter filter on the RPC base — NO embed select, no referencedTable", async () => {
+    authenticateRequestMock.mockResolvedValue(
+      authFixture({ userId: "user-1", branchId: "branch-1", branchMemberIds: ["u1"], permissions: permissions({ leadScope: "team" }) }),
+    );
+    const rpcCalls: RpcCall[] = [];
+    const chainCalls: Call[] = [];
+    createClientMock.mockResolvedValue({ rpc: recordingRpc(rpcCalls, chainCalls, 9) });
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
+
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ [FILTER_PARAM]: treeParam([{ id: "n", field: "collaborators", op: "is_not_empty" }]) }));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.meta.total).toBe(9);
+    expect(rpcCalls).toHaveLength(1);
+    expect(rpcCalls[0][0]).toBe("leads_visible_to_user"); // the ordinary visibility function — unchanged
+    expect(JSON.stringify(chainCalls)).not.toContain("lead_collaborators");
+    expect(chainCalls.some(([m, a]) => m === "or" && JSON.stringify(a).includes("collaborator_count.gt.0"))).toBe(true);
+    // no `{ referencedTable }` option on any .or() — that is what 503'd over the RPC base
+    expect(chainCalls.filter(([m]) => m === "or").every(([, a]) => !JSON.stringify(a).includes("referencedTable"))).toBe(true);
+  });
+
+  it("counselor (own scope) + Collaborators is_not_empty: same counter filter, p_scope 'own'", async () => {
+    authenticateRequestMock.mockResolvedValue(authFixture({ userId: "user-1", permissions: permissions({ leadScope: "own" }) }));
+    const rpcCalls: RpcCall[] = [];
+    const chainCalls: Call[] = [];
+    createClientMock.mockResolvedValue({ rpc: recordingRpc(rpcCalls, chainCalls) });
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
+
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ [FILTER_PARAM]: treeParam([{ id: "n", field: "collaborators", op: "is_not_empty" }]) }));
+
+    expect(res.status).toBe(200);
+    expect(rpcCalls[0][1]).toMatchObject({ p_scope: "own", p_user: "user-1" });
+    expect(JSON.stringify(chainCalls)).not.toContain("lead_collaborators");
+    expect(chainCalls.some(([m, a]) => m === "or" && JSON.stringify(a).includes("collaborator_count.gt.0"))).toBe(true);
+  });
+
+  it("owner/admin + Collaborators is_not_empty: counter filter on the plain leads read — no embed select any more", async () => {
+    authenticateRequestMock.mockResolvedValue(authFixture({ userId: "admin-1", role: "owner", permissions: permissions({ leadScope: "all" }) }));
+    const leadsCalls: Call[] = [];
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls }));
+
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ [FILTER_PARAM]: treeParam([{ id: "n", field: "collaborators", op: "is_not_empty" }]) }));
+
+    expect(res.status).toBe(200);
+    expect(JSON.stringify(leadsCalls)).not.toContain("lead_collaborators");
+    expect(leadsCalls.some(([m, a]) => m === "or" && JSON.stringify(a).includes("collaborator_count.gt.0"))).toBe(true);
+  });
+
+  it("is_not_empty + is none of together (branch manager): 'has some collaborator, but none of X' — SQL exclusion + counter filter", async () => {
+    authenticateRequestMock.mockResolvedValue(
+      authFixture({ userId: "user-1", branchId: "branch-1", branchMemberIds: ["u1"], permissions: permissions({ leadScope: "team" }) }),
+    );
+    const rpcCalls: RpcCall[] = [];
+    const chainCalls: Call[] = [];
+    createClientMock.mockResolvedValue({ rpc: recordingRpc(rpcCalls, chainCalls) });
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
+
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ [FILTER_PARAM]: treeParam([
+      { id: "n", field: "collaborators", op: "is_not_empty" },
+      { id: "c", field: "collaborators", op: "is_none_of", value: [A] },
+    ]) }));
+
+    expect(res.status).toBe(200);
+    expect(rpcCalls[0][0]).toBe("leads_visible_to_user_with_collaborator_filter");
+    expect(rpcCalls[0][1]).toMatchObject({ p_exclude_ids: [A] });
+    expect(chainCalls.some(([m, a]) => m === "or" && JSON.stringify(a).includes("collaborator_count.gt.0"))).toBe(true);
+    expect(JSON.stringify(chainCalls)).not.toContain("lead_collaborators");
   });
 });

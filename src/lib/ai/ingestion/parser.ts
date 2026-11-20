@@ -4,10 +4,11 @@
 //   text/plain|markdown|csv  -> UTF-8 decode
 //   pdf|docx|pptx            -> officeparser
 //   image/jpeg|png|webp      -> vision OCR (generateText, MODELS.fast)
-//   scanned PDF (<100 chars) -> vision OCR via a PDF file part (OpenAI chat
-//                               completions supports application/pdf file
-//                               parts as base64 `file_data` — verified against
-//                               the installed @ai-sdk/openai build). Wrapped
+//   scanned PDF (<100 chars) -> vision OCR via a PDF file part (supported by
+//                               both providers: OpenAI chat completions as
+//                               base64 `file_data`, Anthropic as a document
+//                               block). OCR goes through the provider seam
+//                               (model("fast")), so it follows AI_PROVIDER. Wrapped
 //                               in try/catch: if the provider/model rejects
 //                               it, the caller marks the item failed instead
 //                               of retrying forever.

@@ -81,6 +81,20 @@ export interface TenantConfig {
   // for defaults used when this key is absent. Per-stage dwell thresholds are
   // Phase 2 (not wired to any widget yet — stuck-rate is currently a plain
   // touched/pile ratio, not dwell-based).
+  // Pulse (EDGEX-82) rule thresholds — every key optional, code defaults in
+  // features/pulse/lib/thresholds.ts.
+  /** Pulse AI surfaces (briefing, Suggested tags…): shown in Preview mode unless this is explicitly false. */
+  pulse_ai_preview?: boolean;
+  pulse_thresholds?: {
+    activity_drop_ratio?: number;
+    activity_drop_min_usual?: number;
+    over_capacity_ratio?: number;
+    over_capacity_min?: number;
+    stage_leak_ratio?: number;
+    stage_leak_min?: number;
+    bulk_min_rows?: number;
+    bulk_bucket_seconds?: number;
+  };
   team_performance_thresholds?: {
     intake_alarm_buckets_hours?: [number, number];
     follow_up_stale_days?: number;
@@ -1244,8 +1258,13 @@ export interface Application {
   stage_changed_at: string;
   deleted_at: string | null;
   // Joined fields (present when fetched with select joins)
-  leads?: { id: string; first_name: string | null; last_name: string | null; email: string | null } | null;
+  leads?: { id: string; first_name: string | null; last_name: string | null; email: string | null; assigned_to?: string | null } | null;
   application_stages?: ApplicationStage | null;
+  // Board-only, attached by /applications page.tsx (not DB columns)
+  doc_count?: number;
+  open_task_count?: number;
+  /** List view (board-page, no stage): the column the board places this app in. */
+  placed_stage_id?: string | null;
 }
 
 // Deals / Opportunities (it_agency feature)

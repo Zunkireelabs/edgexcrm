@@ -12,6 +12,7 @@ import {
 } from "@/lib/api/response";
 import type { ActivityType, CallOutcome, LeadActivityRecord } from "@/types/database";
 import { touchLeadUpdatedAt } from "@/lib/leads/touch-updated-at";
+import { resolveActivityTime } from "@/lib/leads/activity-time";
 
 const VALID_ACTIVITY_TYPES: ActivityType[] = ["call", "email", "meeting"];
 const VALID_CALL_OUTCOMES: CallOutcome[] = ["connected", "left_voicemail", "no_answer", "busy", "wrong_number"];
@@ -112,7 +113,7 @@ export async function POST(
     return apiValidationError({ body: ["Invalid JSON body"] });
   }
 
-  const { activity_type, subject, description, call_outcome, duration_minutes, scheduled_at, location, attendees, email_subject, email_body, meeting_mode } = body;
+  const { activity_type, subject, description, call_outcome, duration_minutes, scheduled_at, location, attendees, email_subject, email_body, meeting_mode, created_at } = body;
 
   // Validate activity_type
   if (!activity_type || !VALID_ACTIVITY_TYPES.includes(activity_type as ActivityType)) {
@@ -128,6 +129,10 @@ export async function POST(
   if (meeting_mode && !["in_person", "online"].includes(meeting_mode as string)) {
     return apiValidationError({ meeting_mode: ["Must be one of: in_person, online"] });
   }
+
+  // "When": a call can be logged after the fact (past only). Absent = now (the table default).
+  const when = resolveActivityTime(created_at);
+  if (!when.ok) return apiValidationError({ created_at: [when.error] });
 
   const supabase = await createServiceClient();
 
@@ -166,7 +171,8 @@ export async function POST(
       attendees: Array.isArray(attendees) ? attendees : null,
       email_subject: email_subject as string || null,
       email_body: email_body as string || null,
-      completed_at: new Date().toISOString(),
+      ...(when.iso ? { created_at: when.iso } : {}),
+      completed_at: when.iso ?? new Date().toISOString(),
       metadata: meeting_mode ? { meeting_mode } : {},
     })
     .select()

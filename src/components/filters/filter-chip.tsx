@@ -8,7 +8,7 @@
 // from e.g. "Stage" to "Leads Organize" no longer means delete-and-re-add.
 
 import { useEffect, useMemo, useState } from "react";
-import { X } from "lucide-react";
+import { XIcon } from "@/components/icons";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { FieldDef, FilterCondition } from "@/lib/filters/types";
 import { FilterConditionEditor } from "./filter-condition-editor";
@@ -118,18 +118,25 @@ export function FilterChip({
         className="inline-flex h-7 shrink-0 items-center gap-1 rounded-[4px] border pl-2.5 pr-1 text-xs"
         style={{ backgroundColor: `${color}20`, borderColor: `${color}66` }}
       >
-        <PopoverTrigger asChild>
-          <button type="button" data-testid="filter-chip" className="font-medium hover:underline" style={{ color }}>
+        {field.fixedChipLabel ? (
+          // Machine-data condition: plain words, nothing to edit; it can only be removed.
+          <span data-testid="filter-chip" className="font-medium" style={{ color }}>
             {formatChipLabel(field, condition, displayOptions)}
-          </button>
-        </PopoverTrigger>
+          </span>
+        ) : (
+          <PopoverTrigger asChild>
+            <button type="button" data-testid="filter-chip" className="font-medium hover:underline" style={{ color }}>
+              {formatChipLabel(field, condition, displayOptions)}
+            </button>
+          </PopoverTrigger>
+        )}
         <button
           type="button"
           onClick={onRemove}
           aria-label={`Remove ${field.label} filter`}
           className="rounded-sm p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
         >
-          <X className="size-3" />
+          <XIcon className="size-3" />
         </button>
       </div>
       <PopoverContent align="start" className="w-auto p-0">

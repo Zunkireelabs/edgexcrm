@@ -13,6 +13,7 @@ import {
 } from "@/lib/supabase/queries";
 import { createServiceClient } from "@/lib/supabase/server";
 import { LeadDetailV2 } from "@/components/dashboard/lead/lead-detail-v2";
+import { LeadDetailEdu } from "@/industries/education-consultancy/features/lead-detail/lead-detail-edu";
 import { canSeeNav, canAccessList, leadQueryScope } from "@/lib/api/permissions";
 import { canEnrollStudents } from "@/lib/api/class-attendance";
 import { canBypassProspectQualification } from "@/lib/leads/prospect-qualification";
@@ -21,6 +22,8 @@ import { isOffFunnelLeadList } from "@/lib/leads/list-funnel";
 import { filterAssignableMembersByChain } from "@/lib/leads/assignable";
 import { nextPositionSlug, ASSIGN_CHAIN_POSITIONS } from "@/industries/education-consultancy/lead-assignment-chain";
 import { stageAssigneeCandidates } from "@/industries/education-consultancy/lead-assignment-by-stage";
+import { isAssistantEnabled } from "@/lib/ai/flag";
+import { resolveThresholds } from "@/industries/education-consultancy/features/team-performance/lib/thresholds";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import type { TenantEntity, Industry, LeadList } from "@/types/database";
@@ -288,6 +291,54 @@ export default async function LeadDetailPage({
         ),
       ].map((m) => ({ user_id: m.user_id, email: m.email, name: m.name }))
     : [];
+
+  // Education tenants get the new lead detail (EDGEX-89); every other industry keeps LeadDetailV2 untouched.
+  // Keyed by lead id so J/K between leads remounts it (its state is seeded from props).
+  if (tenantData.tenant.industry_id === "education_consultancy") {
+    return (
+      <LeadDetailEdu
+        key={lead.id}
+        lead={lead}
+        memberNames={memberNames}
+        notes={notes}
+        checklists={checklists}
+        activities={activities}
+        submissionHistory={submissionHistory}
+        stages={stages}
+        tenant={tenantData.tenant}
+        role={tenantData.role}
+        userId={tenantData.userId}
+        leadScope={tenantData.permissions.leadScope}
+        bypassQualification={canBypassProspectQualification(
+          tenantData.permissions.baseTier, tenantData.positionSlug
+        )}
+        canAssign={tenantData.permissions.canAssignLeads}
+        canEditLeads={tenantData.permissions.canEditLeads}
+        assignableMembers={assignableMembers}
+        stageScopedAssignees={stageScopedAssignees}
+        nextPositionMembers={nextPositionMembers}
+        revertTargetUserId={revertTargetUserId}
+        revertTargetName={revertTargetName}
+        revertTargetMembers={revertTargetMembers}
+        canMoveWithoutChain={canMoveWithoutChain}
+        stageAssigneeMap={stageAssigneeMap}
+        canManageApplications={tenantData.permissions.canManageApplications}
+        canManageApplicationPanel={canCreateOrReorderApplications(tenantData, lead)}
+        canEnroll={await canEnrollStudents({ role: tenantData.role, userId: tenantData.userId, tenantId: tenantData.tenant.id })}
+        leadLists={accessibleLists}
+        activeLeadLists={activeLeadLists}
+        classesActive={classesActive}
+        applicationsActive={applicationsActive}
+        checkInActive={checkInActive}
+        documentsActive={documentsActive}
+        consentEnabled={consentEnabled}
+        consentSigned={consentSigned}
+        aiEnabled={isAssistantEnabled() && tenantData.tenant.ai_enabled}
+        followUpStaleDays={resolveThresholds(tenantData.tenant.config).followUpStaleDays}
+        projectBoardEnabled={projectBoardEnabled}
+      />
+    );
+  }
 
   return (
     <LeadDetailV2

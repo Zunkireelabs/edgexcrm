@@ -14,6 +14,7 @@ import { getDocumentMetadataTool } from "./get-document-metadata";
 import { getDocumentExtractedDataTool } from "./get-document-extracted-data";
 import { findMissingDocumentsTool } from "./find-missing-documents";
 import { getDocumentDownloadUrlTool } from "./get-document-download-url";
+import { processContextTool } from "./process-context";
 
 registerTool(searchApplicationsTool);
 registerTool(getLeadApplicationsTool);
@@ -25,6 +26,7 @@ registerTool(getDocumentMetadataTool);
 registerTool(getDocumentExtractedDataTool);
 registerTool(findMissingDocumentsTool);
 registerTool(getDocumentDownloadUrlTool);
+registerTool(processContextTool);
 
 export {
   searchApplicationsTool,
@@ -37,4 +39,5 @@ export {
   getDocumentExtractedDataTool,
   findMissingDocumentsTool,
   getDocumentDownloadUrlTool,
+  processContextTool,
 };

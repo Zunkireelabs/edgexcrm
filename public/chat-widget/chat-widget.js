@@ -124,7 +124,7 @@
   function clock(ts) {
     try {
       return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    } catch (e) {
+    } catch {
       return "";
     }
   }
@@ -160,17 +160,14 @@
 
   function createMockTransport() {
     var hooks = null;
-    var visitorMessages = 0;
     function later(fn, ms) {
       return window.setTimeout(fn, ms);
     }
     return {
       start: function (state, h) {
         hooks = h;
-        visitorMessages = state.messages.filter(function (m) { return m.from === "visitor"; }).length;
       },
       send: function (text) {
-        visitorMessages += 1;
         var reply = scriptedReply(text);
         later(function () { hooks.agentTyping(true); }, 350);
         later(function () {
@@ -292,13 +289,13 @@
         state.messages = saved.messages;
         state.visitor = saved.visitor || null;
       }
-    } catch (e) {
+    } catch {
       /* storage can be blocked; the chat still works for this page */
     }
     function save() {
       try {
         window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ messages: state.messages.slice(-80), visitor: state.visitor }));
-      } catch (e) {
+      } catch {
         /* ignore */
       }
     }
@@ -348,7 +345,8 @@
       launcher.focus({ preventScroll: true });
     }
     function toggle() {
-      state.open ? close() : open();
+      if (state.open) close();
+      else open();
     }
 
     function pushMessage(m) {

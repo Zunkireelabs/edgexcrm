@@ -1,14 +1,27 @@
 "use client";
 
 import { isTransientErrorMessage } from "@/lib/ai/ingestion/transient-errors";
-import { notifyDocumentsChanged, onDocumentsChanged } from "./documents-events";
+import { notifyDocumentsChanged } from "./documents-events";
 import { replaceDocumentFile } from "./replace-document";
 import { formatRelativeTime } from "@/lib/date";
-import { groupDocuments, type ApplicationNames } from "./group-documents";
+import { groupDocuments } from "./group-documents";
 import { SECTION_TITLE_CLASS, SUBHEADING_CLASS } from "@/components/dashboard/lead/section-title";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
-import { FileText, Upload, Trash2, Loader2, Download, Eye, RefreshCw, LayoutGrid, List as ListIcon, Image as ImageIcon, AlertCircle, Search } from "lucide-react";
+import {
+  FileTextIcon,
+  UploadIcon,
+  TrashIcon,
+  CircleNotchIcon,
+  DownloadIcon,
+  EyeIcon,
+  ArrowsClockwiseIcon,
+  SquaresFourIcon,
+  ListIcon,
+  ImageIcon,
+  WarningCircleIcon,
+  MagnifyingGlassIcon,
+} from "@/components/icons";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,29 +35,13 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { formatBytes } from "@/lib/format";
-import { DOCUMENT_TYPES, type DocumentType } from "@/lib/documents/constants";
+import { DOCUMENT_TYPES } from "@/lib/documents/constants";
 import { documentTypeLabel, DOCUMENT_CATEGORY_LABELS } from "./labels";
 import { MultiDocumentUploadDialog } from "./multi-document-upload-dialog";
+import { useLeadDocuments, type ApplicantDocument, type DocumentsApi } from "./use-lead-documents";
 import { QUALIFICATION_LEVEL_LABELS } from "./document-upload-dialog";
 import type { QualificationLevel } from "@/lib/documents/constants";
 import { ACCEPTED_LABEL, ACCEPT_ATTR, describeSkipped, isSupportedFile, pickFiles } from "./multi-upload";
-
-interface ApplicantDocument {
-  id: string;
-  document_type: DocumentType;
-  name: string;
-  original_filename: string;
-  mime_type: string;
-  file_size: number;
-  status: string;
-  processing_error: string | null;
-  current_version_id: string | null;
-  uploaded_by: string | null;
-  created_at: string;
-  application_id?: string | null;
-  /** Academic level the document is linked to (migration 240), if any. */
-  qualification_level?: string | null;
-}
 
 type ViewMode = "grid" | "list";
 
@@ -63,6 +60,7 @@ export function ApplicantDocumentsCard({
   isAdmin,
   variant = "page",
   onViewAll,
+  store,
 }: {
   leadId: string;
   canManage: boolean;
@@ -71,12 +69,12 @@ export function ApplicantDocumentsCard({
   variant?: "page" | "summary";
   /** Summary card only: when given, "View all" calls this (e.g. switch to the lead page's Documents tab) instead of leaving for the documents page. */
   onViewAll?: () => void;
+  /** Lead page: the shared documents state (also read by the right rail). Omit and the card owns its own. */
+  store?: DocumentsApi;
 }) {
   const isSummary = variant === "summary";
-  const [docs, setDocs] = useState<ApplicantDocument[]>([]);
-  // Names of the university applications some files are linked to, for the "University – Programme" groups.
-  const [applications, setApplications] = useState<ApplicationNames>({});
-  const [loading, setLoading] = useState(true);
+  const own = useLeadDocuments(leadId, { enabled: !store });
+  const { docs, setDocs, applications, loading, maxFileBytes } = store ?? own;
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   // The files chosen with the upload button (several at once); null = the upload dialog is closed.
   const [pendingFiles, setPendingFiles] = useState<File[] | null>(null);
@@ -89,27 +87,6 @@ export function ApplicantDocumentsCard({
   const replaceInputRef = useRef<HTMLInputElement>(null);
   const replaceTargetRef = useRef<ApplicantDocument | null>(null);
   const [replacingId, setReplacingId] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/v1/leads/${leadId}/documents`);
-      if (!res.ok) return;
-      const json = await res.json();
-      setDocs((json.data?.documents ?? []) as ApplicantDocument[]);
-      setApplications((json.data?.applications ?? {}) as ApplicationNames);
-    } catch {
-      // silently fail — empty state renders
-    } finally {
-      setLoading(false);
-    }
-  }, [leadId]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  // Refresh when documents are added elsewhere on the page (e.g. the Attach button in the Student Details pop-up).
-  useEffect(() => onDocumentsChanged(leadId, load), [leadId, load]);
 
   async function handleDelete(doc: ApplicantDocument) {
     if (!confirm(`Delete "${doc.name}"? This cannot be undone.`)) return;
@@ -240,7 +217,7 @@ export function ApplicantDocumentsCard({
                   onClick={() => setViewMode((m) => (m === "list" ? "grid" : "list"))}
                   title={viewMode === "list" ? "Switch to grid view" : "Switch to list view"}
                 >
-                  {viewMode === "list" ? <LayoutGrid className="h-3.5 w-3.5" /> : <ListIcon className="h-3.5 w-3.5" />}
+                  {viewMode === "list" ? <SquaresFourIcon className="h-3.5 w-3.5" /> : <ListIcon className="h-3.5 w-3.5" />}
                 </Button>
               )}
               {canManage && (
@@ -267,10 +244,11 @@ export function ApplicantDocumentsCard({
                     size="sm"
                     variant="ghost"
                     className="h-6 w-6 p-0"
-                    onClick={() => fileInputRef.current?.click()}
+                    // On the lead page the dialog itself has the drop zone; standalone, the picker comes first.
+                    onClick={() => (store ? store.openUpload() : fileInputRef.current?.click())}
                     title="Upload documents"
                   >
-                    <Upload className="h-3.5 w-3.5" />
+                    <UploadIcon className="h-3.5 w-3.5" />
                   </Button>
                 </>
               )}
@@ -281,7 +259,7 @@ export function ApplicantDocumentsCard({
         <CardContent className="pb-4">
           {loading ? (
             <div className="flex justify-center py-3">
-              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              <CircleNotchIcon className="h-4 w-4 animate-spin text-muted-foreground" />
             </div>
           ) : docs.length === 0 ? (
             <p className="text-xs text-muted-foreground text-center py-2">
@@ -324,7 +302,7 @@ export function ApplicantDocumentsCard({
           ) : (
             <div className="space-y-4">
               <div className="relative max-w-sm">
-                <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -378,6 +356,7 @@ export function ApplicantDocumentsCard({
         defaultType="other"
         showQualificationLevelPicker
         nameFrom="file"
+        maxFileBytes={maxFileBytes}
       />
 
       {/* Viewer dialog */}
@@ -388,7 +367,7 @@ export function ApplicantDocumentsCard({
           </DialogHeader>
           <div className="min-h-[50vh] flex items-center justify-center">
             {viewerLoading ? (
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              <CircleNotchIcon className="h-6 w-6 animate-spin text-muted-foreground" />
             ) : viewerUrl && viewerDoc ? (
               viewerDoc.mime_type.startsWith("image/") ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -397,11 +376,11 @@ export function ApplicantDocumentsCard({
                 <iframe src={viewerUrl} title={viewerDoc.name} className="w-full h-[70vh] border rounded" />
               ) : (
                 <div className="text-center py-8">
-                  <FileText className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                  <FileTextIcon className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
                   <p className="text-sm text-muted-foreground mb-3">Preview not available for this file type.</p>
                   <a href={viewerUrl} target="_blank" rel="noopener noreferrer">
                     <Button size="sm" variant="outline">
-                      <Download className="h-3.5 w-3.5 mr-1.5" />
+                      <DownloadIcon className="h-3.5 w-3.5 mr-1.5" />
                       Download
                     </Button>
                   </a>
@@ -413,7 +392,7 @@ export function ApplicantDocumentsCard({
             <DialogFooter>
               <a href={viewerUrl} target="_blank" rel="noopener noreferrer">
                 <Button size="sm" variant="outline">
-                  <Download className="h-3.5 w-3.5 mr-1.5" />
+                  <DownloadIcon className="h-3.5 w-3.5 mr-1.5" />
                   Open / download
                 </Button>
               </a>
@@ -436,7 +415,7 @@ function DocumentStatusBadge({ status, processingError }: { status: string; proc
   if (status === "queued" || status === "processing") {
     return (
       <Badge variant="secondary" className="text-[10px] px-1.5 py-0 gap-1 bg-amber-50 text-amber-700 border-amber-200">
-        <Loader2 className="h-2.5 w-2.5 animate-spin" />
+        <CircleNotchIcon className="h-2.5 w-2.5 animate-spin" />
         Processing
       </Badge>
     );
@@ -451,7 +430,7 @@ function DocumentStatusBadge({ status, processingError }: { status: string; proc
           className="text-[10px] px-1.5 py-0 gap-1 bg-amber-50 text-amber-700 border-amber-200"
           title={`File is saved. The AI could not read it yet (temporary provider issue) — use Retry. ${processingError ?? ""}`.trim()}
         >
-          <AlertCircle className="h-2.5 w-2.5" />
+          <WarningCircleIcon className="h-2.5 w-2.5" />
           Not readable by AI yet
         </Badge>
       );
@@ -462,7 +441,7 @@ function DocumentStatusBadge({ status, processingError }: { status: string; proc
         className="text-[10px] px-1.5 py-0 gap-1 bg-red-50 text-red-700 border-red-200"
         title={processingError ? `File is saved. ${processingError}` : "File is saved, but the AI could not read it."}
       >
-        <AlertCircle className="h-2.5 w-2.5" />
+        <WarningCircleIcon className="h-2.5 w-2.5" />
         AI couldn&apos;t read this file
       </Badge>
     );
@@ -497,7 +476,7 @@ function DocumentActions({
   return (
     <div className={`flex shrink-0 items-center gap-0.5 ${className}`} role="group" aria-label={`Actions for ${doc.name}`}>
       <button type="button" onClick={onView} className={`${base} hover:text-blue-600`} title="View" aria-label={`View ${doc.name}`}>
-        <Eye className="h-4 w-4" />
+        <EyeIcon className="h-4 w-4" />
       </button>
       {canReplace && (
         <button
@@ -508,12 +487,12 @@ function DocumentActions({
           title="Replace"
           aria-label={`Replace ${doc.name}`}
         >
-          {replacing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          {replacing ? <CircleNotchIcon className="h-4 w-4 animate-spin" /> : <ArrowsClockwiseIcon className="h-4 w-4" />}
         </button>
       )}
       {canDelete && (
         <button type="button" onClick={onDelete} className={`${base} hover:text-red-600`} title="Delete" aria-label={`Delete ${doc.name}`}>
-          <Trash2 className="h-4 w-4" />
+          <TrashIcon className="h-4 w-4" />
         </button>
       )}
     </div>
@@ -539,7 +518,7 @@ function DocumentTile({
   onReplace: () => void;
   onDelete: () => void;
 }) {
-  const Icon = doc.mime_type.startsWith("image/") ? ImageIcon : FileText;
+  const Icon = doc.mime_type.startsWith("image/") ? ImageIcon : FileTextIcon;
   const actions = (className?: string) => (
     <DocumentActions
       doc={doc}

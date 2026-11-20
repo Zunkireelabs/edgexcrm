@@ -1,7 +1,9 @@
 "use client";
 
-import { Plus, Trash2 } from "lucide-react";
+import { PlusIcon, TrashIcon } from "@/components/icons";
+import { useContext } from "react";
 import { Button } from "@/components/ui/button";
+import { EditProfileLayoutContext, sentenceCase } from "./form-primitives";
 
 /**
  * Generic "add as many as you need" list building block — the PDF calls for
@@ -32,6 +34,7 @@ export function RepeatableList<T extends { id: string }>({
   addLabel,
   emptyLabel,
 }: RepeatableListProps<T>) {
+  const compact = useContext(EditProfileLayoutContext);
   const update = (id: string, patch: Partial<T>) => {
     onChange(items.map((item) => (item.id === id ? { ...item, ...patch } : item)));
   };
@@ -61,14 +64,14 @@ export function RepeatableList<T extends { id: string }>({
             className="absolute top-2 right-2 text-muted-foreground hover:text-destructive"
             aria-label="Remove entry"
           >
-            <Trash2 className="h-3.5 w-3.5" />
+            <TrashIcon className="h-3.5 w-3.5" />
           </button>
           {renderItem(item, (patch) => update(item.id, patch))}
         </div>
       ))}
       <Button type="button" variant="outline" size="sm" onClick={add}>
-        <Plus className="h-3.5 w-3.5 mr-1" />
-        {addLabel}
+        <PlusIcon className="h-3.5 w-3.5 mr-1" />
+        {compact ? sentenceCase(addLabel) : addLabel}
       </Button>
     </div>
   );

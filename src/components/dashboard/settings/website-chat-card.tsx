@@ -14,7 +14,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CopyButton } from "@/components/ui/copy-button";
-import { Globe } from "lucide-react";
+import { GlobeIcon } from "@/components/icons";
 import { toast } from "sonner";
 import {
   BRAND_COLORS,
@@ -172,7 +172,7 @@ export function WebsiteChatCard() {
     <CardHeader>
       <div className="flex items-center justify-between gap-3">
         <CardTitle className="flex items-center gap-2 text-base">
-          <Globe className="h-4 w-4 text-muted-foreground" />
+          <GlobeIcon className="h-4 w-4 text-muted-foreground" />
           Website chat
           <Badge variant={state.connected && state.enabled ? "default" : "secondary"}>
             {!state.connected ? "Not connected" : state.enabled ? "Chat on" : "Chat off"}
@@ -406,7 +406,7 @@ export function WebsiteChatCard() {
                       type="button"
                       aria-pressed={on}
                       onClick={() => setHours({ days: on ? draft.officeHours.days.filter((d) => d !== day) : [...draft.officeHours.days, day] })}
-                      className={`rounded-md border px-2.5 py-1 text-xs ${on ? "border-foreground bg-foreground text-background" : "text-muted-foreground"}`}
+                      className={`rounded-[6px] border px-2.5 py-1 text-xs ${on ? "border-foreground bg-foreground text-background" : "text-muted-foreground"}`}
                     >
                       {label}
                     </button>

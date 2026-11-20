@@ -64,4 +64,17 @@ describe("uploadApplicantDocument", () => {
     fetchMock.mockRejectedValueOnce(new Error("offline"));
     expect(await uploadApplicantDocument({ leadId: "l", file: file(), documentType: "other" })).toEqual({ ok: false, message: "Upload failed" });
   });
+
+  it("reports its stages in order (presign, upload, verify, done) for the progress bar; a failed PUT stops before verify", async () => {
+    const stages: string[] = [];
+    fetchMock.mockResolvedValueOnce(PRESIGN).mockResolvedValueOnce({ ok: true }).mockResolvedValueOnce(json(true, { data: {} }));
+    await uploadApplicantDocument({ leadId: "lead-1", file: file(), documentType: "passport", onStage: (s) => stages.push(s) });
+    expect(stages).toEqual(["presign", "upload", "verify", "done"]);
+
+    const failed: string[] = [];
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValueOnce(PRESIGN).mockResolvedValueOnce({ ok: false });
+    expect(await uploadApplicantDocument({ leadId: "lead-1", file: file(), documentType: "passport", onStage: (s) => failed.push(s) })).toEqual({ ok: false, message: "Upload to storage failed" });
+    expect(failed).toEqual(["presign", "upload"]);
+  });
 });

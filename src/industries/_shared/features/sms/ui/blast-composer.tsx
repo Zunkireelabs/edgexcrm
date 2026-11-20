@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { AdvancedFilterBar } from "@/components/filters/advanced-filter-bar";
 import type { FilterOption, HierarchicalFieldGroups } from "@/components/filters/types";
-import { leadFields } from "@/lib/filters/registry/leads";
+import { leadFields, withoutCollaboratorExclusion } from "@/lib/filters/registry/leads";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 import { EMPTY_TREE, type CompileCtx, type FilterCondition, type FilterTree } from "@/lib/filters/types";
 import { conditionSchema } from "@/lib/filters/schema";
@@ -191,7 +191,7 @@ export function BlastComposer({ blast, onSent, canSendSms, sandboxed, isAdmin }:
     () => leadFields({ tz: "UTC", now: new Date(0), industryId: "education_consultancy", permissions: {} } satisfies CompileCtx),
     []
   );
-  const fields = useMemo(() => Object.values(registry), [registry]);
+  const fields = useMemo(() => withoutCollaboratorExclusion(Object.values(registry)), [registry]);
 
   // Audience picker option lists (F-11 fix — SMS-FIX-F11-BRIEF.md). This is a
   // from-scratch page with no leads/team data already loaded, unlike

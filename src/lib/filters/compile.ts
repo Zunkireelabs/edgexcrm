@@ -97,15 +97,22 @@ function isNegative(op: FilterCondition["op"]): boolean {
 
 // True when a condition on an embed-kind field actually needs the join —
 // i.e. must add its relation to .select() and scope its predicate with
-// referencedTable. False for is_empty answered via a denormalized
-// emptyColumn (see the FieldSource doc comment in types.ts): that predicate
-// targets a plain column on the BASE table, so every embed-kind special case
-// (select-embed collection, referencedTable, the OR-group relation-mixing
-// guard) must treat it exactly like any other base-table condition, not like
-// a real relation filter.
+// referencedTable. False for is_empty AND is_not_empty answered via a
+// denormalized emptyColumn (see the FieldSource doc comment in types.ts):
+// those predicates target a plain column on the BASE table, so every
+// embed-kind special case (select-embed collection, referencedTable, the
+// OR-group relation-mixing guard) must treat them exactly like any other
+// base-table condition, not like a real relation filter.
+//
+// is_not_empty used to be an `!inner` embed. Over an RPC base (branch / own
+// scope — leads_visible_to_user()) PostgREST resolves an embedded filter
+// against the RPC's own `pgrst_call` alias, so a branch manager using
+// Collaborators "is not empty" got a 503 "Failed to fetch leads" (found by the
+// Nov 2026 stage smoke test; same family as the 2026-08-25 prod incident). The
+// counter answers it with no join at all.
 function needsEmbedJoin(field: FieldDef, cond: FilterCondition): boolean {
   if (field.source.kind !== "embed") return false;
-  return !(cond.op === "is_empty" && field.source.emptyColumn);
+  return !((cond.op === "is_empty" || cond.op === "is_not_empty") && field.source.emptyColumn);
 }
 
 // ── UUID-shaped value guard for `type: "uuid"` fields ───────────────────────
@@ -409,6 +416,10 @@ function renderPromotedPredicate(field: FieldDef & { source: Extract<FieldDef["s
   return and(negRealLeg, negJsonLeg);
 }
 
+// Above this many typed words the name-token legs are skipped (whole-value legs
+// only) to bound the generated or=() string; tokens are never truncated.
+const MAX_NAME_TOKENS = 8;
+
 function renderColumnsPredicate(field: FieldDef & { source: Extract<FieldDef["source"], { kind: "columns" }> }, cond: FilterCondition): string {
   const { columns, fullNamePairs } = field.source;
   const isNeg = isNegative(cond.op);
@@ -430,19 +441,45 @@ function renderColumnsPredicate(field: FieldDef & { source: Extract<FieldDef["so
   }
 
   if (!isNeg && fullNamePairs && columns.length >= 2 && typeof cond.value === "string") {
-    // "John Smith" won't match any single column — match token pairs against
-    // the first two columns in either order (mirrors route.ts's full-name
-    // search special-case). Only meaningful for a positive "contains"-style
-    // match; there is no sound negation of a token-pair match, so it's
-    // skipped for negative operators.
+    // A multi-word value ("Ram Bahadur Thapa") won't match any single column,
+    // so every typed word must match the NAME (the first two columns, first/
+    // last). NO word may be dropped — truncating tokens was the EDGEX-159 bug
+    // ("Pulse Lead 3" used to match every "Pulse Lead N"). The whole-value
+    // legs above (every column contains the full string) always stay.
+    //   contains: OR(whole-value legs,
+    //                AND over every distinct token of OR(first has t, last has t),
+    //                [all tokens digits] phone contains tokens.join("")).
+    //     Words match in any order and middle names are skipped. No per-token
+    //     legs on email/phone/display_id — that is what made it loose.
+    //   is / starts_with / ends_with: split enumeration — for each split k,
+    //     AND(first op head, last op tail) and the reverse, head/tail being
+    //     the first k / remaining tokens joined by a space.
+    // More than MAX_NAME_TOKENS words: whole-value legs only (never truncate).
+    // Negative ops have no sound token negation and are skipped; every token
+    // still goes through renderAgainstColumn so pgrst escaping applies.
     const tokens = cond.value.trim().split(/\s+/).filter(Boolean);
-    if (tokens.length >= 2) {
+    if (tokens.length >= 2 && tokens.length <= MAX_NAME_TOKENS) {
       const [a, b] = columns;
-      const [t1, t2] = tokens;
-      legs.push(
-        and(renderAgainstColumn(a, field, { ...cond, value: t1 }), renderAgainstColumn(b, field, { ...cond, value: t2 })),
-        and(renderAgainstColumn(a, field, { ...cond, value: t2 }), renderAgainstColumn(b, field, { ...cond, value: t1 }))
-      );
+      const withValue = (col: string, value: string) => renderAgainstColumn(col, field, { ...cond, value });
+      if (cond.op === "contains") {
+        const seen = new Set<string>();
+        const distinct = tokens.filter((t) => {
+          const k = t.toLowerCase();
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        });
+        legs.push(and(...distinct.map((t) => or(withValue(a, t), withValue(b, t)))));
+        if (columns.includes("phone") && tokens.every((t) => /^\+?\d+$/.test(t))) {
+          legs.push(withValue("phone", tokens.join("")));
+        }
+      } else if (cond.op === "is" || cond.op === "starts_with" || cond.op === "ends_with") {
+        for (let k = 1; k < tokens.length; k++) {
+          const head = tokens.slice(0, k).join(" ");
+          const tail = tokens.slice(k).join(" ");
+          legs.push(and(withValue(a, head), withValue(b, tail)), and(withValue(b, head), withValue(a, tail)));
+        }
+      }
     }
   }
 
@@ -478,6 +515,10 @@ function renderCondition(field: FieldDef, cond: FilterCondition, ctx: CompileCtx
       // isEmbedJoinCondition() below treats this case as non-embed.
       if (cond.op === "is_empty" && field.source.emptyColumn) {
         return `${field.source.emptyColumn}.eq.0`;
+      }
+      // is_not_empty: the same counter, the other side of the check (count > 0) — no join, works over an RPC base.
+      if (cond.op === "is_not_empty" && field.source.emptyColumn) {
+        return `${field.source.emptyColumn}.gt.0`;
       }
       // The embedded resource's OWN column only — never relation-prefixed.
       // The caller is responsible for including that relation in the select

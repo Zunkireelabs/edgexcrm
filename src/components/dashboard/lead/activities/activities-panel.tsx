@@ -4,11 +4,25 @@ import { useState, useEffect, useMemo, useCallback, useRef, useImperativeHandle,
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
-  Phone, Mail, Calendar, Clock, FileText, CheckSquare, ChevronDown,
-  ArrowRight, Archive, CheckCircle2, Pencil, Users, UserMinus, UserPlus,
-  GitMerge, Check, Paperclip,
-  type LucideIcon,
-} from "lucide-react";
+  PhoneIcon,
+  EnvelopeSimpleIcon,
+  CalendarIcon,
+  ClockIcon,
+  FileTextIcon,
+  CheckSquareIcon,
+  CaretDownIcon,
+  ArrowRightIcon,
+  ArchiveIcon,
+  CheckCircleIcon,
+  PencilSimpleIcon,
+  UsersIcon,
+  UserMinusIcon,
+  UserPlusIcon,
+  GitMergeIcon,
+  CheckIcon,
+  PaperclipIcon,
+} from "@/components/icons";
+import type { Icon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +44,7 @@ import { TaskList, type TaskListRef } from "@/components/dashboard/tasks/task-li
 import { type EmailThread, type Email } from "@/industries/_shared/features/email/hooks/use-email-threads";
 import { useConnectedInboxes } from "@/industries/_shared/features/email/hooks/use-connected-inboxes";
 import { getFeatureAccess } from "@/industries/_loader";
+import { changedFieldLabels } from "./describe-audit-event";
 import { describeSubmission, humanizeIntakeValue } from "./lead-activity-labels";
 import {
   applicationParts, directDocumentItems, feedDocumentLine, hideAutoAttachedText,
@@ -40,7 +55,6 @@ import { FEATURES } from "@/industries/_registry";
 import { LeadCadenceStrip } from "@/industries/_shared/features/outreach/ui/lead-cadence-strip";
 import { LeadSubscriptionsTab } from "@/industries/_shared/features/outreach/ui/lead-subscriptions-tab";
 import { ApplicantDocumentsCard } from "@/industries/education-consultancy/features/applicant-documents/documents-card";
-import { FINANCIAL_COLUMNS, QUALIFICATION_DETAIL_COLUMNS } from "@/lib/leads/student-record-columns";
 
 // Lazy-load compose dialog so TipTap only loads when the modal is opened
 const ComposeEmailDialog = dynamic(
@@ -84,19 +98,26 @@ interface ActivitiesPanelProps {
   threadsLoading: boolean;
   /** Gates whether a project-linked task's chip links to the cockpit — resolved server-side via getFeatureAccess, never re-derived here. */
   projectBoardEnabled?: boolean;
+  /** Renders ONE sub-tab body without the sub-tab row (the education lead detail owns its own tab row and shows Emails this way). */
+  forcedTab?: SubTab;
+  /** Keeps a host's own merged feed in sync with what this panel logs / deletes. */
+  onActivityLogged?: (activity: LeadActivityRecord) => void;
+  onActivityDeleted?: (activityId: string) => void;
+  /** Host-provided empty state for the Emails body (no threads, no logged emails). Gets the panel's own compose / log actions. */
+  emailsEmpty?: (a: { canCompose: boolean; compose: () => void; logPast: () => void }) => React.ReactNode;
 }
 
 const SUB_TABS: { id: SubTab; label: string; icon: React.ReactNode }[] = [
-  { id: "all", label: "Activity", icon: <Clock className="h-4 w-4" /> },
-  { id: "notes", label: "Notes", icon: <FileText className="h-4 w-4" /> },
-  { id: "emails", label: "Emails", icon: <Mail className="h-4 w-4" /> },
-  { id: "calls", label: "Calls", icon: <Phone className="h-4 w-4" /> },
-  { id: "tasks", label: "Tasks", icon: <CheckSquare className="h-4 w-4" /> },
-  { id: "meetings", label: "Meetings", icon: <Calendar className="h-4 w-4" /> },
+  { id: "all", label: "Activity", icon: <ClockIcon className="h-4 w-4" /> },
+  { id: "notes", label: "Notes", icon: <FileTextIcon className="h-4 w-4" /> },
+  { id: "emails", label: "Emails", icon: <EnvelopeSimpleIcon className="h-4 w-4" /> },
+  { id: "calls", label: "Calls", icon: <PhoneIcon className="h-4 w-4" /> },
+  { id: "tasks", label: "Tasks", icon: <CheckSquareIcon className="h-4 w-4" /> },
+  { id: "meetings", label: "Meetings", icon: <CalendarIcon className="h-4 w-4" /> },
   // Last in the row (client request, Oct 2026). Only shown where the tenant has the documents feature.
-  { id: "documents", label: "Documents", icon: <FileText className="h-4 w-4" /> },
+  { id: "documents", label: "Documents", icon: <FileTextIcon className="h-4 w-4" /> },
   // Everything the lead is subscribed to: outreach sequences (running / queued / past) and campaigns. Only where Outreach exists.
-  { id: "subscribed", label: "Subscribed", icon: <Mail className="h-4 w-4" /> },
+  { id: "subscribed", label: "Subscribed", icon: <EnvelopeSimpleIcon className="h-4 w-4" /> },
 ];
 
 export interface ActivitiesPanelRef {
@@ -136,8 +157,12 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
   setThreads,
   threadsLoading,
   projectBoardEnabled,
+  forcedTab,
+  onActivityLogged,
+  onActivityDeleted,
+  emailsEmpty,
 }: ActivitiesPanelProps, ref) {
-  const [activeTab, setActiveTab] = useState<SubTab>("all");
+  const [activeTab, setActiveTab] = useState<SubTab>(forcedTab ?? "all");
   const notesTabRef = useRef<NotesTabRef>(null);
   const taskListRef = useRef<TaskListRef>(null);
 
@@ -284,6 +309,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
 
   const handleActivityLogged = (activity: LeadActivityRecord) => {
     setLoggedActivities((prev) => [activity, ...prev]);
+    onActivityLogged?.(activity);
   };
 
   const handleDeleteActivity = async (activityId: string) => {
@@ -297,6 +323,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
       if (!res.ok) throw new Error();
 
       setLoggedActivities((prev) => prev.filter((a) => a.id !== activityId));
+      onActivityDeleted?.(activityId);
       toast.success("Activity deleted");
     } catch {
       toast.error("Failed to delete activity");
@@ -511,7 +538,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
   return (
     <div className="space-y-4">
       {/* Sub-tabs */}
-      <div className="border-b">
+      {!forcedTab && <div className="border-b">
         <div className="flex gap-1 -mb-px overflow-x-auto">
           {visibleTabs.map((tab) => (
             <button
@@ -537,10 +564,12 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
             </button>
           ))}
         </div>
-      </div>
+      </div>}
 
       {/* Action buttons */}
-      {(activeTab === "calls" || activeTab === "emails" || activeTab === "meetings" || (activeTab === "notes" && mergedIntoNotes)) && (
+      {/* (Education lead detail: an empty Emails tab shows only its empty-state button, not a second Compose.) */}
+      {(activeTab === "calls" || activeTab === "emails" || activeTab === "meetings" || (activeTab === "notes" && mergedIntoNotes))
+        && !(forcedTab === "emails" && emailsEmpty && !hasEmailContent && !isEmailsTabLoading) && (
         <div className="flex justify-end">
           {getActionButtons()}
         </div>
@@ -616,7 +645,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
       {/* Emails sub-tab — threads (top) + logged emails (below, "Past activity") */}
       {activeTab === "emails" && (
         <>
-          {hasOutreach && (
+          {hasOutreach && !forcedTab && (
             <div className="mb-3">
               <LeadCadenceStrip
                 leadId={leadId}
@@ -634,10 +663,12 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
                 <p className="text-muted-foreground">Loading emails...</p>
               </CardContent>
             </Card>
+          ) : !hasEmailContent && emailsEmpty ? (
+            emailsEmpty({ canCompose: hasEmail, compose: () => { setReplyContext(null); setComposeOpen(true); }, logPast: () => handleLogActivity("email") })
           ) : !hasEmailContent ? (
             <Card className="shadow-none rounded-lg py-0">
               <CardContent className="p-8 text-center">
-                <Mail className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                <EnvelopeSimpleIcon className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
                 <p className="text-muted-foreground">{getEmptyMessage()}</p>
               </CardContent>
             </Card>
@@ -688,6 +719,22 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
         </>
       )}
 
+      {/* Education lead detail: the old "Subscribed" tab lives at the bottom of Emails. */}
+      {forcedTab === "emails" && hasOutreach && (
+        <div className="mt-6">
+          <h3 className="mb-2 text-[14px] font-medium leading-5 text-black/[.63]">Sequences &amp; campaigns</h3>
+          <LeadSubscriptionsTab
+            leadId={leadId}
+            isAdmin={isAdmin}
+            currentUserId={currentUserId}
+            leadFirstName={leadFirstName}
+            leadLastName={leadLastName}
+            leadEmail={leadEmail}
+            plainHeaders
+          />
+        </div>
+      )}
+
       {/* Activity list (calls, meetings only — "all" tab uses unified timeline below) */}
       {(activeTab === "calls" || activeTab === "meetings") && (
         <>
@@ -700,7 +747,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
           ) : filteredActivities.length === 0 ? (
             <Card className="shadow-none rounded-lg py-0">
               <CardContent className="p-8 text-center">
-                <Clock className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                <ClockIcon className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
                 <p className="text-muted-foreground">{getEmptyMessage()}</p>
               </CardContent>
             </Card>
@@ -791,7 +838,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
             if (all.length === 0) return (
               <Card className="shadow-none rounded-lg py-0">
                 <CardContent className="p-8 text-center">
-                  <Clock className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                  <ClockIcon className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
                   <p className="text-muted-foreground">{getEmptyMessage()}</p>
                 </CardContent>
               </Card>
@@ -842,7 +889,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
                           <div key={item.id} className="flex gap-3">
                             <div className="flex flex-col items-center">
                               <div className="h-6 w-6 rounded-full border border-border bg-background flex items-center justify-center shrink-0">
-                                <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                                <FileTextIcon className="h-3.5 w-3.5 text-muted-foreground" />
                               </div>
                               {!isLast && <div className="w-px bg-border flex-1 mt-1" />}
                             </div>
@@ -866,7 +913,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
                       if (item.kind === "activity") {
                         const a = item.record;
                         const actor = resolveActorLabel(a.user_id, currentUserId, teamMemberNames, teamMemberEmails);
-                        const Icon = a.activity_type === "call" ? Phone : Calendar;
+                        const Icon = a.activity_type === "call" ? PhoneIcon : CalendarIcon;
                         const meetingMode = a.metadata?.meeting_mode as string | undefined;
                         const meetingModeLabel = meetingMode === "online" ? "Online" : meetingMode === "in_person" ? "In Person" : null;
                         const label = a.activity_type === "call"
@@ -900,7 +947,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
                           <div key={item.id} className="flex gap-3">
                             <div className="flex flex-col items-center">
                               <div className="h-6 w-6 rounded-full border border-border bg-background flex items-center justify-center shrink-0">
-                                <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                                <FileTextIcon className="h-3.5 w-3.5 text-muted-foreground" />
                               </div>
                               {!isLast && <div className="w-px bg-border flex-1 mt-1" />}
                             </div>
@@ -926,7 +973,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
                           <div key={item.id} className="flex gap-3">
                             <div className="flex flex-col items-center">
                               <div className="h-6 w-6 rounded-full border border-border bg-background flex items-center justify-center shrink-0">
-                                <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                                <FileTextIcon className="h-3.5 w-3.5 text-muted-foreground" />
                               </div>
                               {!isLast && <div className="w-px bg-border flex-1 mt-1" />}
                             </div>
@@ -956,7 +1003,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
                           <div key={item.id} className="flex gap-3">
                             <div className="flex flex-col items-center">
                               <div className="h-6 w-6 rounded-full border border-border bg-background flex items-center justify-center shrink-0">
-                                <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
+                                <PaperclipIcon className="h-3.5 w-3.5 text-muted-foreground" />
                               </div>
                               {!isLast && <div className="w-px bg-border flex-1 mt-1" />}
                             </div>
@@ -1054,7 +1101,7 @@ function AppFeedFiles({ documents }: { documents: FeedDocument[] }) {
     <ul className="mt-1 space-y-0.5" data-testid="app-feed-files">
       {documents.map((d) => (
         <li key={d.id} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Paperclip className="h-3 w-3 shrink-0" />
+          <PaperclipIcon className="h-3 w-3 shrink-0" />
           <FeedFileLink documentId={d.id} label={feedDocumentLine(d)} />
         </li>
       ))}
@@ -1078,7 +1125,11 @@ function SystemActivityItem({
   isLast: boolean;
 }) {
   const time = formatTimeOnly(activity.created_at);
-  const actor = resolveActorLabel(activity.user_id, currentUserId, teamMemberNames, teamMemberEmails);
+  // Smart assignment writes as the tenant owner (audit user_id), but the audit row carries `via`: show the rule, not the owner.
+  const actor =
+    activity.changes?.via?.new === "smart_assignment"
+      ? "Smart assignment"
+      : resolveActorLabel(activity.user_id, currentUserId, teamMemberNames, teamMemberEmails);
   const description = getSystemActivityDescription(activity, teamMemberEmails, teamMemberNames);
   const isSubmission = activity.action === "lead.submission";
   const Icon = getSystemActivityIcon(activity);
@@ -1128,7 +1179,7 @@ function SystemActivityItem({
           <div className="min-w-0 pb-3 flex-1">
             <CollapsibleTrigger className="flex items-center gap-1 text-sm text-foreground hover:underline underline-offset-2 cursor-pointer text-left">
               <span className="min-w-0">{description}</span>
-              <ChevronDown
+              <CaretDownIcon
                 className={`h-3 w-3 text-muted-foreground transition-transform duration-150 shrink-0 ${open ? "rotate-180" : ""}`}
               />
             </CollapsibleTrigger>
@@ -1235,7 +1286,7 @@ function SubmissionDetail({ submission }: { submission: LeadSubmission }) {
           <span className="text-muted-foreground">Files:</span>
           {Object.keys(fileUrls).map((key) => (
             <div key={key} className="flex items-center gap-1 text-foreground">
-              <FileText className="h-3 w-3 shrink-0" />
+              <FileTextIcon className="h-3 w-3 shrink-0" />
               <span className="truncate">{key}</span>
             </div>
           ))}
@@ -1249,30 +1300,30 @@ function SubmissionDetail({ submission }: { submission: LeadSubmission }) {
   );
 }
 
-function getSystemActivityIcon(activity: LeadActivity): LucideIcon {
+function getSystemActivityIcon(activity: LeadActivity): Icon {
   const changes = activity.changes || {};
 
   if (activity.action === "lead.submission") {
     const isFirst = (changes as Record<string, { new?: unknown }>).is_first?.new === true;
-    return isFirst ? UserPlus : FileText;
+    return isFirst ? UserPlusIcon : FileTextIcon;
   }
-  if (activity.action === "lead.merged") return GitMerge;
-  if (activity.action === "lead.note_added") return FileText;
-  if (activity.action === "lead.note_edited") return Pencil;
-  if (activity.action === "lead.branch_revoked") return UserMinus;
-  if (activity.action === "lead.branch_shared" || activity.action === "lead.branch_assigned") return Users;
+  if (activity.action === "lead.merged") return GitMergeIcon;
+  if (activity.action === "lead.note_added") return FileTextIcon;
+  if (activity.action === "lead.note_edited") return PencilSimpleIcon;
+  if (activity.action === "lead.branch_revoked") return UserMinusIcon;
+  if (activity.action === "lead.branch_shared" || activity.action === "lead.branch_assigned") return UsersIcon;
 
   const ch = changes as Record<string, { old?: unknown; new?: unknown }>;
   if (ch.list) {
     const reason = ch.archive_reason?.new as string | null;
-    if (reason) return Archive;
+    if (reason) return ArchiveIcon;
     const to = ch.list.new as string | null;
-    if (to?.toLowerCase() === "qualified") return CheckCircle2;
-    return ArrowRight;
+    if (to?.toLowerCase() === "qualified") return CheckCircleIcon;
+    return ArrowRightIcon;
   }
-  if (ch.assigned_to) return Users;
-  if (activity.action === "lead.updated") return Pencil;
-  return Check;
+  if (ch.assigned_to) return UsersIcon;
+  if (activity.action === "lead.updated") return PencilSimpleIcon;
+  return CheckIcon;
 }
 
 function resolveActorLabel(
@@ -1416,47 +1467,7 @@ export function getSystemActivityDescription(
 
   // Generic lead.updated: build "Updated name, destinations, …" from the changed fields
   if (activity.action === "lead.updated" && Object.keys(changes).length > 0) {
-    const FIELD_LABELS: Record<string, string> = {
-      first_name: "name",
-      last_name: "name",
-      phone: "phone",
-      email: "email",
-      destinations: "destinations",
-      field_of_study: "field of study",
-      degree_level: "degree level",
-      tags: "tags",
-      intake_source: "source",
-      source: "source",
-      custom_fields: "details",
-      notes: "notes",
-      status: "stage",
-      stage_id: "stage",
-      city: "city",
-      country: "country",
-      company_name: "company",
-      designation: "designation",
-      salutation: "salutation",
-      preferred_contact_method: "contact method",
-      // The structured address is saved as several columns; one edit should read as one "address".
-      full_address: "address",
-      address_province: "address",
-      address_district: "address",
-      address_municipality: "address",
-      address_ward: "address",
-      address_tole: "address",
-      // Qualification details (migration 236) and financial details (migration 239): one label each, not 19 + 4 raw column names.
-      ...Object.fromEntries(QUALIFICATION_DETAIL_COLUMNS.map((c) => [c, "qualification details"])),
-      ...Object.fromEntries(FINANCIAL_COLUMNS.map((c) => [c, "financial details"])),
-    };
-    const seen = new Set<string>();
-    const labels: string[] = [];
-    for (const key of Object.keys(changes)) {
-      const label = FIELD_LABELS[key] ?? key.replace(/_/g, " ");
-      if (!seen.has(label)) {
-        seen.add(label);
-        labels.push(label);
-      }
-    }
+    const labels = changedFieldLabels(changes);
     if (labels.length > 0) return `Updated ${labels.join(", ")}`;
   }
 

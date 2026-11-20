@@ -2,7 +2,15 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { User, Phone, Mail, ExternalLink, UserPlus, RefreshCw, UserCircle } from "lucide-react";
+import {
+  UserIcon,
+  PhoneIcon,
+  EnvelopeSimpleIcon,
+  ArrowSquareOutIcon,
+  UserPlusIcon,
+  ArrowsClockwiseIcon,
+  UserCircleIcon,
+} from "@/components/icons";
 import { buildLeadFromConversation, conversationContactEmail, type ConversationForLead } from "@/lib/inbox/lead-from-conversation";
 import { providerLabel } from "@/lib/inbox/provider-label";
 import { Button } from "@/components/ui/button";
@@ -167,7 +175,7 @@ export function ContactPanel({ conversation, tenantId, userRole, onConversationU
   if (!conversation) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-sm gap-1 px-4">
-        <User className="w-8 h-8 opacity-30" />
+        <UserIcon className="w-8 h-8 opacity-30" />
         <p>Select a conversation</p>
       </div>
     );
@@ -179,18 +187,18 @@ export function ContactPanel({ conversation, tenantId, userRole, onConversationU
       <div className="p-4 border-b">
         <div className="flex flex-col items-center gap-2 py-2">
           <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
-            <User className="w-6 h-6 text-gray-400" />
+            <UserIcon className="w-6 h-6 text-gray-400" />
           </div>
           <p className="font-semibold text-sm text-center">{displayName}</p>
           {(conversation.contact_phone as string | null) && (
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Phone className="w-3 h-3" />
+              <PhoneIcon className="w-3 h-3" />
               <span>{conversation.contact_phone as string}</span>
             </div>
           )}
           {conversationContactEmail(conversation.meta as ConversationForLead["meta"]) && (
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Mail className="w-3 h-3" />
+              <EnvelopeSimpleIcon className="w-3 h-3" />
               <span>{conversationContactEmail(conversation.meta as ConversationForLead["meta"])}</span>
             </div>
           )}
@@ -208,7 +216,7 @@ export function ContactPanel({ conversation, tenantId, userRole, onConversationU
 
         {loadingLead ? (
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
-            <RefreshCw className="w-3 h-3 animate-spin" />
+            <ArrowsClockwiseIcon className="w-3 h-3 animate-spin" />
             Loading…
           </div>
         ) : lead ? (
@@ -219,7 +227,7 @@ export function ContactPanel({ conversation, tenantId, userRole, onConversationU
             {lead.email && <p className="text-xs text-muted-foreground">{lead.email}</p>}
             {lead.phone && (
               <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                <Phone className="w-3 h-3" />
+                <PhoneIcon className="w-3 h-3" />
                 <span>{lead.phone}</span>
               </div>
             )}
@@ -227,7 +235,7 @@ export function ContactPanel({ conversation, tenantId, userRole, onConversationU
               href={`/leads/${lead.id}`}
               className="flex items-center gap-1 text-xs text-primary hover:underline mt-1"
             >
-              View lead <ExternalLink className="w-3 h-3" />
+              View lead <ArrowSquareOutIcon className="w-3 h-3" />
             </Link>
           </div>
         ) : (
@@ -239,7 +247,7 @@ export function ContactPanel({ conversation, tenantId, userRole, onConversationU
               className="w-full text-xs h-7 gap-1"
               onClick={handleConvertToLead}
             >
-              <UserPlus className="w-3 h-3" />
+              <UserPlusIcon className="w-3 h-3" />
               Convert to lead
             </Button>
           </div>
@@ -297,7 +305,7 @@ export function ContactPanel({ conversation, tenantId, userRole, onConversationU
             </div>
           ) : (
             <div className="flex items-center gap-2 text-muted-foreground">
-              <UserCircle className="h-4 w-4" />
+              <UserCircleIcon className="h-4 w-4" />
               <span className="text-sm">{assigneeId ? "Assigned" : "Unassigned"}</span>
             </div>
           )}

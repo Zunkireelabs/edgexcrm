@@ -6,6 +6,7 @@ import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { assertLeadVisible } from "@/lib/documents/access";
 import { DOCUMENT_TYPE_CATEGORY, type DocumentType } from "@/lib/documents/constants";
+import { loadMaxDocumentSizeBytes } from "@/lib/documents/settings";
 import type { ApplicantDocumentRow } from "@/lib/documents/types";
 
 interface RouteContext {
@@ -51,5 +52,14 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     }
   }
 
-  return apiSuccess({ documents, by_category: byCategory, applications });
+  // The tenant's per-file size cap (the same setting upload-url enforces), so the upload dialog can say "up to N MB each"
+  // without hardcoding it. Best effort: without it the dialog simply omits the limit; the server still enforces it.
+  let maxFileBytes: number | null = null;
+  try {
+    maxFileBytes = await loadMaxDocumentSizeBytes(db);
+  } catch {
+    maxFileBytes = null;
+  }
+
+  return apiSuccess({ documents, by_category: byCategory, applications, max_file_bytes: maxFileBytes });
 }

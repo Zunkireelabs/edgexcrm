@@ -210,6 +210,27 @@ describe("processFwdRelay — happy path (REPLYABLE-FORWARD-BRIEF Stage 2)", () 
   });
 });
 
+describe("processFwdRelay — EMAIL_TRANSPORT=stub result (EDGEX-128)", () => {
+  it("a stub_ result from sendMessage is a normal success: no dead-letter, no token persist", async () => {
+    sendMessageMock.mockReset().mockResolvedValue({
+      gmail_message_id: "stub_11111111-2222-3333-4444-555555555555",
+      gmail_thread_id: "stub_66666666-7777-8888-9999-000000000000",
+      rfc_message_id: "<stub-rfc-1@edgex-crm.com>",
+      refreshed_credentials: null,
+    });
+    seedActiveFwdToken();
+    seedThreadAndAccount();
+    seedLastInboundFromLead();
+
+    await processFwdRelay(BASE_PARAMS, makeDb(), BASE_RECEIVING, { from: '"Rep Person" <rep@example.com>' });
+
+    expect(sendMessageMock).toHaveBeenCalledTimes(1);
+    expect(serviceTables.inbound_email_dead_letter ?? []).toHaveLength(0);
+    expect(persistRefreshedTokenMock).not.toHaveBeenCalled();
+    expect(scopedTables.emails.filter((e) => e.direction === "outbound")).toHaveLength(1);
+  });
+});
+
 describe("processFwdRelay — sender guard (the security core)", () => {
   it("sender mismatch: dead-letters fwd_sender_mismatch, zero emails rows, sendMessage() NOT called", async () => {
     seedActiveFwdToken();

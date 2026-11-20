@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { compileFilter, planFilter, type QueryBuilder } from "../compile";
 import { FilterCompileError, type CompileCtx, type FilterCondition, type FilterTree } from "../types";
-import { leadFields } from "./leads";
+import { leadFields, withoutCollaboratorExclusion } from "./leads";
 import { legacyLeadsParamsToTree } from "../legacy-leads-params";
 
 // Spot-checks that the leads registry's legacy-facing fields (status, source,
@@ -245,9 +245,22 @@ describe("leads registry — legacy value-shape equivalence", () => {
     expect(plan).toEqual({ ok: true, embeds: ["lead_collaborators!inner(user_id)"] });
   });
 
-  it("collaborators: is_not_empty is safe on the !inner join (any surviving row already has >=1 collaborator) and still carries referencedTable", () => {
+  // Found by the Nov 2026 stage smoke test: as an !inner embed, is_not_empty 503'd ("Failed to fetch leads") for branch
+  // managers / counselors, whose queries run over the leads_visible_to_user() RPC (an embedded filter is resolved against
+  // pgrst_call there). It now reads the same mig 210 counter as is_empty — a plain base column, no embed, no join.
+  it("collaborators: is_not_empty compiles to the counter column (count > 0), NOT the !inner join — no embed added, no referencedTable", () => {
     const plan = planFilter(andTree(cond("c1", "collaborators", "is_not_empty")), registry, ctx);
-    expect(plan).toEqual({ ok: true, embeds: ["lead_collaborators!inner(user_id)"] });
+    expect(plan).toEqual({ ok: true, embeds: [] });
+
+    const b = compile(andTree(cond("c1", "collaborators", "is_not_empty")));
+    // A plain .or(...) with NO { referencedTable } option — the base-table path (is_empty does the same).
+    expect(b.calls).toEqual(["or(collaborator_count.gt.0)"]);
+  });
+
+  it("collaborators: is_not_empty never needs the embed, so it works beside is_any_of lifted to SQL (branch / own scope)", () => {
+    const tree = andTree(cond("c1", "collaborators", "is_not_empty"), cond("c2", "status", "is", "new"));
+    const plan = planFilter(tree, registry, ctx);
+    expect(plan).toEqual({ ok: true, embeds: [] });
   });
 
   it("collaborators: is_empty compiles to the mig 210 counter column, NOT the !inner join — no embed added, no referencedTable", () => {
@@ -270,10 +283,21 @@ describe("leads registry — legacy value-shape equivalence", () => {
     if (!plan.ok) expect(plan.errors.collaborators?.[0]).toMatch(/cannot mix/);
   });
 
-  it("collaborators: is_none_of is still rejected — not even in the field's operators list, since a count alone can't say WHO (stays out of scope even with mig 210's counter)", () => {
+  it("collaborators: is_none_of is offered (migration 282) but is NOT compilable as an embedded filter — planFilter still rejects it, so a request only works when the leads route lifts it out into SQL first (splitCollaboratorNoneOf)", () => {
+    expect(registry.collaborators.operators).toContain("is_none_of");
     const plan = planFilter(andTree(cond("c1", "collaborators", "is_none_of", ["11111111-2222-4333-8444-555555555555"])), registry, ctx);
     expect(plan.ok).toBe(false);
-    if (!plan.ok) expect(plan.errors.collaborators?.[0]).toMatch(/operator is_none_of is not allowed/);
+    if (!plan.ok) expect(plan.errors.collaborators?.[0]).toMatch(/is_none_of is not supported on relation fields/);
+  });
+
+  it("withoutCollaboratorExclusion drops only Collaborators' is_none_of (audience builders must not offer it)", () => {
+    const fields = withoutCollaboratorExclusion(Object.values(registry));
+    const collab = fields.find((f) => f.key === "collaborators")!;
+    expect(collab.operators).toEqual(["is_any_of", "is_not_empty", "is_empty"]);
+    // other fields keep theirs (Assigned to has none_of)
+    expect(fields.find((f) => f.key === "assignees")!.operators).toContain("is_none_of");
+    // the source registry object is not mutated
+    expect(registry.collaborators.operators).toContain("is_none_of");
   });
 
   it("tags has_all matches route.ts's .contains('tags', [tagFilter]) via the native path", () => {

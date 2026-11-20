@@ -1,4 +1,8 @@
 import { and, or, pgLike, pgVal } from "../pgrst";
+import { heldClauses, heldCutoff } from "../held-cutoff";
+import { quietContactClauses, quietContactCutoff } from "../quiet-contact";
+import { workableSteps, type WorkableTerminal } from "../workable-clauses";
+import { operatorsForField } from "../operators";
 import { FilterCompileError, type CompileCtx, type FieldDef, type FieldRegistry, type FilterCondition } from "../types";
 
 // Mirrors DEFAULT_FOLLOW_UP_STALE_DAYS in
@@ -178,6 +182,108 @@ function compileFollowUpNeeded(cond: FilterCondition, ctx: CompileCtx): string {
   );
 }
 
+// ── untouched_new: virtual — never touched AND older than 48h (Pulse "untouched new leads") ─
+// Same rule as education_intake_alarm / Pulse's `untouched` metric: no call/email/meeting and no note since it
+// arrived. Migration 250's trigger sets last_touched_at on exactly those events, so NULL == never touched. The 48h
+// is fixed (Pulse's alarm bucket), NOT tenant-configurable like follow_up_needed's stale days, and on-hold leads are
+// NOT excluded (a lead nobody has touched is untouched, hold or not).
+
+const UNTOUCHED_NEW_HOURS = 48;
+
+function compileUntouchedNew(_cond: FilterCondition, ctx: CompileCtx): string {
+  const cutoff = new Date(ctx.now.getTime() - UNTOUCHED_NEW_HOURS * 60 * 60 * 1000);
+  return and("last_touched_at.is.null", `created_at.lt.${pgVal(cutoff.toISOString())}`);
+}
+
+// ── untouched_held: virtual — a held lead with no touch AND no stage move for 3+ days (Pulse "untouched") ─
+// Pulse's absolute definition (lib/untouched.ts there): last_touched_at null/old AND stage_changed_at old, not archived.
+// Window-independent, so the Pulse count and "See the N leads" are the same set.
+
+const UNTOUCHED_HELD_DAYS = 3;
+
+function compileUntouchedHeld(_cond: FilterCondition, ctx: CompileCtx): string {
+  const cutoff = pgVal(new Date(ctx.now.getTime() - UNTOUCHED_HELD_DAYS * 86_400_000).toISOString());
+  return and(or("last_touched_at.is.null", `last_touched_at.lt.${cutoff}`), `stage_changed_at.lt.${cutoff}`, "archived_at.is.null");
+}
+
+// ── no_contact_14d: virtual — no contact for 2+ tenant-local weeks (Home "N leads with no contact") ──
+// The exact contact test Home's quiet-leads count uses (../quiet-contact.ts is the one definition; ctx.tz is the
+// tenant's day). It is ONLY the contact test: "someone holds it" and "it is workable" are separate conditions the
+// caller adds (Home's Review link adds `assignees is_not_empty` and the workable stage list).
+
+function compileNoContact14d(_cond: FilterCondition, ctx: CompileCtx): string {
+  return or(...quietContactClauses(quietContactCutoff(ctx.now, ctx.tz)));
+}
+
+// ── held_48h: virtual — the holder has had the lead for 48h+ (Home's "untouched, held" row; link only) ──
+// `assigned_at` older than 48h, or null (older leads were never stamped). One definition with Home's count (../held-cutoff.ts).
+
+function compileHeld48h(_cond: FilterCondition, ctx: CompileCtx): string {
+  return or(...heldClauses(heldCutoff(ctx.now)));
+}
+
+// ── workable: virtual — Home's "a lead someone should be working" (links only; hidden from the picker) ──
+// The SAME clauses `applyWorkable` puts on Home's counts (../workable-clauses.ts), so a Review link opens exactly the rows
+// that were counted: not deleted, not archived, not on hold, not a walk-in, not in a terminal status for its pipeline. A filter
+// compile cannot read the DB, so the tenant's terminal-stage plan travels in the condition's value (a JSON string, operator `is`). Everything
+// in it is re-validated here (slugs and pipeline ids are interpolated into a PostgREST filter). "In an active list" is not part
+// of this field: the link adds it as a `stage` condition.
+
+const WORKABLE_SLUG_RE = /^[A-Za-z0-9_ -]{1,64}$/;
+
+const NO_TERMINAL: WorkableTerminal = { terminalEverywhere: [], terminalSome: [] };
+
+// A plan that is missing, unparseable or malformed is IGNORED (the base exclusions still apply) and none of its text is ever
+// interpolated, so a hostile value can only widen back to "not archived / on hold / walk-in", never inject a predicate.
+function parseWorkableTerminal(raw: unknown): WorkableTerminal {
+  try {
+    return parseStrict(raw);
+  } catch {
+    return NO_TERMINAL;
+  }
+}
+
+function parseStrict(raw: unknown): WorkableTerminal {
+  const bad = () => new FilterCompileError("workable: invalid terminal plan", "invalid_value");
+  if (typeof raw !== "string") return NO_TERMINAL;
+  let v: unknown;
+  try {
+    v = JSON.parse(raw);
+  } catch {
+    throw bad();
+  }
+  if (typeof v !== "object" || v === null) throw bad();
+  const o = v as { terminalEverywhere?: unknown; terminalSome?: unknown };
+  const slug = (x: unknown): string => {
+    if (typeof x !== "string" || !WORKABLE_SLUG_RE.test(x)) throw bad();
+    return x;
+  };
+  if (!Array.isArray(o.terminalEverywhere) || !Array.isArray(o.terminalSome)) throw bad();
+  return {
+    terminalEverywhere: o.terminalEverywhere.map(slug),
+    terminalSome: o.terminalSome.map((t: { slug?: unknown; pipelineIds?: unknown }) => {
+      if (!Array.isArray(t.pipelineIds)) throw bad();
+      return {
+        slug: slug(t.slug),
+        pipelineIds: t.pipelineIds.map((p: unknown) => {
+          if (p === null) return null;
+          if (typeof p !== "string" || !UUID_RE.test(p)) throw bad();
+          return p;
+        }),
+      };
+    }),
+  };
+}
+
+function compileWorkable(cond: FilterCondition): string {
+  const parts: string[] = [];
+  for (const step of workableSteps(parseWorkableTerminal(cond.value))) {
+    if (step.kind === "is_null") parts.push(`${step.column}.is.null`);
+    else if (step.kind === "or") parts.push(`or(${step.expr})`);
+  }
+  return and(...parts);
+}
+
 // ── callback_due: virtual — a pending callback window that has fully elapsed ─
 // (migration 250). "Due" = window elapsed, not merely a missed call: a lead
 // still inside its grace period has callback_due_at set but in the future —
@@ -262,6 +368,9 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       emptyIsBlankString: false,
       group: "Basic",
       filterable: true,
+      sortable: true,
+      sortColumns: ["prospect_industry"],
+      sortNullsFirst: false,
     },
     {
       key: "source",
@@ -271,6 +380,9 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       operators: ["is", "is_not", "is_any_of", "is_none_of", "is_empty", "is_not_empty"],
       group: "Basic",
       filterable: true,
+      sortable: true,
+      sortColumns: ["intake_source"],
+      sortNullsFirst: false,
     },
     {
       key: "assignees",
@@ -290,22 +402,25 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
         relation: "lead_collaborators",
         column: "user_id",
         embedSelect: "lead_collaborators!inner(user_id)",
-        // Mig 210: a trigger-maintained counter on leads, used ONLY for
-        // is_empty. The !inner join above can prove a collaborator EXISTS,
-        // never that none does — this sidesteps that instead of trying to
-        // express "no matching row" through the join at all. See its comment
-        // in compile.ts's "embed" render case for the full reasoning.
+        // Mig 210: a trigger-maintained counter on leads, used for is_empty
+        // (count = 0) and is_not_empty (count > 0). The !inner join above can
+        // prove a collaborator EXISTS, never that none does — this sidesteps
+        // that instead of trying to express "no matching row" through the join
+        // at all. See its comment in compile.ts's "embed" render case.
         emptyColumn: "collaborator_count",
       },
-      // is_not_empty is safe on top of is_any_of: the embedSelect above is an
-      // `!inner` join, so any row that survives it already has >=1
-      // collaborator — is_not_empty just states that fact explicitly.
-      // is_none_of is still NOT offered: excluding SPECIFIC people has no
-      // equivalent to the emptyColumn escape hatch (a count alone can't say
-      // WHO) — it would still need the NOT-EXISTS-shaped query this field's
-      // is_empty was rewritten specifically to avoid. See compile.ts's
-      // requireOperator for the enforced rejection.
-      operators: ["is_any_of", "is_not_empty", "is_empty"],
+      // is_not_empty answers from the same counter as is_empty (collaborator_count > 0) — no join, so it also works
+      // for branch managers / counselors, whose queries run over the leads_visible_to_user() RPC where an embedded
+      // `!inner` filter 503s (42703 pgrst_call). It used to be an embed; the Nov 2026 stage smoke test caught the
+      // branch-manager 503. is_any_of is still the only embed-backed operator here (and is lifted into SQL for RPC
+      // callers — see collaborator-split.ts).
+      // is_none_of (Nov 2026, migration 282) — "leads where NONE of these people is a collaborator". It is NOT
+      // compilable as an embedded filter (compile.ts's requireOperator still rejects it there, deliberately), so it
+      // is lifted out of the tree and answered in SQL by the leads list route — see splitCollaboratorNoneOf in
+      // collaborator-split.ts. Only the leads list supports it: every other consumer of this registry (the email /
+      // SMS / outreach audience builders) must drop it from the operator picker via withoutCollaboratorExclusion()
+      // below, and their server side keeps rejecting it (422) — a wrong exclusion there would message the wrong people.
+      operators: ["is_any_of", "is_none_of", "is_not_empty", "is_empty"],
       group: "Basic",
       filterable: true,
     },
@@ -433,6 +548,9 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       emptyIsBlankString: true,
       group: "Basic",
       filterable: true,
+      sortable: true,
+      sortColumns: ["phone"],
+      sortNullsFirst: false,
     },
     {
       key: "city",
@@ -464,6 +582,9 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       operators: ["contains", "not_contains", "starts_with", "ends_with", "is_empty", "is_not_empty"],
       group: "Basic",
       filterable: true,
+      sortable: true,
+      sortColumns: ["country", "city"],
+      sortNullsFirst: false,
     },
 
     // ── follow-up-needed / callback-due signals (migration 250) ──────────
@@ -480,6 +601,60 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       // Never-touched (NULL) must sort to the TOP on ascending — see
       // FieldDef.sortNullsFirst's doc comment in types.ts.
       sortNullsFirst: true,
+      industries: ["education_consultancy"],
+    },
+    {
+      key: "untouched_new",
+      label: "Untouched for 48h+",
+      type: "boolean",
+      source: { kind: "virtual", compile: compileUntouchedNew },
+      operators: ["is_true"],
+      group: "Basic",
+      filterable: true,
+      industries: ["education_consultancy"],
+    },
+    {
+      key: "untouched_held",
+      label: "Untouched for 3+ days",
+      type: "boolean",
+      source: { kind: "virtual", compile: compileUntouchedHeld },
+      operators: ["is_true"],
+      group: "Basic",
+      filterable: true,
+      industries: ["education_consultancy"],
+    },
+    {
+      key: "no_contact_14d",
+      label: "No contact for 2+ weeks",
+      type: "boolean",
+      source: { kind: "virtual", compile: compileNoContact14d },
+      operators: ["is_true"],
+      group: "Basic",
+      filterable: true,
+      industries: ["education_consultancy"],
+    },
+    {
+      key: "held_48h",
+      label: "Held for 48h+",
+      type: "boolean",
+      source: { kind: "virtual", compile: compileHeld48h },
+      operators: ["is_true"],
+      group: "Basic",
+      filterable: true,
+      hiddenFromPicker: true,
+      industries: ["education_consultancy"],
+    },
+    {
+      key: "workable",
+      label: "Workable",
+      // `is` + a JSON string: the shared filter schema allows no value on is_true, and the terminal plan has to travel in the link.
+      type: "text",
+      source: { kind: "virtual", compile: compileWorkable },
+      operators: ["is"],
+      group: "Basic",
+      filterable: true,
+      hiddenFromPicker: true,
+      fixedChipLabel: "Still being worked",
       industries: ["education_consultancy"],
     },
     {
@@ -520,9 +695,145 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       group: "Basic",
       filterable: false,
     },
+    // ── SORT-ONLY fields (Nov 2026, client request: click-to-sort on every Leads column) ──────────────────────
+    // Each is a plain stored `leads` column the table already shows. They exist ONLY so GET /api/v1/leads can
+    // allow-list them for ?sort= — filterable:false keeps them out of the filter picker and rejects them in filter
+    // trees. Blanks always sort last (sortNullsFirst:false), in either direction.
+    {
+      key: "ref_code",
+      label: "Ref code",
+      type: "text",
+      source: { kind: "column", column: "ref_code" },
+      group: "Basic",
+      filterable: false,
+      sortable: true,
+      sortColumns: ["ref_code"],
+      sortNullsFirst: false,
+    },
+    {
+      key: "form_source",
+      label: "Form source",
+      type: "text",
+      source: { kind: "column", column: "form_source" },
+      group: "Basic",
+      filterable: false,
+      sortable: true,
+      sortColumns: ["form_source"],
+      sortNullsFirst: false,
+    },
+    {
+      key: "intake_medium",
+      label: "Medium",
+      type: "text",
+      source: { kind: "column", column: "intake_medium" },
+      group: "Basic",
+      filterable: false,
+      sortable: true,
+      sortColumns: ["intake_medium"],
+      sortNullsFirst: false,
+    },
+    {
+      key: "intake_campaign",
+      label: "Campaign",
+      type: "text",
+      source: { kind: "column", column: "intake_campaign" },
+      group: "Basic",
+      filterable: false,
+      sortable: true,
+      sortColumns: ["intake_campaign"],
+      sortNullsFirst: false,
+    },
+    {
+      key: "preferred_contact_method",
+      label: "Preferred contact",
+      type: "text",
+      source: { kind: "column", column: "preferred_contact_method" },
+      group: "Basic",
+      filterable: false,
+      sortable: true,
+      sortColumns: ["preferred_contact_method"],
+      sortNullsFirst: false,
+    },
+    {
+      key: "ai_score",
+      label: "AI score",
+      type: "number",
+      source: { kind: "column", column: "ai_score" },
+      group: "Basic",
+      filterable: false,
+      sortable: true,
+      sortColumns: ["ai_score"],
+      sortNullsFirst: false,
+    },
+    {
+      key: "company_name",
+      label: "Company",
+      type: "text",
+      source: { kind: "column", column: "company_name" },
+      group: "Basic",
+      filterable: false,
+      sortable: true,
+      sortColumns: ["company_name"],
+      sortNullsFirst: false,
+    },
+    {
+      key: "designation",
+      label: "Designation",
+      type: "text",
+      source: { kind: "column", column: "designation" },
+      group: "Basic",
+      filterable: false,
+      sortable: true,
+      sortColumns: ["designation"],
+      sortNullsFirst: false,
+    },
+    {
+      key: "salutation",
+      label: "Salutation",
+      type: "text",
+      source: { kind: "column", column: "salutation" },
+      group: "Basic",
+      filterable: false,
+      sortable: true,
+      sortColumns: ["salutation"],
+      sortNullsFirst: false,
+    },
+    {
+      key: "company_email",
+      label: "Company email",
+      type: "text",
+      source: { kind: "column", column: "company_email" },
+      group: "Basic",
+      filterable: false,
+      sortable: true,
+      sortColumns: ["company_email"],
+      sortNullsFirst: false,
+    },
+    {
+      key: "archived_at",
+      label: "Archived date",
+      type: "date",
+      source: { kind: "column", column: "archived_at" },
+      group: "Basic",
+      filterable: false,
+      sortable: true,
+      sortColumns: ["archived_at"],
+      sortNullsFirst: false,
+    },
   ];
 
   const registry: FieldRegistry = {};
   for (const field of fields) registry[field.key] = field;
   return registry;
+}
+
+/**
+ * The registry's fields with Collaborators' "is none of" removed — for every surface that does NOT run the leads
+ * list's SQL exclusion path (email / SMS / outreach audience builders). Those server paths reject the operator
+ * too; this just keeps it out of their pickers.
+ */
+export function withoutCollaboratorExclusion(fields: FieldDef[]): FieldDef[] {
+  return fields.map((f) =>
+    f.key === "collaborators" ? { ...f, operators: operatorsForField(f).filter((op) => op !== "is_none_of") } : f
+  );
 }

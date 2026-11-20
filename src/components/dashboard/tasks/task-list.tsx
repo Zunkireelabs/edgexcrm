@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle } from "react";
 import { useRouter } from "next/navigation";
-import { ClipboardList } from "lucide-react";
+import { ClipboardTextIcon } from "@/components/icons";
 import { TaskRow, type TaskRowItem } from "./task-row";
 import { TaskComposer, type TaskComposerContext, type TaskComposerRef } from "./task-composer";
 import { toLocalDateString } from "@/lib/date";
@@ -16,6 +16,8 @@ interface TaskListProps {
   emptyLabel?: string;
   /** Gates whether a project-linked task's chip links to the cockpit — see TaskContextChip. Resolve via getFeatureAccess at the page shell; never re-derive client-side. */
   projectBoardEnabled?: boolean;
+  /** Optional: called after this list successfully creates / completes / deletes a task, so a host surface (e.g. the record preview) can refresh its own derived data. Does NOT emit TASK_CHANGED_EVENT, so there is no refetch loop. */
+  onChange?: () => void;
 }
 
 export interface TaskListRef {
@@ -24,7 +26,7 @@ export interface TaskListRef {
 }
 
 export const TaskList = forwardRef<TaskListRef, TaskListProps>(function TaskList(
-  { fetchUrl, currentUserId, context, emptyLabel = "No tasks yet.", projectBoardEnabled = false },
+  { fetchUrl, currentUserId, context, emptyLabel = "No tasks yet.", projectBoardEnabled = false, onChange },
   ref
 ) {
   const router = useRouter();
@@ -72,6 +74,11 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(function TaskList
     return () => window.removeEventListener(TASK_CHANGED_EVENT, onChanged);
   }, [fetchTasks]);
 
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+
   const handleComplete = useCallback(async (id: string) => {
     const res = await fetch(`/api/v1/my-tasks/${id}`, {
       method: "PATCH",
@@ -80,6 +87,7 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(function TaskList
     });
     if (res.ok) {
       setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, status: "done" } : t)));
+      onChangeRef.current?.();
     }
   }, []);
 
@@ -87,11 +95,13 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(function TaskList
     const res = await fetch(`/api/v1/my-tasks/${id}`, { method: "DELETE" });
     if (res.ok) {
       setTasks((prev) => prev.filter((t) => t.id !== id));
+      onChangeRef.current?.();
     }
   }, []);
 
   function handleCreated(task: Record<string, unknown>) {
     setTasks((prev) => [task as unknown as TaskRowItem, ...prev]);
+    onChangeRef.current?.();
   }
 
   const today = toLocalDateString(new Date());
@@ -104,7 +114,7 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(function TaskList
         <p className="text-sm text-muted-foreground py-2">Loading tasks…</p>
       ) : open.length === 0 && !showCompleted ? (
         <div className="flex flex-col items-center justify-center py-4 gap-1.5 text-center">
-          <ClipboardList className="h-6 w-6 text-muted-foreground/40" />
+          <ClipboardTextIcon className="h-6 w-6 text-muted-foreground/40" />
           <p className="text-sm text-muted-foreground">{emptyLabel}</p>
         </div>
       ) : (

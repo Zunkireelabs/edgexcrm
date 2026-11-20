@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pulse v2 – EdgeX mockup</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!-- Tokens from src/app/globals.css. AI accent = chart-1 (#2272B4) -> chart-3 (#8b5cf6). Icons = lucide (already in app). -->
+<style>
+:root{
+  --bg:#f7f7f7; --fg:#333; --card:#fff; --ink:#171717; --muted:#f5f5f5; --mfg:#6b7280;
+  --accent:#dbeafe; --accent-fg:#2563eb; --border:#e5e7eb; --ring:#2272B4;
+  --c1:#2272B4; --c2:#10b981; --c3:#8b5cf6; --c4:#f59e0b; --c5:#ef4444; --r:1rem;
+  --ai: linear-gradient(135deg,#2272B4 0%,#8b5cf6 100%);
+  --ai-soft: linear-gradient(135deg,rgba(34,114,180,.08),rgba(139,92,246,.10));
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,system-ui,sans-serif;background:#e9e9ea;color:var(--fg);font-size:13px;line-height:1.45;font-feature-settings:"tnum" 1}
+svg.i{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0;vertical-align:-3px}
+.scene{margin:28px auto;width:1440px;background:var(--bg);border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.scene-h{background:#171717;color:#fff;padding:10px 18px;font-size:12px}.scene-h b{font-size:13px;margin-right:10px}.scene-h span{color:#a3a3a3}
+.app{display:flex}
+.side{width:236px;background:#fff;border-right:1px solid var(--border);padding:18px 14px;flex-shrink:0}
+.logo{font-size:19px;font-weight:600;color:var(--ink);margin-bottom:14px}.logo i{font-style:normal;color:var(--ring)}
+.seg{display:flex;background:var(--muted);border-radius:12px;padding:3px;margin-bottom:12px}
+.seg div{flex:1;text-align:center;padding:6px;border-radius:9px;color:var(--mfg);display:flex;gap:6px;justify-content:center;align-items:center}.seg .on{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.search{border:1px solid var(--border);border-radius:10px;padding:7px 10px;color:var(--mfg);margin-bottom:14px;display:flex;gap:8px;align-items:center}
+.nl{font-size:10.5px;letter-spacing:.08em;color:#9ca3af;margin:14px 6px 6px}
+.ni{padding:7px 8px;border-radius:9px;color:#374151;display:flex;gap:9px;align-items:center}
+.ni.on{background:var(--muted);color:var(--ink);font-weight:600}
+.ni .new{margin-left:auto;font-size:10px;color:#fff;background:var(--ai);border-radius:6px;padding:1px 6px;font-weight:600}
+.main{flex:1;padding:18px 24px 36px;min-width:0}
+.top{display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px}
+.btn{border:1px solid var(--border);background:#fff;border-radius:10px;padding:7px 12px;color:var(--ink);font-weight:500;display:inline-flex;gap:6px;align-items:center;white-space:nowrap}
+.btn.pri{background:var(--ink);color:#fff;border-color:var(--ink)}
+.btn.sm{padding:5px 10px;font-size:12px;border-radius:8px}
+.btn.link{border:0;background:none;color:var(--mfg);padding:5px 4px}
+.btn.aib{border:1px solid transparent;background:linear-gradient(#fff,#fff) padding-box,var(--ai) border-box;color:#4c3fb5}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:18px;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+.h1row{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:14px}
+.title{font-size:24px;font-weight:600;color:var(--ink);letter-spacing:-.01em}.sub{color:var(--mfg);margin-top:2px}
+.tabs{display:flex;background:#fff;border:1px solid var(--border);border-radius:12px;padding:3px}
+.tabs div{padding:6px 12px;border-radius:9px;color:var(--mfg)}.tabs .on{background:var(--ink);color:#fff}
+.dd{border:1px solid var(--border);border-radius:10px;padding:7px 12px;background:#fff;color:var(--ink);display:inline-flex;gap:6px;align-items:center}
+/* ---------- AI language ---------- */
+.ai-badge{width:26px;height:26px;border-radius:8px;background:var(--ai);display:grid;place-items:center;color:#fff;box-shadow:0 2px 8px rgba(109,92,230,.35)}
+.ai-badge svg{width:15px;height:15px}
+.ai-ic{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:6px;background:var(--ai);color:#fff;flex-shrink:0}
+.ai-ic svg{width:11px;height:11px;stroke-width:2.4}
+.ai-note{display:inline-flex;gap:6px;align-items:center;background:var(--ai-soft);border:1px solid rgba(124,92,230,.25);color:#3b2f9e;border-radius:8px;padding:3px 8px 3px 4px;font-size:11.5px;font-weight:500;white-space:nowrap}
+.ai-text{background:var(--ai);-webkit-background-clip:text;background-clip:text;color:transparent;font-weight:600}
+/* briefing (kept gradient) */
+.topgrid{display:grid;grid-template-columns:1fr 372px;gap:14px}
+.brief{border:1px solid #c7dbf3;background:linear-gradient(180deg,#f3f8fe,#fff 62%);position:relative;overflow:hidden}
+.brief:before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:var(--ai)}
+.bh{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.bt{font-weight:600;color:var(--ink);font-size:15px;display:flex;gap:10px;align-items:center}
+.bm{color:var(--mfg);font-size:12px}
+.bi{display:grid;grid-template-columns:30px 1fr auto;gap:12px;padding:13px 0;border-top:1px solid #e8eef6;align-items:start}
+.bi:first-of-type{border-top:0}
+.tag{width:28px;height:28px;border-radius:9px;display:grid;place-items:center}
+.tag svg{width:15px;height:15px}
+.t-red{background:#fee2e2;color:#b91c1c}.t-grn{background:#d1fae5;color:#047857}.t-amb{background:#fef3c7;color:#b45309}.t-blu{background:var(--accent);color:var(--accent-fg)}
+.bi p{color:#1f2937;font-size:13.5px}.bi p b{color:var(--ink)}
+.why{color:var(--mfg);font-size:12px;margin-top:4px;display:flex;gap:6px}
+.why b{color:#4b5563;font-weight:600}
+.ask{margin-top:6px;display:flex;gap:8px;align-items:center;border:1px solid transparent;background:linear-gradient(#fff,#fff) padding-box,var(--ai) border-box;border-radius:12px;padding:9px 12px;color:#9ca3af}
+.chip{color:#374151;background:var(--muted);border-radius:8px;padding:3px 8px;font-size:12px}
+/* needs you */
+.nh{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+.sec-t{font-weight:600;color:var(--ink);font-size:14px}.sec-s{color:var(--mfg);font-size:12px}
+.task{display:grid;grid-template-columns:4px 1fr;gap:12px;padding:12px 0;border-top:1px solid #f1f1f1}
+.task:first-of-type{border-top:0}
+.task .bar{border-radius:4px}
+.task p{color:#1f2937}.task p b{color:var(--ink)}
+.tm{color:var(--mfg);font-size:11.5px;margin-top:2px}
+.tacts{display:flex;gap:6px;margin-top:8px;align-items:center}
+.count{background:var(--ink);color:#fff;border-radius:999px;padding:1px 8px;font-size:11px;font-weight:600}
+/* funnel */
+.funnel{display:grid;grid-template-columns:1fr 92px 1fr 92px 1fr 92px 1fr;align-items:stretch;margin:14px 0;padding:0;overflow:hidden}
+.fs{padding:16px 18px}
+.kl{color:var(--mfg);font-size:12px;font-weight:500;display:flex;gap:6px;align-items:center}
+.kv{font-size:30px;font-weight:600;color:var(--ink);margin-top:2px;display:flex;align-items:baseline;gap:8px;letter-spacing:-.02em}
+.d{font-size:12px;font-weight:600;border-radius:6px;padding:1px 6px;letter-spacing:0}
+.up{color:#047857;background:#d1fae5}.dn{color:#b91c1c;background:#fee2e2}
+.kn{color:var(--mfg);font-size:12px}
+.spark{margin-top:6px;height:26px;width:100%}
+.conn{display:flex;flex-direction:column;justify-content:center;align-items:center;gap:6px;border-left:1px dashed var(--border);border-right:1px dashed var(--border);background:#fbfbfb}
+.cr{font-size:15px;font-weight:600;color:var(--ink);display:flex;align-items:center;gap:2px}
+.cl{font-size:11px;color:var(--mfg);text-align:center;line-height:1.3}
+.leak{font-size:11px;color:#b91c1c;background:#fef2f2;border-radius:6px;padding:1px 6px}
+.fs .ai-note{margin-top:8px}
+.fs.hot{background:linear-gradient(180deg,rgba(139,92,246,.05),transparent 70%)}
+/* scoreboard */
+.sh{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:10px}
+table{width:100%;border-collapse:separate;border-spacing:0}
+th{font-size:11px;color:var(--mfg);font-weight:500;text-align:left;padding:7px 7px;border-bottom:1px solid var(--border);line-height:1.25;vertical-align:bottom}
+th.n,td.n{text-align:right}
+th.grp{font-size:10.5px;letter-spacing:.07em;color:#9ca3af;font-weight:600;border-bottom:0;padding-bottom:0}
+th.gl,td.gl{border-left:1px solid var(--border)}
+td{padding:9px 7px;border-bottom:1px solid #f3f3f3;vertical-align:middle}
+tr.g td{background:#fafafa;color:var(--mfg);font-size:10.5px;font-weight:600;letter-spacing:.07em;padding:6px 10px}
+.who{display:flex;gap:10px;align-items:center}
+.av{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:600;color:#fff;flex-shrink:0}
+.nm{color:var(--ink);font-weight:500;white-space:nowrap}.rl{color:var(--mfg);font-size:11.5px;white-space:nowrap}
+.num{position:relative;display:inline-block;min-width:44px;text-align:right}
+.num b{color:var(--ink);font-weight:600;font-size:13.5px;position:relative;z-index:1}
+.num .hb{position:absolute;right:0;top:50%;height:18px;transform:translateY(-50%);background:rgba(34,114,180,.10);border-radius:4px}
+.dv{display:block;font-size:10.5px;font-weight:600;line-height:1.2}
+.dv.p{color:#047857}.dv.m{color:#b91c1c}.dv.z{color:#9ca3af;font-weight:500}
+.chips{display:flex;gap:4px;flex-wrap:wrap}
+.sc{font-size:11.5px;border-radius:6px;padding:1px 7px;font-weight:500;white-space:nowrap}
+.s-pq{background:#f1f5f9;color:#475569}.s-q{background:#e0ecf8;color:#1e5a8f}.s-p{background:#ede9fe;color:#6d28d9}.s-a{background:#d1fae5;color:#047857}
+.qd{display:inline-block;width:7px;height:7px;border-radius:50%;margin-left:4px;vertical-align:1px}
+tr.flag td{background:rgba(139,92,246,.045)}
+tr.flag td:first-child{box-shadow:inset 3px 0 0 #8b5cf6}
+tr.star td:first-child{box-shadow:inset 3px 0 0 #10b981}
+.rowai{margin-top:5px}
+.dim{color:#9ca3af}
+.foot{display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:10px}
+.bulk{display:flex;gap:8px;align-items:center;background:var(--muted);border-radius:10px;padding:8px 12px;color:var(--mfg);font-size:12px;flex:1}
+.legend{display:flex;gap:12px;color:var(--mfg);font-size:11.5px;align-items:center}
+/* anatomy */
+.anat{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;padding:24px}
+.an h4{font-size:13px;color:var(--ink);margin-bottom:4px}.an p.s{color:var(--mfg);font-size:12px;margin-bottom:12px}
+.pop{border-radius:12px;background:#fff;border:1px solid var(--border);box-shadow:0 12px 32px rgba(16,24,40,.14);padding:12px;width:300px;position:relative}
+.pop:before{content:"";position:absolute;inset:0;border-radius:12px;padding:1px;background:var(--ai);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
+.rules li{margin:5px 0 5px 16px;color:#374151}
+/* drawer */
+.wrap{position:relative}
+.shade{position:absolute;inset:0;background:rgba(17,17,17,.28)}
+.drawer{position:absolute;top:0;right:0;bottom:0;width:640px;background:#fff;border-left:1px solid var(--border);padding:22px;box-shadow:-8px 0 24px rgba(0,0,0,.08);overflow:hidden}
+.mini{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0}
+.mini div{border:1px solid var(--border);border-radius:12px;padding:10px 12px}
+.mini b{display:block;font-size:20px;color:var(--ink)}
+.coach{border-radius:14px;padding:14px;margin:12px 0;background:linear-gradient(180deg,#f3f8fe,#fff);border:1px solid #c7dbf3;position:relative;overflow:hidden}
+.coach:before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:var(--ai)}
+.tl{border-left:2px solid var(--border);margin-left:6px;padding-left:14px}
+.tl div{position:relative;padding:6px 0;color:#374151}
+.tl div:before{content:"";position:absolute;left:-19px;top:11px;width:8px;height:8px;border-radius:50%;background:#cbd5e1}
+.tl span{color:var(--mfg);font-size:11.5px;margin-left:6px}
+.off .ai-badge{background:#9ca3af;box-shadow:none}
+.note{background:var(--muted);border-radius:10px;padding:10px 12px;color:var(--mfg);font-size:12px;margin-top:10px}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="spark" viewBox="0 0 24 24"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4M22 5h-4"/></symbol>
+  <symbol id="down" viewBox="0 0 24 24"><path d="M16 17h6v-6"/><path d="m22 17-8.5-8.5-5 5L2 7"/></symbol>
+  <symbol id="up" viewBox="0 0 24 24"><path d="M16 7h6v6"/><path d="m22 7-8.5 8.5-5-5L2 17"/></symbol>
+  <symbol id="alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></symbol>
+  <symbol id="info" viewBox="0 0 24 24"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M7 16h8M7 11h12M7 6h3"/></symbol>
+  <symbol id="home" viewBox="0 0 24 24"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="grid" viewBox="0 0 24 24"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></symbol>
+  <symbol id="pulse" viewBox="0 0 24 24"><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/></symbol>
+  <symbol id="book" viewBox="0 0 24 24"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></symbol>
+  <symbol id="users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+  <symbol id="search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></symbol>
+  <symbol id="pin" viewBox="0 0 24 24"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></symbol>
+  <symbol id="dl" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5M12 15V3"/></symbol>
+  <symbol id="chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="arrow" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></symbol>
+  <symbol id="layers" viewBox="0 0 24 24"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65M22 12.65l-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></symbol>
+  <symbol id="send" viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></symbol>
+  <symbol id="x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+</svg>
+
+<!-- ================= SCENE 1 ================= -->
+<section class="scene" id="s1">
+<div class="scene-h"><b>Scene 1 — Pulse · a normal week (Owner / Admin)</b><span>Default dashboard for education tenants. Anything with the gradient spark is AI. Everything else is computed data. Sample data.</span></div>
+<div class="app">
+  <aside class="side">
+    <div class="logo">EdgeX<i>edu</i></div>
+    <div class="seg"><div class="on"><svg class="i"><use href="#grid"/></svg>Ops</div><div><svg class="i"><use href="#spark"/></svg>Orca</div></div>
+    <div class="search"><svg class="i"><use href="#search"/></svg>Global Search</div>
+    <div class="ni"><svg class="i"><use href="#home"/></svg>Home</div>
+    <div class="nl">INTELLIGENCE</div>
+    <div class="ni on"><svg class="i"><use href="#pulse"/></svg>Pulse<span class="new">AI</span></div>
+    <div class="ni"><svg class="i"><use href="#grid"/></svg>Dashboards</div>
+    <div class="ni"><svg class="i"><use href="#book"/></svg>Knowledge Base</div>
+    <div class="nl">LEADS</div>
+    <div class="ni"><svg class="i"><use href="#layers"/></svg>Leads Organise</div><div class="ni"><svg class="i"><use href="#users"/></svg>All Leads</div><div class="ni"><svg class="i"><use href="#grid"/></svg>Pipeline</div>
+    <div class="nl">OPERATIONS</div>
+    <div class="ni"><svg class="i"><use href="#book"/></svg>Applications</div><div class="ni"><svg class="i"><use href="#users"/></svg>Check-In</div>
+  </aside>
+  <main class="main">
+    <div class="top"><span class="btn aib"><svg class="i"><use href="#spark"/></svg>Ask Orca</span><span class="btn"><svg class="i"><use href="#pin"/></svg>All branches<svg class="i"><use href="#chev"/></svg></span><span class="btn"><svg class="i"><use href="#bell"/></svg></span></div>
+    <div class="h1row">
+      <div><div class="title">Pulse</div><div class="sub">Your team this week: what changed, why, and what needs you · 28 Oct – 3 Nov vs the week before</div></div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <div class="tabs"><div>24 hours</div><div class="on">7 days</div><div>30 days</div><div>Custom</div></div>
+        <span class="dd">All roles<svg class="i"><use href="#chev"/></svg></span><span class="btn"><svg class="i"><use href="#dl"/></svg>Export</span>
+      </div>
+    </div>
+
+    <div class="topgrid">
+      <!-- briefing: what changed + why -->
+      <div class="card brief">
+        <div class="bh">
+          <div class="bt"><span class="ai-badge"><svg class="i"><use href="#spark"/></svg></span>This week's briefing</div>
+          <div class="bm">Orca · 9:00 AM · from the numbers below</div>
+        </div>
+        <div class="bi"><span class="tag t-red"><svg class="i"><use href="#down"/></svg></span>
+          <div><p><b>Prospects fell 12%, and Pokhara accounts for nearly all of it.</b> Bikash Thapa's activity stopped on Wednesday. His 38 leads have had no call or note since.</p>
+          <div class="why"><b>Evidence</b> Pokhara −11 of the team's −13 · Bikash 9 calls vs his usual 46</div></div>
+          <span class="btn sm link">38 leads <svg class="i"><use href="#arrow"/></svg></span></div>
+        <div class="bi"><span class="tag t-grn"><svg class="i"><use href="#up"/></svg></span>
+          <div><p><b>Sita Gurung brought 11 of the 31 students into Applications</b>, 2.4× the counsellor average.</p>
+          <div class="why"><b>What works</b> She calls every new Prospect within 2h. The team median is 19h.</div></div>
+          <span class="btn sm link">11 students <svg class="i"><use href="#arrow"/></svg></span></div>
+        <div class="bi"><span class="tag t-blu"><svg class="i"><use href="#info"/></svg></span>
+          <div><p><b>More leads are being archived from Qualified: 18%, up from 9%.</b> The top reason is "Not reachable" (22 leads).</p>
+          <div class="why"><b>Pattern</b> 14 of the 22 had only one call attempt. A second-attempt rule would likely recover several.</div></div>
+          <span class="btn sm link">22 leads <svg class="i"><use href="#arrow"/></svg></span></div>
+        <div class="ask"><span class="ai-ic"><svg class="i"><use href="#spark"/></svg></span>Ask about this week…<span class="chip">Why did Pokhara drop?</span><span class="chip">Compare branches this month</span></div>
+      </div>
+
+      <!-- needs you: to-dos -->
+      <div class="card">
+        <div class="nh"><div class="sec-t" style="display:flex;gap:8px;align-items:center">Needs you <span class="count">3</span></div><span class="sec-s" style="display:flex;gap:5px;align-items:center"><span class="ai-ic"><svg class="i"><use href="#spark"/></svg></span>ranked by impact</span></div>
+        <div class="task"><span class="bar" style="background:#ef4444"></span><div><p><b>Check in with Bikash Thapa</b>, then cover his 12 hottest Qualified leads</p><div class="tm">Suggested: move them to Anil KC for 3 days</div>
+          <div class="tacts"><span class="btn sm pri">Review &amp; approve</span><span class="btn sm link">Dismiss</span></div></div></div>
+        <div class="task"><span class="bar" style="background:#f59e0b"></span><div><p><b>63 new leads</b> untouched for over 48h. 41 are in Butwal, which has 2× its usual intake.</p><div class="tm">Suggested: spread 30 across Pokhara TeleCallers</div>
+          <div class="tacts"><span class="btn sm pri">Review &amp; approve</span><span class="btn sm link">Open</span></div></div></div>
+        <div class="task"><span class="bar" style="background:#2272B4"></span><div><p><b>5 students in Applications</b> are missing documents before the Feb intake</p><div class="tm">Reminder drafts are ready for 5 students</div>
+          <div class="tacts"><span class="btn sm pri">Review drafts</span><span class="btn sm link">Open</span></div></div></div>
+      </div>
+    </div>
+
+    <!-- funnel -->
+    <div class="card funnel">
+      <div class="fs"><div class="kl">New leads in</div><div class="kv">412 <span class="d up">+18%</span></div><div class="kn">349 last week</div>
+        <svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none"><polyline points="0,18 16,16 33,19 50,14 66,6 83,9 100,8" fill="none" stroke="#2272B4" stroke-width="1.8"/></svg></div>
+      <div class="conn"><div class="cr">48%<svg class="i" style="width:13px"><use href="#arrow"/></svg></div><div class="cl">qualified</div><span class="leak">31 out</span></div>
+      <div class="fs hot"><div class="kl">Moved to Prospects</div><div class="kv">96 <span class="d dn">−12%</span></div><div class="kn">109 last week</div>
+        <svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none"><polyline points="0,8 16,7 33,9 50,10 66,17 83,19 100,20" fill="none" stroke="#8b5cf6" stroke-width="1.8"/></svg>
+        <span class="ai-note"><span class="ai-ic"><svg class="i"><use href="#spark"/></svg></span>Pokhara −11 · one counsellor inactive</span></div>
+      <div class="conn"><div class="cr">32%<svg class="i" style="width:13px"><use href="#arrow"/></svg></div><div class="cl">to Applications</div><span class="leak">38 out</span></div>
+      <div class="fs"><div class="kl">Students reached Applications</div><div class="kv">31 <span class="d up">+24%</span></div><div class="kn">25 last week</div>
+        <svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none"><polyline points="0,20 16,19 33,16 50,15 66,12 83,10 100,6" fill="none" stroke="#10b981" stroke-width="1.8"/></svg></div>
+      <div class="conn"><div class="cr">1.5×<svg class="i" style="width:13px"><use href="#arrow"/></svg></div><div class="cl">per student</div><span class="leak" style="color:#6b7280;background:#f3f4f6">6 out</span></div>
+      <div class="fs"><div class="kl">Applications filed</div><div class="kv">47 <span class="d up">+9%</span></div><div class="kn">to 19 universities</div>
+        <svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none"><polyline points="0,16 16,15 33,14 50,15 66,11 83,12 100,9" fill="none" stroke="#10b981" stroke-width="1.8"/></svg></div>
+    </div>
+
+    <!-- scoreboard -->
+    <div class="card">
+      <div class="sh"><div><div class="sec-t">Team scoreboard</div><div class="sec-s">Click any number to see the exact leads. Small figures show the change against that person's usual week.</div></div>
+        <div style="display:flex;gap:6px"><span class="dd">Group: Role<svg class="i"><use href="#chev"/></svg></span><span class="dd">Sort: Moved forward<svg class="i"><use href="#chev"/></svg></span></div></div>
+      <table>
+        <thead>
+          <tr><th class="grp"></th><th class="grp gl" colspan="6">ACTIVITY · what they did</th><th class="grp gl" colspan="3">RESULTS · on leads they hold</th><th class="grp gl"></th></tr>
+          <tr><th>Person</th><th class="n gl">Leads<br>received</th><th>Moved forward</th><th class="n">Back /<br>archived</th><th class="n">Status<br>changes</th><th class="n">Notes <span class="ai-ic" style="width:14px;height:14px;border-radius:4px;vertical-align:-2px"><svg class="i" style="width:9px;height:9px"><use href="#spark"/></svg></span></th><th class="n">Calls</th>
+              <th class="n gl">Prospects</th><th class="n">Students<br>in Apps</th><th class="n">Apps<br>filed</th><th class="gl">Trend<br>vs usual</th></tr>
+        </thead>
+        <tbody>
+        <tr class="g"><td colspan="11">COUNSELLORS · 3</td></tr>
+        <tr class="star"><td><div class="who"><span class="av" style="background:#10b981">SG</span><div><div class="nm">Sita Gurung</div><div class="rl">Counsellor · Putalisadak</div>
+              <div class="rowai"><span class="ai-note"><span class="ai-ic"><svg class="i"><use href="#spark"/></svg></span>Fastest to call new Prospects · 2h</span></div></div></div></td>
+          <td class="n gl"><span class="num"><span class="hb" style="width:25%"></span><b>24</b></span><span class="dv z">usual 22</span></td>
+          <td><div class="chips"><span class="sc s-p">→ Prospects 6</span><span class="sc s-a">→ Applications 11</span></div></td>
+          <td class="n"><span class="num"><b>2</b></span><span class="dv z">usual 3</span></td>
+          <td class="n"><span class="num"><span class="hb" style="width:38%"></span><b>31</b></span><span class="dv p">+19%</span></td>
+          <td class="n"><span class="num"><span class="hb" style="width:86%"></span><b>38</b><span class="qd" style="background:#10b981"></span></span><span class="dv z">4 edited</span></td>
+          <td class="n"><span class="num"><span class="hb" style="width:33%"></span><b>71</b></span><span class="dv p">+12%</span></td>
+          <td class="n gl"><span class="num"><span class="hb" style="width:100%"></span><b>14</b></span></td>
+          <td class="n"><span class="num"><span class="hb" style="width:100%;background:rgba(16,185,129,.16)"></span><b>11</b></span><span class="dv p">+120%</span></td>
+          <td class="n"><span class="num"><span class="hb" style="width:100%;background:rgba(16,185,129,.16)"></span><b>17</b></span></td>
+          <td class="gl"><svg width="66" height="26" viewBox="0 0 86 26" preserveAspectRatio="none"><line x1="0" y1="15" x2="86" y2="15" stroke="#e5e7eb" stroke-dasharray="3 3"/><polyline points="0,18 14,17 28,15 43,13 57,12 71,8 86,4" fill="none" stroke="#10b981" stroke-width="2"/></svg></td></tr>
+        <tr><td><div class="who"><span class="av" style="background:#8b5cf6">AK</span><div><div class="nm">Anil KC</div><div class="rl">Counsellor · Putalisadak</div></div></div></td>
+          <td class="n gl"><span class="num"><span class="hb" style="width:20%"></span><b>19</b></span><span class="dv z">usual 20</span></td>
+          <td><div class="chips"><span class="sc s-p">→ Prospects 9</span><span class="sc s-a">→ Applications 5</span></div></td>
+          <td class="n"><span class="num"><b>4</b></span><span class="dv z">usual 4</span></td>
+          <td class="n"><span class="num"><span class="hb" style="width:27%"></span><b>22</b></span><span class="dv z">±0</span></td>
+          <td class="n"><span class="num"><span class="hb" style="width:48%"></span><b>21</b><span class="qd" style="background:#f59e0b"></span></span><span class="dv z">1 edited</span></td>
+          <td class="n"><span class="num"><span class="hb" style="width:23%"></span><b>49</b></span><span class="dv z">−3%</span></td>
+          <td class="n gl"><span class="num"><span class="hb" style="width:86%"></span><b>12</b></span></td>
+          <td class="n"><span class="num"><span class="hb" style="width:45%;background:rgba(16,185,129,.16)"></span><b>5</b></span><span class="dv z">±0</span></td>
+          <td class="n"><span class="num"><span class="hb" style="width:47%;background:rgba(16,185,129,.16)"></span><b>8</b></span></td>
+          <td class="gl"><svg width="66" height="26" viewBox="0 0 86 26" preserveAspectRatio="none"><line x1="0" y1="14" x2="86" y2="14" stroke="#e5e7eb" stroke-dasharray="3 3"/><polyline points="0,14 14,12 28,15 43,13 57,14 71,15 86,13" fill="none" stroke="#94a3b8" stroke-width="2"/></svg></td></tr>
+        <tr class="flag"><td><div class="who"><span class="av" style="background:#ef4444">BT</span><div><div class="nm">Bikash Thapa</div><div class="rl">Counsellor · Pokhara</div>
+              <div class="rowai"><span class="ai-note"><span class="ai-ic"><svg class="i"><use href="#spark"/></svg></span>Stopped Wednesday · check in first</span></div></div></div></td>
+          <td class="n gl"><span class="num"><span class="hb" style="width:22%"></span><b>21</b></span><span class="dv z">usual 20</span></td>
+          <td><div class="chips"><span class="sc s-p">→ Prospects 4</span><span class="sc s-a">→ Applications 1</span></div></td>
+          <td class="n"><span class="num"><b>7</b></span><span class="dv m">usual 3</span></td>
+          <td class="n"><span class="num"><span class="hb" style="width:7%"></span><b>6</b></span><span class="dv m">−78%</span></td>
+          <td class="n"><span class="num"><span class="hb" style="width:11%"></span><b>5</b><span class="qd" style="background:#ef4444"></span></span><span class="dv m">−84%</span></td>
+          <td class="n"><span class="num"><span class="hb" style="width:4%"></span><b>9</b></span><span class="dv m">−80%</span></td>
+          <td class="n gl"><span class="num"><span class="hb" style="width:21%"></span><b>3</b></span></td>
+          <td class="n"><span class="num"><span class="hb" style="width:9%;background:rgba(16,185,129,.16)"></span><b>1</b></span><span class="dv m">−75%</span></td>
+          <td class="n"><span class="num"><span class="hb" style="width:6%;background:rgba(16,185,129,.16)"></span><b>1</b></span></td>
+          <td class="gl"><svg width="66" height="26" viewBox="0 0 86 26" preserveAspectRatio="none"><line x1="0" y1="9" x2="86" y2="9" stroke="#e5e7eb" stroke-dasharray="3 3"/><polyline points="0,6 14,7 28,14 43,21 57,22 71,23 86,23" fill="none" stroke="#ef4444" stroke-width="2"/></svg></td></tr>
+        <tr class="g"><td colspan="11">EXECUTIVES · 2</td></tr>
+        <tr><td><div class="who"><span class="av" style="background:#2272B4">PS</span><div><div class="nm">Pooja Shrestha</div><div class="rl">Executive · Putalisadak</div></div></div></td>
+          <td class="n gl"><span class="num"><span class="hb" style="width:60%"></span><b>58</b></span><span class="dv z">usual 52</span></td>
+          <td><div class="chips"><span class="sc s-q">→ Qualified 27</span><span class="sc s-p">→ Prospects 31</span></div></td>
+          <td class="n"><span class="num"><b>9</b></span><span class="dv z">usual 10</span></td>
+          <td class="n"><span class="num"><span class="hb" style="width:79%"></span><b>64</b></span><span class="dv p">+8%</span></td>
+          <td class="n"><span class="num"><span class="hb" style="width:100%"></span><b>44</b><span class="qd" style="background:#10b981"></span></span><span class="dv z">2 edited</span></td>
+          <td class="n"><span class="num"><span class="hb" style="width:62%"></span><b>132</b></span><span class="dv p">+6%</span></td>
+          <td class="n gl dim">—</td><td class="n dim">—</td><td class="n dim">—</td>
+          <td class="gl"><svg width="66" height="26" viewBox="0 0 86 26" preserveAspectRatio="none"><line x1="0" y1="14" x2="86" y2="14" stroke="#e5e7eb" stroke-dasharray="3 3"/><polyline points="0,15 14,13 28,14 43,11 57,12 71,10 86,9" fill="none" stroke="#2272B4" stroke-width="2"/></svg></td></tr>
+        <tr><td><div class="who"><span class="av" style="background:#f59e0b">RM</span><div><div class="nm">Rojina Maharjan</div><div class="rl">Executive · Butwal</div></div></div></td>
+          <td class="n gl"><span class="num"><span class="hb" style="width:49%"></span><b>47</b></span><span class="dv z">usual 45</span></td>
+          <td><div class="chips"><span class="sc s-q">→ Qualified 19</span><span class="sc s-p">→ Prospects 22</span></div></td>
+          <td class="n"><span class="num"><b>11</b></span><span class="dv z">usual 10</span></td>
+          <td class="n"><span class="num"><span class="hb" style="width:47%"></span><b>38</b></span><span class="dv z">±0</span></td>
+          <td class="n"><span class="num"><span class="hb" style="width:66%"></span><b>29</b><span class="qd" style="background:#10b981"></span></span><span class="dv z">0 edited</span></td>
+          <td class="n"><span class="num"><span class="hb" style="width:46%"></span><b>98</b></span><span class="dv z">+2%</span></td>
+          <td class="n gl dim">—</td><td class="n dim">—</td><td class="n dim">—</td>
+          <td class="gl"><svg width="66" height="26" viewBox="0 0 86 26" preserveAspectRatio="none"><line x1="0" y1="14" x2="86" y2="14" stroke="#e5e7eb" stroke-dasharray="3 3"/><polyline points="0,14 14,15 28,13 43,14 57,13 71,14 86,13" fill="none" stroke="#94a3b8" stroke-width="2"/></svg></td></tr>
+        <tr class="g"><td colspan="11">TELECALLERS · 3</td></tr>
+        <tr class="flag"><td><div class="who"><span class="av" style="background:#6b7280">NR</span><div><div class="nm">Nisha Rai</div><div class="rl">TeleCaller · Butwal</div>
+              <div class="rowai"><span class="ai-note"><span class="ai-ic"><svg class="i"><use href="#spark"/></svg></span>Over capacity · 2× intake</span></div></div></div></td>
+          <td class="n gl"><span class="num"><span class="hb" style="width:100%"></span><b>96</b></span><span class="dv m">usual 44</span></td>
+          <td><div class="chips"><span class="sc s-pq">→ Pre-qualified 18</span><span class="sc s-q">→ Qualified 22</span></div></td>
+          <td class="n"><span class="num"><b>14</b></span><span class="dv z">usual 13</span></td>
+          <td class="n"><span class="num"><span class="hb" style="width:100%"></span><b>81</b></span><span class="dv p">+14%</span></td>
+          <td class="n"><span class="num"><span class="hb" style="width:91%"></span><b>40</b><span class="qd" style="background:#f59e0b"></span></span><span class="dv z">0 edited</span></td>
+          <td class="n"><span class="num"><span class="hb" style="width:100%"></span><b>214</b></span><span class="dv p">+21%</span></td>
+          <td class="n gl dim">—</td><td class="n dim">—</td><td class="n dim">—</td>
+          <td class="gl"><svg width="66" height="26" viewBox="0 0 86 26" preserveAspectRatio="none"><line x1="0" y1="16" x2="86" y2="16" stroke="#e5e7eb" stroke-dasharray="3 3"/><polyline points="0,16 14,4 28,8 43,9 57,10 71,9 86,10" fill="none" stroke="#2272B4" stroke-width="2"/></svg></td></tr>
+        <tr><td><div class="who"><span class="av" style="background:#6b7280">DB</span><div><div class="nm">Dipesh Basnet</div><div class="rl">TeleCaller · Butwal</div></div></div></td>
+          <td class="n gl"><span class="num"><span class="hb" style="width:92%"></span><b>88</b></span><span class="dv m">usual 41</span></td>
+          <td><div class="chips"><span class="sc s-pq">→ Pre-qualified 11</span><span class="sc s-q">→ Qualified 15</span></div></td>
+          <td class="n"><span class="num"><b>17</b></span><span class="dv z">usual 14</span></td>
+          <td class="n"><span class="num"><span class="hb" style="width:73%"></span><b>59</b></span><span class="dv z">+3%</span></td>
+          <td class="n"><span class="num"><span class="hb" style="width:52%"></span><b>23</b><span class="qd" style="background:#f59e0b"></span></span><span class="dv z">0 edited</span></td>
+          <td class="n"><span class="num"><span class="hb" style="width:87%"></span><b>187</b></span><span class="dv p">+9%</span></td>
+          <td class="n gl dim">—</td><td class="n dim">—</td><td class="n dim">—</td>
+          <td class="gl"><svg width="66" height="26" viewBox="0 0 86 26" preserveAspectRatio="none"><line x1="0" y1="15" x2="86" y2="15" stroke="#e5e7eb" stroke-dasharray="3 3"/><polyline points="0,15 14,5 28,7 43,10 57,12 71,11 86,11" fill="none" stroke="#2272B4" stroke-width="2"/></svg></td></tr>
+        </tbody>
+      </table>
+      <div class="foot">
+        <div class="bulk"><svg class="i"><use href="#layers"/></svg><span><b style="color:#374151">Not in scores:</b> 2 bulk actions moved 520 leads (Admizz Admin, Mon 28 Oct, NEB-10k → Pre-qualified)</span><span class="btn sm link" style="margin-left:auto">View <svg class="i"><use href="#arrow"/></svg></span></div>
+        <div class="legend"><span class="ai-ic"><svg class="i"><use href="#spark"/></svg></span>Note quality <span><span class="qd" style="background:#10b981"></span> detailed</span><span><span class="qd" style="background:#f59e0b"></span> short</span><span><span class="qd" style="background:#ef4444"></span> says little</span></div>
+      </div>
+    </div>
+  </main>
+</div>
+</section>
+
+<!-- ================= SCENE 2 ================= -->
+<section class="scene" id="s2">
+<div class="scene-h"><b>Scene 2 — The AI design language (build spec)</b><span>One visual system for every AI touchpoint. The gradient spark always means "Orca said this". Plain data never uses it.</span></div>
+<div class="anat">
+  <div class="card an"><h4>1 · AI surface (card)</h4><p class="s">Briefings, coaching, any block written by AI. Blue-tint gradient, 3px spark-gradient top edge, gradient badge.</p>
+    <div class="card brief" style="padding:14px"><div class="bt" style="font-size:13.5px"><span class="ai-badge"><svg class="i"><use href="#spark"/></svg></span>This week's briefing</div><p style="margin-top:8px;color:#374151">Narrative + evidence + link to records.</p></div></div>
+  <div class="card an"><h4>2 · AI note (inline)</h4><p class="s">A one-line insight attached to a number, row or chart. At most one per row or card, shown only when significant.</p>
+    <div style="display:flex;flex-direction:column;gap:10px;align-items:flex-start"><span class="ai-note"><span class="ai-ic"><svg class="i"><use href="#spark"/></svg></span>Stopped Wednesday · check in first</span><span class="ai-note"><span class="ai-ic"><svg class="i"><use href="#spark"/></svg></span>Pokhara −11 · one counsellor inactive</span></div></div>
+  <div class="card an"><h4>3 · AI flag (row)</h4><p class="s">The row gets a violet left edge and a soft wash, so your eye lands on it before reading any numbers.</p>
+    <table><tr class="flag"><td><div class="who"><span class="av" style="background:#ef4444">BT</span><div><div class="nm">Bikash Thapa</div><div class="rl">Counsellor · Pokhara</div></div></div></td><td class="n"><b style="color:#171717">9</b><span class="dv m">−80%</span></td></tr></table></div>
+  <div class="card an"><h4>4 · Hover = "why"</h4><p class="s">Hovering any AI note opens its reasoning and evidence, with a link to the records. Nothing AI-written is a dead end.</p>
+    <div class="pop"><div style="display:flex;gap:8px;align-items:center;margin-bottom:6px"><span class="ai-ic"><svg class="i"><use href="#spark"/></svg></span><b style="color:#171717">Why Orca flagged this</b></div>
+      <p style="color:#374151">Calls fell from 46/wk (4-week avg) to 9, starting Wed 30 Oct. Notes and stage moves fell at the same time. A drop across everything at once usually means absence, not performance.</p>
+      <div style="display:flex;justify-content:space-between;margin-top:10px"><span class="sec-s">Based on 312 activity records</span><span class="btn sm link" style="padding:0">See records <svg class="i"><use href="#arrow"/></svg></span></div></div></div>
+  <div class="card an"><h4>5 · AI action</h4><p class="s">AI proposes and a human approves. The primary button reads "Review &amp; approve", never a silent auto-act.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><span class="btn sm pri">Review &amp; approve</span><span class="btn sm aib"><svg class="i"><use href="#spark"/></svg>Draft message</span><span class="btn sm link">Dismiss</span></div>
+    <p class="s" style="margin-top:12px;margin-bottom:0">Dismissals are logged, so Orca learns which insights are noise.</p></div>
+  <div class="card an"><h4>Rules</h4><ul class="rules">
+    <li>Gradient spark = AI. Never used for plain data.</li>
+    <li>AI cites numbers; it never computes them.</li>
+    <li>Max 1 AI note per row or card, only when significant.</li>
+    <li>Every AI element links to its records.</li>
+    <li>AI off → AI elements disappear, data stays (Scene 3).</li></ul></div>
+</div>
+</section>
+
+<!-- ================= SCENE 3 ================= -->
+<section class="scene" id="s3">
+<div class="scene-h"><b>Scene 3 — AI off</b><span>Admizz prod until consent (#289), or over budget. The briefing becomes computed highlights, AI notes and flags disappear, and Needs-you is ranked by rules.</span></div>
+<div style="padding:24px;display:grid;grid-template-columns:1fr 372px;gap:14px">
+  <div class="card brief off" style="border-color:var(--border);background:#fff"><div class="bh"><div class="bt"><span class="ai-badge"><svg class="i"><use href="#info"/></svg></span>Key changes this week</div><div class="bm">Calculated · AI explanations are off</div></div>
+    <div class="bi"><span class="tag t-red"><svg class="i"><use href="#down"/></svg></span><div><p><b>Biggest drop: Moved to Prospects −12%</b> (109 → 96). Pokhara −11, Putalisadak −1, Butwal −1.</p></div><span class="btn sm link">Open <svg class="i"><use href="#arrow"/></svg></span></div>
+    <div class="bi"><span class="tag t-red"><svg class="i"><use href="#down"/></svg></span><div><p><b>Largest personal drop: Bikash Thapa</b>, calls 9 vs usual 46 (−80%).</p></div><span class="btn sm link">Open <svg class="i"><use href="#arrow"/></svg></span></div>
+    <div class="bi"><span class="tag t-grn"><svg class="i"><use href="#up"/></svg></span><div><p><b>Top mover: Sita Gurung</b>, 11 students to Applications (counsellor avg 4.6).</p></div><span class="btn sm link">Open <svg class="i"><use href="#arrow"/></svg></span></div>
+    <div class="note">Turn on Orca for the "why", suggested actions and follow-up questions.</div></div>
+  <div class="card"><div class="nh"><div class="sec-t">Needs you <span class="count">2</span></div><span class="sec-s">by rule</span></div>
+    <div class="task"><span class="bar" style="background:#ef4444"></span><div><p><b>38 leads</b> held by Bikash Thapa with no activity 3+ days</p><div class="tacts"><span class="btn sm">Reassign</span><span class="btn sm link">Open</span></div></div></div>
+    <div class="task"><span class="bar" style="background:#f59e0b"></span><div><p><b>63 new leads</b> untouched &gt;48h</p><div class="tacts"><span class="btn sm">Reassign</span><span class="btn sm link">Open</span></div></div></div></div>
+</div>
+</section>
+
+<!-- ================= SCENE 4 ================= -->
+<section class="scene" id="s4">
+<div class="scene-h"><b>Scene 4 — Person view (click a name)</b><span>Their week against their own normal, Orca's read in the same AI language, and what they actually did.</span></div>
+<div class="wrap" style="height:800px;background:var(--bg)">
+  <div style="padding:24px;opacity:.5"><div class="title">Pulse</div></div>
+  <div class="shade"></div>
+  <div class="drawer">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div class="who"><span class="av" style="background:#ef4444;width:42px;height:42px;font-size:14px">BT</span><div><div class="title" style="font-size:19px">Bikash Thapa</div><div class="rl">Counsellor · Pokhara · holds 87 leads</div></div></div>
+      <span class="btn sm"><svg class="i"><use href="#x"/></svg></span>
+    </div>
+    <div class="mini">
+      <div><span class="kl">Calls</span><b>9</b><span class="dv m">−80% vs 46 usual</span></div>
+      <div><span class="kl">Notes</span><b>5</b><span class="dv m">−84% vs 31</span></div>
+      <div><span class="kl">→ Prospects</span><b>4</b><span class="dv m">−73% vs 15</span></div>
+      <div><span class="kl">Untouched leads</span><b>38</b><span class="dv m">3+ days</span></div>
+    </div>
+    <div class="sec-t" style="margin-bottom:6px">Daily activity <span class="sec-s">· dashed line = his usual</span></div>
+    <svg width="596" height="86" viewBox="0 0 596 86"><line x1="0" y1="22" x2="596" y2="22" stroke="#cbd5e1" stroke-dasharray="4 4"/>
+      <g fill="#c7d7ea"><rect x="10" y="14" width="60" height="62" rx="5"/><rect x="95" y="18" width="60" height="58" rx="5"/></g>
+      <g fill="#ef4444" opacity=".85"><rect x="180" y="52" width="60" height="24" rx="5"/><rect x="265" y="68" width="60" height="8" rx="4"/><rect x="350" y="71" width="60" height="5" rx="3"/><rect x="435" y="72" width="60" height="4" rx="2"/><rect x="520" y="71" width="60" height="5" rx="3"/></g></svg>
+    <div class="rl" style="display:flex;justify-content:space-around;margin-top:2px"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div>
+    <div class="coach"><div class="bt" style="font-size:13.5px"><span class="ai-badge"><svg class="i"><use href="#spark"/></svg></span>Orca's read</div>
+      <p style="margin-top:8px;color:#1f2937">Everything dropped together from Wednesday: calls, notes and moves. That usually means leave, sickness or a system problem, not performance. <b>Suggest:</b> check in with Bikash before any nudge, and cover his 12 hottest Qualified leads with Anil KC for 3 days.</p>
+      <div class="tacts"><span class="btn sm pri">Review &amp; approve cover</span><span class="btn sm aib"><svg class="i"><use href="#spark"/></svg>Draft check-in</span><span class="btn sm link">Dismiss</span></div></div>
+    <div class="sec-t" style="margin-bottom:6px">What he did</div>
+    <div class="tl">
+      <div>Moved <b>Rajan Gautam</b> Qualified → Prospects<span>Wed 30 Oct, 3:10 PM</span></div>
+      <div>Note on <b>Manisha Joshi</b>: "called"<span>Wed 30 Oct, 1:02 PM</span> <span class="ai-note" style="margin-left:6px"><span class="ai-ic"><svg class="i"><use href="#spark"/></svg></span>says little</span></div>
+      <div>Call to <b>Sujan Rai</b>, no answer<span>Tue 29 Oct, 5:48 PM</span></div>
+      <div>Received <b>21 new leads</b> from Kabita Lama<span>Mon 28 Oct</span></div>
+    </div>
+  </div>
+</div>
+</section>
+
+<script>
+const s=new URLSearchParams(location.search).get('scene');
+if(s){document.querySelectorAll('.scene').forEach(e=>{if(e.id!==s)e.remove()});}
+</script>
+</body>
+</html>

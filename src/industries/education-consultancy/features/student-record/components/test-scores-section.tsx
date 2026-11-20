@@ -3,6 +3,7 @@
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RepeatableList } from "./repeatable-list";
+import { FieldLabel, useSetPlaceholder } from "./form-primitives";
 import type { Lead } from "@/types/database";
 import { EXAM_TYPES } from "@/lib/leads/student-record-lists";
 
@@ -84,6 +85,7 @@ export function TestScoresSection({
   value: TestScore[];
   onChange: (next: TestScore[]) => void;
 }) {
+  const setPh = useSetPlaceholder();
   return (
     <RepeatableList
       items={value}
@@ -95,33 +97,33 @@ export function TestScoresSection({
       renderSummary={(item) => (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-2 text-sm">
           <div>
-            <p className="text-xs text-muted-foreground">Exam Type</p>
+            <FieldLabel className="text-xs text-muted-foreground">Exam Type</FieldLabel>
             <p className="font-medium">{item.examType || "—"}</p>
           </div>
           <div>
-            <p className="text-xs text-muted-foreground">Date of Exam</p>
+            <FieldLabel className="text-xs text-muted-foreground">Date of Exam</FieldLabel>
             <p className="font-medium">{item.dateOfExam || "—"}</p>
           </div>
           <div>
-            <p className="text-xs text-muted-foreground">Overall</p>
+            <FieldLabel className="text-xs text-muted-foreground">Overall</FieldLabel>
             <p className="font-medium">{item.overall || "—"}</p>
           </div>
           {SKILL_BREAKDOWN_EXAMS.includes(item.examType) && (
             <>
               <div>
-                <p className="text-xs text-muted-foreground">Listening</p>
+                <FieldLabel className="text-xs text-muted-foreground">Listening</FieldLabel>
                 <p className="font-medium">{item.listening || "—"}</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Reading</p>
+                <FieldLabel className="text-xs text-muted-foreground">Reading</FieldLabel>
                 <p className="font-medium">{item.reading || "—"}</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Writing</p>
+                <FieldLabel className="text-xs text-muted-foreground">Writing</FieldLabel>
                 <p className="font-medium">{item.writing || "—"}</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Speaking</p>
+                <FieldLabel className="text-xs text-muted-foreground">Speaking</FieldLabel>
                 <p className="font-medium">{item.speaking || "—"}</p>
               </div>
             </>
@@ -133,7 +135,7 @@ export function TestScoresSection({
         return (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-3">
             <div>
-              <p className="text-xs text-muted-foreground mb-1">Exam Type</p>
+              <FieldLabel className="text-xs text-muted-foreground mb-1">Exam Type</FieldLabel>
               <Select value={item.examType || "__none__"} onValueChange={(v) => update({ examType: v === "__none__" ? "" : v })}>
                 <SelectTrigger className="h-9 text-sm w-full">
                   <SelectValue placeholder="Select exam" />
@@ -147,30 +149,30 @@ export function TestScoresSection({
               </Select>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground mb-1">Date of Exam</p>
+              <FieldLabel className="text-xs text-muted-foreground mb-1">Date of Exam</FieldLabel>
               <Input type="date" value={item.dateOfExam} onChange={(e) => update({ dateOfExam: e.target.value })} className="h-9 text-sm" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground mb-1">Overall</p>
-              <Input value={item.overall} onChange={(e) => update({ overall: e.target.value })} placeholder="Overall score" className="h-9 text-sm" />
+              <FieldLabel className="text-xs text-muted-foreground mb-1">Overall</FieldLabel>
+              <Input value={item.overall} onChange={(e) => update({ overall: e.target.value })} placeholder={setPh("Overall") ?? "Overall score"} className="h-9 text-sm" />
             </div>
             {showSkills && (
               <>
                 <div>
-                  <p className="text-xs text-muted-foreground mb-1">Listening</p>
-                  <Input value={item.listening} onChange={(e) => update({ listening: e.target.value })} className="h-9 text-sm" />
+                  <FieldLabel className="text-xs text-muted-foreground mb-1">Listening</FieldLabel>
+                  <Input placeholder={setPh("Listening")} value={item.listening} onChange={(e) => update({ listening: e.target.value })} className="h-9 text-sm" />
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground mb-1">Reading</p>
-                  <Input value={item.reading} onChange={(e) => update({ reading: e.target.value })} className="h-9 text-sm" />
+                  <FieldLabel className="text-xs text-muted-foreground mb-1">Reading</FieldLabel>
+                  <Input placeholder={setPh("Reading")} value={item.reading} onChange={(e) => update({ reading: e.target.value })} className="h-9 text-sm" />
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground mb-1">Writing</p>
-                  <Input value={item.writing} onChange={(e) => update({ writing: e.target.value })} className="h-9 text-sm" />
+                  <FieldLabel className="text-xs text-muted-foreground mb-1">Writing</FieldLabel>
+                  <Input placeholder={setPh("Writing")} value={item.writing} onChange={(e) => update({ writing: e.target.value })} className="h-9 text-sm" />
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground mb-1">Speaking</p>
-                  <Input value={item.speaking} onChange={(e) => update({ speaking: e.target.value })} className="h-9 text-sm" />
+                  <FieldLabel className="text-xs text-muted-foreground mb-1">Speaking</FieldLabel>
+                  <Input placeholder={setPh("Speaking")} value={item.speaking} onChange={(e) => update({ speaking: e.target.value })} className="h-9 text-sm" />
                 </div>
               </>
             )}

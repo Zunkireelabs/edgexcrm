@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   CONSENT_PROFILE_COLUMNS,
   computeConsentReadiness,
+  consentRequirementGroups,
   type ConsentProfile,
 } from "@/lib/consent/readiness";
 
@@ -21,6 +22,10 @@ export interface ProfileCompletenessGaps {
   complete: boolean;
   /** Field labels as shown in Student Details, e.g. "First Name", "Passport Number", "Guardian Name". */
   missing: string[];
+  /** How many profile fields the consent form needs for this tenant (same field groups as `missing`). */
+  total: number;
+  /** total - missing.length: what is already filled. */
+  filled: number;
 }
 
 const PROFILE_KEYS = CONSENT_PROFILE_COLUMNS.split(",").map((c) => c.trim());
@@ -91,5 +96,6 @@ export async function checkLeadProfileCompleteness(
 
   // No active template (or already signed) -> no placeholders to check; only the always-required fields remain.
   const result = computeConsentReadiness(templateBody, profile);
-  return { complete: result.ready, missing: result.missing };
+  const total = consentRequirementGroups(templateBody).reduce((n, g) => n + g.fields.length, 0);
+  return { complete: result.ready, missing: result.missing, total, filled: Math.max(0, total - result.missing.length) };
 }

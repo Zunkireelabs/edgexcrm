@@ -1,0 +1,236 @@
+/* Education Home (EDGEX-87 A1). Sizes/colours follow docs/design-system/mockups/home-v2.html (scenes H2, H4, H7).
+   Only ds- tokens (globals.css); no new hex. Soft borders are mixed from the same tokens. */
+.eh { padding: 28px 32px 40px; max-width: 1120px; margin: 0 auto; color: var(--ds-text); font-size: 13px; line-height: 1.5; }
+.eh-h1 { font-size: 26px; font-weight: 600; color: var(--ds-ink); letter-spacing: -0.02em; }
+.eh-lede { color: var(--ds-muted); font-size: 14px; margin-top: 2px; }
+.eh-lede b { color: var(--ds-ink); font-weight: 500; }
+.eh-cols { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 28px; margin-top: 22px; align-items: start; }
+.eh-sh { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; flex-wrap: wrap; }
+.eh-sh h2 { font-size: 16px; font-weight: 600; color: var(--ds-ink); letter-spacing: -0.01em; }
+.eh-count { font-size: 12px; color: var(--ds-muted); background: var(--ds-sunken); border: 1px solid var(--ds-border); border-radius: var(--ds-r-full); padding: 0 7px; height: 20px; display: inline-grid; place-items: center; font-variant-numeric: tabular-nums; }
+.eh-seg { margin-left: auto; }
+.eh-tier { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 16px 0 2px; padding: 0 2px; }
+.eh-tier .t { font-size: 12px; font-weight: 600; color: var(--ds-ink); }
+.eh-tier .d { font-size: 12px; color: var(--ds-muted); }
+.eh-tier .r { margin-left: auto; font-size: 12px; color: var(--ds-muted); }
+.eh-tier .r a { color: var(--ds-accent); font-weight: 500; }
+.eh-tier .r a:hover { text-decoration: underline; }
+.eh-list { border: 1px solid var(--ds-border); border-radius: var(--ds-r-md); overflow: hidden; background: var(--ds-surface); }
+.eh-it { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 11px 12px 11px 14px; border-top: 1px solid var(--ds-divider); }
+.eh-it:first-child { border-top: 0; }
+.eh-ic { width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; background: var(--ds-sunken); border: 1px solid var(--ds-border); color: var(--ds-text); }
+.eh-ic.bad { background: var(--ds-bad-soft); border-color: color-mix(in srgb, var(--ds-bad) 18%, var(--ds-surface)); color: var(--ds-bad); }
+.eh-ic.warn { background: var(--ds-warn-soft); border-color: color-mix(in srgb, var(--ds-warn) 18%, var(--ds-surface)); color: var(--ds-warn); }
+.eh-ic.new { background: var(--ds-accent-soft); border-color: color-mix(in srgb, var(--ds-accent) 18%, var(--ds-surface)); color: var(--ds-accent); }
+.eh-ic.good { background: var(--ds-good-soft); border-color: color-mix(in srgb, var(--ds-good) 18%, var(--ds-surface)); color: var(--ds-good); }
+.eh-tl { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.eh-nm { color: var(--ds-ink); font-weight: 500; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+/* the title never gives way to the chip: the chip is the one that shrinks (with an ellipsis) */
+.eh-tl > .eh-nm { flex: 0 0 auto; max-width: 100%; }
+.eh-tl > .eh-chip { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* a manager row's "Suggested: A +2, B +2, …" line may take two lines on desktop (four real names do not fit on one at 1280) */
+.eh-wh.eh-wh-wrap { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.eh-nm-btn { background: none; border: 0; padding: 0; text-align: left; cursor: pointer; font-family: inherit; }
+.eh-nm-btn:hover { text-decoration: underline; }
+.eh-wh { color: var(--ds-muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+.eh-ac { display: flex; gap: 6px; align-items: center; }
+.eh-chip { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px; border-radius: var(--ds-r-xs); font-size: 11.5px; font-weight: 500; white-space: nowrap; border: 1px solid var(--ds-border); background: var(--ds-sunken); color: var(--ds-text); flex-shrink: 0; }
+.eh-chip.bad { background: var(--ds-bad-soft); border-color: color-mix(in srgb, var(--ds-bad) 18%, var(--ds-surface)); color: var(--ds-bad); }
+.eh-chip.warn { background: var(--ds-warn-soft); border-color: color-mix(in srgb, var(--ds-warn) 18%, var(--ds-surface)); color: var(--ds-warn); }
+.eh-chip.good { background: var(--ds-good-soft); border-color: color-mix(in srgb, var(--ds-good) 18%, var(--ds-surface)); color: var(--ds-good); }
+.eh-chip.new { background: var(--ds-accent-soft); border-color: color-mix(in srgb, var(--ds-accent) 18%, var(--ds-surface)); color: var(--ds-accent); }
+.eh-more { display: flex; align-items: center; gap: 6px; padding: 10px 14px; color: var(--ds-accent); font-weight: 500; font-size: 12.5px; border-top: 1px solid var(--ds-divider); background: var(--ds-sunken); width: 100%; text-align: left; cursor: pointer; }
+/* inline call log */
+.eh-log { background: var(--ds-sunken); border-top: 1px solid var(--ds-divider); padding: 12px 14px 14px 58px; display: flex; flex-direction: column; gap: 10px; }
+.eh-log .q { font-size: 12.5px; color: var(--ds-muted); font-weight: 500; }
+.eh-opts { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.eh-opt { height: 28px; padding: 0 10px; border-radius: var(--ds-r-sm); border: 1px solid var(--ds-border); background: var(--ds-surface); font-size: 12.5px; color: var(--ds-text); display: inline-flex; align-items: center; gap: 6px; font-weight: 500; cursor: pointer; }
+.eh-opt[aria-pressed="true"] { border-color: var(--ds-ink); color: var(--ds-ink); box-shadow: inset 0 0 0 1px var(--ds-ink); }
+.eh-log input[type="datetime-local"], .eh-log textarea { border: 1px solid var(--ds-border); border-radius: var(--ds-r-sm); background: var(--ds-surface); font-size: 12.5px; color: var(--ds-ink); padding: 4px 8px; }
+.eh-log textarea { width: 100%; min-height: 60px; resize: vertical; }
+.eh-err { color: var(--ds-bad); font-size: 12.5px; }
+/* B1: the note that fills the record. */
+.eh-ai-note { font-size: 12.5px; color: var(--ds-ai); }
+.eh-ai { border: 1px solid var(--ds-ai-line); background: var(--ds-ai-soft); border-radius: var(--ds-r-md); padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.eh-ai-h { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--ds-ai); }
+.eh-ai-h span { margin-left: auto; font-weight: 400; color: var(--ds-muted); }
+.eh-ai-row { display: grid; grid-template-columns: auto 150px minmax(0, 1fr); gap: 2px 10px; align-items: baseline; font-size: 12.5px; cursor: pointer; }
+.eh-ai-row .k { color: var(--ds-muted); }
+.eh-ai-row .v { color: var(--ds-ink); }
+.eh-ai-row .v s { color: var(--ds-faint); }
+/* right column */
+.eh-card { border: 1px solid var(--ds-border); border-radius: var(--ds-r-md); background: var(--ds-surface); padding: 14px 14px 10px; }
+.eh-card + .eh-card { margin-top: 16px; }
+.eh-ch { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.eh-ch h3 { font-size: 13.5px; font-weight: 600; color: var(--ds-ink); }
+.eh-ch .r { margin-left: auto; color: var(--ds-accent); font-size: 12.5px; font-weight: 500; }
+.eh-ag { display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 10px; padding: 7px 0; border-top: 1px solid var(--ds-divider); align-items: baseline; }
+.eh-ag:first-of-type { border-top: 0; }
+.eh-ag .tm { color: var(--ds-ink); font-weight: 500; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.eh-ag .tm.no { color: var(--ds-faint); font-weight: 400; }
+.eh-ag.soon .tm { color: var(--ds-accent); }
+.eh-ag .x { color: var(--ds-text); font-size: 13px; min-width: 0; }
+.eh-ag .x span { display: block; color: var(--ds-muted); font-size: 12px; }
+.eh-met { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; padding: 8px 0; border-top: 1px solid var(--ds-divider); align-items: baseline; }
+.eh-met:first-of-type { border-top: 0; }
+.eh-met .k { color: var(--ds-text); font-size: 13px; }
+.eh-met .v { color: var(--ds-ink); font-weight: 600; font-size: 15px; font-variant-numeric: tabular-nums; text-align: right; }
+.eh-met .u { grid-column: 1 / -1; color: var(--ds-muted); font-size: 12px; }
+.eh-met .u.warn { color: var(--ds-warn); }
+.eh-met .u.good { color: var(--ds-good); }
+.eh-met .u.bad { color: var(--ds-bad); }
+.eh-empty { padding: 40px 24px; text-align: center; }
+.eh-empty .badge { width: 44px; height: 44px; border-radius: var(--ds-r-md); margin: 0 auto 12px; display: grid; place-items: center; background: var(--ds-good-soft); color: var(--ds-good); }
+.eh-empty .t { font-size: 16px; font-weight: 600; color: var(--ds-ink); }
+.eh-empty .s { color: var(--ds-muted); margin-top: 4px; font-size: 13.5px; }
+.eh-empty .b { margin-top: 14px; display: flex; gap: 8px; justify-content: center; }
+.eh-nextup { display: none; }
+/* phone (H7): one column, Today becomes the lede line, icon-only row actions */
+@media (max-width: 767px) {
+  .eh { padding: 18px 14px 32px; }
+  .eh-h1 { font-size: 22px; }
+  .eh-lede { font-size: 13px; }
+  .eh-cols { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .eh-side { display: none; }
+  .eh-nextup { display: inline; }
+  .eh-it { padding: 10px; gap: 10px; }
+  .eh-it .eh-chip { display: none; }
+  .eh-it .eh-wh { white-space: normal; }
+  /* long titles wrap to two lines on a phone instead of being cut off ("551 call-back remind…") */
+  .eh-tl > .eh-nm { flex: 0 1 auto; }
+  .eh-wh.eh-wh-wrap { display: block; -webkit-line-clamp: unset; }
+  .eh-nm { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; text-overflow: clip; overflow-wrap: break-word; }
+  .eh-lbl { display: none; }
+  .eh-log { padding-left: 14px; }
+  .eh-seg { margin-left: 0; width: 100%; overflow-x: auto; }
+}
+.eh-ph { display: none; }
+@media (max-width: 767px) { .eh-ph { display: inline; } }
+/* segmented counts: 4px gap, count in ds-faint (the shared control renders a bare <span>, so style it here) */
+.eh-seg button > span { margin-left: 4px; color: var(--ds-faint); font-variant-numeric: tabular-nums; }
+.eh-seg { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.eh-seg::-webkit-scrollbar { display: none; }
+.eh-seg > * { flex-shrink: 0; width: max-content; }
+.eh-seg button { flex-shrink: 0; white-space: nowrap; }
+.eh-ag { grid-template-columns: 64px minmax(0, 1fr); }
+@media (max-width: 767px) { .eh-seg { margin-left: 0; width: 100%; } }
+/* manager Home (A2): Needs you, Needs a look, Is the new Home helping? */
+.eh-pp { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 7px 0; border-top: 1px solid var(--ds-divider); }
+.eh-pp:first-of-type { border-top: 0; }
+.eh-pp .x { font-size: 13px; color: var(--ds-ink); font-weight: 500; min-width: 0; }
+.eh-pp .x span { display: block; font-weight: 400; color: var(--ds-muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.eh-pp .v { font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--ds-text); text-align: right; display: inline-flex; align-items: center; }
+.eh-av { width: 22px; height: 22px; border-radius: var(--ds-r-full); display: grid; place-items: center; color: var(--ds-surface); font-size: 9.5px; font-weight: 600; }
+.eh-av.bad { background: var(--ds-bad); }
+.eh-av.warn { background: var(--ds-warn); }
+.eh-av.muted { background: var(--ds-faint); }
+.eh-fl { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; }
+.eh-fl.bad { background: var(--ds-bad); }
+.eh-fl.warn { background: var(--ds-warn); }
+.eh-fl.muted { background: var(--ds-ghost); }
+.eh-fl.good { background: var(--ds-good); }
+.eh-sub { color: var(--ds-muted); font-size: 12px; margin: -4px 0 4px; }
+.eh-note { color: var(--ds-muted); font-size: 12.5px; padding: 4px 0 8px; }
+.eh-nudged { color: var(--ds-muted); font-size: 12.5px; padding: 0 6px; white-space: nowrap; }
+.eh-linkbtn { color: var(--ds-accent); font-weight: 500; font-size: 12.5px; }
+@media (max-width: 767px) { .eh-ac { flex-wrap: wrap; justify-content: flex-end; } }
+/* phone: a row whose actions include a text button ("Assign as suggested", "Clear them", "Call through them") puts them on their own line
+   under the text (column 2 to the end), so the text column keeps the width instead of being squeezed to a few letters. Icon-only actions stay beside the text (H7). */
+@media (max-width: 767px) { .eh-it > .eh-ac.eh-ac-text { grid-column: 2 / -1; justify-content: flex-start; } }
+/* B2: Orca's read on Home (matches home-v2.html .oread, scenes H1 / H5). */
+.eh-orca { border: 1px solid var(--ds-ai-line); background: var(--ds-ai-wash); border-radius: 16px; padding: 16px 18px 12px; margin-top: 20px; margin-bottom: 20px; position: relative; }
+.eh-orca-h { display: flex; align-items: center; gap: 8px; color: var(--ds-ink); font-weight: 600; font-size: 13.5px; }
+.eh-orca-h .spk { width: 22px; height: 22px; border-radius: 7px; background: var(--ds-ai-grad); display: grid; place-items: center; color: #fff; flex-shrink: 0; }
+.eh-orca-h .mt { color: var(--ds-muted); font-weight: 400; font-size: 12.5px; }
+.eh-orca-h .act { margin-left: auto; display: flex; gap: 2px; color: var(--ds-faint); }
+.eh-orca-ic { width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; color: var(--ds-faint); background: transparent; border: 0; cursor: pointer; }
+.eh-orca-ic:hover:not(:disabled) { background: var(--ds-surface); color: var(--ds-ink); }
+.eh-orca-ic[aria-pressed="true"] { color: var(--ds-ai); background: var(--ds-surface); }
+.eh-orca-ic:disabled { opacity: 0.4; cursor: default; }
+.eh-orca-pts { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.eh-orca-pts li { display: flex; gap: 10px; align-items: baseline; font-size: 14px; color: var(--ds-text); line-height: 1.5; }
+.eh-orca-pts li .n { flex-shrink: 0; width: 18px; height: 18px; border-radius: 50%; background: var(--ds-surface); border: 1px solid var(--ds-ai-line); color: var(--ds-ai); font-size: 11px; font-weight: 600; display: grid; place-items: center; transform: translateY(2px); }
+.eh-orca-pts li b { color: var(--ds-ink); font-weight: 500; }
+.eh-orca-pts .lk { color: var(--ds-accent); font-weight: 500; white-space: nowrap; margin-left: 4px; }
+.eh-orca-note { font-size: 12.5px; color: var(--ds-muted); margin-top: 8px; }
+.eh-orca-sk { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.eh-orca-sk i { display: block; height: 12px; border-radius: 6px; background: var(--ds-ai-line); opacity: 0.6; }
+.eh-orca-sk i:nth-child(2) { width: 85%; }
+.eh-orca-sk i:nth-child(3) { width: 60%; }
+.eh-orca-ask { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--ds-ai-line); }
+.eh-orca-in { flex: 1 1 220px; min-width: 0; display: flex; align-items: center; gap: 8px; height: 34px; border: 1px solid var(--ds-border); border-radius: 10px; background: var(--ds-surface); padding: 0 6px 0 10px; color: var(--ds-ai); }
+.eh-orca-in input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font-size: 13px; color: var(--ds-ink); }
+.eh-orca-go { width: 24px; height: 24px; border-radius: 999px; border: 0; background: var(--ds-ai); color: #fff; display: grid; place-items: center; cursor: pointer; }
+.eh-orca-go:disabled { opacity: 0.4; cursor: default; }
+.eh-orca-q { height: 28px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--ds-border); background: var(--ds-surface); color: var(--ds-text); font-size: 12.5px; display: inline-flex; align-items: center; white-space: nowrap; cursor: pointer; }
+/* B3: Draft on a row (H3). */
+.eh-dp-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.eh-dp { padding: 0 16px 16px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; flex: 1; }
+.eh-dp-tabs { display: inline-flex; gap: 4px; }
+.eh-dp-draft { border: 1px solid var(--ds-ai-line); background: var(--ds-ai-wash); border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.eh-dp-by { display: flex; align-items: center; gap: 6px; color: var(--ds-ai); font-size: 12.5px; font-weight: 500; }
+.eh-dp-by span { margin-left: auto; color: var(--ds-muted); font-weight: 400; }
+.eh-dp-text { margin: 0; white-space: pre-wrap; font-size: 14px; line-height: 1.55; color: var(--ds-ink); }
+.eh-dp-draft textarea, .eh-dp-subject { width: 100%; border: 1px solid var(--ds-border); border-radius: var(--ds-r-sm); background: var(--ds-surface); font-size: 14px; color: var(--ds-ink); padding: 8px 10px; }
+.eh-dp-draft textarea { min-height: 140px; resize: vertical; }
+.eh-dp-tone { gap: 6px; }
+.eh-dp-why { margin: 0; font-size: 13px; line-height: 1.5; color: var(--ds-muted); }
+.eh-dp-why b { color: var(--ds-text); font-weight: 600; }
+.eh-dp-task { display: flex; gap: 8px; align-items: flex-start; font-size: 13.5px; color: var(--ds-text); cursor: pointer; }
+.eh-dp-foot { border-top: 1px solid var(--ds-divider); padding: 12px 16px; display: flex; gap: 8px; align-items: center; justify-content: flex-end; flex-wrap: wrap; }
+.eh-dp-note { margin-right: auto; font-size: 12.5px; color: var(--ds-muted); flex: 1 1 200px; }
+.eh-dp-q { margin-right: auto; font-size: 13.5px; font-weight: 500; color: var(--ds-ink); }
+.eh-dp-title { display: inline-flex; align-items: center; gap: 8px; }
+.eh-dp-title svg { flex-shrink: 0; color: var(--ds-ai); }
+/* B4: Call prep (H3c). */
+.eh-cp-h { margin: 0 0 8px; font-size: 11.5px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ds-muted); }
+.eh-cp-dl { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.eh-cp-dl > div { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; font-size: 14px; }
+.eh-cp-dl dt { color: var(--ds-muted); }
+.eh-cp-dl dd { margin: 0; color: var(--ds-ink); }
+/* B5: Prepare all (H3b). */
+.eh-prep { display: flex; align-items: center; gap: 12px; border: 1px solid var(--ds-ai-line); background: var(--ds-ai-wash); border-radius: 14px; padding: 12px 14px; margin-bottom: 16px; }
+.eh-prep .spk { width: 28px; height: 28px; border-radius: 8px; background: var(--ds-ai-grad); display: grid; place-items: center; color: #fff; flex-shrink: 0; }
+.eh-prep .tx { display: flex; flex-direction: column; min-width: 0; flex: 1; font-size: 13px; color: var(--ds-muted); }
+.eh-prep .tx b { color: var(--ds-ink); font-weight: 500; font-size: 14px; }
+.eh-bp-card { border: 1px solid var(--ds-border); border-radius: 12px; background: var(--ds-surface); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.eh-bp-card[data-state="sent"] { opacity: 0.7; }
+.eh-bp-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.eh-bp-name { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--ds-ink); cursor: pointer; }
+.eh-bp-name b { font-weight: 500; }
+.eh-bp-edit { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; color: var(--ds-muted); background: transparent; border: 0; cursor: pointer; }
+.eh-bp-card textarea { width: 100%; min-height: 90px; border: 1px solid var(--ds-border); border-radius: var(--ds-r-sm); background: var(--ds-surface); font-size: 14px; color: var(--ds-ink); padding: 8px 10px; resize: vertical; }
+
+
+/* EDGEX-87 B6 fixes. */
+/* Q1: "Orca suggests not sending" card in Prepare all. */
+.eh-bp-skip { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.eh-bp-open { color: var(--ds-accent); font-weight: 500; font-size: 12.5px; }
+.eh-bp-open:hover { text-decoration: underline; }
+/* Q6: the "drafts from Orca" row icon is violet (H5). */
+.eh-ic.ai { background: var(--ds-ai-soft); border-color: var(--ds-ai-line); color: var(--ds-ai); }
+/* Q4: Orca's read on a phone: title + icons on line one, "made at ..." under; long links wrap like text instead of running off the edge. */
+.eh-orca-h .ti { min-width: 0; overflow-wrap: anywhere; }
+.eh-orca-pts li > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 767px) {
+  .eh-orca-h { flex-wrap: wrap; row-gap: 2px; }
+  .eh-orca-h .ti { flex: 1 1 0; }
+  .eh-orca-h .act { order: 2; }
+  .eh-orca-h .mt { order: 3; flex: 0 0 100%; padding-left: 30px; }
+  .eh-orca-pts .lk { white-space: normal; }
+}
+/* Q5 / Q5b: Needs you rows. A chip never shrinks; a title, chip or why line is never cut with "..." (it wraps); and when the buttons do not fit
+   beside the text they drop under it, as on the phone. The list is the container, so this follows the real width of the column. */
+.eh-list-needs { container-type: inline-size; }
+.eh-list-needs .eh-tl { flex-wrap: wrap; row-gap: 2px; }
+.eh-list-needs .eh-tl > .eh-nm { flex: 0 1 auto; white-space: normal; display: block; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; -webkit-line-clamp: unset; }
+.eh-list-needs .eh-tl > .eh-chip { flex: 0 0 auto; max-width: none; overflow: visible; text-overflow: clip; }
+.eh-list-needs .eh-wh, .eh-list-needs .eh-wh.eh-wh-wrap { white-space: normal; display: block; overflow: visible; text-overflow: clip; -webkit-line-clamp: unset; overflow-wrap: anywhere; }
+@container (max-width: 700px) {
+  .eh-list-needs .eh-it > .eh-ac.eh-ac-text { grid-column: 2 / -1; justify-content: flex-start; flex-wrap: wrap; }
+}
+/* Q8: on a phone the owner / branch manager still sees "Needs a look" and "Is the new Home helping?" (under Needs you); the rest of the side column stays hidden. */
+@media (max-width: 767px) {
+  .eh-side.eh-side-mgr { display: block; }
+  .eh-side-mgr .eh-ph-hide { display: none; }
+}
