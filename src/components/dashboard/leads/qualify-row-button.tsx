@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2 } from "lucide-react";
+import { CircleNotchIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -10,13 +10,9 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import type { LeadList } from "@/types/database";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
@@ -29,6 +25,8 @@ interface QualifyRowButtonProps {
   currentDegreeLevel: string | null;
   qualifiedList: LeadList;
   onQualified: (qualifiedListId: string) => Promise<void>;
+  /** Leads table v2: a quiet 24px control that fits the 36px row. */
+  quiet?: boolean;
 }
 
 export function QualifyRowButton({
@@ -38,6 +36,7 @@ export function QualifyRowButton({
   currentDegreeLevel,
   qualifiedList,
   onQualified,
+  quiet = false,
 }: QualifyRowButtonProps) {
   const { destinations: destOptions, fieldsOfStudy, studyLevels } = useEduTaxonomy();
   const [open, setOpen] = useState(false);
@@ -95,7 +94,11 @@ export function QualifyRowButton({
       <button
         type="button"
         onClick={openDialog}
-        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors"
+        className={
+          quiet
+            ? "inline-flex h-6 shrink-0 items-center rounded-ds-xs px-2 text-xs font-medium text-ds-accent transition-colors hover:bg-ds-accent-soft focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ds-ghost"
+            : "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors"
+        }
       >
         Qualify →
       </button>
@@ -111,52 +114,40 @@ export function QualifyRowButton({
               selected={dests}
               onChange={setDests}
               options={destOptions}
-              label="Interested Destinations"
+              label="Interested destinations"
               optional={false}
             />
 
             <div className="space-y-1.5">
-              <p className="text-sm font-medium">Field of Study</p>
-              <Select value={fieldOfStudy || "__none__"} onValueChange={(v) => setFieldOfStudy(v === "__none__" ? "" : v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select field" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">
-                    <span className="text-muted-foreground">Not specified</span>
-                  </SelectItem>
-                  {fieldsOfStudy.map((f) => (
-                    <SelectItem key={f} value={f}>{f}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>Field of study</Label>
+              <SearchableSelect
+                options={[{ value: "__none__", label: "Not specified" }, ...fieldsOfStudy.map((x) => ({ value: x, label: x }))]}
+                value={fieldOfStudy}
+                onValueChange={(v) => setFieldOfStudy(v === "__none__" ? "" : v)}
+                placeholder="Select field"
+                searchPlaceholder="Search fields…"
+              />
             </div>
 
             <div className="space-y-1.5">
-              <p className="text-sm font-medium">Degree Level</p>
-              <Select value={degreeLevel || "__none__"} onValueChange={(v) => setDegreeLevel(v === "__none__" ? "" : v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select level" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">
-                    <span className="text-muted-foreground">Not specified</span>
-                  </SelectItem>
-                  {studyLevels.map((lvl) => (
-                    <SelectItem key={lvl} value={lvl}>{lvl}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>Degree level</Label>
+              <SearchableSelect
+                options={[{ value: "__none__", label: "Not specified" }, ...studyLevels.map((x) => ({ value: x, label: x }))]}
+                value={degreeLevel}
+                onValueChange={(v) => setDegreeLevel(v === "__none__" ? "" : v)}
+                placeholder="Select level"
+                searchPlaceholder="Search levels…"
+              />
             </div>
 
             <div className="space-y-1.5">
-              <p className="text-sm font-medium">Note <span className="text-muted-foreground font-normal">(optional)</span></p>
-              <textarea
+              <Label>Note <span className="font-normal">(optional)</span></Label>
+              <Textarea
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 placeholder="Add a note about this qualification…"
                 rows={3}
-                className="w-full px-3 py-2 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                className="resize-none"
               />
             </div>
           </div>
@@ -168,7 +159,7 @@ export function QualifyRowButton({
             <Button onClick={handleSubmit} disabled={qualifying}>
               {qualifying ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />
                   Qualifying…
                 </>
               ) : (

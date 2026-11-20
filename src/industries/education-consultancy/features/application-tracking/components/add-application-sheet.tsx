@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import { useBlockingNotice } from "@/components/dashboard/blocking-notice";
 import { profileIncompleteNotice } from "@/lib/blocking-notice";
-import { Loader2, Search } from "lucide-react";
+import { CircleNotchIcon, MagnifyingGlassIcon } from "@/components/icons";
 import {
   Sheet,
   SheetContent,
@@ -44,6 +44,8 @@ interface AddApplicationSheetProps {
   stages: ApplicationStage[];
   canManageApplications: boolean;
   onSuccess: () => void;
+  /** Preselects this stage when the sheet opens (the board column "+"). Ignored if it is not in the status list shown. */
+  initialStageId?: string | null;
 }
 
 export function AddApplicationSheet({
@@ -52,6 +54,7 @@ export function AddApplicationSheet({
   stages,
   canManageApplications,
   onSuccess,
+  initialStageId,
 }: AddApplicationSheetProps) {
 
   const [submitting, setSubmitting] = useState(false);
@@ -73,6 +76,7 @@ export function AddApplicationSheet({
   const defaultStage = statusStages.find((s) => s.is_default) ?? statusStages[0];
   // Never submit a status that is not in the list shown (e.g. left over from a previous destination).
   const selectedStageId = statusStages.some((s) => s.id === stageId) ? stageId : (defaultStage?.id ?? "");
+  const presetStageId = initialStageId && statusStages.some((s) => s.id === initialStageId) ? initialStageId : null;
   const [deadline, setDeadline] = useState("");
   const [agentId, setAgentId] = useState("");
   const [appliedDate, setAppliedDate] = useState("");
@@ -147,8 +151,8 @@ export function AddApplicationSheet({
       setIntakeStartDate("");
       setConsentBlocked(false);
     }
-    if (open) setStageId(defaultStage?.id ?? "");
-  }, [open, defaultStage?.id]);
+    if (open) setStageId(presetStageId ?? defaultStage?.id ?? "");
+  }, [open, defaultStage?.id, presetStageId]);
 
   // Program suggestions are the one dataset here NOT shared with the other
   // Add Application screens — this reads real past-application university/
@@ -316,7 +320,7 @@ export function AddApplicationSheet({
                 </div>
               ) : (
                 <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                  <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                   <Input
                     value={leadSearch}
                     onChange={(e) => setLeadSearch(e.target.value)}
@@ -327,7 +331,7 @@ export function AddApplicationSheet({
                     <div className="absolute z-10 w-full mt-1 bg-card border rounded-md shadow-lg max-h-48 overflow-y-auto">
                       {leadSearching && (
                         <div className="flex items-center justify-center py-4">
-                          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                          <CircleNotchIcon className="h-4 w-4 animate-spin text-muted-foreground" />
                         </div>
                       )}
                       {!leadSearching && leadOptions.length === 0 && (
@@ -557,7 +561,7 @@ export function AddApplicationSheet({
               disabled={submitting || !selectedLead || !universityName.trim() || !programName.trim() || consentBlocked || profileMissing.length > 0}
               className="flex-1"
             >
-              {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {submitting && <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />}
               Create Application
             </Button>
           </div>

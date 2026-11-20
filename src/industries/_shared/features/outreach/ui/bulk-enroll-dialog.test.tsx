@@ -21,25 +21,11 @@ vi.mock("../hooks/use-sequences", () => ({
     loading: false,
     refresh: vi.fn(),
     sequences: [
-      { id: "seq-1", name: "Welcome", auto_send: false },
-      { id: "seq-2", name: "Nurture", auto_send: true },
-      { id: "seq-sms", name: "Text follow-up", auto_send: false, channel: "sms" },
+      { id: "seq-1", name: "Welcome", auto_send: false, email_sequence_steps: [{}, {}, {}] },
+      { id: "seq-2", name: "Nurture", auto_send: true, email_sequence_steps: [{}] },
+      { id: "seq-sms", name: "Text follow-up", auto_send: false, channel: "sms", email_sequence_steps: [{}, {}] },
     ],
   }),
-}));
-
-// Radix Select needs pointer events jsdom lacks — a native <select> with the same props is enough here.
-vi.mock("@/components/ui/select", () => ({
-  Select: ({ value, onValueChange, children }: { value: string; onValueChange: (v: string) => void; children: React.ReactNode }) => (
-    <select aria-label="Sequence" value={value} onChange={(e) => onValueChange(e.target.value)}>
-      <option value="">—</option>
-      {children}
-    </select>
-  ),
-  SelectTrigger: () => null,
-  SelectValue: () => null,
-  SelectContent: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  SelectItem: ({ value, children }: { value: string; children: React.ReactNode }) => <option value={value}>{children}</option>,
 }));
 
 // the real picker is the shared filter bar (covered elsewhere): a stub that lets the test emit trees
@@ -81,7 +67,7 @@ const basePreview = {
   sandbox: true,
   sendingEnabled: true,
   sampleNames: ["Sita Rai"],
-  sequence: { id: "seq-1", name: "Welcome", auto_send: false },
+  sequence: { id: "seq-1", name: "Welcome", auto_send: false, email_sequence_steps: [{}, {}, {}] },
 };
 
 beforeEach(() => {
@@ -106,6 +92,14 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
+const NAMES: Record<string, string> = { "seq-1": "Welcome", "seq-2": "Nurture", "seq-sms": "Text follow-up" };
+/** Step 1 is the searchable list: click the sequence, then "Preview …". */
+const pickSeq = (id: string) => {
+  fireEvent.click(screen.getByRole("option", { name: new RegExp(NAMES[id]) }));
+  fireEvent.click(screen.getByRole("button", { name: /^Preview/ }));
+};
+const enrollBtn = () => screen.getByRole("button", { name: /^Enroll [\d,]+ leads?/ });
+
 const previewCalls = () => calls.filter((c) => c.url.endsWith("/bulk-enroll/preview"));
 const selected = { mode: "selected" as const, leadIds: ["l1", "l2"] };
 
@@ -115,7 +109,7 @@ const open = (props: Partial<React.ComponentProps<typeof BulkEnrollDialog>> = {}
 describe("BulkEnrollDialog — selected rows", () => {
   it("previews the picked audience for the chosen sequence and shows the numbers", async () => {
     open();
-    fireEvent.change(screen.getByLabelText("Sequence"), { target: { value: "seq-1" } });
+    pickSeq("seq-1");
 
     await screen.findByText(/will be enrolled/);
     expect(previewCalls()).toHaveLength(1);
@@ -130,51 +124,73 @@ describe("BulkEnrollDialog — selected rows", () => {
 
   it("from 100 leads Start stays disabled until ENROLL is typed, then starts with confirm:true and shows the result", async () => {
     open();
-    fireEvent.change(screen.getByLabelText("Sequence"), { target: { value: "seq-1" } });
+    pickSeq("seq-1");
     await screen.findByText(/will be enrolled/);
 
-    const start = screen.getByRole("button", { name: "Start" });
+    const start = enrollBtn();
     expect(start).toBeDisabled();
     fireEvent.change(screen.getByLabelText(/Type/), { target: { value: "enroll" } });
     expect(start).toBeEnabled();
 
     fireEvent.click(start);
 
-    await screen.findByText("Done.");
+    await screen.findByText(/118 leads enrolled/);
     const startCall = calls.find((c) => c.url.endsWith("/bulk-enroll") && c.method === "POST")!;
     expect(startCall.body).toMatchObject({ sequence_id: "seq-1", conflict_policy: "skip", confirm: true });
-    expect(screen.getByText(/Enrolled 118/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Download skipped leads/ })).toHaveAttribute(
+    expect(screen.getByText("118")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Download skipped/ })).toHaveAttribute(
       "href",
       "/api/v1/outreach/bulk-enroll/run-1/skipped",
     );
   });
 
+  it("the primary button names the action and the count once the preview is in", async () => {
+    open();
+    expect(screen.queryByRole("button", { name: /^Enroll/ })).toBeNull(); // step 1 is the list
+    expect(screen.getByRole("button", { name: /^Preview/ })).toHaveTextContent("Preview “Welcome”"); // the highlighted row
+    pickSeq("seq-1");
+    await screen.findByText(/will be enrolled/);
+    expect(enrollBtn()).toHaveTextContent("Enroll 120 leads");
+  });
+
+  it("Back returns to the sequence list", async () => {
+    open();
+    pickSeq("seq-1");
+    await screen.findByText(/will be enrolled/);
+    fireEvent.click(screen.getByRole("button", { name: /Back/ }));
+    expect(screen.getByRole("option", { name: /Welcome/ })).toBeInTheDocument();
+    // picking the SAME sequence again must fetch a fresh preview (regression: it used to stay blank)
+    fireEvent.click(screen.getByRole("option", { name: /Welcome/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Preview/ }));
+    await screen.findByText(/will be enrolled/);
+    expect(previewCalls()).toHaveLength(2);
+  });
+
   it("under 100 leads no confirmation word is needed, and confirm is not sent", async () => {
     previewData = { ...basePreview, willEnroll: 40, matched: 40 };
     open();
-    fireEvent.change(screen.getByLabelText("Sequence"), { target: { value: "seq-1" } });
+    pickSeq("seq-1");
     await screen.findByText(/will be enrolled/);
 
     expect(screen.queryByLabelText(/Type/)).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Start" }));
-    await screen.findByText("Done.");
+    fireEvent.click(enrollBtn());
+    await screen.findByText(/118 leads enrolled/);
     expect(calls.find((c) => c.url.endsWith("/bulk-enroll") && c.method === "POST")!.body).not.toHaveProperty("confirm");
   });
 
   it("blocks Start when nobody can be enrolled or the run is over the limit", async () => {
     previewData = { ...basePreview, willEnroll: 0, matched: 5 };
     open();
-    fireEvent.change(screen.getByLabelText("Sequence"), { target: { value: "seq-1" } });
+    pickSeq("seq-1");
     await screen.findByText(/will be enrolled/);
-    expect(screen.getByRole("button", { name: "Start" })).toBeDisabled();
+    expect(enrollBtn()).toBeDisabled();
 
     cleanup();
     previewData = { ...basePreview, willEnroll: 10001, overLimit: true };
     open();
-    fireEvent.change(screen.getByLabelText("Sequence"), { target: { value: "seq-1" } });
+    pickSeq("seq-1");
     await screen.findByText(/more than the 10,000/);
-    expect(screen.getByRole("button", { name: "Start" })).toBeDisabled();
+    expect(enrollBtn()).toBeDisabled();
   });
 });
 
@@ -182,7 +198,7 @@ describe("BulkEnrollDialog — conflict policy", () => {
   it("offers skip / switch / queue only when someone is in another sequence, and re-previews with the choice", async () => {
     previewData = { ...basePreview, willEnroll: 40, inOtherSequence: 12 };
     open();
-    fireEvent.change(screen.getByLabelText("Sequence"), { target: { value: "seq-1" } });
+    pickSeq("seq-1");
     await screen.findByText(/12 leads are already in another sequence/);
 
     expect(screen.getByRole("radio", { name: /Skip them/ })).toBeChecked();
@@ -196,7 +212,7 @@ describe("BulkEnrollDialog — conflict policy", () => {
 
   it("does not show the choice when nobody is in another sequence", async () => {
     open();
-    fireEvent.change(screen.getByLabelText("Sequence"), { target: { value: "seq-1" } });
+    pickSeq("seq-1");
     await screen.findByText(/will be enrolled/);
     expect(screen.queryByRole("radio")).toBeNull();
   });
@@ -204,7 +220,7 @@ describe("BulkEnrollDialog — conflict policy", () => {
   it("tells the rep when the first emails will go out when the sequence has a send window", async () => {
     previewData = { ...basePreview, sequence: { id: "seq-1", name: "Welcome", auto_send: false, send_window_text: "Mon, Tue, Wed, Thu, Fri at 10:00 AM–12:00 PM" } };
     open();
-    fireEvent.change(screen.getByLabelText("Sequence"), { target: { value: "seq-1" } });
+    pickSeq("seq-1");
     await screen.findByText(/This sequence sends Mon, Tue, Wed, Thu, Fri at 10:00 AM–12:00 PM/);
     expect(screen.getByText(/first emails wait/)).toBeInTheDocument();
   });
@@ -212,7 +228,7 @@ describe("BulkEnrollDialog — conflict policy", () => {
   it("warns when the sequence is auto-send and the sandbox is off", async () => {
     previewData = { ...basePreview, sandbox: false, sequence: { id: "seq-2", name: "Nurture", auto_send: true } };
     open();
-    fireEvent.change(screen.getByLabelText("Sequence"), { target: { value: "seq-2" } });
+    pickSeq("seq-2");
     await screen.findByText(/nobody reviews the emails/);
     expect(screen.getByText(/real leads, not a test address/)).toBeInTheDocument();
   });
@@ -244,14 +260,15 @@ describe("BulkEnrollDialog — SMS sequences", () => {
     skipped: { noEmail: 0, malformedEmail: 0, duplicateEmail: 0, noPhone: 4, foreignNumber: 1, malformedPhone: 2, duplicatePhone: 3, suppressed: 5, alreadyInSequence: 6 },
     cap: { dailyCap: 0, sentToday: 0, remaining: 0 },
     sms: { creditsFirstStep: 55, creditsAllSteps: 110, stepCount: 2, balance: 500, sufficientFirstStep: true, sufficientAllSteps: true },
-    sequence: { id: "seq-sms", name: "Text follow-up", auto_send: false, channel: "sms" },
+    sequence: { id: "seq-sms", name: "Text follow-up", auto_send: false, channel: "sms", email_sequence_steps: [{}, {}] },
     ...over,
   });
-  const pick = () => fireEvent.change(screen.getByLabelText("Sequence"), { target: { value: "seq-sms" } });
+  const pick = () => pickSeq("seq-sms");
 
-  it("labels the SMS sequence in the picker", () => {
+  it("groups the SMS sequence under SMS in the picker, with its step count", () => {
     open();
-    expect(screen.getByText("Text follow-up · SMS")).toBeInTheDocument();
+    expect(screen.getByText("SMS")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Text follow-up.*2 steps/ })).toBeInTheDocument();
   });
 
   it("shows phone skip reasons (not email ones) and the credits instead of the daily email limit", async () => {
@@ -295,7 +312,7 @@ describe("BulkEnrollDialog — SMS sequences", () => {
     open();
     pick();
     await screen.findByText(/will be enrolled/);
-    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+    fireEvent.click(enrollBtn());
     await waitFor(() => expect(calls.some((c) => c.url.endsWith("/bulk-enroll") && c.method === "POST")).toBe(true));
     expect(calls.find((c) => c.url.endsWith("/bulk-enroll") && c.method === "POST")?.body).toMatchObject({ sequence_id: "seq-sms" });
   });

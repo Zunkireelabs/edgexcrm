@@ -48,6 +48,7 @@ import {
   resolveDegreeLevel,
 } from "@/lib/leads/destination-normalize";
 import { normalizePhoneForStorage } from "@/lib/phone-utils";
+import { requestSmartAssignment } from "@/industries/education-consultancy/features/home/server/assignment/request";
 import {
   resolveEmailField,
   foldUnknownFieldsIntoCustomFields,
@@ -665,6 +666,9 @@ export async function POST(
       requestId,
     });
   }
+
+  // Smart assignment (only when the tenant turned it on, only for a lead created unassigned). Non-blocking.
+  void requestSmartAssignment({ tenantId: tenant.id, leadId, assignedTo: (lead as { assigned_to?: string | null }).assigned_to });
 
   Promise.all([
     // lead.created audit suppressed when lead.submission was recorded (A4: combined display)

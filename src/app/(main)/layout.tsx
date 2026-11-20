@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, Geist_Mono } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import "../globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
 });
 
@@ -24,9 +24,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${inter.variable} ${geistMono.variable}`}>
+      {/* suppressHydrationWarning: browser extensions (e.g. Grammarly/ColorZilla's cz-shortcut-listen) inject
+          attributes on <body> before React hydrates. One level only; it cannot mask mismatches in children. */}
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased h-screen overflow-hidden`}
+        className="antialiased h-screen overflow-hidden"
+        suppressHydrationWarning
       >
         {children}
         <Toaster />

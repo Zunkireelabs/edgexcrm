@@ -12,6 +12,16 @@ export const ACCEPT_ATTR = "application/pdf,image/jpeg,image/png,image/webp,.doc
 const ACCEPTED_EXTENSIONS = [".pdf", ".jpg", ".jpeg", ".png", ".webp", ".docx"];
 export const ACCEPTED_LABEL = "PDF, JPG, PNG, WEBP or DOCX";
 
+/** "25 MB" — the tenant's per-file cap for the drop-zone hint; null when the cap isn't known (no hint is shown). */
+export function formatLimitMb(maxFileBytes: number | null | undefined): string | null {
+  if (!maxFileBytes || maxFileBytes <= 0) return null;
+  const mb = maxFileBytes / (1024 * 1024);
+  return `${Number.isInteger(mb) ? mb : mb.toFixed(1)} MB`;
+}
+
+/** Share of one file's upload that is done, by stage (the browser PUT gives no byte progress through fetch). */
+export const STAGE_PROGRESS = { presign: 15, upload: 60, verify: 90, done: 100 } as const;
+
 /** By file name, because the browser leaves `type` blank for some files (e.g. some .docx). */
 export function isSupportedFile(file: Pick<File, "name">): boolean {
   const name = file.name.toLowerCase();
@@ -89,6 +99,8 @@ export interface UploadItem {
   qualificationLevel?: string;
   status: ItemStatus;
   error?: string;
+  /** 0-100 while uploading (by stage). */
+  progress?: number;
 }
 
 export const autoName = (type: DocumentType): string => documentTypeLabel(type);

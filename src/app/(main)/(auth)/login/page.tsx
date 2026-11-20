@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Eye, EyeOff } from 'lucide-react';
+import { EyeIcon, EyeSlashIcon } from "@/components/icons";
 
 type AuthMode = 'signin' | 'signup';
 
@@ -434,7 +434,7 @@ function LoginPageContent() {
                     alignItems: 'center',
                   }}
                 >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  {showPassword ? <EyeSlashIcon size={18} /> : <EyeIcon size={18} />}
                 </button>
               </div>
             </div>
@@ -486,7 +486,7 @@ function LoginPageContent() {
           flex-direction: column;
           overflow: hidden;
           position: relative;
-          font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+          font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
           -webkit-font-smoothing: antialiased;
           -moz-osx-font-smoothing: grayscale;
         }

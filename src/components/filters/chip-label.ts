@@ -34,6 +34,12 @@ function formatValue(condition: FilterCondition, options: FilterOption[]): strin
   return "";
 }
 
+// Value-only text of a condition ("Prospects", "A, B +1") — the leads toolbar v2 sentence
+// chips render field / operator / value as separate segments and need it on its own.
+export function formatConditionValue(condition: FilterCondition, options: FilterOption[]): string {
+  return formatValue(condition, options);
+}
+
 // Resolves the chip's prefix label — normally just field.label, but a
 // single-value condition whose matched option carries a `groupLabel`
 // (see FilterOption) uses that instead. Only fires for a genuinely
@@ -79,6 +85,7 @@ export function scopeOptionsToConditionGroup(condition: FilterCondition, options
 }
 
 export function formatChipLabel(field: FieldDef, condition: FilterCondition, options: FilterOption[]): string {
+  if (field.fixedChipLabel) return field.fixedChipLabel; // machine-data value: never printed
   const prefixLabel = resolvePrefixLabel(field, condition, options);
   if (NO_VALUE_OPS.has(condition.op)) {
     return `${prefixLabel}: ${OPERATOR_LABELS[condition.op]}`;

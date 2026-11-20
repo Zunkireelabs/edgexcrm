@@ -1,0 +1,128 @@
+import { DEFAULT_MIN_DAYS, METRIC_REGISTRY, metricMinDays, type MetricUnit, type RawMetrics } from "./metrics";
+import type { ProcessKey } from "./keys";
+import type { ProcessSpec } from "./spec";
+
+/**
+ * Before -> after: the SAME metrics SQL over two periods. previous = the 30 days before the version went live; current = from
+ * going live to now, capped at 30 days. Pure maths here; the server fetches the two raw metric objects.
+ */
+
+export const COMPARE_WINDOW_DAYS = 30;
+const DAY = 86_400_000;
+
+/** Only the new-lead process takes a window (cohort created in it). The other three are current-state counts: their "before" is a snapshot. */
+export const WINDOWED_PROCESSES: readonly ProcessKey[] = ["new_lead_first_call"];
+
+export interface ComparePeriods {
+  previous: { from: Date; to: Date };
+  current: { from: Date; to: Date };
+  /** Whole days the version has been live (at `now`). */
+  daysLive: number;
+}
+
+export function comparePeriods(approvedAt: Date, now: Date): ComparePeriods {
+  const capEnd = new Date(approvedAt.getTime() + COMPARE_WINDOW_DAYS * DAY);
+  return {
+    previous: { from: new Date(approvedAt.getTime() - COMPARE_WINDOW_DAYS * DAY), to: approvedAt },
+    current: { from: approvedAt, to: now < capEnd ? now : capEnd },
+    daysLive: Math.max(0, Math.floor((now.getTime() - approvedAt.getTime()) / DAY)),
+  };
+}
+
+const round1 = (n: number) => Math.round(n * 10) / 10;
+
+/** percent -> points; min -> % change on the old value; count -> absolute. Null when either side is unknown (or the % base is 0). */
+export function changeValue(unit: MetricUnit, before: number | null, after: number | null): number | null {
+  if (before === null || after === null) return null;
+  if (unit === "percent") return round1(after - before);
+  if (unit === "min") return before > 0 ? round1(((after - before) / before) * 100) : null;
+  return after - before;
+}
+
+/** What the "Change" cell says while it waits. Matches the mockup: "after 7 days" / "needs 14 days (the step's own target)". */
+export const waitText = (minDays: number): string => (minDays <= DEFAULT_MIN_DAYS ? `after ${minDays} days` : `needs ${minDays} days (the step's own target)`);
+
+export interface Measure {
+  metric: string;
+  label: string;
+  unit: MetricUnit;
+  /** Which way is an improvement: percent metrics up, times and counts down (every count here is a "how many are still stuck"). */
+  better: "up" | "down";
+  before: number | null;
+  after: number | null;
+  /** Null until `ready`. */
+  change: number | null;
+  ready: boolean;
+  minDays: number;
+  /** Empty when ready. */
+  waitText: string;
+}
+
+/** Target metrics + "show" metrics of a spec, in step order, unique. */
+export function specMetrics(spec: ProcessSpec | null): string[] {
+  if (!spec) return [];
+  const out: string[] = [];
+  for (const s of spec.steps) for (const m of [s.target.metric, s.show?.metric]) if (m && !out.includes(m)) out.push(m);
+  return out;
+}
+
+/**
+ * Union of the two versions' metrics: current's in step order. A metric only the previous version had sits right after the
+ * current metric of the same step ("Called within 1 hour" after "Called within 1 working hour"); with no such step it goes last.
+ */
+export function measureMetrics(previous: ProcessSpec | null, current: ProcessSpec): string[] {
+  const out = specMetrics(current);
+  if (!previous) return out;
+  for (const s of previous.steps) {
+    for (const m of [s.target.metric, s.show?.metric]) {
+      if (!m || out.includes(m)) continue;
+      const sibling = current.steps.find((c) => c.key === s.key);
+      const anchors = sibling ? [sibling.target.metric, sibling.show?.metric].filter((x): x is string => !!x) : [];
+      const at = anchors.length ? Math.max(...anchors.map((a) => out.indexOf(a))) : -1;
+      out.splice(at >= 0 ? at + 1 : out.length, 0, m);
+    }
+  }
+  return out;
+}
+
+/** Metrics only the previous version measured. Their rows say so ("Called within 1 hour (v1's measure)"). */
+export function previousOnlyMetrics(previous: ProcessSpec | null, current: ProcessSpec): Set<string> {
+  const cur = new Set(specMetrics(current));
+  return new Set(specMetrics(previous).filter((m) => !cur.has(m)));
+}
+
+export function buildMeasures(
+  key: ProcessKey,
+  metrics: string[],
+  rawBefore: RawMetrics | null,
+  rawAfter: RawMetrics | null,
+  daysLive: number,
+  opts: { previousOnly?: ReadonlySet<string>; previousVersion?: number } = {},
+): Measure[] {
+  const out: Measure[] = [];
+  for (const metric of metrics) {
+    const def = METRIC_REGISTRY[key][metric];
+    if (!def) continue;
+    const minDays = metricMinDays(key, metric);
+    const ready = daysLive >= minDays;
+    const before = rawBefore ? def.read(rawBefore) : null;
+    const rawNow = rawAfter ? def.read(rawAfter) : null;
+    // v2's numbers show once it has been live a full day. A measure with its own longer clock (e.g. "decided within 14 days") shows
+    // no "after" until that clock has run. Only the Change column waits for `minDays`.
+    const after = daysLive >= 1 && (ready || minDays <= DEFAULT_MIN_DAYS) ? rawNow : null;
+    const baseLabel = def.compareLabel ?? def.label;
+    out.push({
+      metric,
+      label: opts.previousOnly?.has(metric) && opts.previousVersion ? `${baseLabel} (v${opts.previousVersion}'s measure)` : baseLabel,
+      unit: def.unit,
+      better: def.unit === "percent" ? "up" : "down",
+      before,
+      after,
+      change: ready ? changeValue(def.unit, before, after) : null,
+      ready,
+      minDays,
+      waitText: ready ? "" : waitText(minDays),
+    });
+  }
+  return out;
+}

@@ -1,5 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
+describe("MODELS ids", () => {
+  it("Anthropic uses the current Claude 5.5 ids; OpenAI is unchanged", async () => {
+    const { MODELS } = await import("./models");
+    expect(MODELS.anthropic).toEqual({ agent: "claude-sonnet-5-5", fast: "claude-haiku-5-5" });
+    expect(MODELS.openai).toEqual({ agent: "gpt-4o-mini", fast: "gpt-4o-mini" });
+  });
+});
+
 describe("ACTIVE_PROVIDER resolution", () => {
   beforeEach(() => {
     vi.resetModules();

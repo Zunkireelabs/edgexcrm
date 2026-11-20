@@ -24,7 +24,13 @@ import {
 } from "@/lib/phone-utils";
 import { COUNTRY_CODES, DEFAULT_DIAL_CODE } from "@/lib/country-codes";
 import { getInitialFormData } from "@/lib/form-defaults";
-import { CheckCircle, Loader2, ChevronRight, ChevronLeft, ChevronDown } from "lucide-react";
+import {
+  CheckCircleIcon,
+  CircleNotchIcon,
+  CaretRightIcon,
+  CaretLeftIcon,
+  CaretDownIcon,
+} from "@/components/icons";
 import { toast } from "sonner";
 
 function toTitleCase(str: string): string {
@@ -432,7 +438,7 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
       <div className="min-h-screen flex items-center justify-center px-4">
         {bgGradient && <style>{`html, body { background: ${bgGradient} !important; min-height: 100%; }`}</style>}
         <div className="max-w-md w-full text-center p-8">
-          <CheckCircle
+          <CheckCircleIcon
             className="h-16 w-16 mx-auto mb-4"
             style={{ color: primaryColor }}
           />
@@ -736,7 +742,7 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
                                 style={{ color: "#6b7280", ...(hideLabels ? { height: compact ? 32 : 40 } : {}) }}
                               >
                                 {currentDialCode}
-                                <ChevronDown className="size-4 shrink-0 opacity-50" />
+                                <CaretDownIcon className="size-4 shrink-0 opacity-50" />
                               </button>
                             }
                           />
@@ -932,7 +938,7 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
                 variant="outline"
                 onClick={() => setCurrentStep((s) => s - 1)}
               >
-                <ChevronLeft className="h-4 w-4 mr-1" />
+                <CaretLeftIcon className="h-4 w-4 mr-1" />
                 Back
               </Button>
             ) : (
@@ -948,7 +954,7 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
               >
                 {submitting ? (
                   <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />
                     Submitting...
                   </>
                 ) : (
@@ -961,7 +967,7 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
                 style={{ backgroundColor: primaryColor }}
               >
                 Next
-                <ChevronRight className="h-4 w-4 ml-1" />
+                <CaretRightIcon className="h-4 w-4 ml-1" />
               </Button>
             )}
           </div>

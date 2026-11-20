@@ -49,4 +49,22 @@ describe("every stage-move audit writer records the lead's holder", () => {
     const missing = writers.filter((w) => !w.text.includes("holderChange(")).map((w) => w.rel);
     expect(missing, `These write a stage move to the audit log without holderChange(): ${missing.join(", ")}`).toEqual([]);
   });
+
+  it("each one also records exact list ids via listIdsChange() (Pulse prefers ids over names)", () => {
+    const missing = writers.filter((w) => !w.text.includes("listIdsChange(")).map((w) => w.rel);
+    expect(missing, `These write a stage move without changes.list_ids: ${missing.join(", ")}`).toEqual([]);
+  });
+
+  it("the bulk route tags its stage moves with via = bulk", () => {
+    const bulk = writers.find((w) => w.rel === "app/(main)/api/v1/leads/bulk/route.ts");
+    expect(bulk?.text).toContain("BULK_VIA");
+    expect(bulk?.text).toMatch(/changes\.via\s*=/);
+  });
+
+  it("no other writer tags itself as bulk", () => {
+    const wrong = writers
+      .filter((w) => w.rel !== "app/(main)/api/v1/leads/bulk/route.ts" && /BULK_VIA/.test(w.text))
+      .map((w) => w.rel);
+    expect(wrong).toEqual([]);
+  });
 });

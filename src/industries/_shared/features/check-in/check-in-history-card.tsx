@@ -1,46 +1,27 @@
 "use client";
 
 import { SECTION_TITLE_CLASS } from "@/components/dashboard/lead/section-title";
-import { useState, useEffect, useCallback } from "react";
-import { Clock, Loader2, ChevronRight } from "lucide-react";
+import { useState } from "react";
+import { ClockIcon, CircleNotchIcon, CaretRightIcon, PlusIcon } from "@/components/icons";
+import { Button } from "@/components/ui/button";
+import { useLeadCheckIns, type CheckInsApi } from "./lead-check-in";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-
-interface CheckInRecord {
-  id: string;
-  content: string;
-  created_at: string;
-  user_email: string;
-  user_id: string | null;
-  meet_with_id: string | null;
-}
 
 interface CheckInHistoryCardProps {
   leadId: string;
   teamMemberNames: Record<string, string>;
   teamMemberEmails: Record<string, string>;
+  /** Lead page: the shared check-ins state (also read by the right rail). Omit and the card owns its own. */
+  store?: CheckInsApi;
+  /** Lead page: shows a "+" that records a visit (the page hosts the dialog). */
+  onCheckIn?: () => void;
 }
 
-export function CheckInHistoryCard({ leadId, teamMemberNames, teamMemberEmails }: CheckInHistoryCardProps) {
-  const [records, setRecords] = useState<CheckInRecord[]>([]);
-  const [loading, setLoading] = useState(true);
+export function CheckInHistoryCard({ leadId, teamMemberNames, teamMemberEmails, store, onCheckIn }: CheckInHistoryCardProps) {
+  const own = useLeadCheckIns(leadId, { enabled: !store });
+  const { records, loading } = store ?? own;
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-
-  const fetchHistory = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/v1/leads/${leadId}/check-ins`);
-      if (!res.ok) throw new Error("Failed to fetch");
-      const { data } = await res.json();
-      setRecords(data ?? []);
-    } catch {
-      // silently fail
-    }
-  }, [leadId]);
-
-  useEffect(() => {
-    setLoading(true);
-    fetchHistory().finally(() => setLoading(false));
-  }, [fetchHistory]);
 
   function toggleExpanded(id: string) {
     setExpanded((prev) => {
@@ -56,7 +37,7 @@ export function CheckInHistoryCard({ leadId, teamMemberNames, teamMemberEmails }
       <CardHeader className="pt-4 pb-3">
         <div className="flex items-center justify-between">
           <span className={`${SECTION_TITLE_CLASS} flex items-center gap-2`}>
-            <Clock className="h-3.5 w-3.5" />
+            <ClockIcon className="h-3.5 w-3.5" />
             Check-In History
             {!loading && (
               <Badge variant="secondary" className="h-5 px-1.5 text-xs normal-case">
@@ -64,13 +45,18 @@ export function CheckInHistoryCard({ leadId, teamMemberNames, teamMemberEmails }
               </Badge>
             )}
           </span>
+          {onCheckIn && (
+            <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={onCheckIn} title="Record check-in" aria-label="Record check-in">
+              <PlusIcon className="h-3.5 w-3.5" />
+            </Button>
+          )}
         </div>
       </CardHeader>
 
       <CardContent className="pb-4">
         {loading ? (
           <div className="flex justify-center py-3">
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            <CircleNotchIcon className="h-4 w-4 animate-spin text-muted-foreground" />
           </div>
         ) : records.length === 0 ? (
           <p className="text-xs text-muted-foreground text-center py-2">No check-in visits recorded yet.</p>
@@ -103,7 +89,7 @@ export function CheckInHistoryCard({ leadId, teamMemberNames, teamMemberEmails }
                       className="flex w-full items-center justify-between gap-2 cursor-pointer text-left"
                     >
                       {header}
-                      <ChevronRight
+                      <CaretRightIcon
                         className={`h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform ${isExpanded ? "rotate-90" : ""}`}
                       />
                     </button>

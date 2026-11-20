@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { Suspense } from "react";
-import { X } from "lucide-react";
+import { XIcon } from "@/components/icons";
 import {
   Dialog,
   DialogContent,
@@ -63,8 +63,8 @@ export function SettingsModal({ isOpen, activeTab, onTabChange, onClose }: Setti
       onOpenChange={(open) => { if (!open) onClose(); }}
     >
       <DialogContent
-        className="w-[90vw] md:w-[80vw] max-w-[1440px] sm:max-w-[1440px] md:min-w-[720px] h-[85vh] p-0 flex gap-0 overflow-hidden"
-        overlayClassName="bg-[#0000004d] backdrop-blur-[2px]"
+        className="w-[90vw] md:w-[80vw] max-w-[1440px] sm:max-w-[1440px] md:min-w-[720px] h-[85vh] p-0 gap-0 overflow-hidden"
+        bodyClassName="flex-row overflow-hidden"
         showCloseButton={false}
       >
         {/* Left sidebar */}
@@ -82,7 +82,7 @@ export function SettingsModal({ isOpen, activeTab, onTabChange, onClose }: Setti
             className="absolute top-4 right-4 z-10 w-8 h-8 rounded-md flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
             aria-label="Close settings"
           >
-            <X className="w-4 h-4" />
+            <XIcon className="w-4 h-4" />
           </button>
 
           {/* Panel content — fills remaining space */}

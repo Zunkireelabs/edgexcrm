@@ -2,20 +2,22 @@
 
 import { CONSENT_FIELD_HINTS } from "@/lib/consent/field-hints";
 import { SECTION_TITLE_CLASS } from "@/components/dashboard/lead/section-title";
-import { useState, useEffect, useCallback, useRef } from "react";
-import { AlertTriangle, Clock, CheckCircle2, Loader2, Copy, RefreshCw, FileText, Upload, PenLine, ChevronDown } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import {
+  WarningIcon,
+  ClockIcon,
+  CheckCircleIcon,
+  CircleNotchIcon,
+  CopyIcon,
+  ArrowsClockwiseIcon,
+  FileTextIcon,
+  UploadIcon,
+  PencilLineIcon,
+  CaretDownIcon,
+} from "@/components/icons";
 import { cardCompleteness } from "./consent-completeness";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -26,35 +28,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { SendConsentDialog } from "./send-consent-dialog";
-import { InPersonConsentDialog } from "./in-person-consent-dialog";
-import { useBlockingNotice } from "@/components/dashboard/blocking-notice";
+import { useFee, type FeeApi, type FeeStatus } from "../hooks/use-fee";
+import { useConsent, type ConsentApi, type MissingGroupView } from "../hooks/use-consent";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-
-type FeeStatus = "paid" | "unpaid" | "waiver" | "claimed";
-
-interface ConsentStatus {
-  consent_enabled: boolean;
-  status: "none" | "sent" | "signed" | "expired";
-  record: {
-    id: string;
-    signer_name: string | null;
-    signed_at: string | null;
-    document_url: string | null;
-    token: string | null;
-    method: string | null;
-    sent_via: string | null;
-  } | null;
-  link: string | null;
-  /** Education only: is the profile complete enough to generate a consent document? null/absent = no gate. */
-  readiness?: { ready: boolean; missing: string[]; groups?: MissingGroupView[] } | null;
-}
-
-/** Missing fields grouped by the Student Details section they live in (`section` "" = ungrouped fallback). */
-interface MissingGroupView {
-  section: string;
-  fields: string[];
-}
 
 /** "Basic Details: Date of Birth, Father's Name" — the section in bold, then the fields. */
 function MissingGroupText({ group }: { group: MissingGroupView }) {
@@ -198,6 +174,10 @@ interface ConsentCardProps {
   profileKey?: string;
   /** Lead page only: opens the Student Details pop-up in edit mode (the warning shows an "Open Student Details" button when given). */
   onOpenStudentDetails?: () => void;
+  /** Lead page: the page-level fee state (shared with the rail and the stage card). Omit and the card owns its own. */
+  feeApi?: FeeApi;
+  /** Lead page: the page-level consent flow. When given, the card does NOT render the consent dialogs (the page does, once). */
+  consentApi?: ConsentApi;
 }
 
 export function ConsentCard({
@@ -216,6 +196,8 @@ export function ConsentCard({
   showCollapsedStatus = false,
   profileKey,
   onOpenStudentDetails,
+  feeApi,
+  consentApi,
 }: ConsentCardProps) {
   // Effective labels — education wording unless a caller overrides.
   const L = {
@@ -228,185 +210,40 @@ export function ConsentCard({
     awaitingHelp: labels?.awaitingHelp ?? "Consent sent · awaiting student signature",
     signedTitle: labels?.signedTitle ?? "Consent signed",
   };
-  const [status, setStatus] = useState<ConsentStatus | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [dialogTab, setDialogTab] = useState<"send" | "manual">("send");
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [inPersonOpen, setInPersonOpen] = useState(false);
-
-  // ── Pre-Application fee ──────────────────────────────────────────────
-  const [feeStatus, setFeeStatus] = useState<FeeStatus | "">(initialFeeStatus ?? "");
-  const [feeAmount, setFeeAmount] = useState(
-    initialFeeAmount !== null && initialFeeAmount !== undefined ? String(initialFeeAmount) : "",
-  );
-  const [feeNotes, setFeeNotes] = useState(initialFeeNotes ?? "");
+  const ownFee = useFee({
+    leadId, init: { status: initialFeeStatus, amount: initialFeeAmount, notes: initialFeeNotes }, canManageFee, canManage,
+  });
+  const ownConsent = useConsent({ leadId, tenantId, profileKey, enabled: !consentApi, onSignedChange, allowCopyOnly: showCopyLink });
+  const fee = feeApi ?? ownFee;
+  const consent = consentApi ?? ownConsent;
   const [open, setOpen] = useState(false); // collapsible: collapsed by default
-  // The fee as last SAVED. The green "complete" signal reads this, never the dropdown's unsaved choice.
-  const [savedFeeStatus, setSavedFeeStatus] = useState<string>(initialFeeStatus ?? "");
-  const [feeDirty, setFeeDirty] = useState(false);
-  const [feeSaving, setFeeSaving] = useState(false);
-  // Once a fee is saved the box shows it read-only; "Edit" re-opens the form.
+  const {
+    feeStatus, feeAmount, feeNotes, savedFeeStatus, feeDirty, feeSaving, feeIsReported, canReportFee, setFeeStatus, setFeeAmount, setFeeNotes, saveFee: saveFeeRaw,
+  } = fee;
+  // Once a fee is saved the box shows it read-only; "Edit" re-opens the form, and a save closes it again.
   const [feeEditing, setFeeEditing] = useState(false);
-
-  // Owner/admin records the fee; anyone else can only REPORT a received fee ("claimed"),
-  // which an owner/admin verifies later. A reported fee is enough to move to Applications (admin verification is not awaited).
-  const feeIsReported = savedFeeStatus === "claimed";
-  const canReportFee = canManage && !canManageFee && (savedFeeStatus === "" || feeIsReported);
-
-  async function saveFee(override?: FeeStatus) {
-    setFeeSaving(true);
-    const statusToSave: FeeStatus | "" = override ?? (canManageFee ? feeStatus : "claimed");
-    try {
-      const res = await fetch(`/api/v1/leads/${leadId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          pre_app_fee_status: statusToSave || null,
-          pre_app_fee_amount:
-            (statusToSave === "paid" || statusToSave === "claimed") && feeAmount !== ""
-              ? Number(feeAmount)
-              : null,
-          pre_app_fee_notes: feeNotes.trim() || null,
-        }),
-      });
-      if (!res.ok) throw new Error();
-      toast.success(
-        override === "paid" ? "Fee confirmed" : override === "unpaid" ? "Fee report rejected"
-          : canManageFee ? "Processing fee saved" : "Fee reported — the Account will verify it",
-      );
-      setFeeStatus(statusToSave);
-      setSavedFeeStatus(statusToSave);
-      setFeeDirty(false);
-      setFeeEditing(false);
-    } catch {
-      toast.error("Failed to save application fee");
-    } finally {
-      setFeeSaving(false);
-    }
-  }
-
-  const [creatingLink, setCreatingLink] = useState(false);
-  // Owner/admin chose "Send anyway" for an incomplete profile (after confirming). Resets on reload.
-  const [overrideProfile, setOverrideProfile] = useState(false);
-  const [overrideConfirmOpen, setOverrideConfirmOpen] = useState(false);
-  const overrideBody = overrideProfile ? { override_profile_check: true } : {};
-  const { notify, noticeDialog } = useBlockingNotice();
-
-  // One click: create the signing link WITHOUT emailing the student, copy it, and let the card move on to
-  // "Awaiting signature" (which keeps its own Copy link button if the clipboard is unavailable).
-  async function handleCreateAndCopyLink() {
-    setCreatingLink(true);
-    try {
-      const res = await fetch(`/api/v1/leads/${leadId}/consent`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "send", deliver: "none", ...overrideBody }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        notify(json.error, "Failed to create consent link");
-        if (json.error?.code === "ALREADY_SIGNED") fetchStatus();
-        return;
-      }
-      const link = (json.data as { link?: string }).link;
-      try {
-        if (!link) throw new Error("no link");
-        await navigator.clipboard.writeText(link);
-        toast.success("Consent link copied");
-      } catch {
-        // Some browsers refuse clipboard writes after a network round-trip; the link exists either way.
-        toast.info("Link created — use Copy link");
-      }
-      fetchStatus();
-    } catch {
-      toast.error("Failed to create consent link");
-    } finally {
-      setCreatingLink(false);
-    }
-  }
-
-  const fetchStatus = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/v1/leads/${leadId}/consent`);
-      if (!res.ok) return;
-      const { data } = await res.json();
-      setStatus(data as ConsentStatus);
-      onSignedChange?.((data as ConsentStatus).status === "signed");
-    } catch {
-      // silently fail
-    } finally {
-      setLoading(false);
-    }
-  }, [leadId, onSignedChange]);
-
-  // profileKey changes when the student's details are edited, so the "complete the profile" gate updates live.
-  useEffect(() => { fetchStatus(); }, [fetchStatus, profileKey]);
-
-  function openDialog(tab: "send" | "manual") {
-    setDialogTab(tab);
-    setDialogOpen(true);
-  }
-
-  async function handleCopyLink() {
-    if (!status?.link) return;
-    try {
-      await navigator.clipboard.writeText(status.link);
-      toast.success("Link copied to clipboard");
-    } catch {
-      toast.error("Failed to copy link");
-    }
-  }
-
-  async function handleResend() {
-    try {
-      const res = await fetch(`/api/v1/leads/${leadId}/consent`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "send", ...overrideBody }),
-      });
-      if (!res.ok) {
-        const json = await res.json();
-        notify(json.error, "Failed to resend consent");
-        // The student signed while this card still showed "awaiting signature": re-read the status
-        // so the card (and the Applications "+") correct themselves instead of staying stale.
-        if (json.error?.code === "ALREADY_SIGNED") fetchStatus();
-        return;
-      }
-      toast.success("Consent resent");
-      fetchStatus();
-    } catch {
-      toast.error("Failed to resend consent");
-    }
-  }
+  const saveFee = async (override?: FeeStatus) => { if ((await saveFeeRaw(override)) !== false) setFeeEditing(false); };
+  const { loading, creatingLink, overrideProfile, handleCreateAndCopyLink, handleCopyLink, handleResend, openDialog } = consent;
 
   if (loading) {
     return (
       <Card className="shadow-none rounded-lg py-0">
         <CardContent className="pt-4 pb-4">
           <div className="flex justify-center">
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            <CircleNotchIcon className="h-4 w-4 animate-spin text-muted-foreground" />
           </div>
         </CardContent>
       </Card>
     );
   }
 
-  const current = status;
+  const current = consent.status;
   const consentStatus = current?.status ?? "none";
   // Green only when BOTH the Processing Fee (Paid / Waiver) and the consent are done — see consent-completeness.ts.
   const completeness = cardCompleteness({ consent: consentStatus, savedFeeStatus, showProcessingFee });
   // Education profile gate: all four consent actions wait for a complete student profile.
-  const readiness = current?.readiness ?? null;
-  const profileIncomplete = consentStatus === "none" && !!readiness && !readiness.ready;
-  const actionsBlocked = profileIncomplete && !overrideProfile;
+  const { readiness, profileIncomplete, actionsBlocked, missingGroups } = consent;
   const canOverride = canOverrideProfileCheck;
-  // Missing fields grouped by Student Details section; falls back to one flat group if the server sent none.
-  const missingGroups: MissingGroupView[] = readiness
-    ? readiness.groups?.length
-      ? readiness.groups
-      : [{ section: "", fields: readiness.missing }]
-    : [];
   const blockedHint = actionsBlocked && readiness ? missingGroups : null;
   // What still stands between this lead and Applications — same three checks as the Applications gate
   // (applications-readiness.ts): a counsellor's REPORTED fee ("claimed") counts, documents are not part of it.
@@ -438,7 +275,7 @@ export function ConsentCard({
                   title={L.requiredTitle}
                   className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700"
                 >
-                  <AlertTriangle className="h-3 w-3 shrink-0" />
+                  <WarningIcon className="h-3 w-3 shrink-0" />
                   Required
                 </span>
               )}
@@ -447,7 +284,7 @@ export function ConsentCard({
                   title={L.signedTitle}
                   className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700"
                 >
-                  <CheckCircle2 className="h-3 w-3 shrink-0" />
+                  <CheckCircleIcon className="h-3 w-3 shrink-0" />
                   Signed
                 </span>
               )}
@@ -456,12 +293,12 @@ export function ConsentCard({
                   title={`${L.signedTitle} · ${feeIsReported ? "processing fee reported, awaiting verification" : "processing fee pending"}`}
                   className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700"
                 >
-                  <AlertTriangle className="h-3 w-3 shrink-0" />
+                  <WarningIcon className="h-3 w-3 shrink-0" />
                   {feeIsReported ? "Fee reported" : "Fee pending"}
                 </span>
               )}
             </span>
-            <ChevronDown
+            <CaretDownIcon
               className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
             />
           </button>
@@ -473,7 +310,7 @@ export function ConsentCard({
           {preAppMissing.length > 0 && (
             <div role="alert" data-testid="pre-app-warning" className="rounded-md border border-red-200 bg-red-50 p-3">
               <p className="flex items-center gap-2 text-sm font-medium text-red-600">
-                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <WarningIcon className="h-4 w-4 shrink-0" />
                 Still needed before this lead can go to Applications
               </p>
               <ul className="mt-2 space-y-1">
@@ -493,12 +330,12 @@ export function ConsentCard({
               <p className="text-xs font-medium text-muted-foreground">Processing Fee</p>
               {completeness.feeDone ? (
                 <span className="inline-flex items-center gap-1 text-[11px] font-medium text-green-600">
-                  <CheckCircle2 className="h-3 w-3 shrink-0" />
+                  <CheckCircleIcon className="h-3 w-3 shrink-0" />
                   Done
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-600">
-                  <AlertTriangle className="h-3 w-3 shrink-0" />
+                  <WarningIcon className="h-3 w-3 shrink-0" />
                   {feeIsReported ? "Awaiting verification" : "Pending"}
                 </span>
               )}
@@ -543,10 +380,7 @@ export function ConsentCard({
                   <Label className="text-xs text-muted-foreground">Fee Paid?</Label>
                   <Select
                     value={feeStatus}
-                    onValueChange={(v) => {
-                      setFeeStatus(v as FeeStatus);
-                      setFeeDirty(true);
-                    }}
+                    onValueChange={(v) => setFeeStatus(v as FeeStatus)}
                   >
                     <SelectTrigger className="h-8 text-sm">
                       <SelectValue placeholder="Not set" />
@@ -569,10 +403,7 @@ export function ConsentCard({
                       min="0"
                       placeholder="0.00"
                       value={feeAmount}
-                      onChange={(e) => {
-                        setFeeAmount(e.target.value);
-                        setFeeDirty(true);
-                      }}
+                      onChange={(e) => setFeeAmount(e.target.value)}
                       className="h-8 text-sm"
                     />
                   </div>
@@ -583,10 +414,7 @@ export function ConsentCard({
                   <Textarea
                     placeholder="Optional notes"
                     value={feeNotes}
-                    onChange={(e) => {
-                      setFeeNotes(e.target.value);
-                      setFeeDirty(true);
-                    }}
+                    onChange={(e) => setFeeNotes(e.target.value)}
                     className="text-sm min-h-[60px]"
                   />
                 </div>
@@ -622,10 +450,7 @@ export function ConsentCard({
                     min="0"
                     placeholder="0.00"
                     value={feeAmount}
-                    onChange={(e) => {
-                      setFeeAmount(e.target.value);
-                      setFeeDirty(true);
-                    }}
+                    onChange={(e) => setFeeAmount(e.target.value)}
                     className="h-8 text-sm"
                   />
                 </div>
@@ -634,10 +459,7 @@ export function ConsentCard({
                   <Textarea
                     placeholder="Optional notes (e.g. receipt no., payment method)"
                     value={feeNotes}
-                    onChange={(e) => {
-                      setFeeNotes(e.target.value);
-                      setFeeDirty(true);
-                    }}
+                    onChange={(e) => setFeeNotes(e.target.value)}
                     className="text-sm min-h-[60px]"
                   />
                 </div>
@@ -677,7 +499,7 @@ export function ConsentCard({
           {consentStatus === "none" && (
             <>
               <div className="flex items-start gap-2 text-amber-600">
-                <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                <WarningIcon className="h-4 w-4 mt-0.5 shrink-0" />
                 <p className="text-sm font-medium">{L.requiredTitle}</p>
               </div>
               <p className="text-xs text-muted-foreground">
@@ -686,7 +508,7 @@ export function ConsentCard({
               {profileIncomplete && readiness && (
                 <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-amber-900">
                   <div className="flex items-start gap-2">
-                    <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                    <WarningIcon className="h-4 w-4 mt-0.5 shrink-0" />
                     <div className="space-y-0.5">
                       <p className="text-sm font-medium">Complete the student profile first</p>
                       <p className="text-xs">
@@ -724,14 +546,14 @@ export function ConsentCard({
                       onClick={onOpenStudentDetails}
                       className="h-7 border-amber-300 bg-white px-2 text-xs text-amber-900 hover:bg-amber-100"
                     >
-                      <FileText className="h-3 w-3 mr-1" />
+                      <FileTextIcon className="h-3 w-3 mr-1" />
                       Open Student Details
                     </Button>
                   )}
                   {canOverride && !overrideProfile && (
                     <button
                       type="button"
-                      onClick={() => setOverrideConfirmOpen(true)}
+                      onClick={() => consent.askOverride()}
                       className="text-xs font-medium underline underline-offset-2 hover:text-amber-950"
                     >
                       Send anyway (admin)
@@ -750,19 +572,19 @@ export function ConsentCard({
                   {showCopyLink && (
                     <Button size="sm" variant="outline" onClick={handleCreateAndCopyLink} disabled={creatingLink || actionsBlocked} className="h-7 px-2 text-xs">
                       {creatingLink ? (
-                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                        <CircleNotchIcon className="h-3 w-3 mr-1 animate-spin" />
                       ) : (
-                        <Copy className="h-3 w-3 mr-1" />
+                        <CopyIcon className="h-3 w-3 mr-1" />
                       )}
                       Copy consent link
                     </Button>
                   )}
-                  <Button size="sm" variant="outline" disabled={actionsBlocked} onClick={() => setInPersonOpen(true)} className={`h-7 text-xs${showCopyLink ? " px-2" : ""}`}>
-                    <PenLine className="h-3 w-3 mr-1" />
+                  <Button size="sm" variant="outline" disabled={actionsBlocked} onClick={() => consent.openInPerson()} className={`h-7 text-xs${showCopyLink ? " px-2" : ""}`}>
+                    <PencilLineIcon className="h-3 w-3 mr-1" />
                     Sign here now
                   </Button>
                   <Button size="sm" variant={showCopyLink ? "outline" : "ghost"} disabled={actionsBlocked} onClick={() => openDialog("manual")} className={`h-7 text-xs${showCopyLink ? " px-2" : ""}`}>
-                    <Upload className="h-3 w-3 mr-1" />
+                    <UploadIcon className="h-3 w-3 mr-1" />
                     Record manually
                   </Button>
                 </BlockedHint>
@@ -773,7 +595,7 @@ export function ConsentCard({
           {(consentStatus === "sent" || consentStatus === "expired") && (
             <>
               <div className="flex items-start gap-2 text-blue-600">
-                <Clock className="h-4 w-4 mt-0.5 shrink-0" />
+                <ClockIcon className="h-4 w-4 mt-0.5 shrink-0" />
                 <p className="text-sm font-medium">
                   {consentStatus === "expired" ? "Consent link expired" : "Awaiting signature"}
                 </p>
@@ -787,20 +609,20 @@ export function ConsentCard({
                 <div className="flex gap-2 flex-wrap">
                   {consentStatus === "sent" && current?.link && (
                     <Button size="sm" variant="outline" onClick={handleCopyLink} className="h-7 text-xs">
-                      <Copy className="h-3 w-3 mr-1" />
+                      <CopyIcon className="h-3 w-3 mr-1" />
                       Copy link
                     </Button>
                   )}
                   <Button size="sm" variant="outline" onClick={handleResend} className="h-7 text-xs">
-                    <RefreshCw className="h-3 w-3 mr-1" />
+                    <ArrowsClockwiseIcon className="h-3 w-3 mr-1" />
                     {consentStatus === "expired" ? "Resend" : "Resend"}
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => setInPersonOpen(true)} className="h-7 text-xs">
-                    <PenLine className="h-3 w-3 mr-1" />
+                  <Button size="sm" variant="outline" onClick={() => consent.openInPerson()} className="h-7 text-xs">
+                    <PencilLineIcon className="h-3 w-3 mr-1" />
                     Sign here now
                   </Button>
                   <Button size="sm" variant="ghost" onClick={() => openDialog("manual")} className="h-7 text-xs">
-                    <Upload className="h-3 w-3 mr-1" />
+                    <UploadIcon className="h-3 w-3 mr-1" />
                     Record manually
                   </Button>
                 </div>
@@ -812,9 +634,9 @@ export function ConsentCard({
             <>
               <div className={`flex items-start gap-2 ${completeness.complete ? "text-green-600" : "text-amber-600"}`}>
                 {completeness.complete ? (
-                  <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
+                  <CheckCircleIcon className="h-4 w-4 mt-0.5 shrink-0" />
                 ) : (
-                  <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                  <WarningIcon className="h-4 w-4 mt-0.5 shrink-0" />
                 )}
                 <div>
                   <p className="text-sm font-medium">{L.signedTitle}</p>
@@ -838,9 +660,9 @@ export function ConsentCard({
                   size="sm"
                   variant="outline"
                   className="h-7 text-xs"
-                  onClick={() => setPreviewOpen(true)}
+                  onClick={() => consent.openPreview()}
                 >
-                  <FileText className="h-3 w-3 mr-1" />
+                  <FileTextIcon className="h-3 w-3 mr-1" />
                   View document
                 </Button>
               )}
@@ -850,101 +672,8 @@ export function ConsentCard({
         )}
       </Card>
 
-      <SendConsentDialog
-        open={dialogOpen}
-        onOpenChange={(next) => {
-          setDialogOpen(next);
-          // Closing (also after an "already signed" refusal) re-reads the status so a stale card corrects itself.
-          if (!next) fetchStatus();
-        }}
-        leadId={leadId}
-        tenantId={tenantId}
-        defaultTab={dialogTab}
-        allowCopyOnly={showCopyLink}
-        overrideProfileCheck={overrideProfile}
-        onSuccess={() => {
-          setDialogOpen(false);
-          fetchStatus();
-        }}
-      />
-
-      {/* Owner/admin "send anyway" confirmation for an incomplete profile */}
-      <Dialog open={overrideConfirmOpen} onOpenChange={setOverrideConfirmOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Send consent with missing details?</DialogTitle>
-            <DialogDescription>The student profile is missing:</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2 text-sm">
-            <ul className="list-disc pl-5">
-              {(readiness?.missing ?? []).map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-            <p className="text-muted-foreground">
-              The consent document will go out with these details blank. This override is recorded in the audit log.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setOverrideConfirmOpen(false)}>Cancel</Button>
-            <Button
-              onClick={() => {
-                setOverrideProfile(true);
-                setOverrideConfirmOpen(false);
-              }}
-            >
-              Send anyway
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Signed-document preview — inline PDF in a modal instead of a new tab */}
-      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Signed Consent Document</DialogTitle>
-          </DialogHeader>
-          {current?.record?.document_url && (
-            <iframe
-              src={current.record.document_url}
-              title="Signed consent document"
-              className="w-full h-[70vh] rounded-md border"
-            />
-          )}
-          <DialogFooter className="sm:justify-between">
-            {current?.record?.document_url && (
-              <a
-                href={current.record.document_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-muted-foreground hover:text-foreground hover:underline self-center"
-              >
-                Open in new tab
-              </a>
-            )}
-            <Button variant="outline" size="sm" onClick={() => setPreviewOpen(false)}>
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <InPersonConsentDialog
-        open={inPersonOpen}
-        onOpenChange={(next) => {
-          setInPersonOpen(next);
-          if (!next) fetchStatus();
-        }}
-        leadId={leadId}
-        overrideProfileCheck={overrideProfile}
-        onSuccess={() => {
-          setInPersonOpen(false);
-          fetchStatus();
-        }}
-      />
-
-      {noticeDialog}
+      {/* The page-level consent flow renders its dialogs once; a standalone card renders its own. */}
+      {!consentApi && consent.dialogs}
     </>
   );
 }

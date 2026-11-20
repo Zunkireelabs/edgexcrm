@@ -2,13 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { COUNTRY_CODES, DEFAULT_DIAL_CODE } from "@/lib/country-codes";
 import { parseStoredPhone, formatPhoneForStorage } from "@/lib/phone-utils";
 
@@ -70,30 +64,30 @@ export function PhoneInput({
   };
 
   return (
-    <div className={`flex ${className || ""}`}>
-      <Select value={selectedCountry} onValueChange={handleCountryChange} disabled={disabled}>
-        <SelectTrigger
-          className={`h-9 w-[90px] rounded-r-none border-r-0 shrink-0 ${error ? "border-red-500" : ""}`}
-        >
-          <SelectValue>
-            {currentDialCode}
-          </SelectValue>
-        </SelectTrigger>
-        <SelectContent className="max-h-[300px]">
-          {COUNTRY_CODES.map((cc) => (
-            <SelectItem key={cc.value} value={cc.value}>
-              {cc.dialCode} {cc.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+    <div
+      data-slot="phone-input"
+      data-invalid={error || undefined}
+      className={`flex h-9 w-full items-center overflow-hidden rounded-[9px] border bg-transparent focus-within:ring-[3px] focus-within:ring-ring/50 ${error ? "border-red-500" : "border-input"} ${className || ""}`}
+    >
+      {/* EDGEX-145: searchable country picker; the trigger still shows only the dial code */}
+      <SearchableSelect
+        value={selectedCountry}
+        onValueChange={handleCountryChange}
+        options={COUNTRY_CODES.map((cc) => ({ value: cc.value, label: `${cc.dialCode} ${cc.label}` }))}
+        summarize={() => currentDialCode}
+        searchPlaceholder="Search countries…"
+        aria-label="Country code"
+        aria-invalid={error || undefined}
+        disabled={disabled}
+        className="h-full w-[90px] shrink-0 rounded-none border-0 border-r border-input focus-visible:ring-0"
+      />
       <Input
         type="tel"
         value={localNumber}
         onChange={(e) => handleNumberChange(e.target.value)}
         placeholder={placeholder}
         disabled={disabled}
-        className={`h-9 rounded-l-none ${error ? "border-red-500" : ""}`}
+        className="h-full min-w-0 flex-1 rounded-none border-0 focus-visible:ring-0"
       />
     </div>
   );

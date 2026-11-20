@@ -4,17 +4,17 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  ArrowLeft,
-  Pencil,
-  X,
-  Check,
-  Loader2,
-  Trash2,
-  GraduationCap,
-  MapPin,
-  Calendar,
-  UserPlus,
-} from "lucide-react";
+  ArrowLeftIcon,
+  PencilSimpleIcon,
+  XIcon,
+  CheckIcon,
+  CircleNotchIcon,
+  TrashIcon,
+  GraduationCapIcon,
+  MapPinIcon,
+  CalendarIcon,
+  UserPlusIcon,
+} from "@/components/icons";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,6 +47,7 @@ import { useApplicationReferenceData, getCollegeSuggestions } from "../hooks/use
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 import { DestinationsMultiSelect } from "@/components/dashboard/destinations-multi-select";
 import { AddUniversityWithProgramsDialog } from "../components/add-university-with-programs-dialog";
+import { BOARD_BACK_PARAM, boardBackHref } from "../lib/applications-url";
 import type { Application, ApplicationStage, Lead } from "@/types/database";
 import type { LeadActivity } from "@/lib/supabase/queries";
 import { normalizeDestinations, normalizeFieldOfStudy, normalizeDegreeLevel } from "@/lib/leads/destination-normalize";
@@ -114,7 +115,8 @@ export function ApplicationDetailPage({
   // If opened from a lead's Applications card (?from=lead&leadId=...), back nav
   // should return there instead of the global Applications board.
   const fromLeadId = searchParams.get("from") === "lead" ? searchParams.get("leadId") : null;
-  const backHref = fromLeadId ? `/leads/${fromLeadId}` : "/applications";
+  // From the board: back to the board with its filters (?back=, same-origin board path only, B3).
+  const backHref = fromLeadId ? `/leads/${fromLeadId}` : boardBackHref(searchParams.get(BOARD_BACK_PARAM));
   const backLabel = fromLeadId ? "Back to Lead" : "Applications";
 
   const [application, setApplication] = useState<Application>(initialApplication);
@@ -367,7 +369,7 @@ export function ApplicationDetailPage({
       {/* Back nav */}
       <Button variant="ghost" size="sm" asChild className="-ml-2">
         <Link href={backHref}>
-          <ArrowLeft className="h-4 w-4 mr-1.5" />
+          <ArrowLeftIcon className="h-4 w-4 mr-1.5" />
           {backLabel}
         </Link>
       </Button>
@@ -419,7 +421,7 @@ export function ApplicationDetailPage({
               {createdByName || createdByEmail ? (
                 <div className="flex items-start gap-2.5">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                    <UserPlus className="h-4 w-4" />
+                    <UserPlusIcon className="h-4 w-4" />
                   </div>
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-foreground truncate">
@@ -466,7 +468,7 @@ export function ApplicationDetailPage({
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <GraduationCap className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <GraduationCapIcon className="h-4 w-4 text-muted-foreground shrink-0" />
                     <h1 className="text-lg font-bold leading-tight">{application.university_name}</h1>
                   </div>
                   <p className="text-sm text-muted-foreground mt-0.5">{application.program_name}</p>
@@ -484,13 +486,13 @@ export function ApplicationDetailPage({
                     )}
                     {application.countries && application.countries.length > 0 && (
                       <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <MapPin className="h-3 w-3" />
+                        <MapPinIcon className="h-3 w-3" />
                         {normalizeDestinations(application.countries).join(", ")}
                       </span>
                     )}
                     {application.application_deadline && (
                       <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <Calendar className="h-3 w-3" />
+                        <CalendarIcon className="h-3 w-3" />
                         {formatDate(application.application_deadline)}
                       </span>
                     )}
@@ -556,7 +558,7 @@ export function ApplicationDetailPage({
                   <div className="flex items-center gap-1">
                     {canEdit && (
                       <Button size="sm" variant="ghost" onClick={startEdit} className="h-7 px-2">
-                        <Pencil className="h-3.5 w-3.5" />
+                        <PencilSimpleIcon className="h-3.5 w-3.5" />
                       </Button>
                     )}
                     {canDelete && (
@@ -566,7 +568,7 @@ export function ApplicationDetailPage({
                         onClick={() => setDeleteOpen(true)}
                         className="h-7 px-2 text-destructive hover:text-destructive"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <TrashIcon className="h-3.5 w-3.5" />
                       </Button>
                     )}
                   </div>
@@ -574,7 +576,7 @@ export function ApplicationDetailPage({
                 {editing && (
                   <div className="flex items-center gap-1">
                     <Button size="sm" variant="outline" onClick={() => setEditing(false)} disabled={saving} className="h-7 px-2">
-                      <X className="h-3.5 w-3.5" />
+                      <XIcon className="h-3.5 w-3.5" />
                     </Button>
                     <Button
                       size="sm"
@@ -582,7 +584,7 @@ export function ApplicationDetailPage({
                       disabled={saving || !universityName.trim() || !programName.trim()}
                       className="h-7 px-2"
                     >
-                      {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                      {saving ? <CircleNotchIcon className="h-3.5 w-3.5 animate-spin" /> : <CheckIcon className="h-3.5 w-3.5" />}
                     </Button>
                   </div>
                 )}
@@ -858,7 +860,7 @@ export function ApplicationDetailPage({
               Cancel
             </Button>
             <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
-              {deleting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {deleting && <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />}
               Delete
             </Button>
           </DialogFooter>

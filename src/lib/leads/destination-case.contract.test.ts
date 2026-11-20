@@ -28,7 +28,7 @@ describe("destination case-insensitivity stays wired in", () => {
   });
 
   it("the Add Application sheet narrows countries ignoring case and never to an empty list", () => {
-    const src = read("industries/education-consultancy/features/application-tracking/components/add-application-to-lead-sheet.tsx");
+    const src = read("industries/education-consultancy/features/application-tracking/components/add-application-dialog.tsx");
     expect(src.includes("countryOptionsForLead(")).toBe(true);
     // the old exact-match filter must not come back
     expect(/countryOptions\.filter\(\(c\) => leadDestinations\.includes\(c\)\)/.test(src)).toBe(false);

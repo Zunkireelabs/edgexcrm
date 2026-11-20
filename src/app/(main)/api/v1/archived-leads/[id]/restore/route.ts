@@ -21,7 +21,7 @@ import {
   type RestoreList,
   type RestoreStage,
 } from "@/industries/education-consultancy/features/archived-lookup/lib/restore-target";
-import { holderChange } from "@/lib/leads/stage-move-audit";
+import { holderChange, listIdsChange } from "@/lib/leads/stage-move-audit";
 import { onLeadsEnteredStageSafe } from "@/industries/_shared/features/outreach/lib/stage-auto-enroll";
 
 // POST /api/v1/archived-leads/[id]/restore — send an archived lead back to the pipeline.
@@ -136,6 +136,7 @@ export async function POST(request: NextRequest, { params }: Props) {
       entityId: id,
       changes: {
         list: { old: current.name, new: target.listName },
+        list_ids: listIdsChange(lead.list_id as string | null, target.listId),
         // Restoring does not change the assigned counselor — record who holds the lead for System Activity.
         holder: holderChange(lead.assigned_to),
         restored_from_archive: { old: false, new: true },

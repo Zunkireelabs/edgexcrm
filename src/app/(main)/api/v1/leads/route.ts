@@ -4,6 +4,8 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { normalizePhoneForStorage } from "@/lib/phone-utils";
 import { getBranchIds, getChecklistCounts, getTaskCounts } from "@/lib/supabase/queries";
 import { authenticateRequest, getClientIp } from "@/lib/api/auth";
+import { resolveTenantTz } from "@/lib/filters/tenant-tz";
+import { canOpenNamedList, masterViewExcludeIds } from "@/lib/leads/master-exclusion";
 import { leadQueryScope, canSeeNav, canAccessList, isSharedPoolList, resolveEffectiveBranch } from "@/lib/api/permissions";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
@@ -22,6 +24,7 @@ import { PROSPECT_INDUSTRY_VALUES } from "@/industries/it-agency/leads/prospect-
 import { SALUTATION_VALUES } from "@/industries/it-agency/leads/salutations";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { checkRateLimit, FORM_SUBMIT_LIMIT } from "@/lib/api/rate-limit";
+import { requestSmartAssignment } from "@/industries/education-consultancy/features/home/server/assignment/request";
 import { createRequestLogger } from "@/lib/logger";
 import {
   upsertThreadNotification,
@@ -36,9 +39,9 @@ import { POSITION_ROUTE_MAP } from "@/industries/education-consultancy/features/
 import { addLeadCollaborator } from "@/lib/leads/collaborators";
 import { visibleLeadsBase } from "@/lib/leads/visibility-query";
 import { splitCollaboratorAnyOf, splitCollaboratorNoneOf } from "@/lib/filters/collaborator-split";
-import { getSourceFacet, getDestinationFacet, getCollaboratorFacet } from "@/lib/leads/aggregates";
+import { getSourceFacet, getDestinationFacet, getCollaboratorFacet, getListFacet } from "@/lib/leads/aggregates";
 import { countFacetOptions, type FacetOption } from "@/lib/leads/facet-counts";
-import { treeForFacetOption } from "@/lib/filters/facet-tree";
+import { treeForFacetOption, treeWithCondition } from "@/lib/filters/facet-tree";
 import { compileFilter, planFilter } from "@/lib/filters/compile";
 import { decodeFilterTree, FILTER_PARAM } from "@/lib/filters/serialize";
 import { legacyLeadsParamsToTree } from "@/lib/filters/legacy-leads-params";
@@ -214,10 +217,8 @@ export async function GET(request: NextRequest) {
   // compileFilter() call further below, which is the whole point (the existing
   // route.test.ts suite is a full-fidelity regression harness for the compiler
   // against real production semantics precisely because the legacy path routes
-  // through it too). `tz` is fixed at "UTC" for now — no legacy toolbar param
-  // needs tz-aware day boundaries (they all use rolling within_last windows or
-  // plain column comparisons), and per-tenant timezone wiring for the real
-  // date-picker UI is Phase 3+ work.
+  // through it too). `tz` is the tenant's own timezone (EDGEX-114): a date filter's day
+  // starts and ends at the tenant's midnight, not UTC's.
   // "Follow-up needed"'s cutoff is the same tenant-configurable threshold the Team &
   // Lead Performance dashboard's Pipeline widget already reads (resolveThresholds()) —
   // one threshold, one meaning, never a second config key for the same concept. Only
@@ -231,8 +232,17 @@ export async function GET(request: NextRequest) {
     followUpStaleDays = resolveThresholds((tenantRow?.config ?? null) as TenantConfig | null).followUpStaleDays;
   }
 
+  // EDGEX-114: date filters count days in the TENANT's timezone, never UTC. A failed read falls back to the default, never breaks the list.
+  let tenantTz = resolveTenantTz(null);
+  try {
+    const tzClient = await createServiceClient();
+    const { data: tzRow } = await tzClient.from("tenants").select("timezone").eq("id", auth.tenantId).maybeSingle();
+    tenantTz = resolveTenantTz((tzRow as { timezone?: string | null } | null)?.timezone);
+  } catch {
+    /* default tz */
+  }
   const compileCtx: CompileCtx = {
-    tz: "UTC",
+    tz: tenantTz,
     now: new Date(),
     industryId: auth.industryId,
     // src/lib/filters/types.ts deliberately does not import the real ResolvedPermissions
@@ -316,7 +326,11 @@ export async function GET(request: NextRequest) {
       // Master view (no list/funnel) excludes both archive AND staging lists — the
       // page's `excludeIds` (page.tsx) filters on `is_archive || is_staging`; the old
       // version of this route only excluded is_archive, a real parity gap.
-      excludeListIds = lists.filter((l) => l.is_archive || l.is_staging).map((l) => l.id);
+      // An explicit `stage is_any_of` filter lifts the hide for the lists it names, admin/owner only (staging is admin-only) and within `access`.
+      excludeListIds = masterViewExcludeIds(lists, filterTree, (id) => {
+        const l = lists.find((x) => x.id === id);
+        return !!l && canOpenNamedList(auth, l);
+      });
 
       if (listSlug) {
         const targetList = lists.find((l) => l.slug === listSlug);
@@ -618,7 +632,7 @@ export async function GET(request: NextRequest) {
   // fetch source + assignee counts in one round-trip.
   const facetsParam = searchParams.get("facets");
   const requestedFacets = facetsParam
-    ? (facetsParam.split(",").map((s) => s.trim()).filter(Boolean) as Array<"source" | "assignee" | "collaborator" | "destination">)
+    ? (facetsParam.split(",").map((s) => s.trim()).filter(Boolean) as Array<"source" | "assignee" | "collaborator" | "destination" | "summary">)
     : [];
   const legacySingleSourceFacet = requestedFacets.length === 1 && requestedFacets[0] === "source";
 
@@ -665,7 +679,9 @@ export async function GET(request: NextRequest) {
       return legacySingleSourceFacet
         ? apiSuccess({ facet: "source", options: [] })
         : apiSuccess({
-            facets: Object.fromEntries(requestedFacets.map((f) => [f, { options: [] }])),
+            facets: Object.fromEntries(
+              requestedFacets.map((f) => [f, f === "summary" ? { stages: 0, needFollowUp: 0 } : { options: [] }]),
+            ),
           });
     }
 
@@ -703,6 +719,11 @@ export async function GET(request: NextRequest) {
     const effectiveCreatedAfter = rawFilterParam !== null ? (aggParams?.createdAfter ?? null) : createdAfter;
     // Search is not expressible in the ?f= tree, so it is always read from its own param (list and counts must agree).
     const effectiveSearch = search ? search.replace(/[,().]/g, "") : null;
+    // Source/Destination ride lead_aggregates(), whose p_search is ONE whole-string ILIKE on
+    // first/last/email/phone with no display_id match — unlike the list (per-word name match +
+    // display_id). Under a search those counts can't be faithful to the list, so they come back
+    // null ("no number") rather than contradict it. The DB-side fix waits for EDGEX-163 part (a).
+    const rpcSearchFaithful = !effectiveSearch;
 
     const baseFacetParams = {
       tenantId: auth.tenantId,
@@ -743,11 +764,57 @@ export async function GET(request: NextRequest) {
     let assigneeOptions: FacetOption[] | null | undefined;
     let collaboratorOptions: FacetOption[] | null | undefined;
     let destinationOptions: Awaited<ReturnType<typeof getDestinationFacet>> | null | undefined;
+    // EDGEX-126 footer summary: numbers over the WHOLE filtered set (never the page). Each is null = "no number".
+    let summary: { stages: number | null; needFollowUp: number | null } | undefined;
     try {
+      if (requestedFacets.includes("summary")) {
+        // Stages: number of Stage (lead list) values with >=1 lead in the filtered set.
+        //  - Normal case: the `list` dimension of lead_aggregates() — same scope + filters as every other facet, ONE RPC.
+        //  - With a search box term (or a tree lead_aggregates() cannot take): the RPC cannot answer faithfully
+        //    (its p_search has no display-id match, unlike the list's search), so count each list with the
+        //    list's OWN query (buildScopedQuery + `stage` = that list, head:true) and tally the non-empty ones.
+        //    Bounded by the tenant's number of lead lists (~10), run in parallel.
+        let stages: number | null = null;
+        if (aggregateFacetsAvailable && !effectiveSearch) {
+          stages = (
+            await getListFacet({
+              ...baseFacetParams,
+              assigneesAny: effectiveAssigneesAny,
+              includeUnassigned: effectiveIncludeUnassigned,
+            })
+          ).length;
+        } else if (filterRegistry.stage) {
+          const { data: listRows, error: listErr } = await supabase.from("lead_lists").select("id").eq("tenant_id", auth.tenantId);
+          if (listErr) throw new Error(`summary stage lists failed: ${listErr.message}`);
+          const perList = await Promise.all(
+            (listRows ?? []).map(async (l) => {
+              const t = treeWithCondition(filterTree, { id: `summary:stage:${l.id}`, field: "stage", op: "is_any_of", value: [l.id as string] });
+              if (!t) return null;
+              const { count, error: cErr } = await buildScopedQuery({ head: true, count: "exact" }, { tree: t });
+              if (cErr) throw new Error(`summary stage count failed: ${cErr.message}`);
+              return count ?? 0;
+            }),
+          );
+          stages = perList.some((c) => c === null) ? null : perList.filter((c) => (c ?? 0) > 0).length;
+        }
+        // Need follow-up: ONE head:true count from the list's own buildScopedQuery with the EXISTING
+        // `follow_up_needed` registry condition AND-ed on (COUNT-SPLIT rule). Equals adding the
+        // "Follow-up needed" filter. Only education offers the field; a top-level OR tree -> null.
+        let needFollowUp: number | null = null;
+        const followTree = filterRegistry.follow_up_needed
+          ? treeWithCondition(filterTree, { id: "summary:follow_up", field: "follow_up_needed", op: "is_true" })
+          : null;
+        if (followTree) {
+          const { count, error: followErr } = await buildScopedQuery({ head: true, count: "exact" }, { tree: followTree });
+          if (followErr) throw new Error(`summary follow-up count failed: ${followErr.message}`);
+          needFollowUp = count ?? 0;
+        }
+        summary = { stages, needFollowUp };
+      }
       if (requestedFacets.includes("source")) {
         // Source facet: cross-filtered by the current assignee selection (there's no
         // "source" axis to exclude — it has no p_source param at all).
-        sourceOptions = aggregateFacetsAvailable
+        sourceOptions = aggregateFacetsAvailable && rpcSearchFaithful
           ? await getSourceFacet({
               ...baseFacetParams,
               assigneesAny: effectiveAssigneesAny,
@@ -760,7 +827,7 @@ export async function GET(request: NextRequest) {
         // axis via baseFacetParams, same as source — there is no p_destination self-
         // filter param on the RPC (this axis has no way to filter the base query yet,
         // matching source's own precedent), so nothing needs to be omitted here.
-        destinationOptions = aggregateFacetsAvailable ? await getDestinationFacet(baseFacetParams) : null;
+        destinationOptions = aggregateFacetsAvailable && rpcSearchFaithful ? await getDestinationFacet(baseFacetParams) : null;
       }
 
       // Assignee + collaborator: counted with the list's OWN query (buildScopedQuery),
@@ -810,7 +877,7 @@ export async function GET(request: NextRequest) {
           let formerIds: string[] = [];
           if (aggregateFacetsAvailable) {
             try {
-              const discovered = await getCollaboratorFacet({ ...baseFacetParams, collaboratorIds: null });
+              const discovered = await getCollaboratorFacet({ ...baseFacetParams, collaboratorIds: null, search: null });
               formerIds = discovered.map((o) => o.name).filter((id) => !memberSet.has(id)).slice(0, 50);
             } catch (err) {
               log.warn({ err }, "former-collaborator discovery failed; listing current members only");
@@ -860,6 +927,7 @@ export async function GET(request: NextRequest) {
         ...(assigneeOptions !== undefined ? { assignee: facetEntry(assigneeOptions) } : {}),
         ...(collaboratorOptions !== undefined ? { collaborator: facetEntry(collaboratorOptions) } : {}),
         ...(destinationOptions !== undefined ? { destination: facetEntry(destinationOptions) } : {}),
+        ...(summary !== undefined ? { summary } : {}),
       },
     });
   }
@@ -1505,6 +1573,8 @@ async function handlePost(request: NextRequest) {
         void touchLastActivity(supabase, { leadId: canonical.id, tenantId });
 
         log.info({ draftId: leadId, canonicalId: canonical.id }, "Draft folded into canonical lead");
+        // Smart assignment: the multi-step form just completed, so the lead that SURVIVES the fold is the one to place.
+        if (!(draftLead as Lead).is_final) void requestSmartAssignment({ tenantId, leadId: canonical.id, assignedTo: canonical.assigned_to, requireWorkable: true });
         return apiSuccess({ ...canonical, id: canonical.id }, 200);
       }
     }
@@ -1592,6 +1662,9 @@ async function handlePost(request: NextRequest) {
     ]);
 
     if (leadPayload.is_final === true) {
+      // Smart assignment, exactly once: only when THIS update flipped is_final to true (a multi-step form completing),
+      // never on a repeat save of an already-final lead. requestSmartAssignment skips an assigned lead; the run is idempotent per lead.
+      if (!(existingLead as Lead).is_final) void requestSmartAssignment({ tenantId, leadId, assignedTo: (updated as Lead).assigned_to });
       void processEmailForwardRules({
         tenantId,
         lead: updated as Lead,
@@ -1942,6 +2015,9 @@ async function handlePost(request: NextRequest) {
       });
     })().catch(() => { /* non-fatal */ });
   }
+
+  // Smart assignment (only when the tenant turned it on, only for a lead created unassigned). Non-blocking.
+  if ((lead as Lead).is_final !== false) void requestSmartAssignment({ tenantId, leadId: lead.id, assignedTo: (lead as Lead).assigned_to });
 
   Promise.all([
     // lead.created audit suppressed when lead.submission was recorded (A4: combined display)

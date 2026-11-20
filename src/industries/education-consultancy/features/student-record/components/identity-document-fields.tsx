@@ -49,10 +49,12 @@ interface IdentityDocumentFieldsProps {
   isEditing: boolean;
   values: Record<string, string>;
   onChange?: (key: string, value: string) => void;
+  /** Edit profile: lower-case labels the consent form still needs ("passport number"); those fields get the "needed" mark. */
+  neededLabels?: ReadonlySet<string>;
 }
 
 /** Passport, then Citizenship: number on its own line, detail boxes on the next. Same in the pop-up and the summary card. */
-export function IdentityDocumentFields({ isEditing, values, onChange }: IdentityDocumentFieldsProps) {
+export function IdentityDocumentFields({ isEditing, values, onChange, neededLabels }: IdentityDocumentFieldsProps) {
   const noop = () => {};
   return (
     <div className="space-y-5">
@@ -61,6 +63,7 @@ export function IdentityDocumentFields({ isEditing, values, onChange }: Identity
           <FieldGrid>
             <EditableField
               field={group.number}
+              needed={neededLabels?.has(group.number.label.toLowerCase())}
               isEditing={isEditing}
               value={values[group.number.key] || ""}
               onChange={(v) => (onChange ?? noop)(group.number.key, v)}
@@ -71,6 +74,7 @@ export function IdentityDocumentFields({ isEditing, values, onChange }: Identity
               <EditableField
                 key={field.key}
                 field={field}
+                needed={neededLabels?.has(field.label.toLowerCase())}
                 isEditing={isEditing}
                 value={values[field.key] || ""}
                 onChange={(v) => (onChange ?? noop)(field.key, v)}

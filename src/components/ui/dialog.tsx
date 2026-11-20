@@ -1,11 +1,12 @@
 "use client"
 
 import * as React from "react"
-import { XIcon } from "lucide-react"
+import { XIcon } from "@/components/icons";
 import { Dialog as DialogPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { DIALOG_CARD, DIALOG_FOOTER, DIALOG_FOOTER_FORM, DIALOG_KEY_HINT, DIALOG_SHELL, DIALOG_SIZES, type DialogSize } from "@/components/ui/dialog-shell"
 
 function Dialog({
   ...props
@@ -39,7 +40,7 @@ function DialogOverlay({
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
       className={cn(
-        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50",
+        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-transparent",
         className
       )}
       {...props}
@@ -47,47 +48,99 @@ function DialogOverlay({
   )
 }
 
+/**
+ * Body spacing (deterministic, no gap): body children get 16px side margin; 16px under the header; 20px between
+ * body blocks and before the footer; 16px above the first block when there is no header; 20px at the scroll end
+ * when there is no footer. The "+" selectors are disjoint, so no rule fights another.
+ */
+const BODY_CHILD =
+  "[&>:not([data-slot=dialog-header]):not([data-slot=dialog-footer])]:mx-4 " +
+  "[&>[data-slot=dialog-header]+*]:mt-4 " +
+  // header directly followed by the footer (no body blocks): the footer sits right under the header
+  "[&>[data-slot=dialog-header]+[data-slot=dialog-footer]]:mt-0 " +
+  "[&>:not([data-slot=dialog-header]):not([data-slot=dialog-footer])+*]:mt-5 " +
+  "[&>:not([data-slot=dialog-header]):not([data-slot=dialog-footer])]:first:mt-4 " +
+  "[&>:not([data-slot=dialog-header]):not([data-slot=dialog-footer])]:last:mb-5";
+
+const DialogSizeContext = React.createContext<DialogSize>("md")
+
 function DialogContent({
   className,
   children,
   showCloseButton = true,
   overlayClassName,
+  size = "md",
+  flush,
+  bodyClassName,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
   overlayClassName?: string
+  /** 440 / 560 / 720. Default md. A consumer `sm:max-w-*` class still overrides. */
+  size?: DialogSize
+  /**
+   * The content owns its own padding and spacing (no body margins, no gap). Implied when the consumer's
+   * className already says `p-0` (those dialogs were built flush against the old rounded box).
+   */
+  flush?: boolean
+  /** Extra classes for the inner scroll area (e.g. `flex-row` for a sidebar + panel layout). */
+  bodyClassName?: string
 }) {
+  const isFlush = flush ?? /(^|\s)p-0(\s|$)/.test(className ?? "")
+  const isForm = size === "form"
   return (
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay className={overlayClassName} />
       <DialogPrimitive.Content
         data-slot="dialog-content"
+        data-size={size}
         className={cn(
-          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 outline-none sm:max-w-lg",
+          DIALOG_SHELL,
+          "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed left-[50%] z-50 w-full translate-x-[-50%] duration-200",
+          // form: anchored at 14vh (never re-centres as content changes); under sm, 16px from the top
+          isForm ? "top-[14vh] max-sm:top-4" : "top-[50%] translate-y-[-50%]",
+          DIALOG_SIZES[size],
           className
         )}
         {...props}
       >
-        {children}
-        {showCloseButton && (
-          <DialogPrimitive.Close
-            data-slot="dialog-close"
-            className="ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+        <div
+          data-slot="dialog-card"
+          className={cn(DIALOG_CARD, "relative min-h-0", isForm ? "h-[70vh] max-sm:h-[calc(100dvh-32px)] flex-none" : "flex-1 max-h-[calc(100vh-48px)]")}
+        >
+          <div
+            data-slot="dialog-scroll"
+            className={cn("flex min-h-0 flex-1 flex-col overflow-y-auto", isFlush ? "gap-0" : cn("gap-0 [&>*]:shrink-0", BODY_CHILD), bodyClassName)}
           >
-            <XIcon />
-            <span className="sr-only">Close</span>
-          </DialogPrimitive.Close>
-        )}
+            <DialogSizeContext.Provider value={size}>{children}</DialogSizeContext.Provider>
+          </div>
+          {showCloseButton && (
+            <DialogPrimitive.Close
+              data-slot="dialog-close"
+              className={cn(
+                "absolute right-3 z-20 grid size-7 place-items-center rounded-[8px] text-ds-faint transition-colors outline-none hover:bg-ds-hover hover:text-ds-ink focus-visible:ring-2 focus-visible:ring-ds-accent/30 disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+                isForm ? "top-2" : "top-[10px]"
+              )}
+            >
+              <XIcon />
+              <span className="sr-only">Close</span>
+            </DialogPrimitive.Close>
+          )}
+        </div>
       </DialogPrimitive.Content>
     </DialogPortal>
   )
 }
 
 function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
+  const isForm = React.useContext(DialogSizeContext) === "form"
   return (
     <div
       data-slot="dialog-header"
-      className={cn("flex flex-col gap-2 text-center sm:text-left", className)}
+      className={cn(
+        "sticky top-0 z-10 flex flex-col justify-center gap-0.5 border-b border-ds-divider bg-ds-surface pr-14 pl-4 text-left", isForm ? "min-h-11 py-0" : "min-h-12 py-2.5", " [&_[data-slot=dialog-description]]:text-[13px] [&_[data-slot=dialog-description]]:leading-[18px] [&_[data-slot=dialog-description]]:text-ds-faint",
+        className
+      )}
       {...props}
     />
   )
@@ -101,15 +154,9 @@ function DialogFooter({
 }: React.ComponentProps<"div"> & {
   showCloseButton?: boolean
 }) {
+  const isForm = React.useContext(DialogSizeContext) === "form"
   return (
-    <div
-      data-slot="dialog-footer"
-      className={cn(
-        "flex flex-col-reverse gap-2 sm:flex-row sm:justify-end",
-        className
-      )}
-      {...props}
-    >
+    <div data-slot="dialog-footer" className={cn(isForm ? DIALOG_FOOTER_FORM : DIALOG_FOOTER, className)} {...props}>
       {children}
       {showCloseButton && (
         <DialogPrimitive.Close asChild>
@@ -120,6 +167,11 @@ function DialogFooter({
   )
 }
 
+/** The small translucent key hint inside a primary button: `<Button>Archive <DialogKeyHint>↵</DialogKeyHint></Button>`. */
+function DialogKeyHint({ className, ...props }: React.ComponentProps<"kbd">) {
+  return <kbd data-slot="dialog-key-hint" className={cn(DIALOG_KEY_HINT, "font-sans", className)} {...props} />
+}
+
 function DialogTitle({
   className,
   ...props
@@ -127,7 +179,7 @@ function DialogTitle({
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={cn("text-lg leading-none font-semibold", className)}
+      className={cn("text-sm leading-5 font-medium text-ds-ink", className)}
       {...props}
     />
   )
@@ -153,6 +205,7 @@ export {
   DialogDescription,
   DialogFooter,
   DialogHeader,
+  DialogKeyHint,
   DialogOverlay,
   DialogPortal,
   DialogTitle,

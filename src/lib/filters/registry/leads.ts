@@ -1,4 +1,7 @@
 import { and, or, pgLike, pgVal } from "../pgrst";
+import { heldClauses, heldCutoff } from "../held-cutoff";
+import { quietContactClauses, quietContactCutoff } from "../quiet-contact";
+import { workableSteps, type WorkableTerminal } from "../workable-clauses";
 import { operatorsForField } from "../operators";
 import { FilterCompileError, type CompileCtx, type FieldDef, type FieldRegistry, type FilterCondition } from "../types";
 
@@ -177,6 +180,108 @@ function compileFollowUpNeeded(cond: FilterCondition, ctx: CompileCtx): string {
     "on_hold.eq.false",
     or("last_touched_at.is.null", `last_touched_at.lt.${pgVal(cutoff.toISOString())}`),
   );
+}
+
+// ── untouched_new: virtual — never touched AND older than 48h (Pulse "untouched new leads") ─
+// Same rule as education_intake_alarm / Pulse's `untouched` metric: no call/email/meeting and no note since it
+// arrived. Migration 250's trigger sets last_touched_at on exactly those events, so NULL == never touched. The 48h
+// is fixed (Pulse's alarm bucket), NOT tenant-configurable like follow_up_needed's stale days, and on-hold leads are
+// NOT excluded (a lead nobody has touched is untouched, hold or not).
+
+const UNTOUCHED_NEW_HOURS = 48;
+
+function compileUntouchedNew(_cond: FilterCondition, ctx: CompileCtx): string {
+  const cutoff = new Date(ctx.now.getTime() - UNTOUCHED_NEW_HOURS * 60 * 60 * 1000);
+  return and("last_touched_at.is.null", `created_at.lt.${pgVal(cutoff.toISOString())}`);
+}
+
+// ── untouched_held: virtual — a held lead with no touch AND no stage move for 3+ days (Pulse "untouched") ─
+// Pulse's absolute definition (lib/untouched.ts there): last_touched_at null/old AND stage_changed_at old, not archived.
+// Window-independent, so the Pulse count and "See the N leads" are the same set.
+
+const UNTOUCHED_HELD_DAYS = 3;
+
+function compileUntouchedHeld(_cond: FilterCondition, ctx: CompileCtx): string {
+  const cutoff = pgVal(new Date(ctx.now.getTime() - UNTOUCHED_HELD_DAYS * 86_400_000).toISOString());
+  return and(or("last_touched_at.is.null", `last_touched_at.lt.${cutoff}`), `stage_changed_at.lt.${cutoff}`, "archived_at.is.null");
+}
+
+// ── no_contact_14d: virtual — no contact for 2+ tenant-local weeks (Home "N leads with no contact") ──
+// The exact contact test Home's quiet-leads count uses (../quiet-contact.ts is the one definition; ctx.tz is the
+// tenant's day). It is ONLY the contact test: "someone holds it" and "it is workable" are separate conditions the
+// caller adds (Home's Review link adds `assignees is_not_empty` and the workable stage list).
+
+function compileNoContact14d(_cond: FilterCondition, ctx: CompileCtx): string {
+  return or(...quietContactClauses(quietContactCutoff(ctx.now, ctx.tz)));
+}
+
+// ── held_48h: virtual — the holder has had the lead for 48h+ (Home's "untouched, held" row; link only) ──
+// `assigned_at` older than 48h, or null (older leads were never stamped). One definition with Home's count (../held-cutoff.ts).
+
+function compileHeld48h(_cond: FilterCondition, ctx: CompileCtx): string {
+  return or(...heldClauses(heldCutoff(ctx.now)));
+}
+
+// ── workable: virtual — Home's "a lead someone should be working" (links only; hidden from the picker) ──
+// The SAME clauses `applyWorkable` puts on Home's counts (../workable-clauses.ts), so a Review link opens exactly the rows
+// that were counted: not deleted, not archived, not on hold, not a walk-in, not in a terminal status for its pipeline. A filter
+// compile cannot read the DB, so the tenant's terminal-stage plan travels in the condition's value (a JSON string, operator `is`). Everything
+// in it is re-validated here (slugs and pipeline ids are interpolated into a PostgREST filter). "In an active list" is not part
+// of this field: the link adds it as a `stage` condition.
+
+const WORKABLE_SLUG_RE = /^[A-Za-z0-9_ -]{1,64}$/;
+
+const NO_TERMINAL: WorkableTerminal = { terminalEverywhere: [], terminalSome: [] };
+
+// A plan that is missing, unparseable or malformed is IGNORED (the base exclusions still apply) and none of its text is ever
+// interpolated, so a hostile value can only widen back to "not archived / on hold / walk-in", never inject a predicate.
+function parseWorkableTerminal(raw: unknown): WorkableTerminal {
+  try {
+    return parseStrict(raw);
+  } catch {
+    return NO_TERMINAL;
+  }
+}
+
+function parseStrict(raw: unknown): WorkableTerminal {
+  const bad = () => new FilterCompileError("workable: invalid terminal plan", "invalid_value");
+  if (typeof raw !== "string") return NO_TERMINAL;
+  let v: unknown;
+  try {
+    v = JSON.parse(raw);
+  } catch {
+    throw bad();
+  }
+  if (typeof v !== "object" || v === null) throw bad();
+  const o = v as { terminalEverywhere?: unknown; terminalSome?: unknown };
+  const slug = (x: unknown): string => {
+    if (typeof x !== "string" || !WORKABLE_SLUG_RE.test(x)) throw bad();
+    return x;
+  };
+  if (!Array.isArray(o.terminalEverywhere) || !Array.isArray(o.terminalSome)) throw bad();
+  return {
+    terminalEverywhere: o.terminalEverywhere.map(slug),
+    terminalSome: o.terminalSome.map((t: { slug?: unknown; pipelineIds?: unknown }) => {
+      if (!Array.isArray(t.pipelineIds)) throw bad();
+      return {
+        slug: slug(t.slug),
+        pipelineIds: t.pipelineIds.map((p: unknown) => {
+          if (p === null) return null;
+          if (typeof p !== "string" || !UUID_RE.test(p)) throw bad();
+          return p;
+        }),
+      };
+    }),
+  };
+}
+
+function compileWorkable(cond: FilterCondition): string {
+  const parts: string[] = [];
+  for (const step of workableSteps(parseWorkableTerminal(cond.value))) {
+    if (step.kind === "is_null") parts.push(`${step.column}.is.null`);
+    else if (step.kind === "or") parts.push(`or(${step.expr})`);
+  }
+  return and(...parts);
 }
 
 // ── callback_due: virtual — a pending callback window that has fully elapsed ─
@@ -496,6 +601,60 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       // Never-touched (NULL) must sort to the TOP on ascending — see
       // FieldDef.sortNullsFirst's doc comment in types.ts.
       sortNullsFirst: true,
+      industries: ["education_consultancy"],
+    },
+    {
+      key: "untouched_new",
+      label: "Untouched for 48h+",
+      type: "boolean",
+      source: { kind: "virtual", compile: compileUntouchedNew },
+      operators: ["is_true"],
+      group: "Basic",
+      filterable: true,
+      industries: ["education_consultancy"],
+    },
+    {
+      key: "untouched_held",
+      label: "Untouched for 3+ days",
+      type: "boolean",
+      source: { kind: "virtual", compile: compileUntouchedHeld },
+      operators: ["is_true"],
+      group: "Basic",
+      filterable: true,
+      industries: ["education_consultancy"],
+    },
+    {
+      key: "no_contact_14d",
+      label: "No contact for 2+ weeks",
+      type: "boolean",
+      source: { kind: "virtual", compile: compileNoContact14d },
+      operators: ["is_true"],
+      group: "Basic",
+      filterable: true,
+      industries: ["education_consultancy"],
+    },
+    {
+      key: "held_48h",
+      label: "Held for 48h+",
+      type: "boolean",
+      source: { kind: "virtual", compile: compileHeld48h },
+      operators: ["is_true"],
+      group: "Basic",
+      filterable: true,
+      hiddenFromPicker: true,
+      industries: ["education_consultancy"],
+    },
+    {
+      key: "workable",
+      label: "Workable",
+      // `is` + a JSON string: the shared filter schema allows no value on is_true, and the terminal plan has to travel in the link.
+      type: "text",
+      source: { kind: "virtual", compile: compileWorkable },
+      operators: ["is"],
+      group: "Basic",
+      filterable: true,
+      hiddenFromPicker: true,
+      fixedChipLabel: "Still being worked",
       industries: ["education_consultancy"],
     },
     {

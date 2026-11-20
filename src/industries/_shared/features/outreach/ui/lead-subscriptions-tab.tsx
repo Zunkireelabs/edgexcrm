@@ -1,7 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Loader2, Mail, MessageSquare, X, Zap } from "lucide-react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import {
+  CircleNotchIcon,
+  EnvelopeSimpleIcon,
+  ChatTextIcon,
+  XIcon,
+  LightningIcon,
+} from "@/components/icons";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -33,7 +39,11 @@ interface LeadSubscriptionsTabProps {
   leadFirstName?: string | null;
   leadLastName?: string | null;
   leadEmail?: string | null;
+  /** Section headers in the 14/20/500 sentence-case style (the education lead detail) instead of the old uppercase caption. */
+  plainHeaders?: boolean;
 }
+
+const PlainHeadersContext = createContext(false);
 
 const EMPTY: LeadSubscriptions = { sequences: [], queued: [], campaigns: [], autoEnrollOptOuts: { email: false, sms: false } };
 
@@ -43,7 +53,7 @@ const PREVIEW_ROWS = 5;
 /** A clear "Email" / "SMS" tag (icon + word, its own colour) so the two channels can't be confused. */
 function ChannelTag({ channel }: { channel: OutreachChannel }) {
   const isSms = channel === "sms";
-  const Icon = isSms ? MessageSquare : Mail;
+  const Icon = isSms ? ChatTextIcon : EnvelopeSimpleIcon;
   return (
     <span
       className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
@@ -56,7 +66,7 @@ function ChannelTag({ channel }: { channel: OutreachChannel }) {
   );
 }
 
-export function LeadSubscriptionsTab(props: LeadSubscriptionsTabProps) {
+export function LeadSubscriptionsTab({ plainHeaders = false, ...props }: LeadSubscriptionsTabProps) {
   const { leadId } = props;
   const [data, setData] = useState<LeadSubscriptions>(EMPTY);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -89,6 +99,7 @@ export function LeadSubscriptionsTab(props: LeadSubscriptionsTabProps) {
   const busyChannels = (["email", "sms"] as const).filter((c) => live.some((s) => s.channel === c));
 
   return (
+    <PlainHeadersContext.Provider value={plainHeaders}>
     <div className="space-y-4">
       <Section title="Running now" hint="A lead runs at most one email and one SMS sequence at a time.">
         <LeadCadenceStrip key={stripKey} {...props} readFromLead labelled onChanged={load} />
@@ -96,7 +107,7 @@ export function LeadSubscriptionsTab(props: LeadSubscriptionsTabProps) {
 
       {status === "loading" && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading subscriptions…
+          <CircleNotchIcon className="h-4 w-4 animate-spin" /> Loading subscriptions…
         </div>
       )}
       {status === "error" && (
@@ -162,14 +173,16 @@ export function LeadSubscriptionsTab(props: LeadSubscriptionsTabProps) {
         </>
       )}
     </div>
+    </PlainHeadersContext.Provider>
   );
 }
 
 function Section({ title, count, hint, children }: { title: string; count?: number; hint?: string; children: React.ReactNode }) {
+  const plain = useContext(PlainHeadersContext);
   return (
     <section className="space-y-2">
       <div>
-        <h4 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <h4 className={plain ? "text-[14px] font-medium leading-5 text-black/[.63]" : "text-xs font-medium uppercase tracking-wide text-muted-foreground"}>
           {title}
           {count ? ` (${count})` : ""}
         </h4>
@@ -208,7 +221,7 @@ function PastRow({ s }: { s: SubscribedSequence }) {
         <span className="truncate font-medium">{s.sequenceName}</span>
         {s.source === "stage_rule" && (
           <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
-            <Zap className="h-3 w-3" aria-hidden />
+            <LightningIcon className="h-3 w-3" aria-hidden />
             Auto-enrolled{s.triggerStageName ? ` · entered ${s.triggerStageName}` : ""}
           </span>
         )}
@@ -287,7 +300,7 @@ function QueueRow({
           <span className="font-medium">{queued.sequenceName}</span>
           <span className="text-xs text-muted-foreground">starts after {running.sequenceName}</span>
           <Button type="button" variant="ghost" size="sm" className="ml-auto" disabled={busy} onClick={remove}>
-            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5 mr-1" />}
+            {busy ? <CircleNotchIcon className="h-3.5 w-3.5 animate-spin" /> : <XIcon className="h-3.5 w-3.5 mr-1" />}
             Remove
           </Button>
         </>
@@ -308,7 +321,7 @@ function QueueRow({
             </SelectContent>
           </Select>
           <Button type="button" size="sm" disabled={!selected || busy} onClick={queue}>
-            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Queue next"}
+            {busy ? <CircleNotchIcon className="h-3.5 w-3.5 animate-spin" /> : "Queue next"}
           </Button>
         </>
       )}
