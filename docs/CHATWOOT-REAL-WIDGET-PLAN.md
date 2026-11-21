@@ -49,7 +49,11 @@ identifier with the inbox's `hmac_token`. Only a server holding the token can pr
 1. DONE (local): `connectWebsiteChat({ inboxType: "api" })` and `POST /api/v1/inbox/website-chat { branded: true }` create the API inbox with
    `hmac_mandatory`, store identifier and encrypted hmac token. The card UI does not offer it yet.
 2. DONE: webhook shape confirmed against a real API inbox; parses unchanged.
-3. EdgeX: the small session-signing endpoint, with tests (wrong origin, flood, bad tenant).
+3. DONE (local, mock-tested): `POST /api/public/chat/session` (`src/lib/inbox/website-chat/session.ts` + route). Body `{ inbox }`.
+   Checks, in order: feature flag, id shape, per-IP limit (60 / 10 min), inbox lookup (unknown, off, wrong type: one identical 404),
+   Origin must be the tenant's website (https, with or without www; no Origin header is refused), per-inbox limit (1000 / 10 min).
+   Returns `{ chatwootBaseUrl, inboxIdentifier, identifier, identifierHash }`. CORS names the one allowed origin, only on success.
+   Not yet exercised against a live local server (needs a branded inbox connected locally).
 4. Widget: real transport (start / send / submitDetails / poll), keep the mock for local work; honeypot.
 5. "Online": decide between a static value and EdgeX office hours (Chatwoot's agent status will not drive it for API inboxes).
 6. Stage test end to end, then abuse tests. Security review (`/security-auditor`) before production.

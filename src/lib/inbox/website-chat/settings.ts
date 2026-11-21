@@ -326,9 +326,14 @@ function colorHex(color: string): string {
 export const CHAT_OFF_ALLOWED_DOMAINS = "https://chat-switched-off.invalid";
 
 /** The site itself and its "www." twin, as Chatwoot expects them (a comma-separated list of origins). */
-function allowedDomainsFor(host: string): string {
+/** The origins (scheme + host) allowed to show this tenant's chat. The Chatwoot window and the session endpoint share it. */
+export function allowedOriginsFor(host: string): string[] {
   const bare = host.replace(/^www\./, "");
-  return [`https://${bare}`, `https://www.${bare}`, ...devExtraOrigins()].join(", ");
+  return [`https://${bare}`, `https://www.${bare}`, ...devExtraOrigins()];
+}
+
+function allowedDomainsFor(host: string): string {
+  return allowedOriginsFor(host).join(", ");
 }
 
 /**
