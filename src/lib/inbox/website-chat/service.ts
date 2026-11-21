@@ -12,6 +12,7 @@ import { buildChatwootPassword } from "../chatwoot-agents";
 import { chatwootBaseUrl, chatwootRequest, parseChatwootChannelRef } from "../chatwoot-api";
 import { chatwootChannelRef } from "../adapters/chatwoot";
 import {
+  buildBrandedSnippet,
   buildWidgetSnippet,
   DEFAULT_WEBSITE_CHAT_SETTINGS,
   toChatwootChannel,
@@ -47,6 +48,12 @@ interface ChannelRow {
   meta: { webhook_secret_enc?: string; website_chat?: StoredWebsiteChat } | null;
 }
 
+/** The embed code for whichever kind of inbox this is: Chatwoot's own bubble, or the branded widget. */
+function snippetFor(stored: StoredWebsiteChat): string | null {
+  if (stored.inboxType === "api") return stored.inboxIdentifier ? buildBrandedSnippet(appBaseUrl(), stored.inboxIdentifier) : null;
+  return stored.websiteToken ? buildWidgetSnippet(chatwootBaseUrl(), stored.websiteToken) : null;
+}
+
 export class WebsiteChatError extends Error {
   constructor(
     message: string,
@@ -62,6 +69,8 @@ export interface WebsiteChatState {
   settings: WebsiteChatSettings | null;
   /** The code to paste on the website. Null until connected. */
   snippet: string | null;
+  /** Branded widget only: the inbox's public identifier (safe on a website; the secret never leaves the server). */
+  inboxIdentifier?: string;
   /** The logo shown at the top of the chat window, if one was uploaded. */
   logoUrl: string | null;
 }
@@ -114,8 +123,8 @@ export async function loadWebsiteChat(db: Db, tenantId: string): Promise<Website
     connected: true,
     enabled: stored.enabled,
     settings: withSettingDefaults(stored.settings),
-    // The branded widget (api inbox) gets its embed code once its transport exists.
-    snippet: stored.websiteToken ? buildWidgetSnippet(chatwootBaseUrl(), stored.websiteToken) : null,
+    snippet: snippetFor(stored),
+    ...(stored.inboxType === "api" && stored.inboxIdentifier ? { inboxIdentifier: stored.inboxIdentifier } : {}),
     logoUrl: stored.logoUrl ?? null,
   };
 }
@@ -230,7 +239,8 @@ export async function connectWebsiteChat(input: ConnectWebsiteChatInput): Promis
       connected: true,
       enabled: true,
       settings,
-      snippet: inboxType === "web_widget" ? buildWidgetSnippet(baseUrl, inbox.website_token as string) : null,
+      snippet: snippetFor(stored),
+      ...(inboxType === "api" ? { inboxIdentifier: inbox.inbox_identifier } : {}),
       logoUrl: null,
     };
   } catch (err) {
@@ -267,7 +277,14 @@ export async function updateWebsiteChat(input: UpdateWebsiteChatInput): Promise<
       logger.error({ err: error.message, tenantId }, "website chat: could not save settings");
       throw new WebsiteChatError("Could not save your changes. Please try again.", "chatwoot_failed");
     }
-    return { connected: true, enabled, settings, snippet: null, logoUrl: stored.logoUrl ?? null };
+    return {
+      connected: true,
+      enabled,
+      settings,
+      snippet: snippetFor(nextApi),
+      inboxIdentifier: stored.inboxIdentifier,
+      logoUrl: stored.logoUrl ?? null,
+    };
   }
 
   const baseUrl = chatwootBaseUrl();
@@ -351,7 +368,7 @@ export async function uploadWebsiteChatLogo(input: WebsiteChatLogoInput): Promis
   }
 
   await storeLogoUrl(db, channel, stored, tenantId, logoUrl);
-  return { connected: true, enabled: stored.enabled, settings: withSettingDefaults(stored.settings), snippet: stored.websiteToken ? buildWidgetSnippet(baseUrl, stored.websiteToken) : null, logoUrl };
+  return { connected: true, enabled: stored.enabled, settings: withSettingDefaults(stored.settings), snippet: snippetFor(stored), logoUrl };
 }
 
 /** Removes the logo again. */
@@ -371,5 +388,5 @@ export async function removeWebsiteChatLogo(input: Omit<WebsiteChatLogoInput, "f
   }
 
   await storeLogoUrl(db, channel, stored, tenantId, null);
-  return { connected: true, enabled: stored.enabled, settings: withSettingDefaults(stored.settings), snippet: stored.websiteToken ? buildWidgetSnippet(baseUrl, stored.websiteToken) : null, logoUrl: null };
+  return { connected: true, enabled: stored.enabled, settings: withSettingDefaults(stored.settings), snippet: snippetFor(stored), logoUrl: null };
 }

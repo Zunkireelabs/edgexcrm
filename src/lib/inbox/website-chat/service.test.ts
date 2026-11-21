@@ -371,8 +371,10 @@ describe("branded widget (api inbox)", () => {
     expect(stored.hmacTokenEnc).not.toContain("hmac-secret");
     expect(decryptToken(stored.hmacTokenEnc)).toBe("hmac-secret");
 
-    // No embed snippet yet, and nothing secret comes back to the browser.
-    expect(state).toMatchObject({ connected: true, enabled: true, snippet: null });
+    // The browser gets the embed code and the PUBLIC inbox id, never the secret.
+    expect(state).toMatchObject({ connected: true, enabled: true, inboxIdentifier: "pub-inbox-id" });
+    expect(state.snippet).toContain('src="https://crm.example.com/chat-widget/chat-widget.js"');
+    expect(state.snippet).toContain('connection: { inbox: "pub-inbox-id" }');
     expect(JSON.stringify(state)).not.toContain("hmac-secret");
   });
 
@@ -419,12 +421,14 @@ describe("branded widget (api inbox)", () => {
     expect(saved.website_chat).toMatchObject({ enabled: false, inboxType: "api", inboxIdentifier: "pub-inbox-id", hmacTokenEnc: "ENC-HMAC" });
     expect(saved.webhook_secret_enc).toBe("ENC-SECRET");
     expect(db.updated[0].patch).not.toHaveProperty("status");
-    expect(state).toMatchObject({ enabled: false, snippet: null, settings: { color: "teal" } });
+    expect(state).toMatchObject({ enabled: false, inboxIdentifier: "pub-inbox-id", settings: { color: "teal" } });
+    expect(state.snippet).toContain("pub-inbox-id");
   });
 
-  it("load reports connected with no snippet and never returns the HMAC secret, identifier or tokens", async () => {
+  it("load reports connected with the embed code and public inbox id, and never returns the HMAC secret or tokens", async () => {
     const state = await loadWebsiteChat(fakeDb(apiRow()) as never, "tenant-A");
-    expect(state).toMatchObject({ connected: true, enabled: true, snippet: null });
+    expect(state).toMatchObject({ connected: true, enabled: true, inboxIdentifier: "pub-inbox-id" });
+    expect(state.snippet).toContain("pub-inbox-id");
     const json = JSON.stringify(state);
     for (const secret of ["ENCRYPTED", "ENC-SECRET", "ENC-HMAC", "hmac"]) expect(json).not.toContain(secret);
   });

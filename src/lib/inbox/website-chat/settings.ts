@@ -405,6 +405,16 @@ export function toChatwootInbox(settings: WebsiteChatSettings) {
 }
 
 /** The one-line install snippet for the website. Built here from server config, not taken from Chatwoot. */
+/** The embed code for the branded widget: the script (served by EdgeX) plus the public inbox id it connects to. */
+export function buildBrandedSnippet(appBaseUrl: string, inboxIdentifier: string): string {
+  return [
+    `<script src="${appBaseUrl}/chat-widget/chat-widget.js"></script>`,
+    "<script>",
+    `  ZunkireeChat.init({ connection: { inbox: "${inboxIdentifier}" } });`,
+    "</script>",
+  ].join("\n");
+}
+
 export function buildWidgetSnippet(baseUrl: string, websiteToken: string): string {
   return [
     "<script>",
