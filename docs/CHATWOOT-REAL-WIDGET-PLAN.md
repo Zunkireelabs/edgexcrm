@@ -54,7 +54,13 @@ identifier with the inbox's `hmac_token`. Only a server holding the token can pr
    Origin must be the tenant's website (https, with or without www; no Origin header is refused), per-inbox limit (1000 / 10 min).
    Returns `{ chatwootBaseUrl, inboxIdentifier, identifier, identifierHash }`. CORS names the one allowed origin, only on success.
    Not yet exercised against a live local server (needs a branded inbox connected locally).
-4. Widget: real transport (start / send / submitDetails / poll), keep the mock for local work; honeypot.
+4. DONE (local, jsdom-tested): the widget's real transport. With `connection: { inbox, api? }` it asks the session endpoint (api defaults
+   to the origin the script came from), then calls Chatwoot's public client API with `identifier_hash` on every call. Lazy: nothing
+   is contacted until the visitor sends. Polls every 5 s while the page is visible (backs off to 30 s on errors), shows only
+   counsellor messages (type 1), resumes after a reload (sessionStorage), re-signs once on a 401, shows a plain notice when the
+   team cannot be reached, normalises phone numbers to international form (config `contact.defaultCountryCode`, retry without the
+   number if Chatwoot rejects it), hidden spam-trap field. The mock remains when no `connection` is given.
+   Still to do on the Admizz site: pass `connection.inbox` (+ `defaultCountryCode: "+977"`) from an env variable.
 5. "Online": decide between a static value and EdgeX office hours (Chatwoot's agent status will not drive it for API inboxes).
 6. Stage test end to end, then abuse tests. Security review (`/security-auditor`) before production.
 7. Production: its own Chatwoot install and host, a separate decision.
