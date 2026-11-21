@@ -2,7 +2,7 @@
 
 > **Single source of truth for the omnichannel inbox.** Captures what shipped, what's deliberately stubbed, what's required before it works in a deployed env, and the remaining roadmap. Keep this current until the feature is fully live, then archive to `docs/archive/features/`.
 
-**Status (2026-06-11):** Phases 1 + 2 + 3a **shipped to stage**; **real WhatsApp is LIVE end-to-end on dev** (`dev-lead-crm`) — inbound + outbound + read receipts, verified with a real phone. Migration 044 applied to the shared Supabase DB (additive, dormant for prod). **Not on prod yet.** Next: Phase 3b (near-instant inbound — `docs/UNIFIED-INBOX-PHASE-3B-BRIEF.md`), then prod promotion. See **Live state log** below for the exact dev wiring.
+**Status (2026-06-11):** Phases 1 + 2 + 3a **shipped to stage**; **real WhatsApp is LIVE end-to-end on dev** (`dev-lead-crm`) — inbound + outbound + read receipts, verified with a real phone. Migration 044 applied to the shared Supabase DB (additive, dormant for prod). **Not on prod yet.** Next: Phase 3b (near-instant inbound — `docs/archive/features/UNIFIED-INBOX-PHASE-3B-BRIEF.md`), then prod promotion. See **Live state log** below for the exact dev wiring.
 
 ### Phase ledger
 | Phase | What | Status |
