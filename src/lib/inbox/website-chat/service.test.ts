@@ -339,3 +339,93 @@ describe("settings saved before office hours existed", () => {
     expect(state.settings?.officeHours).toMatchObject({ enabled: false });
   });
 });
+
+// The branded widget: a plain API inbox with hmac_mandatory on, no Chatwoot-side look, no website token.
+describe("branded widget (api inbox)", () => {
+  const apiResponses = {
+    ...chatwootResponses,
+    "/api/v1/accounts/7/inboxes": { id: 9, inbox_identifier: "pub-inbox-id", hmac_token: "hmac-secret" },
+  };
+
+  it("creates an API inbox with hmac_mandatory on, and stores the identifier plus the encrypted HMAC secret", async () => {
+    vi.stubGlobal("fetch", fakeFetch(apiResponses));
+    const db = fakeDb();
+    const state = await connectWebsiteChat({ ...input(db), inboxType: "api" });
+
+    // No availability calls: "away" is a Chatwoot-window idea. The webhook is still registered.
+    expect(calls.map((c) => `${c.method} ${c.url.replace("https://inbox.example.com", "")}`)).toEqual([
+      "POST /platform/api/v1/accounts",
+      "POST /platform/api/v1/users",
+      "POST /platform/api/v1/accounts/7/account_users",
+      "POST /api/v1/accounts/7/inboxes",
+      "POST /api/v1/accounts/7/inbox_members",
+      "POST /api/v1/accounts/7/webhooks",
+    ]);
+    expect(calls[3].body).toEqual({ name: "Chat with Admizz Education", channel: { type: "api", hmac_mandatory: true } });
+
+    const row = db.inserted[0] as { provider: string; external_account_id: string; meta: { website_chat: Record<string, unknown> } };
+    expect(row).toMatchObject({ provider: "chatwoot", external_account_id: "7:9" });
+    const stored = row.meta.website_chat as { inboxType: string; inboxIdentifier: string; hmacTokenEnc: string; websiteToken?: string };
+    expect(stored).toMatchObject({ inboxType: "api", inboxIdentifier: "pub-inbox-id" });
+    expect(stored.websiteToken).toBeUndefined();
+    expect(stored.hmacTokenEnc).not.toContain("hmac-secret");
+    expect(decryptToken(stored.hmacTokenEnc)).toBe("hmac-secret");
+
+    // No embed snippet yet, and nothing secret comes back to the browser.
+    expect(state).toMatchObject({ connected: true, enabled: true, snippet: null });
+    expect(JSON.stringify(state)).not.toContain("hmac-secret");
+  });
+
+  it("stores nothing when Chatwoot does not return the identifier and HMAC secret", async () => {
+    vi.stubGlobal("fetch", fakeFetch({ ...chatwootResponses, "/api/v1/accounts/7/inboxes": { id: 9 } }));
+    const db = fakeDb();
+    await expect(connectWebsiteChat({ ...input(db), inboxType: "api" })).rejects.toMatchObject({ code: "chatwoot_failed" });
+    expect(db.inserted).toHaveLength(0);
+  });
+
+  it("the default is still Chatwoot's own window (nothing changes for existing callers)", async () => {
+    vi.stubGlobal("fetch", fakeFetch(chatwootResponses));
+    await connectWebsiteChat(input(fakeDb()));
+    expect((calls.find((c) => c.url.endsWith("/accounts/7/inboxes"))!.body as { channel: { type: string } }).channel.type).toBe("web_widget");
+  });
+
+  const apiRow = (enabled = true) => ({
+    id: "chan-1",
+    external_account_id: "7:9",
+    access_token: "ENCRYPTED",
+    meta: {
+      webhook_secret_enc: "ENC-SECRET",
+      website_chat: {
+        settings: { ...DEFAULT_WEBSITE_CHAT_SETTINGS, websiteHost: "admizzeducation.com" },
+        enabled,
+        inboxType: "api",
+        inboxIdentifier: "pub-inbox-id",
+        hmacTokenEnc: "ENC-HMAC",
+      },
+    },
+  });
+
+  it("saving settings or switching off touches only EdgeX, never Chatwoot", async () => {
+    vi.stubGlobal("fetch", fakeFetch({}));
+    const row = apiRow();
+    const db = fakeDb(row);
+    const settings = { ...row.meta.website_chat.settings, color: "teal" as const };
+    const state = await updateWebsiteChat({ db: db as never, tenantId: "tenant-A", settings, enabled: false });
+
+    expect(calls).toHaveLength(0);
+    expect(db.updated).toHaveLength(1);
+    expect(db.updated[0].filters).toEqual([["id", "chan-1"], ["tenant_id", "tenant-A"]]);
+    const saved = (db.updated[0].patch as { meta: { webhook_secret_enc: string; website_chat: Record<string, unknown> } }).meta;
+    expect(saved.website_chat).toMatchObject({ enabled: false, inboxType: "api", inboxIdentifier: "pub-inbox-id", hmacTokenEnc: "ENC-HMAC" });
+    expect(saved.webhook_secret_enc).toBe("ENC-SECRET");
+    expect(db.updated[0].patch).not.toHaveProperty("status");
+    expect(state).toMatchObject({ enabled: false, snippet: null, settings: { color: "teal" } });
+  });
+
+  it("load reports connected with no snippet and never returns the HMAC secret, identifier or tokens", async () => {
+    const state = await loadWebsiteChat(fakeDb(apiRow()) as never, "tenant-A");
+    expect(state).toMatchObject({ connected: true, enabled: true, snippet: null });
+    const json = JSON.stringify(state);
+    for (const secret of ["ENCRYPTED", "ENC-SECRET", "ENC-HMAC", "hmac"]) expect(json).not.toContain(secret);
+  });
+});

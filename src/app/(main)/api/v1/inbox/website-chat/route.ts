@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
   const g = await guard();
   if (!g.ok) return g.response;
 
-  const body = (await request.json().catch(() => null)) as { websiteHost?: unknown } | null;
+  const body = (await request.json().catch(() => null)) as { websiteHost?: unknown; branded?: unknown } | null;
   const websiteHost = typeof body?.websiteHost === "string" ? normalizeWebsiteHost(body.websiteHost) : null;
   if (!websiteHost) return apiValidationError({ websiteHost: ["Enter your website address, for example example.com"] });
 
@@ -37,6 +37,8 @@ export async function POST(request: NextRequest) {
       tenantName: (tenant as { name?: string } | null)?.name?.trim() || "Website",
       userId: g.auth.userId,
       websiteHost,
+      // { branded: true } creates the plain inbox for the branded widget instead of Chatwoot's own window.
+      inboxType: body?.branded === true ? "api" : "web_widget",
     });
     return apiSuccess(state, 201);
   } catch (err) {
