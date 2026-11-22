@@ -211,4 +211,52 @@ describe("WebsiteChatCard", () => {
     fireEvent.click(screen.getByLabelText("Show Name"));
     expect(screen.getByLabelText("Name required")).toBeDisabled();
   });
+  it("offers the branded widget as a second way to connect, and asks for it with branded: true", async () => {
+    const branded = {
+      ...connected,
+      snippet: '<script src="https://crm.example.com/chat-widget/chat-widget.js"></script>',
+      inboxIdentifier: "AbCdEfGhIjKlMnOpQrStUvWx",
+    };
+    const fetchMock = mockFetch([{ body: { data: notConnected } }, { status: 201, body: { data: branded } }]);
+    render(<WebsiteChatCard />);
+
+    fireEvent.change(await screen.findByLabelText("Your website address"), { target: { value: "admizzeducation.com" } });
+    // Both ways are offered and described; the standard window still posts without the flag.
+    expect(screen.getByText("Standard chat window")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Connect branded widget" }));
+
+    await screen.findByText("Put it on your website");
+    const [, init] = fetchMock.mock.calls[1] as unknown as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({ websiteHost: "admizzeducation.com", branded: true });
+  });
+
+  it("a connected branded widget shows its inbox id and the website address, and hides the standard window's look, form and office hours", async () => {
+    mockFetch([
+      {
+        body: {
+          data: { ...connected, snippet: "<script>BRANDED</script>", inboxIdentifier: "AbCdEfGhIjKlMnOpQrStUvWx" },
+        },
+      },
+    ]);
+    render(<WebsiteChatCard />);
+
+    await screen.findByText("Branded chat widget.");
+    expect(screen.getByText("AbCdEfGhIjKlMnOpQrStUvWx")).toBeInTheDocument();
+    expect(screen.getByLabelText("Website address")).toBeInTheDocument();
+    expect(screen.getByText("<script>BRANDED</script>")).toBeInTheDocument();
+    for (const gone of ["How the bubble looks", "The short form before chatting", "Office hours"]) {
+      expect(screen.queryByText(gone)).not.toBeInTheDocument();
+    }
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeInTheDocument();
+  });
+
+  it("a standard window still shows its look, form and office hours, and no branded note", async () => {
+    mockFetch([{ body: { data: connected } }]);
+    render(<WebsiteChatCard />);
+
+    await screen.findByText("How the bubble looks");
+    expect(screen.getByText("The short form before chatting")).toBeInTheDocument();
+    expect(screen.getByText("Office hours")).toBeInTheDocument();
+    expect(screen.queryByText("Branded chat widget.")).not.toBeInTheDocument();
+  });
 });

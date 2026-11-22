@@ -47,7 +47,9 @@ identifier with the inbox's `hmac_token`. Only a server holding the token can pr
 
 ## Build steps (stage first)
 1. DONE (local): `connectWebsiteChat({ inboxType: "api" })` and `POST /api/v1/inbox/website-chat { branded: true }` create the API inbox with
-   `hmac_mandatory`, store identifier and encrypted hmac token. The card UI does not offer it yet.
+   `hmac_mandatory`, store identifier and encrypted hmac token. The card now offers it as "Connect branded widget" next to the standard
+   window; a branded connection shows its public inbox id and hides the standard window's look / form / office hours sections.
+   Live local end-to-end test PASSED 2026-11-22 (widget -> session -> Chatwoot -> webhook -> Inbox -> reply -> widget).
 2. DONE: webhook shape confirmed against a real API inbox; parses unchanged.
 3. DONE (local, mock-tested): `POST /api/public/chat/session` (`src/lib/inbox/website-chat/session.ts` + route). Body `{ inbox }`.
    Checks, in order: feature flag, id shape, per-IP limit (60 / 10 min), inbox lookup (unknown, off, wrong type: one identical 404),
