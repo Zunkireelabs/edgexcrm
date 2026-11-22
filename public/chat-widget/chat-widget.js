@@ -39,6 +39,10 @@
     topics: [],
     link: null, // { label, sub, url }: one highlighted action under the topics, for example "Book a consultation"
     composerPlaceholder: "Write a message…",
+    // A short soft sound when a team member's reply arrives (real connections only), with a mute button in the chat header that the
+    // visitor's browser remembers. It plays only while the page is open and visible, and only after the visitor has clicked something,
+    // because browsers block sound before that. enabled: false removes the sound and the button.
+    sound: { enabled: true, muteLabel: "Mute notification sound", unmuteLabel: "Turn on notification sound" },
     // Short guidance so a visitor is never left wondering what to do next. Only used with a real connection (the demo transport
     // answers on its own). "{name}" becomes ", Sneha" when we know the name, and nothing when we do not. Set a text to "" to turn it off.
     guide: {
@@ -78,6 +82,7 @@
 
   var STORAGE_KEY = "zk-chat:v2";
   var CONN_KEY = "zk-chat:v2:conn";
+  var MUTE_KEY = "zk-chat:v2:mute";
   var POLL_MS = 5000; // how often a visitor checks for a counsellor's reply while the page is visible
   var POLL_MAX_MS = 30000; // slowest it backs off to while the server is failing
   // The origin this script came from is EdgeX: the session endpoint lives there. Null when the script was not loaded by a tag.
@@ -148,6 +153,8 @@
     home: ["M4 11l8-7 8 7v9H4z"],
     msgs: ["M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"],
     link: ["M7 3v4M17 3v4M3.5 9h17M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"],
+    soundOn: ["M11 5L6 9H3v6h3l5 4V5z", "M15.5 8.5a5 5 0 0 1 0 7", "M18.5 6a9 9 0 0 1 0 12"],
+    soundOff: ["M11 5L6 9H3v6h3l5 4V5z", "M16 9l5 6M21 9l-5 6"],
   };
 
   function clock(ts) {
@@ -494,6 +501,67 @@
     // Guidance is for real conversations. The built-in demo answers by itself, so it does not need it.
     var isReal = Boolean(cfg.transport || (cfg.connection && cfg.connection.inbox));
 
+    // ----- notification sound: a soft two-note "ding" made by the browser itself (no file to host, nothing for the security policy).
+    var AudioCtor = window.AudioContext || window.webkitAudioContext;
+    var soundOn = Boolean(AudioCtor && cfg.sound && cfg.sound.enabled && isReal);
+    var audioCtx = null;
+    var lastDing = 0;
+    var muted = false;
+    try {
+      muted = window.localStorage.getItem(MUTE_KEY) === "1";
+    } catch {
+      /* storage can be blocked: sound simply starts on */
+    }
+    /** Browsers only allow sound after a click or key press, so this is called from those moments. It never throws. */
+    function unlockAudio() {
+      if (!soundOn) return;
+      try {
+        if (!audioCtx) audioCtx = new AudioCtor();
+        if (audioCtx.state === "suspended" && audioCtx.resume) audioCtx.resume();
+      } catch {
+        audioCtx = null;
+      }
+    }
+    /** Plays the ding unless muted, not yet allowed by the browser, or one just played (a burst of replies is one sound). */
+    function ding() {
+      if (!soundOn || muted || !audioCtx || audioCtx.state !== "running") return;
+      var now = Date.now();
+      if (now - lastDing < 1500) return;
+      lastDing = now;
+      try {
+        var t = audioCtx.currentTime;
+        [[880, 0], [1318.5, 0.14]].forEach(function (note) {
+          var osc = audioCtx.createOscillator();
+          var gain = audioCtx.createGain();
+          osc.type = "sine";
+          osc.frequency.value = note[0];
+          gain.gain.setValueAtTime(0.0001, t + note[1]);
+          gain.gain.exponentialRampToValueAtTime(0.12, t + note[1] + 0.015);
+          gain.gain.exponentialRampToValueAtTime(0.0001, t + note[1] + 0.4);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start(t + note[1]);
+          osc.stop(t + note[1] + 0.45);
+        });
+      } catch {
+        /* a sound must never break the chat */
+      }
+    }
+    /** The header button: switches the sound off or on, and remembers the choice in this browser. */
+    function toggleSound(btn) {
+      muted = !muted;
+      try {
+        window.localStorage.setItem(MUTE_KEY, muted ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      unlockAudio();
+      btn.setAttribute("aria-label", muted ? cfg.sound.unmuteLabel : cfg.sound.muteLabel);
+      btn.setAttribute("aria-pressed", String(muted));
+      btn.textContent = "";
+      btn.appendChild(svg(muted ? ICON.soundOff : ICON.soundOn, 18));
+    }
+
     var state = { open: false, view: "home", messages: [], typing: false, quick: [], visitor: null, unread: false, pending: null };
     try {
       var saved = JSON.parse(window.sessionStorage.getItem(STORAGE_KEY) || "null");
@@ -540,6 +608,7 @@
       render();
     }
     function open() {
+      unlockAudio();
       state.open = true;
       state.unread = false;
       zk.classList.add("open");
@@ -593,6 +662,7 @@
       agentMessage: function (reply) {
         state.quick = reply.quick || [];
         pushMessage({ from: "agent", kind: "text", text: reply.text });
+        ding();
         // After the first answer, ask for contact details once, so the team can follow up.
         if (cfg.contact.when === "after" && !state.visitor && !state.messages.some(function (x) { return x.kind === "details"; })) {
           window.setTimeout(function () {
@@ -653,6 +723,7 @@
         return;
       }
       state.quick = [];
+      unlockAudio();
       pushMessage({ from: "visitor", kind: "text", text: text });
       refreshComposer(); // the "type your question" hint only belongs before the first question
       if (state.bot) return; // the hidden form field was filled: show it as sent, deliver nothing
@@ -759,6 +830,19 @@
             el("b", { text: cfg.agent.name }),
             el("small", { text: cfg.online ? "Online · " + cfg.onlineSub.toLowerCase() : cfg.offlineTitle }),
           ]),
+          soundOn
+            ? el(
+                "button",
+                {
+                  type: "button",
+                  class: "iconbtn",
+                  "aria-label": muted ? cfg.sound.unmuteLabel : cfg.sound.muteLabel,
+                  "aria-pressed": String(muted),
+                  onclick: function (e) { toggleSound(e.currentTarget); },
+                },
+                [svg(muted ? ICON.soundOff : ICON.soundOn, 18)]
+              )
+            : null,
           el("button", { type: "button", class: "iconbtn", "aria-label": "Close chat", onclick: close }, [svg(ICON.close, 18)]),
         ])
       );
@@ -871,6 +955,7 @@
             err.textContent = "Please add " + how + " so we can reach you.";
             return;
           }
+          unlockAudio();
           if (trap.value) state.bot = true;
           state.visitor = { name: n, phone: p, email: em };
           var held = state.pending;
