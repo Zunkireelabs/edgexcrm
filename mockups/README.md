@@ -4,7 +4,8 @@ Only the versions approved by Sadin. Open the .html files in a browser (self-con
 
 | File | What | Approved version |
 |---|---|---|
-| pulse-v5.html | Pulse | v5 |
+| pulse-v5.html, pulse-v5-s1.png | Pulse | v5 |
+| processes-v3.html (+ processes-v3/*.png) | Processes (v3 includes all earlier scenes P1-P4, S1-S4, plus T1-T4) | v3 |
 | sidebar-v21.html (+ sidebar-v21/*.png) | Global shell / sidebar | v2.1 |
 | home-v2.html (+ home-v2/*.png) | Education Home (EDGEX-87) | v2 |
 | leads-table-v2-bulk.html, leads-table-v2-item3.html | Leads table v2 | as named |
