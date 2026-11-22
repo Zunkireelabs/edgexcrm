@@ -39,6 +39,18 @@
     topics: [],
     link: null, // { label, sub, url }: one highlighted action under the topics, for example "Book a consultation"
     composerPlaceholder: "Write a message…",
+    // Short guidance so a visitor is never left wondering what to do next. Only used with a real connection (the demo transport
+    // answers on its own). "{name}" becomes ", Sneha" when we know the name, and nothing when we do not. Set a text to "" to turn it off.
+    guide: {
+      // Right after the contact form (when the form comes first and no question was typed yet).
+      afterDetails: "Thanks{name}! What would you like to know? Type your question below, and the team will reply right here.",
+      // Tappable topics under that message (the same list as the home screen). false = none.
+      topics: true,
+      // Hint inside the message box while waiting for the first question.
+      composerHint: "Type your question here…",
+      // After the first message was really delivered (never shown when sending failed).
+      afterSend: "Got it! The team will reply here as soon as possible. You can keep browsing; your chat stays open.",
+    },
     // The short contact form that gives the team a way to reach the visitor (it becomes a lead).
     // when: "before" = ask first, and hold the visitor's message until the form is sent;
     //       "after"  = ask once, right after the first answer.
@@ -144,6 +156,11 @@
     } catch {
       return "";
     }
+  }
+
+  /** Puts the visitor's name into a guidance text: "Thanks{name}!" becomes "Thanks, Sneha!" or "Thanks!". */
+  function fill(text, name) {
+    return String(text).replace("{name}", name ? ", " + name : "");
   }
 
   function uid() {
@@ -315,7 +332,10 @@
     function post(text, retried) {
       return ready()
         .then(function () { return request("POST", messagesPath(), { content: text, identifier_hash: saved.hash }); })
-        .then(function () { schedule(POLL_MS); })
+        .then(function () {
+          schedule(POLL_MS);
+          if (hooks.sent) hooks.sent();
+        })
         .catch(function (err) {
           // A signature Chatwoot no longer accepts: start a fresh session once, then try again.
           if (err.status === 401 && !retried) {
@@ -471,6 +491,8 @@
     if (document.getElementById("zk-chat-host")) return window.ZunkireeChat;
     var cfg = merge(DEFAULT_CONFIG, userConfig || {});
     var transport = cfg.transport || (cfg.connection && cfg.connection.inbox ? createChatwootTransport(cfg) : createMockTransport());
+    // Guidance is for real conversations. The built-in demo answers by itself, so it does not need it.
+    var isReal = Boolean(cfg.transport || (cfg.connection && cfg.connection.inbox));
 
     var state = { open: false, view: "home", messages: [], typing: false, quick: [], visitor: null, unread: false, pending: null };
     try {
@@ -555,6 +577,11 @@
     }
 
     var hooks = {
+      /** The visitor's message really reached the team (the real transport calls this after the server accepted it). */
+      sent: function () {
+        if (!cfg.guide.afterSend || state.messages.some(function (x) { return x.guide === "afterSend"; })) return;
+        pushMessage({ from: "agent", kind: "text", guide: "afterSend", text: cfg.guide.afterSend });
+      },
       /** A plain line from the team's side that does not count as an answer (no quick replies, no details form). */
       notice: function (text) {
         pushMessage({ from: "agent", kind: "text", text: text });
@@ -576,6 +603,20 @@
     };
     transport.start(state, hooks);
 
+    /** The message box hint: a clearer one until the visitor has asked their first question. */
+    function idlePlaceholder() {
+      var asked = state.messages.some(function (x) { return x.from === "visitor"; });
+      return isReal && !asked && cfg.guide.composerHint ? cfg.guide.composerHint : cfg.composerPlaceholder;
+    }
+
+    /** Tells a visitor who just shared their details what to do next, with the topics as one-tap starters. */
+    function guideAfterDetails() {
+      if (!isReal || cfg.contact.when !== "before" || !cfg.guide.afterDetails) return;
+      if (state.messages.some(function (x) { return x.guide === "afterDetails"; })) return;
+      state.quick = cfg.guide.topics === false ? [] : (cfg.topics || []).slice(0, 6);
+      pushMessage({ from: "agent", kind: "text", guide: "afterDetails", text: fill(cfg.guide.afterDetails, state.visitor && state.visitor.name) });
+    }
+
     /** In "before" mode nothing is sent until the visitor has shared how to reach them. */
     function needsDetails() {
       return cfg.contact.when === "before" && !state.visitor;
@@ -589,7 +630,7 @@
       if (!inputEl) return;
       var waiting = needsDetails();
       inputEl.disabled = waiting;
-      inputEl.placeholder = waiting ? "Share your details to start" : cfg.composerPlaceholder;
+      inputEl.placeholder = waiting ? "Share your details to start" : idlePlaceholder();
       if (sendBtn) sendBtn.disabled = waiting || !inputEl.value.trim();
     }
     /** Puts the cursor where the visitor should type next: the form's first field, or the message box. */
@@ -613,6 +654,7 @@
       }
       state.quick = [];
       pushMessage({ from: "visitor", kind: "text", text: text });
+      refreshComposer(); // the "type your question" hint only belongs before the first question
       if (state.bot) return; // the hidden form field was filled: show it as sent, deliver nothing
       transport.send(text);
     }
@@ -723,7 +765,7 @@
       msgsEl = el("div", { class: "msgs", role: "log", "aria-label": "Conversation" });
       panel.appendChild(msgsEl);
 
-      inputEl = el("textarea", { rows: "1", placeholder: cfg.composerPlaceholder, "aria-label": "Message", maxlength: "2000" });
+      inputEl = el("textarea", { rows: "1", placeholder: idlePlaceholder(), "aria-label": "Message", maxlength: "2000" });
       sendBtn = el("button", { type: "button", class: "send", "aria-label": "Send message", disabled: true }, [svg(ICON.arrow, 18)]);
       function sync() {
         sendBtn.disabled = !inputEl.value.trim();
@@ -837,7 +879,10 @@
           renderMessages();
           refreshComposer();
           if (held) sendVisitor(held);
-          else if (!state.bot) transport.submitDetails(state.visitor);
+          else if (!state.bot) {
+            transport.submitDetails(state.visitor);
+            guideAfterDetails();
+          }
           if (inputEl) inputEl.focus();
         },
       }, kids);
@@ -859,5 +904,5 @@
     if (host) host.style.display = hidden ? "none" : "";
   }
 
-  window.ZunkireeChat = { init: init, setHidden: setHidden, version: "0.2.0" };
+  window.ZunkireeChat = { init: init, setHidden: setHidden, version: "0.2.1" };
 })();

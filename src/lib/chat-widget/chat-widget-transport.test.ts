@@ -303,3 +303,136 @@ describe("without a connection", () => {
     expect(root().textContent).toContain("Good choice");
   });
 });
+
+// Guidance: a visitor is never left wondering what to do next.
+describe("guidance for the visitor", () => {
+  const TOPICS = ["Study in the UK", "Visa help"];
+  const WITH_TOPICS = { ...CONFIG, topics: TOPICS };
+  const text = () => root().textContent ?? "";
+  // Count visible message bubbles only: the widget also keeps a hidden screen-reader line that repeats every team message.
+  const count = (needle: string) => Array.from(root().querySelectorAll(".m")).filter((m) => m.textContent?.includes(needle)).length;
+  const hint = () => q<HTMLTextAreaElement>("textarea")!.placeholder;
+  const topicButtons = () => Array.from(root().querySelectorAll(".qr button")).map((b) => b.textContent);
+
+  function openAndShareDetails(config: unknown, details = { name: "Sneha", phone: "9800000000" }) {
+    load().init(config);
+    click(q(".launcher"));
+    click(q(".start"));
+    fillForm(details);
+  }
+
+  it("right after the form, says what to do next with the visitor's name, offers the topics, and contacts nobody yet", async () => {
+    openAndShareDetails(WITH_TOPICS);
+    await flush();
+    expect(text()).toContain("Thanks, Sneha! What would you like to know? Type your question below, and the team will reply right here.");
+    expect(topicButtons()).toEqual(TOPICS);
+    expect(hint()).toBe("Type your question here…");
+    expect(calls).toHaveLength(0);
+  });
+
+  it("works without a name, with no stray comma", async () => {
+    load().init({ ...WITH_TOPICS, contact: { when: "before", defaultCountryCode: "+977", name: { show: false } } });
+    click(q(".launcher"));
+    click(q(".start"));
+    fillForm({ phone: "9800000000" });
+    await flush();
+    expect(text()).toContain("Thanks! What would you like to know?");
+  });
+
+  it("tapping a topic sends it as the first question", async () => {
+    openAndShareDetails(WITH_TOPICS);
+    await flush();
+    click(root().querySelectorAll(".qr button")[0]);
+    await flush();
+    expect(trail().some((t) => t.endsWith("/messages"))).toBe(true);
+    expect(calls.find((c) => c.url.endsWith("/messages"))!.body).toMatchObject({ content: "Study in the UK" });
+  });
+
+  it("after the first message really arrives, says so once, and the box goes back to its normal hint", async () => {
+    await chat({ name: "Sneha", phone: "9800000000" });
+    expect(count("Got it! The team will reply here as soon as possible.")).toBe(1);
+    expect(hint()).toBe("Write a message…");
+    typeAndSend("One more thing");
+    await flush();
+    expect(count("Got it! The team will reply here as soon as possible.")).toBe(1);
+  });
+
+  it("never says 'got it' when the message did not go through", async () => {
+    handler = () => ({ status: 503, json: {} });
+    await chat({ name: "Sneha", phone: "9800000000" });
+    expect(text()).toContain("We could not reach the team just now");
+    expect(text()).not.toContain("Got it!");
+  });
+
+  it("a visitor who asked first (typed or tapped before sharing details) is not asked again what they want", async () => {
+    load().init(WITH_TOPICS);
+    click(q(".launcher"));
+    click(root().querySelectorAll(".chip")[0]); // "Study in the UK" from the home screen, held until the form is sent
+    fillForm({ name: "Sneha", phone: "9800000000" });
+    await flush();
+    expect(text()).not.toContain("What would you like to know?");
+    expect(calls.find((c) => c.url.endsWith("/messages"))!.body).toMatchObject({ content: "Study in the UK" });
+    expect(count("Got it! The team will reply here as soon as possible.")).toBe(1);
+  });
+
+  it("the wording and the topics can be changed or switched off", async () => {
+    openAndShareDetails({ ...WITH_TOPICS, guide: { afterDetails: "Hello{name}. Ask away.", topics: false, composerHint: "Ask here", afterSend: "" } });
+    await flush();
+    expect(text()).toContain("Hello, Sneha. Ask away.");
+    expect(topicButtons()).toEqual([]);
+    expect(hint()).toBe("Ask here");
+    typeAndSend("Hi");
+    await flush();
+    expect(text()).not.toContain("Got it!");
+
+    document.body.innerHTML = "";
+    delete (window as unknown as { ZunkireeChat?: unknown }).ZunkireeChat;
+    window.sessionStorage.clear();
+    openAndShareDetails({ ...WITH_TOPICS, guide: { afterDetails: "" } });
+    await flush();
+    expect(text()).not.toContain("What would you like to know?");
+  });
+
+  it("stays quiet with the built-in demo (it answers by itself)", async () => {
+    openAndShareDetails({ ...WITH_TOPICS, connection: null });
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(text()).not.toContain("What would you like to know?");
+    expect(text()).not.toContain("Got it!");
+    expect(hint()).toBe("Write a message…");
+  });
+
+  it("stays quiet when the form comes after the first answer (the visitor already asked)", async () => {
+    load().init({ ...WITH_TOPICS, contact: { when: "after", defaultCountryCode: "+977" } });
+    click(q(".launcher"));
+    click(q(".start"));
+    typeAndSend("Hi");
+    await flush();
+    outgoing = [{ id: 101, message_type: 1, content: "Hello!" }];
+    await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(1000);
+    fillForm({ name: "Sneha", phone: "9800000000" });
+    await flush();
+    expect(text()).not.toContain("What would you like to know?");
+  });
+
+  it("gives a bot nothing", async () => {
+    openAndShareDetails(WITH_TOPICS, { name: "Bot", phone: "9800000000", trap: "http://spam.example" } as never);
+    await flush();
+    expect(text()).not.toContain("What would you like to know?");
+    expect(calls).toHaveLength(0);
+  });
+
+  it("does not repeat after a page reload", async () => {
+    openAndShareDetails(WITH_TOPICS);
+    await flush();
+    expect(count("What would you like to know?")).toBe(1);
+    vi.clearAllTimers();
+    document.body.innerHTML = "";
+    delete (window as unknown as { ZunkireeChat?: unknown }).ZunkireeChat;
+    load().init(WITH_TOPICS);
+    click(q(".launcher"));
+    click(q(".start"));
+    await flush();
+    expect(count("What would you like to know?")).toBe(1);
+  });
+});
