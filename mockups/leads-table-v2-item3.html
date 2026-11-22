@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leads table — mockup v2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#101112;--text:#2b2d2f;--muted:#6b6f76;--faint:#9a9ea5;--ghost:#d0d3d7;
+  --line:#e8e9eb;--line-soft:#f0f1f2;--bg:#fff;--head:#fafafa;--hover:#f6f7f9;--press:#eef0f3;--sel:#edf3ff;
+  --blue:#266df0;--blue-d:#1d5bd0;--blue-soft:#eaf1ff;
+  --good:#12805c;--warn:#b25e09;--warn-soft:#fff3e0;--bad:#c4321f;--ai:#6b4fe0;--ai-soft:#f2efff;
+  --pop-shadow:0 0 0 1px rgba(16,17,18,.06),0 8px 24px -4px rgba(16,17,18,.14),0 2px 6px rgba(16,17,18,.06);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font:500 14px/20px Inter,-apple-system,"Segoe UI",sans-serif;color:var(--ink);background:#f4f5f6;-webkit-font-smoothing:antialiased}
+.states{display:flex;gap:6px;flex-wrap:wrap;padding:10px 16px;font-size:12px;background:#101112;position:sticky;top:0;z-index:100}
+.states button{font:500 12px Inter,sans-serif;background:#26282b;color:#cfd2d6;border:0;border-radius:6px;padding:5px 10px;cursor:pointer}
+.states button.on{background:#fff;color:#101112}
+.states span{color:#8b8f96;align-self:center;margin-right:6px}
+.app{margin:16px;background:var(--bg);border:1px solid var(--line);border-radius:12px;overflow:visible;position:relative}
+svg.i{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.sm svg.i{width:14px;height:14px}
+/* controls */
+.btn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 8px;border-radius:8px;border:0;background:transparent;color:var(--ink);font:inherit;cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--hover)}
+.btn.bd{box-shadow:inset 0 0 0 1px var(--line)}
+.btn.pri{background:var(--blue);color:#fff;padding:0 10px}
+.btn.pri:hover{background:var(--blue-d)}
+.btn .c{color:var(--muted)}
+.chev{width:14px;height:14px;color:var(--faint)}
+.kbd{font:500 11px Inter;color:var(--faint);border:1px solid var(--line);border-radius:4px;padding:0 5px;line-height:16px}
+/* rows of chrome */
+.r1{display:flex;align-items:center;gap:8px;height:52px;padding:0 12px 0 16px}
+.r1 h1{font:600 16px/20px Inter;margin:0;letter-spacing:-.01em}
+.r1 .ic{width:20px;height:20px;border-radius:6px;background:var(--blue-soft);color:var(--blue);display:flex;align-items:center;justify-content:center}
+.r1 .ic svg{width:13px;height:13px}
+.pill{font:500 12px Inter;color:var(--muted);background:var(--hover);border-radius:9999px;padding:0 8px;line-height:20px;font-variant-numeric:tabular-nums}
+.sp{flex:1}
+.r2{display:flex;align-items:center;gap:2px;height:40px;padding:0 12px;border-bottom:1px solid var(--line)}
+.tab{height:40px;display:flex;align-items:center;gap:6px;padding:0 10px;color:var(--muted);cursor:pointer;position:relative}
+.tab:hover{color:var(--ink)}
+.tab.on{color:var(--ink)}
+.tab.on::after{content:"";position:absolute;left:8px;right:8px;bottom:-1px;height:2px;background:var(--ink);border-radius:2px}
+.tab .n{font:600 11px Inter;border-radius:9999px;padding:0 6px;line-height:18px;background:var(--warn-soft);color:var(--warn)}
+.tab .n.g{background:var(--hover);color:var(--muted)}
+.r3{display:flex;align-items:center;gap:8px;height:48px;padding:0 12px 0 16px;position:relative}
+.search{display:flex;align-items:center;gap:8px;height:28px;width:220px;padding:0 8px;border-radius:8px;box-shadow:inset 0 0 0 1px var(--line);color:var(--faint)}
+.search:hover{box-shadow:inset 0 0 0 1px var(--ghost)}
+.search .kbd{margin-left:auto}
+.chip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 8px;border-radius:8px;color:var(--muted);cursor:pointer;position:relative;white-space:nowrap}
+.chip:hover{background:var(--hover);color:var(--ink)}
+.chip.on{box-shadow:inset 0 0 0 1px var(--line);color:var(--ink);background:#fff}
+.chip.dash{box-shadow:inset 0 0 0 1px var(--line);border-radius:8px}
+.chip b{font-weight:500;color:var(--ink)}
+.fchip{display:inline-flex;align-items:stretch;height:28px;border-radius:8px;box-shadow:inset 0 0 0 1px var(--line);overflow:hidden;background:#fff}
+.fchip>*{display:flex;align-items:center;gap:6px;padding:0 8px;cursor:pointer}
+.fchip>*:hover{background:var(--hover)}
+.fchip>*+*{border-left:1px solid var(--line-soft)}
+.fchip .k{color:var(--muted)}
+.fchip .x{color:var(--faint);padding:0 6px}
+.dirty{display:none;align-items:center;gap:6px}
+.dirty .t{color:var(--muted);font-size:13px;margin-right:4px}
+.s-filtered .dirty,.s-values .dirty,.s-empty .dirty{display:flex}
+/* table */
+.tw{position:relative;overflow:auto;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+table{border-collapse:separate;border-spacing:0;table-layout:fixed;min-width:1468px;width:100%}
+th{height:38px;padding:0 12px;background:var(--bg);text-align:left;font-weight:500;color:var(--muted);border-bottom:1px solid var(--line);border-right:1px solid var(--line);position:sticky;top:0;z-index:2;white-space:nowrap;cursor:pointer}
+th .h{display:flex;align-items:center;gap:8px}
+th .h .i{color:var(--faint)}
+th .h .tt{color:var(--ink)}
+th .h .pin{margin-left:auto;opacity:0;color:var(--faint)}
+th:hover{background:var(--hover)}th:hover .pin{opacity:1}
+th.ai .tt,th.ai .i{color:var(--ai)}
+th.last,td.last{border-right:0}
+td{height:36px;padding:0 12px;border-bottom:1px solid var(--line);border-right:1px solid var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sc{width:44px;padding:0 0 0 14px;position:sticky;left:0;z-index:3;background:var(--bg)}
+th.sc{z-index:4}
+.sn{position:sticky;left:44px;z-index:3;background:var(--bg);box-shadow:inset -1px 0 0 var(--line)}
+th.sn{z-index:4}
+tr.rw:hover td{background:var(--hover)}
+tr.rw.sel td{background:var(--sel)}
+tr.rw.hot td{background:var(--bg)}
+tr.rw:hover td.sc,tr.rw:hover td.sn{background:var(--hover)}
+tr.rw.sel td.sc,tr.rw.sel td.sn{background:var(--sel)}
+.cb{width:16px;height:16px;border-radius:5px;box-shadow:inset 0 0 0 1.5px var(--ghost);background:#fff;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;cursor:pointer}
+.cb.on{background:var(--blue);box-shadow:none}
+.cb.on::after{content:"";width:8px;height:4px;border-left:1.8px solid #fff;border-bottom:1.8px solid #fff;transform:rotate(-45deg) translate(1px,-1px)}
+td .cb{opacity:.55}
+tr.rw:hover .cb,.anysel td .cb{opacity:1}
+.nm{position:relative;display:flex;align-items:center;gap:8px}
+.av{width:20px;height:20px;border-radius:9999px;display:inline-flex;align-items:center;justify-content:center;font:600 9px Inter;color:var(--text);background:var(--press);flex:none}
+.nm a{color:var(--ink);text-decoration:none}
+tr.rw:hover .nm a{text-decoration:underline;text-decoration-color:var(--ghost);text-underline-offset:3px}
+.acts{position:absolute;right:-4px;display:none;gap:2px;background:inherit}
+tr.rw:hover .acts{display:flex}
+.acts .btn{height:24px;width:24px;padding:0;justify-content:center;background:#fff;box-shadow:inset 0 0 0 1px var(--line)}
+.acts .open{width:auto;padding:0 8px;font-size:12px;gap:4px}
+.stg{display:inline-flex;align-items:center;gap:8px;cursor:pointer;height:24px;padding:0 6px;margin:0 -6px;border-radius:6px}
+.stg:hover{background:var(--press)}
+.dot{width:8px;height:8px;border-radius:9999px;flex:none}
+.mono{color:var(--muted);font-variant-numeric:tabular-nums}
+.lnk{color:var(--blue)}
+.lnk.bad{color:var(--bad);text-decoration:underline wavy;text-decoration-color:#e8a59b;text-underline-offset:3px}
+.orca{display:flex;align-items:center;gap:8px}
+.orca .i{color:var(--ai);width:14px;height:14px}
+.orca.hot{font-weight:500}
+.lc{display:flex;align-items:center;gap:6px}
+.lc.late{color:var(--warn)}
+.lc .dot{background:var(--warn)}
+.as{display:flex;align-items:center;gap:8px}
+.fix{display:inline-flex;align-items:center;gap:4px;margin-left:8px;font-size:12px;color:var(--ai);background:var(--ai-soft);border-radius:6px;padding:0 6px;line-height:18px;cursor:pointer}
+/* footer calc */
+tfoot td{height:36px;background:var(--head);color:var(--faint);border-bottom:0;border-top:0;font-size:13px}
+tfoot td.sc,tfoot td.sn{background:var(--head)}
+tfoot .v{color:var(--ink)}
+tfoot .ad{color:var(--faint);display:flex;align-items:center;gap:6px;cursor:pointer}
+tfoot .ad:hover{color:var(--ink)}
+.pag{display:flex;align-items:center;gap:8px;height:48px;padding:0 12px 0 16px;color:var(--muted)}
+.pag b{color:var(--ink);font-weight:500}
+/* popovers */
+.pop{position:absolute;background:#fff;border-radius:10px;box-shadow:var(--pop-shadow);z-index:50;display:none;padding:4px;font-size:14px}
+.pop .it{display:flex;align-items:center;gap:10px;height:32px;padding:0 8px;border-radius:6px;cursor:pointer;color:var(--ink)}
+.pop .it:hover,.pop .it.hv{background:var(--hover)}
+.pop .it .i{color:var(--muted)}
+.pop .it .n{margin-left:auto;color:var(--faint);font-size:12px;display:flex;align-items:center;gap:2px}
+.pop .sep{height:1px;background:var(--line-soft);margin:4px -4px}
+.pop .inp{display:flex;align-items:center;gap:8px;height:36px;padding:0 10px;color:var(--faint);border-bottom:1px solid var(--line-soft);margin:-4px -4px 4px;border-radius:10px 10px 0 0}
+.pop .lab{padding:6px 8px 2px;color:var(--faint);font-size:12px}
+.pop .hint{margin-left:auto;font-size:11px;color:var(--faint)}
+.pop .it.dn{color:var(--bad)}.pop .it.dn .i{color:var(--bad)}
+.pop .grp{padding:6px 8px 2px;font-size:12px;color:var(--faint)}
+.pop .sel2{white-space:nowrap;height:28px;border-radius:6px;box-shadow:inset 0 0 0 1px var(--line);display:flex;align-items:center;gap:8px;padding:0 8px;flex:1}
+.pop .row{display:flex;align-items:center;gap:6px;padding:3px 4px}
+.pop .x{color:var(--faint)}
+.pop .grip{color:var(--ghost);cursor:grab}
+.pop.show{display:block}
+.s-filtermenu #p-filter,.s-values #p-values,.s-sort #p-sort,.s-hdr #p-hdr,.s-cols #p-cols,.s-views #p-views{display:block}
+/* bulk + empty */
+.bulk{position:absolute;left:50%;bottom:64px;transform:translateX(-50%);display:none;align-items:center;gap:2px;background:var(--ink);color:#fff;border-radius:12px;padding:4px;box-shadow:var(--pop-shadow);z-index:60}
+.anysel .bulk{display:flex}
+.bulk .t{padding:0 12px;font-size:13px}
+.bulk button{background:transparent;border:0;color:#e6e8ea;height:28px;border-radius:8px;padding:0 10px;font:500 13px Inter;display:flex;gap:6px;align-items:center;cursor:pointer}
+.bulk button:hover{background:#2c2f33}
+.bulk .v{width:1px;height:16px;background:#3b3f44;margin:0 4px}
+.empty{display:none;padding:64px 0 72px;text-align:center;color:var(--muted)}
+.empty .big{width:40px;height:40px;border-radius:12px;background:var(--hover);margin:0 auto 12px;display:flex;align-items:center;justify-content:center;color:var(--faint)}
+.empty h3{font:600 15px Inter;color:var(--ink);margin:0 0 4px}
+.empty p{margin:0 0 14px;font-weight:400}
+.s-empty .empty{display:block}
+.s-empty table,.s-empty tfoot{display:none}
+.s-tag #p-tag{display:block}
+.toast{position:absolute;left:50%;bottom:64px;transform:translateX(-50%);display:none;align-items:center;gap:8px;background:var(--ink);color:#fff;border-radius:10px;padding:0 14px;height:36px;font-size:13px;box-shadow:var(--pop-shadow);z-index:60}
+.s-tagged .toast{display:none}
+/* EDGEX toast v1 (Attio-style): top-right stack, white card, tinted status icon, title + optional body, close X */
+.toasts{position:absolute;top:12px;right:12px;display:none;flex-direction:column;gap:8px;z-index:80;width:360px}
+.s-tagged #tst-tagged,.s-toasts #tst-all{display:flex}
+.tst{display:flex;gap:10px;align-items:flex-start;background:#fff;border-radius:10px;box-shadow:var(--pop-shadow);padding:12px 12px 12px 12px;font-size:14px}
+.tst .ti{flex:none;width:22px;height:22px;border-radius:6px;display:grid;place-items:center;margin-top:-1px}
+.tst .ti .i{width:14px;height:14px;stroke-width:2.2}
+.tst.ok .ti{background:#e9f6ef;color:#12805c;box-shadow:inset 0 0 0 1px #c9ead8}
+.tst.bad .ti{background:#fdeeec;color:#c4321f;box-shadow:inset 0 0 0 1px #f6cfc8}
+.tst.warn .ti{background:#fff3e0;color:#b25e09;box-shadow:inset 0 0 0 1px #f5dcb5}
+.tst.info .ti{background:#eaf1ff;color:#266df0;box-shadow:inset 0 0 0 1px #cfdffc}
+.tst .tb{flex:1;min-width:0}
+.tst .tt{color:var(--ink);font-weight:500;line-height:20px}
+.tst .td{color:var(--muted);line-height:20px}
+.tst .ta{display:flex;gap:6px;margin-top:8px}
+.tst .tx{flex:none;color:var(--faint);cursor:pointer;margin-top:1px}
+.tst .tx:hover{color:var(--ink)}
+.tst .bar{height:2px;background:var(--line-soft);border-radius:2px;margin-top:10px;overflow:hidden}
+.tst .bar span{display:block;height:100%;width:62%;background:var(--ghost)}
+
+.note{margin:0 16px 24px;font:400 12px/18px Inter;color:#6b6f76}
+</style></head><body>
+<div class="states" id="st"><span>States:</span></div>
+<div class="app" id="app">
+  <div class="r1">
+    <div class="ic"><svg class="i" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0M16 4.5a3.5 3.5 0 010 7M18 14a6 6 0 013.5 6"/></svg></div>
+    <h1>Leads</h1><span class="pill" id="cnt">845</span>
+    <span class="sp"></span>
+    <button class="btn bd"><svg class="i" viewBox="0 0 24 24"><path d="M12 15V4m0 0L8 8m4-4l4 4M5 14v4a2 2 0 002 2h10a2 2 0 002-2v-4"/></svg>Import / Export<svg class="i chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
+    <button class="btn pri"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Add lead</button>
+  </div>
+  <div class="r2">
+    <div class="tab on">All leads</div><div class="tab">My leads</div>
+    <div class="tab">Needs follow-up <span class="n">38</span></div>
+    <div class="tab">Applications <span class="n g">112</span></div>
+    <div class="tab" id="more">More<svg class="i chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div>
+    <span class="sp"></span>
+    <button class="btn" id="b-cols"><svg class="i" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>View settings<svg class="i chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
+  </div>
+  <div class="r3">
+    <div class="search"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>Search leads<span class="kbd">/</span></div>
+    <span class="chip on" id="b-sort"><svg class="i" viewBox="0 0 24 24"><path d="M4 7h9M4 12h6M4 17h3M17 5v14m0 0l-3-3m3 3l3-3"/></svg><span class="c" style="color:var(--muted)">Sorted by</span> <b>Newest</b></span>
+    <span id="fchips" style="display:flex;gap:8px"></span>
+    <span class="chip" id="b-filter"><svg class="i" viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Filter</span>
+    <span class="sp"></span>
+    <div class="dirty"><span class="t">Unsaved changes</span><button class="btn">Discard</button><button class="btn pri">Save for everyone<svg class="i chev" style="color:#cfe0ff" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button></div>
+  </div>
+
+  <div class="tw" id="tw">
+  <table id="t">
+    <colgroup><col style="width:44px"><col style="width:210px"><col style="width:150px"><col style="width:240px"><col style="width:150px"><col style="width:280px"><col style="width:140px"><col style="width:124px"><col style="width:130px"></colgroup>
+    <thead><tr>
+      <th class="sc"><span class="cb" id="all"></span></th>
+      <th class="sn"><div class="h"><span class="tt">Name</span><svg class="i pin" viewBox="0 0 24 24"><path d="M12 17v5M9 3h6l-1 7 3 3H7l3-3z"/></svg></div></th>
+      <th id="h-stage"><div class="h"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg><span class="tt">Stage</span><svg class="i pin" viewBox="0 0 24 24"><path d="M12 5v14m0 0l-5-5m5 5l5-5"/></svg></div></th>
+      <th class="ai"><div class="h"><svg class="i" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg><span class="tt">Next step · Orca</span><span class="pill" style="background:var(--ai-soft);color:var(--ai);font-size:11px;line-height:16px;padding:0 6px">Preview</span></div></th>
+      <th><div class="h"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0116 0"/></svg><span class="tt">Assigned to</span></div></th>
+      <th><div class="h"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg><span class="tt">Email</span></div></th>
+      <th><div class="h"><svg class="i" viewBox="0 0 24 24"><path d="M12 21s7-6.2 7-11a7 7 0 10-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg><span class="tt">Location</span></div></th>
+      <th><div class="h"><svg class="i" viewBox="0 0 24 24"><path d="M9 4L7 20M17 4l-2 16M4 9h16M3 15h16"/></svg><span class="tt">ID</span></div></th>
+      <th class="last"><div class="h"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg><span class="tt">Last contact</span></div></th>
+    </tr></thead>
+    <tbody id="tb"></tbody>
+    <tfoot><tr>
+      <td class="sc"></td><td class="sn"><span class="v" id="fc">845</span> leads</td>
+      <td><span class="v">4</span> stages</td><td><span class="v">38</span> need follow-up</td><td><span class="v">11</span> counsellors</td>
+      <td></td><td></td><td></td><td class="last"></td>
+    </tr></tfoot>
+  </table>
+  <div class="empty"><div class="big"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg></div><h3>No leads match these filters</h3><p>Try removing a filter, or check the spelling of your search.</p><button class="btn bd">Clear filters</button></div>
+  </div>
+  <div class="pag"><span id="show">Showing 1–14 of 845</span><span class="sp"></span><span>Rows per page</span><button class="btn bd">25<svg class="i chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button><button class="btn bd" style="width:28px;padding:0;justify-content:center"><svg class="i" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button><span>Page <b>1</b> of <span id="pgs">34</span></span><button class="btn bd" style="width:28px;padding:0;justify-content:center"><svg class="i" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button></div>
+
+  <!-- popovers -->
+  <div class="pop" id="p-filter" style="left:428px;top:196px;width:260px">
+    <div class="inp"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>Filter by…</div>
+    <div class="lab">Most used</div>
+    <div class="it hv"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg>Stage<span class="n">4 <svg class="i chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span></div>
+    <div class="it"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0116 0"/></svg>Assigned to<span class="n">11 <svg class="i chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span></div>
+    <div class="it"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>Last contact</div>
+    <div class="sep"></div><div class="lab">All fields</div>
+    <div class="it"><svg class="i" viewBox="0 0 24 24"><path d="M12 21s7-6.2 7-11a7 7 0 10-14 0c0 4.8 7 11 7 11z"/></svg>Location</div>
+    <div class="it"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>Email</div>
+    <div class="it"><svg class="i" viewBox="0 0 24 24"><path d="M3 12l9-9h8v8l-9 9z"/></svg>Tags</div>
+    <div class="it"><svg class="i" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>Created</div>
+  </div>
+  <div class="pop" id="p-values" style="left:520px;top:196px;width:250px">
+    <div class="inp"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>Search stages…</div>
+    <div class="it"><span class="cb"></span><span class="dot" style="background:#9a9ea5"></span>Pre-qualified<span class="n">96</span></div>
+    <div class="it"><span class="cb"></span><span class="dot" style="background:#266df0"></span>Qualified<span class="n">188</span></div>
+    <div class="it hv"><span class="cb on"></span><span class="dot" style="background:#b25e09"></span>Prospects<span class="n">449</span></div>
+    <div class="it"><span class="cb"></span><span class="dot" style="background:#12805c"></span>Applications<span class="n">112</span></div>
+  </div>
+  <div class="pop" id="p-sort" style="left:246px;top:196px;width:420px;padding:8px">
+    <div class="row"><span class="grip"><svg class="i" viewBox="0 0 24 24"><path d="M9 6h0M15 6h0M9 12h0M15 12h0M9 18h0M15 18h0" stroke-width="2.6"/></svg></span><div class="sel2">Created<svg class="i chev" style="margin-left:auto" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div><div class="sel2" style="flex:.8">Newest first<svg class="i chev" style="margin-left:auto" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div><svg class="i x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></div>
+    <div class="row"><span class="grip"><svg class="i" viewBox="0 0 24 24"><path d="M9 6h0M15 6h0M9 12h0M15 12h0M9 18h0M15 18h0" stroke-width="2.6"/></svg></span><div class="sel2">Stage<svg class="i chev" style="margin-left:auto" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div><div class="sel2" style="flex:.8">Pipeline order<svg class="i chev" style="margin-left:auto" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div><svg class="i x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></div>
+    <div class="row"><button class="btn" style="color:var(--muted)"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Add sort</button></div>
+  </div>
+  <div class="pop" id="p-hdr" style="left:300px;top:240px;width:220px">
+    <div class="it"><svg class="i" viewBox="0 0 24 24"><path d="M4 17h8M4 12h5M4 7h2M17 5v14m0-14l-3 3m3-3l3 3"/></svg>Sort ascending</div>
+    <div class="it"><svg class="i" viewBox="0 0 24 24"><path d="M4 7h8M4 12h5M4 17h2M17 5v14m0 0l-3-3m3 3l3-3"/></svg>Sort descending</div>
+    <div class="it"><svg class="i" viewBox="0 0 24 24"><path d="M4 6h16l-6 8v6l-4-2v-4z"/></svg>Filter by Stage</div>
+    <div class="sep"></div>
+    <div class="it"><svg class="i" viewBox="0 0 24 24"><path d="M12 17v5M9 3h6l-1 7 3 3H7l3-3z"/></svg>Pin column<span class="hint">⌘ P</span></div>
+    <div class="it"><svg class="i" viewBox="0 0 24 24"><path d="M5 12h14m0 0l-5-5m5 5l-5 5"/></svg>Move right</div>
+    <div class="it"><svg class="i" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>Rename column</div>
+    <div class="sep"></div>
+    <div class="it"><svg class="i" viewBox="0 0 24 24"><path d="M3 3l18 18M10 6a9 9 0 0111 6 9 9 0 01-3 3.5M6 8a9 9 0 00-3 4 9 9 0 0011 6"/></svg>Hide from view</div>
+  </div>
+  <div class="pop" id="p-cols" style="right:12px;top:128px;width:280px">
+    <div class="inp"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>Find a field…</div>
+    <div class="lab">Shown · drag to reorder</div>
+    <div class="it"><span class="grip"><svg class="i" viewBox="0 0 24 24"><path d="M9 6h0M15 6h0M9 12h0M15 12h0M9 18h0M15 18h0" stroke-width="2.6"/></svg></span>Stage<span class="n"><svg class="i" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></span></div>
+    <div class="it"><span class="grip"><svg class="i" viewBox="0 0 24 24"><path d="M9 6h0M15 6h0M9 12h0M15 12h0M9 18h0M15 18h0" stroke-width="2.6"/></svg></span>Next step · Orca<span class="n"><svg class="i" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></span></div>
+    <div class="it"><span class="grip"><svg class="i" viewBox="0 0 24 24"><path d="M9 6h0M15 6h0M9 12h0M15 12h0M9 18h0M15 18h0" stroke-width="2.6"/></svg></span>Assigned to<span class="n"><svg class="i" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></span></div>
+    <div class="it"><span class="grip"><svg class="i" viewBox="0 0 24 24"><path d="M9 6h0M15 6h0M9 12h0M15 12h0M9 18h0M15 18h0" stroke-width="2.6"/></svg></span>Email<span class="n"><svg class="i" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></span></div>
+    <div class="sep"></div><div class="lab">Hidden</div>
+    <div class="it" style="color:var(--muted)"><span style="width:14px"></span>Tag<span class="n"><svg class="i" viewBox="0 0 24 24"><path d="M3 3l18 18M10 6a9 9 0 0111 6 9 9 0 01-3 3.5M6 8a9 9 0 00-3 4 9 9 0 0011 6"/></svg></span></div>
+    <div class="it" style="color:var(--muted)"><span style="width:14px"></span>Source<span class="n"><svg class="i" viewBox="0 0 24 24"><path d="M3 3l18 18M10 6a9 9 0 0111 6 9 9 0 01-3 3.5M6 8a9 9 0 00-3 4 9 9 0 0011 6"/></svg></span></div>
+    <div class="sep"></div><div class="it"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Add custom field</div>
+  </div>
+  <div class="pop" id="p-views" style="left:480px;top:128px;width:240px">
+    <div class="inp"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>Search views…</div>
+    <div class="it">Archived</div><div class="it">Recycle bin</div><div class="it">Admizz — this week</div>
+    <div class="sep"></div><div class="it"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Create new view</div>
+  </div>
+  <div class="pop" id="p-tag" style="left:50%;transform:translateX(-50%);bottom:112px;width:300px">
+    <div class="inp" style="color:var(--ink)"><svg class="i" viewBox="0 0 24 24" style="color:var(--faint)"><path d="M3 12l9-9h8v8l-9 9z"/><circle cx="16" cy="8" r="1.5"/></svg>schol<span style="width:1px;height:16px;background:var(--ink);margin-left:-6px"></span></div>
+    <div class="lab">Add to 2 leads</div>
+    <div class="it hv"><span class="cb on"></span>scholarship<span class="n">41</span></div>
+    <div class="it"><span class="cb"></span>scholarship-2027<span class="n">6</span></div>
+    <div class="sep"></div>
+    <div class="it"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Create tag “schol”</div>
+    <div class="sep"></div>
+    <div style="display:flex;gap:6px;justify-content:flex-end;padding:4px">
+      <button class="btn">Cancel</button><button class="btn pri">Add 1 tag</button>
+    </div>
+  </div>
+  <div class="toast"><svg class="i" viewBox="0 0 24 24" style="color:#7ee2b0"><path d="M5 12l5 5 9-10"/></svg>Added “scholarship” to 2 leads</div>
+<div class="toasts" id="tst-tagged"><div class="tst ok"><span class="ti"><svg class="i" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg></span><div class="tb"><div class="tt">Tag added</div><div class="td">“scholarship” added to 2 leads</div></div><svg class="i tx" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></div></div><div class="toasts" id="tst-all"><div class="tst ok"><span class="ti"><svg class="i" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg></span><div class="tb"><div class="tt">Tag added</div><div class="td">“scholarship” added to 2 leads</div></div><svg class="i tx" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></div><div class="tst ok"><span class="ti"><svg class="i" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg></span><div class="tb"><div class="tt">2 leads archived</div> <div class="ta"><button class="btn bd">Undo</button></div></div><svg class="i tx" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></div><div class="tst bad"><span class="ti"><svg class="i" viewBox="0 0 24 24"><path d="M12 8v5M12 16.5v.5"/><path d="M10.3 3.9L2.4 18a2 2 0 001.7 3h15.8a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg></span><div class="tb"><div class="tt">Couldn’t move 3 leads</div><div class="td">You can only move leads in your branch. The other 9 moved.</div></div><svg class="i tx" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></div><div class="tst warn"><span class="ti"><svg class="i" viewBox="0 0 24 24"><path d="M12 8v5M12 16.5v.5"/><path d="M10.3 3.9L2.4 18a2 2 0 001.7 3h15.8a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg></span><div class="tb"><div class="tt">Missing requirements</div><div class="td">Please check the highlighted fields.</div></div><svg class="i tx" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></div><div class="tst info"><span class="ti"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v.5"/></svg></span><div class="tb"><div class="tt">Export started</div><div class="td">We’ll email the file when it’s ready.</div></div><svg class="i tx" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></div></div>
+  <div class="bulk"><span class="t" id="bn">2 selected</span><span class="v"></span>
+    <button>Move stage</button><button>Assign</button><button id="b-tag">Add tag</button><span class="v"></span><button style="color:#ff9a8c">Archive</button></div>
+</div>
+<p class="note" style="background:#fff7e6;padding:10px 12px;border-radius:8px;color:#5c3d00"><b>Item 3 draft (EDGEX-126 / EDGEX-127), for Sadin's approval.</b> New states: <b>Add tag picker</b> and <b>Tag added</b> (in the black bar). Changes from the approved mockup: (1) the bulk bar has no <b>Message</b> (waits for EDGEX-132); (2) the footer has no <b>9d median</b>: no database total exists for it, and building one needs a migration (new ticket); (3) the footer has no <b>Add summary</b> (Attio-style per-column calculations, a separate ticket); (5) <b>Toasts</b> (Attio style, for ALL notifications app-wide): top-right, white card, tinted status icon, title + optional one-line detail, close ✕. Success/info auto-hide after 3 s; with an Undo button 5 s; errors and warnings stay until closed (6 s minimum), and hovering pauses the timer. (4) "need follow-up" counts the existing <i>Follow-up needed</i> filter (tenant follow-up days), so it always equals that filter's result. Footer numbers cover ALL filtered leads, not just the page.</p>
+<p class="note"><b>How to read this:</b> use the black bar to flip between states. Sample data shows 14 rows although the footer says 25 per page. Hover rows, tick checkboxes, hover headers. Sizes follow Attio as measured (Inter 14px/500, 36px rows, 38px header, 28px controls, 8px radius, 1px hairlines). Icons here are placeholders — the build uses our Phosphor set. Orca column and the "Fix" suggestion are a preview of future data, not live today. The left sidebar is omitted.</p>
+<script>
+const S={Q:["Qualified","#266df0"],P:["Prospects","#b25e09"],A:["Applications","#12805c"],N:["Pre-qualified","#9a9ea5"]};
+const R=[
+["Pratima Dhital","Q","Kaman Rai","K","#e9e3fb","Call back — Sept intake",1,"pratima.dhital10@gmail.com","Nepal","ADM-17613","2d",0],
+["Neha Kumari","P","Diplov Karki","DK","#dff3e6","Send IELTS prep options",0,"nehachaubey543@gmail.com","Birgunj, Nepal","ADM-17647","9d",1],
+["Kamal Bishowkarma","P","Nikhil Mahat","NM","#fbe3f1","Qualify — budget not captured",0,"kamalbishowkarma64@gmail.com","Koholpur, Nepal","ADM-17646","1d",0],
+["Khusbu Yadav","P","Mamata Shah","MS","#dff3e6","Follow up — 2 unanswered",1,"khushbuyadav18567@gmail.com","Janakpur, Nepal","ADM-17645","12d",1],
+["Subhan Ali","A","Dikshya Lama","D","#f6ecc3","Collect passport + transcripts",1,"subhanali2020b@gmail.com","Kapilvastu, Nepal","ADM-17642","3d",0],
+["Pramisha Bhattarai","P","Amit Rai","AR","#f9d9d4","Book counselling session",0,"pramishabhattarai057@gmail.com","Kathmandu, Nepal","ADM-17643","5d",0],
+["Sneha Sah","P","Diplov Karki","DK","#dff3e6","Send IELTS prep options",0,"snehasah0023@gmail.com","Nepal","ADM-17640","15d",1],
+["Aashish Sunuwar","A","Dikshya Lama","D","#f6ecc3","Chase university offer letter",1,"ashishsunwr@gmail.com","Ramechhap, Nepal","ADM-17638","1d",0],
+["Sarika Limbu","P","Gautam Rana","GR","#e1efd5","Qualify — confirm study level",0,"sayarikalimbu@gmail.com","Kathmandu, Nepal","ADM-17635","4d",0],
+["Shruti Thakur","N","Nikhil Mahat","NM","#fbe3f1","Intro call not yet booked",0,"shrutiithakurr@gmail.com","London, Nepal","ADM-17634","2d",0],
+["Laxman Shrestha","P","Amit Rai","AR","#f9d9d4","Fix email — looks mistyped",1,"laxman45@gmil.com","Nepal","ADM-17632","7d",0,1],
+["Sunil Limbu","P","Diplov Karki","DK","#dff3e6","Send IELTS prep options",0,"sgamming07@gmail.com","काठमाडौं, Nepal","ADM-17631","10d",1],
+["Anjali Gurung","Q","Gautam Rana","GR","#e1efd5","Move to Prospects",1,"anjali.gurung@gmail.com","Pokhara, Nepal","ADM-17629","1d",0],
+["Rohan Tamang","N","Mamata Shah","MS","#dff3e6","Intro call not yet booked",0,"rohan.tamang22@gmail.com","Lalitpur, Nepal","ADM-17628","6d",0]];
+const star='<svg class="i" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg>';
+const tb=document.getElementById('tb');
+function render(filter){tb.innerHTML='';let n=0;R.forEach(r=>{if(filter&&!(r[1]==='P'&&r[2]==='Diplov Karki'))return;n++;
+const[nm,s,a,ai,ac,next,hot,m,loc,id,age,late,bad]=r;const ini=nm.split(' ').map(x=>x[0]).slice(0,2).join('');
+const tr=document.createElement('tr');tr.className='rw';
+tr.innerHTML=`<td class="sc"><span class="cb"></span></td>
+<td class="sn"><div class="nm"><span class="av">${ini}</span><a href="#">${nm}</a><span class="acts"><span class="btn open">Open <span class="kbd" style="border:0;padding:0">⌘↵</span></span><span class="btn"><svg class="i" viewBox="0 0 24 24"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 005 5L15 13l5 2v4a2 2 0 01-2 2A16 16 0 013 6a2 2 0 012-2z"/></svg></span></span></div></td>
+<td><span class="stg"><span class="dot" style="background:${S[s][1]}"></span>${S[s][0]}</span></td>
+<td><div class="orca ${hot?'hot':''}">${star}${next}</div></td>
+<td><div class="as"><span class="av" style="background:${ac}">${ai}</span>${a}</div></td>
+<td><span class="lnk ${bad?'bad':''}">${m}</span>${bad?'<span class="fix">✦ Fix</span>':''}</td><td>${loc}</td><td class="mono">${id}</td>
+<td class="last"><div class="lc ${late?'late':''}">${late?'<span class="dot"></span>':''}${age} ago</div></td>`;tb.appendChild(tr);});
+document.getElementById('pgs').textContent=filter?'9':'34';document.getElementById('cnt').textContent=filter?'212':'845';document.getElementById('fc').textContent=filter?'212':'845';
+document.getElementById('show').textContent=filter?'Showing 1–25 of 212':'Showing 1–25 of 845';}
+const app=document.getElementById('app');
+const fch={on:'<span class="fchip"><span class="k"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg>Stage</span><span style="color:var(--muted)">is</span><span><span class="dot" style="background:#b25e09"></span>Prospects</span><span class="x">✕</span></span><span class="fchip"><span class="k"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0116 0"/></svg>Assigned to</span><span style="color:var(--muted)">is</span><span>Diplov Karki</span><span class="x">✕</span></span>'};
+const states={default:'Default',views:'Views “More”',filtermenu:'Filter menu',values:'Pick values',filtered:'Filtered + unsaved bar',sort:'Sort popover',hdr:'Column menu',cols:'View settings (columns)',selected:'Rows selected',tag:'Add tag picker (NEW)',tagged:'Tag added (NEW)',toasts:'All toast types (NEW)',empty:'No results'};
+const bar=document.getElementById('st');
+Object.keys(states).forEach(k=>{const b=document.createElement('button');b.textContent=states[k];b.dataset.k=k;b.onclick=()=>go(k);bar.appendChild(b);});
+function go(k){document.body.className='';app.className='app s-'+k;document.body.classList.remove('anysel');
+ bar.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.k===k));
+ const f=['filtered','values','empty'].includes(k);render(k==='filtered'||k==='values');
+ document.getElementById('fchips').innerHTML=f?fch.on:'';
+ tb.querySelectorAll('.cb').forEach(c=>c.classList.remove('on'));
+ document.getElementById('b-filter').style.display=f?'none':'';
+ if(k==='empty'){document.getElementById('fchips').innerHTML=fch.on.replace('Diplov Karki','Diplov Karki').replace('Prospects','Pre-qualified');document.getElementById('cnt').textContent='0';document.getElementById('show').textContent='Showing 0 of 0';document.getElementById('pgs').textContent='1';}
+ if(k==='selected'||k==='tag'){const c=tb.querySelectorAll('.cb');c[1].classList.add('on');c[3].classList.add('on');sync();}
+ location.hash=k;}
+function sync(){const n=tb.querySelectorAll('.cb.on').length;document.body.classList.toggle('anysel',n>0);document.getElementById('bn').textContent=n+' selected';
+ tb.querySelectorAll('tr').forEach(t=>t.classList.toggle('sel',t.querySelector('.cb').classList.contains('on')));}
+tb.addEventListener('click',e=>{const c=e.target.closest('.cb');if(c){c.classList.toggle('on');sync();}});
+document.getElementById('all').onclick=e=>{const on=!e.currentTarget.classList.contains('on');e.currentTarget.classList.toggle('on',on);tb.querySelectorAll('.cb').forEach(c=>c.classList.toggle('on',on));sync();};
+document.getElementById('b-filter').onclick=()=>go('filtermenu');document.getElementById('b-sort').onclick=()=>go('sort');
+document.getElementById('b-cols').onclick=()=>go('cols');document.getElementById('h-stage').onclick=()=>go('hdr');document.getElementById('more').onclick=()=>go('views');document.getElementById('b-tag').onclick=()=>go('tag');
+go((location.hash||'#default').slice(1));
+</script></body></html>

@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Record preview v1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#101112;--text:#2b2d2f;--muted:#6b6f76;--faint:#9a9ea5;--ghost:#d0d3d7;
+  --line:#e8e9eb;--line-soft:#f0f1f2;--card-line:#eeeff1;--bg:#fff;--hover:#f6f7f9;--press:#eef0f3;--sel:#edf3ff;--tint:#faf9f7;
+  --blue:#266df0;--blue-d:#1d5bd0;--blue-soft:#eaf1ff;
+  --good:#12805c;--good-soft:#e7f6ef;--warn:#b25e09;--warn-soft:#fff3e0;--bad:#c4321f;
+  --l63:rgba(0,0,0,.63);--l50:rgba(0,0,0,.5);
+  --panel-shadow:0 0 0 1px rgba(28,40,64,.04),0 4px 8px -4px rgba(28,40,64,.12),0 4px 12px -2px rgba(24,41,75,.16);
+  --pop-shadow:0 0 0 1px rgba(16,17,18,.06),0 8px 24px -4px rgba(16,17,18,.14),0 2px 6px rgba(16,17,18,.06);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font:500 14px/20px Inter,-apple-system,"Segoe UI",sans-serif;color:var(--ink);background:#f4f5f6;-webkit-font-smoothing:antialiased}
+.states{display:flex;gap:6px;flex-wrap:wrap;padding:10px 16px;font-size:12px;background:#101112;position:sticky;top:0;z-index:100}
+.states button{font:500 12px Inter,sans-serif;background:#26282b;color:#cfd2d6;border:0;border-radius:6px;padding:5px 10px;cursor:pointer}
+.states button.on{background:#fff;color:#101112}
+.states span{color:#8b8f96;align-self:center;margin-right:6px}
+svg.i{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.sm{width:14px!important;height:14px!important}
+/* page behind */
+.app{margin:16px;height:720px;background:var(--bg);border:1px solid var(--line);border-radius:12px;position:relative;overflow:hidden}
+.r1{display:flex;align-items:center;gap:8px;height:52px;padding:0 12px 0 16px}
+.r1 h1{font:600 16px/20px Inter;margin:0}
+.pill{font:500 12px Inter;color:var(--muted);background:var(--hover);border-radius:9999px;padding:0 8px;line-height:20px}
+.sp{flex:1}
+.btn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 8px;border-radius:8px;border:0;background:transparent;color:var(--ink);font:inherit;cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--hover)}
+.btn.bd{box-shadow:inset 0 0 0 1px var(--line)}
+.btn.pri{background:var(--blue);color:#fff;padding:0 10px}
+.btn.ic{width:28px;padding:0;justify-content:center;color:var(--muted)}
+.btn.ic:hover{color:var(--ink)}
+.r2{display:flex;align-items:center;gap:2px;height:40px;padding:0 12px;border-bottom:1px solid var(--line)}
+.tab{height:40px;display:flex;align-items:center;gap:6px;padding:0 10px;color:var(--muted);position:relative}
+.tab.on{color:var(--ink)}
+.tab.on::after{content:"";position:absolute;left:8px;right:8px;bottom:-1px;height:2px;background:var(--ink);border-radius:2px}
+table{border-collapse:separate;border-spacing:0;table-layout:fixed;width:1400px}
+th{height:38px;padding:0 12px;text-align:left;font-weight:500;color:var(--muted);border-bottom:1px solid var(--line);border-right:1px solid var(--line);white-space:nowrap}
+td{height:36px;padding:0 12px;border-bottom:1px solid var(--line);border-right:1px solid var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+tr.sel td{background:var(--sel)}
+.nm{display:flex;align-items:center;gap:8px}
+.av{width:20px;height:20px;border-radius:9999px;display:inline-flex;align-items:center;justify-content:center;font:600 9px Inter;color:var(--text);background:var(--press);flex:none}
+.dot{width:8px;height:8px;border-radius:9999px;flex:none;display:inline-block}
+.lnk{color:var(--blue)}
+.late{color:var(--warn)}
+/* ===== preview panel ===== */
+.pv{position:absolute;top:8px;right:8px;bottom:8px;width:497px;background:#fff;border-radius:12px;box-shadow:var(--panel-shadow);display:flex;flex-direction:column;overflow:hidden;z-index:20}
+.pv-h{height:48px;flex:none;display:flex;align-items:center;gap:4px;padding:0 10px 0 12px;border-bottom:1px solid var(--line-soft)}
+.nav{width:28px;height:28px;border-radius:8px;box-shadow:inset 0 0 0 1px var(--line);display:inline-flex;align-items:center;justify-content:center;color:var(--muted);position:relative}
+.nav:hover{background:var(--hover);color:var(--ink)}
+.nav.dis{opacity:.4}
+.cnt{font:500 12px/16px Inter;color:var(--l63);margin-left:8px}
+.tip{position:absolute;top:34px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;font:500 12px/16px Inter;border-radius:6px;padding:4px 6px 4px 8px;white-space:nowrap;display:none;align-items:center;gap:8px;z-index:5}
+.tip kbd{font:500 11px Inter;border:1px solid #3a3d41;border-radius:4px;padding:0 4px;color:#cfd2d6}
+.s-tip .nav.next .tip{display:flex}
+.s-tip .pv-tabs .t:nth-of-type(3){color:var(--ink);box-shadow:inset 0 0 0 1px var(--card-line)}
+.pv-id{padding:14px 16px 0;flex:none}
+.who{display:flex;align-items:center;gap:10px}
+.who .av{width:28px;height:28px;font-size:11px}
+.who h2{margin:0;font:600 18px/24px Inter;letter-spacing:-.01em}
+.meta{display:flex;align-items:center;gap:6px;margin:6px 0 0 38px;color:var(--muted);font-size:13px;flex-wrap:wrap}
+.meta .sep{color:var(--ghost)}
+.meta .cp{color:var(--faint);display:inline-flex}
+.acts{display:flex;gap:6px;margin:12px 0 0;padding-bottom:12px}
+.pv-tabs{display:flex;align-items:flex-start;gap:4px;height:44px;padding:8px 12px 0;border-bottom:1px solid var(--line);flex:none}
+.pv-tabs .t{height:28px;display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:8px;color:var(--l63);position:relative;box-shadow:inset 0 0 0 1px transparent;transition:box-shadow .14s,background-color .14s;cursor:pointer;white-space:nowrap}
+.pv-tabs .t svg{width:16px;height:16px}
+.pv-tabs .t:hover,.pv-tabs .t.hv{color:var(--ink);box-shadow:inset 0 0 0 1px var(--card-line)}
+.pv-tabs .t.on{color:var(--ink);background:#fbfbfb;box-shadow:inset 0 0 0 1px var(--card-line)}
+.pv-tabs .t.on::after{content:"";position:absolute;left:0;right:0;bottom:-8px;height:1px;background:var(--ink)}
+.pv-tabs .t.mo{width:28px;padding:0;justify-content:center}
+.pv-tabs .n{font:500 11px/16px Inter;color:var(--muted);background:var(--hover);border-radius:4px;padding:0 5px}
+.pv-tabs .vr{width:1px;height:16px;background:var(--card-line);margin:6px 8px 0;flex:none}
+.pv-b{flex:1;overflow:auto;padding:4px 12px 16px}
+.sec{display:flex;align-items:center;height:36px;padding:0 4px;margin-top:12px}
+.sec h3{margin:0;font:500 14px/20px Inter;color:var(--l63);display:flex;align-items:center;gap:6px}
+.sec h3 .n{font:500 11px/16px Inter;color:var(--muted);background:var(--hover);border-radius:4px;padding:0 5px}
+.sec .va{margin-left:auto;font-size:13px;color:var(--muted)}
+.sec .va:hover{color:var(--ink)}
+/* highlight cards */
+.grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
+.card{height:86px;border-radius:12px;box-shadow:inset 0 0 0 1px var(--card-line);padding:10px 12px;display:flex;flex-direction:column;position:relative;cursor:default}
+.card.ed{cursor:pointer}
+.card.ed:hover,.card.hv{background:var(--tint)}
+.card .lb{display:flex;align-items:center;gap:8px;font:500 12px/16px Inter;color:var(--l63)}
+.card .lb svg{margin-left:auto;color:var(--faint);width:14px;height:14px}
+.card .vl{margin-top:auto;display:flex;align-items:center;gap:6px;font:500 14px/20px Inter;white-space:nowrap;overflow:hidden}
+.card .vl span{overflow:hidden;text-overflow:ellipsis}
+.card .sb{font:500 12px/16px Inter;color:var(--l50);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:16px}
+.card .vl.w{color:var(--warn)}
+.card .vl.g{color:var(--good)}
+.card .vl.e{color:var(--l50)}
+.card .chev{display:none;position:absolute;right:10px;bottom:12px;color:var(--faint)}
+.card.ed:hover .chev,.card.hv .chev{display:block}
+.card .add{color:var(--blue)}
+.card .lock{display:none;position:absolute;right:10px;bottom:12px;color:var(--ghost)}
+.card.ro:hover .lock{display:block}
+/* lists in boxes */
+.box{border-radius:12px;box-shadow:inset 0 0 0 1px var(--card-line);padding:4px}
+.tl{border-radius:12px;box-shadow:inset 0 0 0 1px var(--card-line);padding:9px 13px}
+.tl .ev{display:flex;align-items:center;gap:8px;height:23px;white-space:nowrap}
+.tl .ev+.ev::before{content:none}
+.tl .cn{width:16px;height:8px;display:flex;justify-content:center}
+.tl .cn::after{content:"";width:1px;height:8px;background:var(--card-line)}
+.tl .ic{width:16px;height:16px;flex:none;display:inline-flex;align-items:center;justify-content:center;font:600 7px/1 Inter;color:var(--text)}
+.tl .ic.p{border-radius:9999px;background:var(--press);box-shadow:inset 0 0 0 1px rgba(0,0,0,.06)}
+.tl .ic.s{border-radius:30%;background:#f6f7f7;box-shadow:inset 0 0 0 1px #e6e7ea;color:var(--muted)}
+.tl .ic.s svg{width:11px;height:11px}
+.tl .tx{overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
+.tl .tx b{font-weight:500}
+.tl .tx em{font-style:normal;color:var(--l63)}
+.tl .tm{font:500 12px/16px Inter;color:var(--l50);flex:none}
+.li{display:flex;align-items:center;gap:8px;height:32px;padding:0 8px;border-radius:8px;white-space:nowrap}
+.li:hover{background:var(--hover)}
+.li .av{width:18px;height:18px;font-size:8px}
+.li .tx{overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
+.li .tx b{font-weight:500}
+.li .tx em{font-style:normal;color:var(--l50)}
+.li .tm{color:var(--l50);font-size:12px;flex:none}
+.li .ck{width:14px;height:14px;border-radius:4px;box-shadow:inset 0 0 0 1.5px var(--ghost);flex:none;cursor:pointer}
+.li .ck:hover{box-shadow:inset 0 0 0 1.5px var(--good)}
+.li .due{font-size:12px;flex:none;color:var(--l50)}
+.li .due.w{color:var(--warn)}
+.chip{font:500 12px/18px Inter;border-radius:6px;padding:0 6px;flex:none}
+.chip.b{background:var(--blue-soft);color:var(--blue)}
+.chip.g{background:var(--good-soft);color:var(--good)}
+.chip.y{background:var(--warn-soft);color:var(--warn)}
+.note{padding:10px 12px}
+.note p{margin:0;color:var(--text);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.note .by{margin-top:6px;font-size:12px;color:var(--l50)}
+.foot{margin:16px 4px 0;font-size:12px;color:var(--l50);display:flex;gap:6px;flex-wrap:wrap}
+.foot .sep{color:var(--ghost)}
+/* dropdown (Attio look, EDGEX-145) */
+.dd{position:absolute;top:96px;left:0;width:280px;background:#fff;border-radius:12px;box-shadow:var(--pop-shadow);padding:4px;z-index:30;display:none}
+.s-edit .dd{display:block}
+.s-edit .grid>.card:first-child{background:var(--tint)}
+.s-edit .grid>.card:first-child .chev{display:block}
+.dd .in{display:flex;align-items:center;gap:8px;height:36px;padding:0 10px;color:var(--faint);border-bottom:1px solid var(--line-soft);margin:-4px -4px 4px}
+.dd .gp{padding:6px 8px 2px;font-size:12px;color:var(--faint)}
+.dd .it{display:flex;align-items:center;gap:8px;height:32px;padding:0 8px;border-radius:8px}
+.dd .it:hover,.dd .it.hv{background:#f6f7f7}
+.dd .it .ok{margin-left:auto;color:var(--faint)}
+/* skeleton */
+.sk{display:inline-block;height:10px;border-radius:5px;background:linear-gradient(90deg,#f0f1f2,#f6f7f8,#f0f1f2);background-size:200% 100%;animation:sh 1.2s infinite}
+@keyframes sh{to{background-position:-200% 0}}
+/* variants: hide/show by state class on body */
+.v-q [data-v]:not([data-v~=q]){display:none!important}
+.v-a [data-v]:not([data-v~=a]){display:none!important}
+.v-c [data-v]:not([data-v~=c]){display:none!important}
+.v-k [data-v]:not([data-v~=k]){display:none!important}
+.v-l [data-v]:not([data-v~=l]){display:none!important}
+/* 390 */
+.phone{display:none;margin:16px auto;width:390px;height:780px;border-radius:28px;border:8px solid #101112;overflow:hidden;position:relative;background:#fff}
+.s-m .app{display:none}.s-m .phone{display:block}
+.phone .pv{position:absolute;inset:0;width:auto;border-radius:0;box-shadow:none}
+.phone .acts .tn{width:28px;padding:0;justify-content:center}
+.phone .acts .tn span{display:none}
+.phone .grid{grid-template-columns:minmax(0,1fr)}
+.phone .card{height:74px}
+.phone .pv-tabs{overflow-x:auto;scrollbar-width:none}
+.phone .pv-tabs .t.on::after{bottom:-7px}
+.phone .pv-tabs .t{flex:none}
+.phone .meta .sep:last-of-type{display:none}
+.notes{margin:0 16px 24px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 18px;font-size:13px;color:var(--text);line-height:20px}
+.notes h4{margin:0 0 6px;font:600 13px Inter}
+.notes ul{margin:0;padding-left:18px}
+</style></head>
+<body class="v-q">
+<div class="states"><span>State</span>
+  <button class="on" data-s="v-q">1 · Admin, Qualified lead</button>
+  <button data-s="v-a">2 · Admin, Applications lead (ready)</button>
+  <button data-s="v-c">3 · Counsellor, stale + no next step</button>
+  <button data-s="v-q s-edit">4 · Editing Stage</button>
+  <button data-s="v-q s-tip">5 · J/K hint</button>
+  <button data-s="v-k">6 · Loading next record</button>
+  <button data-s="v-q s-m">7 · 390px</button>
+</div>
+
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="x" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></symbol>
+  <symbol id="up" viewBox="0 0 16 16"><path d="M4 10l4-4 4 4"/></symbol>
+  <symbol id="dn" viewBox="0 0 16 16"><path d="M4 6l4 4 4-4"/></symbol>
+  <symbol id="exp" viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M13.5 2.5L9 7M6.5 13.5h-4v-4M2.5 13.5L7 9"/></symbol>
+  <symbol id="cp" viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1 1 0 00-1-1h-6a1 1 0 00-1 1v6a1 1 0 001 1h2"/></symbol>
+  <symbol id="mail" viewBox="0 0 16 16"><rect x="2" y="3.5" width="12" height="9" rx="1.5"/><path d="M2.5 4.5L8 8.5l5.5-4"/></symbol>
+  <symbol id="wa" viewBox="0 0 16 16"><path d="M3 13.2l.8-2.6A5.5 5.5 0 118 13.5a5.5 5.5 0 01-2.6-.7L3 13.2z"/><path d="M6.2 5.8c.2-.4.6-.4.8 0l.4.9c.1.2 0 .4-.1.6l-.3.3c.3.7.9 1.3 1.6 1.6l.3-.3c.2-.1.4-.2.6-.1l.9.4c.4.2.4.6 0 .8-.6.5-1.4.6-2.1.2a5 5 0 01-2.3-2.3c-.4-.7-.3-1.5.2-2.1z"/></symbol>
+  <symbol id="ph" viewBox="0 0 16 16"><path d="M3 2.5h2.5l1.2 3-1.5 1a7 7 0 004.3 4.3l1-1.5 3 1.2V13a1 1 0 01-1 1A11 11 0 012 3.5a1 1 0 011-1z"/></symbol>
+  <symbol id="task" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="2.5"/><path d="M5.5 8l1.8 1.8L10.5 6.5"/></symbol>
+  <symbol id="note" viewBox="0 0 16 16"><path d="M4 2.5h5.5l3 3V13a.5.5 0 01-.5.5H4a.5.5 0 01-.5-.5V3a.5.5 0 01.5-.5zM9.5 2.5v3h3M6 9h4M6 11h3"/></symbol>
+  <symbol id="stage" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" stroke-dasharray="2.5 2"/></symbol>
+  <symbol id="next" viewBox="0 0 16 16"><path d="M3 8h9M9 5l3 3-3 3"/></symbol>
+  <symbol id="clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3l2 1.5"/></symbol>
+  <symbol id="user" viewBox="0 0 16 16"><circle cx="8" cy="5.5" r="2.5"/><path d="M3 13.5a5 5 0 0110 0"/></symbol>
+  <symbol id="cap" viewBox="0 0 16 16"><path d="M1.5 6L8 3l6.5 3L8 9 1.5 6zM4 7.3V11c1 1 2.5 1.5 4 1.5s3-.5 4-1.5V7.3"/></symbol>
+  <symbol id="ready" viewBox="0 0 16 16"><path d="M8 1.8l5 2v4c0 3-2.2 5.2-5 6.4-2.8-1.2-5-3.4-5-6.4v-4l5-2z"/><path d="M5.8 8l1.6 1.6 3-3"/></symbol>
+  <symbol id="lock" viewBox="0 0 16 16"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 015 0v2"/></symbol>
+  <symbol id="plus" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></symbol>
+  <symbol id="srch" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></symbol>
+  <symbol id="chk" viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7"/></symbol>
+  <symbol id="bld" viewBox="0 0 16 16"><path d="M3 13.5V3.5a1 1 0 011-1h5a1 1 0 011 1v10M10 6.5h2a1 1 0 011 1v6M2 13.5h12M5.5 5h2M5.5 7.5h2M5.5 10h2"/></symbol>
+  <symbol id="src" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5"/><path d="M2.5 8h11M8 2.5c1.5 1.5 2.3 3.4 2.3 5.5S9.5 12 8 13.5C6.5 12 5.7 10.1 5.7 8S6.5 4 8 2.5z"/></symbol>
+  <symbol id="tov" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1.5"/><rect x="9" y="2.5" width="4.5" height="4.5" rx="2.25"/><rect x="2.5" y="9" width="4.5" height="4.5" rx="1.5"/><rect x="9" y="9" width="4.5" height="4.5" rx="1.5"/></symbol>
+  <symbol id="tact" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="2.5"/><path d="M4.5 8.5h1.6l1.2-2.5 1.6 4 1.1-1.5h1.5"/></symbol>
+  <symbol id="gear" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2"/><path d="M8 2.5v1.3M8 12.2v1.3M2.5 8h1.3M12.2 8h1.3M4.1 4.1l.9.9M11 11l.9.9M4.1 11.9l.9-.9M11 5l.9-.9"/></symbol>
+  <symbol id="form" viewBox="0 0 16 16"><rect x="3.5" y="2.5" width="9" height="11" rx="1.5"/><path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3"/></symbol>
+  <symbol id="dots" viewBox="0 0 16 16"><circle cx="3.5" cy="8" r="1" fill="currentColor"/><circle cx="8" cy="8" r="1" fill="currentColor"/><circle cx="12.5" cy="8" r="1" fill="currentColor"/></symbol>
+  <symbol id="more" viewBox="0 0 16 16"><path d="M5 6.5l3 3 3-3"/></symbol>
+</svg>
+
+<template id="panel">
+<aside class="pv">
+  <div class="pv-h">
+    <button class="btn ic" title="Close (Esc)"><svg class="i"><use href="#x"/></svg></button>
+    <span class="nav" data-v="q a c k l"><svg class="i sm"><use href="#up"/></svg></span>
+    <span class="nav next"><svg class="i sm"><use href="#dn"/></svg><span class="tip">Next lead <kbd>J</kbd></span></span>
+    <span class="cnt"><span data-v="q">4</span><span data-v="a">2</span><span data-v="c">7</span><span data-v="k">5</span><span data-v="l">3</span> of <span data-v="q a k">444 in All leads</span><span data-v="c">38 in My leads</span><span data-v="l">27 in All leads</span></span>
+    <span class="sp"></span>
+    <button class="btn ic" title="Open full record"><svg class="i sm"><use href="#exp"/></svg></button>
+  </div>
+
+  <div class="pv-id">
+    <div class="who">
+      <span class="av" data-v="q">AS</span><span class="av" data-v="a">RK</span><span class="av" data-v="c">SM</span><span class="av" data-v="k">PT</span><span class="av" data-v="l">JD</span>
+      <h2><span data-v="q">Aarati Shrestha</span><span data-v="a">Rohan KC</span><span data-v="c">Sabina Maharjan</span><span data-v="k">Prakash Thapa</span><span data-v="l">James Doyle</span></h2>
+    </div>
+    <div class="meta">
+      <span data-v="q">PS-187</span><span data-v="a">PS-049</span><span data-v="c">PS-311</span><span data-v="k">PS-227</span><span data-v="l">TA-012</span>
+      <span class="sep">·</span>
+      <span data-v="q">+977 980-1234567</span><span data-v="a">+977 984-5551023</span><span data-v="c">+977 981-7770042</span><span data-v="k">+977 986-2201188</span><span data-v="l">+44 7700 900123</span>
+      <span class="cp"><svg class="i sm"><use href="#cp"/></svg></span>
+      <span class="sep">·</span>
+      <span data-v="q">aarati.s@gmail.com</span><span data-v="a">rohan.kc@gmail.com</span><span data-v="c">sabina.mhj@gmail.com</span><span data-v="k">prakash.t@gmail.com</span><span data-v="l">james@northwind.io</span>
+    </div>
+    <div class="acts">
+      <button class="btn bd"><svg class="i sm"><use href="#mail"/></svg>Email</button>
+      <button class="btn bd"><svg class="i sm"><use href="#ph"/></svg>Call</button>
+      <button class="btn bd"><svg class="i sm"><use href="#wa"/></svg>WhatsApp</button>
+      <button class="btn bd tn" title="Add task"><svg class="i sm"><use href="#task"/></svg><span>Task</span></button>
+      <button class="btn bd tn" title="Add note"><svg class="i sm"><use href="#note"/></svg><span>Note</span></button>
+    </div>
+  </div>
+
+  <nav class="pv-tabs">
+    <span class="t on"><svg class="i"><use href="#tov"/></svg>Overview</span><span class="vr"></span>
+    <span class="t"><svg class="i"><use href="#tact"/></svg>Activity</span>
+    <span class="t"><svg class="i"><use href="#task"/></svg>Tasks <span class="n"><span data-v="q">2</span><span data-v="a">1</span><span data-v="c">0</span><span data-v="k">–</span><span data-v="l">1</span></span></span>
+    <span class="t"><svg class="i"><use href="#note"/></svg>Notes <span class="n"><span data-v="q">3</span><span data-v="a">5</span><span data-v="c">1</span><span data-v="k">–</span><span data-v="l">2</span></span></span>
+    <span class="t mo" data-v="q a c k" title="More"><svg class="i"><use href="#dots"/></svg></span>
+  </nav>
+
+  <div class="pv-b">
+    <div class="sec"><h3>Highlights</h3></div>
+    <div class="grid" style="position:relative">
+      <!-- 1 Stage -->
+      <div class="card ed" data-v="q a c k">
+        <div class="lb">Stage<svg class="i"><use href="#stage"/></svg></div>
+        <div class="vl" data-v="q k"><i class="dot" style="background:#5b6cf0"></i><span>Qualified · Docs pending</span></div>
+        <div class="vl" data-v="a"><i class="dot" style="background:#22a06b"></i><span>Applications · Submitted</span></div>
+        <div class="vl" data-v="c"><i class="dot" style="background:#7c6cf0"></i><span>Pre-qualified · Contacted</span></div>
+        <div class="sb"><span data-v="q k">6 days in stage</span><span data-v="a">2 days in stage</span><span data-v="c">19 days in stage</span></div>
+        <svg class="i sm chev"><use href="#dn"/></svg>
+      </div>
+      <div class="card ed" data-v="l">
+        <div class="lb">Status<svg class="i"><use href="#stage"/></svg></div>
+        <div class="vl"><i class="dot" style="background:#e0a106"></i><span>Proposal sent</span></div>
+        <div class="sb">Sales pipeline · 4 days</div>
+        <svg class="i sm chev"><use href="#dn"/></svg>
+      </div>
+      <!-- 2 Next step -->
+      <div class="card ed" data-v="q a l">
+        <div class="lb">Next step<svg class="i"><use href="#next"/></svg></div>
+        <div class="vl"><span data-v="q">Call about IELTS date</span><span data-v="a">Send CAS documents</span><span data-v="l">Follow up on proposal</span></div>
+        <div class="sb"><span data-v="q">Tomorrow · Binod Rai</span><span data-v="a">Fri 14 Nov · Gita Karki</span><span data-v="l">Today · Sam Lee</span></div>
+      </div>
+      <div class="card ed" data-v="c">
+        <div class="lb">Next step<svg class="i"><use href="#next"/></svg></div>
+        <div class="vl w"><span>No next step</span></div>
+        <div class="sb add">+ Add a task</div>
+      </div>
+      <div class="card" data-v="k">
+        <div class="lb">Next step<svg class="i"><use href="#next"/></svg></div>
+        <div class="vl"><i class="sk" style="width:140px"></i></div>
+        <div class="sb"><i class="sk" style="width:90px;height:8px"></i></div>
+      </div>
+      <!-- 3 Last touch -->
+      <div class="card" data-v="q a l">
+        <div class="lb">Last touch<svg class="i"><use href="#clock"/></svg></div>
+        <div class="vl"><span data-v="q">3 days ago</span><span data-v="a">Yesterday</span><span data-v="l">4 days ago</span></div>
+        <div class="sb"><span data-v="q">Call · Binod Rai</span><span data-v="a">Email · Gita Karki</span><span data-v="l">Email · Sam Lee</span></div>
+      </div>
+      <div class="card" data-v="c">
+        <div class="lb">Last touch<svg class="i"><use href="#clock"/></svg></div>
+        <div class="vl w"><span>12 days ago</span></div>
+        <div class="sb">Call · You · over your 7-day follow-up</div>
+      </div>
+      <div class="card" data-v="k">
+        <div class="lb">Last touch<svg class="i"><use href="#clock"/></svg></div>
+        <div class="vl"><span>6 days ago</span></div>
+        <div class="sb"><i class="sk" style="width:110px;height:8px"></i></div>
+      </div>
+      <!-- 4 Counsellor -->
+      <div class="card ed" data-v="q a k">
+        <div class="lb">Counsellor<svg class="i"><use href="#user"/></svg></div>
+        <div class="vl"><span class="av" data-v="q k">BR</span><span class="av" data-v="a">GK</span><span><span data-v="q k">Binod Rai</span><span data-v="a">Gita Karki</span></span></div>
+        <div class="sb">Putalisadak branch</div>
+        <svg class="i sm chev"><use href="#dn"/></svg>
+      </div>
+      <div class="card ro" data-v="c" title="Only managers can reassign">
+        <div class="lb">Counsellor<svg class="i"><use href="#user"/></svg></div>
+        <div class="vl"><span class="av">BR</span><span>You</span></div>
+        <div class="sb">Putalisadak branch</div>
+        <svg class="i sm lock"><use href="#lock"/></svg>
+      </div>
+      <div class="card ed" data-v="l">
+        <div class="lb">Owner<svg class="i"><use href="#user"/></svg></div>
+        <div class="vl"><span class="av">SL</span><span>Sam Lee</span></div>
+        <div class="sb">Sales</div>
+        <svg class="i sm chev"><use href="#dn"/></svg>
+      </div>
+      <!-- 5 Study plan -->
+      <div class="card" data-v="q a c k">
+        <div class="lb">Study plan<svg class="i"><use href="#cap"/></svg></div>
+        <div class="vl"><span><span data-v="q k">Australia, UK · Feb 2027</span><span data-v="a">Canada · Sep 2026</span><span data-v="c">Japan · intake not set</span></span></div>
+        <div class="sb"><span data-v="q k">Master's · IT · IELTS 6.5</span><span data-v="a">Bachelor's · Business · PTE 62</span><span data-v="c">Language course · no test yet</span></div>
+      </div>
+      <div class="card" data-v="l">
+        <div class="lb">Company<svg class="i"><use href="#bld"/></svg></div>
+        <div class="vl"><span>Northwind Labs</span></div>
+        <div class="sb">Head of Ops</div>
+      </div>
+      <!-- 6 Readiness -->
+      <div class="card" data-v="q">
+        <div class="lb">Ready to apply<svg class="i"><use href="#ready"/></svg></div>
+        <div class="vl w"><span>2 missing</span></div>
+        <div class="sb">Passport number · Signed consent</div>
+      </div>
+      <div class="card" data-v="a">
+        <div class="lb">Ready to apply<svg class="i"><use href="#ready"/></svg></div>
+        <div class="vl g"><svg class="i sm"><use href="#chk"/></svg><span>Ready</span></div>
+        <div class="sb">Consent signed 3 Nov · Pre-app fee paid</div>
+      </div>
+      <div class="card" data-v="c">
+        <div class="lb">Ready to apply<svg class="i"><use href="#ready"/></svg></div>
+        <div class="vl w"><span>5 missing</span></div>
+        <div class="sb">Date of birth · Address · +3 more</div>
+      </div>
+      <div class="card" data-v="k">
+        <div class="lb">Ready to apply<svg class="i"><use href="#ready"/></svg></div>
+        <div class="vl"><i class="sk" style="width:70px"></i></div>
+        <div class="sb"><i class="sk" style="width:130px;height:8px"></i></div>
+      </div>
+      <div class="card" data-v="l">
+        <div class="lb">Source<svg class="i"><use href="#src"/></svg></div>
+        <div class="vl"><span>Website form</span></div>
+        <div class="sb">Added 2 Nov</div>
+      </div>
+
+      <!-- stage dropdown -->
+      <div class="dd">
+        <div class="in"><svg class="i sm"><use href="#srch"/></svg>Search stages…</div>
+        <div class="gp">Pre-qualified</div>
+        <div class="it"><i class="dot" style="background:#7c6cf0"></i>New</div>
+        <div class="it"><i class="dot" style="background:#7c6cf0"></i>Contacted</div>
+        <div class="gp">Qualified</div>
+        <div class="it"><i class="dot" style="background:#5b6cf0"></i>Interested</div>
+        <div class="it hv"><i class="dot" style="background:#5b6cf0"></i>Docs pending<svg class="i sm ok"><use href="#chk"/></svg></div>
+        <div class="gp">Prospects</div>
+        <div class="it"><i class="dot" style="background:#e07a1f"></i>Fee paid</div>
+        <div class="gp">Applications</div>
+        <div class="it"><i class="dot" style="background:#22a06b"></i>Submitted</div>
+      </div>
+    </div>
+
+    <!-- Applications (only when count > 0) -->
+    <div data-v="a">
+      <div class="sec"><h3>Applications <span class="n">2</span></h3><span class="va">View all</span></div>
+      <div class="box">
+        <div class="li"><span class="tx"><b>University of Toronto</b> <em>· BBA</em></span><span class="chip g">Offer</span></div>
+        <div class="li"><span class="tx"><b>Seneca College</b> <em>· Business Admin</em></span><span class="chip b">Submitted</span></div>
+      </div>
+    </div>
+
+    <div data-v="q a c l">
+      <div class="sec"><h3>Activity</h3><span class="va">View all</span></div>
+      <div class="tl">
+        <div class="ev" data-v="q"><span class="ic p">BR</span><span class="tx"><b>Binod Rai</b> <em>logged a call · "wants Feb intake"</em></span><span class="tm">3d</span></div>
+        <div class="cn" data-v="q"></div>
+        <div class="ev" data-v="q"><span class="ic p">BR</span><span class="tx"><b>Binod Rai</b> <em>moved to</em> Qualified</span><span class="tm">6d</span></div>
+        <div class="cn" data-v="q"></div>
+        <div class="ev" data-v="q"><span class="ic s"><svg class="i"><use href="#form"/></svg></span><span class="tx"><b>Facebook form</b> <em>created the lead</em></span><span class="tm">10 Oct</span></div>
+        <div class="ev" data-v="a"><span class="ic p">GK</span><span class="tx"><b>Gita Karki</b> <em>emailed · "Offer letter from UofT"</em></span><span class="tm">1d</span></div>
+        <div class="cn" data-v="a"></div>
+        <div class="ev" data-v="a"><span class="ic p">GK</span><span class="tx"><b>Gita Karki</b> <em>moved to</em> Applications</span><span class="tm">2d</span></div>
+        <div class="cn" data-v="a"></div>
+        <div class="ev" data-v="a"><span class="ic p">RK</span><span class="tx"><b>Rohan KC</b> <em>signed the consent</em></span><span class="tm">3 Nov</span></div>
+        <div class="ev" data-v="c"><span class="ic p">BR</span><span class="tx"><b>You</b> <em>logged a call · no answer</em></span><span class="tm">12d</span></div>
+        <div class="cn" data-v="c"></div>
+        <div class="ev" data-v="c"><span class="ic s"><svg class="i"><use href="#form"/></svg></span><span class="tx"><b>Website form</b> <em>created the lead</em></span><span class="tm">23 Oct</span></div>
+        <div class="ev" data-v="l"><span class="ic p">SL</span><span class="tx"><b>Sam Lee</b> <em>sent the proposal</em></span><span class="tm">4d</span></div>
+        <div class="cn" data-v="l"></div>
+        <div class="ev" data-v="l"><span class="ic p">SL</span><span class="tx"><b>Sam Lee</b> <em>logged a meeting</em></span><span class="tm">8d</span></div>
+      </div>
+    </div>
+    <div data-v="k">
+      <div class="sec"><h3>Activity</h3><span class="va">View all</span></div>
+      <div class="tl"><div class="ev"><i class="sk" style="width:60%"></i></div><div class="cn"></div><div class="ev"><i class="sk" style="width:45%"></i></div><div class="cn"></div><div class="ev"><i class="sk" style="width:52%"></i></div></div>
+    </div>
+
+    <div data-v="c">
+      <div class="sec"><h3>Tasks <span class="n">0</span></h3><span class="va"><svg class="i sm"><use href="#plus"/></svg></span></div>
+    </div>
+    <div data-v="q a l">
+      <div class="sec"><h3>Tasks <span class="n"><span data-v="q">2</span><span data-v="a">1</span><span data-v="l">1</span></span></h3><span class="va"><svg class="i sm"><use href="#plus"/></svg></span></div>
+      <div class="box">
+        <div class="li" data-v="q"><span class="ck"></span><span class="tx">Call about IELTS date</span><span class="due">Tomorrow</span></div>
+        <div class="li" data-v="q"><span class="ck"></span><span class="tx">Collect passport copy</span><span class="due w">Overdue 2d</span></div>
+        <div class="li" data-v="a"><span class="ck"></span><span class="tx">Send CAS documents</span><span class="due">Fri 14 Nov</span></div>
+        <div class="li" data-v="l"><span class="ck"></span><span class="tx">Follow up on proposal</span><span class="due">Today</span></div>
+      </div>
+    </div>
+
+    <div data-v="q a c l">
+      <div class="sec"><h3>Latest note</h3><span class="va">View all</span></div>
+      <div class="box note">
+        <p data-v="q">Wants Feb intake in Sydney or Melbourne. Has IELTS 6.5 (L6 R7 W6 S6.5). Father will sponsor; asked about part-time work rules.</p>
+        <p data-v="a">UofT offer is conditional on final transcript. Student prefers UofT over Seneca; deposit due 28 Nov.</p>
+        <p data-v="c">Interested in Japan language school, April intake. Asked to call back after his exams.</p>
+        <p data-v="l">Budget approved in principle; wants a phased rollout starting January.</p>
+        <div class="by"><span data-v="q">Binod Rai · 3 days ago</span><span data-v="a">Gita Karki · yesterday</span><span data-v="c">You · 12 days ago</span><span data-v="l">Sam Lee · 4 days ago</span></div>
+      </div>
+    </div>
+
+    <div class="foot" data-v="q a c">
+      <span data-v="q">Facebook form</span><span data-v="a">Walk-in</span><span data-v="c">Website form</span><span class="sep">·</span>
+      <span data-v="q">Added 10 Oct 2026</span><span data-v="a">Added 21 Sep 2026</span><span data-v="c">Added 23 Oct 2026</span><span class="sep">·</span>
+      <span data-v="q">Kathmandu</span><span data-v="a">Pokhara</span><span data-v="c">Lalitpur</span>
+    </div>
+  </div>
+</aside>
+</template>
+
+<div class="app">
+  <div class="r1"><h1>Leads</h1><span class="pill">444</span><span class="sp"></span><button class="btn bd">Export</button><button class="btn pri">+ Add lead</button></div>
+  <div class="r2"><span class="tab on">All leads</span><span class="tab">My leads</span><span class="tab">Applications</span><span class="tab">More</span></div>
+  <table>
+    <thead><tr><th style="width:44px"></th><th style="width:220px">Name</th><th style="width:170px">Stage</th><th style="width:160px">Assigned to</th><th style="width:240px">Email</th><th style="width:120px">Location</th><th style="width:100px">ID</th><th>Last activity</th></tr></thead>
+    <tbody>
+      <tr><td></td><td><span class="nm"><span class="av">PT</span>Prakash Thapa</span></td><td><i class="dot" style="background:#22a06b"></i> Applications</td><td>Gita Karki</td><td class="lnk">prakash.t@gmail.com</td><td>Nepal</td><td>PS-227</td><td class="late">10d since touch</td></tr>
+      <tr><td></td><td><span class="nm"><span class="av">RK</span>Rohan KC</span></td><td><i class="dot" style="background:#22a06b"></i> Applications</td><td>Gita Karki</td><td class="lnk">rohan.kc@gmail.com</td><td>Nepal</td><td>PS-049</td><td>Yesterday</td></tr>
+      <tr><td></td><td><span class="nm"><span class="av">NB</span>Nisha Bhandari</span></td><td><i class="dot" style="background:#7c6cf0"></i> Pre-qualified</td><td>Binod Rai</td><td class="lnk">nisha.b@gmail.com</td><td>Nepal</td><td>PS-361</td><td class="late">Never touched</td></tr>
+      <tr class="sel"><td></td><td><span class="nm"><span class="av">AS</span>Aarati Shrestha</span></td><td><i class="dot" style="background:#5b6cf0"></i> Qualified</td><td>Binod Rai</td><td class="lnk">aarati.s@gmail.com</td><td>Nepal</td><td>PS-187</td><td>3d ago</td></tr>
+      <tr><td></td><td><span class="nm"><span class="av">SM</span>Sabina Maharjan</span></td><td><i class="dot" style="background:#7c6cf0"></i> Pre-qualified</td><td>Binod Rai</td><td class="lnk">sabina.mhj@gmail.com</td><td>Nepal</td><td>PS-311</td><td class="late">12d since touch</td></tr>
+      <tr><td></td><td><span class="nm"><span class="av">DG</span>Dipesh Gurung</span></td><td><i class="dot" style="background:#5b6cf0"></i> Qualified</td><td>Dipa Gurung</td><td class="lnk">dipesh.g@gmail.com</td><td>Nepal</td><td>PS-404</td><td>7d ago</td></tr>
+      <tr><td></td><td><span class="nm"><span class="av">FA</span>Farhan Ali</span></td><td><i class="dot" style="background:#e07a1f"></i> Prospects</td><td>Farhan Ali</td><td class="lnk">farhan.a@gmail.com</td><td>Nepal</td><td>PS-203</td><td>8d ago</td></tr>
+      <tr><td></td><td><span class="nm"><span class="av">KT</span>Kiran Tamang</span></td><td><i class="dot" style="background:#7c6cf0"></i> Pre-qualified</td><td>Asha Tamang</td><td class="lnk">kiran.t@gmail.com</td><td>Nepal</td><td>PS-099</td><td>2d ago</td></tr>
+    </tbody>
+  </table>
+  <div id="slotA"></div>
+</div>
+<div class="phone"><div id="slotB"></div></div>
+
+<div class="notes">
+  <h4>What this mockup decides (EDGEX-149)</h4>
+  <ul>
+    <li><b>Frame:</b> a floating card 497px wide, 8px in from the table edges, 12px corners, Attio's shadow. It covers the table instead of squeezing it; the selected row stays tinted. Esc closes. Expand opens the full record.</li>
+    <li><b>Navigation:</b> previous/next buttons plus K/J, and "n of N in &lt;view&gt;" (N is the server total). At the edge of a page it fetches the next page instead of stopping.</li>
+    <li><b>Highlights (education):</b> Stage · status, Next step, Last touch, Counsellor, Study plan (countries · intake, then level · course · best test score), Ready to apply. "Ready to apply" uses exactly the same check as moving a lead into Applications, so the two can never disagree.</li>
+    <li><b>Amber only means "act":</b> no next step, last touch past the tenant's follow-up threshold, missing fields for applying, overdue tasks. Nothing else is coloured.</li>
+    <li><b>Edit in place:</b> Stage (stage + status picker, Attio dropdown from Dialogs v1), Counsellor (managers, or people whose role lets them assign leads; others see a lock on hover), Next step (adds a task). Other cards are read-only and open the full record.</li>
+    <li><b>Quick actions:</b> Email, Call (tel:), WhatsApp (opens the counsellor's own WhatsApp via wa.me, same as the lead page's contact card today; nothing is sent by EdgeX), Task, Note. Task checkboxes complete the task in place.</li>
+    <li><b>Intake:</b> from the lead's form answer (preferred intake) or, once applications exist, the earliest application intake. "Intake not set" is shown plainly because it is the deadline driver.</li>
+    <li><b>Orca later (EDGEX-118):</b> one line above Highlights is reserved for Orca's suggested next step. Not built in this round.</li>
+    <li><b>Tabs (Attio, measured):</b> 28px items, 8px radius, 16px icon + label 14/20/500. Inactive rgba(0,0,0,.63) with no box. Hover: ink + 1px #eeeff1 ring. Active: ink, #fbfbfb fill, 1px #eeeff1 ring, and a 1px ink underline the full width of the tab sitting on the row's bottom border. State 5 shows a hovered Activity tab.</li>
+    <li><b>Activity timeline (Attio, measured):</b> 16px avatars — people round, system/forms rounded-square (30%) with an icon; rows 23px joined by a 1px × 8px #eeeff1 line centred under the avatar; verb 63% grey; time 12px 50% grey.</li>
+    <li><b>Empty states (Attio):</b> Activity is never empty — the lead's creation is always an event ("{source or person} created the lead", from <code>created_at</code> when no audit row exists). Tasks always shows its header; with no open tasks it is just "Tasks 0" + "+" and no box (state 3). Applications and Latest note stay hidden when empty.</li>
+    <li><b>Tabs list:</b> Overview, Activity, Tasks, Notes. the "···" More button (28×28 icon-only, same tab style, tooltip "More") opens Applications, Documents and Check-ins in the full record.</li>
+    <li><b>Loading while stepping with J/K:</b> name, stage, counsellor and study plan come from the table row instantly; only Next step, Last touch detail, Ready to apply and the lists show skeletons.</li>
+    <li><b>Education only:</b> the new preview is for education_consultancy tenants. Other industries keep today's panel unchanged (no new design for them); the legacy-tenant check only confirms nothing changed there.</li>
+    <li><b>Dropped from today's panel:</b> the old Status badge, Checklist, the big Created/Source/Location fields (now one muted footer line), uppercase labels, the duplicate "View record".</li>
+  </ul>
+</div>
+
+<script>
+const tpl=document.getElementById('panel');
+document.getElementById('slotA').appendChild(tpl.content.cloneNode(true));
+document.getElementById('slotB').appendChild(tpl.content.cloneNode(true));
+document.querySelectorAll('.states button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.states button').forEach(x=>x.classList.remove('on'));b.classList.add('on');
+  document.body.className=b.dataset.s;
+  const sel=document.querySelector('tr.sel');sel&&sel.classList.remove('sel');
+  const map={'v-q':3,'v-a':1,'v-c':4,'v-k':0,'v-l':-1};const k=b.dataset.s.split(' ')[0];
+  if(map[k]>=0)document.querySelectorAll('tbody tr')[map[k]].classList.add('sel');
+});
+</script>
+</body></html>

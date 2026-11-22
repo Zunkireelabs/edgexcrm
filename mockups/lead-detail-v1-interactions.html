@@ -1,0 +1,699 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lead detail v1 interactions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#101112;--text:#2b2d2f;--muted:#6b6f76;--faint:#9a9ea5;--ghost:#d0d3d7;
+  --line:#e8e9eb;--line-soft:#f0f1f2;--card-line:#eeeff1;--bg:#fff;--canvas:#f7f7f8;--hover:#f6f7f9;--press:#eef0f3;--sel:#edf3ff;--tint:#faf9f7;
+  --blue:#266df0;--blue-d:#1d5bd0;--blue-soft:#eaf1ff;
+  --good:#12805c;--good-soft:#e7f6ef;--warn:#b25e09;--warn-soft:#fff3e0;--bad:#c4321f;
+  --l63:rgba(0,0,0,.63);--l50:rgba(0,0,0,.5);
+  --s-pre:#6366f1;--s-qual:#3b82f6;--s-pros:#f97316;--s-app:#22c55e;
+  --pop-shadow:0 0 0 1px rgba(16,17,18,.06),0 8px 24px -4px rgba(16,17,18,.14),0 2px 6px rgba(16,17,18,.06);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font:500 14px/20px Inter,-apple-system,"Segoe UI",sans-serif;color:var(--ink);background:#e9eaec;-webkit-font-smoothing:antialiased}
+.states{display:flex;gap:6px;flex-wrap:wrap;padding:10px 16px;background:#101112;position:sticky;top:0;z-index:100}
+.states button{font:500 12px Inter,sans-serif;background:#26282b;color:#cfd2d6;border:0;border-radius:6px;padding:5px 10px;cursor:pointer}
+.states button.on{background:#fff;color:#101112}
+.states span{color:#8b8f96;align-self:center;margin-right:6px;font-size:12px}
+.note{max-width:1502px;margin:14px 16px 0;font:400 13px/20px Inter;color:#3a3d41}
+.note b{font-weight:600;color:var(--ink)}
+.note ul{margin:4px 0 0;padding-left:18px}
+.scene{display:none;padding:12px 16px 40px;overflow-x:auto}
+.scene.on{display:block}
+svg.i{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.sm{width:14px!important;height:14px!important}
+.xs{width:12px!important;height:12px!important}
+
+/* ===== app shell ===== */
+.frame{background:var(--canvas);border-radius:12px;display:flex;overflow:hidden;box-shadow:0 0 0 1px #dcdee1;position:relative}
+.side{width:240px;flex:none;padding:10px 8px;display:flex;flex-direction:column;gap:1px;font-size:14px}
+.side .logo{display:flex;align-items:center;justify-content:space-between;height:32px;padding:0 8px 0 10px;font:600 16px Inter;letter-spacing:-.01em}
+.side .logo em{font-style:normal;color:var(--blue);font-weight:500}
+.side .sbx{display:flex;align-items:center;gap:8px;height:30px;margin:6px 0 8px;padding:0 8px;border-radius:8px;background:#fff;box-shadow:inset 0 0 0 1px var(--line);color:var(--muted)}
+.side .sbx kbd{margin-left:auto;font:500 11px Inter;color:var(--faint)}
+.side .it{display:flex;align-items:center;gap:8px;height:28px;padding:0 8px;border-radius:8px;color:var(--text)}
+.side .it.on{background:#eceef0;color:var(--ink)}
+.side .gh{height:28px;display:flex;align-items:center;padding:0 8px;margin-top:8px;font:500 12px Inter;color:var(--faint)}
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.top{height:44px;flex:none;display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:0 12px}
+.top .bell{width:28px;height:28px;border-radius:8px;box-shadow:inset 0 0 0 1px var(--line);display:flex;align-items:center;justify-content:center;background:#fff;color:var(--muted)}
+.top .me{display:flex;align-items:center;gap:6px;height:28px;padding:0 8px 0 4px;border-radius:8px;box-shadow:inset 0 0 0 1px var(--line);background:#fff}
+.top .me .av{width:20px;height:20px;background:var(--ink);color:#fff}
+.card-main{flex:1;min-height:0;margin:0 8px 8px 0;background:#fff;border-radius:12px;box-shadow:0 0 0 1px var(--line);display:flex;flex-direction:column;overflow:hidden}
+
+/* ===== record header strip ===== */
+.rh{height:48px;flex:none;display:flex;align-items:center;gap:4px;padding:0 12px;border-bottom:1px solid var(--line)}
+.btn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 8px;border-radius:8px;border:0;background:transparent;color:var(--ink);font:inherit;cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--hover)}
+.btn.bd{box-shadow:inset 0 0 0 1px var(--line);background:#fff}
+.btn.pri{background:var(--blue);color:#fff;padding:0 10px}
+.btn.ic{width:28px;padding:0;justify-content:center;color:var(--muted)}
+.btn.ic.bd{color:var(--text)}
+.btn.dis{opacity:.4;cursor:not-allowed}
+.nav{width:28px;height:28px;border-radius:8px;box-shadow:inset 0 0 0 1px var(--line);display:inline-flex;align-items:center;justify-content:center;color:var(--muted);background:#fff}
+.crumb{display:flex;align-items:center;gap:6px;color:var(--l63);font-size:14px}
+.crumb b{color:var(--ink);font-weight:500}
+.crumb .sl{color:var(--ghost)}
+.cnt{font:500 12px/16px Inter;color:var(--l63);margin-left:6px}
+.sp{flex:1}
+.vr{width:1px;height:16px;background:var(--line);margin:0 6px;flex:none}
+
+/* ===== 3 columns ===== */
+.cols{flex:1;min-height:0;display:flex}
+.col{min-height:0;overflow:hidden}
+.lc{width:320px;flex:none;border-right:1px solid var(--line);display:flex;flex-direction:column}
+.mc{flex:1;min-width:0;display:flex;flex-direction:column}
+.rc{width:280px;flex:none;border-left:1px solid var(--line);padding:4px 12px 16px;overflow:hidden}
+.scroll{flex:1;min-height:0;overflow:hidden}
+
+/* left: identity */
+.idb{padding:16px 16px 12px}
+.who{display:flex;align-items:center;gap:10px}
+.av{border-radius:9999px;display:inline-flex;align-items:center;justify-content:center;font:600 9px Inter;color:var(--text);background:var(--press);flex:none;width:20px;height:20px}
+.who .av{width:32px;height:32px;font-size:12px;background:#e8eefc;color:#1f3f8f}
+.who h1{margin:0;font:600 18px/24px Inter;letter-spacing:-.01em}
+.idl{display:flex;flex-direction:column;gap:2px;margin:10px 0 0;color:var(--text);font-size:13px}
+.idl .r{display:flex;align-items:center;gap:8px;height:24px;color:var(--text)}
+.idl .r svg{color:var(--faint)}
+.idl .r .cp{margin-left:auto;color:var(--faint);width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;border-radius:6px}
+.idl .r .cp:hover{background:var(--hover);color:var(--ink)}
+.idl .r .v{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.idl .r .mono{font-variant-numeric:tabular-nums}
+.idchip{font:500 12px/18px Inter;color:var(--muted);background:var(--hover);border-radius:6px;padding:0 6px}
+.acts{display:flex;gap:6px;margin-top:12px}
+.acts .btn.bd{flex:none}
+
+/* left: stage card */
+.stg{margin:0 12px;padding:12px;border-radius:12px;box-shadow:inset 0 0 0 1px var(--card-line)}
+.stg-h{display:flex;align-items:center;gap:8px}
+.stg-h .lb{font:500 12px/16px Inter;color:var(--l63)}
+.chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 6px 0 8px;border-radius:8px;box-shadow:inset 0 0 0 1px var(--line);font:500 13px Inter;background:#fff;white-space:nowrap}
+.chip .dot{width:8px;height:8px}
+.chip svg{color:var(--faint)}
+.dot{width:8px;height:8px;border-radius:9999px;display:inline-block;flex:none}
+.seg{display:grid;grid-template-columns:76px 60px 62px 1fr;gap:2px;margin-top:10px}
+.seg i{display:block;height:4px;border-radius:2px;background:var(--line-soft)}
+.seg .f i{background:var(--ink)}
+.seg .c i{background:var(--s-pros)}
+.seg-l{display:grid;grid-template-columns:76px 60px 62px 1fr;gap:2px;margin-top:6px;font:500 11px/14px Inter;letter-spacing:-.01em;color:var(--l50)}
+.seg-l span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.seg-l .c{color:var(--ink)}
+.nx{margin-top:12px;padding-top:10px;border-top:1px solid var(--line-soft)}
+.nx-t{font:500 12px/16px Inter;color:var(--l63);display:flex;align-items:center;gap:6px}
+.nx-t b{color:var(--ink);font-weight:500}
+.req{list-style:none;margin:6px 0 0;padding:0}
+.req li{display:flex;align-items:center;gap:8px;height:28px;font-size:13px}
+.req .ok{color:var(--good)}
+.req .no{color:var(--warn)}
+.req .tx{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.req li.done .tx{color:var(--l50)}
+.req a{color:var(--blue);font-size:13px;text-decoration:none;flex:none}
+.bigbtn{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;height:32px;margin-top:8px;border:0;border-radius:8px;font:500 14px Inter;background:var(--blue);color:#fff}
+.bigbtn.off{background:var(--line-soft);color:rgba(0,0,0,.38);cursor:not-allowed}
+.stg-f{display:flex;align-items:center;gap:2px;margin-top:6px}
+.stg-f .btn{height:26px;font-size:13px;color:var(--l63);padding:0 6px}
+.stg-f .btn:hover{color:var(--ink)}
+
+/* left: details list */
+.sech{display:flex;align-items:center;height:36px;padding:0 16px;margin-top:10px}
+.sech h2,.sech h3{margin:0;font:500 14px/20px Inter;color:var(--l63);display:flex;align-items:center;gap:6px}
+.sech .va{margin-left:auto;font-size:13px;color:var(--muted)}
+.n{font:500 11px/16px Inter;color:var(--muted);background:var(--hover);border-radius:4px;padding:0 5px}
+.dl{padding:0 10px}
+.dr{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 6px;border-radius:8px}
+.dr:hover,.dr.hv{background:var(--hover)}
+.dr .k{width:106px;flex:none;display:flex;align-items:center;gap:8px;font:500 12px/16px Inter;color:var(--l63);white-space:nowrap}
+.dr .k svg{color:var(--faint);width:14px;height:14px}
+.dr .v{flex:1;min-width:0;display:flex;align-items:center;gap:6px;font:500 14px/20px Inter;white-space:nowrap;overflow:hidden}
+.dr .v span.t{overflow:hidden;text-overflow:ellipsis}
+.dr .v.e{color:var(--l50)}
+.dr .lk{margin-left:auto;color:var(--ghost)}
+.dr.edit .v{height:28px;margin:2px 0;padding:0 8px;border-radius:8px;box-shadow:0 0 0 1px var(--blue);background:#fff}
+.pill{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 4px 0 6px;border-radius:6px;background:var(--hover);font:500 12px Inter;color:var(--text)}
+.pill .x{width:16px;height:16px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;color:var(--faint)}
+.pill .av{width:16px;height:16px;font-size:7px}
+.tgl{width:28px;height:16px;border-radius:9999px;background:var(--ghost);position:relative;flex:none}
+.tgl::after{content:"";position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:9999px;background:#fff}
+.va-link{display:block;margin:4px 16px 0;font:500 12px/16px Inter;color:var(--l50)}
+.prof{margin:12px 12px 16px;padding:10px 12px;border-radius:12px;box-shadow:inset 0 0 0 1px var(--card-line);display:flex;align-items:center;gap:10px}
+.prof .bar{flex:1;height:4px;border-radius:2px;background:var(--line-soft);position:relative;overflow:hidden}
+.prof .bar i{position:absolute;inset:0 auto 0 0;background:var(--ink);border-radius:2px}
+.prof .t1{font:500 13px/18px Inter}
+.prof .t2{font:500 12px/16px Inter;color:var(--l50)}
+.prof a{color:var(--blue);font-size:13px;text-decoration:none;white-space:nowrap}
+
+/* tabs (Attio record tabs) */
+.tabs{display:flex;align-items:flex-start;gap:4px;height:44px;padding:8px 12px 0;border-bottom:1px solid var(--line);flex:none;position:relative}
+.tabs .t{height:28px;display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:8px;color:var(--l63);position:relative;box-shadow:inset 0 0 0 1px transparent;white-space:nowrap;cursor:pointer}
+.tabs .t svg{width:16px;height:16px}
+.tabs .t:hover{color:var(--ink);box-shadow:inset 0 0 0 1px var(--card-line)}
+.tabs .t.on{color:var(--ink);background:#fbfbfb;box-shadow:inset 0 0 0 1px var(--card-line)}
+.tabs .t.on::after{content:"";position:absolute;left:0;right:0;bottom:-8px;height:1px;background:var(--ink)}
+.tabs .t.open{color:var(--ink);box-shadow:inset 0 0 0 1px var(--card-line)}
+.tabs .tvr{width:1px;height:16px;background:var(--card-line);margin:6px 4px 0;flex:none}
+.menu{position:absolute;top:40px;right:12px;width:220px;background:#fff;border-radius:12px;box-shadow:var(--pop-shadow);padding:4px;z-index:30}
+.menu .mi{display:flex;align-items:center;gap:8px;height:32px;padding:0 8px;border-radius:8px}
+.menu .mi:hover,.menu .mi.hv{background:#f6f7f7}
+.menu .mi svg{color:var(--muted)}
+.menu .mi .n{margin-left:auto}
+
+/* middle body */
+.mb{flex:1;min-height:0;overflow:hidden;padding:4px 16px 16px}
+.mb .sech{padding:0 4px;margin-top:12px}
+.orca{margin-top:12px;padding:12px 14px;border-radius:12px;background:#fbfaff;box-shadow:inset 0 0 0 1px #ece8fb}
+.orca-h{display:flex;align-items:center;gap:6px;font:500 12px/16px Inter;color:#5b4bc4}
+.orca-h .tm{margin-left:auto;color:var(--l50)}
+.orca-h a{color:var(--l63);text-decoration:none}
+.orca p{margin:6px 0 0;font:400 14px/22px Inter;color:var(--text)}
+.orca p b{font-weight:500;color:var(--ink)}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.grid.c2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.grid.c1{grid-template-columns:1fr}
+.card{height:86px;border-radius:12px;box-shadow:inset 0 0 0 1px var(--card-line);padding:10px 12px;display:flex;flex-direction:column;position:relative}
+.card.ed:hover{background:var(--tint)}
+.card .lb{display:flex;align-items:center;gap:8px;font:500 12px/16px Inter;color:var(--l63)}
+.card .lb svg{margin-left:auto;color:var(--faint);width:14px;height:14px}
+.card .vl{margin-top:auto;display:flex;align-items:center;gap:6px;font:500 14px/20px Inter;white-space:nowrap;overflow:hidden}
+.card .vl span{overflow:hidden;text-overflow:ellipsis}
+.card .vl .dot,.card .vl .av{margin-right:6px;vertical-align:-1px}
+.dr.wr .v{flex-wrap:wrap;white-space:normal;padding:5px 0;row-gap:4px}
+.mc{overflow:visible}
+.card .sb{font:500 12px/16px Inter;color:var(--l50);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:16px}
+.card .vl.w{color:var(--warn)}
+.card .vl.g{color:var(--good)}
+.card .add{color:var(--blue)}
+.tl{border-radius:12px;box-shadow:inset 0 0 0 1px var(--card-line);padding:9px 13px}
+.tl .ev{display:flex;align-items:center;gap:8px;height:23px;white-space:nowrap}
+.tl .cn{width:16px;height:8px;display:flex;justify-content:center}
+.tl .cn::after{content:"";width:1px;height:8px;background:var(--card-line)}
+.tl .ic{width:16px;height:16px;flex:none;display:inline-flex;align-items:center;justify-content:center;font:600 7px/1 Inter;color:var(--text)}
+.tl .ic.p{border-radius:9999px;background:var(--press);box-shadow:inset 0 0 0 1px rgba(0,0,0,.06)}
+.tl .ic.s{border-radius:30%;background:#f6f7f7;box-shadow:inset 0 0 0 1px #e6e7ea;color:var(--muted)}
+.tl .ic.s svg{width:11px;height:11px}
+.tl .tx{overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
+.tl .tx b{font-weight:500}
+.tl .tx em{font-style:normal;color:var(--l63)}
+.tl .tm{font:500 12px/16px Inter;color:var(--l50);flex:none}
+.box{border-radius:12px;box-shadow:inset 0 0 0 1px var(--card-line);padding:4px}
+.li{display:flex;align-items:center;gap:8px;height:32px;padding:0 8px;border-radius:8px;white-space:nowrap}
+.li:hover{background:var(--hover)}
+.li .tx{overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
+.li .tm{font:500 12px/16px Inter;color:var(--l50);flex:none}
+.li .tm.w{color:var(--warn)}
+.cb{width:16px;height:16px;border-radius:4px;box-shadow:inset 0 0 0 1.5px var(--ghost);flex:none;display:inline-flex;align-items:center;justify-content:center}
+.cb.on{background:var(--ink);box-shadow:none;color:#fff}
+.li.done .tx{color:var(--l50);text-decoration:line-through}
+.notep{border-radius:12px;box-shadow:inset 0 0 0 1px var(--card-line);padding:10px 12px}
+.notep p{margin:0;font:400 14px/20px Inter;color:var(--text);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.notep .m{margin-top:6px;font:500 12px/16px Inter;color:var(--l50)}
+.filt{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
+.fc{height:26px;display:inline-flex;align-items:center;gap:6px;padding:0 8px;border-radius:8px;box-shadow:inset 0 0 0 1px var(--line);font:500 13px Inter;color:var(--l63);background:#fff}
+.fc.on{color:var(--ink);background:var(--hover)}
+.grp{font:500 12px/16px Inter;color:var(--l50);margin:16px 4px 6px}
+.evr{display:flex;gap:10px;padding:6px 4px}
+.evr .ic{width:24px;height:24px;border-radius:9999px;flex:none;display:inline-flex;align-items:center;justify-content:center;background:#f6f7f7;box-shadow:inset 0 0 0 1px #e6e7ea;color:var(--muted);font:600 9px Inter}
+.evr .b{flex:1;min-width:0}
+.evr .l1{display:flex;gap:6px;font-size:14px;line-height:20px}
+.evr .l1 b{font-weight:500}
+.evr .l1 em{font-style:normal;color:var(--l63)}
+.evr .l1 .tm{margin-left:auto;font:500 12px/20px Inter;color:var(--l50);flex:none}
+.evr .q{margin-top:6px;padding:8px 10px;border-radius:8px;background:var(--hover);font:400 13px/18px Inter;color:var(--text)}
+.composer{display:flex;align-items:center;gap:8px;height:36px;padding:0 6px 0 10px;border-radius:10px;box-shadow:inset 0 0 0 1px var(--line);margin-top:12px;color:var(--l50)}
+.composer .sp{flex:1}
+
+/* right rail */
+.rs{margin-top:8px}
+.rs-h{display:flex;align-items:center;gap:6px;height:36px;padding:0 4px}
+.rs-h h3{margin:0;font:500 14px/20px Inter;color:var(--l63);display:flex;align-items:center;gap:6px;cursor:pointer}
+.rs-h h3:hover{color:var(--ink)}
+.rs-h .btn.ic{margin-left:auto;width:24px;height:24px}
+.rs-e{display:flex;align-items:center;gap:8px;height:32px;padding:0 8px;border-radius:8px;box-shadow:inset 0 0 0 1px var(--card-line);font-size:13px;color:var(--l50)}
+.rs-e a{margin-left:auto;color:var(--blue);text-decoration:none}
+.kv{display:flex;align-items:center;gap:8px;height:32px;padding:0 8px;border-radius:8px;font-size:13px}
+.kv .k{color:var(--l63);width:100px;flex:none;white-space:nowrap}
+.kv .v{flex:1;min-width:0;display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden}
+.kv .v.w{color:var(--warn)}
+.kv a{color:var(--blue);text-decoration:none;flex:none}
+.file{display:flex;align-items:center;gap:8px;height:32px;padding:0 8px;border-radius:8px;font-size:13px}
+.file:hover{background:var(--hover)}
+.file .ext{font:600 9px/16px Inter;width:26px;text-align:center;border-radius:4px;background:#fdecea;color:#b4231a;flex:none}
+.file .ext.img{background:#e9f2ff;color:#1d5bd0}
+.file .tx{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file .tm{font:500 12px/16px Inter;color:var(--l50)}
+.st-chip{font:500 12px/18px Inter;border-radius:6px;padding:0 6px;background:var(--blue-soft);color:var(--blue)}
+.ann{position:absolute;z-index:40;font:500 11px/14px Inter;color:#fff;background:#d23f8c;border-radius:6px;padding:3px 6px;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.18)}
+
+/* phone */
+.phone{width:390px;height:844px;background:#fff;border-radius:28px;box-shadow:0 0 0 10px #1b1c1e,0 0 0 11px #3a3d41;overflow:hidden;display:flex;flex-direction:column;margin:12px 0 0 12px}
+.ph-top{height:48px;flex:none;display:flex;align-items:center;gap:4px;padding:0 12px;border-bottom:1px solid var(--line)}
+.ph-b{flex:1;overflow:hidden}
+.ph-b .idb{padding:14px 16px 12px}
+.ph-b .stg{margin:0 16px}
+.ph-tabs{display:flex;gap:4px;height:44px;padding:8px 16px 0;border-bottom:1px solid var(--line);margin-top:14px;overflow:hidden;white-space:nowrap}
+</style></head><body>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="x" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></symbol>
+  <symbol id="up" viewBox="0 0 16 16"><path d="M4 10l4-4 4 4"/></symbol>
+  <symbol id="dn" viewBox="0 0 16 16"><path d="M4 6l4 4 4-4"/></symbol>
+  <symbol id="back" viewBox="0 0 16 16"><path d="M13 8H3M7 4L3 8l4 4"/></symbol>
+  <symbol id="cp" viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1 1 0 00-1-1h-6a1 1 0 00-1 1v6a1 1 0 001 1h2"/></symbol>
+  <symbol id="mail" viewBox="0 0 16 16"><rect x="2" y="3.5" width="12" height="9" rx="1.5"/><path d="M2.5 4.5L8 8.5l5.5-4"/></symbol>
+  <symbol id="wa" viewBox="0 0 16 16"><path d="M3 13.2l.8-2.6A5.5 5.5 0 118 13.5a5.5 5.5 0 01-2.6-.7L3 13.2z"/><path d="M6.2 5.8c.2-.4.6-.4.8 0l.4.9c.1.2 0 .4-.1.6l-.3.3c.3.7.9 1.3 1.6 1.6l.3-.3c.2-.1.4-.2.6-.1l.9.4c.4.2.4.6 0 .8-.6.5-1.4.6-2.1.2a5 5 0 01-2.3-2.3c-.4-.7-.3-1.5.2-2.1z"/></symbol>
+  <symbol id="ph" viewBox="0 0 16 16"><path d="M3 2.5h2.5l1.2 3-1.5 1a7 7 0 004.3 4.3l1-1.5 3 1.2V13a1 1 0 01-1 1A11 11 0 012 3.5a1 1 0 011-1z"/></symbol>
+  <symbol id="task" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="2.5"/><path d="M5.5 8l1.8 1.8L10.5 6.5"/></symbol>
+  <symbol id="note" viewBox="0 0 16 16"><path d="M4 2.5h5.5l3 3V13a.5.5 0 01-.5.5H4a.5.5 0 01-.5-.5V3a.5.5 0 01.5-.5zM9.5 2.5v3h3M6 9h4M6 11h3"/></symbol>
+  <symbol id="stage" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" stroke-dasharray="2.5 2"/></symbol>
+  <symbol id="next" viewBox="0 0 16 16"><path d="M3 8h9M9 5l3 3-3 3"/></symbol>
+  <symbol id="clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3l2 1.5"/></symbol>
+  <symbol id="user" viewBox="0 0 16 16"><circle cx="8" cy="5.5" r="2.5"/><path d="M3 13.5a5 5 0 0110 0"/></symbol>
+  <symbol id="users" viewBox="0 0 16 16"><circle cx="6" cy="6" r="2.2"/><path d="M2 13a4 4 0 018 0"/><circle cx="11" cy="5.5" r="1.8"/><path d="M11 9a3 3 0 013 3"/></symbol>
+  <symbol id="cap" viewBox="0 0 16 16"><path d="M1.5 6L8 3l6.5 3L8 9 1.5 6zM4 7.3V11c1 1 2.5 1.5 4 1.5s3-.5 4-1.5V7.3"/></symbol>
+  <symbol id="ready" viewBox="0 0 16 16"><path d="M8 1.8l5 2v4c0 3-2.2 5.2-5 6.4-2.8-1.2-5-3.4-5-6.4v-4l5-2z"/><path d="M5.8 8l1.6 1.6 3-3"/></symbol>
+  <symbol id="lock" viewBox="0 0 16 16"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 015 0v2"/></symbol>
+  <symbol id="plus" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></symbol>
+  <symbol id="srch" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></symbol>
+  <symbol id="chk" viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7"/></symbol>
+  <symbol id="okc" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M5.5 8.2l1.7 1.7 3.3-3.6"/></symbol>
+  <symbol id="todo" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/></symbol>
+  <symbol id="bld" viewBox="0 0 16 16"><path d="M3 13.5V3.5a1 1 0 011-1h5a1 1 0 011 1v10M10 6.5h2a1 1 0 011 1v6M2 13.5h12M5.5 5h2M5.5 7.5h2M5.5 10h2"/></symbol>
+  <symbol id="src" viewBox="0 0 16 16"><path d="M6.5 9.5a3 3 0 004.2 0l2-2a3 3 0 00-4.2-4.2l-.8.8M9.5 6.5a3 3 0 00-4.2 0l-2 2a3 3 0 004.2 4.2l.8-.8"/></symbol>
+  <symbol id="pin" viewBox="0 0 16 16"><path d="M8 14s4.5-4.2 4.5-7.5a4.5 4.5 0 00-9 0C3.5 9.8 8 14 8 14z"/><circle cx="8" cy="6.5" r="1.6"/></symbol>
+  <symbol id="tag" viewBox="0 0 16 16"><path d="M2.5 2.5h5l6 6-5 5-6-6v-5z"/><circle cx="5.5" cy="5.5" r="1"/></symbol>
+  <symbol id="pause" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M6.5 6v4M9.5 6v4"/></symbol>
+  <symbol id="globe" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c1.8 1.8 2.6 3.8 2.6 6S9.8 12.2 8 14C6.2 12.2 5.4 10.2 5.4 8S6.2 3.8 8 2z"/></symbol>
+  <symbol id="tov" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1"/><rect x="9" y="2.5" width="4.5" height="4.5" rx="1"/><rect x="2.5" y="9" width="4.5" height="4.5" rx="1"/><rect x="9" y="9" width="4.5" height="4.5" rx="1"/></symbol>
+  <symbol id="tact" viewBox="0 0 16 16"><rect x="2" y="2.5" width="12" height="11" rx="2"/><path d="M4.5 9l2-3 2 4 1.5-2.5h1.5"/></symbol>
+  <symbol id="app" viewBox="0 0 16 16"><rect x="3" y="2.5" width="10" height="11" rx="1.5"/><path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3"/></symbol>
+  <symbol id="cls" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="8" rx="1"/><path d="M5 14l3-3 3 3"/></symbol>
+  <symbol id="doc" viewBox="0 0 16 16"><path d="M3 4.5a1 1 0 011-1h3l1.5 1.5H12a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-7.5z"/></symbol>
+  <symbol id="chkin" viewBox="0 0 16 16"><circle cx="6.5" cy="5.5" r="2.5"/><path d="M2 13.5a4.5 4.5 0 019 0M10.5 8l1.5 1.5 3-3"/></symbol>
+  <symbol id="dots" viewBox="0 0 16 16"><circle cx="3.5" cy="8" r=".6"/><circle cx="8" cy="8" r=".6"/><circle cx="12.5" cy="8" r=".6"/></symbol>
+  <symbol id="spark" viewBox="0 0 16 16"><path d="M8 2l1.4 3.6L13 7l-3.6 1.4L8 12l-1.4-3.6L3 7l3.6-1.4L8 2zM12.5 11l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6.6-1.4z"/></symbol>
+  <symbol id="rot" viewBox="0 0 16 16"><path d="M13 8a5 5 0 11-1.5-3.5M13 2.5v3h-3"/></symbol>
+  <symbol id="arch" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="3" rx="1"/><path d="M3 6v6.5a1 1 0 001 1h8a1 1 0 001-1V6M6.5 9h3"/></symbol>
+  <symbol id="cal" viewBox="0 0 16 16"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3"/></symbol>
+  <symbol id="money" viewBox="0 0 16 16"><rect x="1.5" y="4" width="13" height="8" rx="1.5"/><circle cx="8" cy="8" r="1.8"/></symbol>
+  <symbol id="sign" viewBox="0 0 16 16"><path d="M2 12.5c2-2 3-5 4.5-5S7 11 8.5 11 11 9 13.5 9M2 14.5h12"/></symbol>
+  <symbol id="home" viewBox="0 0 16 16"><path d="M2.5 7L8 2.5 13.5 7v6a.5.5 0 01-.5.5H3a.5.5 0 01-.5-.5V7z"/></symbol>
+  <symbol id="inbox" viewBox="0 0 16 16"><path d="M2 9.5l1.5-6h9l1.5 6v3a1 1 0 01-1 1H3a1 1 0 01-1-1v-3zM2 9.5h3.5l1 1.5h3l1-1.5H14"/></symbol>
+  <symbol id="pulse" viewBox="0 0 16 16"><path d="M1.5 8.5h3l2-5 3 9 2-4h3"/></symbol>
+  <symbol id="kanban" viewBox="0 0 16 16"><rect x="2" y="2.5" width="12" height="11" rx="1.5"/><path d="M6 2.5v11M10 2.5v7"/></symbol>
+  <symbol id="bell" viewBox="0 0 16 16"><path d="M4 11V7a4 4 0 018 0v4l1 1.5H3L4 11zM6.5 14h3"/></symbol>
+  <symbol id="list" viewBox="0 0 16 16"><path d="M2.5 4h11M2.5 8h11M2.5 12h11"/></symbol>
+  <symbol id="edit" viewBox="0 0 16 16"><path d="M10.5 3l2.5 2.5-7 7H3.5V10l7-7z"/></symbol>
+  <symbol id="filter" viewBox="0 0 16 16"><path d="M2.5 4h11M4.5 8h7M6.5 12h3"/></symbol>
+</svg>
+<style>
+/* ===== interactions sheet ===== */
+.page{max-width:1480px;padding:16px 16px 60px}
+.toc{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0 4px}
+.toc a{font:500 12px Inter;color:#cfd2d6;background:#26282b;border-radius:6px;padding:5px 9px;text-decoration:none}
+.flow{margin-top:28px;padding-top:4px}
+.flow>h2{margin:0;font:600 18px/26px Inter;letter-spacing:-.01em;display:flex;align-items:center;gap:10px}
+.flow>h2 .tg{font:500 11px/18px Inter;border-radius:6px;padding:0 6px;background:#fff;box-shadow:inset 0 0 0 1px var(--line);color:var(--muted)}
+.flow>h2 .tg.new{background:#eaf1ff;color:#1d5bd0;box-shadow:none}
+.flow>h2 .tg.chg{background:#fff3e0;color:#b25e09;box-shadow:none}
+.flow>p.lead{margin:4px 0 0;font:400 13px/20px Inter;color:#3a3d41;max-width:1100px}
+.steps{display:flex;gap:16px;flex-wrap:wrap;margin-top:12px;align-items:flex-start}
+.st{display:flex;flex-direction:column;gap:6px}
+.st .cap{font:500 12px/16px Inter;color:#3a3d41;display:flex;gap:6px;align-items:flex-start;max-width:520px}
+.st .cap>b{flex:none;width:18px;height:18px;border-radius:9999px;background:#101112;color:#fff;font:600 11px/18px Inter;text-align:center}
+.st .cap span{padding-top:1px}
+.fr{position:relative;background:#fff;border-radius:12px;box-shadow:0 0 0 1px #dcdee1;overflow:hidden}
+.fr.dim::before{content:"";position:absolute;inset:0;background:rgba(16,17,18,.04);z-index:2}
+.rules{margin-top:10px;display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:10px;max-width:1300px}
+.rb{background:#fff;border-radius:10px;box-shadow:0 0 0 1px #dcdee1;padding:10px 12px;font:400 13px/19px Inter;color:#2b2d2f}
+.rb h4{margin:0 0 4px;font:600 12px/16px Inter;color:var(--ink);text-transform:none}
+.rb ul{margin:0;padding-left:16px}
+.rb li{margin:2px 0}
+.rb .same{color:var(--good);font-weight:500}.rb .new{color:#1d5bd0;font-weight:500}.rb .chg{color:var(--warn);font-weight:500}.rb .dec{color:#a1307a;font-weight:500}
+.cursor{position:absolute;z-index:60;width:18px;height:18px;pointer-events:none}
+.cursor::before{content:"";position:absolute;inset:0;background:no-repeat center/contain url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 3l14 8-6 1.5L10 19z' fill='%23101112' stroke='%23fff' stroke-width='1.5' stroke-linejoin='round'/%3E%3C/svg%3E")}
+.ring{position:absolute;z-index:59;border-radius:10px;box-shadow:0 0 0 2px #d23f8c;pointer-events:none}
+/* dialog (Dialogs v1) */
+.dlg{position:absolute;z-index:50;display:flex;flex-direction:column;padding:4px;background:rgba(255,255,255,.6);backdrop-filter:blur(16px);border-radius:16px;box-shadow:0 8px 28px -6px rgba(28,40,64,.12),0 18px 88px -4px rgba(28,40,64,.16),0 0 1px rgba(28,40,64,.16)}
+.dcard{display:flex;flex-direction:column;background:#fff;border-radius:12px;box-shadow:0 0 0 1px rgba(28,40,64,.08),0 1px 2px rgba(28,40,64,.04);overflow:hidden}
+.hd{display:flex;align-items:center;gap:8px;height:44px;padding:0 8px 0 16px;border-bottom:1px solid var(--line-soft);font-size:14px;font-weight:500;flex:none}
+.hd .dic{width:20px;height:20px;border-radius:6px;display:grid;place-items:center;background:var(--blue-soft);color:var(--blue)}
+.hd .dic svg{width:13px;height:13px}
+.hd .sub{color:var(--l50);font-weight:500}
+.hd .x{margin-left:auto;width:28px;height:28px;border-radius:8px;display:grid;place-items:center;color:var(--faint)}
+.dbd{padding:16px;display:flex;flex-direction:column;gap:16px}
+.ft{display:flex;align-items:center;gap:8px;height:44px;padding:0 8px 0 16px;border-top:1px solid var(--line-soft);font-size:13px;color:var(--muted);flex:none}
+.ft .sp{flex:1}
+.b{display:inline-flex;align-items:center;gap:8px;height:28px;border:0;border-radius:8px;font:500 14px Inter;white-space:nowrap}
+.b.ghost{background:transparent;color:var(--muted);padding:0 10px}
+.b.out{background:#fff;color:var(--ink);padding:0 10px;box-shadow:inset 0 0 0 1px var(--line)}
+.b.go{background:var(--blue);color:#fff;padding:0 6px 0 12px}
+.b.go.red{background:var(--bad)}
+.b.go.off{opacity:.45}
+.b .ent{min-width:20px;height:20px;border-radius:5px;background:rgba(255,255,255,.2);display:grid;place-items:center;font-size:11px;padding:0 4px}
+.f{display:flex;flex-direction:column;gap:4px}
+.f>label{font-size:12px;line-height:16px;color:rgba(0,0,0,.5);font-weight:500;padding-left:4px}
+.f>label .req-m{color:var(--warn)}
+.in{height:32px;border-radius:9px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.06);display:flex;align-items:center;gap:8px;padding:0 8px;font-weight:500;color:var(--ink);background:#fff}
+.in.ph{color:rgba(0,0,0,.5)}
+.in.focus{box-shadow:inset 0 0 0 1px var(--blue);border-radius:10px}
+.in.ta{height:64px;align-items:flex-start;padding-top:6px}
+.in .chev{margin-left:auto;color:var(--faint)}
+.in .caret{width:1.5px;height:18px;background:var(--blue);margin-left:-6px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+.hint{font:400 12px/16px Inter;color:var(--l50);padding-left:4px}
+.hint.w{color:var(--warn)}
+.p{margin:0;color:var(--text);font-weight:400;line-height:21px}
+.conf{display:flex;gap:14px;align-items:flex-start}
+.conf h3{margin:0 0 4px;font-size:15px;font-weight:600}
+.cic{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;flex:none}
+.cic.red{background:#fdecea;color:var(--bad)}
+.cic.blue{background:var(--blue-soft);color:var(--blue)}
+.cic.amber{background:var(--warn-soft);color:var(--warn)}
+.cic svg{width:18px;height:18px}
+.seg2{display:flex;gap:4px;padding:2px;border-radius:9px;background:var(--hover)}
+.seg2 span{flex:1;height:28px;display:flex;align-items:center;justify-content:center;border-radius:7px;font:500 13px Inter;color:var(--l63)}
+.seg2 span.on{background:#fff;color:var(--ink);box-shadow:0 0 0 1px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.06)}
+.tok{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 4px 0 6px;border-radius:6px;background:var(--hover);font:500 12px Inter}
+.drop{height:96px;border-radius:12px;box-shadow:inset 0 0 0 1px var(--line);background:#fbfbfb;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--l63);font-size:13px}
+.drop b{color:var(--blue);font-weight:500}
+.prog{height:4px;border-radius:2px;background:var(--line-soft);overflow:hidden}
+.prog i{display:block;height:100%;background:var(--blue)}
+/* popover (Attio dropdown) */
+.pop{position:absolute;z-index:45;background:#fff;border-radius:12px;box-shadow:0 0 0 1px rgba(28,40,64,.04),0 4px 8px -4px rgba(28,40,64,.12),0 4px 12px -2px rgba(24,41,75,.16);overflow:hidden}
+.pop .ps{display:flex;align-items:center;gap:8px;height:36px;padding:8px 12px;box-shadow:inset 0 -1px 0 #eeeff1;color:rgba(0,0,0,.5);font-weight:500}
+.pop .pl{padding:4px}
+.pop .gl{font:500 11px/16px Inter;color:var(--l50);padding:6px 8px 2px}
+.pop .po{display:flex;align-items:center;gap:8px;height:32px;padding:6px 8px;border-radius:8px;font-weight:500;color:var(--ink);white-space:nowrap}
+.pop .po.hv{background:#f6f7f7}
+.pop .po.dis{color:var(--l50)}
+.pop .po .s2{font-size:12px;color:var(--l50);margin-left:auto}
+.pop .po .s2.w{color:var(--warn)}
+.pop .po .ck{margin-left:auto;color:var(--muted)}
+.pop .pf{box-shadow:inset 0 1px 0 #eeeff1;padding:4px}
+.pop .pb{padding:12px;display:flex;flex-direction:column;gap:12px}
+.tip2{position:absolute;z-index:46;background:var(--ink);color:#fff;font:500 12px/16px Inter;border-radius:6px;padding:6px 8px;max-width:260px}
+.tip2 ul{margin:4px 0 0;padding-left:14px}
+.toast{position:absolute;z-index:47;display:flex;align-items:center;gap:10px;height:40px;padding:0 8px 0 12px;background:#fff;border-radius:10px;box-shadow:0 0 0 1px rgba(16,17,18,.06),0 8px 24px -4px rgba(16,17,18,.14);font:500 13px Inter;white-space:nowrap}
+.toast .okd{color:var(--good)}
+.toast a{color:var(--blue);text-decoration:none}
+.banner{display:flex;align-items:center;gap:8px;height:36px;padding:0 12px;border-radius:10px;background:var(--hover);font:500 13px Inter;color:var(--text)}
+.mini{font:400 12px/16px Inter;color:var(--l50)}
+.qa{margin-top:28px;background:#fff;border-radius:12px;box-shadow:0 0 0 1px #dcdee1;padding:14px 16px;max-width:1300px}
+.qa h2{margin:0 0 8px;font:600 16px/24px Inter}
+.qa table{border-collapse:collapse;width:100%;font:400 13px/18px Inter}
+.qa td,.qa th{padding:6px 8px;border-bottom:1px solid var(--line-soft);text-align:left;vertical-align:top}
+.qa th{font:500 12px/16px Inter;color:var(--l63)}
+.qa td:first-child{width:28px;color:var(--l50)}
+.pl-s{font:500 11px/18px Inter;border-radius:6px;padding:0 6px;white-space:nowrap}
+.pl-s.same{background:var(--good-soft);color:var(--good)}.pl-s.new{background:#eaf1ff;color:#1d5bd0}.pl-s.chg{background:var(--warn-soft);color:var(--warn)}.pl-s.dec{background:#fbe9f3;color:#a1307a}.pl-s.fix{background:#fdecea;color:var(--bad)}
+</style>
+
+<div class="states"><span>Lead detail v1 · interactions &amp; QA · EDGEX-89</span>
+<a href="lead-detail-v1.html" style="font:500 12px Inter;color:#fff;background:#26282b;border-radius:6px;padding:5px 10px;text-decoration:none">← Back to the page states</a></div>
+
+<div class="page">
+<div class="note" style="margin:0">
+  <b>How to read this:</b> each flow shows the clicks in order (1 → 2 → 3) on the new page, with the pop-up or dialog it opens, then a box of rules: <span style="color:var(--good);font-weight:500">same as today</span>, <span style="color:#1d5bd0;font-weight:500">new</span>, <span style="color:var(--warn);font-weight:500">changed</span>, <span style="color:#12805c;font-weight:500">decided by Sadin (2026-11-12)</span>. Every pop-up uses the approved Dialogs v1 look (blurred two-layer card, 44px header/footer, 28px buttons radius 8, 32px fields radius 9, no grey overlay). The pink ring and arrow show where the click lands. At the bottom: the full QA checklist.
+  <div class="toc" id="toc"></div>
+</div>
+<div id="flows"></div>
+<div class="qa" id="qa"></div>
+</div>
+
+<script>
+const I=(id,c='')=>`<svg class="i ${c}"><use href="#${id}"/></svg>`;
+const cur=(x,y)=>`<span class="cursor" style="left:${x}px;top:${y}px"></span>`;
+const ring=(x,y,w,h)=>`<span class="ring" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px"></span>`;
+const dlg=(x,y,w,body)=>`<div class="dlg" style="left:${x}px;top:${y}px;width:${w}px"><div class="dcard">${body}</div></div>`;
+const hd=(ic,t,sub='')=>`<div class="hd"><span class="dic">${I(ic)}</span>${t}${sub?` <span class="sub">${sub}</span>`:''}<span class="x">${I('x','sm')}</span></div>`;
+const ft=(left,btns)=>`<div class="ft">${left||''}<span class="sp"></span>${btns}</div>`;
+const fld=(l,v,o={})=>`<div class="f"><label>${l}${o.req?' <span class="req-m">· needed for consent</span>':''}${o.opt?' <span style="color:var(--l50)">(optional)</span>':''}</label><div class="in ${o.ph?'ph':''} ${o.focus?'focus':''} ${o.ta?'ta':''}">${v}${o.focus?'<span class="caret"></span>':''}${o.sel?I('dn','chev sm'):''}</div>${o.hint?`<div class="hint ${o.hw?'w':''}">${o.hint}</div>`:''}</div>`;
+const frame=(w,h,inner,dim)=>`<div class="fr ${dim?'dim':''}" style="width:${w}px;height:${h}px">${inner}</div>`;
+const step=(n,cap,fr)=>`<div class="st"><div class="cap"><b>${n}</b><span>${cap}</span></div>${fr}</div>`;
+const rules=(boxes)=>`<div class="rules">${boxes.map(b=>`<div class="rb"><h4>${b[0]}</h4><ul>${b[1].map(x=>`<li>${x}</li>`).join('')}</ul></div>`).join('')}</div>`;
+const K=t=>`<span class="dec" style="color:#12805c">Decided:</span> ${t}`;
+const S=t=>`<span class="same">Same:</span> ${t}`, N=t=>`<span class="new">New:</span> ${t}`, C=t=>`<span class="chg">Changed:</span> ${t}`, D=t=>`<span class="dec">Decide:</span> ${t}`;
+
+/* ---------- reusable page fragments (left column 320 wide) ---------- */
+const STG=[['Pre-qualified','--s-pre'],['Qualified','--s-qual'],['Prospects','--s-pros'],['Applications','--s-app']];
+function stageCard(o){
+  const segs=STG.map((s,i)=>`<span class="${i<o.cur?'f':''}"><i style="${i===o.cur?`background:var(${s[1]})`:''}"></i></span>`).join('');
+  const labs=STG.map((s,i)=>`<span class="${i===o.cur?'c':''}">${s[0]}</span>`).join('');
+  const req=(o.req||[]).map(r=>`<li class="${r.ok?'done':''}">${I(r.ok?'okc':'todo',(r.ok?'ok':'no')+' sm')}<span class="tx">${r.t}</span>${r.a?`<a>${r.a}</a>`:''}</li>`).join('');
+  return `<div class="stg" style="margin:0">
+   <div class="stg-h"><span class="lb">Stage</span><span class="sp"></span><span class="chip"><span class="dot" style="background:var(${STG[o.cur][1]})"></span>${STG[o.cur][0]} <span style="color:var(--ghost)">·</span> ${o.status}${I('dn','xs')}</span></div>
+   <div class="seg">${segs}</div><div class="seg-l">${labs}</div>
+   <div class="nx"><div class="nx-t">Next <b>${o.next}</b>${o.ns?`<span style="margin-left:auto;color:var(--l50)">${o.ns}</span>`:''}</div>
+    ${req?`<ul class="req">${req}</ul>`:''}${o.hint?`<div style="font:400 13px/18px Inter;color:var(--l63);margin-top:6px">${o.hint}</div>`:''}
+    <button class="bigbtn ${o.off?'off':''}">${o.btn}${o.off?'':I('next','sm')}</button>
+    <div class="stg-f">${o.foot}</div></div></div>`}
+const footAdmin=`<span class="btn">${I('back','xs')}Revert to Qualified</span><span class="sp"></span><span class="btn">Move to…${I('dn','xs')}</span><span class="btn ic" title="Archive">${I('arch','sm')}</span>`;
+const footChain=(rev)=>`<span class="btn ${rev?'':'dis'}">${I('back','xs')}Revert${rev?' to '+rev:''}</span><span class="sp"></span><span class="btn ic" title="Archive">${I('arch','sm')}</span>`;
+const PROS={cur:2,status:'Follow-up',next:'Applications',ns:'1 of 3 done',req:[{t:'Basic info for the consent form',ok:1},{t:'Processing fee',a:'Record'},{t:'Consent signed',a:'Copy link'}],btn:'Move to Applications',off:1,foot:footAdmin};
+const PRE={cur:0,status:'New',next:'Qualified',hint:'Qualify asks for the study countries, course and level. At least a country or a course is needed.',btn:'Qualify',foot:footChain('')};
+const QUAL={cur:1,status:'Contacted',next:'Prospects',ns:'0 of 1 done',req:[{t:'+2, Bachelor or Masters %/GPA',a:'Add'}],btn:'Send to Prospects',foot:footChain('Pre-qualified')};
+const left=(inner,pad=16)=>`<div style="position:absolute;left:0;top:0;width:320px;padding:${pad}px 12px">${inner}</div>`;
+const drow=(i,k,v,o={})=>`<div class="dr ${o.cls||''}"><span class="k">${I(i)}${k}</span><span class="v ${o.e?'e':''}">${v}</span>${o.r||''}</div>`;
+const pill=(t,av,x=true)=>`<span class="pill">${av?`<span class="av">${av}</span>`:''}${t}${x?`<span class="x">${I('x','xs')}</span>`:''}</span>`;
+const avc=(t,bg='#d9f2ea',c='#1c6b54')=>`<span class="av" style="background:${bg};color:${c}">${t}</span>`;
+const railHead=(ic,t,n)=>`<div class="rs-h"><h3>${I(ic,'sm')}${t} <span class="n">${n}</span></h3><span class="btn ic">${I('plus','sm')}</span></div>`;
+
+const F=[];
+/* ========== F1 Qualify ========== */
+F.push({id:'qualify',t:'Qualify (Pre-qualified → Qualified)',tag:['chg','Changed: same pop-up for every role'],
+lead:'The big blue button on a Pre-qualified lead. Today counsellors get a tiny "Send to next" chip that opens the Qualify pop-up, while admins pick "Qualified" in a dropdown that skips the pop-up (study interest never gets captured). Now everyone gets the same pop-up.',
+steps:[
+ step(1,'Click <b>Qualify</b> (or press <b>⌘↵</b> anywhere on the page when nothing is focused).',frame(344,300,left(stageCard(PRE)))),
+ step(2,'The Qualify pop-up opens prefilled with whatever is already on the lead. Countries are a searchable multi-pick, course and level are searchable dropdowns.',frame(600,420,dlg(20,16,560,hd('cap','Qualify','Sita Karki')+`<div class="dbd">
+   ${fld('Study countries','<span class="tok">Australia'+I('x','xs')+'</span><span class="tok">Japan'+I('x','xs')+'</span><span style="color:var(--l50)">Add country</span>',{sel:1})}
+   <div class="row2">${fld('Course','Nursing',{sel:1})}${fld('Level','Bachelor',{sel:1})}</div>
+   ${fld('Note','Wants nursing, maybe Australia. Will bring +2 marksheet Friday.',{opt:1,ta:1})}
+   <div class="hint">Needed: at least one study country or a course.</div><div class="banner">${I('next','sm')}Moves to <b style="font-weight:600">Qualified</b> and stays with you.</div></div>`+ft('',`<span class="b ghost">Cancel</span><span class="b go">Qualify <span class="ent">⌘↵</span></span>`)),1)),
+ step(3,'Saved: a toast confirms, the stage card moves on and shows what Prospects needs. The Classes tab and rail section appear (they unlock at Qualified).',frame(344,330,left(stageCard(QUAL))+`<div class="toast" style="left:20px;top:282px">${I('okc','okd sm')}Moved to Qualified<a>View</a></div>`)),
+],
+rules:[['Who',[S('anyone who can work the lead; read-only viewers see the button disabled with "You don\'t hold this lead".'),C('admins and branch managers now see the same Qualify pop-up (today they skip it).')]],
+ ['What it saves',[S('destinations, field_of_study, degree_level on the lead, then list → Qualified, then the note (if any) as a lead note.'),S('the lead keeps its counsellor (Qualify does not hand off).'),N('if entering Qualified starts an outreach sequence, the banner says so: "Starts the Qualified welcome sequence".')]],
+ ['Errors',[S('if the save fails, nothing moves and the toast says "Couldn\'t qualify, try again"; the pop-up stays open with what was typed.'),K('Qualify needs at least one country OR a course. The pop-up says so up front ("Needed: at least one study country or a course") and the button stays disabled until one is set. Today you can qualify with everything empty.'),N('enforced in the Qualify pop-up for every role. Bulk moves and check-in triage are not blocked by it in this round; a server-side rule is a follow-up ticket.')]]]});
+
+/* ========== F2 Send to Prospects ========== */
+F.push({id:'prospects',t:'Send to Prospects (with the %/GPA gate and hand-off)',tag:['chg','Changed'],
+lead:'On a Qualified lead the button is "Send to Prospects". The requirement (%/GPA for +2, Bachelor or Masters) is listed BEFORE the click. Counsellors in the chain hand the lead to the next team; admins and branch managers may skip the GPA.',
+steps:[
+ step(1,'Requirement shown up front. Click <b>Add</b> next to it, or the button itself.',frame(344,330,left(stageCard(QUAL)))),
+ step(2,'"Add academic qualification" opens (the existing gate pop-up, restyled). One gate-eligible level with a %/GPA unlocks the move. Admins see "Skip for now" (bypass, same rule as today).',frame(600,380,dlg(20,16,560,hd('cap','Add academic qualification')+`<div class="dbd">
+   <div class="seg2"><span>SEE</span><span class="on">+2</span><span>Bachelor</span><span>Masters</span></div>
+   <div class="row3">${fld('%/GPA','3.21',{focus:1})}${fld('School / college','Set school',{ph:1})}${fld('Passed year','2025',{})}</div>
+   ${fld('Test score','IELTS 6.5',{opt:1})}<div class="hint">SEE / 10th doesn't count for Prospects.</div></div>`+ft('<span class="mini">Admins only:</span> <span class="b ghost" style="padding:0 6px">Skip for now</span>',`<span class="b ghost">Cancel</span><span class="b go">Save &amp; continue <span class="ent">⌘↵</span></span>`)),1)),
+ step(3,'Confirm the hand-off. The assignee list is the next team (same people as today). The default is preselected; the button names the person.',frame(500,330,dlg(20,16,460,`<div class="dbd" style="padding:20px 20px 18px"><div class="conf"><span class="cic blue">${I('next')}</span><div><h3>Send to Prospects?</h3><p class="p">Sita Karki moves to <b>Prospects</b> and leaves your list.</p></div></div>
+   ${fld('Assign to',avc('FA')+'Farhan Ali <span class="mini" style="margin-left:4px">Counsellor · Kathmandu</span>',{sel:1})}</div>`+ft('',`<span class="b ghost">Cancel</span><span class="b go">Send to Farhan <span class="ent">↵</span></span>`)),1)),
+ step(4,'After a hand-off the lead is read-only for you, so the page opens <b>your next lead</b> in the same view and a toast says what happened.',frame(360,150,`<div class="toast" style="left:16px;top:20px">${I('okc','okd sm')}Sita Karki sent to Farhan Ali · Prospects</div><div style="position:absolute;left:16px;top:76px;right:16px" class="banner">${I('dn','sm')}Opened your next lead: <b style="font-weight:600;margin-left:4px">Ram Thapa</b><span style="margin-left:auto;color:var(--l50)">4 of 5 in My leads</span></div>`)),
+],
+rules:[['Who',[S('chain members (telecaller → counsellor …) send to the next position; first holder can\'t revert.'),S('admins + branch managers bypass the GPA gate and may move to ANY stage via "Move to…" (flow 4).')]],
+ ['Server rules kept',[S('the GPA gate is enforced on the server too (also when assigning a counsellor auto-promotes the lead).'),S('if the server still blocks (someone else changed it), the gate pop-up opens instead of a corner toast.')]],
+ ['Changes',[C('after a hand-off, today\'s page jumps back to the list. New: it opens your next lead in the view (J). If there is none, it goes back to the list.'),K('open your next lead in the same view; if there is none, go back to the list.')]]]});
+
+/* ========== F3 Applications requirements ========== */
+const feePop=(admin)=>admin?`<div class="pop" style="left:20px;top:214px;width:300px"><div class="pb">
+  <div class="f"><label>Fee status</label><div class="seg2"><span class="on">Paid</span><span>Unpaid</span><span>Waiver</span></div></div>
+  <div class="row2">${fld('Amount (Rs)','5,000',{focus:1})}${fld('Received','Nov 11',{sel:1})}</div>
+  ${fld('Note','Cash at Kathmandu desk',{opt:1})}</div><div class="pf" style="display:flex;justify-content:flex-end;gap:6px;padding:8px"><span class="b ghost">Cancel</span><span class="b go">Save <span class="ent">↵</span></span></div></div>`
+ :`<div class="pop" style="left:20px;top:214px;width:300px"><div class="pb">
+  <div class="mini" style="color:var(--l63)">You report the fee; an admin confirms it. Reported counts for the Applications check.</div>
+  <div class="row2">${fld('Amount received (Rs)','5,000',{focus:1})}${fld('Received','Nov 11',{sel:1})}</div>
+  ${fld('Note','Paid by father, cash',{opt:1})}</div><div class="pf" style="display:flex;justify-content:flex-end;gap:6px;padding:8px"><span class="b ghost">Cancel</span><span class="b go">Report fee <span class="ent">↵</span></span></div></div>`;
+const railConsent=(fee,feeCls,con,conCls,feeA,conA)=>`<div style="position:absolute;left:12px;top:12px;width:306px">${railHead('ready','Consent &amp; fee','').replace('<span class="n"></span>','').replace(/<span class="btn ic">.*?<\/span><\/div>$/,'</div>')}<div class="box" style="padding:2px"><div class="kv"><span class="k">Processing fee</span><span class="v ${feeCls}">${fee}</span><a>${feeA}</a></div><div class="kv"><span class="k">Consent</span><span class="v ${conCls}">${con}</span><a>${conA}</a></div></div></div>`;
+F.push({id:'apps',t:'Getting to Applications: fee, consent, profile',tag:['chg','Changed: one place, shown before the click'],
+lead:'The 3 things Applications needs live in the stage card (left) AND in Consent &amp; fee (right rail / "+6 more" tab). Each one is fixable in place. Admins and staff see different fee controls (same rule as today).',
+steps:[
+ step(1,'Hover the greyed button: the tooltip lists what\'s missing. Nothing is hidden until a move fails.',frame(344,330,left(stageCard(PROS))+`<div class="tip2" style="left:40px;top:250px">Still needed before Applications:<ul><li>Processing fee</li><li>Consent signed</li></ul></div>`)),
+ step(2,'<b>Record</b> fee as an <b>admin</b>: Paid / Unpaid / Waiver, amount, date, note.',frame(344,480,left(stageCard(PROS))+feePop(true),1)),
+ step(3,'<b>Record</b> as a <b>counsellor</b>: they REPORT the fee; it shows "Reported · awaiting admin" and already counts for Applications. The admin gets a notification and confirms or rejects it.',frame(344,500,left(stageCard(PROS))+feePop(false),1)),
+ step(4,'Admin view of a reported fee in the rail: <b>Confirm</b> or <b>Reject</b> right there.',frame(330,160,railConsent('Rs 5,000 reported','w','Not signed','w','','Copy link')+`<div style="position:absolute;left:12px;top:118px;display:flex;gap:6px"><span class="b out" style="height:26px;font-size:13px">Confirm</span><span class="b ghost" style="height:26px;font-size:13px">Reject</span></div>`)),
+],
+rules:[['Fee (same rules as today)',[S('owner/admin set Paid/Unpaid/Waiver + amount + note; others can only REPORT ("claimed").'),S('a reported fee counts for the Applications check; the admin is notified to verify.'),K('add a "Received" date. It needs a new database column (migration), so it ships as its own ticket through the PR pipeline; until then the fee form shows no date.')]],
+ ['Where it shows',[N('the requirement list in the stage card is the SAME check the server runs (applications-readiness), so they can\'t disagree.'),S('documents are NOT required for Applications (Admizz decision 2026-11-05).')]],
+ ['Edge cases',[S('tenant without an active consent template: only fee + basic info are listed; "Consent signed" is not shown.'),S('archived lead: no requirements, the stage card shows "Archived · Restore" (flow 6).')]]]});
+
+/* ========== F3b Consent ========== */
+F.push({id:'consent',t:'Consent: copy link, send, sign in person, upload',tag:['chg','Changed: restyled, same actions'],
+lead:'"Copy link" is the one-click default (creates the signing link without emailing, copies it, ready for WhatsApp). The ··· menu next to it keeps every other way to get consent signed.',
+steps:[
+ step(1,'Profile not complete: the consent row says so and <b>Complete profile</b> opens Edit profile at the first missing section (flow 10). Admins can still "Send anyway".',frame(330,190,railConsent('Not recorded','w','3 fields missing','w','Record','Complete')+`<div class="mini" style="position:absolute;left:20px;top:118px;width:240px">Missing for consent: Father's name, Passport no., Address (3)</div><div style="position:absolute;left:12px;top:152px"><span class="b ghost" style="height:24px;font-size:12px;padding:0 6px">Admins: Send anyway</span></div>`)),
+ step(2,'Profile complete → click <b>Copy link</b>: the link is created and copied; toast "Consent link copied". Status becomes "Awaiting signature".',frame(330,160,railConsent('Rs 5,000 · Paid','','Awaiting signature','w','','Copy')+`<div class="toast" style="left:12px;top:108px">${I('okc','okd sm')}Consent link copied</div>`)),
+ step(3,'··· menu on the consent row: every other way.',frame(330,250,railConsent('Rs 5,000 · Paid','','Awaiting signature','w','','···')+`<div class="pop" style="left:40px;top:84px;width:240px"><div class="pl"><div class="po hv">${I('mail','sm')}Email it to the student</div><div class="po">${I('sign','sm')}Sign in person (on this device)</div><div class="po">${I('doc','sm')}Upload a signed copy</div><div class="po">${I('rot','sm')}Resend link</div></div></div>`)),
+ step(4,'Signed: "Signed Nov 10 · View" opens the signed PDF in a large dialog (same as today). Link expired: "Link expired · Resend".',frame(330,120,railConsent('Rs 5,000 · Paid','','Signed Nov 10','','','View'))),
+],
+rules:[['Who',[S('anyone who can manage applications sends / copies / signs in person / uploads; admins can override the profile check.'),S('the signed document opens inline, not in a new tab.')]],
+ ['States covered',[S('not sent · profile incomplete · awaiting signature · expired · signed.'),N('the stage card and the rail read one status, so they can\'t disagree.')]],
+ ['Unlocks',[S('Applications "+" stays disabled until consent is signed (only when the tenant has an active template), with the tooltip "Unlocks after consent".')]]]});
+
+/* ========== F4 Move to… (admin) ========== */
+F.push({id:'moveto',t:'Admin / branch manager: Move to… any stage',tag:['chg','Changed: same checks as everyone'],
+lead:'Admins and branch managers keep "move to any stage, any direction", but each stage now says what it needs, and the same Qualify / GPA / Applications checks run.',
+steps:[
+ step(1,'Click <b>Move to…</b>. Each stage shows its state; Applications shows "2 missing" and is disabled with the reason.',frame(580,360,left(stageCard(PROS))+`<div class="pop" style="left:340px;top:150px;width:220px"><div class="ps">${I('srch','sm')}Move to…</div><div class="pl">
+ <div class="po">${'<span class="dot" style="background:var(--s-pre)"></span>'}Pre-qualified</div><div class="po">${'<span class="dot" style="background:var(--s-qual)"></span>'}Qualified</div><div class="po dis">${'<span class="dot" style="background:var(--s-pros)"></span>'}Prospects<span class="ck">${I('chk','sm')}</span></div>
+ <div class="po dis">${'<span class="dot" style="background:var(--s-app)"></span>'}Applications<span class="s2 w">2 missing</span></div></div><div class="pf"><div class="po">${I('arch','sm')}Archive…</div></div></div>`)),
+ step(2,'Pick a stage → confirm with that stage\'s team in the assignee list (same people as today; never empty).',frame(500,320,dlg(20,16,460,`<div class="dbd" style="padding:20px 20px 18px"><div class="conf"><span class="cic blue">${I('next')}</span><div><h3>Move to Qualified?</h3><p class="p">This is a step back. Aarav moves to <b>Qualified</b>.</p></div></div>${fld('Assign to',avc('BR','#eceef0','#2b2d2f')+'Binod Rai <span class="mini" style="margin-left:4px">Qualified team</span>',{sel:1})}</div>`+ft('',`<span class="b ghost">Cancel</span><span class="b go">Move <span class="ent">↵</span></span>`)),1)),
+],
+rules:[['Who',[S('owner, admin, branch manager (education). Chain members don\'t get "Move to…"; they get Send to next + Revert.')]],
+ ['Changes',[C('choosing Qualified from Pre-qualified now opens the Qualify pop-up (flow 1).'),C('choosing Applications runs the readiness check first; disabled with the reason when it would fail.'),S('Prospects GPA gate is bypassed for these roles (rule unchanged).')]]]});
+
+/* ========== F5 Revert ========== */
+F.push({id:'revert',t:'Revert (send it back)',tag:['same','Same rules, new look'],
+lead:'Hands the lead back one stage, by default to the person who sent it.',
+steps:[
+ step(1,'Click <b>Revert to Pre-qualified</b>. First holders see it disabled: "This lead started with you".',frame(344,330,left(stageCard(QUAL)))),
+ step(2,'Confirm. The previous holder is preselected; their team mates and admins are the other choices.',frame(500,320,dlg(20,16,460,`<div class="dbd" style="padding:20px 20px 18px"><div class="conf"><span class="cic amber">${I('back')}</span><div><h3>Revert to Pre-qualified?</h3><p class="p">Sita goes back to <b>Pre-qualified</b>. Tell them why in a note so they know what to fix.</p></div></div>${fld('Give it to',avc('GK','#fdecea','#b4231a')+'Gita Karki <span class="mini" style="margin-left:4px">sent it to you</span>',{sel:1})}${fld('Why','Not reachable, wrong number',{opt:1})}</div>`+ft('',`<span class="b ghost">Cancel</span><span class="b go">Revert <span class="ent">↵</span></span>`)),1)),
+],
+rules:[['Rules kept',[S('first holder cannot revert (server enforced); admin/branch manager can always revert.'),S('the default is the previous holder from assignment history; options = their same-position peers + admins.')]],
+ ['New',[K('optional "Why" note, saved as a lead note so the sender knows what to fix.')]]]});
+
+/* ========== F6 Archive ========== */
+F.push({id:'archive',t:'Archive from the lead page',tag:['new','New on this page'],
+lead:'Today a single lead can only be archived from the table\'s bulk bar. The archive icon in the stage card opens the same red confirm with a reason.',
+steps:[
+ step(1,'Click the archive icon → red confirm with the same reasons as bulk archive.',frame(500,300,dlg(20,16,460,`<div class="dbd" style="padding:20px 20px 18px"><div class="conf"><span class="cic red">${I('arch')}</span><div><h3>Archive Aarav Shrestha?</h3><p class="p">He leaves every stage. You can bring him back from <b>Archive</b> any time.</p></div></div>${fld('Reason','Choose a reason',{ph:1,sel:1})}</div>`+ft('',`<span class="b ghost">Cancel</span><span class="b go red off">Archive <span class="ent">↵</span></span>`)),1)),
+ step(2,'Archived: the stage card becomes a banner with <b>Restore</b>; tabs stay readable, editing is off.',frame(344,150,left(`<div class="stg" style="margin:0"><div class="stg-h"><span class="lb">Stage</span><span class="sp"></span><span class="chip">${I('arch','xs')}Archived · Not reachable</span></div><div class="mini" style="margin-top:8px">Archived Nov 11 by Farhan Ali from Prospects.</div><button class="bigbtn" style="background:#fff;color:var(--ink);box-shadow:inset 0 0 0 1px var(--line)">${I('rot','sm')}Restore to Prospects</button></div>`))),
+],
+rules:[['Who',[S('archiving = moving to the Archived stage; the server requires a reason and checks access to that stage, same as bulk archive.'),N('Restore returns it to the stage and status it was archived from (archived_from_list_id / status, already stored).')]],
+ ['Decided',[K('add Archive to the lead page. Today it exists only in the table\'s bulk bar, so staff leave the lead to archive it. Same reasons and server rule; Restore on the page.')]]]});
+
+/* ========== F7 Status ========== */
+F.push({id:'status',t:'Change status inside the stage',tag:['same','Same data, searchable'],
+lead:'The chip "Prospects · Follow-up" opens the statuses of THIS stage only (each stage has its own list).',
+steps:[
+ step(1,'Click the chip → searchable list of this stage\'s statuses, current one ticked.',frame(344,300,left(stageCard(PROS))+`<div class="pop" style="left:110px;top:46px;width:210px"><div class="ps">${I('srch','sm')}Search status</div><div class="pl"><div class="po">New</div><div class="po hv">Follow-up<span class="ck">${I('chk','sm')}</span></div><div class="po">Documents pending</div><div class="po">Ready</div><div class="po">On hold</div></div></div>`)),
+],
+rules:[['Rules kept',[S('PATCH stage_id (+ pipeline_id when the stage belongs to another pipeline: the data-drift fix stays).'),S('optimistic: changes at once, rolls back with a toast if the save fails.')]]]});
+
+/* ========== F8 Collaborators ========== */
+F.push({id:'collab',t:'Collaborators: admin vs other staff',tag:['chg','Changed'],
+lead:'Only owners and admins can add or remove collaborators (the server already enforces this). Everyone else sees the list read-only. The counsellor is never repeated as a collaborator.',
+steps:[
+ step(1,'<b>Admin:</b> hover the row → a <b>+</b> appears. Click it.',frame(344,150,left(drow('users','Collaborators',pill('Binod Rai','BR')+pill('Dipa Gurung','DG'),{cls:'wr hv',r:'<span class="btn ic" style="width:24px;height:24px;margin-left:auto">'+I('plus','sm')+'</span>'}),12))),
+ step(2,'Searchable people picker, grouped by role. Already-added people and the counsellor are left out. Enter adds and keeps the picker open for the next one.',frame(344,330,left(drow('users','Collaborators',pill('Binod Rai','BR')+pill('Dipa Gurung','DG'),{cls:'wr'}),12)+`<div class="pop" style="left:110px;top:70px;width:230px"><div class="ps">${I('srch','sm')}<span style="color:var(--ink)">as</span><span style="width:1.5px;height:16px;background:var(--blue)"></span></div><div class="pl"><div class="gl">Counsellors</div><div class="po hv">${avc('AT','#e9f2ff','#1d5bd0')}Asha Tamang</div><div class="gl">Documentation</div><div class="po">${avc('AS','#eceef0','#2b2d2f')}Asmita Shah</div></div><div class="pf"><div class="mini" style="padding:4px 8px">Farhan Ali is the counsellor</div></div></div>`)),
+ step(3,'Remove: click × on a pill → it goes at once with a toast <b>Undo</b> (no extra pop-up).',frame(344,150,left(drow('users','Collaborators',pill('Binod Rai','BR'),{cls:'wr'}),12)+`<div class="toast" style="left:16px;top:84px">Dipa Gurung removed<a>Undo</a></div>`)),
+ step(4,'<b>Counsellor / other staff:</b> read-only. No +, no ×. Hover explains.',frame(344,150,left(drow('users','Collaborators',pill('Binod Rai','BR',false)+pill('Dipa Gurung','DG',false),{cls:'wr hv',r:'<span class="lk">'+I('lock','xs')+'</span>'}),12)+`<div class="tip2" style="left:100px;top:84px">Only admins can change collaborators</div>`)),
+],
+rules:[['Rules kept',[S('add/remove = owner/admin only (server returns 403 to others).'),S('collaborators can see and work the lead; the leads table can filter by Collaborators.')]],
+ ['Changes',[C('today\'s "Add collaborator…" dropdown + separate add button → one searchable picker.'),C('today: × then an inline "Remove?" link. New: remove + Undo toast.'),C('the counsellor is hidden from the collaborator list (today Farhan shows twice).'),K('keep collaborators owner/admin-only (today\'s rule). Branch managers already see and reassign their branch\'s leads; collaborator changes widen who can see a lead, so it stays an admin decision.')]]]});
+
+/* ========== F9 Counsellor ========== */
+F.push({id:'counsellor',t:'Change the counsellor',tag:['same','Same rules, searchable'],
+lead:'Click the Counsellor value. Who can: anyone with "can assign leads" (admins, managers, TeleCaller pool roles). Others see a lock.',
+steps:[
+ step(1,'<b>Admin:</b> searchable list scoped to the lead\'s current stage team (falls back to branch → tenant so it is never empty).',frame(344,300,left(drow('user','Counsellor',avc('FA')+'<span class="t">Farhan Ali</span>',{cls:'hv'}),12)+`<div class="pop" style="left:110px;top:52px;width:230px"><div class="ps">${I('srch','sm')}Search people</div><div class="pl"><div class="gl">Prospects team · Kathmandu</div><div class="po">${avc('FA')}Farhan Ali<span class="ck">${I('chk','sm')}</span></div><div class="po hv">${avc('CS','#fff3e0','#b25e09')}Chirag Shah</div><div class="po">${avc('GK','#fdecea','#b4231a')}Gita Karki</div></div><div class="pf"><div class="po">${I('user','sm')}Unassign</div></div></div>`)),
+ step(2,'Assigning an unqualified lead to a counsellor would push it into Prospects: the GPA pop-up opens first (server rule, unchanged).',frame(360,110,`<div class="banner" style="position:absolute;left:16px;top:16px;right:16px;height:auto;padding:10px 12px;align-items:flex-start">${I('cap','sm')}<span>Assigning Chirag moves Aarav to Prospects, which needs a %/GPA. <a style="color:var(--blue)">Add it</a></span></div>`)),
+ step(3,'<b>Counsellor without assign rights:</b> lock + tooltip "Only managers can reassign".',frame(344,110,left(drow('user','Counsellor',avc('Y','#ece8fb','#4b3aa8')+'<span class="t">You</span>',{cls:'hv',r:'<span class="lk">'+I('lock','xs')+'</span>'}),12)+`<div class="tip2" style="left:150px;top:56px">Only managers can reassign</div>`)),
+],
+rules:[['Rules kept',[S('canAssignLeads permission; counsellors limited to their scope; stage-scoped picker for admin/branch manager.'),S('the GPA hard-block on assign stays on the server.')]]]});
+
+/* ========== F10 Edit profile ========== */
+F.push({id:'editprofile',t:'Edit profile (the full Student Details form)',tag:['chg','Changed: Dialogs v1 form + sections'],
+lead:'"Edit profile" (top right or in Details) opens the big form in the approved 808px form dialog, with a section list on the left. Fields the consent form needs are marked. Small edits still happen inline in the Details list (flow 11).',
+steps:[
+ step(1,'Click <b>Edit profile</b>. Opens on the first section with something missing (or where "Complete profile" pointed).',frame(860,560,dlg(20,16,808,`<div class="hd"><span class="dic">${I('user')}</span>Edit profile <span class="sub">Aarav Shrestha · 22 of 31 filled</span><span class="x">${I('x','sm')}</span></div>
+  <div style="display:flex;height:440px">
+   <div style="width:200px;flex:none;border-right:1px solid var(--line-soft);padding:8px">${[['Personal',''],['Address','1'],['Basic details','2'],['Guardian','1'],['Passport','1'],['Study interest',''],['Academic',''],['Tests',''],['Work experience',''],['References',''],['Funding','1'],['Source','']].map((s,i)=>`<div class="po" style="display:flex;align-items:center;gap:8px;height:32px;padding:0 8px;border-radius:8px;${i===2?'background:#f6f7f7;color:var(--ink)':'color:var(--l63)'};font-weight:500">${s[0]}${s[1]?`<span class="n" style="margin-left:auto;color:var(--warn);background:var(--warn-soft)">${s[1]}</span>`:''}</div>`).join('')}</div>
+   <div class="dbd" style="flex:1;overflow:hidden"><div style="font:500 13px Inter">Basic details</div>
+    <div class="row2">${fld('Date of birth','Set date of birth',{ph:1,req:1,sel:1})}${fld('Marital status','Single',{sel:1})}</div>
+    <div class="row2">${fld("Father's name",'Set father’s name',{ph:1,req:1,focus:1})}${fld("Mother's name",'Sita Shrestha',{})}</div>
+    <div class="row2">${fld('Nationality','Nepali',{sel:1})}${fld('Citizenship no.','Set citizenship no.',{ph:1})}</div>
+   </div></div>`+ft('<span class="mini">3 fields changed</span>',`<span class="b ghost">Cancel</span><span class="b go">Save <span class="ent">⌘↵</span></span>`)),1)),
+ step(2,'Close or J/K away with unsaved changes → the standard discard confirm.',frame(500,200,dlg(20,16,440,`<div class="dbd" style="padding:20px 20px 18px"><h3 style="margin:0 0 4px;font-size:15px;font-weight:600">Discard your changes?</h3><p class="p">You edited 3 fields on <b>Aarav Shrestha</b>. They won't be saved.</p></div>`+ft('',`<span class="b ghost">Keep editing</span><span class="b go">Discard <span class="ent">↵</span></span>`)),1)),
+],
+rules:[['Rules kept',[S('same fields and save path as today\'s Student Details pop-up; edit right = admin, assignee or collaborator (isEditor).'),S('the Applications gate pop-up "Edit profile" button still jumps to the missing fields.')]],
+ ['Changes',[C('one long scroll → section list with "missing for consent" counts.'),C('today\'s page-wide Edit mode (every section turns into inputs) is removed; inline edit in Details + this form replace it.'),K('drop the page-wide Edit mode on the education page: in-place editing for single fields, Edit profile for the whole profile. Other industries keep today\'s page.')]]]});
+
+/* ========== F11 Inline details ========== */
+F.push({id:'inline',t:'Inline edit in Details + tags',tag:['new','New'],
+lead:'Click any value in Details to edit it in place (Attio). Enter saves, Esc cancels. Empty values read "Set …".',
+steps:[
+ step(1,'Click "Set study countries" → a searchable multi-pick opens right there.',frame(344,300,left(drow('globe','Study in','<span class="t" style="color:var(--l50)">Set study countries</span>',{cls:'edit'}),12)+`<div class="pop" style="left:110px;top:52px;width:230px"><div class="ps">${I('srch','sm')}Search countries</div><div class="pl"><div class="po hv">Australia<span class="ck">${I('chk','sm')}</span></div><div class="po">Canada</div><div class="po">Japan</div><div class="po">United Kingdom</div></div></div>`)),
+ step(2,'Tags: × removes (fixes EDGEX-147, no way to remove a tag today), "+" adds from existing tags or creates one.',frame(344,240,left(drow('tag','Tags',pill('NEB 2025')+pill('Scholarship'),{cls:'wr hv',r:'<span class="btn ic" style="width:24px;height:24px;margin-left:auto">'+I('plus','sm')+'</span>'}),12)+`<div class="pop" style="left:110px;top:60px;width:230px"><div class="ps">${I('srch','sm')}<span style="color:var(--ink)">ielts</span></div><div class="pl"><div class="po hv">IELTS booked</div><div class="po">${I('plus','sm')}Create "ielts"</div></div></div>`)),
+],
+rules:[['Who',[S('same edit rights as today (canEdit / isEditor); read-only users see values without hover.')]],
+ ['Saves',[S('each field PATCHes on its own; optimistic with rollback + toast on failure.'),N('tags remove/add (EDGEX-147).')]]]});
+
+/* ========== F12 Log activity ========== */
+F.push({id:'log',t:'Log activity (Activity tab)',tag:['chg','Changed: restyled'],
+lead:'"Log activity" is the same as today\'s Log Call / Email / Meeting, plus Note and Check-in, in one menu.',
+steps:[
+ step(1,'Click <b>Log activity</b>.',frame(420,240,`<div style="position:absolute;right:16px;top:16px;display:flex;gap:8px"><span class="btn bd">${I('filter','sm')}Filter</span><span class="btn bd">${I('plus','sm')}Log activity</span></div>`+`<div class="pop" style="left:170px;top:56px;width:234px"><div class="pl"><div class="po hv">${I('ph','sm')}Call</div><div class="po">${I('cal','sm')}Meeting</div><div class="po">${I('mail','sm')}Email (sent outside EdgeX)</div><div class="po">${I('note','sm')}Note</div><div class="po">${I('chkin','sm')}Check-in</div></div></div>`)),
+ step(2,'Call: outcome as segmented choices, duration, when (defaults to now), notes.',frame(600,380,dlg(20,16,560,hd('ph','Log call','Aarav Shrestha')+`<div class="dbd"><div class="f"><label>Outcome</label><div class="seg2"><span class="on">Connected</span><span>No answer</span><span>Busy</span><span>Voicemail</span><span>Wrong no.</span></div></div>
+  <div class="row2">${fld('Duration (min)','12',{focus:1})}${fld('When','Today, 10:42',{sel:1})}</div>${fld('Notes','Interested, waiting on parents for the fee',{ta:1})}</div>`+ft('<span class="mini">Also set a follow-up task</span>',`<span class="b ghost">Cancel</span><span class="b go">Log call <span class="ent">⌘↵</span></span>`)),1)),
+],
+rules:[['Rules kept',[S('same payload as today (call_outcome, duration_minutes, subject).'),S('counts toward Last touch and the Activity count.')]],
+ ['New',[K('"When" field, defaults to now, past only (log a call from earlier). No database change: the activity time is set on save.'),K('"Also set a follow-up task" toggle: after saving, the task composer opens prefilled ("Follow up: Aarav", due tomorrow 10:00, assigned to you).')]]]});
+
+/* ========== F13 Rail + buttons ========== */
+F.push({id:'rail',t:'Right rail "+" buttons: Applications, Classes, Documents, Check-ins',tag:['chg','Changed'],
+lead:'Every "+" in the rail opens the same dialog as its tab\'s main button. Clicking a section title opens that tab.',
+steps:[
+ step('A','<b>Applications +</b> (disabled until consent when the template is active). Form dialog with the existing fields.',frame(600,400,dlg(20,16,560,hd('app','Add application','Aarav Shrestha')+`<div class="dbd"><div class="row2">${fld('University','University of Melbourne',{focus:1})}${fld('Program','Bachelor of Nursing',{sel:1})}</div><div class="row2">${fld('Level','Bachelor',{sel:1})}${fld('Intake','Feb 2027',{sel:1})}</div><div class="row2">${fld('Status','Preparing',{sel:1})}${fld('Deadline','Set deadline',{ph:1,sel:1})}</div>${fld('Agent','None',{opt:1,sel:1})}</div>`+ft('<span class="tog"></span><span class="mini">Add another</span>',`<span class="b ghost">Cancel</span><span class="b go">Add application <span class="ent">⌘↵</span></span>`)),1)),
+ step('B','<b>Classes +</b>: pick a class (searchable), demo or actual, fee.',frame(500,330,dlg(20,16,460,hd('cls','Add to class')+`<div class="dbd">${fld('Class','IELTS Morning B · 6/12 seats',{sel:1})}<div class="f"><label>Type</label><div class="seg2"><span class="on">Actual</span><span>Demo</span></div></div><div class="row2">${fld('Fee','Paid',{sel:1})}${fld('Amount (Rs)','8,000',{})}</div></div>`+ft('',`<span class="b ghost">Cancel</span><span class="b go">Enroll <span class="ent">↵</span></span>`)),1)),
+ step('C','<b>Documents +</b>: drop files, pick a type per file, upload shows progress. It only counts as uploaded after the storage check (two-system rule).',frame(500,380,dlg(20,16,460,hd('doc','Upload documents')+`<div class="dbd"><div class="drop">${I('doc')}Drop files or <b>browse</b><span class="mini">PDF, Word, JPG, PNG, WEBP · up to 25 MB each (tenant setting)</span></div>
+  <div style="display:flex;align-items:center;gap:8px"><span class="ext" style="font:600 9px/16px Inter;width:26px;text-align:center;border-radius:4px;background:#fdecea;color:#b4231a">PDF</span><span style="flex:1">Passport.pdf</span><span class="in" style="height:28px;width:140px">Passport${I('dn','chev sm')}</span></div><div class="prog"><i style="width:64%"></i></div></div>`+ft('',`<span class="b ghost">Cancel</span><span class="b go off">Upload <span class="ent">↵</span></span>`)),1)),
+ step('D','<b>Check-ins +</b>: record a visit for this student (existing per-lead check-in). Front desk can also set who they meet and, on education, assign + move stage.',frame(500,380,dlg(20,16,460,hd('chkin','Check in','Aarav Shrestha')+`<div class="dbd">${fld('Reason','Document submission',{sel:1})}${fld('Meeting with','Farhan Ali',{opt:1,sel:1})}<div class="row2">${fld('Assign to','Keep Farhan Ali',{opt:1,sel:1})}${fld('Move to','Stay in Prospects',{opt:1,sel:1})}</div><div class="hint">Records a visit now. Assign and Move are optional.</div></div>`+ft('',`<span class="b ghost">Cancel</span><span class="b go">Check in <span class="ent">↵</span></span>`)),1)),
+],
+rules:[['Rules kept',[S('Applications: canManageApplicationPanel; disabled until consent signed (active template only).'),S('Classes: canEnroll; only from Qualified.'),S('Documents: canEdit; presign → upload → verify (exists) → save.'),S('Check-in: POST /leads/:id/check-in with reason, meet_with_id, assign_to_id, move_to_stage (qualified/prospects, GPA rules apply).')]],
+ ['Changes',[C('today\'s side sheets for Add application / Add enrollment become Dialogs v1 form dialogs.'),N('a check-in can be recorded from the lead page (today only from the Check-in page).'),K('same rule as today: anyone with check-in access can record a visit for any lead in the tenant (front-desk action). The dialog says: "Records a visit now. Assign and Move are optional."')]]]});
+
+/* ========== F14 Delete & quick actions ========== */
+F.push({id:'delete',t:'··· menu: Delete, copy link, and the quick actions',tag:['chg','Changed'],
+lead:'The browser\'s built-in "Are you sure?" box on Delete is replaced by the red confirm. Call / WhatsApp / Note / Task are one click from the identity block.',
+steps:[
+ step(1,'Header ··· menu.',frame(300,230,`<div style="position:absolute;right:12px;top:10px" class="btn ic">${I('dots')}</div><div class="pop" style="right:12px;top:44px;width:220px"><div class="pl"><div class="po">${I('src','sm')}Copy link to this lead</div><div class="po">${I('cp','sm')}Copy lead ID</div><div class="po">${I('users','sm')}Merge duplicates…</div></div><div class="pf"><div class="po hv" style="color:var(--bad)">${I('x','sm')}Delete lead</div></div></div>`)),
+ step(2,'Delete (admins only): red confirm, typed-free, says it can be restored from the Recycle bin.',frame(500,230,dlg(20,16,460,`<div class="dbd" style="padding:20px 20px 18px"><div class="conf"><span class="cic red">${I('x')}</span><div><h3>Delete Aarav Shrestha?</h3><p class="p">The lead moves to the <b>Recycle bin</b>. Admins can restore it from there.</p></div></div></div>`+ft('',`<span class="b ghost">Cancel</span><span class="b go red">Delete <span class="ent">↵</span></span>`)),1)),
+ step(3,'Quick actions: <b>Call</b> = phone link (logs nothing until you log it); <b>WhatsApp</b> = opens the Inbox thread when WhatsApp is connected, else wa.me; no phone → disabled with "No phone number". <b>Note</b> / <b>Task</b> open small composers.',frame(344,250,left(`<div class="acts" style="margin:0"><span class="btn bd">${I('mail','sm')}Email</span><span class="btn ic bd">${I('ph','sm')}</span><span class="btn ic bd">${I('wa','sm')}</span><span class="btn ic bd">${I('note','sm')}</span><span class="btn ic bd" style="box-shadow:inset 0 0 0 1px var(--blue)">${I('task','sm')}</span><span class="btn ic bd">${I('dots','sm')}</span></div>`,14)+`<div class="pop" style="left:12px;top:52px;width:316px"><div class="pb"><div class="in focus">Send course shortlist<span class="caret"></span></div><div style="display:flex;gap:6px"><span class="b out" style="height:26px;font-size:13px">${I('cal','xs')}Fri</span><span class="b out" style="height:26px;font-size:13px">${I('user','xs')}Farhan</span><span class="sp" style="flex:1"></span><span class="b go" style="height:26px;font-size:13px">Add <span class="ent">↵</span></span></div></div></div>`)),
+],
+rules:[['Rules kept',[S('Delete = owner/admin; soft delete (deleted_at) → Recycle bin restore.'),S('WhatsApp + Copy link exist today inside the Action menu; they move to the identity row / ··· menu.')]],
+ ['Keyboard',[N('J/K = next/previous lead, N = note, T = task, E = email, ⌘↵ = the stage card\'s main button, Esc closes. Shortcuts are off while typing in a field.')]]]});
+
+document.getElementById('flows').innerHTML=F.map(f=>`<section class="flow" id="${f.id}"><h2>${f.t}<span class="tg ${f.tag[0]}">${f.tag[1]}</span></h2><p class="lead">${f.lead}</p><div class="steps">${f.steps.join('')}</div>${rules(f.rules)}</section>`).join('');
+
+const TG={qualify:{0:'.bigbtn'},prospects:{0:'.req a'},apps:{0:'.bigbtn',1:'.req a',2:'.req a'},consent:{1:'.kv:nth-child(2) a'},moveto:{0:'.stg-f .btn:nth-child(3)'},revert:{0:'.stg-f .btn'},archive:{},status:{0:'.chip'},collab:{0:'.dr .btn.ic',2:'.toast a'},counsellor:{0:'.dr .v'},inline:{0:'.dr .v',1:'.dr .btn.ic'},log:{0:'.btn.bd:nth-child(2)'},delete:{0:'.btn.ic'}};
+function placeRings(){document.querySelectorAll('.ring,.fr>.cursor').forEach(e=>e.remove());document.querySelectorAll('.flow').forEach(fl=>{const m=TG[fl.id]||{};fl.querySelectorAll('.st').forEach((st,i)=>{const sel=m[i];if(!sel)return;const fr=st.querySelector('.fr');const el=fr.querySelector(sel);if(!el)return;const a=fr.getBoundingClientRect(),r=el.getBoundingClientRect();const x=r.left-a.left,y=r.top-a.top;fr.insertAdjacentHTML('beforeend',`<span class="ring" style="left:${x-3}px;top:${y-3}px;width:${r.width+6}px;height:${r.height+6}px"></span><span class="cursor" style="left:${x+Math.min(r.width*.6,r.width-8)}px;top:${y+r.height*.55}px"></span>`)})})}
+(document.fonts?document.fonts.ready:Promise.resolve()).then(()=>requestAnimationFrame(placeRings));window.addEventListener('load',placeRings);
+
+document.getElementById('toc').innerHTML=F.map((f,i)=>`<a href="#${f.id}">${i+1} · ${f.t.split(' (')[0].split(':')[0]}</a>`).join('')+'<a href="#qa">QA checklist</a>';
+
+/* ========== QA checklist ========== */
+const QA=[
+['Every role sees the right controls: owner/admin, branch manager, chain counsellor, telecaller pool, read-only viewer, collaborator-only.','same','Matrix verified against permissions in code; live check per role before handoff.'],
+['Admin moving to Qualified skips the Qualify pop-up today.','fix','Fixed: Move to… → Qualified opens Qualify (flow 1, 4).'],
+['Admin "Move to Applications" has no pre-check today (only fails after the click).','fix','Fixed: disabled with the reason; server still re-checks.'],
+['Stage-card list and the server readiness check could disagree.','new','One source: GET applications-readiness feeds the card.'],
+['Hand-off makes the lead read-only → page jumps back to the list.','fix','Opens your next lead in the view; back to the list if none (flow 2).'],
+['Server auto-assigns an unassigned lead on some moves (stage-transition governance).','same','UI re-reads assigned_to after every move and updates Counsellor.'],
+['Entering a stage can auto-enrol the lead in an outreach sequence.','new','Confirm dialogs say so when a sequence is configured.'],
+['Optimistic updates (status, stage, counsellor, inline fields) roll back on failure with a toast.','same','Kept; tested per field.'],
+['Fee reported by staff ("claimed") counts for Applications and waits for admin confirm/reject.','same','Kept; admin sees Confirm / Reject in the rail.'],
+['Consent states: not sent, profile incomplete, awaiting, expired, signed; admin override of the profile check.','same','All drawn (flow 3b).'],
+['No active consent template: no consent requirement, Applications "+" enabled.','same','Requirement list hides "Consent signed".'],
+['Archived lead: gates off, editing off, Restore back to the archived-from stage/status.','new','Flow 6.'],
+['"Other"-tagged contacts (walk-ins): no stage card, no study interest.','same','Stage card + study rows hidden for them.'],
+['Counsellor duplicated as a collaborator.','fix','Hidden from the collaborator list.'],
+['Activity tab count only counts system events (6 vs 8 notes).','fix','Count = everything in the unified timeline.'],
+['A lead with no events shows an empty Activity tab.','fix','"Created the lead" event always first (same helper as the preview).'],
+['Delete uses the browser confirm box (blocks automation, not accessible).','fix','Red Dialogs v1 confirm (flow 14).'],
+['Unsaved Edit profile changes when pressing J/K or closing.','new','Discard confirm (flow 10).'],
+['Keyboard shortcuts fire while typing (J/K typed into the search box happened on /leads).','fix','Shortcuts ignored when focus is in an input/textarea/contenteditable.'],
+['Tabs overflow at narrow widths.','new','"+N more" measured by width; hidden tabs keep their counts in the menu.'],
+['Tabs for features not unlocked yet (Classes before Qualified, Applications/Consent before Prospects).','same','Hidden, same rule as the cards today.'],
+['Rail below 1280px.','new','Hidden; same items in tabs. No stacking under the page.'],
+['Phone 390: identity, stage card, scrolling tab strip; dialogs become bottom sheets.','new','Drawn in page state 6; dialogs use the existing mobile sheet.'],
+['Accessibility: page h1 = student name, tab title = student name, skip link, role=tab on tabs, 24px min targets, labelled icon buttons, focus returns to the trigger after a dialog.','new','Part of ticket A/B/C acceptance.'],
+['Call/WhatsApp without a phone number.','new','Disabled with tooltip "No phone number".'],
+['Copy buttons give feedback.','new','Icon turns into a tick for 1.5s + "Copied" tooltip.'],
+['Two people editing the same lead.','same','Last write wins today; no change in this round (noted, not in scope).'],
+['Other industries (it_agency etc.) keep today\'s page.','same','New page is education_consultancy only; checked on admin@edgex.local.'],
+];
+document.getElementById('qa').innerHTML=`<h2>QA checklist (what I'll verify live before you see the build)</h2><table><tr><th>#</th><th>Case</th><th>Status</th><th>How it's handled</th></tr>${QA.map((q,i)=>`<tr><td>${i+1}</td><td>${q[0]}</td><td><span class="pl-s ${q[1]}">${{same:'Same as today',fix:'Bug fixed',new:'New',dec:'Decide',chg:'Changed'}[q[1]]}</span></td><td>${q[2]}</td></tr>`).join('')}</table>`;
+</script>
+
+</body></html>

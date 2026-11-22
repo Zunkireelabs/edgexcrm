@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dialogs v1 mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#101112;--text:#2b2d2f;--muted:#6b6f76;--faint:#9a9ea5;--ghost:#d0d3d7;
+  --line:#e8e9eb;--line-soft:#f0f1f2;--bg:#fff;--head:#fafafa;--hover:#f6f7f9;--sel:#edf3ff;
+  --blue:#266df0;--blue-d:#1d5bd0;--blue-soft:#eaf1ff;
+  --good:#12805c;--good-soft:#e7f6ef;--warn:#b25e09;--warn-soft:#fff3e0;--bad:#c4321f;--bad-d:#a92a1a;--bad-soft:#fdecea;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font:500 14px/20px Inter,-apple-system,"Segoe UI",sans-serif;color:var(--ink);background:#f4f5f6;-webkit-font-smoothing:antialiased}
+.states{display:flex;gap:6px;flex-wrap:wrap;padding:10px 16px;background:#101112;position:sticky;top:0;z-index:200}
+.states button{font:500 12px Inter,sans-serif;background:#26282b;color:#cfd2d6;border:0;border-radius:6px;padding:5px 10px;cursor:pointer}
+.states button.on{background:#fff;color:#101112}
+.states span{color:#8b8f96;align-self:center;margin:0 4px 0 8px;font-size:12px}
+svg.i{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
+
+/* faux page behind the dialog */
+.app{margin:16px;background:#fff;border:1px solid var(--line);border-radius:12px;position:relative;min-height:760px;overflow:hidden}
+.app .top{height:52px;display:flex;align-items:center;gap:8px;padding:0 16px;border-bottom:1px solid var(--line);font-weight:600}
+.app .top .cnt{font:500 12px Inter;color:var(--muted);background:var(--hover);border-radius:6px;padding:1px 6px}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th{height:38px;text-align:left;font-weight:500;color:var(--text);border-bottom:1px solid var(--line);padding:0 12px;box-shadow:inset -1px 0 0 var(--line)}
+td{height:36px;border-bottom:1px solid var(--line);padding:0 12px;box-shadow:inset -1px 0 0 var(--line);color:var(--ink);white-space:nowrap}
+tr.sel td{background:var(--sel)}
+.cb{width:14px;height:14px;border-radius:4px;box-shadow:inset 0 0 0 1px #c9ccd1;display:inline-block;vertical-align:middle}
+tr.sel .cb{background:var(--blue);box-shadow:none}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:8px}
+
+/* ===== THE STANDARD: two-layer shell (same as the approved command dialog) ===== */
+.dlg{position:absolute;left:50%;top:96px;transform:translateX(-50%);display:none;flex-direction:column;padding:4px;background:rgba(255,255,255,.6);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-radius:16px;box-shadow:0 8px 28px -6px rgba(28,40,64,.12),0 18px 88px -4px rgba(28,40,64,.16),0 0 1px rgba(28,40,64,.16);z-index:90}
+.dlg.on{display:flex}
+.dlg.sm{width:440px}.dlg.md{width:560px}.dlg.lg{width:720px}.dlg.form{width:808px;top:14vh}.dlg.form .card{height:70vh}.dlg.form .bd{max-height:none;flex:1;min-height:0}.dlg.form .hd{height:44px}.dlg.form .ft{height:44px}.dlg.form .b{height:28px;border-radius:8px}.sec{font-size:13px;font-weight:500;color:var(--ink);margin:4px 0 -4px 4px}
+.card{display:flex;flex-direction:column;background:#fff;border-radius:12px;box-shadow:0 0 0 1px rgba(28,40,64,.08),0 1px 2px rgba(28,40,64,.04);overflow:hidden}
+.hd{display:flex;align-items:center;gap:8px;height:48px;padding:0 12px 0 16px;border-bottom:1px solid var(--line-soft);font-size:14px;font-weight:500}
+.hd .ic{width:20px;height:20px;border-radius:6px;display:grid;place-items:center;background:var(--blue-soft);color:var(--blue)}
+.hd .ic svg.i{width:13px;height:13px}
+.hd .sub{color:var(--faint);font-weight:400}
+.hd .x{margin-left:auto;width:28px;height:28px;border-radius:8px;display:grid;place-items:center;color:var(--faint);cursor:pointer}
+.hd .x:hover{background:var(--hover)}
+.bd{padding:16px;display:flex;flex-direction:column;gap:16px;max-height:min(560px,calc(100vh - 290px));overflow:auto}
+.ft{display:flex;align-items:center;gap:8px;height:52px;padding:0 12px 0 16px;border-top:1px solid var(--line-soft);font-size:13px;color:var(--muted)}
+.ft .sp{flex:1}
+.kb{min-width:20px;height:20px;border-radius:6px;display:inline-grid;place-items:center;box-shadow:inset 0 0 0 1px var(--line);color:var(--muted);font-size:11px;padding:0 4px}
+.b{display:inline-flex;align-items:center;gap:8px;height:32px;border:0;border-radius:9px;font:500 14px Inter;cursor:pointer;white-space:nowrap}
+.b.ghost{background:transparent;color:var(--muted);padding:0 10px}
+.b.ghost:hover{background:var(--hover);color:var(--ink)}
+.b.out{background:#fff;color:var(--ink);padding:0 10px;box-shadow:inset 0 0 0 1px var(--line)}
+.b.go{background:var(--blue);color:#fff;padding:0 6px 0 12px}
+.b.go.solo{padding:0 12px}
+.b.go.red{background:var(--bad)}
+.b.go.off{opacity:.45;cursor:default}
+.b .ent{min-width:20px;height:20px;border-radius:5px;background:rgba(255,255,255,.2);display:grid;place-items:center;font-size:11px;padding:0 4px}
+.b.red-ghost{background:transparent;color:var(--bad);padding:0 10px}
+.b.red-ghost:hover{background:var(--bad-soft)}
+
+/* form fields (Attio form dialog) */
+.f{display:flex;flex-direction:column;gap:4px}
+.f label{font-size:12px;line-height:16px;color:rgba(0,0,0,.5);font-weight:500;padding-left:4px}
+.f label .optl{color:rgba(0,0,0,.5);font-weight:500}
+.in{height:32px;border-radius:9px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.06);display:flex;align-items:center;gap:8px;padding:0 8px;font-weight:500;color:var(--ink)}
+.in.ph{color:rgba(0,0,0,.5)}
+.in.focus{box-shadow:inset 0 0 0 1px var(--blue);border-radius:10px}
+.in.err{box-shadow:inset 0 0 0 1px var(--bad)}
+.in .chev{margin-left:auto;color:var(--faint)}
+.hint{font-size:12px;color:var(--faint);font-weight:400}
+.hint.bad{color:var(--bad);font-size:12px;line-height:16px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px 12px}
+.tog{width:28px;height:16px;border-radius:9px;background:#d9dce0;position:relative;display:inline-block}
+.tog::after{content:"";position:absolute;left:2px;top:2px;width:12px;height:12px;border-radius:50%;background:#fff}
+.p{margin:0;color:var(--text);font-weight:400;line-height:21px}
+.p b{font-weight:500;color:var(--ink)}
+
+/* command list (sequence picker) */
+.q{display:flex;align-items:center;height:56px;padding:0 18px;border-bottom:1px solid var(--line-soft);font:500 16px Inter;color:var(--faint)}
+.q .car{width:1.5px;height:20px;background:var(--blue);margin-right:2px}
+.lst{padding:8px;max-height:320px;overflow:auto}
+.grp{padding:6px 8px 4px;font-size:12px;color:var(--faint)}
+.it{display:flex;align-items:center;gap:10px;height:40px;padding:0 8px;border-radius:12px;font-size:14px;cursor:pointer}
+.it.hv{background:#f6f7f7}
+.it .bx{width:24px;height:24px;border-radius:7px;display:grid;place-items:center;box-shadow:inset 0 0 0 1px var(--line);color:var(--muted)}
+.it .bx svg.i{width:14px;height:14px}
+.it .sub{color:var(--faint);font-size:13px;font-weight:400}
+.it .n{margin-left:auto;color:var(--faint);font-size:12px;font-weight:400}
+
+/* preview blocks */
+.sum{display:flex;align-items:baseline;gap:8px}
+.sum .big{font-size:24px;font-weight:600;letter-spacing:-.01em}
+.sum .of{color:var(--muted);font-weight:400}
+.eg{color:var(--faint);font-weight:400;font-size:13px}
+.box{border-radius:10px;box-shadow:inset 0 0 0 1px var(--line);overflow:hidden}
+.box .r{display:flex;align-items:center;height:34px;padding:0 12px;font-weight:400;color:var(--text);border-top:1px solid var(--line-soft)}
+.box .r:first-child{border-top:0}
+.box .r .v{margin-left:auto;font-variant-numeric:tabular-nums;color:var(--ink);font-weight:500}
+.box .r.h{color:var(--muted);font-size:12px;height:30px;background:var(--head)}
+.opts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.opt{border-radius:10px;box-shadow:inset 0 0 0 1px var(--line);padding:10px 12px;cursor:pointer}
+.opt .t{display:flex;align-items:center;gap:8px;font-weight:500}
+.opt .d{font-size:12px;color:var(--faint);font-weight:400;margin-top:2px;line-height:16px}
+.rad{width:14px;height:14px;border-radius:50%;box-shadow:inset 0 0 0 1px #c9ccd1}
+.opt.on{box-shadow:inset 0 0 0 1.5px var(--blue);background:#f7faff}
+.opt.on .rad{box-shadow:inset 0 0 0 4px var(--blue)}
+.note{display:flex;gap:10px;align-items:flex-start;border-radius:10px;padding:10px 12px;font-size:13px;font-weight:400;line-height:18px}
+.note.warn{background:var(--warn-soft);color:#6b3a05}
+.note.warn svg.i{color:var(--warn)}
+.note.info{background:var(--hover);color:var(--text)}
+.note.info svg.i{color:var(--muted)}
+.note b{font-weight:500}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;background:var(--hover);border-radius:4px;padding:1px 5px;color:var(--ink)}
+.bar{height:6px;border-radius:4px;background:var(--line-soft);overflow:hidden}
+.bar i{display:block;height:100%;width:62%;background:var(--blue);border-radius:4px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stat{border-radius:10px;box-shadow:inset 0 0 0 1px var(--line);padding:10px 12px}
+.stat .k{font-size:12px;color:var(--faint);font-weight:400}
+.stat .v{font-size:18px;font-weight:600;font-variant-numeric:tabular-nums;margin-top:2px}
+.stat .v.g{color:var(--good)}
+.done-ic{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:var(--good-soft);color:var(--good)}
+.warn-ic{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:var(--bad-soft);color:var(--bad)}
+.conf{display:flex;gap:14px;align-items:flex-start}
+.conf h3{margin:0 0 4px;font-size:15px;font-weight:600}
+.spin{width:14px;height:14px;border-radius:50%;border:2px solid var(--blue-soft);border-top-color:var(--blue);display:inline-block}
+
+
+/* dropdown (Attio Create Person > Company, measured 2026-11-11) */
+.pop{position:absolute;background:#fff;border-radius:12px;box-shadow:0 0 0 1px rgba(28,40,64,.04),0 4px 8px -4px rgba(28,40,64,.12),0 4px 12px -2px rgba(24,41,75,.16);overflow:hidden;z-index:5}
+.pop .ps{display:flex;align-items:center;gap:8px;height:36px;padding:8px 12px;box-shadow:inset 0 -1px 0 #eeeff1;color:rgba(0,0,0,.5);font-weight:500}
+.pop .pl{padding:4px}
+.pop .po{display:flex;align-items:center;gap:8px;height:32px;padding:6px 8px;border-radius:8px;font-weight:500;color:var(--ink)}
+.pop .po.hv{background:#f6f7f7}
+.pop .po .s2{font-size:12px;line-height:16px;color:rgba(0,0,0,.63);margin-left:-2px}
+.pop .po .ck{margin-left:auto;color:var(--muted)}
+.pop .pf{box-shadow:inset 0 1px 0 #eeeff1;padding:4px}
+.relw{position:relative}
+.notes{margin:0 16px 24px;background:#fff7e6;padding:12px 14px;border-radius:8px;color:#5c3d00;font-size:13px;line-height:19px;font-weight:400}
+.notes b{font-weight:600}
+.notes ul{margin:6px 0 0;padding-left:18px}
+</style></head>
+<body>
+<div class="states" id="states">
+  <span>Enroll in sequence:</span>
+  <button data-s="e1" class="on">1 · Pick sequence</button>
+  <button data-s="e2">2 · Preview</button>
+  <button data-s="e3">3 · Preview (big batch, type to confirm)</button>
+  <button data-s="e4">4 · Running</button>
+  <button data-s="e5">5 · Done</button>
+  <span>Other dialogs:</span>
+  <button data-s="c1">Confirm · destructive</button>
+  <button data-s="c2">Confirm · simple</button>
+  <button data-s="f1">Form · Add lead</button>
+  <button data-s="f2">Form · validation error</button>
+  <button data-s="f3">Form · dropdown open</button>
+  <button data-s="old">Today (before)</button>
+</div>
+
+<div class="app">
+  <div class="top"><svg class="i" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 4.6a3.5 3.5 0 010 6.8M18 14.7c2 .6 3.3 2.3 3.6 5.3"/></svg>Leads <span class="cnt">444</span></div>
+  <table>
+    <tr><th style="width:44px"><span class="cb"></span></th><th>Name</th><th>Stage</th><th>Assigned to</th><th>Email</th><th>Last activity</th></tr>
+    <tr class="sel"><td><span class="cb"></span></td><td>Pulse Lead 187</td><td><span class="dot" style="background:#2fb36b"></span>Applications</td><td>Gita Karki</td><td>pulse.lead.187@pulse.invalid</td><td>9d since touch</td></tr>
+    <tr class="sel"><td><span class="cb"></span></td><td>Pulse Lead 361</td><td><span class="dot" style="background:#6c6cf0"></span>Pre-qualified</td><td>Binod Rai</td><td>pulse.lead.361@pulse.invalid</td><td>Never touched</td></tr>
+    <tr><td><span class="cb"></span></td><td>Pulse Lead 311</td><td><span class="dot" style="background:#6c6cf0"></span>Pre-qualified</td><td>Binod Rai</td><td>pulse.lead.311@pulse.invalid</td><td>Never touched</td></tr>
+    <tr><td><span class="cb"></span></td><td>Pulse Lead 49</td><td><span class="dot" style="background:#2fb36b"></span>Applications</td><td>Gita Karki</td><td>pulse.lead.49@pulse.invalid</td><td>6d since touch</td></tr>
+    <tr><td><span class="cb"></span></td><td>Pulse Lead 227</td><td><span class="dot" style="background:#3b82f6"></span>Qualified</td><td>Dipa Gurung</td><td>pulse.lead.227@pulse.invalid</td><td>5d since touch</td></tr>
+    <tr><td><span class="cb"></span></td><td>Pulse Lead 404</td><td><span class="dot" style="background:#3b82f6"></span>Qualified</td><td>Asha Tamang</td><td>pulse.lead.404@pulse.invalid</td><td>6d since touch</td></tr>
+    <tr><td><span class="cb"></span></td><td>Pulse Lead 367</td><td><span class="dot" style="background:#6c6cf0"></span>Pre-qualified</td><td>Binod Rai</td><td>pulse.lead.367@pulse.invalid</td><td>Never touched</td></tr>
+    <tr><td><span class="cb"></span></td><td>Pulse Lead 203</td><td><span class="dot" style="background:#f08a3c"></span>Prospects</td><td>Farhan Ali</td><td>pulse.lead.203@pulse.invalid</td><td>7d since touch</td></tr>
+    <tr><td><span class="cb"></span></td><td>Pulse Lead 99</td><td><span class="dot" style="background:#6c6cf0"></span>Pre-qualified</td><td>Binod Rai</td><td>pulse.lead.99@pulse.invalid</td><td>7d since touch</td></tr>
+    <tr><td><span class="cb"></span></td><td>Pulse Lead 347</td><td><span class="dot" style="background:#6c6cf0"></span>Pre-qualified</td><td>Binod Rai</td><td>pulse.lead.347@pulse.invalid</td><td>7d since touch</td></tr>
+    <tr><td><span class="cb"></span></td><td>Pulse Lead 386</td><td><span class="dot" style="background:#3b82f6"></span>Qualified</td><td>Asha Tamang</td><td>pulse.lead.386@pulse.invalid</td><td>6d since touch</td></tr>
+    <tr><td><span class="cb"></span></td><td>Pulse Lead 331</td><td><span class="dot" style="background:#6c6cf0"></span>Pre-qualified</td><td>Binod Rai</td><td>pulse.lead.331@pulse.invalid</td><td>7d since touch</td></tr>
+    <tr><td><span class="cb"></span></td><td>Pulse Lead 50</td><td><span class="dot" style="background:#6c6cf0"></span>Pre-qualified</td><td>Asha Tamang</td><td>pulse.lead.50@pulse.invalid</td><td>9d since touch</td></tr>
+    <tr><td><span class="cb"></span></td><td>Pulse Lead 12</td><td><span class="dot" style="background:#3b82f6"></span>Qualified</td><td>Dipa Gurung</td><td>pulse.lead.12@pulse.invalid</td><td>3d since touch</td></tr>
+    <tr><td><span class="cb"></span></td><td>Pulse Lead 77</td><td><span class="dot" style="background:#f08a3c"></span>Prospects</td><td>Farhan Ali</td><td>pulse.lead.77@pulse.invalid</td><td>2d since touch</td></tr>
+    <tr><td><span class="cb"></span></td><td>Pulse Lead 140</td><td><span class="dot" style="background:#6c6cf0"></span>Pre-qualified</td><td>Binod Rai</td><td>pulse.lead.140@pulse.invalid</td><td>Never touched</td></tr>
+    <tr><td><span class="cb"></span></td><td>Pulse Lead 258</td><td><span class="dot" style="background:#2fb36b"></span>Applications</td><td>Gita Karki</td><td>pulse.lead.258@pulse.invalid</td><td>4d since touch</td></tr>
+    <tr><td><span class="cb"></span></td><td>Pulse Lead 301</td><td><span class="dot" style="background:#3b82f6"></span>Qualified</td><td>Asha Tamang</td><td>pulse.lead.301@pulse.invalid</td><td>8d since touch</td></tr>
+  </table>
+
+  <!-- 1. Pick sequence: command list (same as Move stage / Assign) -->
+  <div class="dlg lg on" id="e1"><div class="card">
+    <div class="hd">Enroll 2 leads in a sequence<span class="x"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></span></div>
+    <div class="q"><span class="car"></span>Search sequences…</div>
+    <div class="lst">
+      <div class="grp">Email</div>
+      <div class="it hv"><span class="bx"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.5 6.5l8.5 6 8.5-6"/></svg></span>New enquiry follow-up<span class="sub">5 steps · sends automatically</span><span class="n">128 active</span></div>
+      <div class="it"><span class="bx"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.5 6.5l8.5 6 8.5-6"/></svg></span>UK intake Jan 2027<span class="sub">4 steps · you approve each email</span><span class="n">42 active</span></div>
+      <div class="it"><span class="bx"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.5 6.5l8.5 6 8.5-6"/></svg></span>Re-engage cold leads<span class="sub">3 steps · sends automatically</span><span class="n">0 active</span></div>
+      <div class="grp">SMS</div>
+      <div class="it"><span class="bx"><svg class="i" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg></span>Counselling reminder<span class="sub">2 steps · 1 credit per text</span><span class="n">16 active</span></div>
+    </div>
+    <div class="ft"><span class="kb">↑</span><span class="kb">↓</span>Navigate<span class="sp"></span><button class="b ghost">Cancel</button><button class="b go">Preview “New enquiry follow-up” <span class="ent">↵</span></button></div>
+  </div></div>
+
+  <!-- 2. Preview -->
+  <div class="dlg md" id="e2"><div class="card">
+    <div class="hd"><span class="ic"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.5 6.5l8.5 6 8.5-6"/></svg></span>New enquiry follow-up<span class="sub">· 2 selected leads</span><span class="x"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></span></div>
+    <div class="bd">
+      <div><div class="sum"><span class="big">2</span><span class="of">of 2 leads will be enrolled</span></div><div class="eg">Pulse Lead 187, Pulse Lead 361</div></div>
+      <div class="box"><div class="r h">Skipped</div><div class="r">Already in a sequence<span class="v">0</span></div><div class="r">No email address<span class="v">0</span></div><div class="r">Unsubscribed or bounced<span class="v">0</span></div></div>
+      <div class="note info"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v.5"/></svg><div>First email goes out <b>today, 10:00–17:00</b> (send window). 5 steps over 14 days; replies stop the sequence for that lead.</div></div>
+      <div class="note warn"><svg class="i" viewBox="0 0 24 24"><path d="M12 8v5M12 16.5v.5"/><path d="M10.3 3.9L2.4 18a2 2 0 001.7 3h15.8a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg><div>Emails go to the <b>real leads</b>, not a test address.</div></div>
+    </div>
+    <div class="ft"><button class="b ghost">← Back</button><span class="sp"></span><button class="b ghost">Cancel</button><button class="b go">Enroll 2 leads <span class="ent">↵</span></button></div>
+  </div></div>
+
+  <!-- 3. Preview, big batch: conflict policy + type to confirm -->
+  <div class="dlg md" id="e3"><div class="card">
+    <div class="hd"><span class="ic"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.5 6.5l8.5 6 8.5-6"/></svg></span>New enquiry follow-up<span class="sub">· 845 filtered leads</span><span class="x"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></span></div>
+    <div class="bd">
+      <div><div class="sum"><span class="big">712</span><span class="of">of 845 leads will be enrolled</span></div><div class="eg">e.g. Aarav Shrestha, Sita Gurung, Bikash Thapa</div></div>
+      <div class="box"><div class="r h">Skipped · 133</div><div class="r">Already in a sequence<span class="v">58</span></div><div class="r">No email address<span class="v">61</span></div><div class="r">Same email as another lead<span class="v">9</span></div><div class="r">Unsubscribed or bounced<span class="v">5</span></div></div>
+      <div class="f"><label>58 leads are already in another sequence</label>
+        <div class="opts">
+          <div class="opt on"><div class="t"><span class="rad"></span>Skip them</div><div class="d">Leave them where they are.</div></div>
+          <div class="opt"><div class="t"><span class="rad"></span>Switch them</div><div class="d">End that sequence, start this one.</div></div>
+          <div class="opt"><div class="t"><span class="rad"></span>Queue next</div><div class="d">Start this one when theirs ends.</div></div>
+        </div></div>
+      <div class="note warn"><svg class="i" viewBox="0 0 24 24"><path d="M12 8v5M12 16.5v.5"/><path d="M10.3 3.9L2.4 18a2 2 0 001.7 3h15.8a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg><div>Daily cap is <b>300 emails</b>, so this takes about <b>2 extra days</b> to send. Emails go to the real leads.</div></div>
+      <div class="f"><label>Type <span class="mono">ENROLL</span> to start 712 enrollments</label><div class="in focus">ENRO<span style="width:1.5px;height:18px;background:var(--blue);margin-left:-6px"></span></div></div>
+    </div>
+    <div class="ft"><button class="b ghost">← Back</button><span class="sp"></span><button class="b ghost">Cancel</button><button class="b go off">Enroll 712 leads <span class="ent">↵</span></button></div>
+  </div></div>
+
+  <!-- 4. Running -->
+  <div class="dlg md" id="e4"><div class="card">
+    <div class="hd"><span class="ic"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.5 6.5l8.5 6 8.5-6"/></svg></span>New enquiry follow-up<span class="sub">· enrolling</span><span class="x"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></span></div>
+    <div class="bd">
+      <div style="display:flex;align-items:center;gap:8px"><span class="spin"></span><span>Enrolling 441 of 712…</span><span class="eg" style="margin-left:auto">about 20 s left</span></div>
+      <div class="bar"><i></i></div>
+      <div class="stats"><div class="stat"><div class="k">Enrolled</div><div class="v g">441</div></div><div class="stat"><div class="k">Skipped</div><div class="v">133</div></div><div class="stat"><div class="k">Failed</div><div class="v">0</div></div></div>
+      <div class="hint">You can close this. Enrolling carries on, and the result is in Outreach → Enrollments.</div>
+    </div>
+    <div class="ft"><button class="b red-ghost">Stop enrolling</button><span class="sp"></span><button class="b out">Close</button></div>
+  </div></div>
+
+  <!-- 5. Done -->
+  <div class="dlg md" id="e5"><div class="card">
+    <div class="hd"><span class="ic"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.5 6.5l8.5 6 8.5-6"/></svg></span>New enquiry follow-up<span class="sub">· done</span><span class="x"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></span></div>
+    <div class="bd">
+      <div class="conf"><span class="done-ic"><svg class="i" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg></span><div><h3>712 leads enrolled</h3><p class="p">133 were skipped. The first emails go out today between 10:00 and 17:00.</p></div></div>
+      <div class="stats"><div class="stat"><div class="k">Enrolled</div><div class="v g">712</div></div><div class="stat"><div class="k">Skipped</div><div class="v">133</div></div><div class="stat"><div class="k">Failed</div><div class="v">0</div></div></div>
+    </div>
+    <div class="ft"><button class="b out"><svg class="i" viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Download skipped (133)</button><span class="sp"></span><button class="b go solo">Done</button></div>
+  </div></div>
+
+  <!-- Confirm destructive -->
+  <div class="dlg sm" id="c1"><div class="card">
+    <div class="bd" style="padding:20px 20px 18px">
+      <div class="conf"><span class="warn-ic"><svg class="i" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13"/></svg></span><div><h3>Archive 2 leads?</h3><p class="p">They leave every stage and list. You can bring them back from <b>Archive</b> at any time.</p></div></div>
+      <div class="f"><label>Reason</label><div class="in ph">Choose a reason<svg class="i chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div></div>
+    </div>
+    <div class="ft"><span class="sp"></span><button class="b ghost">Cancel</button><button class="b go red">Archive 2 leads <span class="ent">↵</span></button></div>
+  </div></div>
+
+  <!-- Confirm simple -->
+  <div class="dlg sm" id="c2"><div class="card">
+    <div class="bd" style="padding:20px 20px 18px">
+      <div><h3 style="margin:0 0 4px;font-size:15px;font-weight:600">Discard your changes?</h3><p class="p">You edited 3 fields on <b>Pulse Lead 187</b>. If you leave now, they won’t be saved.</p></div>
+    </div>
+    <div class="ft"><span class="sp"></span><button class="b ghost">Keep editing</button><button class="b go">Discard <span class="ent">↵</span></button></div>
+  </div></div>
+
+  <!-- Form: Add lead -->
+  <div class="dlg form" id="f1"><div class="card">
+    <div class="hd"><span class="ic"><svg class="i" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/></svg></span>Add lead<span class="x"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></span></div>
+    <div class="bd">
+      <div class="row2"><div class="f"><label>First name</label><div class="in focus">Aarav<span style="width:1.5px;height:18px;background:var(--blue);margin-left:-6px"></span></div></div><div class="f"><label>Last name</label><div class="in ph">Set last name</div></div></div>
+      <div class="row2"><div class="f"><label>Email</label><div class="in ph">name@example.com</div></div><div class="f"><label>Phone</label><div class="in ph">+977 98…</div></div></div>
+      <div class="row2"><div class="f"><label>Stage</label><div class="in"><span class="dot" style="background:#6c6cf0;margin-right:0"></span>Pre-qualified<svg class="i chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div></div><div class="f"><label>Assigned to <span class="optl">(optional)</span></label><div class="in ph">Choose someone<svg class="i chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div></div></div>
+      <div class="f"><label>Interested in <span class="optl">(optional)</span></label><div class="in ph">Country, course or intake</div></div>
+    </div>
+    <div class="ft"><span class="tog"></span>Add another<span class="sp"></span><button class="b ghost">Cancel</button><button class="b go">Add lead <span class="ent">⌘↵</span></button></div>
+  </div></div>
+
+  <!-- Form: validation -->
+  <div class="dlg form" id="f2"><div class="card">
+    <div class="hd"><span class="ic"><svg class="i" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/></svg></span>Add lead<span class="x"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></span></div>
+    <div class="bd">
+      <div class="row2"><div class="f"><label>First name</label><div class="in">Aarav</div></div><div class="f"><label>Last name</label><div class="in">Shrestha</div></div></div>
+      <div class="row2"><div class="f"><label>Email</label><div class="in err">aarav@gmail</div><span class="hint bad">Enter a full email address, like name@example.com.</span></div><div class="f"><label>Phone</label><div class="in err"></div><span class="hint bad">Add an email or a phone number.</span></div></div>
+      <div class="row2"><div class="f"><label>Stage</label><div class="in"><span class="dot" style="background:#6c6cf0;margin-right:0"></span>Pre-qualified<svg class="i chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div></div><div class="f"><label>Assigned to <span class="optl">(optional)</span></label><div class="in ph">Choose someone<svg class="i chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div></div></div>
+    </div>
+    <div class="ft"><span class="tog"></span>Add another<span class="sp"></span><button class="b ghost">Cancel</button><button class="b go">Add lead <span class="ent">⌘↵</span></button></div>
+  </div></div>
+
+
+  <!-- Form: dropdown open -->
+  <div class="dlg form" id="f3"><div class="card">
+    <div class="hd"><span class="ic"><svg class="i" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/></svg></span>Add lead<span class="x"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></span></div>
+    <div class="bd" style="overflow:visible">
+      <div class="row2"><div class="f"><label>First name</label><div class="in">Aarav</div></div><div class="f"><label>Last name</label><div class="in">Shrestha</div></div></div>
+      <div class="row2"><div class="f"><label>Field of study <span class="optl">(optional)</span></label><div class="relw"><div class="in focus">Engineering &amp; Technology<svg class="i chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div>
+        <div class="pop" style="left:0;right:0;top:36px"><div class="ps"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>Search fields…</div><div class="pl">
+          <div class="po">Business &amp; Management</div><div class="po hv">Engineering &amp; Technology<svg class="i ck" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg></div><div class="po">Medical &amp; Pharmacy</div><div class="po">Humanities &amp; Social Sciences</div><div class="po">Not decided</div></div></div></div></div>
+        <div class="f"><label>Assigned to <span class="optl">(optional)</span></label><div class="relw"><div class="in focus" style="box-shadow:inset 0 0 0 1px var(--blue)">Choose someone<svg class="i chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div>
+        <div class="pop" style="left:0;right:0;top:36px"><div class="ps"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>Find someone…</div><div class="pl">
+          <div class="po hv"><span class="av" style="width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:9px;font-weight:600;color:var(--muted);background:var(--hover)">GK</span>Gita Karki<span class="s2">Counsellor · Kathmandu</span></div><div class="po"><span class="av" style="width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:9px;font-weight:600;color:var(--muted);background:var(--hover)">BR</span>Binod Rai<span class="s2">TeleCaller</span></div></div>
+          <div class="pf"><div class="po"><svg class="i" viewBox="0 0 24 24"><path d="M5 12h14"/></svg>Unassign</div></div></div></div></div></div>
+      <div style="height:200px"></div>
+    </div>
+    <div class="ft"><span class="tog"></span>Add another<span class="sp"></span><button class="b ghost">Cancel</button><button class="b go">Add lead <span class="ent">⌘↵</span></button></div>
+  </div></div>
+  <!-- Before: today's dialog, for comparison -->
+  <div id="old" style="display:none;position:absolute;inset:0;background:rgba(0,0,0,.45);z-index:80">
+    <div style="position:absolute;left:50%;top:150px;transform:translateX(-50%);width:430px;background:#fff;border-radius:16px;padding:22px 24px;box-shadow:0 10px 40px rgba(0,0,0,.2)">
+      <div style="font-size:18px;font-weight:600">Enroll in sequence</div><div style="color:var(--muted);font-weight:400;margin-top:4px">1 selected lead</div>
+      <div style="margin-top:18px;font-size:14px">Sequence</div><div class="in ph" style="width:210px;margin-top:6px;border-radius:10px">Choose a sequence<svg class="i chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:22px"><button class="b out" style="border-radius:20px;padding:0 16px">Cancel</button><button class="b" style="border-radius:20px;padding:0 16px;background:#8a8a8a;color:#fff">Start</button></div>
+    </div>
+  </div>
+</div>
+
+<div class="notes"><b>Dialogs v1 (EDGEX-145), for Sadin's approval.</b> One standard for ALL dialogs, copying Attio: the same two-layer shell as the approved command dialog (a frosted 4px outer layer with 16px corners around a white inner card with 12px corners and a hairline), no grey page overlay, a 48px header (icon, title, grey context, ✕), and a 52px footer (left: Back, toggles or hints; right: Cancel, then the main button, which names the action and shows its key ↵ or ⌘↵). Three widths: small 440 (confirms), medium 560, large 720 (lists and forms).
+<ul>
+<li><b>Enroll in sequence</b> becomes a list you search (like Move stage and Assign) → preview → start, instead of a dropdown. Everything it does today stays: the skipped counts, what to do with leads already in a sequence (Skip / Switch / Queue), the send-window, daily-cap and real-leads warnings, typing ENROLL for big batches, live progress with Stop, and downloading the skipped leads. The disabled grey “Start” becomes the named blue button.</li>
+<li><b>Confirms</b>: a small card with no header bar; destructive ones get a red icon and a red button. Archive keeps its reason picker.</li>
+<li><b>Form fields (updated 2026-11-11, measured from Attio’s Create Person):</b> labels 12px/500 at 50% black, 32px fields with 9px corners and a 6% hairline, 14px/500 text, placeholder at 50% black, focus = 1px blue line only (no glow). Applies to fields in every dialog.</li><li><b>Dropdowns (Attio, app-wide):</b> white popover, 12px corners, soft shadow; a search row on every dropdown (consistent, like Attio); 32px rows with 8px corners; grey hover; the chosen item gets a grey check (no blue fill); optional grey second line; a “+” action row at the bottom when one exists. Triggers stop being pills.</li><li><b>Form dialog size (Attio Create Person, measured):</b> 808px wide (800px card), top fixed at 14% of the window, card a FIXED 70% of the window tall (it does not shrink for short forms), so long forms scroll inside with the header and footer staying put; 44px header and footer, 28px buttons. No description line under the title.</li><li><b>Forms</b> (Add lead shown; it keeps the fields it has today, only the look changes): Attio-style field labels, hairline inputs, a blue focus ring, red error text under the field, and “Add another”.</li>
+<li><b>How it's built:</b> restyle the two shared parts (<code>ui/dialog</code>, 113 files, and <code>ui/alert-dialog</code>, 11 files) so every dialog in the app upgrades at once. Enroll, Archive and Add lead also get the layout shown here. Other dialogs keep their own content and only gain the new shell, header and footer.</li>
+<li><b>Not in this round:</b> browser <code>confirm()</code> pop-ups (none left in .tsx), sheets and side panels, and dark mode (no switch yet).</li>
+</ul></div>
+
+<script>
+const ids=["e1","e2","e3","e4","e5","c1","c2","f1","f2","f3"];
+document.getElementById("states").addEventListener("click",e=>{const b=e.target.closest("button[data-s]");if(!b)return;
+document.querySelectorAll(".states button").forEach(x=>x.classList.toggle("on",x===b));
+ids.forEach(id=>document.getElementById(id).classList.toggle("on",id===b.dataset.s));
+document.getElementById("old").style.display=b.dataset.s==="old"?"block":"none";});
+</script>
+</body></html>

@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Applications list — mockup v1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#101112;--text:#2b2d2f;--muted:#6b6f76;--faint:#9a9ea5;--ghost:#d0d3d7;
+  --line:#e8e9eb;--line-soft:#f0f1f2;--bg:#fff;--head:#fafafa;--hover:#f6f7f9;--press:#eef0f3;--sel:#edf3ff;
+  --blue:#266df0;--blue-d:#1d5bd0;--blue-soft:#eaf1ff;
+  --good:#12805c;--warn:#b25e09;--warn-soft:#fff3e0;--bad:#c4321f;--bad-soft:#fdecea;
+  --pop-shadow:0 0 0 1px rgba(16,17,18,.06),0 8px 24px -4px rgba(16,17,18,.14),0 2px 6px rgba(16,17,18,.06);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font:500 14px/20px Inter,-apple-system,"Segoe UI",sans-serif;color:var(--ink);background:#f4f5f6;-webkit-font-smoothing:antialiased}
+.states{display:flex;gap:6px;flex-wrap:wrap;padding:10px 16px;font-size:12px;background:#101112;position:sticky;top:0;z-index:100}
+.states button{font:500 12px Inter,sans-serif;background:#26282b;color:#cfd2d6;border:0;border-radius:6px;padding:5px 10px;cursor:pointer}
+.states button.on{background:#fff;color:#101112}
+.states span{color:#8b8f96;align-self:center;margin-right:6px}
+.app{margin:16px;background:var(--bg);border:1px solid var(--line);border-radius:12px;overflow:visible;position:relative}
+svg.i{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.btn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 8px;border-radius:8px;border:0;background:transparent;color:var(--ink);font:inherit;cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--hover)}
+.btn.bd{box-shadow:inset 0 0 0 1px var(--line)}
+.btn.pri{background:var(--blue);color:#fff;padding:0 10px}
+.btn.sq{width:28px;padding:0;justify-content:center}
+.chev{width:14px;height:14px;color:var(--faint)}
+.kbd{font:500 11px Inter;color:var(--faint);border:1px solid var(--line);border-radius:4px;padding:0 5px;line-height:16px}
+/* header rows (same as board mockup) */
+.r1{display:flex;align-items:center;gap:8px;height:52px;padding:0 12px 0 16px}
+.r1 h1{font:600 16px/20px Inter;margin:0;letter-spacing:-.01em}
+.pill{font:500 12px Inter;color:var(--muted);background:var(--hover);border-radius:9999px;padding:0 8px;line-height:20px;font-variant-numeric:tabular-nums}
+.sp{flex:1}
+.pipe .pi{width:16px;height:16px;border-radius:4px;background:#fdebd9;color:#b25e09;display:inline-flex;align-items:center;justify-content:center}
+.pipe .pi svg{width:11px;height:11px}
+.pipe .c{color:var(--faint);font-variant-numeric:tabular-nums}
+.r2{display:flex;align-items:center;gap:2px;height:40px;padding:0 12px;border-bottom:1px solid var(--line)}
+.tab{height:40px;display:flex;align-items:center;gap:6px;padding:0 10px;color:var(--muted);cursor:pointer;position:relative}
+.tab.on{color:var(--ink)}
+.tab.on::after{content:"";position:absolute;left:8px;right:8px;bottom:-1px;height:2px;background:var(--ink);border-radius:2px}
+.tab .n{font:600 11px Inter;border-radius:9999px;padding:0 6px;line-height:18px;background:var(--hover);color:var(--muted)}
+.tab .n.r{background:var(--bad-soft);color:var(--bad)}
+.r3{display:flex;align-items:center;gap:8px;height:48px;padding:0 12px 0 16px;position:relative}
+.search{display:flex;align-items:center;gap:8px;height:28px;width:220px;padding:0 8px;border-radius:8px;box-shadow:inset 0 0 0 1px var(--line);color:var(--faint)}
+.search .kbd{margin-left:auto}
+.chip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 8px;border-radius:8px;color:var(--muted);cursor:pointer;white-space:nowrap}
+.chip:hover{background:var(--hover);color:var(--ink)}
+.chip.on{box-shadow:inset 0 0 0 1px var(--line);color:var(--ink);background:#fff}
+.chip b{font-weight:500;color:var(--ink)}
+/* applications pill chip (as built in Phase 2 round 2) */
+.pchip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:8px;border:1px solid var(--line);background:#fafaf9;font-size:13px;white-space:nowrap;cursor:pointer}
+.pchip .i{width:15px;height:15px;color:var(--muted)}
+.pchip .op{color:var(--muted);font-weight:400}
+.pchip b{font-weight:600}
+.pchip .x{color:var(--faint);margin-left:2px}
+.dplus{display:inline-flex;align-items:center;justify-content:center;height:28px;padding:0 10px;border-radius:8px;border:1px dashed var(--ghost);color:var(--muted);cursor:pointer}
+.seg{display:inline-flex;gap:2px;padding:2px;border-radius:8px;background:var(--hover)}
+.seg button{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;border:0;border-radius:6px;background:transparent;font:500 13px Inter;color:var(--muted);cursor:pointer}
+.seg button.on{background:#fff;color:var(--ink);box-shadow:0 0 0 1px var(--line)}
+/* table (Leads v2 metrics: 36px rows, 38px header, hairlines) */
+.tw{position:relative;overflow:auto;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+table{border-collapse:separate;border-spacing:0;table-layout:fixed;min-width:1394px;width:100%}
+th{height:38px;padding:0 12px;background:var(--bg);text-align:left;font-weight:500;color:var(--muted);border-bottom:1px solid var(--line);border-right:1px solid var(--line);position:sticky;top:0;z-index:2;white-space:nowrap;cursor:pointer}
+th .h{display:flex;align-items:center;gap:8px}
+th .h .i{color:var(--faint)}
+th .h .tt{color:var(--ink)}
+th .h .so{margin-left:auto;color:var(--muted)}
+th:hover{background:var(--hover)}
+th.last,td.last{border-right:0}
+td{height:36px;padding:0 12px;border-bottom:1px solid var(--line);border-right:1px solid var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sc{width:44px;padding:0 0 0 14px;position:sticky;left:0;z-index:3;background:var(--bg)}
+th.sc{z-index:4}
+.sn{position:sticky;left:44px;z-index:3;background:var(--bg);box-shadow:inset -1px 0 0 var(--line)}
+th.sn{z-index:4}
+tr.rw:hover td{background:var(--hover)}
+tr.rw.sel td{background:var(--sel)}
+tr.rw:hover td.sc,tr.rw:hover td.sn{background:var(--hover)}
+tr.rw.sel td.sc,tr.rw.sel td.sn{background:var(--sel)}
+.cb{width:16px;height:16px;border-radius:5px;box-shadow:inset 0 0 0 1.5px var(--ghost);background:#fff;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;cursor:pointer}
+.cb.on{background:var(--blue);box-shadow:none}
+.cb.on::after{content:"";width:8px;height:4px;border-left:1.8px solid #fff;border-bottom:1.8px solid #fff;transform:rotate(-45deg) translate(1px,-1px)}
+td .cb{opacity:.55}
+tr.rw:hover .cb,.anysel td .cb{opacity:1}
+.nm{position:relative;display:flex;align-items:center;gap:8px}
+.av{width:20px;height:20px;border-radius:9999px;display:inline-flex;align-items:center;justify-content:center;font:600 9px Inter;color:var(--text);background:var(--press);flex:none}
+.uni{width:20px;height:20px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;background:var(--hover);color:var(--muted);flex:none}
+.uni svg{width:13px;height:13px}
+.nm a{color:var(--ink);text-decoration:none;overflow:hidden;text-overflow:ellipsis}
+tr.rw:hover .nm a{text-decoration:underline;text-decoration-color:var(--ghost);text-underline-offset:3px}
+.acts{position:absolute;right:-4px;display:none;gap:2px;background:inherit}
+tr.rw:hover .acts{display:flex}
+.acts .btn{height:24px;padding:0 8px;font-size:12px;gap:4px;background:#fff;box-shadow:inset 0 0 0 1px var(--line)}
+.sub{color:var(--muted)}
+.stg{display:inline-flex;align-items:center;gap:8px;cursor:pointer;height:24px;padding:0 6px;margin:0 -6px;border-radius:6px}
+.stg:hover{background:var(--press)}
+.dot{width:8px;height:8px;border-radius:9999px;flex:none}
+.as{display:flex;align-items:center;gap:8px}
+.set{color:var(--faint)}
+.mono{color:var(--muted);font-variant-numeric:tabular-nums}
+.age{display:inline-flex;align-items:center;gap:4px;font:500 12px Inter;border-radius:6px;padding:0 6px;line-height:20px;color:var(--muted);background:var(--hover);font-variant-numeric:tabular-nums}
+.age.amb{color:var(--warn);background:var(--warn-soft)}
+.age.red{color:var(--bad);background:var(--bad-soft)}
+.dl.soon{color:var(--warn)}
+.dl.past{color:var(--bad)}
+.offer{font:500 12px Inter;color:var(--warn);background:var(--warn-soft);border-radius:6px;padding:0 6px;line-height:20px;margin-left:6px}
+tfoot td{height:36px;background:var(--head);color:var(--faint);border-bottom:0;border-top:0;font-size:13px}
+tfoot td.sc,tfoot td.sn{background:var(--head)}
+tfoot .v{color:var(--ink)}
+.pag{display:flex;align-items:center;gap:8px;height:48px;padding:0 12px 0 16px;color:var(--muted)}
+.pag b{color:var(--ink);font-weight:500}
+/* popovers */
+.pop{position:absolute;background:#fff;border-radius:10px;box-shadow:var(--pop-shadow);z-index:50;display:none;padding:4px;font-size:14px}
+.pop .it{display:flex;align-items:center;gap:10px;height:32px;padding:0 8px;border-radius:6px;cursor:pointer;color:var(--ink)}
+.pop .it:hover,.pop .it.hv{background:var(--hover)}
+.pop .it .i{color:var(--muted)}
+.pop .it .n{margin-left:auto;color:var(--faint);font-size:12px}
+.pop .sep{height:1px;background:var(--line-soft);margin:4px -4px}
+.pop .inp{display:flex;align-items:center;gap:8px;height:36px;padding:0 10px;color:var(--faint);border-bottom:1px solid var(--line-soft);margin:-4px -4px 4px;border-radius:10px 10px 0 0}
+.pop .lab{padding:6px 8px 2px;color:var(--faint);font-size:12px}
+.pop .grip{color:var(--ghost)}
+.pop .ck{margin-left:auto;color:var(--ink)}
+.s-sort #p-sort,.s-hdr #p-hdr,.s-cols #p-cols,.s-stage #p-stage{display:block}
+/* bulk + empty */
+.bulk{position:absolute;left:50%;bottom:64px;transform:translateX(-50%);display:none;align-items:center;gap:2px;background:var(--ink);color:#fff;border-radius:12px;padding:4px;box-shadow:var(--pop-shadow);z-index:60}
+.anysel .bulk{display:flex}
+.bulk .t{padding:0 12px;font-size:13px}
+.bulk button{background:transparent;border:0;color:#e6e8ea;height:28px;border-radius:8px;padding:0 10px;font:500 13px Inter;display:flex;gap:6px;align-items:center;cursor:pointer}
+.bulk button:hover{background:#2c2f33}
+.bulk .v{width:1px;height:16px;background:#3b3f44;margin:0 4px}
+.empty{display:none;padding:64px 0 72px;text-align:center;color:var(--muted)}
+.empty .big{width:40px;height:40px;border-radius:12px;background:var(--hover);margin:0 auto 12px;display:flex;align-items:center;justify-content:center;color:var(--faint)}
+.empty h3{font:600 15px Inter;color:var(--ink);margin:0 0 4px}
+.empty p{margin:0 0 14px;font-weight:400}
+.s-empty .empty{display:block}
+.s-empty table{display:none}
+.note{margin:0 16px 24px;font:400 12px/18px Inter;color:#6b6f76;max-width:1100px}
+</style></head><body>
+<div class="states" id="st"><span>States:</span></div>
+<div class="app" id="app">
+  <div class="r1">
+    <h1>Applications</h1><span class="pill" id="cnt">201</span>
+    <span class="sp"></span>
+    <button class="btn bd pipe"><span class="pi"><svg class="i" viewBox="0 0 24 24"><path d="M6 3v12M18 9a3 3 0 100-6 3 3 0 000 6zM6 21a3 3 0 100-6 3 3 0 000 6zM18 9a9 9 0 01-9 9"/></svg></span>Default pipeline <span class="c">201</span><svg class="i chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
+    <button class="btn bd sq" title="Pipeline settings"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 01-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 010-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 014 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 010 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg></button>
+    <button class="btn pri"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Add application</button>
+  </div>
+  <div class="r2">
+    <div class="tab on">All applications <span class="n">201</span></div>
+    <div class="tab">My applications <span class="n">34</span></div>
+    <div class="tab">Stuck 30d+ <span class="n r">17</span></div>
+    <span class="sp"></span>
+    <button class="btn" id="b-cols"><svg class="i" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>View settings<svg class="i chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
+  </div>
+  <div class="r3">
+    <div class="search"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>Search applications<span class="kbd">/</span></div>
+    <span class="chip on" id="b-sort"><svg class="i" viewBox="0 0 24 24"><path d="M4 7h9M4 12h6M4 17h3M17 5v14m0 0l-3-3m3 3l3-3"/></svg><span style="color:var(--muted)">Sorted by</span> <b>Time in stage</b></span>
+    <span id="fchips" style="display:flex;gap:8px"></span>
+    <span class="chip" id="b-filter"><svg class="i" viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Filter</span>
+    <span class="sp"></span>
+    <span class="seg"><button><svg class="i" viewBox="0 0 24 24"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="17" y="4" width="4" height="7" rx="1.5"/></svg>Board</button><button class="on"><svg class="i" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>List</button></span>
+  </div>
+
+  <div class="tw">
+  <table>
+    <colgroup><col style="width:44px"><col style="width:190px"><col style="width:210px"><col style="width:180px"><col style="width:190px"><col style="width:120px"><col style="width:160px"><col style="width:110px"><col style="width:110px"><col style="width:80px"></colgroup>
+    <thead><tr>
+      <th class="sc"><span class="cb" id="all"></span></th>
+      <th class="sn"><div class="h"><span class="tt">Student</span></div></th>
+      <th><div class="h"><svg class="i" viewBox="0 0 24 24"><path d="M3 10l9-5 9 5-9 5z"/><path d="M7 12v4c0 1.5 2.5 3 5 3s5-1.5 5-3v-4"/></svg><span class="tt">University</span></div></th>
+      <th><div class="h"><svg class="i" viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5z"/><path d="M9 10h6M9 14h6"/></svg><span class="tt">Program</span></div></th>
+      <th id="h-stage"><div class="h"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg><span class="tt">Stage</span></div></th>
+      <th><div class="h"><svg class="i" viewBox="0 0 24 24"><path d="M6 3h12M6 21h12M8 3c0 5 8 5 8 9s-8 4-8 9M16 3c0 5-8 5-8 9"/></svg><span class="tt">Time in stage</span><svg class="i so" viewBox="0 0 24 24"><path d="M12 5v14m0 0l-5-5m5 5l5-5"/></svg></div></th>
+      <th><div class="h"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0116 0"/></svg><span class="tt">Counsellor</span></div></th>
+      <th><div class="h"><svg class="i" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg><span class="tt">Intake</span></div></th>
+      <th><div class="h"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg><span class="tt">Deadline</span></div></th>
+      <th class="last"><div class="h"><svg class="i" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></svg><span class="tt">Docs</span></div></th>
+    </tr></thead>
+    <tbody id="tb"></tbody>
+    <tfoot><tr>
+      <td class="sc"></td><td class="sn"><span class="v" id="fc">201</span> applications</td>
+      <td><span class="v" id="fu">24</span> universities</td><td></td><td><span class="v" id="fs">6</span> stages</td><td><span class="v" id="fm">12d</span> median</td><td><span class="v" id="fco">9</span> counsellors</td>
+      <td></td><td><span class="v" id="fd">11</span> due in 14d</td><td class="last"></td>
+    </tr></tfoot>
+  </table>
+  <div class="empty"><div class="big"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg></div><h3>No applications match these filters</h3><p>Try removing a filter, or check the spelling of your search.</p><button class="btn bd">Clear filters</button></div>
+  </div>
+  <div class="pag"><span id="show">Showing 1–25 of 201</span><span class="sp"></span><span>Rows per page</span><button class="btn bd">25<svg class="i chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button><button class="btn bd sq"><svg class="i" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button><span>Page <b>1</b> of <span id="pgs">9</span></span><button class="btn bd sq"><svg class="i" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button></div>
+
+  <!-- popovers -->
+  <div class="pop" id="p-sort" style="left:246px;top:196px;width:220px">
+    <div class="it hv">Time in stage<span class="ck">✓</span></div><div class="it">Newest</div><div class="it">Recently updated</div><div class="it">University A–Z</div><div class="it">Deadline soonest</div>
+  </div>
+  <div class="pop" id="p-hdr" style="left:668px;top:196px;width:220px">
+    <div class="it"><svg class="i" viewBox="0 0 24 24"><path d="M4 17h8M4 12h5M4 7h2M17 5v14m0-14l-3 3m3-3l3 3"/></svg>Sort ascending</div>
+    <div class="it"><svg class="i" viewBox="0 0 24 24"><path d="M4 7h8M4 12h5M4 17h2M17 5v14m0 0l-3-3m3 3l3-3"/></svg>Sort descending</div>
+    <div class="it"><svg class="i" viewBox="0 0 24 24"><path d="M4 6h16l-6 8v6l-4-2v-4z"/></svg>Filter by Stage</div>
+    <div class="sep"></div>
+    <div class="it"><svg class="i" viewBox="0 0 24 24"><path d="M5 12h14m0 0l-5-5m5 5l-5 5"/></svg>Move right</div>
+    <div class="it"><svg class="i" viewBox="0 0 24 24"><path d="M3 3l18 18M10 6a9 9 0 0111 6 9 9 0 01-3 3.5M6 8a9 9 0 00-3 4 9 9 0 0011 6"/></svg>Hide from view</div>
+  </div>
+  <div class="pop" id="p-stage" style="left:660px;top:276px;width:230px">
+    <div class="inp"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>Move to stage…</div>
+    <div class="it"><span class="dot" style="background:#9a9ea5"></span>Need to start</div>
+    <div class="it"><span class="dot" style="background:#266df0"></span>Shortlisted</div>
+    <div class="it hv"><span class="dot" style="background:#b25e09"></span>Documents pending<span class="ck">✓</span></div>
+    <div class="it"><span class="dot" style="background:#7c4ddb"></span>Applied</div>
+    <div class="it"><span class="dot" style="background:#d4a017"></span>Conditional offer</div>
+    <div class="sep"></div><div class="lab">Finished</div>
+    <div class="it"><span class="dot" style="background:#12805c"></span>Enrolled</div>
+    <div class="it"><span class="dot" style="background:#c4321f"></span>Rejected</div>
+  </div>
+  <div class="pop" id="p-cols" style="right:12px;top:128px;width:280px">
+    <div class="inp"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>Find a field…</div>
+    <div class="lab">Shown · drag to reorder</div>
+    <div class="it"><span class="grip">⋮⋮</span>University</div><div class="it"><span class="grip">⋮⋮</span>Program</div><div class="it"><span class="grip">⋮⋮</span>Stage</div><div class="it"><span class="grip">⋮⋮</span>Time in stage</div><div class="it"><span class="grip">⋮⋮</span>Counsellor</div><div class="it"><span class="grip">⋮⋮</span>Intake</div><div class="it"><span class="grip">⋮⋮</span>Deadline</div><div class="it"><span class="grip">⋮⋮</span>Docs</div>
+    <div class="sep"></div><div class="lab">Hidden</div>
+    <div class="it" style="color:var(--muted)">Country</div><div class="it" style="color:var(--muted)">Updated</div><div class="it" style="color:var(--muted)">Offer type</div><div class="it" style="color:var(--muted)">Fee paid</div><div class="it" style="color:var(--muted)">Open tasks</div><div class="it" style="color:var(--muted)">Created</div>
+  </div>
+  <div class="bulk"><span class="t" id="bn">2 selected</span><span class="v"></span>
+    <button>Move stage</button><button>Assign counsellor</button><span class="v"></span><button>Clear</button></div>
+</div>
+<p class="note"><b>How to read this:</b> the black bar flips between states. This is the approved Leads v2 table (36px rows, 38px header, hairlines, sticky checkbox + first column, footer summaries, Rows-per-page paging) with the Applications board's own header and toolbar (tabs, search, Sorted by, pill chips, dashed "+", Board/List). Click a Stage cell to move the application; click a header for its menu. Bulk actions (Move stage, Assign counsellor) are admin-only; there is no bulk delete in v1. Footer summaries follow the filters. Sample data shows 14 rows. Icons are placeholders; the build uses the Phosphor set. Students are fake.</p>
+<script>
+const S={N:["Need to start","#9a9ea5"],H:["Shortlisted","#266df0"],D:["Documents pending","#b25e09"],A:["Applied","#7c4ddb"],C:["Conditional offer","#d4a017"]};
+const R=[
+["Aarav Shrestha","University of Roehampton","BSc Business Management","N","Asha Tamang","AT","#e9e3fb","Sep 2026","United Kingdom","12 Jun","",2,2,"2d ago"],
+["Nisha Poudel","University of North Texas","MSc Hospitality Management","H","Binod Rai","BR","#dff3e6","Jan 2027","USA","1 Dec","soon",1,4,"today"],
+["Prakash Basnet","University of Lancashire","MSc Biomedical Science","D","Gita Karki","GK","#fbe3f1","Feb 2027","New Zealand","—","",0,6,"3d ago"],
+["Priya Magar","Coventry University","MBA Global","A","Esha Thapa","ET","#f6ecc3","May 2026","USA","—","",2,3,"1d ago"],
+["Bibek Lama","Victoria University","BE Engineering & Tech","C","Bijay Dahal","BD","#f9d9d4","Sep 2026","Australia","20 Nov","soon",5,9,"4d ago",1],
+["Sneha Thapa","Monash University","Bachelor of Commerce","D","Esha Thapa","ET","#f6ecc3","May 2026","Australia","8 Nov","past",5,15,"6d ago"],
+["Kiran Bhandari","University of Roehampton","BSc Psychology","A","","","","Sep 2026","Canada","—","",1,18,"2d ago"],
+["Suman K.C.","Ravensbourne University","BA Digital Marketing","H","Gita Karki","GK","#fbe3f1","Feb 2027","USA","—","",5,12,"5d ago"],
+["Riya Joshi","University of Northampton","MSc Hospitality Mgmt","C","Asha Tamang","AT","#e9e3fb","Jul 2026","United Kingdom","2 Dec","soon",5,6,"today"],
+["Sita Gurung","University of East London","MSc Data Science","N","Binod Rai","BR","#dff3e6","Jan 2027","New Zealand","—","",5,5,"1w ago"],
+["Rohit Adhikari","University of Waikato","BBus Marketing","D","Gita Karki","GK","#fbe3f1","Feb 2027","New Zealand","15 Jan","",3,33,"3w ago"],
+["Anjali Gurung","Deakin University","Master of IT","A","Bijay Dahal","BD","#f9d9d4","Mar 2026","Australia","—","",4,21,"2w ago"],
+["Manish Rai","University of Toronto","MEng Civil","H","Asha Tamang","AT","#e9e3fb","Sep 2026","Canada","10 Jan","",0,8,"8d ago"],
+["Kabita Shah","Coventry University","MSc Cyber Security","N","","","","Jan 2027","United Kingdom","—","",0,41,"1mo ago"]];
+const tb=document.getElementById('tb');
+const uni='<span class="uni"><svg class="i" viewBox="0 0 24 24"><path d="M3 10l9-5 9 5-9 5z"/><path d="M7 12v4c0 1.5 2.5 3 5 3s5-1.5 5-3v-4"/></svg></span>';
+function render(filter){tb.innerHTML='';R.forEach(r=>{if(filter&&r[4]!=='Asha Tamang')return;
+const[nm,u,p,s,c,ci,cc,intk,ctry,dl,dlc,docs,age,upd,offer]=r;const ini=nm.split(' ').map(x=>x[0]).slice(0,2).join('');
+const ac=age>=30?'red':age>=14?'amb':'';
+const tr=document.createElement('tr');tr.className='rw';
+tr.innerHTML=`<td class="sc"><span class="cb"></span></td>
+<td class="sn"><div class="nm"><span class="av">${ini}</span><a href="#">${nm}</a><span class="acts"><span class="btn">Open <span class="kbd" style="border:0;padding:0">⌘↵</span></span></span></div></td>
+<td><div class="nm">${uni}<span>${u}</span></div></td>
+<td class="sub">${p}</td>
+<td><span class="stg st-cell"><span class="dot" style="background:${S[s][1]}"></span>${S[s][0]}</span></td>
+<td><span class="age ${ac}">${age}d</span></td>
+<td>${c?`<div class="as"><span class="av" style="background:${cc}">${ci}</span>${c}</div>`:'<span class="set">Set counsellor</span>'}</td>
+<td>${intk}</td>
+<td><span class="dl ${dlc}">${dl}</span></td>
+<td class="last mono">${docs}</td>`;tb.appendChild(tr);});
+document.getElementById('cnt').textContent=filter?'20 of 201':'201';document.getElementById('fc').textContent=filter?'20':'201';
+document.getElementById('show').textContent=filter?'Showing 1–20 of 20':'Showing 1–25 of 201';document.getElementById('pgs').textContent=filter?'1':'9';
+const ft=filter?{fu:'3',fs:'3',fco:'1',fd:'2',fm:'6d'}:{fu:'24',fs:'6',fco:'9',fd:'11',fm:'12d'};Object.entries(ft).forEach(([k,v])=>document.getElementById(k).textContent=v);}
+const app=document.getElementById('app');
+const chips='<span class="pchip"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0116 0"/></svg>Counsellor <span class="op">is</span> <b>Asha Tamang</b><span class="x">✕</span></span><span class="pchip"><svg class="i" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16"/></svg>Intake <span class="op">is</span> <b>Sep 2026</b><span class="x">✕</span></span><span class="dplus">+</span>';
+const states={default:'1 Default',filtered:'2 Filtered',sort:'3 Sort',hdr:'4 Column menu',stage:'5 Change stage',cols:'6 View settings',selected:'7 Rows selected',empty:'8 No results'};
+const bar=document.getElementById('st');
+Object.keys(states).forEach(k=>{const b=document.createElement('button');b.textContent=states[k];b.dataset.k=k;b.onclick=()=>go(k);bar.appendChild(b);});
+function go(k){app.className='app s-'+k;document.body.classList.remove('anysel');
+ bar.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.k===k));
+ const f=['filtered','empty'].includes(k);render(k==='filtered');
+ document.getElementById('fchips').innerHTML=f?chips:'';
+ document.getElementById('b-filter').style.display=f?'none':'';
+ if(k==='empty'){document.getElementById('cnt').textContent='0 of 201';document.getElementById('show').textContent='Showing 0 of 0';document.getElementById('pgs').textContent='1';}
+ if(k==='selected'){const c=tb.querySelectorAll('.cb');c[1].classList.add('on');c[3].classList.add('on');sync();}
+ location.hash=k;}
+function sync(){const n=tb.querySelectorAll('.cb.on').length;document.body.classList.toggle('anysel',n>0);document.getElementById('bn').textContent=n+' selected';
+ tb.querySelectorAll('tr').forEach(t=>t.classList.toggle('sel',t.querySelector('.cb').classList.contains('on')));}
+tb.addEventListener('click',e=>{const c=e.target.closest('.cb');if(c){c.classList.toggle('on');sync();return;}if(e.target.closest('.st-cell'))go('stage');});
+document.getElementById('all').onclick=e=>{const on=!e.currentTarget.classList.contains('on');e.currentTarget.classList.toggle('on',on);tb.querySelectorAll('.cb').forEach(c=>c.classList.toggle('on',on));sync();};
+document.getElementById('b-sort').onclick=()=>go('sort');document.getElementById('b-cols').onclick=()=>go('cols');document.getElementById('h-stage').onclick=()=>go('hdr');
+window.addEventListener('hashchange',()=>go((location.hash||'#default').slice(1)));
+go((location.hash||'#default').slice(1));
+</script></body></html>

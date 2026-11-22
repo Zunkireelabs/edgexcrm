@@ -1,0 +1,549 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lead detail v1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#101112;--text:#2b2d2f;--muted:#6b6f76;--faint:#9a9ea5;--ghost:#d0d3d7;
+  --line:#e8e9eb;--line-soft:#f0f1f2;--card-line:#eeeff1;--bg:#fff;--canvas:#f7f7f8;--hover:#f6f7f9;--press:#eef0f3;--sel:#edf3ff;--tint:#faf9f7;
+  --blue:#266df0;--blue-d:#1d5bd0;--blue-soft:#eaf1ff;
+  --good:#12805c;--good-soft:#e7f6ef;--warn:#b25e09;--warn-soft:#fff3e0;--bad:#c4321f;
+  --l63:rgba(0,0,0,.63);--l50:rgba(0,0,0,.5);
+  --s-pre:#6366f1;--s-qual:#3b82f6;--s-pros:#f97316;--s-app:#22c55e;
+  --pop-shadow:0 0 0 1px rgba(16,17,18,.06),0 8px 24px -4px rgba(16,17,18,.14),0 2px 6px rgba(16,17,18,.06);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font:500 14px/20px Inter,-apple-system,"Segoe UI",sans-serif;color:var(--ink);background:#e9eaec;-webkit-font-smoothing:antialiased}
+.states{display:flex;gap:6px;flex-wrap:wrap;padding:10px 16px;background:#101112;position:sticky;top:0;z-index:100}
+.states button{font:500 12px Inter,sans-serif;background:#26282b;color:#cfd2d6;border:0;border-radius:6px;padding:5px 10px;cursor:pointer}
+.states button.on{background:#fff;color:#101112}
+.states span{color:#8b8f96;align-self:center;margin-right:6px;font-size:12px}
+.note{max-width:1502px;margin:14px 16px 0;font:400 13px/20px Inter;color:#3a3d41}
+.note b{font-weight:600;color:var(--ink)}
+.note ul{margin:4px 0 0;padding-left:18px}
+.scene{display:none;padding:12px 16px 40px;overflow-x:auto}
+.scene.on{display:block}
+svg.i{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.sm{width:14px!important;height:14px!important}
+.xs{width:12px!important;height:12px!important}
+
+/* ===== app shell ===== */
+.frame{background:var(--canvas);border-radius:12px;display:flex;overflow:hidden;box-shadow:0 0 0 1px #dcdee1;position:relative}
+.side{width:240px;flex:none;padding:10px 8px;display:flex;flex-direction:column;gap:1px;font-size:14px}
+.side .logo{display:flex;align-items:center;justify-content:space-between;height:32px;padding:0 8px 0 10px;font:600 16px Inter;letter-spacing:-.01em}
+.side .logo em{font-style:normal;color:var(--blue);font-weight:500}
+.side .sbx{display:flex;align-items:center;gap:8px;height:30px;margin:6px 0 8px;padding:0 8px;border-radius:8px;background:#fff;box-shadow:inset 0 0 0 1px var(--line);color:var(--muted)}
+.side .sbx kbd{margin-left:auto;font:500 11px Inter;color:var(--faint)}
+.side .it{display:flex;align-items:center;gap:8px;height:28px;padding:0 8px;border-radius:8px;color:var(--text)}
+.side .it.on{background:#eceef0;color:var(--ink)}
+.side .gh{height:28px;display:flex;align-items:center;padding:0 8px;margin-top:8px;font:500 12px Inter;color:var(--faint)}
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.top{height:44px;flex:none;display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:0 12px}
+.top .bell{width:28px;height:28px;border-radius:8px;box-shadow:inset 0 0 0 1px var(--line);display:flex;align-items:center;justify-content:center;background:#fff;color:var(--muted)}
+.top .me{display:flex;align-items:center;gap:6px;height:28px;padding:0 8px 0 4px;border-radius:8px;box-shadow:inset 0 0 0 1px var(--line);background:#fff}
+.top .me .av{width:20px;height:20px;background:var(--ink);color:#fff}
+.card-main{flex:1;min-height:0;margin:0 8px 8px 0;background:#fff;border-radius:12px;box-shadow:0 0 0 1px var(--line);display:flex;flex-direction:column;overflow:hidden}
+
+/* ===== record header strip ===== */
+.rh{height:48px;flex:none;display:flex;align-items:center;gap:4px;padding:0 12px;border-bottom:1px solid var(--line)}
+.btn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 8px;border-radius:8px;border:0;background:transparent;color:var(--ink);font:inherit;cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--hover)}
+.btn.bd{box-shadow:inset 0 0 0 1px var(--line);background:#fff}
+.btn.pri{background:var(--blue);color:#fff;padding:0 10px}
+.btn.ic{width:28px;padding:0;justify-content:center;color:var(--muted)}
+.btn.ic.bd{color:var(--text)}
+.btn.dis{opacity:.4;cursor:not-allowed}
+.nav{width:28px;height:28px;border-radius:8px;box-shadow:inset 0 0 0 1px var(--line);display:inline-flex;align-items:center;justify-content:center;color:var(--muted);background:#fff}
+.crumb{display:flex;align-items:center;gap:6px;color:var(--l63);font-size:14px}
+.crumb b{color:var(--ink);font-weight:500}
+.crumb .sl{color:var(--ghost)}
+.cnt{font:500 12px/16px Inter;color:var(--l63);margin-left:6px}
+.sp{flex:1}
+.vr{width:1px;height:16px;background:var(--line);margin:0 6px;flex:none}
+
+/* ===== 3 columns ===== */
+.cols{flex:1;min-height:0;display:flex}
+.col{min-height:0;overflow:hidden}
+.lc{width:320px;flex:none;border-right:1px solid var(--line);display:flex;flex-direction:column}
+.mc{flex:1;min-width:0;display:flex;flex-direction:column}
+.rc{width:280px;flex:none;border-left:1px solid var(--line);padding:4px 12px 16px;overflow:hidden}
+.scroll{flex:1;min-height:0;overflow:hidden}
+
+/* left: identity */
+.idb{padding:16px 16px 12px}
+.who{display:flex;align-items:center;gap:10px}
+.av{border-radius:9999px;display:inline-flex;align-items:center;justify-content:center;font:600 9px Inter;color:var(--text);background:var(--press);flex:none;width:20px;height:20px}
+.who .av{width:32px;height:32px;font-size:12px;background:#e8eefc;color:#1f3f8f}
+.who h1{margin:0;font:600 18px/24px Inter;letter-spacing:-.01em}
+.idl{display:flex;flex-direction:column;gap:2px;margin:10px 0 0;color:var(--text);font-size:13px}
+.idl .r{display:flex;align-items:center;gap:8px;height:24px;color:var(--text)}
+.idl .r svg{color:var(--faint)}
+.idl .r .cp{margin-left:auto;color:var(--faint);width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;border-radius:6px}
+.idl .r .cp:hover{background:var(--hover);color:var(--ink)}
+.idl .r .v{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.idl .r .mono{font-variant-numeric:tabular-nums}
+.idchip{font:500 12px/18px Inter;color:var(--muted);background:var(--hover);border-radius:6px;padding:0 6px}
+.acts{display:flex;gap:6px;margin-top:12px}
+.acts .btn.bd{flex:none}
+
+/* left: stage card */
+.stg{margin:0 12px;padding:12px;border-radius:12px;box-shadow:inset 0 0 0 1px var(--card-line)}
+.stg-h{display:flex;align-items:center;gap:8px}
+.stg-h .lb{font:500 12px/16px Inter;color:var(--l63)}
+.chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 6px 0 8px;border-radius:8px;box-shadow:inset 0 0 0 1px var(--line);font:500 13px Inter;background:#fff;white-space:nowrap}
+.chip .dot{width:8px;height:8px}
+.chip svg{color:var(--faint)}
+.dot{width:8px;height:8px;border-radius:9999px;display:inline-block;flex:none}
+.seg{display:grid;grid-template-columns:76px 60px 62px 1fr;gap:2px;margin-top:10px}
+.seg i{display:block;height:4px;border-radius:2px;background:var(--line-soft)}
+.seg .f i{background:var(--ink)}
+.seg .c i{background:var(--s-pros)}
+.seg-l{display:grid;grid-template-columns:76px 60px 62px 1fr;gap:2px;margin-top:6px;font:500 11px/14px Inter;letter-spacing:-.01em;color:var(--l50)}
+.seg-l span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.seg-l .c{color:var(--ink)}
+.nx{margin-top:12px;padding-top:10px;border-top:1px solid var(--line-soft)}
+.nx-t{font:500 12px/16px Inter;color:var(--l63);display:flex;align-items:center;gap:6px}
+.nx-t b{color:var(--ink);font-weight:500}
+.req{list-style:none;margin:6px 0 0;padding:0}
+.req li{display:flex;align-items:center;gap:8px;height:28px;font-size:13px}
+.req .ok{color:var(--good)}
+.req .no{color:var(--warn)}
+.req .tx{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.req li.done .tx{color:var(--l50)}
+.req a{color:var(--blue);font-size:13px;text-decoration:none;flex:none}
+.bigbtn{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;height:32px;margin-top:8px;border:0;border-radius:8px;font:500 14px Inter;background:var(--blue);color:#fff}
+.bigbtn.off{background:var(--line-soft);color:rgba(0,0,0,.38);cursor:not-allowed}
+.stg-f{display:flex;align-items:center;gap:2px;margin-top:6px}
+.stg-f .btn{height:26px;font-size:13px;color:var(--l63);padding:0 6px}
+.stg-f .btn:hover{color:var(--ink)}
+
+/* left: details list */
+.sech{display:flex;align-items:center;height:36px;padding:0 16px;margin-top:10px}
+.sech h2,.sech h3{margin:0;font:500 14px/20px Inter;color:var(--l63);display:flex;align-items:center;gap:6px}
+.sech .va{margin-left:auto;font-size:13px;color:var(--muted)}
+.n{font:500 11px/16px Inter;color:var(--muted);background:var(--hover);border-radius:4px;padding:0 5px}
+.dl{padding:0 10px}
+.dr{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 6px;border-radius:8px}
+.dr:hover,.dr.hv{background:var(--hover)}
+.dr .k{width:106px;flex:none;display:flex;align-items:center;gap:8px;font:500 12px/16px Inter;color:var(--l63);white-space:nowrap}
+.dr .k svg{color:var(--faint);width:14px;height:14px}
+.dr .v{flex:1;min-width:0;display:flex;align-items:center;gap:6px;font:500 14px/20px Inter;white-space:nowrap;overflow:hidden}
+.dr .v span.t{overflow:hidden;text-overflow:ellipsis}
+.dr .v.e{color:var(--l50)}
+.dr .lk{margin-left:auto;color:var(--ghost)}
+.dr.edit .v{height:28px;margin:2px 0;padding:0 8px;border-radius:8px;box-shadow:0 0 0 1px var(--blue);background:#fff}
+.pill{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 4px 0 6px;border-radius:6px;background:var(--hover);font:500 12px Inter;color:var(--text)}
+.pill .x{width:16px;height:16px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;color:var(--faint)}
+.pill .av{width:16px;height:16px;font-size:7px}
+.tgl{width:28px;height:16px;border-radius:9999px;background:var(--ghost);position:relative;flex:none}
+.tgl::after{content:"";position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:9999px;background:#fff}
+.va-link{display:block;margin:4px 16px 0;font:500 12px/16px Inter;color:var(--l50)}
+.prof{margin:12px 12px 16px;padding:10px 12px;border-radius:12px;box-shadow:inset 0 0 0 1px var(--card-line);display:flex;align-items:center;gap:10px}
+.prof .bar{flex:1;height:4px;border-radius:2px;background:var(--line-soft);position:relative;overflow:hidden}
+.prof .bar i{position:absolute;inset:0 auto 0 0;background:var(--ink);border-radius:2px}
+.prof .t1{font:500 13px/18px Inter}
+.prof .t2{font:500 12px/16px Inter;color:var(--l50)}
+.prof a{color:var(--blue);font-size:13px;text-decoration:none;white-space:nowrap}
+
+/* tabs (Attio record tabs) */
+.tabs{display:flex;align-items:flex-start;gap:4px;height:44px;padding:8px 12px 0;border-bottom:1px solid var(--line);flex:none;position:relative}
+.tabs .t{height:28px;display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:8px;color:var(--l63);position:relative;box-shadow:inset 0 0 0 1px transparent;white-space:nowrap;cursor:pointer}
+.tabs .t svg{width:16px;height:16px}
+.tabs .t:hover{color:var(--ink);box-shadow:inset 0 0 0 1px var(--card-line)}
+.tabs .t.on{color:var(--ink);background:#fbfbfb;box-shadow:inset 0 0 0 1px var(--card-line)}
+.tabs .t.on::after{content:"";position:absolute;left:0;right:0;bottom:-8px;height:1px;background:var(--ink)}
+.tabs .t.open{color:var(--ink);box-shadow:inset 0 0 0 1px var(--card-line)}
+.tabs .tvr{width:1px;height:16px;background:var(--card-line);margin:6px 4px 0;flex:none}
+.menu{position:absolute;top:40px;right:12px;width:220px;background:#fff;border-radius:12px;box-shadow:var(--pop-shadow);padding:4px;z-index:30}
+.menu .mi{display:flex;align-items:center;gap:8px;height:32px;padding:0 8px;border-radius:8px}
+.menu .mi:hover,.menu .mi.hv{background:#f6f7f7}
+.menu .mi svg{color:var(--muted)}
+.menu .mi .n{margin-left:auto}
+
+/* middle body */
+.mb{flex:1;min-height:0;overflow:hidden;padding:4px 16px 16px}
+.mb .sech{padding:0 4px;margin-top:12px}
+.orca{margin-top:12px;padding:12px 14px;border-radius:12px;background:#fbfaff;box-shadow:inset 0 0 0 1px #ece8fb}
+.orca-h{display:flex;align-items:center;gap:6px;font:500 12px/16px Inter;color:#5b4bc4}
+.orca-h .tm{margin-left:auto;color:var(--l50)}
+.orca-h a{color:var(--l63);text-decoration:none}
+.orca p{margin:6px 0 0;font:400 14px/22px Inter;color:var(--text)}
+.orca p b{font-weight:500;color:var(--ink)}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.grid.c2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.grid.c1{grid-template-columns:1fr}
+.card{height:86px;border-radius:12px;box-shadow:inset 0 0 0 1px var(--card-line);padding:10px 12px;display:flex;flex-direction:column;position:relative}
+.card.ed:hover{background:var(--tint)}
+.card .lb{display:flex;align-items:center;gap:8px;font:500 12px/16px Inter;color:var(--l63)}
+.card .lb svg{margin-left:auto;color:var(--faint);width:14px;height:14px}
+.card .vl{margin-top:auto;display:flex;align-items:center;gap:6px;font:500 14px/20px Inter;white-space:nowrap;overflow:hidden}
+.card .vl span{overflow:hidden;text-overflow:ellipsis}
+.card .vl .dot,.card .vl .av{margin-right:6px;vertical-align:-1px}
+.dr.wr .v{flex-wrap:wrap;white-space:normal;padding:5px 0;row-gap:4px}
+.mc{overflow:visible}
+.card .sb{font:500 12px/16px Inter;color:var(--l50);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:16px}
+.card .vl.w{color:var(--warn)}
+.card .vl.g{color:var(--good)}
+.card .add{color:var(--blue)}
+.tl{border-radius:12px;box-shadow:inset 0 0 0 1px var(--card-line);padding:9px 13px}
+.tl .ev{display:flex;align-items:center;gap:8px;height:23px;white-space:nowrap}
+.tl .cn{width:16px;height:8px;display:flex;justify-content:center}
+.tl .cn::after{content:"";width:1px;height:8px;background:var(--card-line)}
+.tl .ic{width:16px;height:16px;flex:none;display:inline-flex;align-items:center;justify-content:center;font:600 7px/1 Inter;color:var(--text)}
+.tl .ic.p{border-radius:9999px;background:var(--press);box-shadow:inset 0 0 0 1px rgba(0,0,0,.06)}
+.tl .ic.s{border-radius:30%;background:#f6f7f7;box-shadow:inset 0 0 0 1px #e6e7ea;color:var(--muted)}
+.tl .ic.s svg{width:11px;height:11px}
+.tl .tx{overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
+.tl .tx b{font-weight:500}
+.tl .tx em{font-style:normal;color:var(--l63)}
+.tl .tm{font:500 12px/16px Inter;color:var(--l50);flex:none}
+.box{border-radius:12px;box-shadow:inset 0 0 0 1px var(--card-line);padding:4px}
+.li{display:flex;align-items:center;gap:8px;height:32px;padding:0 8px;border-radius:8px;white-space:nowrap}
+.li:hover{background:var(--hover)}
+.li .tx{overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
+.li .tm{font:500 12px/16px Inter;color:var(--l50);flex:none}
+.li .tm.w{color:var(--warn)}
+.cb{width:16px;height:16px;border-radius:4px;box-shadow:inset 0 0 0 1.5px var(--ghost);flex:none;display:inline-flex;align-items:center;justify-content:center}
+.cb.on{background:var(--ink);box-shadow:none;color:#fff}
+.li.done .tx{color:var(--l50);text-decoration:line-through}
+.notep{border-radius:12px;box-shadow:inset 0 0 0 1px var(--card-line);padding:10px 12px}
+.notep p{margin:0;font:400 14px/20px Inter;color:var(--text);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.notep .m{margin-top:6px;font:500 12px/16px Inter;color:var(--l50)}
+.filt{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
+.fc{height:26px;display:inline-flex;align-items:center;gap:6px;padding:0 8px;border-radius:8px;box-shadow:inset 0 0 0 1px var(--line);font:500 13px Inter;color:var(--l63);background:#fff}
+.fc.on{color:var(--ink);background:var(--hover)}
+.grp{font:500 12px/16px Inter;color:var(--l50);margin:16px 4px 6px}
+.evr{display:flex;gap:10px;padding:6px 4px}
+.evr .ic{width:24px;height:24px;border-radius:9999px;flex:none;display:inline-flex;align-items:center;justify-content:center;background:#f6f7f7;box-shadow:inset 0 0 0 1px #e6e7ea;color:var(--muted);font:600 9px Inter}
+.evr .b{flex:1;min-width:0}
+.evr .l1{display:flex;gap:6px;font-size:14px;line-height:20px}
+.evr .l1 b{font-weight:500}
+.evr .l1 em{font-style:normal;color:var(--l63)}
+.evr .l1 .tm{margin-left:auto;font:500 12px/20px Inter;color:var(--l50);flex:none}
+.evr .q{margin-top:6px;padding:8px 10px;border-radius:8px;background:var(--hover);font:400 13px/18px Inter;color:var(--text)}
+.composer{display:flex;align-items:center;gap:8px;height:36px;padding:0 6px 0 10px;border-radius:10px;box-shadow:inset 0 0 0 1px var(--line);margin-top:12px;color:var(--l50)}
+.composer .sp{flex:1}
+
+/* right rail */
+.rs{margin-top:8px}
+.rs-h{display:flex;align-items:center;gap:6px;height:36px;padding:0 4px}
+.rs-h h3{margin:0;font:500 14px/20px Inter;color:var(--l63);display:flex;align-items:center;gap:6px;cursor:pointer}
+.rs-h h3:hover{color:var(--ink)}
+.rs-h .btn.ic{margin-left:auto;width:24px;height:24px}
+.rs-e{display:flex;align-items:center;gap:8px;height:32px;padding:0 8px;border-radius:8px;box-shadow:inset 0 0 0 1px var(--card-line);font-size:13px;color:var(--l50)}
+.rs-e a{margin-left:auto;color:var(--blue);text-decoration:none}
+.kv{display:flex;align-items:center;gap:8px;height:32px;padding:0 8px;border-radius:8px;font-size:13px}
+.kv .k{color:var(--l63);width:100px;flex:none;white-space:nowrap}
+.kv .v{flex:1;min-width:0;display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden}
+.kv .v.w{color:var(--warn)}
+.kv a{color:var(--blue);text-decoration:none;flex:none}
+.file{display:flex;align-items:center;gap:8px;height:32px;padding:0 8px;border-radius:8px;font-size:13px}
+.file:hover{background:var(--hover)}
+.file .ext{font:600 9px/16px Inter;width:26px;text-align:center;border-radius:4px;background:#fdecea;color:#b4231a;flex:none}
+.file .ext.img{background:#e9f2ff;color:#1d5bd0}
+.file .tx{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file .tm{font:500 12px/16px Inter;color:var(--l50)}
+.st-chip{font:500 12px/18px Inter;border-radius:6px;padding:0 6px;background:var(--blue-soft);color:var(--blue)}
+.ann{position:absolute;z-index:40;font:500 11px/14px Inter;color:#fff;background:#d23f8c;border-radius:6px;padding:3px 6px;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.18)}
+
+/* phone */
+.phone{width:390px;height:844px;background:#fff;border-radius:28px;box-shadow:0 0 0 10px #1b1c1e,0 0 0 11px #3a3d41;overflow:hidden;display:flex;flex-direction:column;margin:12px 0 0 12px}
+.ph-top{height:48px;flex:none;display:flex;align-items:center;gap:4px;padding:0 12px;border-bottom:1px solid var(--line)}
+.ph-b{flex:1;overflow:hidden}
+.ph-b .idb{padding:14px 16px 12px}
+.ph-b .stg{margin:0 16px}
+.ph-tabs{display:flex;gap:4px;height:44px;padding:8px 16px 0;border-bottom:1px solid var(--line);margin-top:14px;overflow:hidden;white-space:nowrap}
+</style></head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="x" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></symbol>
+  <symbol id="up" viewBox="0 0 16 16"><path d="M4 10l4-4 4 4"/></symbol>
+  <symbol id="dn" viewBox="0 0 16 16"><path d="M4 6l4 4 4-4"/></symbol>
+  <symbol id="back" viewBox="0 0 16 16"><path d="M13 8H3M7 4L3 8l4 4"/></symbol>
+  <symbol id="cp" viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1 1 0 00-1-1h-6a1 1 0 00-1 1v6a1 1 0 001 1h2"/></symbol>
+  <symbol id="mail" viewBox="0 0 16 16"><rect x="2" y="3.5" width="12" height="9" rx="1.5"/><path d="M2.5 4.5L8 8.5l5.5-4"/></symbol>
+  <symbol id="wa" viewBox="0 0 16 16"><path d="M3 13.2l.8-2.6A5.5 5.5 0 118 13.5a5.5 5.5 0 01-2.6-.7L3 13.2z"/><path d="M6.2 5.8c.2-.4.6-.4.8 0l.4.9c.1.2 0 .4-.1.6l-.3.3c.3.7.9 1.3 1.6 1.6l.3-.3c.2-.1.4-.2.6-.1l.9.4c.4.2.4.6 0 .8-.6.5-1.4.6-2.1.2a5 5 0 01-2.3-2.3c-.4-.7-.3-1.5.2-2.1z"/></symbol>
+  <symbol id="ph" viewBox="0 0 16 16"><path d="M3 2.5h2.5l1.2 3-1.5 1a7 7 0 004.3 4.3l1-1.5 3 1.2V13a1 1 0 01-1 1A11 11 0 012 3.5a1 1 0 011-1z"/></symbol>
+  <symbol id="task" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="2.5"/><path d="M5.5 8l1.8 1.8L10.5 6.5"/></symbol>
+  <symbol id="note" viewBox="0 0 16 16"><path d="M4 2.5h5.5l3 3V13a.5.5 0 01-.5.5H4a.5.5 0 01-.5-.5V3a.5.5 0 01.5-.5zM9.5 2.5v3h3M6 9h4M6 11h3"/></symbol>
+  <symbol id="stage" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" stroke-dasharray="2.5 2"/></symbol>
+  <symbol id="next" viewBox="0 0 16 16"><path d="M3 8h9M9 5l3 3-3 3"/></symbol>
+  <symbol id="clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3l2 1.5"/></symbol>
+  <symbol id="user" viewBox="0 0 16 16"><circle cx="8" cy="5.5" r="2.5"/><path d="M3 13.5a5 5 0 0110 0"/></symbol>
+  <symbol id="users" viewBox="0 0 16 16"><circle cx="6" cy="6" r="2.2"/><path d="M2 13a4 4 0 018 0"/><circle cx="11" cy="5.5" r="1.8"/><path d="M11 9a3 3 0 013 3"/></symbol>
+  <symbol id="cap" viewBox="0 0 16 16"><path d="M1.5 6L8 3l6.5 3L8 9 1.5 6zM4 7.3V11c1 1 2.5 1.5 4 1.5s3-.5 4-1.5V7.3"/></symbol>
+  <symbol id="ready" viewBox="0 0 16 16"><path d="M8 1.8l5 2v4c0 3-2.2 5.2-5 6.4-2.8-1.2-5-3.4-5-6.4v-4l5-2z"/><path d="M5.8 8l1.6 1.6 3-3"/></symbol>
+  <symbol id="lock" viewBox="0 0 16 16"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 015 0v2"/></symbol>
+  <symbol id="plus" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></symbol>
+  <symbol id="srch" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></symbol>
+  <symbol id="chk" viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7"/></symbol>
+  <symbol id="okc" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M5.5 8.2l1.7 1.7 3.3-3.6"/></symbol>
+  <symbol id="todo" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/></symbol>
+  <symbol id="bld" viewBox="0 0 16 16"><path d="M3 13.5V3.5a1 1 0 011-1h5a1 1 0 011 1v10M10 6.5h2a1 1 0 011 1v6M2 13.5h12M5.5 5h2M5.5 7.5h2M5.5 10h2"/></symbol>
+  <symbol id="src" viewBox="0 0 16 16"><path d="M6.5 9.5a3 3 0 004.2 0l2-2a3 3 0 00-4.2-4.2l-.8.8M9.5 6.5a3 3 0 00-4.2 0l-2 2a3 3 0 004.2 4.2l.8-.8"/></symbol>
+  <symbol id="pin" viewBox="0 0 16 16"><path d="M8 14s4.5-4.2 4.5-7.5a4.5 4.5 0 00-9 0C3.5 9.8 8 14 8 14z"/><circle cx="8" cy="6.5" r="1.6"/></symbol>
+  <symbol id="tag" viewBox="0 0 16 16"><path d="M2.5 2.5h5l6 6-5 5-6-6v-5z"/><circle cx="5.5" cy="5.5" r="1"/></symbol>
+  <symbol id="pause" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M6.5 6v4M9.5 6v4"/></symbol>
+  <symbol id="globe" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c1.8 1.8 2.6 3.8 2.6 6S9.8 12.2 8 14C6.2 12.2 5.4 10.2 5.4 8S6.2 3.8 8 2z"/></symbol>
+  <symbol id="tov" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1"/><rect x="9" y="2.5" width="4.5" height="4.5" rx="1"/><rect x="2.5" y="9" width="4.5" height="4.5" rx="1"/><rect x="9" y="9" width="4.5" height="4.5" rx="1"/></symbol>
+  <symbol id="tact" viewBox="0 0 16 16"><rect x="2" y="2.5" width="12" height="11" rx="2"/><path d="M4.5 9l2-3 2 4 1.5-2.5h1.5"/></symbol>
+  <symbol id="app" viewBox="0 0 16 16"><rect x="3" y="2.5" width="10" height="11" rx="1.5"/><path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3"/></symbol>
+  <symbol id="cls" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="8" rx="1"/><path d="M5 14l3-3 3 3"/></symbol>
+  <symbol id="doc" viewBox="0 0 16 16"><path d="M3 4.5a1 1 0 011-1h3l1.5 1.5H12a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-7.5z"/></symbol>
+  <symbol id="chkin" viewBox="0 0 16 16"><circle cx="6.5" cy="5.5" r="2.5"/><path d="M2 13.5a4.5 4.5 0 019 0M10.5 8l1.5 1.5 3-3"/></symbol>
+  <symbol id="dots" viewBox="0 0 16 16"><circle cx="3.5" cy="8" r=".6"/><circle cx="8" cy="8" r=".6"/><circle cx="12.5" cy="8" r=".6"/></symbol>
+  <symbol id="spark" viewBox="0 0 16 16"><path d="M8 2l1.4 3.6L13 7l-3.6 1.4L8 12l-1.4-3.6L3 7l3.6-1.4L8 2zM12.5 11l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6.6-1.4z"/></symbol>
+  <symbol id="rot" viewBox="0 0 16 16"><path d="M13 8a5 5 0 11-1.5-3.5M13 2.5v3h-3"/></symbol>
+  <symbol id="arch" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="3" rx="1"/><path d="M3 6v6.5a1 1 0 001 1h8a1 1 0 001-1V6M6.5 9h3"/></symbol>
+  <symbol id="cal" viewBox="0 0 16 16"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3"/></symbol>
+  <symbol id="money" viewBox="0 0 16 16"><rect x="1.5" y="4" width="13" height="8" rx="1.5"/><circle cx="8" cy="8" r="1.8"/></symbol>
+  <symbol id="sign" viewBox="0 0 16 16"><path d="M2 12.5c2-2 3-5 4.5-5S7 11 8.5 11 11 9 13.5 9M2 14.5h12"/></symbol>
+  <symbol id="home" viewBox="0 0 16 16"><path d="M2.5 7L8 2.5 13.5 7v6a.5.5 0 01-.5.5H3a.5.5 0 01-.5-.5V7z"/></symbol>
+  <symbol id="inbox" viewBox="0 0 16 16"><path d="M2 9.5l1.5-6h9l1.5 6v3a1 1 0 01-1 1H3a1 1 0 01-1-1v-3zM2 9.5h3.5l1 1.5h3l1-1.5H14"/></symbol>
+  <symbol id="pulse" viewBox="0 0 16 16"><path d="M1.5 8.5h3l2-5 3 9 2-4h3"/></symbol>
+  <symbol id="kanban" viewBox="0 0 16 16"><rect x="2" y="2.5" width="12" height="11" rx="1.5"/><path d="M6 2.5v11M10 2.5v7"/></symbol>
+  <symbol id="bell" viewBox="0 0 16 16"><path d="M4 11V7a4 4 0 018 0v4l1 1.5H3L4 11zM6.5 14h3"/></symbol>
+  <symbol id="list" viewBox="0 0 16 16"><path d="M2.5 4h11M2.5 8h11M2.5 12h11"/></symbol>
+  <symbol id="edit" viewBox="0 0 16 16"><path d="M10.5 3l2.5 2.5-7 7H3.5V10l7-7z"/></symbol>
+  <symbol id="filter" viewBox="0 0 16 16"><path d="M2.5 4h11M4.5 8h7M6.5 12h3"/></symbol>
+</svg>
+
+<div class="states" id="sw">
+  <span>Lead detail v1 · EDGEX-89</span><a href="lead-detail-v1-interactions.html" style="font:500 12px Inter;color:#101112;background:#ffd84d;border-radius:6px;padding:5px 10px;text-decoration:none;margin-right:8px">Interactions &amp; QA →</a>
+  <button data-s="s1" class="on">1 · Admin, Prospects lead, Overview (1470 frame)</button>
+  <button data-s="s2">2 · Counsellor, Pre-qualified, Activity</button>
+  <button data-s="s3">3 · 1180 wide: rail hidden, "+6 more" open, Tasks</button>
+  <button data-s="s4">4 · Details "View all values" + inline edit</button>
+  <button data-s="s5">5 · Ready for Applications</button>
+  <button data-s="s6">6 · Phone 390</button>
+</div>
+
+<div class="note">
+  <b>What this is:</b> the lead detail page rebuilt Attio-style but keeping our 3 columns:
+  <b>left</b> = who + stage + details, <b>middle</b> = ONE tab row (no second row, no AI Insights tab), <b>right</b> = the student file (consent &amp; fee, applications, classes, documents, check-ins) from 1280px wide.
+  Below 1280 the rail hides and the same things live only in the tabs; tabs that don't fit go into <b>"+N more"</b> (at 1470 that is Overview, Activity, Tasks, Notes + "+6 more"; a wider screen lets more out; the rail keeps those items in view).
+  Tabs for features a stage hasn't unlocked yet are hidden (Classes from Qualified, Applications + Consent from Prospects), same rule as today.
+  <ul>
+    <li><b>Stage card</b> shows what the NEXT stage needs before anyone clicks; every role gets the same checks (today admins skip the Qualify pop-up and the Applications pre-check).</li>
+    <li><b>Orca brief</b> replaces the AI Insights tab: facts only, no score. Tasks + Checklist are ONE list. "Subscribed" moves into Emails.</li>
+    <li>Sizes: rows 32px, label 12/16/500 at .63, value 14/20/500, tabs 28px boxes radius 8 with a 1px underline, cards radius 12 ring #eeeff1, buttons 28px radius 8. All radii are exact px.</li>
+  </ul>
+</div>
+
+<div id="root"></div>
+
+<script>
+const I=(id,c='')=>`<svg class="i ${c}"><use href="#${id}"/></svg>`;
+const side=()=>`<nav class="side" aria-label="Main">
+  <div class="logo"><span>EdgeX<em>edu</em></span>${I('kanban','sm')}</div>
+  <div class="sbx">${I('srch','sm')}Search<kbd>⌘K</kbd></div>
+  <div class="it">${I('home')}Home</div><div class="it">${I('inbox')}Inbox</div>
+  <div class="gh">Insights</div><div class="it">${I('pulse')}Pulse</div>
+  <div class="gh">Leads</div><div class="it on">${I('users')}All leads</div><div class="it">${I('kanban')}Pipeline</div><div class="it">${I('user')}Contacts</div>
+  <div class="gh">Students</div><div class="it">${I('cap')}Applications</div><div class="it">${I('cls')}Classes</div><div class="it">${I('chkin')}Check-in</div>
+</nav>`;
+const shell=(w,h,inner)=>`<div class="frame" style="width:${w}px;height:${h}px">${side()}<div class="main"><div class="top"><span class="bell">${I('bell','sm')}</span><span class="me"><span class="av">A</span>admin ${I('dn','xs')}</span></div><div class="card-main">${inner}</div></div></div>`;
+const header=(o)=>`<div class="rh">
+  <a class="btn" style="padding:0 6px;color:var(--l63)">${I('back','sm')}All leads</a>
+  <span class="vr"></span>
+  <span class="nav" title="Previous lead (K)">${I('up')}</span><span class="nav" title="Next lead (J)">${I('dn')}</span>
+  <span class="cnt">${o.count}</span>
+  <span class="sp"></span>
+  <a class="btn" style="color:var(--l63)">${I('edit','sm')}Edit profile</a>
+  <span class="btn ic" title="More">${I('dots')}</span>
+</div>`;
+
+/* ---------- left column ---------- */
+function identity(o){return `<div class="idb">
+  <div class="who"><span class="av">${o.ini}</span><h1>${o.name}</h1></div>
+  <div class="idl">
+    <div class="r"><span class="idchip">${o.id}</span><span style="color:var(--l50);font-size:12px">${o.created}</span></div>
+    <div class="r">${I('ph','sm')}<span class="v mono">${o.phone}</span><span class="cp" title="Copy phone">${I('cp','sm')}</span></div>
+    <div class="r">${I('mail','sm')}<span class="v">${o.email}</span><span class="cp" title="Copy email">${I('cp','sm')}</span></div>
+  </div>
+  <div class="acts">
+    <span class="btn bd">${I('mail','sm')}Email</span>
+    <span class="btn ic bd" title="Call">${I('ph','sm')}</span>
+    <span class="btn ic bd" title="WhatsApp">${I('wa','sm')}</span>
+    <span class="btn ic bd" title="Add note (N)">${I('note','sm')}</span>
+    <span class="btn ic bd" title="Add task (T)">${I('task','sm')}</span>
+    <span class="btn ic bd" title="More actions">${I('dots','sm')}</span>
+  </div></div>`}
+
+const STAGES=[['Pre-qualified','--s-pre'],['Qualified','--s-qual'],['Prospects','--s-pros'],['Applications','--s-app']];
+function stageCard(o){
+  const segs=STAGES.map((s,i)=>`<span class="${i<o.cur?'f':i===o.cur?'c':''}"><i style="${i===o.cur?`background:var(${s[1]})`:''}"></i></span>`).join('');
+  const labs=STAGES.map((s,i)=>`<span class="${i===o.cur?'c':''}">${s[0]}</span>`).join('');
+  const req=o.req.map(r=>`<li class="${r.ok?'done':''}">${I(r.ok?'okc':'todo',(r.ok?'ok':'no')+' sm')}<span class="tx">${r.t}</span>${r.a?`<a href="#">${r.a}</a>`:''}</li>`).join('');
+  return `<div class="stg">
+    <div class="stg-h"><span class="lb">Stage</span><span class="sp"></span>
+      <span class="chip"><span class="dot" style="background:var(${STAGES[o.cur][1]})"></span>${STAGES[o.cur][0]} <span style="color:var(--ghost)">·</span> ${o.status}${I('dn','xs')}</span></div>
+    <div class="seg">${segs}</div><div class="seg-l">${labs}</div>
+    <div class="nx">
+      <div class="nx-t">Next <b>${o.next}</b>${o.nextSub?`<span style="margin-left:auto;color:var(--l50)">${o.nextSub}</span>`:''}</div>
+      ${o.req.length?`<ul class="req">${req}</ul>`:''}
+      ${o.hint?`<div style="font:400 13px/18px Inter;color:var(--l63);margin-top:6px">${o.hint}</div>`:''}
+      <button class="bigbtn ${o.btnOff?'off':''}">${o.btn}${o.btnOff?'':I('next','sm')}</button>
+      <div class="stg-f">${o.foot}</div>
+    </div></div>`}
+
+function detailsList(o){return `<div class="sech"><h2>Details</h2><a class="va">Edit profile</a></div>
+  <div class="dl">${o.rows.map(r=>`<div class="dr ${r.cls||''}"><span class="k">${I(r.i)}${r.k}</span><span class="v ${r.e?'e':''}">${r.v}</span>${r.lock?`<span class="lk" title="Only managers can reassign">${I('lock','xs')}</span>`:''}</div>`).join('')}</div>
+  <a class="va-link">View all values</a>
+  <div class="prof"><div style="flex:1;min-width:0"><div class="t1">Profile ${o.prof[0]} of ${o.prof[1]} filled</div><div class="t2">Needed for the consent form</div><div class="bar" style="margin-top:8px"><i style="width:${Math.round(o.prof[0]/o.prof[1]*100)}%"></i></div></div><a href="#">Complete</a></div>`}
+
+const pill=(t,av)=>`<span class="pill">${av?`<span class="av">${av}</span>`:''}${t}<span class="x" title="Remove ${t}">${I('x','xs')}</span></span>`;
+
+/* ---------- tabs ---------- */
+function tabs(list,on,extra=''){return `<div class="tabs" role="tablist">${list.map((t,i)=>t==='|'?'<span class="tvr"></span>':`<span role="tab" class="t ${t[0]===on?'on':''} ${t[3]||''}">${t[0].startsWith('+')?'':I(t[1])}${t[0]}${t[2]!==undefined&&t[2]!==null?` <span class="n">${t[2]}</span>`:''}${t[0].startsWith('+')?I('dn','xs'):''}</span>`).join('')}${extra}</div>`}
+
+/* ---------- right rail ---------- */
+function rail(o){let h='';
+  if(o.consent) h+=`<div class="rs"><div class="rs-h"><h3>${I('ready','sm')}Consent &amp; fee</h3></div>
+    <div class="box" style="padding:2px">
+      <div class="kv"><span class="k">Processing fee</span><span class="v ${o.consent.fee?'':'w'}">${o.consent.fee||'Not recorded'}</span><a>${o.consent.fee?'':'Record'}</a></div>
+      <div class="kv"><span class="k">Consent</span><span class="v ${o.consent.signed?'':'w'}">${o.consent.signed||'Not signed'}</span><a>${o.consent.signed?'View':'Copy link'}</a></div>
+    </div></div>`;
+  for(const s of o.secs){h+=`<div class="rs"><div class="rs-h"><h3 title="Open the ${s.t} tab">${I(s.i,'sm')}${s.t} <span class="n">${s.n}</span></h3><span class="btn ic" title="${s.add}">${I('plus','sm')}</span></div>${s.body||`<div class="rs-e">${s.empty}<a>${s.cta}</a></div>`}</div>`}
+  return `<aside class="col rc" aria-label="Student file">${h}</aside>`}
+
+/* ---------- middle bodies ---------- */
+const orca=(txt,tm)=>`<div class="orca" role="note" aria-label="Orca summary"><div class="orca-h">${I('spark','sm')}Orca<span class="tm">${tm} · </span><a href="#">${I('rot','xs')} Refresh</a></div><p>${txt}</p></div>`;
+const card=(lb,ic,vl,sb,cls='',ed=true)=>`<div class="card ${ed?'ed':''}"><div class="lb">${lb}${I(ic)}</div><div class="vl ${cls}"><span>${vl}</span></div><div class="sb">${sb}</div></div>`;
+const tlv=(evs)=>`<div class="tl">${evs.map((e,i)=>`${i?'<div class="cn"></div>':''}<div class="ev"><span class="ic ${e.s?'s':'p'}">${e.s?I(e.s):e.a}</span><span class="tx">${e.t}</span><span class="tm">${e.tm}</span></div>`).join('')}</div>`;
+
+/* ======== DATA: Prospects lead (admin) ======== */
+const P={ini:'AS',name:'Aarav Shrestha',id:'PS-203',created:'Added Oct 19 · Website form',phone:'+977 981-234-5678',email:'aarav.shrestha@pulse.invalid',count:'12 of 444 in All leads'};
+const stageP={cur:2,status:'Follow-up',next:'Applications',nextSub:'1 of 3 done',
+  req:[{t:'Basic info for the consent form',ok:true},{t:'Processing fee',a:'Record'},{t:'Consent signed',a:'Copy link'}],
+  btn:'Move to Applications',btnOff:true,
+  foot:`<span class="btn">${I('back','xs')}Revert to Qualified</span><span class="sp"></span><span class="btn">Move to…${I('dn','xs')}</span><span class="btn ic" title="Archive">${I('arch','sm')}</span>`};
+const rowsP=[
+  {i:'user',k:'Counsellor',v:`<span class="av" style="background:#d9f2ea;color:#1c6b54">FA</span><span class="t">Farhan Ali</span>`},
+  {i:'users',k:'Collaborators',v:pill('Binod Rai','BR')+pill('Dipa Gurung','DG'),cls:'wr'},
+  {i:'bld',k:'Branch',v:'<span class="t">Kathmandu</span>'},
+  {i:'src',k:'Source',v:'<span class="t">Website form</span>'},
+  {i:'pin',k:'City',v:'<span class="t">Lalitpur, Nepal</span>'},
+  {i:'globe',k:'Study in',v:'<span class="t">Australia, UK · Feb 2027</span>'},
+  {i:'cap',k:'Course',v:'<span class="t">Bachelor · Nursing · IELTS 6.5</span>'},
+  {i:'tag',k:'Tags',v:pill('NEB 2025')+pill('Scholarship')},
+  {i:'pause',k:'On hold',v:'<span class="tgl"></span>'}];
+const tabsP=[['Overview','tov'],['Activity','tact',14],['Tasks','task',4],['Notes','note',8],['+6 more','dots']];
+const railP=rail({consent:{fee:null,signed:null},secs:[
+  {t:'Applications',i:'app',n:0,add:'Add application',empty:'Unlocks after consent',cta:''},
+  {t:'Classes',i:'cls',n:1,add:'Add to class',body:`<div class="box"><div class="li"><span class="dot" style="background:var(--s-qual)"></span><span class="tx">IELTS Morning B</span><span class="tm">18 / 24 attended</span></div></div>`},
+  {t:'Documents',i:'doc',n:2,add:'Upload documents',body:`<div class="box"><div class="file"><span class="ext">PDF</span><span class="tx">Passport.pdf</span><span class="tm">Nov 2</span></div><div class="file"><span class="ext img">JPG</span><span class="tx">NEB transcript.jpg</span><span class="tm">Oct 28</span></div></div>`},
+  {t:'Check-ins',i:'chkin',n:0,add:'Record check-in',empty:'No visits yet',cta:'Check in'}]});
+
+const overviewP=`
+${orca('Wants a <b>Bachelor in Nursing</b> in Australia or the UK for <b>Feb 2027</b> (IELTS 6.5). Moved to Prospects <b>3 days ago</b> by Farhan. Two things block Applications: the <b>processing fee</b> and the <b>signed consent</b>. Last contact was a call 6 days ago; no next step is booked.','Updated 2h ago')}
+<div class="sech"><h3>Highlights</h3></div>
+<div class="grid">
+  ${card('Stage · status','stage',`<span class="dot" style="background:var(--s-pros)"></span>Prospects · Follow-up`,'3 days in this stage')}
+  ${card('Next step','next','None booked','<span class="add">+ Add task</span>','w')}
+  ${card('Last touch','clock','6d ago · Call','By Farhan Ali','w')}
+  ${card('Counsellor','user',`<span class="av" style="background:#d9f2ea;color:#1c6b54">FA</span>Farhan Ali`,'Kathmandu branch')}
+  ${card('Study plan','cap','Australia, UK · Feb 2027','Bachelor · Nursing · IELTS 6.5')}
+  ${card('Ready to apply','ready','1 of 3','Fee · Consent','w')}
+</div>
+<div class="sech"><h3>Activity</h3><a class="va">View all</a></div>
+${tlv([{a:'FA',t:'<b>Farhan Ali</b> <em>logged a call</em> · Interested, waiting on parents for the fee',tm:'6d ago'},{s:'stage',t:'<b>Farhan Ali</b> <em>moved the lead to</em> Prospects',tm:'3d ago'},{a:'FA',t:'<b>Farhan Ali</b> <em>added a note</em> · Prefers Sydney or Melbourne',tm:'3d ago'},{s:'mail',t:'<b>Email sent</b> <em>·</em> Your next steps with Admizz',tm:'Nov 4'},{s:'user',t:'<b>Gita Karki</b> <em>assigned the lead to</em> Farhan Ali',tm:'Oct 22'}])}
+<div class="sech"><h3>Tasks <span class="n">4</span></h3><span class="btn ic" style="margin-left:auto;width:24px;height:24px" title="Add task">${I('plus','sm')}</span></div>
+<div class="box"><div class="li"><span class="cb"></span><span class="tx">Collect passport copy</span><span class="tm w">Overdue · Nov 9</span></div><div class="li"><span class="cb"></span><span class="tx">Send course shortlist (3 unis)</span><span class="tm">Fri</span></div><div class="li"><span class="cb"></span><span class="tx">Book IELTS mock test</span><span class="tm">No date</span></div></div>
+<div class="sech"><h3>Latest note</h3><a class="va">All 8 notes</a></div>
+<div class="notep"><p>Prefers Sydney or Melbourne. Parents want a lower tuition option, ask about the 20% scholarship at Western Sydney.</p><div class="m">Farhan Ali · 3d ago</div></div>`;
+
+function deskLeft(o){return `<div class="col lc">${identity(o.p)}${stageCard(o.st)}${detailsList({rows:o.rows,prof:o.prof})}</div>`}
+
+/* ======== Scene 1 ======== */
+const s1=shell(1470,980,`${header(P)}<div class="cols">${deskLeft({p:P,st:stageP,rows:rowsP,prof:[22,31]})}
+<div class="col mc">${tabs(tabsP,'Overview')}<div class="mb">${overviewP}</div></div>${railP}</div>`);
+
+/* ======== Scene 2: counsellor, Pre-qualified, Activity ======== */
+const Q={ini:'SK',name:'Sita Karki',id:'PS-339',created:'Added Nov 6 · Walk-in',phone:'+977 984-555-0192',email:'sita.karki@pulse.invalid',count:'3 of 6 in My leads'};
+const stageQ={cur:0,status:'New',next:'Qualified',nextSub:'',req:[],
+  hint:'Qualify asks for the study countries, course and level, then sends the lead on.',
+  btn:'Qualify',btnOff:false,
+  foot:`<span class="btn dis" title="This lead started with you">${I('back','xs')}Revert</span><span class="sp"></span><span class="btn ic" title="Archive">${I('arch','sm')}</span>`};
+const rowsQ=[
+  {i:'user',k:'Counsellor',v:`<span class="av" style="background:#ece8fb;color:#4b3aa8">Y</span><span class="t">You</span>`,lock:true},
+  {i:'users',k:'Collaborators',v:'<span class="t" style="color:var(--l50)">None</span>'},
+  {i:'bld',k:'Branch',v:'<span class="t">Kathmandu</span>'},
+  {i:'src',k:'Source',v:'<span class="t">Walk-in</span>'},
+  {i:'pin',k:'City',v:'<span class="t">Bhaktapur, Nepal</span>'},
+  {i:'globe',k:'Study in',v:'<span class="t">Set study countries</span>',e:true},
+  {i:'cap',k:'Course',v:'<span class="t">Set course and level</span>',e:true},
+  {i:'tag',k:'Tags',v:'<span class="t">Add tag</span>',e:true},
+  {i:'pause',k:'On hold',v:'<span class="tgl"></span>'}];
+const tabsQ=[['Overview','tov'],['Activity','tact',4],['Tasks','task',1],['Notes','note',1],['+3 more','dots']];
+const railQ=rail({secs:[
+  {t:'Documents',i:'doc',n:0,add:'Upload documents',empty:'No documents yet',cta:'Upload'},
+  {t:'Check-ins',i:'chkin',n:1,add:'Record check-in',body:`<div class="box"><div class="li"><span class="ic" style="width:16px;display:inline-flex;color:var(--muted)">${I('chkin','sm')}</span><span class="tx">Walk-in visit · Front desk</span><span class="tm">Nov 6</span></div></div>`}]});
+const activityQ=`
+<div style="display:flex;align-items:center;gap:8px;margin-top:12px"><h3 style="margin:0;font:500 14px/20px Inter">Activity</h3><span class="sp"></span><span class="btn bd">${I('filter','sm')}Filter</span><span class="btn bd">${I('plus','sm')}Log activity</span></div>
+<div class="filt"><span class="fc on">All 4</span><span class="fc">Calls 1</span><span class="fc">Notes 1</span><span class="fc">Emails 0</span><span class="fc">Stage &amp; owner 1</span><span class="fc">Check-ins 1</span></div>
+<div class="grp">Today</div>
+<div class="evr"><span class="ic" style="background:#ece8fb;color:#4b3aa8">Y</span><div class="b"><div class="l1"><b>You</b><em>logged a call</em><span class="tm">10:42</span></div><div class="q">Wants nursing, maybe Australia. Will bring her +2 marksheet on Friday.</div></div></div>
+<div class="grp">Nov 6</div>
+<div class="evr"><span class="ic">${I('note','sm')}</span><div class="b"><div class="l1"><b>You</b><em>added a note</em><span class="tm">15:10</span></div><div class="q">Came with her brother. Asked about cost for Australia vs Japan.</div></div></div>
+<div class="evr"><span class="ic">${I('chkin','sm')}</span><div class="b"><div class="l1"><b>Front desk</b><em>checked her in · Walk-in visit</em><span class="tm">14:55</span></div></div></div>
+<div class="evr"><span class="ic">${I('user','sm')}</span><div class="b"><div class="l1"><b>Front desk</b><em>created the lead and assigned it to</em><b>you</b><span class="tm">14:52</span></div></div></div>`;
+const s2=shell(1470,900,`${header(Q)}<div class="cols">${deskLeft({p:Q,st:stageQ,rows:rowsQ,prof:[6,31]})}
+<div class="col mc">${tabs(tabsQ,'Activity')}<div class="mb">${activityQ}</div></div>${railQ}</div>`);
+
+/* ======== Scene 3: 1180 wide, rail hidden, +3 more open, Tasks tab ======== */
+const tabsN=[['Overview','tov'],['Activity','tact',14],['Tasks','task',4],['Notes','note',8],['+6 more','dots',null,'open']];
+const moreMenu=`<div class="menu"><div class="mi">${I('mail')}Emails<span class="n">3</span></div><div class="mi">${I('ready')}Consent &amp; fee<span class="n" style="color:var(--warn);background:var(--warn-soft)">2 left</span></div><div class="mi">${I('app')}Applications<span class="n">0</span></div><div class="mi hv">${I('cls')}Classes<span class="n">1</span></div><div class="mi">${I('doc')}Documents<span class="n">2</span></div><div class="mi">${I('chkin')}Check-ins<span class="n">0</span></div></div>`;
+const tasksBody=`
+<div style="display:flex;align-items:center;gap:8px;margin-top:12px"><h3 style="margin:0;font:500 14px/20px Inter">Tasks</h3><span class="sp"></span><span class="fc on">Open 4</span><span class="fc">Done 2</span></div>
+<div class="composer">${I('plus','sm')}Add a task… <span class="sp"></span><span class="btn bd" style="height:24px">${I('cal','xs')}Due</span><span class="btn bd" style="height:24px">${I('user','xs')}Farhan</span></div>
+<div class="grp">Overdue</div>
+<div class="box"><div class="li"><span class="cb"></span><span class="tx">Collect passport copy</span><span class="tm w">Nov 9 · Farhan</span></div></div>
+<div class="grp">This week</div>
+<div class="box"><div class="li"><span class="cb"></span><span class="tx">Send course shortlist (3 unis)</span><span class="tm">Fri · Farhan</span></div><div class="li"><span class="cb"></span><span class="tx">Call parents about the fee</span><span class="tm">Sat 10:00 · Farhan</span></div></div>
+<div class="grp">No date</div>
+<div class="box"><div class="li"><span class="cb"></span><span class="tx">Book IELTS mock test</span><span class="tm">Binod Rai</span></div></div>
+<div class="grp">Done</div>
+<div class="box"><div class="li done"><span class="cb on">${I('chk','xs')}</span><span class="tx">First counselling call</span><span class="tm">Nov 4</span></div><div class="li done"><span class="cb on">${I('chk','xs')}</span><span class="tx">Share brochure on WhatsApp</span><span class="tm">Nov 4</span></div></div>
+<div style="font:400 12px/16px Inter;color:var(--l50);margin-top:10px">One list: old checklist items show here as tasks without a due date.</div>`;
+const s3=shell(1180,900,`${header(P)}<div class="cols">${deskLeft({p:P,st:stageP,rows:rowsP,prof:[22,31]})}
+<div class="col mc">${tabs(tabsN,'Tasks',moreMenu)}<div class="mb">${tasksBody}</div></div></div>`);
+
+/* ======== Scene 4: View all values + inline edit ======== */
+const allVals=`<div class="idb" style="padding-bottom:4px"><div class="who"><span class="av">${P.ini}</span><h1>${P.name}</h1></div></div>
+<div style="display:flex;align-items:center;gap:8px;height:40px;margin:4px 0 0;padding:0 16px;border-top:1px solid var(--line-soft);border-bottom:1px solid var(--line-soft);color:var(--l50)">${I('back','sm')}<span>Search fields…</span></div>
+<div class="dl" style="padding-top:6px">
+${[['user','First name','Aarav'],['user','Last name','Shrestha'],['ph','Phone','+977 981-234-5678'],['mail','Email','aarav.shrestha@pulse.invalid'],['cal','Date of birth','Set date of birth',1],['globe','Nationality','Nepali'],['pin','Address','Set address',1],['user',"Father's name",'Set father’s name',1],['user',"Mother's name",'Set mother’s name',1],['users','Guardian','Father'],['ph','Guardian phone','',2],['note','Passport no.','Set passport number',1],['cap','+2 GPA','3.21'],['cap','IELTS','6.5'],['money','Funding','Set funding source',1],['src','Source','Website form']].map(r=>r[3]===2?`<div class="dr edit"><span class="k">${I(r[0])}${r[1]}</span><span class="v"><span class="t" style="color:var(--ink)">+977 98</span><span style="width:1px;height:16px;background:var(--blue)"></span></span></div>`:`<div class="dr"><span class="k">${I(r[0])}${r[1]}</span><span class="v ${r[3]?'e':''}"><span class="t">${r[2]}</span></span></div>`).join('')}
+</div>`;
+const s4=shell(1470,900,`${header(P)}<div class="cols"><div class="col lc">${allVals}</div>
+<div class="col mc">${tabs(tabsP,'Overview')}<div class="mb">${overviewP}</div></div>${railP}</div>`);
+
+/* ======== Scene 5: everything done, ready for Applications ======== */
+const stageR={...stageP,nextSub:'3 of 3 done',req:[{t:'Basic info for the consent form',ok:true},{t:'Processing fee · Rs 5,000 paid',ok:true},{t:'Consent signed · Nov 10',ok:true}],btn:'Move to Applications',btnOff:false};
+const railR=rail({consent:{fee:'Rs 5,000 · Paid',signed:'Signed Nov 10'},secs:[
+  {t:'Applications',i:'app',n:0,add:'Add application',empty:'No applications yet',cta:'Add'},
+  {t:'Classes',i:'cls',n:1,add:'Add to class',body:`<div class="box"><div class="li"><span class="dot" style="background:var(--s-qual)"></span><span class="tx">IELTS Morning B</span><span class="tm">18 / 24 attended</span></div></div>`},
+  {t:'Documents',i:'doc',n:2,add:'Upload documents',body:`<div class="box"><div class="file"><span class="ext">PDF</span><span class="tx">Passport.pdf</span><span class="tm">Nov 2</span></div><div class="file"><span class="ext img">JPG</span><span class="tx">NEB transcript.jpg</span><span class="tm">Oct 28</span></div></div>`},
+  {t:'Check-ins',i:'chkin',n:0,add:'Record check-in',empty:'No visits yet',cta:'Check in'}]});
+const overviewR=overviewP.replace('Two things block Applications: the <b>processing fee</b> and the <b>signed consent</b>.','The fee is paid and the consent was signed on <b>Nov 10</b>: ready for Applications.')
+  .replace(card('Ready to apply','ready','1 of 3','Fee · Consent','w'),card('Ready to apply','ready','Ready','Fee paid · Consent signed','g'));
+const s5=shell(1470,900,`${header(P)}<div class="cols">${deskLeft({p:P,st:stageR,rows:rowsP,prof:[31,31]})}
+<div class="col mc">${tabs(tabsP,'Overview')}<div class="mb">${overviewR}</div></div>${railR}</div>`);
+
+/* ======== Scene 6: phone ======== */
+const s6=`<div class="phone">
+ <div class="ph-top"><span class="btn ic">${I('back')}</span><span class="cnt" style="margin:0">12 of 444</span><span class="sp"></span><span class="nav">${I('up')}</span><span class="nav">${I('dn')}</span><span class="btn ic">${I('dots')}</span></div>
+ <div class="ph-b">
+  ${identity(P).replace('<span class="btn bd">'+I('mail','sm')+'Email</span>','<span class="btn ic bd" title="Email">'+I('mail','sm')+'</span>')}
+  ${stageCard(stageP)}
+  <div class="ph-tabs">${[['Overview','tov',null,'on'],['Activity','tact',14],['Tasks','task',4],['Notes','note',8],['Emails','mail',3]].map(t=>`<span class="t ${t[3]||''}" style="height:28px;display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:8px;color:${t[3]?'var(--ink)':'var(--l63)'};${t[3]?'background:#fbfbfb;box-shadow:inset 0 0 0 1px var(--card-line)':''}">${I(t[1])}${t[0]}${t[2]!=null?` <span class="n">${t[2]}</span>`:''}</span>`).join('')}</div>
+  <div style="padding:0 16px">${orca('Wants a <b>Bachelor in Nursing</b> in Australia or the UK for <b>Feb 2027</b>. Two things block Applications: the <b>fee</b> and the <b>signed consent</b>. Last contact 6 days ago.','2h ago')}
+  <div class="sech" style="padding:0 4px;margin-top:12px"><h3>Highlights</h3></div>
+  <div class="grid c2">${card('Next step','next','None booked','<span class="add">+ Add task</span>','w')}${card('Last touch','clock','6d ago · Call','Farhan Ali','w')}</div></div>
+ </div></div>`;
+
+document.getElementById('root').innerHTML=[s1,s2,s3,s4,s5,s6].map((s,i)=>`<section class="scene ${i===0?'on':''}" id="s${i+1}">${s}</section>`).join('');
+document.querySelectorAll('#sw button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#sw button').forEach(x=>x.classList.toggle('on',x===b));document.querySelectorAll('.scene').forEach(s=>s.classList.toggle('on',s.id===b.dataset.s))});
+</script>
+</body></html>

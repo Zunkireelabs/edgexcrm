@@ -1,0 +1,489 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Applications board v1</title>
+<style>
+:root{
+  --canvas:#f6f6f5;--surface:#fff;--sunken:#fafaf9;--hover:#f6f7f9;--selected:#efefee;
+  --border:#e8e9eb;--divider:#f0f1f2;--ink:#101112;--text:#2b2d2f;--muted:#6b6f76;--faint:#9a9ea5;--ghost:#d0d3d7;
+  --accent:#2272B4;--accent-soft:#eaf2fa;--good:#127a4a;--good-soft:#e9f6ef;--bad:#b42318;--bad-soft:#fdeeec;
+  --warn:#a15c07;--warn-soft:#fdf3e3;
+  --col:#fbfbfb;--ring:0 0 0 1px rgba(0,0,0,.06);--float:0 10px 15px -3px rgb(0 0 0/.1),0 4px 6px -4px rgb(0 0 0/.1);
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--canvas);font:13px/1.4 "Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--text);display:flex;flex-direction:column}
+svg.i{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
+button{font:inherit}
+/* mockup-only state switcher */
+.mk{display:flex;align-items:center;gap:6px;padding:8px 16px;background:#101112;color:#cfd2d6;font-size:12px;flex:none}
+.mk b{color:#fff;margin-right:6px}
+.mk button{background:transparent;border:1px solid #3a3d42;color:#cfd2d6;border-radius:6px;height:24px;padding:0 9px;cursor:pointer}
+.mk button.on{background:#fff;color:#101112;border-color:#fff}
+.mk .sp{flex:1}
+/* app shell (simplified) */
+.app{flex:1;display:flex;min-height:0}
+.side{width:224px;flex:none;padding:12px 10px;display:flex;flex-direction:column;gap:2px;color:var(--text)}
+.brand{font-weight:700;font-size:15px;color:var(--ink);padding:4px 8px 12px}.brand span{color:var(--accent);font-weight:600}
+.side .grp{font-size:11px;color:var(--faint);padding:12px 8px 4px}
+.side a{display:flex;align-items:center;gap:9px;height:30px;padding:0 8px;border-radius:8px;color:var(--text);text-decoration:none}
+.side a.on{background:var(--selected);color:var(--ink);font-weight:500}
+.main{flex:1;min-width:0;padding:8px 8px 8px 0;display:flex}
+.frame{flex:1;min-width:0;background:var(--surface);border:1px solid var(--border);border-radius:16px;display:flex;flex-direction:column;overflow:hidden;position:relative}
+/* header */
+.head{display:flex;align-items:center;gap:10px;padding:14px 20px 0}
+.head h1{margin:0;font-size:20px;letter-spacing:-.02em;font-weight:600;color:var(--ink)}
+.cnt{font-size:12px;color:var(--muted);background:var(--hover);border-radius:9999px;padding:2px 8px;font-variant-numeric:tabular-nums}
+.sp{flex:1}
+.btn{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-weight:500;cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--hover)}
+.btn.icon{width:30px;padding:0;justify-content:center}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.pipe .pi{width:18px;height:18px;border-radius:5px;background:#fff1e6;color:#c2561a;display:inline-flex;align-items:center;justify-content:center}
+.pipe .pi svg{width:12px;height:12px}
+.pipe .n{color:var(--faint);font-weight:400;font-variant-numeric:tabular-nums}
+/* tabs */
+.tabs{display:flex;gap:2px;padding:8px 20px 0;border-bottom:1px solid var(--border)}
+.tab{padding:7px 10px 9px;color:var(--muted);font-weight:500;border-bottom:2px solid transparent;margin-bottom:-1px;display:flex;gap:6px;align-items:center;cursor:pointer}
+.tab.on{color:var(--ink);border-color:var(--ink)}
+.tab .n{font-size:11px;background:var(--hover);color:var(--muted);border-radius:9999px;padding:0 6px;font-weight:600}
+/* toolbar */
+.bar{display:flex;align-items:center;gap:8px;padding:10px 20px;min-height:50px;border-bottom:1px solid var(--border)}
+.search{display:flex;align-items:center;gap:8px;height:30px;width:250px;padding:0 10px;border:1px solid var(--border);border-radius:8px;color:var(--faint)}
+.search kbd{margin-left:auto;font:11px inherit;border:1px solid var(--border);border-radius:4px;padding:0 4px}
+.chip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:8px;border:1px dashed var(--ghost);color:var(--muted);font-weight:500;cursor:pointer;white-space:nowrap}
+.chip.on{border:1px solid var(--border);background:var(--sunken);color:var(--ink)}
+.chip.sort{border:1px solid var(--border);background:#fff;color:var(--muted)}
+.chip.sort b{color:var(--ink);font-weight:500}
+.chip b{font-weight:600}.chip .x{color:var(--faint)}
+.chip .op{color:var(--muted);font-weight:400}
+.seg{display:inline-flex;background:var(--hover);border-radius:10px;padding:2px;gap:2px}
+.seg button{height:26px;min-width:28px;padding:0 8px;border:0;border-radius:8px;background:transparent;color:var(--muted);display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500}
+.seg button.on{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.06),var(--ring)}
+.vsep{width:1px;height:18px;background:var(--border)}
+/* note */
+.note{display:flex;align-items:center;gap:8px;margin:10px 20px 0;padding:7px 10px;border-radius:8px;background:var(--sunken);box-shadow:var(--ring);color:var(--muted);font-size:12px}
+.note b{color:var(--ink);font-weight:600}.note a{color:var(--accent);text-decoration:none;font-weight:500}
+/* board */
+.board{flex:1;min-height:0;overflow:auto;display:flex;gap:8px;padding:12px 20px 12px;align-items:flex-start}
+.col{width:268px;flex:none;background:var(--col);border-radius:16px;display:flex;flex-direction:column;max-height:100%;position:relative}
+.ch{display:flex;align-items:center;gap:8px;height:36px;padding:8px 8px 8px 14px;margin-top:4px}
+.ch .dot{width:9px;height:9px;border-radius:9999px;flex:none}
+.ch .nm{font-size:14px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pill{display:inline-flex;align-items:center;height:16px;padding:0 4px;border-radius:6px;background:rgba(0,0,0,.04);box-shadow:inset 0 0 0 1px #eeeff1;font-size:12px;font-weight:500;color:#505155;font-variant-numeric:tabular-nums}
+.ch .tools{margin-left:auto;display:flex;gap:2px}
+.ib{width:24px;height:24px;border:0;background:transparent;border-radius:6px;color:var(--faint);display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.ib:hover{background:rgba(0,0,0,.05);color:var(--ink)}
+.ib svg{width:14px;height:14px}
+.cards{padding:2px 11px 8px;display:flex;flex-direction:column;gap:8px;overflow:auto}
+.newrow{height:32px;border-radius:9px;border:1px dashed rgba(0,0,0,.06);background:rgba(0,0,0,.02);color:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;flex:none;font-weight:500}
+.newrow:hover{background:rgba(0,0,0,.04);color:var(--ink)}
+.newrow svg{width:13px;height:13px}
+.cf{padding:8px 14px 12px;color:var(--faint);font-size:12px;display:flex;gap:10px;border-top:1px solid #f1f1f1;margin:0 4px}
+.cf b{color:var(--muted);font-weight:500}
+/* card */
+.card{background:#fff;border-radius:12px;box-shadow:var(--ring);cursor:grab;flex:none}
+.card:hover{box-shadow:0 0 0 1px rgba(0,0,0,.1),0 1px 2px rgba(0,0,0,.05)}
+.ct{display:flex;align-items:center;gap:8px;padding:10px 8px 6px 12px}
+.uni{width:20px;height:20px;border-radius:6px;background:var(--hover);color:var(--muted);display:inline-flex;align-items:center;justify-content:center;flex:none}
+.uni svg{width:12px;height:12px}
+.ct .t{font-size:14px;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.f{display:flex;align-items:center;gap:8px;padding:3px 12px;font-size:13px;color:var(--text);min-width:0}
+.f .i{width:14px;height:14px;color:var(--faint)}
+.f span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.f .set{color:rgba(0,0,0,.42)}
+.f .sub{color:var(--muted)}
+.av{width:18px;height:18px;border-radius:9999px;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;flex:none;letter-spacing:.02em}
+.offer{display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:6px;font-size:11.5px;font-weight:500;margin:4px 0 0 12px}
+.offer.cond{background:var(--warn-soft);color:var(--warn)}
+.offer.unc{background:var(--good-soft);color:var(--good)}
+.cfoot{display:flex;align-items:center;gap:12px;padding:8px 10px 9px 12px;margin-top:6px;color:var(--faint);font-size:12px}
+.cfoot .m{display:inline-flex;align-items:center;gap:4px;font-variant-numeric:tabular-nums}
+.cfoot .m svg{width:13px;height:13px}
+.cfoot .m.miss{color:var(--warn)}
+.age{margin-left:auto;display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 6px;border-radius:6px;font-size:12px;font-weight:500;color:rgba(0,0,0,.63);font-variant-numeric:tabular-nums}
+.age svg{width:12px;height:12px}
+.age.amber{background:var(--warn-soft);color:var(--warn)}
+.age.red{background:var(--bad-soft);color:var(--bad)}
+.more{height:30px;border:0;background:transparent;color:var(--muted);border-radius:8px;cursor:pointer;font-weight:500;flex:none}
+.more:hover{background:rgba(0,0,0,.04);color:var(--ink)}
+/* collapsed terminal column */
+.col.slim{width:44px;align-items:center;padding:12px 0;gap:10px;cursor:pointer;min-height:240px}
+.col.slim:hover{background:#f5f5f5}
+.col.slim .dot{width:9px;height:9px;border-radius:9999px}
+.col.slim .vn{writing-mode:vertical-rl;font-size:14px;font-weight:600;color:var(--ink);letter-spacing:.01em}
+.endsep{width:1px;align-self:stretch;background:var(--border);margin:6px 6px;flex:none}
+.endlbl{writing-mode:vertical-rl;transform:rotate(180deg);color:var(--faint);font-size:11px;align-self:center;flex:none}
+.addstage{width:52px;height:52px;border-radius:16px;border:1px dashed #e6e7ea;background:transparent;color:var(--muted);display:inline-flex;align-items:center;justify-content:center;flex:none;cursor:pointer}
+.addstage:hover{background:var(--hover);color:var(--ink)}
+/* menus */
+.menu{position:absolute;background:#fff;border-radius:12px;box-shadow:var(--float),var(--ring);padding:4px;min-width:220px;z-index:20}
+.menu .s{height:30px;display:flex;align-items:center;gap:8px;padding:0 8px;margin:2px 2px 4px;border-radius:8px;box-shadow:inset 0 0 0 1px var(--border);color:var(--faint)}
+.menu .mi{height:30px;display:flex;align-items:center;gap:9px;padding:0 8px;border-radius:8px;color:var(--text);cursor:pointer}
+.menu .mi:hover,.menu .mi.hl{background:var(--hover);color:var(--ink)}
+.menu .mi .i{color:var(--muted)}
+.menu .mi .r{margin-left:auto;color:var(--faint);font-size:12px}
+.menu .lbl{font-size:11px;color:var(--faint);padding:6px 8px 2px}
+.menu hr{border:0;border-top:1px solid var(--divider);margin:4px 0}
+.menu .danger{color:var(--bad)}.menu .danger .i{color:var(--bad)}
+.menu .rename{height:32px;display:flex;align-items:center;gap:8px;padding:0 8px;margin:2px;border-radius:8px;box-shadow:inset 0 0 0 1px var(--accent);color:var(--ink);font-weight:500}
+.tg{margin-left:auto;width:26px;height:15px;border-radius:9999px;background:var(--ghost);position:relative}
+.tg::after{content:"";position:absolute;width:11px;height:11px;border-radius:9999px;background:#fff;top:2px;left:2px}
+.tg.on{background:var(--accent)}.tg.on::after{left:13px}
+/* empty state */
+.empty{position:absolute;left:0;right:0;top:300px;display:flex;flex-direction:column;align-items:center;text-align:center;pointer-events:none}
+.empty *{pointer-events:auto}
+.ill{width:120px;height:120px;border-radius:20px;background:radial-gradient(circle,#e7e8ea 1px,transparent 1.2px) 0 0/10px 10px;display:flex;align-items:center;justify-content:center;margin-bottom:14px}
+.ill .doc{width:72px;height:84px;border-radius:14px;background:#fff;box-shadow:0 0 0 1px #e3e4e7,0 2px 6px rgba(0,0,0,.05);display:flex;flex-direction:column;gap:7px;padding:14px 12px}
+.ill .doc i{display:block;height:6px;border-radius:3px;background:#e6e7ea}
+.empty h3{margin:0 0 4px;font-size:18px;color:var(--ink);font-weight:600}
+.empty p{margin:0 0 14px;color:var(--muted);max-width:340px}
+.empty .acts{display:flex;gap:8px}
+.callout{position:absolute;z-index:60!important;background:#fffbe6;border:1px solid #f0d77a;color:#5c4a00;font-size:11.5px;line-height:1.45;padding:6px 8px;border-radius:8px;max-width:230px;z-index:30;box-shadow:0 2px 6px rgba(0,0,0,.08)}
+.hidden{display:none!important}
+/* pipeline menu */
+.pm{width:340px;padding:4px}
+.pm .row{display:flex;gap:10px;padding:8px 8px 9px;border-radius:8px;cursor:pointer;position:relative}
+.pm .row:hover,.pm .row.hl{background:var(--hover)}
+.pm .ck{width:16px;height:16px;flex:none;margin-top:1px;color:var(--accent)}
+.pm .ck.off{color:transparent}
+.pm .body{flex:1;min-width:0}
+.pm .t{display:flex;align-items:center;gap:6px;color:var(--ink);font-weight:500}
+.pm .badge{font-size:11px;font-weight:500;color:var(--muted);background:var(--hover);box-shadow:inset 0 0 0 1px var(--border);border-radius:5px;padding:0 5px;height:18px;display:inline-flex;align-items:center}
+.pm .meta{color:var(--muted);font-size:12px;margin-top:1px;font-variant-numeric:tabular-nums}
+.pm .sbar{display:flex;height:4px;border-radius:9999px;overflow:hidden;background:var(--divider);margin-top:7px;gap:1px}
+.pm .sbar i{display:block;height:100%}
+.pm .gear{position:absolute;right:6px;top:7px;width:24px;height:24px;border-radius:6px;display:none;align-items:center;justify-content:center;color:var(--muted)}
+.pm .row:hover .gear,.pm .row.hl .gear{display:flex}
+.pm .gear:hover{background:rgba(0,0,0,.06);color:var(--ink)}
+.pm .gear svg{width:14px;height:14px}
+.pm .foot{display:flex;align-items:center;gap:8px;height:32px;padding:0 8px;border-radius:8px;color:var(--text);cursor:pointer;font-weight:500}
+.pm .foot:hover{background:var(--hover)}
+.pm .foot .r{margin-left:auto;color:var(--faint);font-weight:400;font-size:12px}
+/* settings modal */
+.scrim{position:fixed;inset:0;background:rgba(16,17,18,.32);z-index:50;display:flex;align-items:center;justify-content:center}
+.modal{width:640px;max-height:calc(100vh - 64px);background:#fff;border-radius:16px;box-shadow:var(--float),var(--ring);display:flex;flex-direction:column;overflow:hidden}
+.mh{display:flex;align-items:center;gap:10px;padding:16px 16px 12px 20px}
+.mh h2{margin:0;font-size:16px;font-weight:600;color:var(--ink)}
+.mh .sub{color:var(--muted);font-size:12px}
+.mb{padding:4px 20px 16px;overflow:auto}
+.fld{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.fld label{font-size:12px;font-weight:500;color:var(--muted)}
+.inp{height:34px;border-radius:8px;box-shadow:inset 0 0 0 1px var(--border);display:flex;align-items:center;padding:0 10px;color:var(--ink);font-weight:500}
+.inp.focus{box-shadow:inset 0 0 0 1px var(--accent),0 0 0 3px var(--accent-soft)}
+.opt{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;box-shadow:inset 0 0 0 1px var(--border);margin-bottom:18px}
+.opt .tx{flex:1}.opt .tx b{display:block;color:var(--ink);font-weight:500}.opt .tx span{color:var(--muted);font-size:12px}
+.sh{display:flex;align-items:center;gap:8px;margin:2px 0 8px}
+.sh h3{margin:0;font-size:13px;font-weight:600;color:var(--ink)}
+.sh .n{color:var(--faint);font-weight:400}
+.grp{font-size:11.5px;color:var(--muted);display:flex;align-items:center;gap:8px;margin:12px 0 6px}
+.grp b{color:var(--text);font-weight:600}
+.grp::after{content:"";flex:1;height:1px;background:var(--divider)}
+.st{display:flex;align-items:center;gap:8px;height:38px;padding:0 6px 0 4px;border-radius:9px;position:relative}
+.st:hover{background:var(--hover)}
+.st .gr{color:var(--ghost);cursor:grab;width:16px;height:16px}
+.st .sw{width:22px;height:22px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex:none}
+.st .sw:hover{background:rgba(0,0,0,.06)}
+.st .sw i{width:10px;height:10px;border-radius:9999px;display:block}
+.st .nm{flex:1;height:28px;display:flex;align-items:center;padding:0 6px;border-radius:6px;color:var(--ink);font-weight:500}
+.st .nm:hover{box-shadow:inset 0 0 0 1px var(--border);background:#fff}
+.st .start{font-size:11px;font-weight:500;height:20px;padding:0 7px;border-radius:6px;display:inline-flex;align-items:center;gap:4px;color:var(--accent);background:var(--accent-soft)}
+.st .setstart{font-size:11px;color:var(--faint);display:none;cursor:pointer}
+.st:hover .setstart{display:inline}
+.st .apps{width:64px;text-align:right;color:var(--faint);font-size:12px;font-variant-numeric:tabular-nums}
+.st .out{height:24px;padding:0 6px 0 8px;border-radius:6px;box-shadow:inset 0 0 0 1px var(--border);display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:500;cursor:pointer;background:#fff}
+.st .out.won{color:var(--good)}.st .out.lost{color:var(--bad)}
+.st .ib{opacity:0}.st:hover .ib{opacity:1}
+.addrow{display:flex;align-items:center;gap:8px;height:34px;padding:0 10px;margin-top:4px;border-radius:9px;color:var(--muted);cursor:pointer;font-weight:500;border:1px dashed var(--border)}
+.addrow:hover{background:var(--hover);color:var(--ink)}
+.palette{position:absolute;left:24px;top:36px;background:#fff;border-radius:12px;box-shadow:var(--float),var(--ring);padding:10px;z-index:5;width:212px}
+.palette .g{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+.palette .g i{width:24px;height:24px;border-radius:9999px;display:block;cursor:pointer}
+.palette .g i.on{box-shadow:0 0 0 2px #fff,0 0 0 4px var(--ink)}
+.palette .l{font-size:11px;color:var(--faint);margin-bottom:8px}
+.mf{display:flex;align-items:center;gap:8px;padding:12px 16px 14px 20px;border-top:1px solid var(--divider)}
+.mf .del{color:var(--bad);font-weight:500;background:transparent;border:0;cursor:pointer;padding:0;display:inline-flex;gap:6px;align-items:center}
+.hint{font-size:12px;color:var(--muted);background:var(--sunken);box-shadow:var(--ring);border-radius:8px;padding:8px 10px;margin-top:12px;line-height:1.5}
+</style></head><body>
+
+<div class="mk"><b>Mockup · Applications board v1</b>
+  <button data-s="board" class="on">1 Board</button>
+  <button data-s="filtered">2 Filtered</button>
+  <button data-s="colmenu">3 Column menu</button>
+  <button data-s="filtermenu">4 Filter menu</button>
+  <button data-s="expanded">5 Finished stage open</button>
+  <button data-s="empty">6 Empty pipeline</button>
+  <button data-s="pipemenu">7 Pipeline menu</button>
+  <button data-s="settings">8 Pipeline settings</button>
+  <span class="sp"></span><label style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="notes" checked> design notes</label>
+</div>
+
+<div class="app">
+  <nav class="side">
+    <div class="brand">EdgeX<span>edu</span></div>
+    <a>Home</a><a>Inbox</a>
+    <div class="grp">Leads</div><a>All leads</a><a>Pipeline</a><a>Contacts</a>
+    <div class="grp">Students</div><a class="on">Applications</a><a>Classes</a><a>Check-in</a>
+  </nav>
+  <div class="main"><div class="frame" id="frame">
+    <div class="head">
+      <h1>Applications</h1><span class="cnt" id="hcount">201</span>
+      <span class="sp"></span>
+      <button class="btn pipe" id="pipeBtn"><span class="pi"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="17" y="4" width="4" height="7" rx="1.5"/></svg></span><span id="pipeName">Default pipeline</span> <span class="n" id="pipeN">201</span><svg class="i" viewBox="0 0 24 24" style="width:13px;height:13px;color:var(--faint)"><path d="m6 9 6 6 6-6"/></svg></button>
+      <button class="btn icon" title="Pipeline settings"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+      <button class="btn primary"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Add application</button>
+    </div>
+    <div class="tabs">
+      <div class="tab on">All applications <span class="n" id="t1">201</span></div>
+      <div class="tab">My applications <span class="n" id="t2">34</span></div>
+      <div class="tab">Stuck 30d+ <span class="n" id="t3" style="background:var(--bad-soft);color:var(--bad)">17</span></div>
+    </div>
+    <div class="bar">
+      <div class="search"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Search applications</span><kbd>/</kbd></div>
+      <span class="chip sort"><svg class="i" viewBox="0 0 24 24"><path d="M3 6h13M3 12h9M3 18h5M18 8v12m0 0-3-3m3 3 3-3"/></svg>Sorted by <b>Time in stage</b></span>
+      <span id="activeChips" style="display:contents"></span>
+      <span class="chip" id="filterChip"><svg class="i" viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Filter</span>
+      <span class="sp"></span>
+      <span class="seg" title="Column width"><button title="Narrow columns"><svg class="i" viewBox="0 0 24 24"><path d="M8 5v14M12 5v14M16 5v14"/></svg></button><button class="on" title="Wide columns"><svg class="i" viewBox="0 0 24 24"><rect x="4" y="5" width="6" height="14" rx="2"/><rect x="14" y="5" width="6" height="14" rx="2"/></svg></button></span>
+      <span class="seg" title="Card density"><button title="Compact cards"><svg class="i" viewBox="0 0 24 24"><path d="M5 8h14M5 12h14M5 16h14"/></svg></button><button class="on" title="Full cards"><svg class="i" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="3"/></svg></button></span>
+      <span class="vsep"></span>
+      <span class="seg"><button class="on"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="17" y="4" width="4" height="7" rx="1.5"/></svg>Board</button><button><svg class="i" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>List</button></span>
+    </div>
+    <div class="note" id="note"><svg class="i" viewBox="0 0 24 24" style="color:var(--faint)"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg><span><b>84 applications</b> have no pipeline yet. They're shown here in their stage. Move one to give it this pipeline.</span><a href="#">Show only these</a></div>
+    <div class="board" id="board"></div>
+    <div id="overlay"></div>
+  </div></div>
+</div>
+
+<script>
+const I = {
+  plus:'<path d="M12 5v14M5 12h14"/>',
+  dots:'<circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/>',
+  grip:'<circle cx="9" cy="6" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="18" r="1"/>',
+  uni:'<path d="M3 10 12 5l9 5-9 5-9-5z"/><path d="M7 12v4c3 2 7 2 10 0v-4"/>',
+  book:'<path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5"/>',
+  user:'<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>',
+  cal:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+  pin:'<path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>',
+  doc:'<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>',
+  task:'<rect x="4" y="4" width="16" height="16" rx="3"/><path d="m9 12 2 2 4-4"/>',
+  clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  dead:'<path d="M12 3v3M5 6l2 2M19 6l-2 2"/><circle cx="12" cy="14" r="7"/><path d="M12 11v3"/>',
+  pen:'<path d="M4 20h4L19 9l-4-4L4 16z"/>',
+  eyeoff:'<path d="M3 3l18 18"/><path d="M10.6 6.1A9.8 9.8 0 0 1 12 6c5 0 9 6 9 6a17 17 0 0 1-3 3.4M6.4 7.4A17 17 0 0 0 3 12s4 6 9 6a9 9 0 0 0 3.3-.6"/>',
+  collapse:'<path d="M9 4v16M15 4v16M4 9l3 3-3 3M20 9l-3 3 3 3"/>',
+  sliders:'<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>',
+  trash:'<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+  left:'<path d="m15 18-6-6 6-6"/>',
+  hash:'<path d="M5 9h14M5 15h14M10 4 8 20M16 4l-2 16"/>',
+  coin:'<circle cx="12" cy="12" r="9"/><path d="M15 9.5c-.5-1-1.6-1.5-3-1.5-1.7 0-3 .8-3 2s1.3 1.7 3 2 3 .8 3 2-1.3 2-3 2c-1.4 0-2.5-.5-3-1.5M12 6v2M12 16v2"/>'
+};
+const ic = (k, cls='i') => `<svg class="${cls}" viewBox="0 0 24 24">${I[k]}</svg>`;
+
+const COUNSELLORS = {
+  AT:{n:'Asha Tamang',bg:'#e8f1fb',c:'#1f5d94'}, BR:{n:'Binod Rai',bg:'#efeafc',c:'#5b47d6'},
+  GK:{n:'Gita Karki',bg:'#e9f6ef',c:'#127a4a'}, ET:{n:'Esha Thapa',bg:'#fdf3e3',c:'#a15c07'},
+  BD:{n:'Bijay Dahal',bg:'#fdeeec',c:'#b42318'}
+};
+const ACTIVE = [
+  {k:'nts', n:'Need to start', c:'#9aa4b2', count:6},
+  {k:'sl',  n:'Shortlisted', c:'#3b82f6', count:9},
+  {k:'dp',  n:'Documents pending', c:'#f97316', count:14},
+  {k:'ap',  n:'Applied', c:'#a855f7', count:21},
+  {k:'co',  n:'Conditional offer', c:'#eab308', count:18},
+  {k:'uo',  n:'Unconditional offer', c:'#14b8a6', count:11},
+  {k:'dep', n:'Deposit paid', c:'#0ea5e9', count:7},
+  {k:'vl',  n:'Visa lodged', c:'#6366f1', count:12},
+  {k:'va',  n:'Visa approved', c:'#22c55e', count:23}
+];
+const DONE = [
+  {k:'en', n:'Enrolled', c:'#16a34a', count:15},
+  {k:'rj', n:'Rejected', c:'#ef4444', count:2},
+  {k:'wd', n:'Withdrawn', c:'#6b7280', count:63}
+];
+const UNIS = [['University of Roehampton','BSc Business Management'],['University of East London','MSc Data Science'],['Victoria University of Wellington','BE Engineering & Technology'],['University of North Texas','MSc Hospitality Management'],['Ravensbourne University','BA Digital Marketing'],['Deakin University','Master of IT'],['University of Lancashire','MSc Biomedical Science'],['Monash University','Bachelor of Commerce'],['University of Waikato','Master of Cyber Security'],['Coventry University','MBA Global']];
+const STUDENTS = ['Aarav Shrestha','Sita Gurung','Rohan Adhikari','Priya Magar','Kiran Bhandari','Nisha Poudel','Suman K.C.','Anjali Rai','Bibek Lama','Riya Joshi','Prakash Basnet','Sneha Thapa'];
+const INTAKES = ['Sep 2026','Jan 2027','Feb 2027','May 2026','Sep 2026','Jul 2026'];
+const CTRY = ['United Kingdom','Australia','New Zealand','USA','United Kingdom','Canada'];
+const FOOT = {
+  nts:['2 new this week'], sl:['3 deadlines in 14d'], dp:['<b>9</b> missing docs'], ap:['<b>4</b> decisions due'],
+  co:['<b>6</b> conditions open'], uo:['<b>5</b> deposits due'], dep:['<b>7</b> fees paid'], vl:['avg <b>19d</b> to decision'], va:['<b>23</b> ready to enrol']
+};
+let seed = 7; const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+function cardsFor(stage, idx, max){
+  const out=[]; const ages=[[2,5,9,16],[4,12,21,33],[6,15,31,44],[3,18,26,52],[8,11,35,40],[5,9,14,22],[2,7,13,19],[10,16,24,38],[1,4,30,62]][idx]||[3,8,12,20];
+  for(let j=0;j<Math.min(max,stage.count);j++){
+    const u=UNIS[(idx*3+j)%UNIS.length], s=STUDENTS[(idx*5+j)%STUDENTS.length], ck=Object.keys(COUNSELLORS)[(idx+j)%5];
+    const age=ages[j%ages.length]; const docs=[[2,5],[5,5],[1,6],[4,4]][j%4]; const tasks=(idx+j)%3;
+    out.push({u,s,ck,age,intake:INTAKES[(idx+j)%6],ctry:CTRY[(idx+j*2)%6],docs,tasks,
+      offer: stage.k==='co'&&j%2===0?'cond': stage.k==='uo'&&j===0?'unc':null,
+      unassigned: (idx===3&&j===1), noIntake: (idx===2&&j===2)});
+  }
+  return out;
+}
+function card(c, terminal){
+  const co=COUNSELLORS[c.ck];
+  const ageCls = terminal?'':(c.age>=30?'red':c.age>=14?'amber':'');
+  const missing = c.docs[0]<c.docs[1];
+  return `<div class="card">
+    <div class="ct"><span class="uni">${ic('uni')}</span><span class="t">${c.u[0]}</span></div>
+    <div class="f">${ic('book')}<span class="sub">${c.u[1]}</span></div>
+    <div class="f">${ic('user')}<span>${c.s}</span></div>
+    <div class="f">${c.unassigned?`<span class="av" style="background:var(--hover);color:var(--faint)">${ic('user','i')}</span><span class="set">Set counsellor</span>`:`<span class="av" style="background:${co.bg};color:${co.c}">${c.ck}</span><span>${co.n}</span>`}</div>
+    <div class="f">${ic('cal')}${c.noIntake?'<span class="set">Set intake</span>':`<span>${c.intake}</span><span class="sub">·</span>${ic('pin')}<span class="sub">${c.ctry}</span>`}</div>
+    ${c.offer==='cond'?'<span class="offer cond">Conditional offer</span>':c.offer==='unc'?'<span class="offer unc">Unconditional offer</span>':''}
+    <div class="cfoot">
+      <span class="m ${missing?'miss':''}" title="Documents uploaded / required">${ic('doc')}${c.docs[0]}/${c.docs[1]}</span>
+      <span class="m" title="Open tasks">${ic('task')}${c.tasks}</span>
+      <span class="age ${ageCls}" title="Time in this stage">${ic('clock')}${c.age}d</span>
+    </div></div>`;
+}
+function column(stage, idx, opts={}){
+  const terminal = DONE.includes(stage);
+  const count = opts.count ?? stage.count;
+  const cards = opts.empty ? [] : cardsFor(stage, idx, opts.max ?? 4);
+  return `<div class="col" data-k="${stage.k}">
+    <div class="ch"><span class="dot" style="background:${stage.c}"></span><span class="nm">${stage.n}</span><span class="pill">${count}</span>
+      <span class="tools"><button class="ib" title="New application in ${stage.n}">${ic('plus')}</button><button class="ib colmenu" title="Stage options">${ic('dots')}</button></span></div>
+    <div class="cards"><div class="newrow">${ic('plus')}New application</div>
+      ${cards.map(c=>card(c,terminal)).join('')}
+      ${!opts.empty && count>cards.length?`<button class="more">Show ${Math.min(25,count-cards.length)} more</button>`:''}
+    </div>
+    ${opts.empty?'':`<div class="cf">${terminal?`<span>Collapse to tidy the board</span>`:`<span>${(FOOT[stage.k]||[''])[0]}</span>`}</div>`}
+  </div>`;
+}
+function slim(stage, count){
+  return `<div class="col slim" title="Expand ${stage.n}"><span class="dot" style="background:${stage.c}"></span><span class="pill">${count ?? stage.count}</span><span class="vn">${stage.n}</span></div>`;
+}
+const boardEl = document.getElementById('board'), ov = document.getElementById('overlay');
+const notesOn = () => document.getElementById('notes').checked;
+function callouts(list){ if(!notesOn()) return ''; return list.map(([x,y,t])=>`<div class="callout" style="left:${x}px;top:${y}px">${t}</div>`).join(''); }
+
+const S = {
+  board(){
+    seed=7;
+    boardEl.innerHTML = ACTIVE.map((s,i)=>column(s,i)).join('') + '<span class="endsep"></span>' + DONE.map(s=>slim(s)).join('') + `<button class="addstage" title="Add stage (admins)">${ic('plus')}</button>`;
+    ov.innerHTML = callouts([
+      [250,250,'Columns 268px, #FBFBFB, no border, r16, 8px apart (Attio). ~4.5 columns fit on a 1512 laptop vs ~2.8 today (430px). Search covers student, university, program.'],
+      [560,420,'Age pill: neutral &lt;14d, amber 14–29d, red 30d+. Never on finished stages.'],
+      [880,250,'Counsellor = application assignee, else the lead\'s counsellor, with THEIR avatar. Empty fields read "Set …" (Attio).'],
+    ]);
+  },
+  filtered(){
+    seed=7;
+    const fc={nts:1,sl:2,dp:3,ap:4,co:3,uo:2,dep:1,vl:1,va:1};
+    boardEl.innerHTML = ACTIVE.map((s,i)=>column(s,i,{count:fc[s.k],max:fc[s.k]})).join('') + '<span class="endsep"></span>' + DONE.map((s,i)=>slim(s,[0,0,2][i])).join('') + `<button class="addstage">${ic('plus')}</button>`;
+    ov.innerHTML = callouts([[620,330,'Leads v2 filter engine: chips run on the server, live in the URL (?f=), and every count follows them. Header reads "20 of 201".']]);
+  },
+  colmenu(){
+    S.board();
+    const c = boardEl.querySelector('[data-k="dp"]'); const r = c.getBoundingClientRect(), fr = document.getElementById('frame').getBoundingClientRect();
+    ov.innerHTML = `<div class="menu" style="left:${r.left-fr.left+60}px;top:${r.top-fr.top+38}px;width:240px">
+      <div class="rename"><span class="dot" style="width:9px;height:9px;border-radius:9px;background:#f97316"></span>Documents pending</div>
+      <div class="mi">${ic('clock')}Track time in stage<span class="tg on"></span></div>
+      <hr>
+      <div class="mi">${ic('collapse')}Collapse stage</div>
+      <div class="mi">${ic('eyeoff')}Hide stage</div>
+      <div class="mi">${ic('sliders')}Edit stages…<span class="r">colour, order</span></div>
+      <hr>
+      <div class="mi danger">${ic('trash')}Delete stage…</div></div>` + callouts([[r.left-fr.left+310,r.top-fr.top+40,'Admin-only menu. Rename inline; "Edit stages…" opens the existing Pipeline Settings at this stage. Delete asks where its applications go.']]);
+  },
+  filtermenu(){
+    S.board();
+    const f=document.getElementById('filterChip').getBoundingClientRect(), fr=document.getElementById('frame').getBoundingClientRect();
+    ov.innerHTML = `<div class="menu" style="left:${f.left-fr.left}px;top:${f.bottom-fr.top+6}px;width:260px">
+      <div class="s">${ic('hash')}Filter by…</div>
+      <div class="lbl">Most used</div>
+      <div class="mi hl">${ic('user')}Counsellor<span class="r">5 ›</span></div>
+      <div class="mi">${ic('sliders')}Stage<span class="r">12 ›</span></div>
+      <div class="mi">${ic('cal')}Intake<span class="r">›</span></div>
+      <div class="lbl">All fields</div>
+      <div class="mi">${ic('uni')}University<span class="r">›</span></div>
+      <div class="mi">${ic('book')}Program<span class="r">›</span></div>
+      <div class="mi">${ic('pin')}Country<span class="r">›</span></div>
+      <div class="mi">${ic('user')}Student<span class="r">›</span></div>
+      <div class="mi">${ic('hash')}Offer type<span class="r">›</span></div>
+      <div class="mi">${ic('dead')}Deadline<span class="r">›</span></div>
+      <div class="mi">${ic('coin')}Fee paid<span class="r">›</span></div>
+      <div class="mi">${ic('doc')}Missing documents<span class="r">›</span></div>
+      <div class="mi">${ic('clock')}Time in stage<span class="r">›</span></div>
+      <div class="mi">${ic('cal')}Created / Updated<span class="r">›</span></div></div>`;
+  },
+  expanded(){
+    seed=7;
+    boardEl.innerHTML = ACTIVE.slice(5).map((s,i)=>column(s,i+5)).join('') + '<span class="endsep"></span>' + slim(DONE[0]) + slim(DONE[1]) + column(DONE[2], 9, {max:3}) + `<button class="addstage">${ic('plus')}</button>`;
+    requestAnimationFrame(()=>{ boardEl.scrollLeft = 99999; });
+    ov.innerHTML = callouts([[520,300,'Finished stages sit at the right end, collapsed by default. Clicking one opens it; the choice is remembered per person. No red pills here.']]);
+  },
+  pipemenu(){
+    S.board();
+    const b=document.getElementById('pipeBtn').getBoundingClientRect(), fr=document.getElementById('frame').getBoundingClientRect();
+    const all=[...ACTIVE,...DONE];
+    const bar = all.map(s=>`<i style="flex:${s.count};background:${s.c}"></i>`).join('');
+    const emptyBar = '<i style="flex:1;background:var(--divider)"></i>';
+    const row=(name,meta,on,def,b,hl)=>`<div class="row ${hl?'hl':''}"><svg class="i ck ${on?'':'off'}" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></svg>
+      <div class="body"><div class="t">${name}${def?'<span class="badge">Default</span>':''}</div><div class="meta">${meta}</div><div class="sbar">${b}</div></div>
+      <span class="gear" title="Pipeline settings">${ic('sliders')}</span></div>`;
+    ov.innerHTML = `<div class="menu pm" style="left:${b.right-fr.left-340}px;top:${b.bottom-fr.top+6}px">
+      <div class="s">${ic('hash')}Find a pipeline…</div>
+      ${row('Default pipeline','201 applications · 12 stages · 84 with no pipeline',true,true,bar,false)}
+      ${row('Australia','0 applications · 12 stages',false,false,emptyBar,true)}
+      ${row('Germany','0 applications · 12 stages',false,false,emptyBar,false)}
+      ${row('New Zealand','0 applications · 12 stages',false,false,emptyBar,false)}
+      <hr>
+      <div class="foot">${ic('plus')}New pipeline<span class="r">Admins</span></div>
+    </div>` + callouts([[b.left-fr.left-640,b.bottom-fr.top+40,'Each pipeline shows its real count and a stage bar (where its applications sit, coloured by stage). Hover a row for its settings gear. The menu is scrollable/searchable once a tenant has many country pipelines.']]);
+  },
+  settings(){
+    S.board();
+    const st=(s,i,o={})=>`<div class="st">${ic('grip','i gr')}<span class="sw" title="Colour"><i style="background:${s.c}"></i></span>
+      <span class="nm">${s.n}</span>
+      ${o.start?`<span class="start">${ic('left').replace('class="i"','class="i" style="width:11px;height:11px;transform:rotate(180deg)"')}Start</span>`:''}
+      ${o.out?`<span class="out ${o.out}">${o.out==='won'?'Won':'Lost'}<svg class="i" viewBox="0 0 24 24" style="width:12px;height:12px;color:var(--faint)"><path d="m6 9 6 6 6-6"/></svg></span>`:(o.start?'':'<span class="setstart">Set as start</span>')}
+      <span class="apps">${s.count} apps</span><button class="ib" title="Stage options">${ic('dots')}</button>
+      ${o.palette?`<div class="palette"><div class="l">Stage colour</div><div class="g">${['#9aa4b2','#3b82f6','#6366f1','#a855f7','#ec4899','#ef4444','#f97316','#eab308','#22c55e','#14b8a6','#0ea5e9','#6b7280'].map(c=>`<i style="background:${c}" class="${c===s.c?'on':''}"></i>`).join('')}</div></div>`:''}
+    </div>`;
+    ov.innerHTML = `<div class="scrim"><div class="modal">
+      <div class="mh"><div><h2>Pipeline settings</h2><div class="sub">Default pipeline · 201 applications</div></div><span class="sp"></span><button class="ib" title="Close" style="width:30px;height:30px">${ic('plus').replace('<svg','<svg style="transform:rotate(45deg)"')}</button></div>
+      <div class="mb">
+        <div class="fld"><label>Name</label><div class="inp">Default pipeline</div></div>
+        <div class="opt"><div class="tx"><b>Default pipeline</b><span>Opens first on the board. Applications with no pipeline show here.</span></div><span class="tg on"></span></div>
+        <div class="sh"><h3>Stages <span class="n">12</span></h3><span class="sp"></span><span style="color:var(--faint);font-size:12px">Drag to reorder · click a dot to recolour</span></div>
+        <div class="grp"><b>Active</b> on the board, with time-in-stage alerts</div>
+        ${ACTIVE.map((s,i)=>st(s,i,{start:s.k==='sl',palette:s.k==='dp'})).join('')}
+        <div class="grp"><b>Finished</b> collapsed at the board's right end, no alerts</div>
+        ${st(DONE[0],0,{out:'won'})}${st(DONE[1],1,{out:'lost'})}${st(DONE[2],2,{out:'lost'})}
+        <div class="addrow">${ic('plus')}Add stage</div>
+        <div class="hint">Deleting a stage that has applications asks where to move them first. Dragging a stage into <b>Finished</b> marks it Won or Lost.</div>
+      </div>
+      <div class="mf"><button class="del">${ic('trash')}Delete pipeline</button><span class="sp"></span><button class="btn">Cancel</button><button class="btn primary">Save changes</button></div>
+    </div></div>` + callouts([[862,250,'Same Pipeline Settings we have today, reorganised: Active vs Finished groups (from the existing is_terminal / terminal_type columns, no DB change), "Start" replaces the Default badge, colour picker on the dot, inline rename, app counts per stage.']]);
+  },
+  empty(){
+    boardEl.innerHTML = ACTIVE.map((s,i)=>column(s,i,{empty:true,count:0})).join('') + '<span class="endsep"></span>' + DONE.map(s=>slim(s,0)).join('') + `<button class="addstage">${ic('plus')}</button>`;
+    ov.innerHTML = `<div class="empty"><div class="ill"><div class="doc"><i style="width:24px;height:24px;border-radius:7px"></i><i></i><i style="width:60%"></i></div></div>
+      <h3>No applications in Australia yet</h3><p>Add an application, or move one here from another pipeline.</p>
+      <div class="acts"><button class="btn">${ic('left')}Back to Default pipeline</button><button class="btn primary">${ic('plus')}Add application</button></div></div>`;
+  }
+};
+function setState(k){
+  document.querySelectorAll('.mk button').forEach(b=>b.classList.toggle('on', b.dataset.s===k));
+  const filtered = k==='filtered', empty = k==='empty';
+  document.getElementById('activeChips').innerHTML = filtered
+    ? `<span class="chip on">${ic('user')}Counsellor <span class="op">is</span> <b>Asha Tamang</b><span class="x">×</span></span><span class="chip on">${ic('cal')}Intake <span class="op">is</span> <b>Sep 2026</b><span class="x">×</span></span>` : '';
+  document.getElementById('hcount').textContent = filtered ? '20 of 201' : empty ? '0' : '201';
+  document.getElementById('pipeName').textContent = empty ? 'Australia' : 'Default pipeline';
+  document.getElementById('pipeN').textContent = empty ? '0' : '201';
+  document.getElementById('note').classList.toggle('hidden', empty || filtered);
+  [['t1','201'],['t2','34'],['t3','17']].forEach(([id,v])=>document.getElementById(id).textContent = empty ? '0' : v);
+  document.getElementById('t3').style.cssText = empty ? '' : 'background:var(--bad-soft);color:var(--bad)';
+  document.getElementById('filterChip').innerHTML = filtered ? ic('plus') : ic('sliders').replace('sliders','')+'Filter';
+  if(!filtered) document.getElementById('filterChip').innerHTML = `<svg class="i" viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Filter`;
+  boardEl.scrollLeft = 0;
+  S[k]();
+  window.__state = k;
+}
+document.querySelectorAll('.mk button').forEach(b=>b.onclick=()=>setState(b.dataset.s));
+document.getElementById('notes').onchange=()=>setState(window.__state);
+setState('board');
+</script>
+</body></html>
