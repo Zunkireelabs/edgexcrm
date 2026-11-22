@@ -339,7 +339,15 @@ export function LeadsGrid(props: LeadsGridProps) {
                     className="flex h-full w-full items-center gap-2 px-3 text-left font-medium text-ds-muted transition-colors hover:bg-ds-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ds-ghost"
                   >
                     {!isName && <Icon className="size-4 shrink-0 text-ds-faint" />}
-                    <span className="min-w-0 flex-1 truncate text-ds-ink">{titleOf(col)}</span>
+                    {col.v2?.badge ? (
+                      <>
+                        <span className="min-w-0 truncate text-ds-ink">{titleOf(col)}</span>
+                        <span className="shrink-0 rounded-full bg-ds-ai-soft px-1.5 text-[11px] font-medium leading-4 text-ds-ai">{col.v2.badge}</span>
+                        <span className="min-w-0 flex-1" />
+                      </>
+                    ) : (
+                      <span className="min-w-0 flex-1 truncate text-ds-ink">{titleOf(col)}</span>
+                    )}
                     {isName ? (
                       <PushPinIcon className="size-3.5 shrink-0 text-ds-faint opacity-0 transition-opacity group-hover/th:opacity-100" />
                     ) : sorted ? (

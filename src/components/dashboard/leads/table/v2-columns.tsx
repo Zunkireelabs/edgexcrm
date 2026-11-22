@@ -21,6 +21,7 @@ import {
   MapPinIcon,
   PhoneIcon,
   SignInIcon,
+  SparkleIcon,
   TagIcon,
   TextAaIcon,
   UserCircleIcon,
@@ -37,6 +38,7 @@ import {
   FALLBACK_FOLLOW_UP_STALE_DAYS,
   followUpBadgeLabel,
   isCallbackDue,
+  nextStepFor,
   type LeadColumn,
   type LeadColumnCtx,
   type LeadColumnV2,
@@ -289,6 +291,21 @@ const V2: Record<string, LeadColumnV2> = {
     cell: (lead, ctx) => <LastActivityCell lead={lead} ctx={ctx} />,
     sort: "activity",
     filterFieldKey: "last_activity_at",
+  },
+  next_step_orca: {
+    width: 230,
+    icon: SparkleIcon,
+    badge: "Preview",
+    cell: (lead, ctx) => {
+      const s = nextStepFor(lead, ctx);
+      if (!s) return DASH;
+      return (
+        <span className={`inline-flex min-w-0 items-center gap-2 ${s.urgent ? "font-medium text-ds-ink" : "text-ds-text"}`} title={s.text}>
+          <SparkleIcon className="size-3.5 shrink-0 text-ds-ai" />
+          <span className="truncate">{s.text}</span>
+        </span>
+      );
+    },
   },
   archived_from_stage: { width: 180, icon: CircleDashedIcon, label: "Archived from" },
   archived_from_status: { width: 120, icon: CheckCircleIcon },
