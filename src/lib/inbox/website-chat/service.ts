@@ -12,6 +12,7 @@ import { buildChatwootPassword } from "../chatwoot-agents";
 import { chatwootBaseUrl, chatwootRequest, parseChatwootChannelRef } from "../chatwoot-api";
 import { chatwootChannelRef } from "../adapters/chatwoot";
 import {
+  buildBrandedSnippet,
   buildWidgetSnippet,
   DEFAULT_WEBSITE_CHAT_SETTINGS,
   toChatwootChannel,
@@ -29,7 +30,13 @@ const UNIQUE_VIOLATION = "23505";
 interface StoredWebsiteChat {
   settings: WebsiteChatSettings;
   enabled: boolean;
-  websiteToken: string;
+  /** Which kind of Chatwoot inbox backs this chat. Missing means the original "web_widget" (Chatwoot's own window). */
+  inboxType?: "web_widget" | "api";
+  /** web_widget only: the token Chatwoot's own bubble needs. */
+  websiteToken?: string;
+  /** api only: the inbox's public identifier (safe to show on a website) and its HMAC secret (encrypted). */
+  inboxIdentifier?: string;
+  hmacTokenEnc?: string;
   /** The inbox logo's address on the Chatwoot server, once one is uploaded. */
   logoUrl?: string | null;
 }
@@ -39,6 +46,12 @@ interface ChannelRow {
   external_account_id: string;
   access_token: string | null;
   meta: { webhook_secret_enc?: string; website_chat?: StoredWebsiteChat } | null;
+}
+
+/** The embed code for whichever kind of inbox this is: Chatwoot's own bubble, or the branded widget. */
+function snippetFor(stored: StoredWebsiteChat): string | null {
+  if (stored.inboxType === "api") return stored.inboxIdentifier ? buildBrandedSnippet(appBaseUrl(), stored.inboxIdentifier) : null;
+  return stored.websiteToken ? buildWidgetSnippet(chatwootBaseUrl(), stored.websiteToken) : null;
 }
 
 export class WebsiteChatError extends Error {
@@ -56,6 +69,8 @@ export interface WebsiteChatState {
   settings: WebsiteChatSettings | null;
   /** The code to paste on the website. Null until connected. */
   snippet: string | null;
+  /** Branded widget only: the inbox's public identifier (safe on a website; the secret never leaves the server). */
+  inboxIdentifier?: string;
   /** The logo shown at the top of the chat window, if one was uploaded. */
   logoUrl: string | null;
 }
@@ -108,7 +123,8 @@ export async function loadWebsiteChat(db: Db, tenantId: string): Promise<Website
     connected: true,
     enabled: stored.enabled,
     settings: withSettingDefaults(stored.settings),
-    snippet: buildWidgetSnippet(chatwootBaseUrl(), stored.websiteToken),
+    snippet: snippetFor(stored),
+    ...(stored.inboxType === "api" && stored.inboxIdentifier ? { inboxIdentifier: stored.inboxIdentifier } : {}),
     logoUrl: stored.logoUrl ?? null,
   };
 }
@@ -119,6 +135,12 @@ export interface ConnectWebsiteChatInput {
   tenantName: string;
   userId: string;
   websiteHost: string;
+  /**
+   * "web_widget" (default): Chatwoot's own chat window. "api": a plain inbox for our own branded widget, with
+   * hmac_mandatory on, so Chatwoot refuses to create a visitor unless the request carries a signature that only
+   * EdgeX can make (see the session endpoint). Without that switch anyone who knows the inbox id could start chats.
+   */
+  inboxType?: "web_widget" | "api";
 }
 
 /**
@@ -127,6 +149,7 @@ export interface ConnectWebsiteChatInput {
  */
 export async function connectWebsiteChat(input: ConnectWebsiteChatInput): Promise<WebsiteChatState> {
   const { db, tenantId, tenantName, userId, websiteHost } = input;
+  const inboxType = input.inboxType ?? "web_widget";
   const platformToken = requirePlatformToken();
   const baseUrl = chatwootBaseUrl();
   const webhookUrl = `${appBaseUrl()}/api/webhooks/chatwoot`;
@@ -163,17 +186,24 @@ export async function connectWebsiteChat(input: ConnectWebsiteChatInput): Promis
     });
 
     // 3. The website inbox, created as the team user so it can read and reply.
-    const inbox = await chatwootRequest<{ id: number; website_token: string }>(
+    const inbox = await chatwootRequest<{ id: number; website_token?: string; inbox_identifier?: string; hmac_token?: string }>(
       "POST",
       `${baseUrl}/api/v1/accounts/${account.id}/inboxes`,
       teamUser.access_token,
-      { ...toChatwootInbox(settings), channel: { type: "web_widget", ...toChatwootChannel(settings, true) } }
+      inboxType === "api"
+        ? { name: settings.title, channel: { type: "api", hmac_mandatory: true } }
+        : { ...toChatwootInbox(settings), channel: { type: "web_widget", ...toChatwootChannel(settings, true) } }
     );
+    if (inboxType === "api" && (!inbox.inbox_identifier || !inbox.hmac_token)) {
+      throw new Error("Chatwoot did not return the API inbox identifier and HMAC token");
+    }
+    if (inboxType === "web_widget" && !inbox.website_token) throw new Error("Chatwoot did not return a website token");
     await chatwootRequest("POST", `${baseUrl}/api/v1/accounts/${account.id}/inbox_members`, teamUser.access_token, {
       inbox_id: inbox.id,
       user_ids: [teamUser.id],
     });
-    await keepTeamOnline(baseUrl, account.id, teamUser.access_token, tenantId);
+    // "Away" only matters for Chatwoot's own window; the branded widget shows its own status.
+    if (inboxType === "web_widget") await keepTeamOnline(baseUrl, account.id, teamUser.access_token, tenantId);
 
     // 4. The webhook that sends visitor messages to EdgeX. Chatwoot makes the signing secret.
     const webhookResponse = await chatwootRequest<{ payload?: { webhook?: { secret?: string } }; webhook?: { secret?: string } }>(
@@ -186,7 +216,10 @@ export async function connectWebsiteChat(input: ConnectWebsiteChatInput): Promis
     if (!secret) throw new Error("Chatwoot did not return a webhook secret");
 
     // 5. Only now remember it in EdgeX.
-    const stored: StoredWebsiteChat = { settings, enabled: true, websiteToken: inbox.website_token };
+    const stored: StoredWebsiteChat =
+      inboxType === "api"
+        ? { settings, enabled: true, inboxType: "api", inboxIdentifier: inbox.inbox_identifier, hmacTokenEnc: encryptToken(inbox.hmac_token as string) }
+        : { settings, enabled: true, websiteToken: inbox.website_token };
     const { error } = await db.from("inbox_channels").insert({
       tenant_id: tenantId,
       provider: "chatwoot",
@@ -202,7 +235,14 @@ export async function connectWebsiteChat(input: ConnectWebsiteChatInput): Promis
       throw new Error(`Could not save the channel: ${error.message}`);
     }
 
-    return { connected: true, enabled: true, settings, snippet: buildWidgetSnippet(baseUrl, inbox.website_token), logoUrl: null };
+    return {
+      connected: true,
+      enabled: true,
+      settings,
+      snippet: snippetFor(stored),
+      ...(inboxType === "api" ? { inboxIdentifier: inbox.inbox_identifier } : {}),
+      logoUrl: null,
+    };
   } catch (err) {
     if (err instanceof WebsiteChatError) throw err;
     logger.error({ err: err instanceof Error ? err.message : String(err), tenantId }, "website chat: connect failed");
@@ -223,6 +263,29 @@ export async function updateWebsiteChat(input: UpdateWebsiteChatInput): Promise<
   const channel = await findChannel(db, tenantId);
   const stored = channel?.meta?.website_chat;
   if (!channel || !stored || !channel.access_token) throw new WebsiteChatError("Website chat is not connected", "not_connected");
+
+  if (stored.inboxType === "api") {
+    // The branded widget has no Chatwoot-side look to push (colour, hours and the rest are served to it from EdgeX).
+    // Off is enforced by the session endpoint, which refuses to start chats while this is false.
+    const nextApi: StoredWebsiteChat = { ...stored, settings, enabled };
+    const { error } = await db
+      .from("inbox_channels")
+      .update({ meta: { ...channel.meta, website_chat: nextApi } })
+      .eq("id", channel.id)
+      .eq("tenant_id", tenantId);
+    if (error) {
+      logger.error({ err: error.message, tenantId }, "website chat: could not save settings");
+      throw new WebsiteChatError("Could not save your changes. Please try again.", "chatwoot_failed");
+    }
+    return {
+      connected: true,
+      enabled,
+      settings,
+      snippet: snippetFor(nextApi),
+      inboxIdentifier: stored.inboxIdentifier,
+      logoUrl: stored.logoUrl ?? null,
+    };
+  }
 
   const baseUrl = chatwootBaseUrl();
   const { accountId, inboxId } = parseChatwootChannelRef(channel.external_account_id);
@@ -255,7 +318,7 @@ export async function updateWebsiteChat(input: UpdateWebsiteChatInput): Promise<
     throw new WebsiteChatError("Could not save your changes. Please try again.", "chatwoot_failed");
   }
 
-  return { connected: true, enabled, settings, snippet: buildWidgetSnippet(baseUrl, stored.websiteToken), logoUrl: stored.logoUrl ?? null };
+  return { connected: true, enabled, settings, snippet: buildWidgetSnippet(baseUrl, stored.websiteToken as string), logoUrl: stored.logoUrl ?? null };
 }
 
 export interface WebsiteChatLogoInput {
@@ -305,7 +368,7 @@ export async function uploadWebsiteChatLogo(input: WebsiteChatLogoInput): Promis
   }
 
   await storeLogoUrl(db, channel, stored, tenantId, logoUrl);
-  return { connected: true, enabled: stored.enabled, settings: withSettingDefaults(stored.settings), snippet: buildWidgetSnippet(baseUrl, stored.websiteToken), logoUrl };
+  return { connected: true, enabled: stored.enabled, settings: withSettingDefaults(stored.settings), snippet: snippetFor(stored), logoUrl };
 }
 
 /** Removes the logo again. */
@@ -325,5 +388,5 @@ export async function removeWebsiteChatLogo(input: Omit<WebsiteChatLogoInput, "f
   }
 
   await storeLogoUrl(db, channel, stored, tenantId, null);
-  return { connected: true, enabled: stored.enabled, settings: withSettingDefaults(stored.settings), snippet: buildWidgetSnippet(baseUrl, stored.websiteToken), logoUrl: null };
+  return { connected: true, enabled: stored.enabled, settings: withSettingDefaults(stored.settings), snippet: snippetFor(stored), logoUrl: null };
 }

@@ -326,9 +326,14 @@ function colorHex(color: string): string {
 export const CHAT_OFF_ALLOWED_DOMAINS = "https://chat-switched-off.invalid";
 
 /** The site itself and its "www." twin, as Chatwoot expects them (a comma-separated list of origins). */
-function allowedDomainsFor(host: string): string {
+/** The origins (scheme + host) allowed to show this tenant's chat. The Chatwoot window and the session endpoint share it. */
+export function allowedOriginsFor(host: string): string[] {
   const bare = host.replace(/^www\./, "");
-  return [`https://${bare}`, `https://www.${bare}`, ...devExtraOrigins()].join(", ");
+  return [`https://${bare}`, `https://www.${bare}`, ...devExtraOrigins()];
+}
+
+function allowedDomainsFor(host: string): string {
+  return allowedOriginsFor(host).join(", ");
 }
 
 /**
@@ -400,6 +405,16 @@ export function toChatwootInbox(settings: WebsiteChatSettings) {
 }
 
 /** The one-line install snippet for the website. Built here from server config, not taken from Chatwoot. */
+/** The embed code for the branded widget: the script (served by EdgeX) plus the public inbox id it connects to. */
+export function buildBrandedSnippet(appBaseUrl: string, inboxIdentifier: string): string {
+  return [
+    `<script src="${appBaseUrl}/chat-widget/chat-widget.js"></script>`,
+    "<script>",
+    `  ZunkireeChat.init({ connection: { inbox: "${inboxIdentifier}" } });`,
+    "</script>",
+  ].join("\n");
+}
+
 export function buildWidgetSnippet(baseUrl: string, websiteToken: string): string {
   return [
     "<script>",

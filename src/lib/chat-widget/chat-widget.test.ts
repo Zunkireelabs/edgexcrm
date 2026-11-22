@@ -284,7 +284,8 @@ describe("contact form before chatting (ask-before mode)", () => {
     load().init(BEFORE);
     click(q(".launcher"));
     click(q(".start"));
-    expect(qa(".card input").map((i) => i.getAttribute("aria-label"))).toEqual(["Your name", "WhatsApp number", "Email"]);
+    // The hidden spam-trap input (name="website") is not a field the visitor sees.
+    expect(qa('.card input:not([name="website"])').map((i) => i.getAttribute("aria-label"))).toEqual(["Your name", "WhatsApp number", "Email"]);
     expect(qa(".card label").map((l) => l.textContent)).toEqual(["Your name", "WhatsApp number", "Email (optional)"]);
     expect(q(".card p")!.textContent).toContain("how can we reach you");
   });
@@ -321,7 +322,7 @@ describe("contact form before chatting (ask-before mode)", () => {
     load().init({ ...BEFORE, contact: { when: "before", name: { show: false }, email: { show: false } } });
     click(q(".launcher"));
     click(q(".start"));
-    expect(qa(".card input")).toHaveLength(1); // only the WhatsApp number is left
+    expect(qa('.card input:not([name="website"])')).toHaveLength(1); // only the WhatsApp number is left
     fill({ phone: "9800000000" });
     submit();
     type("second question");

@@ -287,3 +287,43 @@ describe("chatwootAdapter.sendMessage", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+// Captured from a real Chatwoot 4.19.1 API-type inbox (the branded widget's inbox), values replaced with test data.
+// Proves the same adapter handles it as the web-widget inbox: nothing in the code depends on the channel type.
+describe("API-type inbox webhook (branded widget)", () => {
+  const apiInboxPayload = (overrides: Record<string, unknown> = {}) => ({
+    event: "message_created",
+    id: 321,
+    content: "hello from the widget",
+    message_type: "incoming",
+    private: false,
+    created_at: "2026-11-22T03:10:00.000Z",
+    source_id: null,
+    account: { id: 7, name: "Admizz Education" },
+    inbox: { id: 9, name: "Chat with Admizz Education" },
+    sender: { id: 55, name: "Test Visitor", email: "v@example.com", phone_number: "+9779800000000", identifier: "11111111-2222-3333-4444-555555555555" },
+    conversation: { id: 3, channel: "Channel::Api", meta: { sender: { id: 55, name: "Test Visitor", phone_number: "+9779800000000" } } },
+    ...overrides,
+  });
+
+  it("turns the visitor's message into an inbound record keyed to the account and inbox", () => {
+    expect(chatwootAdapter.parseInboundEvent(apiInboxPayload())).toEqual([
+      {
+        externalContactId: "55",
+        contactPhone: "+9779800000000",
+        contactDisplayName: "Test Visitor",
+        contactEmail: "v@example.com",
+        providerMessageId: "321",
+        providerTimestamp: "2026-11-22T03:10:00.000Z",
+        contentText: "hello from the widget",
+        attachments: [],
+        channelRef: "7:9",
+      },
+    ]);
+    expect(chatwootChannelRefFromPayload(apiInboxPayload())).toBe("7:9");
+  });
+
+  it("ignores the counsellor's own reply, which Chatwoot also reports", () => {
+    expect(chatwootAdapter.parseInboundEvent(apiInboxPayload({ message_type: "outgoing", sender: { id: 2, name: "Counsellor", type: "user" } }))).toEqual([]);
+  });
+});

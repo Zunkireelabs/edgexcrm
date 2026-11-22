@@ -34,6 +34,8 @@ interface WebsiteChatState {
   enabled: boolean;
   settings: WebsiteChatSettings | null;
   snippet: string | null;
+  /** Only the branded widget has one: the public id of its inbox. It is how the card tells the two kinds apart. */
+  inboxIdentifier?: string;
   logoUrl: string | null;
 }
 
@@ -214,12 +216,31 @@ export function WebsiteChatCard() {
             />
             <p className="text-xs text-muted-foreground">Only this site can show the bubble.</p>
           </div>
-          <Button size="sm" disabled={busy || !websiteHost.trim()} onClick={() => send("POST", { websiteHost }, "Website chat is connected")}>
-            {busy ? "Setting things up…" : "Connect website chat"}
-          </Button>
-          <p className="text-xs text-muted-foreground">
-            This creates your chat inbox, links it to EdgeX and gives you one line of code to paste on your site. Admins and owners only.
-          </p>
+          <div className="grid max-w-2xl gap-3 sm:grid-cols-2">
+            <div className="flex flex-col justify-between gap-3 rounded-[12px] border p-3">
+              <div className="space-y-1">
+                <p className="text-sm font-medium">Branded chat widget</p>
+                <p className="text-xs text-muted-foreground">
+                  Your own styled chat window, with your colours, logo and wording set in your website&apos;s code. Chats arrive in your Inbox.
+                </p>
+              </div>
+              <Button size="sm" disabled={busy || !websiteHost.trim()} onClick={() => send("POST", { websiteHost, branded: true }, "Branded chat widget is connected")}>
+                {busy ? "Setting things up…" : "Connect branded widget"}
+              </Button>
+            </div>
+            <div className="flex flex-col justify-between gap-3 rounded-[12px] border p-3">
+              <div className="space-y-1">
+                <p className="text-sm font-medium">Standard chat window</p>
+                <p className="text-xs text-muted-foreground">
+                  The ready-made chat window, styled here with a logo, colour and office hours. One line of code to paste on your site.
+                </p>
+              </div>
+              <Button size="sm" variant="outline" disabled={busy || !websiteHost.trim()} onClick={() => send("POST", { websiteHost }, "Website chat is connected")}>
+                {busy ? "Setting things up…" : "Connect website chat"}
+              </Button>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">Either one creates your chat inbox and links it to EdgeX. Admins and owners only.</p>
         </CardContent>
       </Card>
     );
@@ -228,6 +249,9 @@ export function WebsiteChatCard() {
   function setField(key: FormFieldKey, patch: Partial<{ show: boolean; required: boolean }>) {
     setDraft((d) => (d ? { ...d, fields: { ...d.fields, [key]: { ...d.fields[key], ...patch } } } : d));
   }
+
+  // The branded widget is styled on the website, so the standard window's look, form and office hours do not apply to it.
+  const branded = Boolean(state.inboxIdentifier);
 
   return (
     <Card>
@@ -239,6 +263,20 @@ export function WebsiteChatCard() {
           <p className="text-xs text-muted-foreground">Only this site can show the bubble.</p>
         </div>
 
+        {branded && (
+          <div className="max-w-2xl space-y-1.5 rounded-[12px] border p-3 text-xs text-muted-foreground">
+            <p>
+              <span className="font-medium text-foreground">Branded chat widget.</span> Its colours, logo, wording and contact form are set in your
+              website&apos;s code, not here. Visitors&apos; chats arrive in your Inbox.
+            </p>
+            <p>
+              Inbox id (public, safe to put on your website): <code className="font-mono text-foreground">{state.inboxIdentifier}</code>
+            </p>
+          </div>
+        )}
+
+        {!branded && (
+          <>
         <div className="space-y-3">
           <h3 className="text-sm font-medium">How the bubble looks</h3>
           <div className="space-y-1.5">
@@ -454,6 +492,8 @@ export function WebsiteChatCard() {
             <span className="font-medium text-foreground">Who replies:</span> visitors see the counselor&apos;s name. A counselor with no name on their profile shows as the team name.
           </p>
         </div>
+          </>
+        )}
 
         <Button size="sm" disabled={busy} onClick={() => send("PATCH", draft, "Website chat settings saved")}>
           {busy ? "Saving…" : "Save changes"}

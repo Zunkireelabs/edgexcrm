@@ -5,9 +5,10 @@
  * leak in and ours cannot leak out. Everything a tenant or project may change is in the theme config
  * (colours, logo, wording, topics, links); the screens do not change per project.
  *
- * PROTOTYPE STATUS: the messages go to a built-in MOCK transport (scripted replies, kept in sessionStorage).
- * Nothing is sent to a server. A real transport (Chatwoot through EdgeX) plugs into `config.transport`
- * with the same three-method shape as MockTransport below.
+ * Messages: with `connection: { inbox }` in the config the widget talks to a Chatwoot API inbox. It first asks the EdgeX
+ * session endpoint (same origin as this script) for a visitor id and its signature, then calls Chatwoot's public client API
+ * with that signature on every request. Without `connection` it uses a built-in MOCK transport (scripted replies, nothing
+ * sent anywhere) for local work. A custom transport can also be passed as `config.transport` (same three-method shape).
  *
  * Usage:
  *   <script src="https://crm.example.com/chat-widget/chat-widget.js"></script>
@@ -43,6 +44,8 @@
     //       "after"  = ask once, right after the first answer.
     // Each field can be hidden, and made required or optional, like the settings card in EdgeX.
     contact: {
+      // Prefix for numbers typed without one (for example "+977"), because Chatwoot only accepts international numbers.
+      defaultCountryCode: "",
       when: "after",
       introBefore: "Before we start, how can we reach you?",
       introAfter: "So a counsellor can follow up, share your details:",
@@ -54,10 +57,24 @@
     },
     poweredBy: "Zunkiree",
     zIndex: 2147483000,
-    transport: null, // null = the built-in mock
+    transport: null, // null = the real transport when `connection` is set, otherwise the built-in mock
+    // { inbox: "<public inbox id>", api: "<EdgeX origin>" }. `api` defaults to the origin this script was loaded from.
+    connection: null,
+    // Shown in the chat when a message could not be sent or the chat could not start.
+    unavailableText: "We could not reach the team just now. Please try again in a moment.",
   };
 
   var STORAGE_KEY = "zk-chat:v2";
+  var CONN_KEY = "zk-chat:v2:conn";
+  var POLL_MS = 5000; // how often a visitor checks for a counsellor's reply while the page is visible
+  var POLL_MAX_MS = 30000; // slowest it backs off to while the server is failing
+  // The origin this script came from is EdgeX: the session endpoint lives there. Null when the script was not loaded by a tag.
+  var SCRIPT_ORIGIN = "";
+  try {
+    if (document.currentScript && document.currentScript.src) SCRIPT_ORIGIN = new URL(document.currentScript.src).origin;
+  } catch {
+    /* no tag to read */
+  }
   var EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
   // ---------------------------------------------------------------- small helpers
@@ -185,6 +202,179 @@
     };
   }
 
+  // ---------------------------------------------------------------- real transport (Chatwoot API inbox, signed by EdgeX)
+  /** Chatwoot only accepts international numbers ("+97798..."). Returns "" when we cannot make one. */
+  function toE164(raw, defaultCode) {
+    var d = String(raw || "").replace(/[^\d+]/g, "");
+    if (!d) return "";
+    if (d.indexOf("00") === 0) d = "+" + d.slice(2);
+    if (d.charAt(0) !== "+" && defaultCode) d = defaultCode + d.replace(/^0+/, "");
+    return /^\+[1-9]\d{6,14}$/.test(d) ? d : "";
+  }
+
+  function createChatwootTransport(cfg) {
+    var conn = cfg.connection;
+    var api = String(conn.api || SCRIPT_ORIGIN || "").replace(/\/+$/, "");
+    var hooks = null;
+    var state = null;
+    var saved = null; // { base, identifier, hash, sourceId, convId, lastId }
+    var opening = null;
+    var timer = null;
+    var delay = POLL_MS;
+
+    function load() {
+      try {
+        var v = JSON.parse(window.sessionStorage.getItem(CONN_KEY) || "null");
+        if (v && v.inbox === conn.inbox && v.convId && v.sourceId && v.hash) return v;
+      } catch {
+        /* storage can be blocked */
+      }
+      return null;
+    }
+    function store() {
+      try {
+        if (saved) window.sessionStorage.setItem(CONN_KEY, JSON.stringify(saved));
+        else window.sessionStorage.removeItem(CONN_KEY);
+      } catch {
+        /* ignore */
+      }
+    }
+
+    function request(method, url, body) {
+      return fetch(url, {
+        method: method,
+        mode: "cors",
+        credentials: "omit",
+        headers: body ? { "Content-Type": "application/json" } : undefined,
+        body: body ? JSON.stringify(body) : undefined,
+      }).then(function (res) {
+        return res.json().catch(function () { return null; }).then(function (data) {
+          if (!res.ok) {
+            var err = new Error("HTTP " + res.status);
+            err.status = res.status;
+            throw err;
+          }
+          return data;
+        });
+      });
+    }
+    function chatwootPath(base, rest) {
+      return base + "/public/api/v1/inboxes/" + encodeURIComponent(conn.inbox) + rest;
+    }
+
+    /** Ask EdgeX for a signed visitor id, then create the contact and the conversation in Chatwoot. */
+    function openSession() {
+      var visitor = (state && state.visitor) || {};
+      var phone = toE164(visitor.phone, cfg.contact.defaultCountryCode);
+      return request("POST", api + "/api/public/chat/session", { inbox: conn.inbox }).then(function (res) {
+        var s = res && res.data;
+        if (!s || !s.identifier || !s.identifierHash || !s.chatwootBaseUrl) throw new Error("bad session");
+        var base = String(s.chatwootBaseUrl).replace(/\/+$/, "");
+        function createContact(withPhone) {
+          var body = { identifier: s.identifier, identifier_hash: s.identifierHash };
+          if (visitor.name) body.name = visitor.name;
+          if (visitor.email) body.email = visitor.email;
+          if (withPhone && phone) body.phone_number = phone;
+          else if (visitor.phone) body.custom_attributes = { whatsapp_as_typed: visitor.phone };
+          return request("POST", chatwootPath(base, "/contacts"), body);
+        }
+        // A phone number Chatwoot rejects must not stop the chat: retry once without it, keeping what was typed.
+        return createContact(true)
+          .catch(function (err) {
+            if (err.status === 422 && phone) return createContact(false);
+            throw err;
+          })
+          .then(function (contact) {
+            return request("POST", chatwootPath(base, "/contacts/" + encodeURIComponent(contact.source_id) + "/conversations"), { identifier_hash: s.identifierHash }).then(function (conv) {
+              saved = { inbox: conn.inbox, base: base, identifier: s.identifier, hash: s.identifierHash, sourceId: contact.source_id, convId: conv.id, lastId: 0 };
+              store();
+            });
+          });
+      });
+    }
+
+    function ready() {
+      if (saved) return Promise.resolve();
+      if (!opening) {
+        opening = openSession().then(
+          function () { opening = null; },
+          function (err) { opening = null; throw err; }
+        );
+      }
+      return opening;
+    }
+
+    function messagesPath() {
+      return chatwootPath(saved.base, "/contacts/" + encodeURIComponent(saved.sourceId) + "/conversations/" + encodeURIComponent(saved.convId) + "/messages");
+    }
+
+    function fail() {
+      hooks.notice(cfg.unavailableText);
+    }
+
+    function post(text, retried) {
+      return ready()
+        .then(function () { return request("POST", messagesPath(), { content: text, identifier_hash: saved.hash }); })
+        .then(function () { schedule(POLL_MS); })
+        .catch(function (err) {
+          // A signature Chatwoot no longer accepts: start a fresh session once, then try again.
+          if (err.status === 401 && !retried) {
+            saved = null;
+            store();
+            return post(text, true);
+          }
+          fail();
+        });
+    }
+
+    function poll() {
+      timer = null;
+      if (!saved) return;
+      if (document.visibilityState === "hidden") return schedule(delay);
+      request("GET", messagesPath() + "?identifier_hash=" + encodeURIComponent(saved.hash))
+        .then(function (list) {
+          delay = POLL_MS;
+          (Array.isArray(list) ? list : [])
+            .filter(function (m) { return m.message_type === 1 && m.id > saved.lastId && m.content; })
+            .sort(function (a, b) { return a.id - b.id; })
+            .forEach(function (m) {
+              saved.lastId = m.id;
+              hooks.agentMessage({ text: m.content });
+            });
+          store();
+        })
+        .catch(function () { delay = Math.min(delay * 2, POLL_MAX_MS); })
+        .then(function () { schedule(delay); });
+    }
+    function schedule(ms) {
+      if (timer || !saved) return;
+      timer = window.setTimeout(poll, ms);
+    }
+
+    return {
+      start: function (st, h) {
+        state = st;
+        hooks = h;
+        saved = load();
+        if (saved) schedule(POLL_MS); // a visitor who reloaded the page keeps their conversation
+      },
+      send: function (text) {
+        post(text, false);
+      },
+      submitDetails: function (d) {
+        if (!saved) return; // the details are used when the first message creates the contact
+        var body = { identifier: saved.identifier, identifier_hash: saved.hash };
+        if (d.name) body.name = d.name;
+        if (d.email) body.email = d.email;
+        var phone = toE164(d.phone, cfg.contact.defaultCountryCode);
+        if (phone) body.phone_number = phone;
+        request("PATCH", chatwootPath(saved.base, "/contacts/" + encodeURIComponent(saved.sourceId)), body)
+          .then(function () { hooks.notice("Thanks" + (d.name ? ", " + d.name : "") + ". A counsellor will reach you soon."); })
+          .catch(fail);
+      },
+    };
+  }
+
   // ---------------------------------------------------------------- styles
   function styles(cfg) {
     var b = cfg.brand;
@@ -280,7 +470,7 @@
   function init(userConfig) {
     if (document.getElementById("zk-chat-host")) return window.ZunkireeChat;
     var cfg = merge(DEFAULT_CONFIG, userConfig || {});
-    var transport = cfg.transport || createMockTransport();
+    var transport = cfg.transport || (cfg.connection && cfg.connection.inbox ? createChatwootTransport(cfg) : createMockTransport());
 
     var state = { open: false, view: "home", messages: [], typing: false, quick: [], visitor: null, unread: false, pending: null };
     try {
@@ -365,6 +555,10 @@
     }
 
     var hooks = {
+      /** A plain line from the team's side that does not count as an answer (no quick replies, no details form). */
+      notice: function (text) {
+        pushMessage({ from: "agent", kind: "text", text: text });
+      },
       agentTyping: function (on) {
         state.typing = on;
         if (msgsEl) renderMessages();
@@ -419,6 +613,7 @@
       }
       state.quick = [];
       pushMessage({ from: "visitor", kind: "text", text: text });
+      if (state.bot) return; // the hidden form field was filled: show it as sent, deliver nothing
       transport.send(text);
     }
 
@@ -599,6 +794,8 @@
       var phoneIn = c.phone.show ? el("input", { type: "tel", autocomplete: "tel", "aria-label": "WhatsApp number", placeholder: "WhatsApp number", maxlength: "30" }) : null;
       var emailIn = c.email.show ? el("input", { type: "email", autocomplete: "email", "aria-label": "Email", placeholder: "you@example.com", maxlength: "200" }) : null;
       var err = el("div", { class: "err", role: "alert" });
+      // Spam trap: invisible to people, so only a script that fills every field will fill it.
+      var trap = el("input", { type: "text", name: "website", tabindex: "-1", autocomplete: "off", "aria-hidden": "true", style: "position:absolute;left:-9999px;width:1px;height:1px;opacity:0" });
       function field(label, input, required) {
         return input ? [el("label", { text: label + (required ? "" : " (optional)") }), input] : [];
       }
@@ -609,7 +806,7 @@
         .concat(field("Your name", nameIn, c.name.required))
         .concat(field("WhatsApp number", phoneIn, c.phone.required))
         .concat(field("Email", emailIn, c.email.required))
-        .concat([err, el("button", { type: "submit", class: "go", text: c.submit })]);
+        .concat([trap, err, el("button", { type: "submit", class: "go", text: c.submit })]);
 
       var form = el("form", {
         novalidate: true,
@@ -632,6 +829,7 @@
             err.textContent = "Please add " + how + " so we can reach you.";
             return;
           }
+          if (trap.value) state.bot = true;
           state.visitor = { name: n, phone: p, email: em };
           var held = state.pending;
           state.pending = null;
@@ -639,7 +837,7 @@
           renderMessages();
           refreshComposer();
           if (held) sendVisitor(held);
-          else transport.submitDetails(state.visitor);
+          else if (!state.bot) transport.submitDetails(state.visitor);
           if (inputEl) inputEl.focus();
         },
       }, kids);
@@ -661,5 +859,5 @@
     if (host) host.style.display = hidden ? "none" : "";
   }
 
-  window.ZunkireeChat = { init: init, setHidden: setHidden, version: "0.1.0-prototype" };
+  window.ZunkireeChat = { init: init, setHidden: setHidden, version: "0.2.0" };
 })();
