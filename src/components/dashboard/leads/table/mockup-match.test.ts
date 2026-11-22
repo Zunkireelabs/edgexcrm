@@ -71,3 +71,18 @@ describe("header labels fit their column width", () => {
     for (const k of ["tags", "status", "source", "destinations", "ref_code", "form_source", "branch", "created", "updated_at"]) expect(v2For(k).icon).toBeDefined();
   });
 });
+
+describe("Next step · Orca column (preview)", () => {
+  it("exists for education only, hidden by default", () => {
+    const edu = getLeadColumns("education_consultancy", [], 1).find((c) => c.key === "next_step_orca");
+    expect(edu).toBeDefined();
+    expect(edu?.defaultVisible).toBe(false);
+    expect(getLeadColumns("it_agency", [], 1).some((c) => c.key === "next_step_orca")).toBe(false);
+    expect(getLeadColumns(null, [], 1).some((c) => c.key === "next_step_orca")).toBe(false);
+  });
+  it("has a Preview badge and a width that fits its label", () => {
+    const v2 = v2For("next_step_orca");
+    expect(v2.badge).toBe("Preview");
+    expect(v2.width).toBeGreaterThanOrEqual("Next step · Orca".length * 8 + 70);
+  });
+});

@@ -7,6 +7,7 @@ import type { Icon } from "@/components/icons";
 import { EyeIcon, ArrowCounterClockwiseIcon } from "@/components/icons";
 import { TruncatedText } from "@/components/ui/truncated-text";
 import { prospectIndustryLabel } from "@/industries/it-agency/leads/prospect-industries";
+import { suggestNextStep } from "@/industries/education-consultancy/features/next-step-suggestion/suggest";
 import { MoveToListSelector } from "@/components/dashboard/leads/move-to-list-selector";
 import { StageSelector } from "@/components/dashboard/leads/stage-selector";
 import { QualifyRowButton } from "@/components/dashboard/leads/qualify-row-button";
@@ -68,6 +69,8 @@ export interface LeadColumnV2 {
   sort?: V2SortField;
   /** Key in the filter registry, for "Filter by …". */
   filterFieldKey?: string;
+  /** Small pill after the header title, e.g. "Preview". */
+  badge?: string;
 }
 
 export interface LeadColumn {
@@ -112,6 +115,12 @@ export function followUpBadgeLabel(lead: Lead, staleDays: number): string | null
 // time-sensitive regardless of hold status.
 export function isCallbackDue(lead: Lead): boolean {
   return !!lead.callback_due_at && new Date(lead.callback_due_at).getTime() <= Date.now();
+}
+
+/** Plain-text suggestion for the "Next step · Orca" column (education only). Shared by the legacy td and the v2 cell. */
+export function nextStepFor(lead: Lead, ctx: Pick<LeadColumnCtx, "leadLists" | "followUpStaleDays">) {
+  const stageSlug = ctx.leadLists?.find((l) => l.id === lead.list_id)?.slug ?? null;
+  return suggestNextStep({ lead, stageSlug, staleDays: ctx.followUpStaleDays ?? FALLBACK_FOLLOW_UP_STALE_DAYS });
 }
 
 // ─── inline sub-components (moved from leads-table.tsx) ───────────────────────
@@ -792,6 +801,25 @@ const STATIC_COLUMNS: LeadColumn[] = [
     renderTd: (lead) => (
       <td key="ai_priority" className="px-3 py-1.5 text-sm font-normal text-[#787871]">
         {lead.ai_priority || <span className="text-gray-400">—</span>}
+      </td>
+    ),
+  },
+
+  // ── next_step_orca (education_consultancy only; PREVIEW — rule-based, nothing stored)
+  {
+    key: "next_step_orca",
+    label: "Next step · Orca",
+    group: "industry",
+    industries: ["education_consultancy"],
+    defaultVisible: false,
+    renderTh: () => (
+      <th key="next_step_orca" className="px-3 py-2 text-left text-xs font-medium text-gray-600 min-w-[200px]">
+        Next step · Orca
+      </th>
+    ),
+    renderTd: (lead, ctx) => (
+      <td key="next_step_orca" className="px-3 py-1.5 text-sm font-normal text-[#787871]">
+        {nextStepFor(lead, ctx)?.text ?? <span className="text-gray-400">—</span>}
       </td>
     ),
   },

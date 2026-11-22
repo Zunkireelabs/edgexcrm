@@ -6,6 +6,7 @@
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { ArrowDownIcon, ArrowUpIcon, PushPinIcon } from "@/components/icons";
+import { OrcaPreviewBadge } from "./orca-preview-badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { Lead } from "@/types/database";
 import type { LeadColumn, LeadColumnCtx } from "../columns-registry";
@@ -339,7 +340,15 @@ export function LeadsGrid(props: LeadsGridProps) {
                     className="flex h-full w-full items-center gap-2 px-3 text-left font-medium text-ds-muted transition-colors hover:bg-ds-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ds-ghost"
                   >
                     {!isName && <Icon className="size-4 shrink-0 text-ds-faint" />}
-                    <span className="min-w-0 flex-1 truncate text-ds-ink">{titleOf(col)}</span>
+                    {col.v2?.badge ? (
+                      <>
+                        <span className="min-w-0 truncate text-ds-ink">{titleOf(col)}</span>
+                        <OrcaPreviewBadge>{col.v2.badge}</OrcaPreviewBadge>
+                        <span className="min-w-0 flex-1" />
+                      </>
+                    ) : (
+                      <span className="min-w-0 flex-1 truncate text-ds-ink">{titleOf(col)}</span>
+                    )}
                     {isName ? (
                       <PushPinIcon className="size-3.5 shrink-0 text-ds-faint opacity-0 transition-opacity group-hover/th:opacity-100" />
                     ) : sorted ? (
