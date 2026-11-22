@@ -303,3 +303,290 @@ describe("without a connection", () => {
     expect(root().textContent).toContain("Good choice");
   });
 });
+
+// Guidance: a visitor is never left wondering what to do next.
+describe("guidance for the visitor", () => {
+  const TOPICS = ["Study in the UK", "Visa help"];
+  const WITH_TOPICS = { ...CONFIG, topics: TOPICS };
+  const text = () => root().textContent ?? "";
+  // Count visible message bubbles only: the widget also keeps a hidden screen-reader line that repeats every team message.
+  const count = (needle: string) => Array.from(root().querySelectorAll(".m")).filter((m) => m.textContent?.includes(needle)).length;
+  const hint = () => q<HTMLTextAreaElement>("textarea")!.placeholder;
+  const topicButtons = () => Array.from(root().querySelectorAll(".qr button")).map((b) => b.textContent);
+
+  function openAndShareDetails(config: unknown, details = { name: "Sneha", phone: "9800000000" }) {
+    load().init(config);
+    click(q(".launcher"));
+    click(q(".start"));
+    fillForm(details);
+  }
+
+  it("right after the form, says what to do next with the visitor's name, offers the topics, and contacts nobody yet", async () => {
+    openAndShareDetails(WITH_TOPICS);
+    await flush();
+    expect(text()).toContain("Thanks, Sneha! What would you like to know? Type your question below, and the team will reply right here.");
+    expect(topicButtons()).toEqual(TOPICS);
+    expect(hint()).toBe("Type your question here…");
+    expect(calls).toHaveLength(0);
+  });
+
+  it("works without a name, with no stray comma", async () => {
+    load().init({ ...WITH_TOPICS, contact: { when: "before", defaultCountryCode: "+977", name: { show: false } } });
+    click(q(".launcher"));
+    click(q(".start"));
+    fillForm({ phone: "9800000000" });
+    await flush();
+    expect(text()).toContain("Thanks! What would you like to know?");
+  });
+
+  it("tapping a topic sends it as the first question", async () => {
+    openAndShareDetails(WITH_TOPICS);
+    await flush();
+    click(root().querySelectorAll(".qr button")[0]);
+    await flush();
+    expect(trail().some((t) => t.endsWith("/messages"))).toBe(true);
+    expect(calls.find((c) => c.url.endsWith("/messages"))!.body).toMatchObject({ content: "Study in the UK" });
+  });
+
+  it("after the first message really arrives, says so once, and the box goes back to its normal hint", async () => {
+    await chat({ name: "Sneha", phone: "9800000000" });
+    expect(count("Got it! The team will reply here as soon as possible.")).toBe(1);
+    expect(hint()).toBe("Write a message…");
+    typeAndSend("One more thing");
+    await flush();
+    expect(count("Got it! The team will reply here as soon as possible.")).toBe(1);
+  });
+
+  it("never says 'got it' when the message did not go through", async () => {
+    handler = () => ({ status: 503, json: {} });
+    await chat({ name: "Sneha", phone: "9800000000" });
+    expect(text()).toContain("We could not reach the team just now");
+    expect(text()).not.toContain("Got it!");
+  });
+
+  it("a visitor who asked first (typed or tapped before sharing details) is not asked again what they want", async () => {
+    load().init(WITH_TOPICS);
+    click(q(".launcher"));
+    click(root().querySelectorAll(".chip")[0]); // "Study in the UK" from the home screen, held until the form is sent
+    fillForm({ name: "Sneha", phone: "9800000000" });
+    await flush();
+    expect(text()).not.toContain("What would you like to know?");
+    expect(calls.find((c) => c.url.endsWith("/messages"))!.body).toMatchObject({ content: "Study in the UK" });
+    expect(count("Got it! The team will reply here as soon as possible.")).toBe(1);
+  });
+
+  it("the wording and the topics can be changed or switched off", async () => {
+    openAndShareDetails({ ...WITH_TOPICS, guide: { afterDetails: "Hello{name}. Ask away.", topics: false, composerHint: "Ask here", afterSend: "" } });
+    await flush();
+    expect(text()).toContain("Hello, Sneha. Ask away.");
+    expect(topicButtons()).toEqual([]);
+    expect(hint()).toBe("Ask here");
+    typeAndSend("Hi");
+    await flush();
+    expect(text()).not.toContain("Got it!");
+
+    document.body.innerHTML = "";
+    delete (window as unknown as { ZunkireeChat?: unknown }).ZunkireeChat;
+    window.sessionStorage.clear();
+    openAndShareDetails({ ...WITH_TOPICS, guide: { afterDetails: "" } });
+    await flush();
+    expect(text()).not.toContain("What would you like to know?");
+  });
+
+  it("stays quiet with the built-in demo (it answers by itself)", async () => {
+    openAndShareDetails({ ...WITH_TOPICS, connection: null });
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(text()).not.toContain("What would you like to know?");
+    expect(text()).not.toContain("Got it!");
+    expect(hint()).toBe("Write a message…");
+  });
+
+  it("stays quiet when the form comes after the first answer (the visitor already asked)", async () => {
+    load().init({ ...WITH_TOPICS, contact: { when: "after", defaultCountryCode: "+977" } });
+    click(q(".launcher"));
+    click(q(".start"));
+    typeAndSend("Hi");
+    await flush();
+    outgoing = [{ id: 101, message_type: 1, content: "Hello!" }];
+    await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(1000);
+    fillForm({ name: "Sneha", phone: "9800000000" });
+    await flush();
+    expect(text()).not.toContain("What would you like to know?");
+  });
+
+  it("gives a bot nothing", async () => {
+    openAndShareDetails(WITH_TOPICS, { name: "Bot", phone: "9800000000", trap: "http://spam.example" } as never);
+    await flush();
+    expect(text()).not.toContain("What would you like to know?");
+    expect(calls).toHaveLength(0);
+  });
+
+  it("does not repeat after a page reload", async () => {
+    openAndShareDetails(WITH_TOPICS);
+    await flush();
+    expect(count("What would you like to know?")).toBe(1);
+    vi.clearAllTimers();
+    document.body.innerHTML = "";
+    delete (window as unknown as { ZunkireeChat?: unknown }).ZunkireeChat;
+    load().init(WITH_TOPICS);
+    click(q(".launcher"));
+    click(q(".start"));
+    await flush();
+    expect(count("What would you like to know?")).toBe(1);
+  });
+});
+
+// Notification sound: a soft ding when a team reply arrives, with a mute button, never breaking the chat.
+describe("notification sound", () => {
+  // A stand-in for the browser's audio engine: it starts "suspended" like a real one until the visitor has clicked something.
+  class FakeAudio {
+    static instances: FakeAudio[] = [];
+    state = "suspended";
+    currentTime = 0;
+    destination = {};
+    started = 0;
+    constructor() {
+      FakeAudio.instances.push(this);
+    }
+    resume() {
+      this.state = "running";
+      return Promise.resolve();
+    }
+    createOscillator() {
+      return { type: "", frequency: { value: 0 }, connect() {}, start: () => { this.started++; }, stop() {} };
+    }
+    createGain() {
+      return { gain: { setValueAtTime() {}, exponentialRampToValueAtTime() {} }, connect() {} };
+    }
+  }
+  // One ding is two notes.
+  const notes = () => FakeAudio.instances.reduce((n, a) => n + a.started, 0);
+  const win = () => window as unknown as { AudioContext?: unknown };
+  const text = () => root().textContent ?? "";
+  const muteButton = () => q<HTMLButtonElement>('.bar button[aria-label="Mute notification sound"]');
+  const unmuteButton = () => q<HTMLButtonElement>('.bar button[aria-label="Turn on notification sound"]');
+  const reply = (id: number, content = "Hello from the team") => outgoing.push({ id, message_type: 1, content });
+
+  beforeEach(() => {
+    FakeAudio.instances = [];
+    win().AudioContext = FakeAudio;
+    window.localStorage.clear();
+  });
+  afterEach(() => {
+    delete win().AudioContext;
+    window.localStorage.clear();
+  });
+
+  it("dings once when a team reply arrives, after the visitor has clicked and sent something", async () => {
+    await chat();
+    expect(notes()).toBe(0); // the guidance lines and "got it" are not replies
+    reply(101);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(text()).toContain("Hello from the team");
+    expect(notes()).toBe(2);
+  });
+
+  it("is one ding for a burst of replies, and silent for the visitor's own messages and for errors", async () => {
+    await chat();
+    reply(101, "First");
+    reply(102, "Second");
+    reply(103, "Third");
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(text()).toContain("Third");
+    expect(notes()).toBe(2);
+
+    const before = notes();
+    handler = (c) => (c.method === "POST" && c.url.endsWith("/messages") ? { status: 500, json: {} } : defaultHandler(c));
+    typeAndSend("Will this ding?");
+    await flush();
+    expect(text()).toContain("We could not reach the team just now");
+    expect(notes()).toBe(before);
+  });
+
+  it("is blocked until the visitor has clicked something, as browsers require, and still shows the reply", async () => {
+    await chat();
+    vi.clearAllTimers();
+    document.body.innerHTML = "";
+    delete (window as unknown as { ZunkireeChat?: unknown }).ZunkireeChat;
+    FakeAudio.instances = [];
+    reply(101, "While you were away");
+    load().init(CONFIG); // a reload: the saved conversation resumes, but nothing has been clicked yet
+    await vi.advanceTimersByTimeAsync(5000);
+    click(q(".launcher"));
+    expect(text()).toContain("While you were away");
+    expect(notes()).toBe(0);
+  });
+
+  it("has a mute button that silences the ding, switches back on, and is remembered", async () => {
+    await chat();
+    click(muteButton());
+    expect(unmuteButton()).not.toBeNull();
+    expect(unmuteButton()!.getAttribute("aria-pressed")).toBe("true");
+    reply(101);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(text()).toContain("Hello from the team");
+    expect(notes()).toBe(0);
+
+    // The choice survives a reload.
+    vi.clearAllTimers();
+    document.body.innerHTML = "";
+    delete (window as unknown as { ZunkireeChat?: unknown }).ZunkireeChat;
+    load().init(CONFIG);
+    click(q(".launcher"));
+    click(q(".start"));
+    expect(unmuteButton()).not.toBeNull();
+
+    click(unmuteButton());
+    expect(muteButton()!.getAttribute("aria-pressed")).toBe("false");
+    reply(102, "Second reply");
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(notes()).toBe(2);
+  });
+
+  it("can be turned off completely: no button, and the audio engine is never even created", async () => {
+    load().init({ ...CONFIG, sound: { enabled: false } });
+    click(q(".launcher"));
+    click(q(".start"));
+    fillForm({ name: "Sneha", phone: "9800000000" });
+    typeAndSend("Hi");
+    await flush();
+    reply(101);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(text()).toContain("Hello from the team");
+    expect(muteButton()).toBeNull();
+    expect(FakeAudio.instances).toHaveLength(0);
+  });
+
+  it("with no audio support in the browser there is no button and the chat works as before", async () => {
+    delete win().AudioContext;
+    await chat();
+    reply(101);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(text()).toContain("Hello from the team");
+    expect(muteButton()).toBeNull();
+  });
+
+  it("a broken audio engine never breaks the chat", async () => {
+    win().AudioContext = class {
+      constructor() {
+        throw new Error("audio is not available");
+      }
+    };
+    await chat();
+    reply(101);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(text()).toContain("Hello from the team");
+  });
+
+  it("stays quiet with the built-in demo (no real conversation)", async () => {
+    load().init({ ...CONFIG, connection: null, contact: { when: "after" } });
+    click(q(".launcher"));
+    click(q(".start"));
+    typeAndSend("Tell me about the UK");
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(text()).toContain("Good choice");
+    expect(muteButton()).toBeNull();
+    expect(FakeAudio.instances).toHaveLength(0);
+  });
+});
