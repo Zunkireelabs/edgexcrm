@@ -6,6 +6,7 @@
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { ArrowDownIcon, ArrowUpIcon, PushPinIcon } from "@/components/icons";
+import { OrcaPreviewBadge } from "./orca-preview-badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { Lead } from "@/types/database";
 import type { LeadColumn, LeadColumnCtx } from "../columns-registry";
@@ -342,7 +343,7 @@ export function LeadsGrid(props: LeadsGridProps) {
                     {col.v2?.badge ? (
                       <>
                         <span className="min-w-0 truncate text-ds-ink">{titleOf(col)}</span>
-                        <span className="shrink-0 rounded-full bg-ds-ai-soft px-1.5 text-[11px] font-medium leading-4 text-ds-ai">{col.v2.badge}</span>
+                        <OrcaPreviewBadge>{col.v2.badge}</OrcaPreviewBadge>
                         <span className="min-w-0 flex-1" />
                       </>
                     ) : (

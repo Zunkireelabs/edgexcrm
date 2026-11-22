@@ -21,6 +21,8 @@ const AI_TOKEN_ALLOWLIST = [
   "src/industries/education-consultancy/features/pulse/ui/scoreboard.tsx",
   // EDGEX-87 Part B: Orca on Home (the note that fills the record, the read, drafts); every AI-toned Home surface lives in this one file
   "src/industries/education-consultancy/features/home/ui/home.css",
+  // Leads table "Next step · Orca" column: its Preview pill lives in this one file
+  "src/components/dashboard/leads/table/orca-preview-badge.tsx",
   "src/components/design-system/showcase.tsx",
   "src/app/(main)/(dashboard)/design-system/page.tsx",
   // this test file names the tokens it searches for
