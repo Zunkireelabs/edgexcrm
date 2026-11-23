@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import { createRequestLogger } from "@/lib/logger";
+import { getEmailTransportMode, sendStubEmail } from "./outbound/transport";
 
 interface SendSmtpEmailParams {
   smtpEmail: string;
@@ -38,6 +39,11 @@ export function interpolateTemplate(
   });
 }
 
+/** EMAIL_TRANSPORT=stub (EDGEX-125): record the send and report success without opening a connection. */
+function stubbedSend(from: string, to: string, subject: string, body: string): SmtpResult {
+  return { success: true, messageId: sendStubEmail({ to: [to], from, subject, html: body }).data.id };
+}
+
 /**
  * Send an email using the user's own SMTP credentials.
  */
@@ -50,6 +56,8 @@ export async function sendSmtpEmail({
   subject,
   body,
 }: SendSmtpEmailParams): Promise<SmtpResult> {
+  if (getEmailTransportMode() === "stub") return stubbedSend(smtpEmail, to, subject, body);
+
   const log = createRequestLogger({
     requestId: crypto.randomUUID(),
     method: "SMTP",
@@ -106,6 +114,8 @@ export async function sendGmailOAuth2Email({
   if (!clientId || !clientSecret) {
     return { success: false, error: "Google OAuth not configured" };
   }
+
+  if (getEmailTransportMode() === "stub") return stubbedSend(email, to, subject, body);
 
   try {
     const transporter = nodemailer.createTransport({

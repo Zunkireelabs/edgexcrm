@@ -52,3 +52,24 @@ export function formerCollaboratorOptions(
     .filter((o) => o.former && !isCurrentMember(o.name))
     .map((o) => ({ value: o.name, label: `${o.label || "Former member"} (former) (${o.count.toLocaleString()})` }));
 }
+
+export const FORMER_MEMBER_LABEL = "Former team member";
+
+/**
+ * The name to show for whoever holds a lead: a current member's display name (or the email's local part), "" for no
+ * holder, and "Former team member" for an id that is no longer on the team (never a raw UUID). When no member list was
+ * loaded at all we can't tell former from current, so that stays blank as before.
+ */
+export function holderLabel(
+  userId: string | null | undefined,
+  memberNames: Record<string, string> | undefined,
+  memberMap: Record<string, string> | undefined,
+): string {
+  if (!userId) return "";
+  const names = memberNames ?? {};
+  const emails = memberMap ?? {};
+  const name = names[userId] || (emails[userId] ? emails[userId].split("@")[0] : "");
+  if (name) return name;
+  if (userId in names || userId in emails) return "";
+  return Object.keys(emails).length > 0 || Object.keys(names).length > 0 ? FORMER_MEMBER_LABEL : "";
+}

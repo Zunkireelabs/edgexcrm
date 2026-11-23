@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Badge } from "@/components/ui/badge";
+import { NavCountPill } from "@/components/dashboard/nav-primitives";
 
 /**
  * Self-contained nav badge for the /orca/review item — deliberately isolated
@@ -34,9 +34,5 @@ export function ReviewNavBadge() {
 
   if (count === 0) return null;
 
-  return (
-    <Badge variant="destructive" className="ml-auto h-5 min-w-5 px-1.5 text-xs">
-      {count > 9 ? "9+" : count}
-    </Badge>
-  );
+  return <NavCountPill>{count > 9 ? "9+" : count}</NavCountPill>;
 }

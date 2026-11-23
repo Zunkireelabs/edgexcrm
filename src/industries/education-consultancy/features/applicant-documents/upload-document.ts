@@ -17,7 +17,11 @@ export interface UploadApplicantDocumentInput {
   /** Pin the file to a university application, and to the note it was attached in. */
   applicationId?: string;
   applicationNoteId?: string;
+  /** Where the file is in the flow, for a progress bar. `verify` = the server is checking the file really landed. */
+  onStage?: (stage: UploadStage) => void;
 }
+
+export type UploadStage = "presign" | "upload" | "verify" | "done";
 
 export type UploadApplicantDocumentResult =
   | { ok: true }
@@ -34,7 +38,9 @@ async function sha256Hex(file: File): Promise<string> {
 export async function uploadApplicantDocument(input: UploadApplicantDocumentInput): Promise<UploadApplicantDocumentResult> {
   const { leadId, file, documentType } = input;
   const name = input.name?.trim() || file.name;
+  const stage = input.onStage ?? (() => {});
   try {
+    stage("presign");
     const urlRes = await fetch(`/api/v1/leads/${leadId}/documents/upload-url`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -55,10 +61,12 @@ export async function uploadApplicantDocument(input: UploadApplicantDocumentInpu
       upload_headers?: Record<string, string>;
     };
 
+    stage("upload");
     const putRes = await fetch(upload_url, { method: "PUT", headers: upload_headers, body: file });
     if (!putRes.ok) return { ok: false, message: "Upload to storage failed" };
 
     const checksum = await sha256Hex(file);
+    stage("verify"); // /complete asks storage whether the file is really there (exists()) BEFORE it writes the record
     const completeRes = await fetch(`/api/v1/leads/${leadId}/documents/${document_id}/complete`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -77,6 +85,7 @@ export async function uploadApplicantDocument(input: UploadApplicantDocumentInpu
     });
     const completeJson = await completeRes.json();
     if (!completeRes.ok) return { ok: false, message: completeJson?.error?.message ?? "Failed to confirm upload — please retry" };
+    stage("done");
     return { ok: true };
   } catch {
     return { ok: false, message: "Upload failed" };

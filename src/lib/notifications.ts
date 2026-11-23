@@ -96,6 +96,7 @@ export const NotificationTypes = {
   LEAVE_REQUESTED: "leave.requested",
   LEAVE_APPROVED: "leave.approved",
   LEAVE_REJECTED: "leave.rejected",
+  LEAD_NUDGE: "lead.nudge",
 } as const;
 
 /**

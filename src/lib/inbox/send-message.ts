@@ -216,7 +216,7 @@ export async function sendMessage(input: SendMessageInput): Promise<SendMessageR
     }
   }
 
-  const channelForAdapter = {
+  let channelForAdapter = {
     id: channel.id,
     tenant_id: channel.tenant_id,
     provider: channel.provider as InboxProvider,
@@ -237,6 +237,26 @@ export async function sendMessage(input: SendMessageInput): Promise<SendMessageR
     contact_display_name: conversation.contact_display_name,
     lead_id: conversation.lead_id,
   };
+
+  // Reply AS the person who is replying when the provider supports it (website chat: so the
+  // visitor sees that counselor's name). Never blocks the send: any problem falls back to the
+  // channel's own credential.
+  if (adapter.resolveSenderToken && input.author.type === "human_agent") {
+    try {
+      const senderToken = await adapter.resolveSenderToken({
+        channel: channelForAdapter,
+        userId: input.author.userId,
+        db: supabase,
+      });
+      // A new object, so the one handed to the adapter above is never changed behind its back.
+      if (senderToken) channelForAdapter = { ...channelForAdapter, access_token: senderToken };
+    } catch (err) {
+      logger.warn(
+        { err, channelId: channel.id, userId: input.author.userId },
+        "sendMessage: could not resolve the replying person's identity, using the channel identity"
+      );
+    }
+  }
 
   // D4: an attachment must be uploaded to the provider FIRST — Meta hands back a media
   // id only AFTER it has the bytes, and a message can only ever reference an id, never

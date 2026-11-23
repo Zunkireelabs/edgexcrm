@@ -1,6 +1,6 @@
 import type { createServiceClient } from "@/lib/supabase/server";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
-import { holderChange } from "@/lib/leads/stage-move-audit";
+import { holderChange, listIdsChange } from "@/lib/leads/stage-move-audit";
 import { onLeadsEnteredStageSafe } from "@/industries/_shared/features/outreach/lib/stage-auto-enroll";
 
 type SupabaseServiceClient = Awaited<ReturnType<typeof createServiceClient>>;
@@ -129,6 +129,8 @@ export async function reviveArchivedLead(
       entityId: lead.id,
       changes: {
         list: { old: fromListName, new: target.listName },
+        // Exact ids next to the names: Pulse prefers list_ids (this branch's stage-move audit contract).
+        list_ids: listIdsChange(lead.list_id, target.listId),
         holder: holderChange(lead.assigned_to),
         restored_from_archive: { old: false, new: true },
         re_registered: { old: false, new: true },

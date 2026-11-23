@@ -49,6 +49,57 @@
   --radius-2xl: calc(var(--radius) + 8px);
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
+
+  /* Design System v2 (EDGEX-85) utilities. NOTE: text-ds-title is a font SIZE, text-ds-ink is a COLOUR. */
+  --color-ds-canvas: var(--ds-canvas);
+  --color-ds-surface: var(--ds-surface);
+  --color-ds-sunken: var(--ds-sunken);
+  --color-ds-hover: var(--ds-hover);
+  --color-ds-selected: var(--ds-selected);
+  --color-ds-border: var(--ds-border);
+  --color-ds-divider: var(--ds-divider);
+  --color-ds-ink: var(--ds-ink);
+  --color-ds-text: var(--ds-text);
+  --color-ds-muted: var(--ds-muted);
+  --color-ds-faint: var(--ds-faint);
+  --color-ds-ghost: var(--ds-ghost);
+  --color-ds-accent: var(--ds-accent);
+  --color-ds-accent-soft: var(--ds-accent-soft);
+  --color-ds-good: var(--ds-good);
+  --color-ds-good-soft: var(--ds-good-soft);
+  --color-ds-bad: var(--ds-bad);
+  --color-ds-bad-soft: var(--ds-bad-soft);
+  --color-ds-warn: var(--ds-warn);
+  --color-ds-warn-soft: var(--ds-warn-soft);
+  --color-ds-ai: var(--ds-ai);
+  --color-ds-ai-soft: var(--ds-ai-soft);
+  --color-ds-ai-line: var(--ds-ai-line);
+  --color-ds-ai-arc: var(--ds-ai-arc);
+  --radius-ds-xs: var(--ds-r-xs);
+  --radius-ds-sm: var(--ds-r-sm);
+  --radius-ds-md: var(--ds-r-md);
+  --radius-ds-lg: var(--ds-r-lg);
+  --radius-ds-full: var(--ds-r-full);
+  --text-ds-title: 26px;
+  --text-ds-title--line-height: 1.25;
+  --text-ds-title--font-weight: 600;
+  --text-ds-title--letter-spacing: -0.02em;
+  --text-ds-section: 15px;
+  --text-ds-section--line-height: 1.4;
+  --text-ds-section--font-weight: 600;
+  --text-ds-lede: 14px;
+  --text-ds-lede--line-height: 1.5;
+  --text-ds-lede--font-weight: 400;
+  --text-ds-body: 13.5px;
+  --text-ds-body--line-height: 1.5;
+  --text-ds-body--font-weight: 400;
+  --text-ds-meta: 12.5px;
+  --text-ds-meta--line-height: 1.5;
+  --text-ds-meta--font-weight: 400;
+  --text-ds-metric: 30px;
+  --text-ds-metric--line-height: 1;
+  --text-ds-metric--font-weight: 600;
+  --text-ds-metric--letter-spacing: -0.02em;
 }
 
 :root {
@@ -84,7 +135,8 @@
   --chart-4: #f59e0b;
   --chart-5: #ef4444;
   /* Layout surfaces (Zunkireelabs standard) */
-  --sidebar-bg: #f9f9f9;   /* app chrome: sidebar + header + frame */
+  --sidebar-bg: #fbfbfb;   /* app chrome: sidebar + header + frame */
+  --sidebar-row-hover: rgba(0, 0, 0, 0.04); /* sidebar row hover + active fill (EDGEX-129, Attio-measured) */
   --content-bg: #ffffff;   /* scrolling content pane */
   --page-bg: #edeef2;      /* desktop behind the floating app card (light) */
   --nav-active: #f0f0f0;   /* active segmented tab (Ops/Orca) on white chrome */
@@ -97,6 +149,24 @@
   --sidebar-accent-foreground: #171717;
   --sidebar-border: #e5e7eb;
   --sidebar-ring: #2272B4;
+
+  /* Design System v2 (EDGEX-84/85). Prefix ds- because 4 v2 names clash with shadcn tokens of a different meaning. Light mode only. */
+  --ds-canvas:#f6f6f5; --ds-surface:#ffffff; --ds-sunken:#fafaf9; --ds-hover:#f6f7f9; --ds-selected:#efefee;
+  --ds-border:#e8e9eb; --ds-divider:#f0f1f2;
+  --ds-ink:#101112; --ds-text:#2b2d2f; --ds-muted:#6b6f76; --ds-faint:#9a9ea5; --ds-ghost:#d0d3d7;
+  --ds-accent:#2272B4; --ds-accent-soft:#eaf2fa;
+  --ds-good:#127a4a; --ds-good-soft:#e9f6ef; --ds-bad:#b42318; --ds-bad-soft:#fdeeec; --ds-warn:#a15c07; --ds-warn-soft:#fdf3e3;
+  --ds-ai:#5b47d6; --ds-ai-soft:#f3f1fd; --ds-ai-line:#d9d3fa; --ds-ai-arc:#7c5cf0;
+  /* Radius scale. Nested rule: an outer container = inner radius + its padding (e.g. segmented: calc(var(--ds-r-sm) + 2px)). */
+  --ds-r-xs:6px; --ds-r-sm:8px; --ds-r-md:12px; --ds-r-lg:16px; --ds-r-full:9999px;
+  /* Shadows: only on things that float, plus the segmented thumb. */
+  --ds-shadow-thumb:0 1px 2px rgba(0,0,0,.06);
+  --ds-shadow-float:0 10px 15px -3px rgb(0 0 0 / .1), 0 4px 6px -4px rgb(0 0 0 / .1);
+  /* Gradients exist ONLY as AI tokens. Gradient = "Orca". */
+  --ds-ai-grad:linear-gradient(135deg,#2272B4 0%,#7c5cf0 100%);
+  --ds-ai-wash:linear-gradient(180deg,#f4f8fe 0%,#fbfbff 45%,#fff 100%);
+  --ds-ai-tint:linear-gradient(135deg,rgba(34,114,180,.08),rgba(124,92,240,.12));
+  --ds-ai-block:linear-gradient(135deg,rgba(34,114,180,.06),rgba(124,92,240,.08));
 }
 
 .dark {
@@ -125,6 +195,7 @@
   --chart-5: #ef4444;
   /* Layout surfaces (Zunkireelabs standard) */
   --sidebar-bg: #171717;   /* dark chrome */
+  --sidebar-row-hover: rgba(255, 255, 255, 0.06);
   --content-bg: #1e1e1e;   /* dark content pane */
   --page-bg: #0a0a0a;      /* dark desktop */
   --nav-active: #2a2a2a;   /* active tab on dark chrome */
@@ -145,14 +216,14 @@
   body {
     background: var(--background);
     color: var(--foreground);
-    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
     font-weight: 400;
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
   h1, h2, h3, h4, h5, h6 {
-    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
     font-weight: 600;
     line-height: 1.4;
     letter-spacing: -0.025em;
@@ -205,11 +276,6 @@ button:disabled,
 [disabled],
 .disabled {
   cursor: not-allowed;
-}
-
-/* Refined icon stroke weight across the whole app (lucide ships at 2) */
-.lucide {
-  stroke-width: 1.3px;
 }
 
 /* Scrollbars: transparent track, subtle slate thumb — app-wide */
@@ -290,4 +356,148 @@ html::-webkit-scrollbar-button {
     animation: none;
     stroke-dashoffset: 0;
   }
+}
+
+/* Design System v2 (EDGEX-85): the small-caps section label. */
+@utility ds-label {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ds-faint);
+}
+
+/* ── Education lead detail at phone width (EDGEX-156) ──────────────────────────────────────────────
+   Dialogs are portaled out of the page, so LeadDetailEdu marks <body data-edu-lead-detail> while it is mounted and the
+   phone sheet below applies to every dialog opened from it (Qualify, gate, confirms, Archive, Log call, check-in,
+   upload, add application / class, Edit profile …) and to nothing else, so LeadDetailV2 and other pages are unchanged.
+   A bottom sheet: full width, anchored to the bottom, rounded on top only. The Edit profile form dialog is a full-height
+   sheet. Unlayered on purpose (it must beat the layered Tailwind utilities on the dialog shell). */
+@media (max-width: 430px) {
+  body[data-edu-lead-detail] :is([data-slot="dialog-content"], [data-slot="alert-dialog-content"]) {
+    left: 0;
+    right: 0;
+    top: auto;
+    bottom: 0;
+    translate: none;
+    width: 100%;
+    max-width: 100%;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+  body[data-edu-lead-detail] [data-slot="dialog-content"][data-size="form"] {
+    top: 16px;
+  }
+  body[data-edu-lead-detail] :is([data-slot="dialog-card"], [data-slot="alert-dialog-card"]) {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    max-height: calc(100dvh - 32px);
+  }
+  /* the ↵ / ⌘↵ key hints mean nothing on a phone */
+  body[data-edu-lead-detail] [data-slot="dialog-key-hint"] {
+    display: none;
+  }
+}
+
+/* ───────────────────────────────────────────────────────────────────────────────────────────────
+   EDGEX-145 Dialogs v1: Attio form fields inside every dialog (values measured live from Attio's
+   Create Person dialog). Scoped to dialogs (`dialog-card` = ui/dialog, `alert-dialog-card`) so page forms
+   outside dialogs do not change. Unlayered on purpose: it wins over the Tailwind utility classes
+   (h-9, rounded-md, border, focus ring...) that the shared Input/Select/Textarea ship with, so no
+   consumer needs editing. Footer buttons are NOT touched here.
+   ─────────────────────────────────────────────────────────────────────────────────────────────── */
+:is([data-slot="dialog-card"], [data-slot="alert-dialog-card"]) {
+  /* label: 12/16, 500, 50% black, 4px left pad, 4px gap to the field */
+  --edgex-field-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+:is([data-slot="dialog-card"], [data-slot="alert-dialog-card"]) [data-slot="label"] {
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.5);
+  padding-left: 4px;
+  margin-bottom: 4px; /* label bottom -> field top: exactly 4px (wins over the wrappers' space-y-1.5) */
+}
+:is([data-slot="dialog-card"], [data-slot="alert-dialog-card"]) [data-slot="label"] * {
+  color: inherit;
+}
+/* input / select trigger / combobox trigger: 32px, 9px radius, hairline inset ring, 14/20 500 ink */
+:is([data-slot="dialog-card"], [data-slot="alert-dialog-card"]) [data-slot="input"],
+:is([data-slot="dialog-card"], [data-slot="alert-dialog-card"]) [data-slot="textarea"],
+:is([data-slot="dialog-card"], [data-slot="alert-dialog-card"]) [data-slot="select-trigger"],
+:is([data-slot="dialog-card"], [data-slot="alert-dialog-card"]) button[role="combobox"] {
+  height: 32px;
+  min-height: 32px;
+  border: 0;
+  border-radius: 9px;
+  background-color: transparent;
+  box-shadow: var(--edgex-field-shadow);
+  padding: 0 8px;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+  color: var(--ds-ink);
+  caret-color: var(--ds-accent);
+}
+:is([data-slot="dialog-card"], [data-slot="alert-dialog-card"]) [data-slot="textarea"] {
+  height: auto;
+  padding: 6px 8px;
+}
+:is([data-slot="dialog-card"], [data-slot="alert-dialog-card"]) [data-slot="input"]::placeholder,
+:is([data-slot="dialog-card"], [data-slot="alert-dialog-card"]) [data-slot="textarea"]::placeholder,
+:is([data-slot="dialog-card"], [data-slot="alert-dialog-card"]) [data-slot="select-trigger"][data-placeholder] {
+  color: rgba(0, 0, 0, 0.5);
+  font-weight: 500;
+}
+/* focus: 1px accent inset ring, 10px radius, no outer glow */
+:is([data-slot="dialog-card"], [data-slot="alert-dialog-card"]) :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"], button[role="combobox"]):is(:focus, :focus-visible, [data-state="open"]) {
+  outline: none;
+  border-radius: 10px;
+  box-shadow: inset 0 0 0 1px var(--ds-accent);
+}
+/* error: 1px ds-bad inset ring; error text 12/16 ds-bad, 4px under the field */
+:is([data-slot="dialog-card"], [data-slot="alert-dialog-card"]) :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"], button[role="combobox"]):is([aria-invalid="true"], .border-red-500, .border-destructive) {
+  box-shadow: inset 0 0 0 1px var(--ds-bad);
+}
+:is([data-slot="dialog-card"], [data-slot="alert-dialog-card"]) p:is(.text-red-500, .text-red-600, .text-destructive) {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ds-bad);
+  margin-top: 0;
+}
+/* the field right above an error line sits 4px from it */
+:is([data-slot="dialog-card"], [data-slot="alert-dialog-card"]) :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"], button[role="combobox"], [data-slot="phone-input"]):has(+ p) {
+  margin-bottom: 4px;
+}
+/* phone: ONE 32px control, the dial-code button inside on the left with a hairline divider */
+:is([data-slot="dialog-card"], [data-slot="alert-dialog-card"]) [data-slot="phone-input"] {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  border: 0;
+  border-radius: 9px;
+  box-shadow: var(--edgex-field-shadow);
+  overflow: hidden;
+}
+:is([data-slot="dialog-card"], [data-slot="alert-dialog-card"]) [data-slot="phone-input"]:focus-within {
+  border-radius: 10px;
+  box-shadow: inset 0 0 0 1px var(--ds-accent);
+}
+:is([data-slot="dialog-card"], [data-slot="alert-dialog-card"]) [data-slot="phone-input"][data-invalid="true"] {
+  box-shadow: inset 0 0 0 1px var(--ds-bad);
+}
+:is([data-slot="dialog-card"], [data-slot="alert-dialog-card"]) [data-slot="phone-input"] :is([data-slot="input"], button[role="combobox"]) {
+  height: 100%;
+  min-height: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background-color: transparent;
+}
+:is([data-slot="dialog-card"], [data-slot="alert-dialog-card"]) [data-slot="phone-input"] button[role="combobox"] {
+  border-right: 1px solid rgba(0, 0, 0, 0.06);
+}
+/* disabled: 50% opacity, not-allowed */
+:is([data-slot="dialog-card"], [data-slot="alert-dialog-card"]) :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"], button[role="combobox"]):disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }

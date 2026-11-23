@@ -56,3 +56,10 @@ export function sendStubEmail(payload: { to: string[]; from: string; subject: st
   );
   return { data: { id }, error: null };
 }
+
+/** The forward counterpart of sendStubEmail (EDGEX-125): a forward has no subject or body of its own to record. */
+export function recordStubForward(payload: { emailId: string; to: string[]; from: string }): StubEmailSendResult {
+  const id = `stub_${randomUUID()}`;
+  logger.info({ ...payload, providerMessageId: id }, "[EMAIL_TRANSPORT=stub] recorded inbound forward without calling Resend");
+  return { data: { id }, error: null };
+}

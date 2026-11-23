@@ -1,9 +1,9 @@
 "use client";
 
 import { SECTION_TITLE_CLASS } from "@/components/dashboard/lead/section-title";
-import { useState, useEffect, useCallback } from "react";
+import { useCallback } from "react";
 import Link from "next/link";
-import { Plus, Loader2, GripVertical } from "lucide-react";
+import { PlusIcon, CircleNotchIcon, DotsSixVerticalIcon } from "@/components/icons";
 import {
   DndContext,
   closestCenter,
@@ -24,9 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "./status-badge";
-import { AddApplicationToLeadSheet } from "./add-application-to-lead-sheet";
-import { useBlockingNotice } from "@/components/dashboard/blocking-notice";
-import { profileIncompleteNotice } from "@/lib/blocking-notice";
+import { useLeadApplications, type ApplicationsApi } from "../hooks/use-lead-applications";
 import type { Application, ApplicationStage } from "@/types/database";
 import { normalizeDestinations } from "@/lib/leads/destination-normalize";
 
@@ -34,6 +32,8 @@ interface ApplicationsCardProps {
   leadId: string;
   canManage: boolean;
   disabled?: boolean;
+  /** Lead page: the shared applications state (also read by the right rail). Omit and the card owns its own. */
+  store?: ApplicationsApi;
 }
 
 /** Inner card body — shared by the static and sortable variants. */
@@ -124,74 +124,20 @@ function SortableApplicationRow({
         {...attributes}
         {...listeners}
       >
-        <GripVertical className="h-4 w-4" />
+        <DotsSixVerticalIcon className="h-4 w-4" />
       </button>
       <ApplicationBody app={app} stages={stages} leadId={leadId} />
     </div>
   );
 }
 
-export function ApplicationsCard({ leadId, canManage, disabled = false }: ApplicationsCardProps) {
-  const [applications, setApplications] = useState<Application[]>([]);
-  const [stages, setStages] = useState<ApplicationStage[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [addOpen, setAddOpen] = useState(false);
-  const [checkingProfile, setCheckingProfile] = useState(false);
-  const { notify, showNotice, noticeDialog } = useBlockingNotice();
-
-  // Check the student's profile BEFORE opening the form, so a missing item is shown up front in a big
-  // pop-up instead of as a small message after the whole form is filled. If the check can't run we
-  // open the form anyway — the create API still enforces the rule when saving.
-  async function handleAddClick() {
-    if (checkingProfile) return;
-    // Consent not signed yet: the "+" stays clickable so it can say WHY (a dead button explains nothing).
-    if (disabled) {
-      notify({ code: "CONSENT_REQUIRED" });
-      return;
-    }
-    setCheckingProfile(true);
-    try {
-      const res = await fetch(`/api/v1/leads/${leadId}/profile-completeness`);
-      if (res.ok) {
-        const { data } = await res.json();
-        if (data && data.complete === false) {
-          showNotice(profileIncompleteNotice(data.missing ?? []));
-          return;
-        }
-      }
-      setAddOpen(true);
-    } catch {
-      setAddOpen(true);
-    } finally {
-      setCheckingProfile(false);
-    }
-  }
+export function ApplicationsCard({ leadId, canManage, disabled = false, store }: ApplicationsCardProps) {
+  const own = useLeadApplications(leadId, { enabled: !store, locked: disabled });
+  const { applications, setApplications, stages, loading, checkingProfile, requestAdd: handleAddClick } = store ?? own;
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
   );
-
-  const fetchApplications = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/v1/leads/${leadId}/applications`);
-      if (!res.ok) throw new Error("Failed to fetch");
-      const { data } = await res.json();
-      setApplications(data ?? []);
-    } catch {
-      // silently fail — card stays empty
-    }
-  }, [leadId]);
-
-  useEffect(() => {
-    setLoading(true);
-    Promise.all([
-      fetchApplications(),
-      fetch("/api/v1/application-stages")
-        .then((r) => r.json())
-        .then((j) => setStages(j.data ?? []))
-        .catch(() => {}),
-    ]).finally(() => setLoading(false));
-  }, [fetchApplications]);
 
   const handleDragEnd = useCallback(
     async (event: DragEndEvent) => {
@@ -218,7 +164,7 @@ export function ApplicationsCard({ leadId, canManage, disabled = false }: Applic
         toast.error("Failed to reorder applications. Please try again.");
       }
     },
-    [applications, leadId]
+    [applications, leadId, setApplications]
   );
 
   return (
@@ -237,7 +183,7 @@ export function ApplicationsCard({ leadId, canManage, disabled = false }: Applic
             {canManage && (
               // While consent is unsigned the "+" is only dimmed (aria-disabled), not disabled: clicking it
               // opens the "complete the consent form first" pop-up instead of doing nothing.
-              <span title={disabled ? "Sign consent first" : "Add Application"}>
+              <span title={disabled ? "Unlocks after consent" : "Add Application"}>
                 <Button
                   size="sm"
                   variant="ghost"
@@ -247,7 +193,7 @@ export function ApplicationsCard({ leadId, canManage, disabled = false }: Applic
                   aria-disabled={disabled || undefined}
                   disabled={checkingProfile}
                 >
-                  <Plus className="h-3.5 w-3.5" />
+                  <PlusIcon className="h-3.5 w-3.5" />
                 </Button>
               </span>
             )}
@@ -257,7 +203,7 @@ export function ApplicationsCard({ leadId, canManage, disabled = false }: Applic
         <CardContent className="pb-4">
           {loading ? (
             <div className="flex justify-center py-3">
-              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              <CircleNotchIcon className="h-4 w-4 animate-spin text-muted-foreground" />
             </div>
           ) : applications.length === 0 ? (
             <p className="text-xs text-muted-foreground text-center py-2">No applications yet.</p>
@@ -286,18 +232,7 @@ export function ApplicationsCard({ leadId, canManage, disabled = false }: Applic
         </CardContent>
       </Card>
 
-      <AddApplicationToLeadSheet
-        open={addOpen}
-        onOpenChange={setAddOpen}
-        leadId={leadId}
-        stages={stages}
-        onSuccess={() => {
-          setAddOpen(false);
-          fetchApplications();
-        }}
-      />
-
-      {noticeDialog}
+      {!store && own.dialogs}
     </>
   );
 }

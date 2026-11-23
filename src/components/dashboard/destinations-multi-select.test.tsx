@@ -10,27 +10,35 @@ import { useState } from "react";
 
 import { DestinationsMultiSelect } from "./destinations-multi-select";
 
+// The picker is the shared SearchableSelect (EDGEX-145) on this branch: a combobox trigger + role="option" rows whose
+// check icon says "ticked". Radix popover needs these two jsdom stubs (same as searchable-select.test.tsx).
+class RO { observe() {} unobserve() {} disconnect() {} }
+(globalThis as unknown as { ResizeObserver: typeof RO }).ResizeObserver = RO;
+Element.prototype.scrollIntoView = () => {};
+
 afterEach(cleanup);
 
 const OPTIONS = ["Australia", "Canada", "Nepal", "UK", "USA"];
 
 function open() {
-  fireEvent.click(screen.getByRole("button"));
+  fireEvent.click(screen.getByRole("combobox"));
 }
-const box = (name: string) => screen.getByRole("checkbox", { name });
+const box = (name: string) => screen.getByRole("option", { name });
+// cmdk owns aria-selected (keyboard highlight), so "ticked" = the row shows its check icon.
+const ticked = (el: HTMLElement) => el.querySelector("svg") !== null;
 
 describe("DestinationsMultiSelect — catalog matching ignores case", () => {
   it("a lead saved with lowercase values shows the catalog entries TICKED", () => {
     render(<DestinationsMultiSelect selected={["uk", "nepal"]} onChange={vi.fn()} options={OPTIONS} />);
     open();
-    expect(box("UK")).toBeChecked();
-    expect(box("Nepal")).toBeChecked();
-    expect(box("Australia")).not.toBeChecked();
+    expect(ticked(box("UK"))).toBe(true);
+    expect(ticked(box("Nepal"))).toBe(true);
+    expect(ticked(box("Australia"))).toBe(false);
   });
 
   it("the button text shows the catalog spelling, not the lowercase leftovers", () => {
     render(<DestinationsMultiSelect selected={["uk", "nepal"]} onChange={vi.fn()} options={OPTIONS} />);
-    expect(screen.getByRole("button")).toHaveTextContent("UK, Nepal");
+    expect(screen.getByRole("combobox")).toHaveTextContent("UK, Nepal");
   });
 
   it("UNticking UK works (the reported 'cannot change' case) and reports the catalog spelling of what remains", () => {
@@ -52,8 +60,8 @@ describe("DestinationsMultiSelect — catalog matching ignores case", () => {
   it("flag decoration and stray spaces still match", () => {
     render(<DestinationsMultiSelect selected={["🇬🇧 UK", " usa "]} onChange={vi.fn()} options={OPTIONS} />);
     open();
-    expect(box("UK")).toBeChecked();
-    expect(box("USA")).toBeChecked();
+    expect(ticked(box("UK"))).toBe(true);
+    expect(ticked(box("USA"))).toBe(true);
   });
 
   it("works end-to-end as a controlled field: untick the lowercase value, then tick it again", () => {
@@ -64,17 +72,17 @@ describe("DestinationsMultiSelect — catalog matching ignores case", () => {
     render(<Harness />);
     open();
     fireEvent.click(box("UK"));
-    expect(box("UK")).not.toBeChecked();
+    expect(ticked(box("UK"))).toBe(false);
     fireEvent.click(box("UK"));
-    expect(box("UK")).toBeChecked();
-    expect(box("Nepal")).toBeChecked();
+    expect(ticked(box("UK"))).toBe(true);
+    expect(ticked(box("Nepal"))).toBe(true);
   });
 
-  it("a selected value the catalog doesn't have gets its own checkbox, so it can be unticked", () => {
+  it("a selected value the catalog doesn't have gets its own option, so it can be unticked", () => {
     const onChange = vi.fn();
     render(<DestinationsMultiSelect selected={["Narnia", "uk"]} onChange={onChange} options={OPTIONS} />);
     open();
-    expect(box("Narnia")).toBeChecked();
+    expect(ticked(box("Narnia"))).toBe(true);
     fireEvent.click(box("Narnia"));
     expect(onChange).toHaveBeenLastCalledWith(["UK"]);
   });
@@ -91,7 +99,7 @@ describe("DestinationsMultiSelect — catalog matching ignores case", () => {
     const onChange = vi.fn();
     render(<DestinationsMultiSelect selected={["UK"]} onChange={onChange} options={OPTIONS} />);
     open();
-    expect(box("UK")).toBeChecked();
+    expect(ticked(box("UK"))).toBe(true);
     fireEvent.click(box("Canada"));
     expect(onChange).toHaveBeenLastCalledWith(["UK", "Canada"]);
   });

@@ -325,3 +325,56 @@ describe("sendMessage — outbound attachments (D4)", () => {
     expect(adapterSendMock).not.toHaveBeenCalled();
   });
 });
+
+// Website chat shows the replying counselor's name: sendMessage asks the adapter (when it offers
+// resolveSenderToken) for that person's own credential, only for human replies, and never lets a
+// problem there block the reply — it falls back to the channel's own credential.
+describe("sendMessage — replying as the counselor (adapter.resolveSenderToken)", () => {
+  const NO_WINDOW = { sessionWindowHours: null, requiresTemplateOutsideWindow: false, supportsTemplates: false, supportsHandover: false, supportsTypingIndicator: false };
+
+  async function run(adapter: Record<string, unknown>, author: { type: "human_agent"; userId: string } | { type: "ai_agent"; aiMetadata: Record<string, unknown> }) {
+    getAdapterMock.mockReset();
+    getAdapterMock.mockReturnValue({ capabilities: NO_WINDOW, ...adapter });
+    const fake = fakeSupabase({ lastInboundTs: new Date().toISOString() });
+    vi.resetModules();
+    vi.doMock("@/lib/supabase/server", () => ({ createServiceClient: () => Promise.resolve(fake.db) }));
+    vi.doMock("./adapters", () => ({ getAdapter: getAdapterMock }));
+    vi.doMock("./crypto", () => ({ decryptToken: decryptTokenMock }));
+    const { sendMessage } = await import("./send-message");
+    return sendMessage({ tenantId: "tenant-1", conversationId: "conv-1", content: "Hello", author });
+  }
+
+  it("sends with the counselor's own credential when the adapter provides one", async () => {
+    const resolve = vi.fn().mockResolvedValue("anil-token");
+    const send = vi.fn().mockResolvedValue({ providerMessageId: "cw-1", sentAt: new Date().toISOString() });
+
+    const result = await run({ resolveSenderToken: resolve, sendMessage: send }, { type: "human_agent", userId: "user-1" });
+
+    expect(result.status).toBe("sent");
+    expect(resolve).toHaveBeenCalledWith(expect.objectContaining({ userId: "user-1", channel: expect.objectContaining({ access_token: "encrypted-token" }) }));
+    expect(send.mock.calls[0][0].access_token).toBe("anil-token");
+  });
+
+  it("keeps the channel's own credential when the adapter returns null", async () => {
+    const send = vi.fn().mockResolvedValue({ providerMessageId: "cw-2", sentAt: new Date().toISOString() });
+    await run({ resolveSenderToken: vi.fn().mockResolvedValue(null), sendMessage: send }, { type: "human_agent", userId: "user-1" });
+    expect(send.mock.calls[0][0].access_token).toBe("encrypted-token");
+  });
+
+  it("still sends, with the channel's credential, when resolving the person's identity throws", async () => {
+    const send = vi.fn().mockResolvedValue({ providerMessageId: "cw-3", sentAt: new Date().toISOString() });
+    const result = await run(
+      { resolveSenderToken: vi.fn().mockRejectedValue(new Error("Chatwoot returned HTTP 401")), sendMessage: send },
+      { type: "human_agent", userId: "user-1" }
+    );
+    expect(result.status).toBe("sent");
+    expect(send.mock.calls[0][0].access_token).toBe("encrypted-token");
+  });
+
+  it("does not ask for a person's identity on AI replies", async () => {
+    const resolve = vi.fn();
+    const send = vi.fn().mockResolvedValue({ providerMessageId: "cw-4", sentAt: new Date().toISOString() });
+    await run({ resolveSenderToken: resolve, sendMessage: send }, { type: "ai_agent", aiMetadata: {} });
+    expect(resolve).not.toHaveBeenCalled();
+  });
+});

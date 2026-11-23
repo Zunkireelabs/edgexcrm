@@ -134,7 +134,7 @@ export function CreateApplicationPipelineModal({ open, onClose, pipelines }: Cre
                       <SelectContent>
                         {pipelines.map((p) => (
                           <SelectItem key={p.id} value={p.id}>
-                            {p.name} ({p.stage_count} stages)
+                            {p.name} ({p.stage_count} {p.stage_count === 1 ? "stage" : "stages"})
                           </SelectItem>
                         ))}
                       </SelectContent>

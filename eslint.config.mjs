@@ -2,6 +2,8 @@ import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
 
+const PHOSPHOR_MSG = "Import icons from @/components/icons (run scripts/icons/build-icons.mjs after adding one)";
+
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
@@ -13,6 +15,27 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  // Icons: Phosphor only (EDGEX-94). Re-stated in the AI block below because a later
+  // no-restricted-imports entry replaces this one for the files it matches.
+  {
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            { name: "lucide-react", message: "Use @phosphor-icons/react (EDGEX-94)" },
+            { name: "@phosphor-icons/react", message: PHOSPHOR_MSG },
+          ],
+          patterns: [{ group: ["@phosphor-icons/react/*"], message: PHOSPHOR_MSG }],
+        },
+      ],
+    },
+  },
+  // The generated icon module is the only place allowed to import Phosphor.
+  {
+    files: ["src/components/icons/**"],
+    rules: { "no-restricted-imports": "off" },
+  },
   // AI code touches tenant data only through scopedClient() — never the raw
   // service-role client, which bypasses RLS and every tenant_id filter.
   // Extended to industry AI packs (src/industries/*/ai/**) so they get the
@@ -24,6 +47,8 @@ const eslintConfig = defineConfig([
         "error",
         {
           paths: [
+            { name: "lucide-react", message: "Use @phosphor-icons/react (EDGEX-94)" },
+            { name: "@phosphor-icons/react", message: PHOSPHOR_MSG },
             {
               name: "@/lib/supabase/server",
               importNames: ["createServiceClient"],

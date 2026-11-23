@@ -1,7 +1,8 @@
 "use client";
 
+import { stageDotColor } from "@/components/dashboard/leads/table/stage-color";
 import { matchesCollaboratorFilter } from "@/lib/leads/collaborator-filter";
-import { countSuffix, isOfferedByCount, sortByCountDesc, formerCollaboratorOptions, type FacetOptionLike } from "@/lib/leads/facet-labels";
+import { countSuffix, isOfferedByCount, sortByCountDesc, formerCollaboratorOptions, holderLabel, type FacetOptionLike } from "@/lib/leads/facet-labels";
 import { useState, useMemo, useEffect, useRef, useCallback, cloneElement, isValidElement, type ReactElement, type ReactNode, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,13 @@ import { TOOLBAR_BTN } from "@/components/dashboard/leads/toolbar-btn";
 // NEXT_PUBLIC_ADVANCED_FILTERS. The legacy FilterMenu/FilterChips imports above
 // stay as the flag-off fallback; see their @deprecated JSDoc.
 import { AdvancedFilterBar, DEFAULT_MAX_CONDITIONS } from "@/components/filters/advanced-filter-bar";
+// Leads toolbar v2 (EDGEX-116): new layout lives in its own folder; this file only feeds it state.
+import { LeadsToolbar } from "@/components/dashboard/leads/toolbar/leads-toolbar";
+import type { CountLoader, OptionContext } from "@/components/filters/toolbar/condition-body";
+import { fetchLeadCount, treeWithoutField } from "@/components/dashboard/leads/toolbar/lead-count";
+import { CTRL, CTRL_BORDERED, CTRL_PRIMARY } from "@/components/filters/toolbar/tokens";
+import { LEADS_V2_DEFAULT_SORT } from "@/lib/leads/default-sort";
+import { SortControl } from "@/components/dashboard/leads/toolbar/sort-control";
 import { AddFilterButton } from "@/components/filters/add-filter-button";
 import { SavedFiltersMenu } from "@/industries/education-consultancy/features/saved-lead-filters/components/saved-filters-menu";
 import { useFilterOptions } from "@/components/filters/use-filter-options";
@@ -41,6 +49,7 @@ import {
   DialogDescription,
   DialogFooter,
   DialogHeader,
+  DialogKeyHint,
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
@@ -49,37 +58,39 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import {
-  Download,
-  Search,
-  Trash2,
-  Users2,
-  Globe,
-  Calendar,
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
-  X,
-  ChevronLeft,
-  ChevronRight,
-  Plus,
-  UserPlus,
-  Tag,
-  GitMerge,
-  Briefcase,
-  Columns3,
-  MoreHorizontal,
-  Pencil,
-  Eye,
-  Building2,
-  ArrowRightLeft,
-  Archive,
-  RotateCcw,
-  Columns4,
-  ArrowUpCircle,
-  GitBranch,
-} from "lucide-react";
+  DownloadIcon,
+  MagnifyingGlassIcon,
+  TrashIcon,
+  UsersIcon,
+  GlobeIcon,
+  CalendarIcon,
+  ArrowsDownUpIcon,
+  ArrowUpIcon,
+  ArrowDownIcon,
+  XIcon,
+  CaretLeftIcon,
+  CaretRightIcon,
+  PlusIcon,
+  UserPlusIcon,
+  TagIcon,
+  GitMergeIcon,
+  BriefcaseIcon,
+  ColumnsIcon,
+  DotsThreeIcon,
+  PencilSimpleIcon,
+  EyeIcon,
+  BuildingsIcon,
+  ArrowsLeftRightIcon,
+  ArchiveIcon,
+  ArrowCounterClockwiseIcon,
+  ArrowCircleUpIcon,
+  GitBranchIcon,
+  SlidersHorizontalIcon,
+  CaretDownIcon,
+} from "@/components/icons";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { BulkEnrollDialog } from "@/industries/_shared/features/outreach/ui/bulk-enroll-dialog";
 import {
   DropdownMenu,
@@ -91,7 +102,12 @@ import { PROSPECT_INDUSTRIES } from "@/industries/it-agency/leads/prospect-indus
 import { toast } from "sonner";
 import { moveErrorMessage } from "@/lib/leads/gate-error";
 import { AddLeadSheet } from "@/components/dashboard/add-lead-sheet";
-import { LeadPreviewPanel } from "@/components/dashboard/lead-preview-panel";
+import { LeadPreviewSlot } from "@/components/dashboard/leads/preview-slot";
+import { RecordPreview } from "@/industries/education-consultancy/features/record-preview/record-preview";
+import { ARCHIVE_REASONS } from "@/lib/leads/archive-reasons";
+import { writeLeadNav } from "@/industries/education-consultancy/features/lead-detail/lib/lead-nav";
+import type { StageChoice } from "@/industries/education-consultancy/features/record-preview/stage-picker";
+import { navState } from "@/industries/education-consultancy/features/record-preview/lib/nav";
 import { MergeDialog } from "@/components/dashboard/lead/merge-dialog";
 import { getLeadFullName, getLeadInitials } from "@/components/dashboard/lead/lead-name";
 import type { Lead, LeadList, PipelineStage, UserRole, TenantEntity, Branch } from "@/types/database";
@@ -110,6 +126,16 @@ import { SORT_FIELD_TO_API, COLUMN_SORT_FIELD, DESC_FIRST_SORT_FIELDS, HEADER_SO
 import { STAGE_FRONTLINE, allowedAssigneePositionsForStage } from "@/lib/leads/stage-assignee-positions";
 import { buildIntakeTermOptions } from "@/lib/intake-options";
 import { ColumnManagerDialog } from "@/components/dashboard/leads/column-manager-dialog";
+import { assignGroup, roleLabel } from "@/components/dashboard/leads/table/assign-groups";
+import { LeadsGrid, countCounsellors } from "@/components/dashboard/leads/table/leads-grid";
+import { ColumnsPopover } from "@/components/dashboard/leads/table/columns-popover";
+import { BulkBar, getBulkBarActions } from "@/components/dashboard/leads/table/bulk-bar";
+import { CommandDialog, type CommandItem } from "@/components/dashboard/leads/table/command-dialog";
+import { normaliseLeadTag } from "@/lib/leads/tags";
+import { GridEmptyState, emptyVariant } from "@/components/dashboard/leads/table/grid-empty-state";
+import { GridPagination } from "@/components/dashboard/leads/table/grid-pagination";
+import { attachV2, V2_DEFAULT_KEYS } from "@/components/dashboard/leads/table/v2-columns";
+import { clearGridPrefs, defaultPrefs, loadGridPrefs, saveGridPrefs, type GridPrefs } from "@/components/dashboard/leads/table/grid-prefs";
 import { POSITION_ROUTE_MAP_WITH_ADMIN } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
 import { DESTINATION_SYNONYM_KEYS } from "@/lib/leads/destination-normalize";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
@@ -259,7 +285,7 @@ function withResizableTh(
   const thElement = col.renderTh(ctx);
   if (!isValidElement(thElement)) return thElement;
   const props = thElement.props as { className?: string; style?: CSSProperties; children?: ReactNode };
-  const SortIcon = !sort?.active ? ArrowUpDown : sort.direction === "asc" ? ArrowUp : ArrowDown;
+  const SortIcon = !sort?.active ? ArrowsDownUpIcon : sort.direction === "asc" ? ArrowUpIcon : ArrowDownIcon;
   return cloneElement(thElement as ReactElement<Record<string, unknown>>, {
     className: `${props.className ?? ""} relative`,
     style: width ? resizedCellStyle(props.style, width) : props.style,
@@ -332,7 +358,7 @@ function SortPopover({
     <Popover>
       <PopoverTrigger asChild>
         <button type="button" className={TOOLBAR_BTN}>
-          <ArrowUpDown className="h-3 w-3 shrink-0" />
+          <ArrowsDownUpIcon className="h-3 w-3 shrink-0" />
           Sort
         </button>
       </PopoverTrigger>
@@ -504,6 +530,9 @@ export function LeadsTable({
   const advancedFilters = useAdvancedFilters(advancedFilterRegistry, advancedFiltersPersistKey);
   const advancedFiltersEnabled = process.env.NEXT_PUBLIC_ADVANCED_FILTERS === "1";
   const advancedFilterActive = advancedFiltersEnabled && !isEmptyTree(advancedFilters.tree);
+  // Leads toolbar + grid v2 (EDGEX-116/117): education_consultancy with advanced filters on. Every
+  // other consumer of this table (Contacts, leads-organise, other industries) keeps the legacy UI.
+  const useToolbarV2 = advancedFiltersEnabled && industryId === "education_consultancy";
 
   // Stage filter <-> current list-tab sync. `activeListSlug` is route-level SCOPE
   // (page.tsx's `?list=`), not a `?f=` condition — but it should look and act like
@@ -575,26 +604,14 @@ export function LeadsTable({
     advancedFilters.setTree(persisted, { deleteParams: ["list"] });
   }
 
-  // Re-sync when the server sends a fresh lead set via a real navigation (list/funnel
-  // switch, router.refresh() after a bulk action) — the page's own SSR query already
-  // did the work; this is a prop sync, not a client fetch.
-  //
-  // Skipped while an advanced filter is active: writing `?f=` to the URL (via
-  // advancedFilters.setTree -> router.replace) triggers Next.js to re-run this
-  // route's Server Component (page.tsx), which does NOT parse `f` (that's Phase
-  // 2b's getLeadsPage mirror, out of scope here) — its SSR props are always the
-  // unfiltered first page. Resyncing from them here would silently revert the
-  // client-fetched filtered result out from under the user right after Apply.
-  // The client fetch effect below is the sole source of truth for localLeads
-  // while an advanced filter is active.
-  useEffect(() => {
-    if (advancedFilterActive) return;
-    setLocalLeads(leads);
-    setTotal(initialTotal ?? leads.length);
-  }, [leads, initialTotal, advancedFilterActive]);
+  // EDGEX-146: the SSR `leads` prop -> localLeads sync lives below the fetch effect (it needs the
+  // client view state: search/status/sort/page/filters).
 
-  const [sortField, setSortField] = useState<SortField>("activity");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  // EDGEX-122: initial sort comes from the shared constant the server first page also uses.
+  const [sortField, setSortField] = useState<SortField>(
+    () => (Object.keys(SORT_FIELD_TO_API) as SortField[]).find((f) => SORT_FIELD_TO_API[f] === LEADS_V2_DEFAULT_SORT.key) ?? "activity",
+  );
+  const [sortDirection, setSortDirection] = useState<SortDirection>(LEADS_V2_DEFAULT_SORT.direction);
   // Column-header click: the same column flips direction; a new column starts ascending (descending for dates/scores).
   const handleHeaderSort = useCallback(
     (field: SortField) => {
@@ -611,6 +628,10 @@ export function LeadsTable({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  // EDGEX-127: the three bulk actions share one command dialog; which one is open (null = none).
+  const [bulkPalette, setBulkPalette] = useState<null | "stage" | "assign" | "tag">(null);
+  const [tagOptions, setTagOptions] = useState<Array<{ tag: string; count: number | null }> | null>(null);
+  const [tagBusy, setTagBusy] = useState(false);
   const [mergeDialogOpen, setMergeDialogOpen] = useState(false);
   // Outreach bulk enroll (OUTREACH-BULK-ENROLL-BRIEF.md): the selected leads (or "all matching" via selectAllMatching) -> a sequence.
   const [bulkEnrollOpen, setBulkEnrollOpen] = useState(false);
@@ -624,6 +645,13 @@ export function LeadsTable({
   const [assignListId, setAssignListId] = useState<string>("");
   const [addLeadOpen, setAddLeadOpen] = useState(false);
   const [previewLeadId, setPreviewLeadId] = useState<string | null>(null);
+  // EDGEX-149 record preview: tab/view name for "n of N in <view>", J/K across pages, refetch after a reassignment.
+  const [activeViewLabel, setActiveViewLabel] = useState("All leads");
+  const [previewRefresh, setPreviewRefresh] = useState(0);
+  // Assign target when opened from the preview's Counsellor card: that one lead, WITHOUT touching the table selection.
+  const [assignTargetIds, setAssignTargetIds] = useState<string[] | null>(null);
+  const pendingPreviewEdge = useRef<{ edge: "first" | "last"; page: number; fromFirstId: string | null } | null>(null);
+  const [stickyPreviewLead, setStickyPreviewLead] = useState<Lead | null>(null);
   const [branchAssignDialogOpen, setBranchAssignDialogOpen] = useState(false);
   const [assignToBranch, setAssignToBranch] = useState<string>("");
   const [isAssigningBranch, setIsAssigningBranch] = useState(false);
@@ -728,6 +756,14 @@ export function LeadsTable({
   const isFirstFetchRef = useRef(true);
   const prevSignatureRef = useRef("");
   const needsCountRef = useRef(false);
+  // EDGEX-146: bumped after a successful bulk action to refetch the CURRENT view (same page/filters,
+  // fresh exact count) — unlike a signature change, it never resets to page 1.
+  const [reloadNonce, setReloadNonce] = useState(0);
+  const reloadCurrentView = useCallback(() => {
+    if (!serverPaginated) return;
+    needsCountRef.current = true;
+    setReloadNonce((n) => n + 1);
+  }, [serverPaginated]);
   const fetchAbortRef = useRef<AbortController | null>(null);
 
   const buildFetchParams = useCallback(
@@ -822,11 +858,18 @@ export function LeadsTable({
       .then((body: { data?: Lead[]; meta?: { total: number }; error?: { message?: string } }) => {
         if (controller.signal.aborted) return;
         if (!body.data) throw new Error(body.error?.message || "Failed to load leads");
-        setLocalLeads(body.data);
         if (wantCount && body.meta) {
           setTotal(body.meta.total);
           needsCountRef.current = false;
+          // EDGEX-146: a bulk action can empty the page we're on (delete/archive/move) — step back to
+          // the last non-empty page (total 0 -> page 1) instead of showing a blank "Page 3".
+          const lastPage = Math.max(1, Math.ceil(body.meta.total / itemsPerPage));
+          if (currentPage > lastPage) {
+            setCurrentPage(lastPage); // re-triggers this effect; the refetch loads that page
+            return;
+          }
         }
+        setLocalLeads(body.data);
       })
       .catch((err: unknown) => {
         if (controller.signal.aborted) return;
@@ -837,7 +880,40 @@ export function LeadsTable({
       });
 
     return () => controller.abort();
-  }, [serverPaginated, fetchSignature, currentPage, itemsPerPage, buildFetchParams, advancedFilterActive]);
+  }, [serverPaginated, fetchSignature, currentPage, itemsPerPage, buildFetchParams, advancedFilterActive, reloadNonce]);
+
+  // EDGEX-146: SSR prop -> client sync. The `leads`/`initialTotal` props are ALWAYS the default first
+  // page (page.tsx), so they may only overwrite the client view when they describe what the user is
+  // looking at: on mount / a real scope navigation (list or funnel switch), or when the client view IS
+  // the SSR default (no search, status "all", default sort, page 1, default page size, no filters).
+  // Otherwise a router.refresh() after a bulk action would clobber search/sort/page/status with page 1.
+  // Still skipped while an advanced filter is active (page.tsx doesn't parse `?f=`; the client fetch is
+  // the sole source of truth then). Legacy (non-serverPaginated) consumers keep the old always-sync.
+  const syncViewRef = useRef({ serverPaginated, advancedFilterActive, scopeKey: "", isDefaultView: true });
+  syncViewRef.current = {
+    serverPaginated,
+    advancedFilterActive,
+    scopeKey: `${activeListSlug ?? ""}|${activeFunnelKey ?? ""}`,
+    isDefaultView:
+      !debouncedSearch &&
+      statusFilter === "all" &&
+      sortField === ((Object.keys(SORT_FIELD_TO_API) as SortField[]).find((f) => SORT_FIELD_TO_API[f] === LEADS_V2_DEFAULT_SORT.key) ?? "activity") &&
+      sortDirection === LEADS_V2_DEFAULT_SORT.direction &&
+      currentPage === 1 &&
+      itemsPerPage === 25 &&
+      formFilter === "all" && counselorFilter.length === 0 && collaboratorFilter.length === 0 &&
+      sourceFilter.length === 0 && tagFilter === "all" && createdFilter === "all" && prospectIndustryFilter === "all",
+  };
+  const prevScopeKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    const v = syncViewRef.current;
+    const scopeChanged = prevScopeKeyRef.current !== v.scopeKey;
+    prevScopeKeyRef.current = v.scopeKey;
+    if (v.advancedFilterActive) return;
+    if (v.serverPaginated && !scopeChanged && !v.isDefaultView) return;
+    setLocalLeads(leads);
+    setTotal(initialTotal ?? leads.length);
+  }, [leads, initialTotal]);
 
   const { counts } = useBadgeCounts();
   const unreadLeadIds = useMemo(() => new Set(counts.unread_lead_ids), [counts.unread_lead_ids]);
@@ -946,6 +1022,8 @@ export function LeadsTable({
   const [serverAssigneeFacet, setServerAssigneeFacet] = useState<FacetOptionLike[] | null>(null);
   const [serverCollaboratorFacet, setServerCollaboratorFacet] = useState<FacetOptionLike[] | null>(null);
   const [serverDestinationFacet, setServerDestinationFacet] = useState<FacetOptionLike[] | null>(null);
+  // EDGEX-126 footer: { stages, needFollowUp } over ALL filtered leads, from the SAME facets request (no extra HTTP call).
+  const [serverSummary, setServerSummary] = useState<{ stages: number | null; needFollowUp: number | null } | null>(null);
   const facetFetchParams = useMemo(() => {
     if (!serverPaginated || isStagingView) return null; // staging view isn't serverPaginated today
     const params = buildFetchParams(1, itemsPerPage, false);
@@ -962,10 +1040,11 @@ export function LeadsTable({
       wantsAssigneeFacet && "assignee",
       wantsCollaboratorFacet && "collaborator",
       wantsDestinationFacet && "destination",
+      useToolbarV2 && "summary",
     ].filter(Boolean);
     params.set("facets", dims.join(","));
     return params;
-  }, [serverPaginated, isStagingView, buildFetchParams, itemsPerPage, wantsAssigneeFacet, wantsCollaboratorFacet, wantsDestinationFacet]);
+  }, [serverPaginated, isStagingView, buildFetchParams, itemsPerPage, wantsAssigneeFacet, wantsCollaboratorFacet, wantsDestinationFacet, useToolbarV2]);
 
   const serverFacetsActive = !!facetFetchParams;
   // Option NAMES survive a facet the server can't count (null): Source/Destination values
@@ -980,6 +1059,7 @@ export function LeadsTable({
       setServerAssigneeFacet(null);
       setServerCollaboratorFacet(null);
       setServerDestinationFacet(null);
+      setServerSummary(null);
       return;
     }
     const controller = new AbortController();
@@ -996,6 +1076,7 @@ export function LeadsTable({
             assignee?: { options: FacetOptionLike[] } | null;
             collaborator?: { options: FacetOptionLike[] } | null;
             destination?: { options: FacetOptionLike[] } | null;
+            summary?: { stages: number | null; needFollowUp: number | null } | null;
           } | null;
         };
       }) => {
@@ -1007,6 +1088,7 @@ export function LeadsTable({
           setServerAssigneeFacet(null);
           setServerCollaboratorFacet(null);
           setServerDestinationFacet(null);
+          setServerSummary(null);
         } else if (body.data?.facets === null || body.data?.facets === undefined) {
           // route.ts returns `facets: null` when the active ?f= tree isn't losslessly
           // expressible into lead_aggregates() (treeToAggregateParams §E — e.g. any
@@ -1024,6 +1106,7 @@ export function LeadsTable({
           setServerAssigneeFacet(null);
           setServerCollaboratorFacet(null);
           setServerDestinationFacet(null);
+          setServerSummary(null);
         } else {
           // Per-facet `null` from the server means "no faithful number for this facet
           // under the active filters" (e.g. a Stage filter on Source/Destination, or a
@@ -1039,6 +1122,7 @@ export function LeadsTable({
           setServerAssigneeFacet(pick(f.assignee, wantsAssigneeFacet));
           setServerCollaboratorFacet(pick(f.collaborator, wantsCollaboratorFacet));
           setServerDestinationFacet(pick(f.destination, wantsDestinationFacet));
+          setServerSummary(f.summary ?? null);
         }
       })
       .catch((err: unknown) => {
@@ -1353,7 +1437,7 @@ export function LeadsTable({
       if (single === null) {
         return "Selected leads are unassigned — pick a member to assign them on route.";
       }
-      const name = (memberNames[single] || memberMap[single]?.split("@")[0]) ?? single;
+      const name = holderLabel(single, memberNames, memberMap) || single;
       return `All selected are assigned to ${name} — 'Keep current assignee' leaves them with this owner.`;
     }
     return "Selected leads have mixed assignees — choosing a member reassigns all of them.";
@@ -1581,6 +1665,7 @@ export function LeadsTable({
       setSelectedIds(new Set());
       setDeleteDialogOpen(false);
       router.refresh();
+      reloadCurrentView(); // EDGEX-146: keep the current view
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to delete leads");
     } finally {
@@ -1588,16 +1673,25 @@ export function LeadsTable({
     }
   }
 
-  async function handleBulkAssign() {
-    const idsToAssign = Array.from(selectedIds);
+  // `targetOverride` is the command dialog's pick (state would not be updated yet); the legacy dialog passes nothing.
+  async function handleBulkAssign(targetOverride?: string): Promise<boolean> {
+    const idsToAssign = assignTargetIds ?? Array.from(selectedIds);
+    const target = targetOverride ?? assignTo;
+    const autoListId = (() => {
+      if (!target || target === "unassign") return null;
+      const posSlug = positionSlugMap?.[target] ?? null;
+      const listSlug = posSlug ? (POSITION_ROUTE_MAP[posSlug] ?? null) : null;
+      const listPool = allLeadLists ?? leadLists;
+      return listSlug ? (listPool.find((l) => l.slug === listSlug)?.id ?? null) : null;
+    })();
 
     if (idsToAssign.length === 0) {
       toast.error("No leads selected");
-      return;
+      return false;
     }
-    if (assignBranchRequired && (!assignBranchId || !assignListId || !assignTo)) {
+    if (assignBranchRequired && (!assignBranchId || !assignListId || !target)) {
       toast.error("Please select a branch, stage, and assignee");
-      return;
+      return false;
     }
 
     setIsAssigning(true);
@@ -1610,10 +1704,10 @@ export function LeadsTable({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             ids: chunk,
-            ...(assignTo && { assigned_to: assignTo === "unassign" ? null : assignTo }),
+            ...(target && { assigned_to: target === "unassign" ? null : target }),
             ...(assignBranchRequired
               ? { branch_id: assignBranchId, list_id: assignListId }
-              : (assignAutoListId ? { list_id: assignAutoListId } : {})),
+              : (autoListId ? { list_id: autoListId } : {})),
           }),
         });
         const data = await response.json();
@@ -1623,19 +1717,82 @@ export function LeadsTable({
         updated += data.data.updated as number;
       }
 
-      const action = assignTo === "unassign" ? "Unassigned" : "Assigned";
-      toast.success(`${action} ${updated} lead${updated !== 1 ? "s" : ""}`);
-      setSelectedIds(new Set());
+      const who = teamMembers.find((m) => m.user_id === target)?.name;
+      toast.success(target === "unassign" ? "Unassigned" : who ? `Assigned to ${who}` : "Assigned", {
+        description: `${updated.toLocaleString()} lead${updated !== 1 ? "s" : ""} ${target === "unassign" ? "unassigned" : "assigned"}`,
+      });
+      if (!assignTargetIds) setSelectedIds(new Set());
+      setAssignTargetIds(null);
+      setPreviewRefresh((n) => n + 1);
       setAssignDialogOpen(false);
       setAssignTo("");
       setAssignBranchId("");
       setAssignListId("");
       router.refresh();
+      reloadCurrentView(); // EDGEX-146: keep the current view
+      return true;
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to assign leads");
+      return false;
     } finally {
       setIsAssigning(false);
     }
+  }
+
+  // Tag list (with lead counts) for the Add tag dialog: loaded when it opens, from the scoped endpoint. If it fails the dialog
+  // falls back to the tags on the loaded rows (no counts).
+  useEffect(() => {
+    if (bulkPalette !== "tag") return;
+    const controller = new AbortController();
+    fetch("/api/v1/leads/tags", { signal: controller.signal })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((b: { data?: { tags: Array<{ tag: string; count: number | null }> } } | null) => {
+        if (!controller.signal.aborted) setTagOptions(b?.data?.tags ?? null);
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [bulkPalette]);
+
+  // EDGEX-127 bulk Add tag. Same chunking + selection (incl. "select all N matching") as Assign; the API unions the tags
+  // into each lead and reports how many writes failed. Returns true when the picker may close.
+  async function handleBulkAddTags(tags: string[]): Promise<boolean> {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0 || tags.length === 0) return false;
+    let updated = 0;
+    let failed = 0;
+    let firstError = "";
+    for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+      const chunk = ids.slice(i, i + CHUNK_SIZE);
+      try {
+        const response = await fetch("/api/v1/leads/bulk", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids: chunk, add_tags: tags }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error?.message || "Failed to add tags");
+        updated += data.data.updated as number;
+        failed += (data.data.failed as number) + ((data.data.notFound as string[] | undefined)?.length ?? 0);
+      } catch (error) {
+        failed += chunk.length;
+        if (!firstError) firstError = error instanceof Error ? error.message : "Failed to add tags";
+      }
+    }
+    const what = tags.length === 1 ? `“${tags[0]}”` : `${tags.length} tags`;
+    if (failed === 0) {
+      toast.success("Tag added", { description: `${what} added to ${updated.toLocaleString()} ${updated === 1 ? "lead" : "leads"}` });
+    } else if (updated === 0) {
+      toast.error("Couldn’t add tags", { description: firstError || `${failed.toLocaleString()} leads could not be tagged.` });
+      return false;
+    } else {
+      toast.error(`Couldn’t tag ${failed.toLocaleString()} ${failed === 1 ? "lead" : "leads"}`, {
+        description: `${firstError || "You can only tag leads in your scope."} The other ${updated.toLocaleString()} were tagged with ${what}.`,
+      });
+    }
+    setSelectedIds(new Set());
+    router.refresh();
+    reloadCurrentView(); // EDGEX-146: keep the current view
+    return true;
   }
 
   async function handleBulkAssignBranch() {
@@ -1669,6 +1826,7 @@ export function LeadsTable({
       setBranchAssignDialogOpen(false);
       setAssignToBranch("");
       router.refresh();
+      reloadCurrentView(); // EDGEX-146: keep the current view
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to share leads");
     } finally {
@@ -1704,6 +1862,7 @@ export function LeadsTable({
       toast.success(`Restored ${restored} lead${restored !== 1 ? "s" : ""}`);
       setSelectedIds(new Set());
       router.refresh();
+      reloadCurrentView(); // EDGEX-146: keep the current view
     } catch {
       toast.error("Failed to restore");
     }
@@ -1728,7 +1887,7 @@ export function LeadsTable({
     const first = leadsInRestore[0].assigned_to ?? null;
     const sameAssignee = leadsInRestore.every((l) => (l.assigned_to ?? null) === first);
     if (!sameAssignee) return "Assignments stay as they are";
-    const name = first ? memberNames[first] || memberMap[first]?.split("@")[0] || first : "Unassigned";
+    const name = first ? holderLabel(first, memberNames, memberMap) || first : "Unassigned";
     return `Assigned to ${name}`;
   }, [restoreIds, localLeads, memberNames, memberMap]);
 
@@ -1811,6 +1970,7 @@ export function LeadsTable({
       setRestoreStageId("");
       setRestoreAssignTo("keep");
       router.refresh();
+      reloadCurrentView(); // EDGEX-146: keep the current view
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to restore leads");
     } finally {
@@ -1818,19 +1978,20 @@ export function LeadsTable({
     }
   }
 
-  async function handleBulkMove() {
+  async function handleBulkMove(listIdOverride?: string): Promise<boolean> {
     const idsToMove = Array.from(selectedIds);
+    const targetListId = listIdOverride ?? moveListId;
     if (idsToMove.length === 0) {
       toast.error("No leads selected");
-      return;
+      return false;
     }
-    if (!moveListId) {
+    if (!targetListId) {
       toast.error("Please select a target list");
-      return;
+      return false;
     }
-    if (moveTargetIsArchive && !moveArchiveReason.trim()) {
+    if (!listIdOverride && moveTargetIsArchive && !moveArchiveReason.trim()) {
       toast.error("Archive reason is required");
-      return;
+      return false;
     }
 
     setIsMoveList(true);
@@ -1850,7 +2011,7 @@ export function LeadsTable({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             ids: chunks[i],
-            list_id: moveListId,
+            list_id: targetListId,
             ...(moveArchiveReason.trim() && { archive_reason: moveArchiveReason.trim() }),
             ...(moveAssignTo !== "keep" && {
               assigned_to: moveAssignTo === "unassign" ? null : moveAssignTo,
@@ -1871,7 +2032,7 @@ export function LeadsTable({
             window.localStorage.setItem(
               routeMemoryKey,
               JSON.stringify({
-                list_id: moveListId,
+                list_id: targetListId,
                 assigned_to: moveAssignTo === "keep" ? null : moveAssignTo === "unassign" ? null : moveAssignTo,
               }),
             );
@@ -1893,7 +2054,12 @@ export function LeadsTable({
         .filter(Boolean)
         .join(" ");
       toast.dismiss("bulk-move");
-      toast.success(toastMsg);
+      const movedTo = leadLists.find((l) => l.id === targetListId)?.name;
+      if (!isGraduateMove && !assignedName && movedTo) {
+        toast.success(`Moved to ${movedTo}`, { description: `${totalMoved.toLocaleString()} lead${totalMoved !== 1 ? "s" : ""} moved` });
+      } else {
+        toast.success(toastMsg);
+      }
       setSelectedIds(new Set());
       setMoveListDialogOpen(false);
       setMoveListId("");
@@ -1901,9 +2067,12 @@ export function LeadsTable({
       setMoveAssignTo("keep");
       setIsGraduateMove(false);
       router.refresh();
+      reloadCurrentView(); // EDGEX-146: keep the current view
+      return true;
     } catch (error) {
       toast.dismiss("bulk-move");
       toast.error(error instanceof Error ? error.message : "Failed to move leads");
+      return false;
     } finally {
       setIsMoveList(false);
     }
@@ -2031,6 +2200,101 @@ export function LeadsTable({
   }
 
   const previewLead = localLeads.find((l) => l.id === previewLeadId) || null;
+  const eduPreview = industryId === "education_consultancy";
+  const previewRowIndex = previewLeadId ? displayLeads.findIndex((l) => l.id === previewLeadId) : -1;
+
+  // EDGEX-151: the lead detail's prev/next + counter + back link read this (sessionStorage `edgex.leadNav`). Kept current
+  // whenever the page of rows changes, so every way into a lead (name click, Open, Expand, ⌘↵) carries the same context.
+  useEffect(() => {
+    if (!eduPreview || !serverPaginated || tableLoading || displayLeads.length === 0) return;
+    const query: Record<string, string> = {};
+    buildFetchParams(currentPage, itemsPerPage, false).forEach((v, k) => {
+      if (k !== "page" && k !== "pageSize" && k !== "count") query[k] = v;
+    });
+    writeLeadNav({
+      viewLabel: activeViewLabel,
+      href: `${window.location.pathname}${window.location.search}`,
+      query,
+      page: currentPage,
+      pageSize: itemsPerPage,
+      ids: displayLeads.map((l) => l.id),
+      total: effectiveTotal,
+    });
+  }, [eduPreview, serverPaginated, tableLoading, displayLeads, buildFetchParams, currentPage, itemsPerPage, activeViewLabel, effectiveTotal]);
+  // Keep showing the last record while J/K waits for the neighbouring page to arrive (no unmount flicker).
+  const shownPreviewLead = previewLead ?? (pendingPreviewEdge.current ? stickyPreviewLead : null);
+  useEffect(() => {
+    if (previewLead) setStickyPreviewLead(previewLead);
+  }, [previewLead]);
+
+  const handlePreviewNavigate = (dir: "next" | "prev") => {
+    if (previewRowIndex < 0) return;
+    const st = navState({ rowIndex: previewRowIndex, rowCount: displayLeads.length, page: currentPage, pageSize: itemsPerPage, total: effectiveTotal });
+    const step = dir === "next" ? st.next : st.prev;
+    if (!step) return;
+    if (step.kind === "row") {
+      setPreviewLeadId(displayLeads[step.index].id);
+    } else {
+      // End of the loaded page: fetch the neighbouring page, then open its first (J) / last (K) row.
+      pendingPreviewEdge.current = { edge: dir === "next" ? "first" : "last", page: step.page, fromFirstId: displayLeads[0]?.id ?? null };
+      setCurrentPage(step.page);
+    }
+  };
+
+  useEffect(() => {
+    const p = pendingPreviewEdge.current;
+    if (!p || tableLoading || currentPage !== p.page || displayLeads.length === 0) return;
+    if (displayLeads[0].id === p.fromFirstId) return; // still the old page
+    pendingPreviewEdge.current = null;
+    setPreviewLeadId((p.edge === "first" ? displayLeads[0] : displayLeads[displayLeads.length - 1]).id);
+  }, [tableLoading, currentPage, displayLeads]);
+
+  // Same list set the table's own Stage control offers this role (admins: all lists; others: no staging/archive),
+  // minus staging/archived for the preview (never a destination from here).
+  const previewStageLists = (isAdmin ? leadLists : leadLists.filter((l) => !l.is_staging && !l.is_archive)).filter((l) => !l.is_staging && !l.is_archive);
+  const handlePreviewStageChange = async (lead: Lead, c: StageChoice) => {
+    const before = leads.find((l) => l.id === lead.id) ?? lead;
+    const targetList = leadLists.find((l) => l.id === c.listId);
+    const stageSlug = stages.find((s) => s.id === c.stageId)?.slug;
+    setLocalLeads((prev) =>
+      prev.map((l) =>
+        l.id === lead.id
+          ? {
+              ...l,
+              list_id: c.listId,
+              stage_id: c.stageId,
+              ...(c.pipelineId ? { pipeline_id: c.pipelineId } : {}),
+              ...(stageSlug ? { status: stageSlug } : {}),
+              lead_type: targetList?.slug === "prospects" ? "prospect" : l.lead_type,
+              stage_changed_at: new Date().toISOString(),
+            }
+          : l,
+      ),
+    );
+    try {
+      // The route validates stage_id against the lead's CURRENT pipeline unless pipeline_id rides along (cross-list move).
+      const res = await fetch(`/api/v1/leads/${lead.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ list_id: c.listId, stage_id: c.stageId, ...(c.pipelineId ? { pipeline_id: c.pipelineId } : {}) }),
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        throw new Error(moveErrorMessage(errJson, "Failed to change stage"));
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to change stage");
+      setLocalLeads((prev) => prev.map((l) => (l.id === lead.id ? { ...before } : l)));
+    }
+  };
+
+  const handlePreviewAssign = (lead: Lead) => {
+    // Same assign flow as the bulk bar, for this one lead (branch-required staging keeps the full dialog).
+    setAssignTargetIds([lead.id]);
+    if (assignBranchRequired) setAssignDialogOpen(true);
+    else setBulkPalette("assign");
+  };
+  const canAssignFromPreview = viewMode === "normal" && (isAdmin || isTeamScoped) && teamMembers.length > 0;
 
   // ── Column registry (Phase 2) ─────────────────────────────────────────────
   // Discover custom-field keys across loaded leads.
@@ -2087,8 +2351,63 @@ export function LeadsTable({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId, currentUserId]);
 
+  // ── Leads table v2 grid preferences (EDGEX-117) ─────────────────────────────────
+  // Order, pins, renames and widths are personal and never touch the Phase 1 unsaved-view bar.
+  const v2AllColumns = useMemo(() => (useToolbarV2 ? attachV2(allColumns) : []), [useToolbarV2, allColumns]);
+  const v2NameColumn = useMemo(() => v2AllColumns.find((c) => c.key === "name"), [v2AllColumns]);
+  const v2DefaultKeys = useMemo(() => {
+    const valid = new Set(allColumns.filter((c) => !c.required).map((c) => c.key));
+    const base = V2_DEFAULT_KEYS.filter((k) => valid.has(k) && !excludeDefaultVisibleKeys.includes(k));
+    const extra = extraDefaultVisibleKeys.filter((k) => k !== "name" && k !== "actions" && valid.has(k) && !base.includes(k));
+    // Archived view: lead with why it is here (Archived from / by / date), Status last.
+    const lead = ["archived_from_stage", "archived_by", "archived_at"].filter((k) => extra.includes(k));
+    if (lead.length > 0) return [...lead, ...base, ...extra.filter((k) => !lead.includes(k))];
+    return [...base, ...extra];
+  }, [allColumns, excludeDefaultVisibleKeys, extraDefaultVisibleKeys]);
+  const [gridPrefs, setGridPrefs] = useState<GridPrefs>(() => defaultPrefs(v2DefaultKeys));
+  const gridSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Load after mount (SSR-safe), like the legacy prefs. Reload only when identity changes.
+  useEffect(() => {
+    if (!useToolbarV2 || !tenantId || !currentUserId) return;
+    const cfKeys = Array.from(
+      new Set(leads.flatMap((l) => (l.custom_fields ? Object.keys(l.custom_fields) : []))),
+    ).sort().map((k) => `cf:${k}`);
+    const staticKeys = getLeadColumns(industryId, []).filter((c) => !c.required).map((c) => c.key);
+    setGridPrefs(
+      loadGridPrefs({ tenantId, userId: currentUserId, scope: columnPrefsScope, validKeys: [...staticKeys, ...cfKeys], defaultKeys: v2DefaultKeys }),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [useToolbarV2, tenantId, currentUserId]);
+
+  const updateGridPrefs = useCallback(
+    (update: (prev: GridPrefs) => GridPrefs) => {
+      setGridPrefs((prev) => {
+        const next = update(prev);
+        if (tenantId && currentUserId) {
+          if (gridSaveTimer.current) clearTimeout(gridSaveTimer.current);
+          gridSaveTimer.current = setTimeout(() => saveGridPrefs(tenantId, currentUserId, next, columnPrefsScope), 250);
+        }
+        return next;
+      });
+    },
+    [tenantId, currentUserId, columnPrefsScope],
+  );
+  const resetGridPrefs = useCallback(() => {
+    if (gridSaveTimer.current) clearTimeout(gridSaveTimer.current);
+    clearGridPrefs(tenantId, currentUserId, columnPrefsScope);
+    setGridPrefs(defaultPrefs(v2DefaultKeys));
+  }, [tenantId, currentUserId, columnPrefsScope, v2DefaultKeys]);
+
   // Resolve ordered column objects: name anchor → middle → actions anchor.
   const visibleColumns = useMemo<LeadColumn[]>(() => {
+    if (useToolbarV2) {
+      const map = new Map(v2AllColumns.map((c) => [c.key, c]));
+      return [
+        ...(v2NameColumn ? [v2NameColumn] : []),
+        ...gridPrefs.keys.map((k) => map.get(k)).filter((c): c is LeadColumn => c !== undefined),
+      ];
+    }
     const colMap = new Map(allColumns.map((c) => [c.key, c]));
     const nameCol = colMap.get("name");
     const actionsCol = colMap.get("actions");
@@ -2100,7 +2419,7 @@ export function LeadsTable({
       ...middleCols,
       ...(actionsCol ? [actionsCol] : []),
     ];
-  }, [allColumns, visibleKeys]);
+  }, [allColumns, visibleKeys, useToolbarV2, v2AllColumns, v2NameColumn, gridPrefs.keys]);
 
   // Handlers for the column manager dialog.
   function handleColumnApply(keys: string[]) {
@@ -2128,7 +2447,7 @@ export function LeadsTable({
   // Position · Branch label for member pickers — education-gated so non-education
   // tenants keep the position-only label unchanged.
   const memberMeta = (userId: string, fallbackRole?: string | null) => {
-    const pos = roleMap?.[userId] ?? fallbackRole ?? "";
+    const pos = roleLabel(roleMap?.[userId] ?? fallbackRole);
     const branch = industryId === "education_consultancy" ? branchMap[memberBranchMap[userId] ?? ""] : undefined;
     return [pos, branch].filter(Boolean).join(" · ");
   };
@@ -2293,7 +2612,7 @@ export function LeadsTable({
           {
             id: "source",
             label: "Source",
-            icon: <Globe className="h-3.5 w-3.5" />,
+            icon: <GlobeIcon className="h-3.5 w-3.5" />,
             multiple: true,
             value: sourceFilter,
             onChange: (val: string[]) => {
@@ -2312,7 +2631,7 @@ export function LeadsTable({
           {
             id: "counselor",
             label: "Assigned To",
-            icon: <Users2 className="h-3.5 w-3.5" />,
+            icon: <UsersIcon className="h-3.5 w-3.5" />,
             multiple: true,
             value: counselorFilter,
             onChange: (val: string[]) => {
@@ -2360,7 +2679,7 @@ export function LeadsTable({
           {
             id: "collaborator",
             label: "Collaborators",
-            icon: <UserPlus className="h-3.5 w-3.5" />,
+            icon: <UserPlusIcon className="h-3.5 w-3.5" />,
             multiple: true,
             value: collaboratorFilter,
             onChange: (val: string[]) => {
@@ -2389,7 +2708,7 @@ export function LeadsTable({
           {
             id: "tag",
             label: "Tag",
-            icon: <Tag className="h-3.5 w-3.5" />,
+            icon: <TagIcon className="h-3.5 w-3.5" />,
             value: tagFilter,
             onChange: (val: string) => {
               setTagFilter(val);
@@ -2406,7 +2725,7 @@ export function LeadsTable({
           {
             id: "industry",
             label: "Industry",
-            icon: <Briefcase className="h-3.5 w-3.5" />,
+            icon: <BriefcaseIcon className="h-3.5 w-3.5" />,
             value: prospectIndustryFilter,
             onChange: (val: string) => {
               setProspectIndustryFilter(val);
@@ -2426,7 +2745,7 @@ export function LeadsTable({
     {
       id: "created",
       label: "Date created",
-      icon: <Calendar className="h-3.5 w-3.5" />,
+      icon: <CalendarIcon className="h-3.5 w-3.5" />,
       searchable: false,
       value: createdFilter,
       onChange: (val: string) => {
@@ -2559,6 +2878,10 @@ export function LeadsTable({
             value: userId,
             label: `${memberNames[userId] || email.split("@")[0]}${countSuffix(counselorCounts, userId)}`,
           })),
+        // A selected assignee who is no longer a member (the Home "held by people who left" link): named, never a raw uuid.
+        ...Array.from(selectedAssignees)
+          .filter((id) => id !== "unassigned" && !counselors.some(([userId]) => userId === id))
+          .map((id) => ({ value: id, label: holderLabel(id, memberNames, memberMap) || id })),
       ],
       // Collaborators: every team member is offered, regardless of role or count (an
       // owner/admin who is genuinely a collaborator must be filterable, and a name must
@@ -2654,17 +2977,155 @@ export function LeadsTable({
     handleAdvancedFilterChange({ ...displayFilterTree, conditions: addOrMergeCondition(displayFilterTree.conditions, condition) });
   }
 
+  // Column menu → "Filter by …": asks the toolbar's Filter menu to open on a field.
+  const [filterRequest, setFilterRequest] = useState<{ fieldKey: string; nonce: number } | null>(null);
+
+  // "This scope, no extra filters": the locked Stage tab's synthetic chip, or nothing.
+  const toolbarScopeTree: FilterTree = useMemo(
+    () => ({
+      conjunction: "and",
+      conditions: displayFilterTree.conditions.filter((c) => c.id === SYNTHETIC_STAGE_CONDITION_ID),
+    }),
+    [displayFilterTree, SYNTHETIC_STAGE_CONDITION_ID]
+  );
+
+  // Per-option numbers for the Pick-values panel. Assignee/source/collaborator/destination counts
+  // are the scope-aware facet maps the table already holds. Stage has no facet, so it is counted
+  // lazily through the table's own list endpoint (same role/branch/own scoping as the rows) — and
+  // a failed count is simply omitted, never guessed.
+  const toolbarStageCountLoader: CountLoader = useMemo(
+    () => ({
+      supports: (fieldKey) => fieldKey === "stage",
+      load: async (_fieldKey, signal) => {
+        const tree = treeWithoutField(advancedFilters.tree, "stage");
+        const entries = await Promise.all(
+          leadLists.map(async (l) => [l.id, await fetchLeadCount({ listSlug: l.slug, tree }, signal)] as const)
+        );
+        const counted = entries.filter((e): e is readonly [string, number] => e[1] !== null);
+        return counted.length > 0 ? new Map(counted) : null;
+      },
+    }),
+    [advancedFilters.tree, leadLists]
+  );
+  const toolbarOptionContext: OptionContext = useMemo(
+    () => ({
+      getOptions: advancedGetOptions,
+      countSources: {
+        assignees: counselorCounts,
+        collaborators: collaboratorCounts,
+        source: sourceCounts,
+        destinations: destinationCounts,
+      },
+      countLoader: toolbarStageCountLoader,
+      optionColors: {
+        stage: new Map(leadLists.map((l) => [l.id, stageDotColor(l)])),
+      },
+    }),
+    [advancedGetOptions, counselorCounts, collaboratorCounts, sourceCounts, destinationCounts, toolbarStageCountLoader, leadLists]
+  );
+
   return (
-    <div className="flex flex-1 min-h-0 gap-0">
-      {/* Main Table Section - shrinks when preview is open */}
+    <div className="relative flex flex-1 min-h-0 gap-0">
+      {/* Main Table Section - shrinks when preview is open (non-education); education's record preview floats over it */}
       <div className="flex flex-col flex-1 min-h-0 min-w-0 gap-1 overflow-hidden">
-        {pageHeading && <h1 className={pageHeadingClassName}>{pageHeading}</h1>}
+        {pageHeading && !useToolbarV2 && <h1 className={pageHeadingClassName}>{pageHeading}</h1>}
         {pageSubheading && (
           <p className="shrink-0 text-sm text-muted-foreground mb-4 pr-6">{pageSubheading}</p>
         )}
         {beforeTable}
 
+      {useToolbarV2 && (
+        <LeadsToolbar
+          key={`${activeListSlug ?? activeFunnelKey ?? "all"}:${viewMode}`}
+          onActiveViewLabel={setActiveViewLabel}
+          title={!pageHeading || pageHeading === "All Leads" ? "Leads" : pageHeading}
+          total={effectiveTotal}
+          titleActions={
+            <>
+              {canExport && (
+                <button type="button" onClick={exportCSV} className={CTRL_BORDERED}>
+                  <DownloadIcon className="size-4" />
+                  Export
+                </button>
+              )}
+              {canCreateLead && tenantId && (
+                <button type="button" onClick={() => setAddLeadOpen(true)} className={CTRL_PRIMARY}>
+                  <PlusIcon className="size-4" />
+                  Add lead
+                </button>
+              )}
+            </>
+          }
+          viewActions={
+            <>
+              {hasListPipeline && (activeListSlug || activeFunnelKey) && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    router.push(
+                      activeListSlug ? `/leads?list=${activeListSlug}&view=kanban` : `/leads?funnel=${activeFunnelKey}&view=kanban`
+                    )
+                  }
+                  className={CTRL}
+                >
+                  <ColumnsIcon className="size-4" />
+                  Kanban view
+                </button>
+              )}
+              <ColumnsPopover
+                trigger={
+                  <button type="button" className={CTRL} data-testid="view-settings-trigger">
+                    <SlidersHorizontalIcon className="size-4" />
+                    View settings
+                    <CaretDownIcon className="size-3.5 text-ds-faint" />
+                  </button>
+                }
+                columns={v2AllColumns.filter((c) => !c.required)}
+                layout={{ keys: gridPrefs.keys, pins: gridPrefs.pins }}
+                titleFor={(c) => gridPrefs.labels[c.key] ?? c.v2?.label ?? c.label}
+                onLayoutChange={(next) => updateGridPrefs((p) => ({ ...p, keys: next.keys, pins: next.pins }))}
+                onReset={resetGridPrefs}
+              />
+            </>
+          }
+          search={{ value: search, onChange: setSearch, loading: tableLoading }}
+          sortControl={
+            <SortControl
+              sort={{ field: sortField, direction: sortDirection }}
+              onChange={(next) => {
+                setSortField(next.field as SortField);
+                setSortDirection(next.direction);
+              }}
+            />
+          }
+          filter={{
+            fields: advancedVisibleFields,
+            tree: displayFilterTree,
+            onChange: handleAdvancedFilterChange,
+            ctx: toolbarOptionContext,
+            maxConditions: DEFAULT_MAX_CONDITIONS,
+          }}
+          scopeTree={toolbarScopeTree}
+          filterRequest={filterRequest}
+          sort={{ field: sortField, direction: sortDirection }}
+          onSortChange={(next) => {
+            setSortField(next.field as SortField);
+            setSortDirection(next.direction);
+          }}
+          savedViewsEnabled={hasSavedLeadFilters}
+          views={{
+            currentUserId,
+            applicationsListId: leadLists.find((l) => l.slug === "applications")?.id ?? null,
+            archiveSlug: leadLists.find((l) => l.is_archive && l.slug !== "delete")?.slug ?? null,
+            trashSlug: leadLists.find((l) => l.slug === "delete")?.slug ?? null,
+            onOpenList: (slug) => router.push(`/leads?list=${slug}`),
+            registry: advancedFilterRegistry,
+          }}
+        />
+      )}
+
       {/* Enhanced Toolbar - matching pipeline style */}
+      {!useToolbarV2 && (
       <div className="shrink-0">
         {/* Top Row: Search + Actions */}
         <div className="flex flex-wrap items-center gap-3 p-3">
@@ -2677,7 +3138,7 @@ export function LeadsTable({
           {/* Search — debounced 300ms, hits GET /api/v1/leads server-side (not a client
               array filter): searches every matching lead, not just the loaded page. */}
           <div className="relative w-60">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
+            <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
             <input
               type="text"
               placeholder="Search leads..."
@@ -2696,7 +3157,7 @@ export function LeadsTable({
             onClick={() => setColumnDialogOpen(true)}
             className={TOOLBAR_BTN}
           >
-            <Columns3 className="h-3 w-3 shrink-0" />
+            <ColumnsIcon className="h-3 w-3 shrink-0" />
             <span>Edit columns</span>
           </button>
 
@@ -2711,7 +3172,7 @@ export function LeadsTable({
               )}
               className={TOOLBAR_BTN}
             >
-              <Columns4 className="h-3 w-3 shrink-0" />
+              <ColumnsIcon className="h-3 w-3 shrink-0" />
               <span>Kanban view</span>
             </button>
           )}
@@ -2762,7 +3223,7 @@ export function LeadsTable({
               onClick={exportCSV}
               className={TOOLBAR_BTN}
             >
-              <Download className="h-3 w-3 shrink-0" />
+              <DownloadIcon className="h-3 w-3 shrink-0" />
               Export
             </button>
           )}
@@ -2774,7 +3235,7 @@ export function LeadsTable({
               onClick={() => setAddLeadOpen(true)}
               className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-[8px] transition-colors bg-[#0f0f10] text-white hover:bg-[#0f0f10]/90"
             >
-              <Plus className="h-3 w-3 shrink-0" />
+              <PlusIcon className="h-3 w-3 shrink-0" />
               Add Lead
             </button>
           )}
@@ -2811,7 +3272,10 @@ export function LeadsTable({
           </>
         )}
       </div>
+      )}
 
+      {!useToolbarV2 && (
+      <>
       {/* Bulk Action Bar - animated container between filters and table */}
       <div
         className={`shrink-0 overflow-hidden transition-all duration-300 ease-out ${
@@ -2834,7 +3298,7 @@ export function LeadsTable({
                     }
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-emerald-700 hover:bg-emerald-50 rounded transition-colors"
                   >
-                    <RotateCcw className="h-4 w-4" />
+                    <ArrowCounterClockwiseIcon className="h-4 w-4" />
                     Restore
                   </button>
                 )}
@@ -2843,7 +3307,7 @@ export function LeadsTable({
                     onClick={() => setDeleteDialogOpen(true)}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <TrashIcon className="h-4 w-4" />
                     Delete
                   </button>
                 )}
@@ -2853,7 +3317,7 @@ export function LeadsTable({
                   className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
                   aria-label="Deselect all"
                 >
-                  <X className="h-4 w-4" />
+                  <XIcon className="h-4 w-4" />
                 </button>
               </>
             ) : (
@@ -2863,7 +3327,7 @@ export function LeadsTable({
                 onClick={() => setBulkEnrollOpen(true)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
               >
-                <GitBranch className="h-4 w-4" />
+                <GitBranchIcon className="h-4 w-4" />
                 Enroll in sequence
               </button>
             )}
@@ -2872,7 +3336,7 @@ export function LeadsTable({
                 onClick={() => setAssignDialogOpen(true)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
               >
-                <UserPlus className="h-4 w-4" />
+                <UserPlusIcon className="h-4 w-4" />
                 Assign
               </button>
             )}
@@ -2881,7 +3345,7 @@ export function LeadsTable({
                 onClick={() => setBranchAssignDialogOpen(true)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
               >
-                <Building2 className="h-4 w-4" />
+                <BuildingsIcon className="h-4 w-4" />
                 Branch
               </button>
             )}
@@ -2896,7 +3360,7 @@ export function LeadsTable({
                 }}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
               >
-                <ArrowUpCircle className="h-4 w-4" />
+                <ArrowCircleUpIcon className="h-4 w-4" />
                 Graduate → Sales Leads
               </button>
             )}
@@ -2911,7 +3375,7 @@ export function LeadsTable({
                 }}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-amber-600 hover:bg-amber-50 rounded transition-colors"
               >
-                <Archive className="h-4 w-4" />
+                <ArchiveIcon className="h-4 w-4" />
                 Archive
               </button>
             )}
@@ -2920,7 +3384,7 @@ export function LeadsTable({
                 onClick={() => setMergeDialogOpen(true)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
               >
-                <GitMerge className="h-4 w-4" />
+                <GitMergeIcon className="h-4 w-4" />
                 Merge
               </button>
             )}
@@ -2929,7 +3393,7 @@ export function LeadsTable({
                 onClick={() => setDeleteDialogOpen(true)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
               >
-                <Trash2 className="h-4 w-4" />
+                <TrashIcon className="h-4 w-4" />
                 Delete
               </button>
             )}
@@ -2939,7 +3403,7 @@ export function LeadsTable({
               className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
               aria-label="Deselect all"
             >
-              <X className="h-4 w-4" />
+              <XIcon className="h-4 w-4" />
             </button>
             </>
             )}
@@ -2978,6 +3442,141 @@ export function LeadsTable({
         </div>
       )}
 
+      </>
+      )}
+
+      {useToolbarV2 && v2NameColumn && (
+        <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-ds-surface">
+          <LeadsGrid
+            leads={displayLeads}
+            nameColumn={v2NameColumn}
+            columns={visibleColumns.filter((c) => c.key !== "name")}
+            ctx={columnCtx}
+            layout={{ keys: gridPrefs.keys, pins: gridPrefs.pins }}
+            widths={gridPrefs.widths}
+            labels={gridPrefs.labels}
+            onWidthChange={(key, width) => updateGridPrefs((p) => ({ ...p, widths: { ...p.widths, [key]: width } }))}
+            onWidthCommit={() => {}}
+            onLayoutChange={(next) => updateGridPrefs((p) => ({ ...p, keys: next.keys, pins: next.pins }))}
+            onRename={(key, label) =>
+              updateGridPrefs((p) => {
+                const labels = { ...p.labels };
+                if (label) labels[key] = label;
+                else delete labels[key];
+                return { ...p, labels };
+              })
+            }
+            selectedIds={selectedIds}
+            previewedId={eduPreview ? previewLeadId : null}
+            allSelected={allSelected}
+            someSelected={someSelected}
+            onToggleSelect={toggleSelect}
+            onToggleSelectAll={toggleSelectAll}
+            sort={{ field: sortField, direction: sortDirection }}
+            onSort={(key, direction) => {
+              setSortField(key as SortField);
+              setSortDirection(direction);
+            }}
+            filterFieldKeys={new Set(advancedVisibleFields.map((f) => f.key))}
+            onFilterRequest={(fieldKey) => setFilterRequest({ fieldKey, nonce: Date.now() })}
+            total={effectiveTotal}
+            counsellors={countCounsellors(serverAssigneeFacet)}
+            stages={serverSummary?.stages ?? null}
+            needFollowUp={serverSummary?.needFollowUp ?? null}
+            loading={tableLoading}
+            emptyState={
+              <GridEmptyState
+                variant={emptyVariant({
+                  hasUserFilters: displayFilterTree.conditions.some((c) => c.id !== SYNTHETIC_STAGE_CONDITION_ID),
+                  hasSearch: search.trim() !== "",
+                  viewMode,
+                })}
+                onClearFilters={() => {
+                  setSearch("");
+                  handleAdvancedFilterChange({ ...displayFilterTree, conditions: displayFilterTree.conditions.filter((c) => c.id === SYNTHETIC_STAGE_CONDITION_ID) });
+                }}
+                onClearSearch={() => setSearch("")}
+                onAddLead={canCreateLead && tenantId ? () => setAddLeadOpen(true) : undefined}
+              />
+            }
+          />
+          <GridPagination
+            total={effectiveTotal}
+            start={startIndex}
+            end={endIndex}
+            page={currentPage}
+            totalPages={totalPages}
+            pageSize={itemsPerPage}
+            onPage={setCurrentPage}
+            onPageSize={(n) => {
+              setItemsPerPage(n);
+              setCurrentPage(1);
+            }}
+          />
+          <BulkBar
+            selectedCount={selectedCount}
+            effectiveTotal={effectiveTotal}
+            actions={getBulkBarActions({
+              viewMode,
+              isAdmin,
+              isTeamScoped,
+              selectedCount,
+              teamMemberCount: teamMembers.length,
+              isStagingView,
+              hasOutreach,
+              showBranches,
+              branchCount: branches.length,
+              canGraduate,
+              hasArchiveList: !!archivedList,
+              pageFullySelected: allSelected,
+              pageCount: paginatedLeads.length,
+              effectiveTotal,
+              allResultsSelected,
+            })}
+            handlers={{
+              onMoveStage: () => {
+                setMoveArchiveReason("");
+                setMoveAssignTo("keep");
+                setIsGraduateMove(false);
+                setMoveListId("");
+                // Staging views route leads with an assignee in the same step: keep the full dialog there.
+                if (isStagingView) setMoveListDialogOpen(true);
+                else setBulkPalette("stage");
+              },
+              // Branch-required staging assigns (branch + stage + assignee) keep the full dialog.
+              onAssign: () => (assignBranchRequired ? setAssignDialogOpen(true) : setBulkPalette("assign")),
+              onAddTag: () => setBulkPalette("tag"),
+              onArchive: () => {
+                if (!archivedList) return;
+                setMoveArchiveReason("");
+                setMoveAssignTo("keep");
+                setIsGraduateMove(false);
+                setMoveListId(archivedList.id);
+                setMoveListDialogOpen(true);
+              },
+              onRestore: () => (viewMode === "archived" ? openRestoreDialog(Array.from(selectedIds)) : restoreLeads(Array.from(selectedIds))),
+              onDeleteForever: () => setDeleteDialogOpen(true),
+              onEnroll: () => setBulkEnrollOpen(true),
+              onBranch: () => setBranchAssignDialogOpen(true),
+              onGraduate: () => {
+                if (!graduateTargetList) return;
+                setMoveArchiveReason("");
+                setMoveAssignTo("keep");
+                setMoveListId(graduateTargetList.id);
+                setIsGraduateMove(true);
+                setMoveListDialogOpen(true);
+              },
+              onMerge: () => setMergeDialogOpen(true),
+              onDelete: () => setDeleteDialogOpen(true),
+              onSelectAllMatching: serverPaginated ? selectAllMatching : () => setSelectedIds(new Set(filtered.map((l) => l.id))),
+              onClear: () => setSelectedIds(new Set()),
+            }}
+          />
+        </div>
+      )}
+
+      {!useToolbarV2 && (
+      <>
       {/* Table - Compact style with sticky header and horizontal scroll */}
       <div className="flex-1 min-h-0 bg-white flex flex-col overflow-hidden">
         <div className="flex-1 min-h-0 overflow-auto">
@@ -3050,7 +3649,7 @@ export function LeadsTable({
                 return (
                   <tr
                     key={lead.id}
-                    className={`group relative hover:bg-gray-50 transition-colors ${isSelected ? "bg-blue-50" : ""}`}
+                    className={`group relative hover:bg-gray-50 transition-colors ${isSelected || (eduPreview && lead.id === previewLeadId) ? "bg-blue-50" : ""}`}
                   >
                     {/* Anchor: follow-up/callback-due row-signal bar */}
                     <td className="p-0 w-1 relative" onClick={(e) => e.stopPropagation()}>
@@ -3080,16 +3679,16 @@ export function LeadsTable({
                             aria-label="Row actions"
                             className="h-6 w-6 rounded flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100"
                           >
-                            <MoreHorizontal className="h-3.5 w-3.5" />
+                            <DotsThreeIcon className="h-3.5 w-3.5" />
                           </button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="start">
                           <DropdownMenuItem onClick={() => columnCtx.onPreviewToggle(lead.id)}>
-                            <Eye className="h-4 w-4 mr-2" />
+                            <EyeIcon className="h-4 w-4 mr-2" />
                             Preview
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => router.push(`/leads/${lead.id}?edit=1`)}>
-                            <Pencil className="h-4 w-4 mr-2" />
+                            <PencilSimpleIcon className="h-4 w-4 mr-2" />
                             Edit
                           </DropdownMenuItem>
                         </DropdownMenuContent>
@@ -3146,7 +3745,7 @@ export function LeadsTable({
                 onClick={() => setCurrentPage((p) => p - 1)}
                 className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               >
-                <ChevronLeft className="w-4 h-4" />
+                <CaretLeftIcon className="w-4 h-4" />
               </button>
               <span className="text-xs text-gray-600 px-2">
                 Page {currentPage} of {totalPages || 1}
@@ -3156,37 +3755,54 @@ export function LeadsTable({
                 onClick={() => setCurrentPage((p) => p + 1)}
                 className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               >
-                <ChevronRight className="w-4 h-4" />
+                <CaretRightIcon className="w-4 h-4" />
               </button>
             </div>
           </div>
         </div>
       </div>
+      </>
+      )}
       </div>
       {/* End of Main Table Section */}
 
-      {/* Lead Preview Panel - side by side with animation */}
-      <div
-        className={`h-full transition-all duration-500 ease-out overflow-hidden ${
-          previewLead ? 'w-[380px] opacity-100' : 'w-0 opacity-0'
-        }`}
-      >
-        <div
-          className={`h-full transition-transform duration-500 ease-out ${
-            previewLead ? 'translate-x-0' : 'translate-x-8'
-          }`}
-        >
-          {previewLead && (
-            <LeadPreviewPanel
-              lead={previewLead}
-              onClose={() => setPreviewLeadId(null)}
-              stages={stages}
-              memberMap={memberMap}
-              memberNames={memberNames}
-            />
-          )}
-        </div>
-      </div>
+      {/* Lead Preview Panel. Education: the EDGEX-149 record preview floats over the table (no squeeze). Everyone else: today's side panel. */}
+      <LeadPreviewSlot
+        education={eduPreview}
+        previewLead={previewLead}
+        educationLead={shownPreviewLead}
+        onClose={() => setPreviewLeadId(null)}
+        stages={stages}
+        memberMap={memberMap}
+        memberNames={memberNames}
+        renderEducation={(lead) => (
+          <RecordPreview
+            lead={lead}
+            rowIndex={Math.max(previewRowIndex, 0)}
+            rowCount={displayLeads.length}
+            page={currentPage}
+            pageSize={itemsPerPage}
+            total={effectiveTotal}
+            viewName={activeViewLabel}
+            nextLeadId={previewRowIndex >= 0 ? displayLeads[previewRowIndex + 1]?.id ?? null : null}
+            onNavigate={handlePreviewNavigate}
+            onClose={() => setPreviewLeadId(null)}
+            currentUserId={currentUserId}
+            memberNames={memberNames}
+            memberEmails={memberMap}
+            branchMap={branchMap}
+            formMap={formMap}
+            stageLists={previewStageLists}
+            stages={stages}
+            canEditRows={canEditRows}
+            canAssign={canAssignFromPreview}
+            followUpStaleDays={followUpStaleDays ?? FALLBACK_FOLLOW_UP_STALE_DAYS}
+            onStageChange={handlePreviewStageChange}
+            onAssign={handlePreviewAssign}
+            refreshToken={previewRefresh}
+          />
+        )}
+      />
 
       {/* Mounted only while open: it holds the selected ids (up to 10,000) and a polling loop, so keep it off every table render. */}
       {hasOutreach && bulkEnrollOpen && (
@@ -3200,14 +3816,22 @@ export function LeadsTable({
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete {selectedCount} lead{selectedCount !== 1 ? "s" : ""}?</DialogTitle>
-            <DialogDescription>
-              This action cannot be undone. The selected leads will be permanently
-              removed from your workspace.
-            </DialogDescription>
-          </DialogHeader>
+        {/* EDGEX-145: destructive confirm layout (same as bulk Archive): red bin badge, named red primary with ↵,
+            focus on the red button so Enter confirms. Delete logic and permission gates are unchanged. */}
+        <DialogContent size="sm" showCloseButton={false}>
+          <div className="flex items-start gap-3.5 px-1 pt-1">
+            <span aria-hidden className="grid size-9 shrink-0 place-items-center rounded-full bg-ds-bad-soft text-ds-bad">
+              <TrashIcon className="size-[18px]" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <DialogTitle className="text-[15px] font-semibold">
+                Delete {selectedCount} lead{selectedCount !== 1 ? "s" : ""}?
+              </DialogTitle>
+              <DialogDescription className="mt-1 text-sm leading-[21px] text-ds-text">
+                This can&apos;t be undone. The selected leads are permanently removed from your workspace.
+              </DialogDescription>
+            </div>
+          </div>
           <DialogFooter>
             <Button
               variant="outline"
@@ -3218,10 +3842,12 @@ export function LeadsTable({
             </Button>
             <Button
               variant="destructive"
+              autoFocus
               onClick={handleBulkDelete}
               disabled={isDeleting}
             >
-              {isDeleting ? "Deleting..." : "Delete"}
+              {isDeleting ? "Deleting…" : `Delete ${selectedCount} lead${selectedCount !== 1 ? "s" : ""}`}
+              {!isDeleting && <DialogKeyHint>↵</DialogKeyHint>}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -3230,6 +3856,7 @@ export function LeadsTable({
       {/* Bulk Assign Dialog */}
       <Dialog open={assignDialogOpen} onOpenChange={(open) => {
         setAssignDialogOpen(open);
+        if (!open) setAssignTargetIds(null);
         if (!open) { setAssignTo(""); setAssignBranchId(""); setAssignListId(""); }
       }}>
         <DialogContent>
@@ -3318,7 +3945,7 @@ export function LeadsTable({
               Cancel
             </Button>
             <Button
-              onClick={handleBulkAssign}
+              onClick={() => void handleBulkAssign()}
               disabled={
                 isAssigning ||
                 (assignBranchRequired ? (!assignBranchId || !assignListId || !assignTo) : !assignTo)
@@ -3378,11 +4005,139 @@ export function LeadsTable({
       </Dialog>
 
       {/* Bulk Move to List Dialog */}
+      {/* EDGEX-127: Move stage / Assign / Add tag — one command dialog, three configs. */}
+      {(() => {
+        const n = bulkPalette === "assign" && assignTargetIds ? assignTargetIds.length : selectedCount;
+        const leadsWord = `${n.toLocaleString()} lead${n !== 1 ? "s" : ""}`;
+        const close = () => { setBulkPalette(null); setAssignTargetIds(null); };
+        const cap = (t: string) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : t);
+        const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("");
+
+        // Move stage: same list rules as the old dialog (admins also see staging/archive lists).
+        const visibleLists = isAdmin ? leadLists : leadLists.filter((l) => !l.is_staging && !l.is_archive);
+        const selectedRows = localLeads.filter((l) => selectedIds.has(l.id));
+        const allSelectedLoaded = selectedRows.length === selectedIds.size;
+        const stageItems: CommandItem[] = visibleLists.map((l) => {
+          const current = allSelectedLoaded && selectedRows.length > 0 && selectedRows.every((r) => r.list_id === l.id);
+          return {
+            id: l.id,
+            label: l.name,
+            sub: current ? "current stage" : undefined,
+            disabled: current,
+            group: l.is_archive ? "Archived" : l.is_staging ? "Staging" : "Pipeline",
+            lead: <span aria-hidden className="size-2.5 shrink-0 rounded-full" style={{ background: stageDotColor(l) }} />,
+          };
+        }).sort((a, b) => ["Pipeline", "Staging", "Archived"].indexOf(a.group!) - ["Pipeline", "Staging", "Archived"].indexOf(b.group!));
+
+        // Assign: the same pool the old dialog offered (non-branch-required case), plus Unassign.
+        const pool = Array.from(new Map((assignableMembers ?? teamMembers.filter((m) => m.canEditLeads !== false)).map((m) => [m.user_id, m])).values());
+        const assignItems: CommandItem[] = [
+          ...pool.map((m) => ({
+            id: m.user_id,
+            label: m.name,
+            sub: cap(memberMeta(m.user_id, m.role)) || undefined,
+            group: assignGroup(roleMap?.[m.user_id], m.role),
+            lead: (
+              <span aria-hidden className="grid size-[22px] shrink-0 place-items-center rounded-full bg-ds-hover text-[9px] font-semibold text-ds-muted">
+                {initials(m.name)}
+              </span>
+            ),
+          })),
+          { id: "unassign", label: "Unassign", sub: "remove the assignment", group: "Other" },
+        ].sort((a, b) => (a.group === "Other" ? 1 : b.group === "Other" ? -1 : a.group!.localeCompare(b.group!)));
+
+        // Add tag: the scoped endpoint (with counts) when it answered, else the tags on the loaded rows.
+        const fallbackTags = Array.from(new Set(["student", ...localLeads.flatMap((l) => l.tags ?? [])])).map((tag) => ({ tag, count: null as number | null }));
+        const tagItems: CommandItem[] = (tagOptions ?? fallbackTags).map((t) => ({
+          id: t.tag,
+          label: t.tag,
+          right: t.count != null ? t.count.toLocaleString() : undefined,
+          group: `Add to ${leadsWord}`,
+        }));
+
+        return (
+          <>
+            <CommandDialog
+              open={bulkPalette === "stage"}
+              returnFocusTo='[data-bulk="stage"]'
+              onClose={close}
+              title={`Move ${leadsWord} to stage`}
+              placeholder="Search stages…"
+              items={stageItems}
+              mode="single"
+              busy={isMoveList}
+              primaryLabel={(c) => (c[0] ? `Move to ${c[0].label}` : "Move")}
+              onSubmit={async ([id]) => {
+                // An archive target needs a reason: hand off to the full dialog, pre-targeted.
+                if (leadLists.find((l) => l.id === id)?.is_archive) {
+                  setMoveListId(id);
+                  setMoveArchiveReason("");
+                  setMoveAssignTo("keep");
+                  setIsGraduateMove(false);
+                  setMoveListDialogOpen(true);
+                  return true;
+                }
+                return handleBulkMove(id);
+              }}
+            />
+            <CommandDialog
+              open={bulkPalette === "assign"}
+              returnFocusTo='[data-bulk="assign"]'
+              onClose={close}
+              title={`Assign ${leadsWord}`}
+              placeholder="Find someone…"
+              items={assignItems}
+              mode="single"
+              busy={isAssigning}
+              primaryLabel={(c) => (c[0] ? (c[0].id === "unassign" ? "Unassign" : `Assign to ${c[0].label}`) : "Assign")}
+              onSubmit={([id]) => handleBulkAssign(id)}
+            />
+            <CommandDialog
+              open={bulkPalette === "tag"}
+              returnFocusTo='[data-bulk="tag"]'
+              onClose={close}
+              title={`Add tag to ${leadsWord}`}
+              placeholder="Search or create a tag…"
+              items={tagItems}
+              mode="multi"
+              busy={tagBusy}
+              create={{ normalise: normaliseLeadTag, label: (t) => `Create tag “${t}”` }}
+              primaryLabel={(c) => (c.length ? `Add ${c.length} tag${c.length !== 1 ? "s" : ""}` : "Add tags")}
+              onSubmit={async (tags) => {
+                setTagBusy(true);
+                try {
+                  return await handleBulkAddTags(tags);
+                } finally {
+                  setTagBusy(false);
+                }
+              }}
+            />
+          </>
+        );
+      })()}
+
       <Dialog open={moveListDialogOpen} onOpenChange={(open) => {
         setMoveListDialogOpen(open);
         if (!open) { setMoveListId(""); setMoveArchiveReason(""); setMoveAssignTo("keep"); setIsGraduateMove(false); }
       }}>
-        <DialogContent>
+        {/* EDGEX-145: a plain bulk Archive (pre-targeted to the archive list, not the staging cockpit) is a destructive
+            confirm: no header bar, red bin badge, the reason picker, and a red primary that names the action. */}
+        <DialogContent size={moveTargetIsArchive && !isGraduateMove && !isStagingView ? "sm" : "md"} showCloseButton={!(moveTargetIsArchive && !isGraduateMove && !isStagingView)}>
+          {moveTargetIsArchive && !isGraduateMove && !isStagingView ? (
+            <div className="flex items-start gap-3.5 px-1 pt-1">
+              <span aria-hidden className="grid size-9 shrink-0 place-items-center rounded-full bg-ds-bad-soft text-ds-bad">
+                <TrashIcon className="size-[18px]" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <DialogTitle className="text-[15px] font-semibold">
+                  {`Archive ${selectedCount} lead${selectedCount !== 1 ? "s" : ""}?`}
+                </DialogTitle>
+                <DialogDescription className="mt-1 text-sm leading-[21px] text-ds-text">
+                  They leave every stage and list. You can bring them back from <b className="font-medium text-ds-ink">Archive</b> at any time.
+                </DialogDescription>
+              </div>
+            </div>
+          ) : (
           <DialogHeader>
             <DialogTitle>
               {isGraduateMove
@@ -3397,10 +4152,12 @@ export function LeadsTable({
                 : "Select a target stage. Leads will be moved out of their current stage."}
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4 space-y-3">
+          )}
+          <div className="space-y-3">
+            {!(moveTargetIsArchive && !isGraduateMove && !isStagingView) && (
             <Select value={moveListId} onValueChange={(v) => { setMoveListId(v); setMoveArchiveReason(""); }} disabled={isGraduateMove}>
               <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select list..." />
+                <SelectValue placeholder={industryId === "education_consultancy" ? "Select stage..." : "Select list..."} />
               </SelectTrigger>
               <SelectContent>
                 {(() => {
@@ -3439,19 +4196,21 @@ export function LeadsTable({
                 })()}
               </SelectContent>
             </Select>
+            )}
             {moveTargetIsArchive && (
               <div className="space-y-1.5">
-                <p className="text-sm font-medium text-gray-700">Archive reason</p>
-                <Select value={moveArchiveReason} onValueChange={setMoveArchiveReason}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select reason..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {["Not interested", "Wrong number", "Not reachable", "Already enrolled elsewhere", "Other"].map((r) => (
-                      <SelectItem key={r} value={r}>{r}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <p className="text-[13px] font-medium text-ds-muted">Archive reason</p>
+                <SearchableSelect
+                  options={ARCHIVE_REASONS.map((r) => ({ value: r, label: r }))}
+                  value={moveArchiveReason}
+                  onValueChange={(v) => {
+                    setMoveArchiveReason(v);
+                    // plain archive confirm: hand focus to the red button so Enter (the hint) confirms
+                    if (!isGraduateMove && !isStagingView) setTimeout(() => document.getElementById("bulk-archive-confirm")?.focus(), 60);
+                  }}
+                  placeholder="Select reason…"
+                  searchPlaceholder="Search reasons…"
+                />
               </div>
             )}
             {(isStagingView || isGraduateMove) && (
@@ -3507,12 +4266,15 @@ export function LeadsTable({
               Cancel
             </Button>
             <Button
-              onClick={handleBulkMove}
+              onClick={() => void handleBulkMove()}
               disabled={isMoveList || !moveListId || (moveTargetIsArchive && !moveArchiveReason)}
+              id="bulk-archive-confirm"
+              variant={moveTargetIsArchive && !isGraduateMove && !isStagingView ? "destructive" : "default"}
             >
               {isMoveList
                 ? (isGraduateMove ? "Graduating…" : moveTargetIsArchive ? "Archiving…" : "Moving…")
-                : (isGraduateMove ? "Graduate" : moveTargetIsArchive ? "Archive" : "Move")}
+                : (isGraduateMove ? "Graduate" : moveTargetIsArchive ? (isStagingView ? "Archive" : `Archive ${selectedCount} lead${selectedCount !== 1 ? "s" : ""}`) : "Move")}
+              {!isMoveList && moveTargetIsArchive && !isGraduateMove && !isStagingView && <DialogKeyHint>↵</DialogKeyHint>}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -3695,6 +4457,7 @@ export function LeadsTable({
             onMerged={() => {
               setSelectedIds(new Set());
               setMergeDialogOpen(false);
+              reloadCurrentView(); // EDGEX-146: MergeDialog calls router.refresh() itself
             }}
           />
         );

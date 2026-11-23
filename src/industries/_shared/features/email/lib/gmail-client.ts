@@ -1,7 +1,9 @@
 import { google } from "googleapis";
 import MailComposer from "nodemailer/lib/mail-composer";
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import type { ConnectedEmailAccount } from "@/types/database";
+import { getEmailTransportMode } from "@/lib/email/outbound/transport";
+import { logger } from "@/lib/logger";
 import { parseGmailMessage, type ParsedMessage } from "./gmail-parser";
 
 export type { ParsedMessage };
@@ -187,9 +189,6 @@ export async function sendMessage(
 }> {
   const rfcMessageId = `<${randomUUID()}@edgex-crm.com>`;
 
-  // Refresh token before sending so the access_token we use is fresh
-  const refreshed = await refreshAccessTokenIfNeeded(account);
-
   const mail = new MailComposer({
     from: args.fromName ? `"${args.fromName}" <${args.from}>` : args.from,
     to: args.to.join(", "),
@@ -218,6 +217,37 @@ export async function sendMessage(
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=+$/, "");
+
+  // EDGEX-128: the Gmail counterpart of the Resend gate (EDGEX-125). The MIME
+  // message is still built above, so a bad payload fails the same way in both
+  // modes; in stub mode nothing below runs: no token refresh, no Gmail call.
+  if (getEmailTransportMode() === "stub") {
+    const bodyHash = createHash("sha256").update(args.bodyHtml).digest("hex").slice(0, 16);
+    const stubMessageId = `stub_${randomUUID()}`;
+    const stubThreadId = args.threadId ?? `stub_${randomUUID()}`;
+    logger.info(
+      {
+        accountId: account.id,
+        toCount: args.to.length,
+        ccCount: args.cc?.length ?? 0,
+        bccCount: args.bcc?.length ?? 0,
+        subject: args.subject,
+        bodyHash,
+        gmailMessageId: stubMessageId,
+        gmailThreadId: stubThreadId,
+      },
+      "[EMAIL_TRANSPORT=stub] recorded Gmail send without calling Gmail",
+    );
+    return {
+      gmail_message_id: stubMessageId,
+      gmail_thread_id: stubThreadId,
+      rfc_message_id: rfcMessageId,
+      refreshed_credentials: null,
+    };
+  }
+
+  // Refresh token before sending so the access_token we use is fresh
+  const refreshed = await refreshAccessTokenIfNeeded(account);
 
   const client = createOAuth2Client(account.refresh_token);
   if (refreshed) {

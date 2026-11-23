@@ -1,32 +1,31 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-  SheetFooter,
-} from "@/components/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogKeyHint,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ChevronRight, Loader2, Plus, AlertCircle } from "lucide-react";
+import {
+  CaretRightIcon,
+  CircleNotchIcon,
+  PlusIcon,
+  WarningCircleIcon,
+} from "@/components/icons";
 import { toast } from "sonner";
 import type { Branch, LeadList, PipelineStage, TenantEntity, UserRole } from "@/types/database";
 import {
@@ -37,6 +36,7 @@ import {
   INTAKE_SOURCES,
 } from "@/industries/_shared/features/lead-lists/taxonomies";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { DestinationsMultiSelect } from "@/components/dashboard/destinations-multi-select";
 import { positionsForStage } from "@/industries/education-consultancy/lead-assignment-by-stage";
 import { validateLeadIdentity } from "@/lib/leads/lead-validation";
@@ -205,6 +205,9 @@ export function AddLeadSheet({
   const [notesOpen, setNotesOpen] = useState(false);
   const [academicsOpen, setAcademicsOpen] = useState(false);
   const [academicsError, setAcademicsError] = useState(false);
+  // EDGEX-145: keep the dialog open and reset the form after a successful add.
+  const [addAnother, setAddAnother] = useState(false);
+  const bodyRef = useRef<HTMLDivElement>(null);
   const [academics, setAcademics] = useState<Record<string, string>>({});
   const [testScores, setTestScores] = useState<Record<string, string>>({});
   const updateAcademic = (col: string, value: string) =>
@@ -217,33 +220,40 @@ export function AddLeadSheet({
   const canSetLeadSource = isAdmin || industryId !== "education_consultancy";
   const defaultStage = stages.find((s) => s.is_default) || stages[0];
 
+  // Fresh form: used when the dialog opens and after a successful "Add another".
+  const resetForm = () => {
+    // Only pre-select a Stage the dropdown will actually offer (mirrors its own
+    // !is_staging && !is_archive filter) — an id from a hidden/archive list, or one
+    // that's since disappeared from leadLists, must fall back to blank, not a dead value.
+    const validDefaultListId =
+      defaultListId && leadLists.some((l) => l.id === defaultListId && !l.is_staging && !l.is_archive)
+        ? defaultListId
+        : "";
+    setFormData({
+      ...initialFormData,
+      stageId: defaultStage?.id || "",
+      listId: lockedList ? lockedList.id : validDefaultListId,
+      assignedTo: role === "staff" ? currentUserId : "",
+      ownerId: currentUserId,
+      // Always seed from creator's own branch first; fall back to active branch switcher
+      branchId: userBranchId || selectedBranchId || "",
+    });
+    setErrors({});
+    setIsDirty(false);
+    setSourceOpen(false);
+    setNotesOpen(false);
+    setAcademicsOpen(false);
+    setAcademicsError(false);
+    setAcademics({});
+    setTestScores({});
+  };
+
   useEffect(() => {
     if (open) {
-      // Only pre-select a Stage the dropdown will actually offer (mirrors its own
-      // !is_staging && !is_archive filter) — an id from a hidden/archive list, or one
-      // that's since disappeared from leadLists, must fall back to blank, not a dead value.
-      const validDefaultListId =
-        defaultListId && leadLists.some((l) => l.id === defaultListId && !l.is_staging && !l.is_archive)
-          ? defaultListId
-          : "";
-      setFormData({
-        ...initialFormData,
-        stageId: defaultStage?.id || "",
-        listId: lockedList ? lockedList.id : validDefaultListId,
-        assignedTo: role === "staff" ? currentUserId : "",
-        ownerId: currentUserId,
-        // Always seed from creator's own branch first; fall back to active branch switcher
-        branchId: userBranchId || selectedBranchId || "",
-      });
-      setErrors({});
-      setIsDirty(false);
-      setSourceOpen(false);
-      setNotesOpen(false);
-      setAcademicsOpen(false);
-      setAcademicsError(false);
-      setAcademics({});
-      setTestScores({});
+      resetForm();
+      setAddAnother(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, defaultStage?.id, role, currentUserId, isAdmin, userBranchId, selectedBranchId, defaultListId, leadLists]);
 
   const updateField = (field: keyof FormData, value: string) => {
@@ -375,7 +385,13 @@ export function AddLeadSheet({
         },
       });
 
-      onOpenChange(false);
+      if (addAnother) {
+        resetForm();
+        bodyRef.current?.closest("[data-slot=dialog-scroll]")?.scrollTo({ top: 0 });
+        setTimeout(() => document.getElementById("firstName")?.focus(), 0);
+      } else {
+        onOpenChange(false);
+      }
       router.refresh();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to create lead";
@@ -443,6 +459,13 @@ export function AddLeadSheet({
       : eduAssignableMembersScoped;
 
   const assigneeOptions = isEducation ? eduAssignableMembers : assignableMembers;
+  // "Role · Branch" secondary text for the people picker.
+  const assigneeSecondary = (m: TeamMember) => {
+    const role = (m.position_slug || m.role || "").replace(/[-_]/g, " ");
+    const roleLabel = role ? role.charAt(0).toUpperCase() + role.slice(1) : "";
+    const branch = m.branch_id ? branches.find((b) => b.id === m.branch_id)?.name : "";
+    return [roleLabel, branch].filter(Boolean).join(" · ") || undefined;
+  };
   const assigneeDisabled =
     isSubmitting || !canPickAssignee || (isEducation && !formData.listId);
 
@@ -470,7 +493,7 @@ export function AddLeadSheet({
   // ── Shared render helpers ────────────────────────────────────────────────
 
   const renderEmailPhoneRow = () => (
-    <div className="grid grid-cols-2 gap-4">
+    <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2 [&>div>*:not([data-slot=label])]:mb-0">
       <div className="space-y-1.5">
         <Label htmlFor="email" className="text-xs text-gray-600">
           Email
@@ -480,7 +503,7 @@ export function AddLeadSheet({
           type="email"
           value={formData.email}
           onChange={(e) => updateField("email", e.target.value)}
-          placeholder="john@example.com"
+          placeholder="Set email"
           disabled={isSubmitting}
           className={errors.email ? "border-red-500" : ""}
         />
@@ -497,6 +520,7 @@ export function AddLeadSheet({
           onChange={(v) => updateField("phone", v)}
           disabled={isSubmitting}
           error={!!errors.phone}
+          placeholder="Set phone number"
         />
         {errors.phone && (
           <p className="text-xs text-red-500">{errors.phone}</p>
@@ -514,15 +538,15 @@ export function AddLeadSheet({
         id="city"
         value={formData.city}
         onChange={(e) => updateField("city", e.target.value)}
-        placeholder="Kathmandu"
+        placeholder="Set city"
         disabled={isSubmitting}
       />
     </div>
   );
 
   const renderAssignmentSection = () => (
-    <div className="space-y-4">
-      <h3 className="text-sm font-medium text-gray-900">Assignment &amp; Status</h3>
+    <div className="flex flex-col gap-5 [&>h3]:-mb-2">
+      <h3 className="pl-1 text-[13px] font-medium text-ds-ink">Assignment &amp; Status</h3>
 
       {/* Education admin: Branch is chosen first and scopes the assignee list */}
       {showEduBranchField && (
@@ -530,27 +554,18 @@ export function AddLeadSheet({
           <Label htmlFor="branchId" className="text-xs text-gray-600">
             Branch
           </Label>
-          <Select
-            value={formData.branchId || "__none__"}
+          <SearchableSelect
+            options={[{ value: "__none__", label: "No branch" }, ...branches.map((b) => ({ value: b.id, label: b.name }))]}
+            value={formData.branchId}
             onValueChange={(v) => updateBranchId(v === "__none__" ? "" : v)}
+            placeholder="Select branch"
+            searchPlaceholder="Search branches…"
             disabled={isSubmitting}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select branch" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__none__">No branch</SelectItem>
-              {branches.map((b) => (
-                <SelectItem key={b.id} value={b.id}>
-                  {b.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          />
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2 [&>div>*:not([data-slot=label])]:mb-0">
         <div className="space-y-1.5">
           <Label htmlFor="stage" className="text-xs text-gray-600">
             Stage
@@ -584,57 +599,48 @@ export function AddLeadSheet({
               )}
             </>
           ) : (
-            <Select
+            <SearchableSelect
+              options={leadLists.filter((l) => !l.is_staging && !l.is_archive).map((list) => ({ value: list.id, label: list.name }))}
               value={formData.listId}
               onValueChange={updateListId}
+              placeholder="Select stage"
+              searchPlaceholder="Search stages…"
               disabled={isSubmitting}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select stage" />
-              </SelectTrigger>
-              <SelectContent>
-                {leadLists
-                  .filter((l) => !l.is_staging && !l.is_archive)
-                  .map((list) => (
-                    <SelectItem key={list.id} value={list.id}>
-                      {list.name}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
+            />
           )}
           {errors.listId && <p className="text-xs text-red-500">{errors.listId}</p>}
         </div>
 
         <div className="space-y-1.5">
           <Label htmlFor="assignedTo" className="text-xs text-gray-600">
-            Assigned To
+            Assigned to
             {!canPickAssignee && (
               <span className="ml-1 text-gray-400">(auto)</span>
             )}
           </Label>
-          <Select
-            value={formData.assignedTo || "__none__"}
+          <SearchableSelect
+            options={[
+              { value: "__none__", label: "Unassigned" },
+              ...assigneeOptions.map((member) => ({
+                value: member.user_id,
+                label: member.name + (member.user_id === currentUserId ? " (You)" : ""),
+                secondary: assigneeSecondary(member),
+                icon: (
+                  <span
+                    aria-hidden
+                    className="grid size-4 shrink-0 place-items-center rounded-full bg-ds-hover text-[9px] font-semibold text-ds-muted"
+                  >
+                    {member.name.trim().slice(0, 1).toUpperCase()}
+                  </span>
+                ),
+              })),
+            ]}
+            value={formData.assignedTo}
             onValueChange={(v) => updateField("assignedTo", v === "__none__" ? "" : v)}
+            placeholder={isEducation && !formData.listId ? "Select a stage first" : "Select team member"}
+            searchPlaceholder="Find someone…"
             disabled={assigneeDisabled}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue
-                placeholder={
-                  isEducation && !formData.listId ? "Select a stage first" : "Select team member"
-                }
-              />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__none__">Unassigned</SelectItem>
-              {assigneeOptions.map((member) => (
-                <SelectItem key={member.user_id} value={member.user_id}>
-                  {member.name}
-                  {member.user_id === currentUserId && " (You)"}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          />
         </div>
       </div>
 
@@ -647,23 +653,14 @@ export function AddLeadSheet({
               <span className="ml-1 text-gray-400">(auto)</span>
             )}
           </Label>
-          <Select
-            value={formData.branchId || "__none__"}
+          <SearchableSelect
+            options={[{ value: "__none__", label: "No branch" }, ...branches.map((b) => ({ value: b.id, label: b.name }))]}
+            value={formData.branchId}
             onValueChange={(v) => updateField("branchId", v === "__none__" ? "" : v)}
+            placeholder="No branch"
+            searchPlaceholder="Search branches…"
             disabled={isSubmitting || !!userBranchId}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="No branch" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__none__">No branch</SelectItem>
-              {branches.map((b) => (
-                <SelectItem key={b.id} value={b.id}>
-                  {b.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          />
         </div>
       )}
 
@@ -672,25 +669,14 @@ export function AddLeadSheet({
           <Label htmlFor="entity" className="text-xs text-gray-600">
             {entityLabel}
           </Label>
-          <Select
-            value={formData.entityId || "__none__"}
+          <SearchableSelect
+            options={[{ value: "__none__", label: "None" }, ...entities.filter((e) => e.is_active).map((entity) => ({ value: entity.id, label: entity.name }))]}
+            value={formData.entityId}
             onValueChange={(v) => updateField("entityId", v === "__none__" ? "" : v)}
+            placeholder={`Select ${entityLabel.toLowerCase()}`}
+            searchPlaceholder="Search…"
             disabled={isSubmitting}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder={`Select ${entityLabel.toLowerCase()}`} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__none__">None</SelectItem>
-              {entities
-                .filter((e) => e.is_active)
-                .map((entity) => (
-                  <SelectItem key={entity.id} value={entity.id}>
-                    {entity.name}
-                  </SelectItem>
-                ))}
-            </SelectContent>
-          </Select>
+          />
         </div>
       )}
     </div>
@@ -699,8 +685,8 @@ export function AddLeadSheet({
   const renderCollapsibles = () => (
     <>
       <Collapsible open={sourceOpen} onOpenChange={setSourceOpen}>
-        <CollapsibleTrigger className="flex items-center gap-2 w-full py-2 text-sm font-medium text-gray-700 hover:text-gray-900">
-          <ChevronRight
+        <CollapsibleTrigger className="flex items-center gap-2 w-full py-2 pl-1 text-[13px] font-medium text-ds-ink">
+          <CaretRightIcon
             className={`h-4 w-4 transition-transform ${
               sourceOpen ? "rotate-90" : ""
             }`}
@@ -708,29 +694,21 @@ export function AddLeadSheet({
           {canSetLeadSource ? "Lead Source" : "Contact Preference"}
           <span className="text-xs text-gray-400 font-normal">(optional)</span>
         </CollapsibleTrigger>
-        <CollapsibleContent className="space-y-4 pt-2">
-          <div className="grid grid-cols-2 gap-4">
+        <CollapsibleContent className="space-y-5 pt-3">
+          <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2 [&>div>*:not([data-slot=label])]:mb-0">
             {canSetLeadSource && (
             <div className="space-y-1.5">
               <Label htmlFor="source" className="text-xs text-gray-600">
                 Source
               </Label>
-              <Select
+              <SearchableSelect
+                options={INTAKE_SOURCES.map((s) => ({ value: s.value, label: s.label }))}
                 value={formData.intakeSource}
                 onValueChange={(v) => updateField("intakeSource", v)}
+                placeholder="Select source"
+                searchPlaceholder="Search sources…"
                 disabled={isSubmitting}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {INTAKE_SOURCES.map((s) => (
-                    <SelectItem key={s.value} value={s.value}>
-                      {s.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              />
             </div>
             )}
             {/* The client dropped Preferred Contact for education (one less field for counselors to fill). */}
@@ -739,22 +717,14 @@ export function AddLeadSheet({
               <Label htmlFor="preferredContact" className="text-xs text-gray-600">
                 Preferred Contact
               </Label>
-              <Select
+              <SearchableSelect
+                options={CONTACT_METHODS.map((m) => ({ value: m.value, label: m.label }))}
                 value={formData.preferredContact}
                 onValueChange={(v) => updateField("preferredContact", v)}
+                placeholder="Select method"
+                searchPlaceholder="Search methods…"
                 disabled={isSubmitting}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select method" />
-                </SelectTrigger>
-                <SelectContent>
-                  {CONTACT_METHODS.map((m) => (
-                    <SelectItem key={m.value} value={m.value}>
-                      {m.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              />
             </div>
             )}
           </div>
@@ -776,8 +746,8 @@ export function AddLeadSheet({
       </Collapsible>
 
       <Collapsible open={notesOpen} onOpenChange={setNotesOpen}>
-        <CollapsibleTrigger className="flex items-center gap-2 w-full py-2 text-sm font-medium text-gray-700 hover:text-gray-900">
-          <ChevronRight
+        <CollapsibleTrigger className="flex items-center gap-2 w-full py-2 pl-1 text-[13px] font-medium text-ds-ink">
+          <CaretRightIcon
             className={`h-4 w-4 transition-transform ${
               notesOpen ? "rotate-90" : ""
             }`}
@@ -799,8 +769,8 @@ export function AddLeadSheet({
 
       {industryId === "education_consultancy" && (
         <Collapsible open={academicsOpen} onOpenChange={setAcademicsOpen}>
-          <CollapsibleTrigger className="flex items-center gap-2 w-full py-2 text-sm font-medium text-gray-700 hover:text-gray-900">
-            <ChevronRight
+          <CollapsibleTrigger className="flex items-center gap-2 w-full py-2 pl-1 text-[13px] font-medium text-ds-ink">
+            <CaretRightIcon
               className={`h-4 w-4 transition-transform ${
                 academicsOpen ? "rotate-90" : ""
               }`}
@@ -875,9 +845,9 @@ export function AddLeadSheet({
   const renderItAgencyForm = () => (
     <>
       {/* 1. Lead Information */}
-      <div className="space-y-4">
-        <h3 className="text-sm font-medium text-gray-900">Lead Information</h3>
-        <div className="grid grid-cols-2 gap-4">
+      <div className="flex flex-col gap-5 [&>h3]:-mb-2">
+        <h3 className="pl-1 text-[13px] font-medium text-ds-ink">Lead Information</h3>
+        <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2 [&>div>*:not([data-slot=label])]:mb-0">
           <div className="space-y-1.5">
             <Label htmlFor="ownerId" className="text-xs text-gray-600">
               Lead Owner
@@ -885,32 +855,23 @@ export function AddLeadSheet({
                 <span className="ml-1 text-gray-400">(auto)</span>
               )}
             </Label>
-            <Select
+            <SearchableSelect
+              options={assignableMembers.map((member) => ({ value: member.user_id, label: member.name + (member.user_id === currentUserId ? " (You)" : "") }))}
               value={formData.ownerId || currentUserId}
               onValueChange={(v) => updateField("ownerId", v)}
+              placeholder="Select owner"
+              searchPlaceholder="Find someone…"
               disabled={isSubmitting || !isAdmin}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select owner" />
-              </SelectTrigger>
-              <SelectContent>
-                {assignableMembers.map((member) => (
-                  <SelectItem key={member.user_id} value={member.user_id}>
-                    {member.name}
-                    {member.user_id === currentUserId && " (You)"}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            />
           </div>
         </div>
       </div>
 
       {/* 2. Company Information */}
-      <div className="space-y-4">
-        <h3 className="text-sm font-medium text-gray-900">Company Information</h3>
+      <div className="flex flex-col gap-5 [&>h3]:-mb-2">
+        <h3 className="pl-1 text-[13px] font-medium text-ds-ink">Company Information</h3>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2 [&>div>*:not([data-slot=label])]:mb-0">
           <div className="space-y-1.5">
             <Label htmlFor="companyName" className="text-xs text-gray-600">
               Company Name
@@ -927,23 +888,14 @@ export function AddLeadSheet({
             <Label htmlFor="prospectIndustry" className="text-xs text-gray-600">
               Industry
             </Label>
-            <Select
-              value={formData.prospectIndustry || "__none__"}
+            <SearchableSelect
+              options={[{ value: "__none__", label: "None" }, ...PROSPECT_INDUSTRIES.map((ind) => ({ value: ind.value, label: ind.label }))]}
+              value={formData.prospectIndustry}
               onValueChange={(v) => updateField("prospectIndustry", v === "__none__" ? "" : v)}
+              placeholder="Select industry"
+              searchPlaceholder="Search industries…"
               disabled={isSubmitting}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select industry" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__">Select industry</SelectItem>
-                {PROSPECT_INDUSTRIES.map((ind) => (
-                  <SelectItem key={ind.value} value={ind.value}>
-                    {ind.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            />
           </div>
         </div>
 
@@ -963,38 +915,30 @@ export function AddLeadSheet({
       </div>
 
       {/* 3. Contact Details */}
-      <div className="space-y-4">
-        <h3 className="text-sm font-medium text-gray-900">Contact Details</h3>
+      <div className="flex flex-col gap-5 [&>h3]:-mb-2">
+        <h3 className="pl-1 text-[13px] font-medium text-ds-ink">Contact Details</h3>
 
         {/* [Salutation] First Name | Last Name */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2 [&>div>*:not([data-slot=label])]:mb-0">
           <div className="space-y-1.5">
             <Label htmlFor="firstName" className="text-xs text-gray-600">
-              First Name
+              First name
             </Label>
             <div className="flex gap-2">
-              <Select
-                value={formData.salutation || "__none__"}
+              <SearchableSelect
+                options={[{ value: "__none__", label: "—" }, ...SALUTATIONS.map((s) => ({ value: s, label: s }))]}
+                value={formData.salutation}
                 onValueChange={(v) => updateField("salutation", v === "__none__" ? "" : v)}
+                placeholder="—"
+                searchPlaceholder="Search…"
                 disabled={isSubmitting}
-              >
-                <SelectTrigger className="w-24 shrink-0">
-                  <SelectValue placeholder="—" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">—</SelectItem>
-                  {SALUTATIONS.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {s}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                className="w-24 shrink-0"
+              />
               <Input
                 id="firstName"
                 value={formData.firstName}
                 onChange={(e) => updateField("firstName", e.target.value)}
-                placeholder="John"
+                placeholder="Set first name"
                 disabled={isSubmitting}
                 className={`flex-1 ${errors.firstName ? "border-red-500" : ""}`}
               />
@@ -1002,20 +946,20 @@ export function AddLeadSheet({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="lastName" className="text-xs text-gray-600">
-              Last Name
+              Last name
             </Label>
             <Input
               id="lastName"
               value={formData.lastName}
               onChange={(e) => updateField("lastName", e.target.value)}
-              placeholder="Doe"
+              placeholder="Set last name"
               disabled={isSubmitting}
             />
           </div>
         </div>
 
         {/* Designation | Email */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2 [&>div>*:not([data-slot=label])]:mb-0">
           <div className="space-y-1.5">
             <Label htmlFor="designation" className="text-xs text-gray-600">
               Designation
@@ -1037,7 +981,7 @@ export function AddLeadSheet({
               type="email"
               value={formData.email}
               onChange={(e) => updateField("email", e.target.value)}
-              placeholder="john@example.com"
+              placeholder="Set email"
               disabled={isSubmitting}
               className={errors.email ? "border-red-500" : ""}
             />
@@ -1048,7 +992,7 @@ export function AddLeadSheet({
         </div>
 
         {/* Phone | City */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2 [&>div>*:not([data-slot=label])]:mb-0">
           <div className="space-y-1.5">
             <Label htmlFor="phone" className="text-xs text-gray-600">
               Phone
@@ -1089,32 +1033,32 @@ export function AddLeadSheet({
   const renderDefaultForm = () => (
     <>
       {/* Contact Information */}
-      <div className="space-y-4">
-        <h3 className="text-sm font-medium text-gray-900">Contact Information</h3>
+      <div className="flex flex-col gap-5 [&>h3]:-mb-2">
+        <h3 className="pl-1 text-[13px] font-medium text-ds-ink">Contact Information</h3>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2 [&>div>*:not([data-slot=label])]:mb-0">
           <div className="space-y-1.5">
             <Label htmlFor="firstName" className="text-xs text-gray-600">
-              First Name
+              First name
             </Label>
             <Input
               id="firstName"
               value={formData.firstName}
               onChange={(e) => updateField("firstName", e.target.value)}
-              placeholder="John"
+              placeholder="Set first name"
               disabled={isSubmitting}
               className={errors.firstName ? "border-red-500" : ""}
             />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="lastName" className="text-xs text-gray-600">
-              Last Name
+              Last name
             </Label>
             <Input
               id="lastName"
               value={formData.lastName}
               onChange={(e) => updateField("lastName", e.target.value)}
-              placeholder="Doe"
+              placeholder="Set last name"
               disabled={isSubmitting}
             />
           </div>
@@ -1130,82 +1074,54 @@ export function AddLeadSheet({
           />
         )}
         {industryId === "education_consultancy" && (
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2 [&>div>*:not([data-slot=label])]:mb-0">
             <div className="space-y-1.5">
-              <Label className="text-xs text-gray-600">Field of Study</Label>
-              <Select
-                value={formData.fieldOfStudy || "__none__"}
+              <Label className="text-xs text-gray-600">Field of study</Label>
+              <SearchableSelect
+                options={[{ value: "__none__", label: "None" }, ...fieldsOfStudy.map((x) => ({ value: x, label: x }))]}
+                value={formData.fieldOfStudy}
                 onValueChange={(v) => updateField("fieldOfStudy", v === "__none__" ? "" : v)}
+                placeholder="Select field"
+                searchPlaceholder="Search fields…"
                 disabled={isSubmitting}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select field" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Select field</SelectItem>
-                  {fieldsOfStudy.map((f) => (
-                    <SelectItem key={f} value={f}>{f}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs text-gray-600">Interested Degree Level</Label>
-              <Select
-                value={formData.degreeLevel || "__none__"}
+              <Label className="text-xs text-gray-600">Interested degree level</Label>
+              <SearchableSelect
+                options={[{ value: "__none__", label: "None" }, ...studyLevels.map((x) => ({ value: x, label: x }))]}
+                value={formData.degreeLevel}
                 onValueChange={(v) => updateField("degreeLevel", v === "__none__" ? "" : v)}
+                placeholder="Select level"
+                searchPlaceholder="Search levels…"
                 disabled={isSubmitting}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select level" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Select level</SelectItem>
-                  {studyLevels.map((lvl) => (
-                    <SelectItem key={lvl} value={lvl}>{lvl}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              />
             </div>
           </div>
         )}
         {industryId === "education_consultancy" && (
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2 [&>div>*:not([data-slot=label])]:mb-0">
             <div className="space-y-1.5">
-              <Label className="text-xs text-gray-600">Intake Month</Label>
-              <Select
-                value={formData.intakeMonth || "__none__"}
+              <Label className="text-xs text-gray-600">Intake month</Label>
+              <SearchableSelect
+                options={[{ value: "__none__", label: "None" }, ...intakeMonths.map((x) => ({ value: x, label: x }))]}
+                value={formData.intakeMonth}
                 onValueChange={(v) => updateField("intakeMonth", v === "__none__" ? "" : v)}
+                placeholder="Select month"
+                searchPlaceholder="Search months…"
                 disabled={isSubmitting}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select month" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Select month</SelectItem>
-                  {intakeMonths.map((m) => (
-                    <SelectItem key={m} value={m}>{m}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs text-gray-600">Intake Year</Label>
-              <Select
-                value={formData.intakeYear || "__none__"}
+              <Label className="text-xs text-gray-600">Intake year</Label>
+              <SearchableSelect
+                options={[{ value: "__none__", label: "None" }, ...intakeYears.map((x) => ({ value: x, label: x }))]}
+                value={formData.intakeYear}
                 onValueChange={(v) => updateField("intakeYear", v === "__none__" ? "" : v)}
+                placeholder="Select year"
+                searchPlaceholder="Search years…"
                 disabled={isSubmitting}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select year" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Select year</SelectItem>
-                  {intakeYears.map((y) => (
-                    <SelectItem key={y} value={y}>{y}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              />
             </div>
           </div>
         )}
@@ -1220,27 +1136,32 @@ export function AddLeadSheet({
   );
 
   return (
-    <Sheet open={open} onOpenChange={handleClose} modal={false}>
-      <SheetContent
-        side="right"
-        className="w-full sm:max-w-xl flex flex-col shadow-2xl border-l"
+    <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
+      <DialogContent
+        size="form"
         showCloseButton={!isSubmitting}
-        showOverlay={false}
+        aria-describedby={undefined}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !isSubmitting) {
+            e.preventDefault();
+            void handleSubmit();
+          }
+        }}
       >
-        <SheetHeader className="shrink-0 border-b pb-4">
-          <SheetTitle className="flex items-center gap-2">
-            <Plus className="h-5 w-5" />
-            Add New Lead
-          </SheetTitle>
-          <SheetDescription>
-            Manually add a lead from a phone call, walk-in, or referral.
-          </SheetDescription>
-        </SheetHeader>
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <span className="grid size-5 shrink-0 place-items-center rounded-md bg-ds-accent-soft text-ds-accent">
+              <PlusIcon className="size-[13px]" aria-hidden />
+            </span>
+            Add lead
+          </DialogTitle>
+          <DialogDescription className="sr-only">Manually add a lead from a phone call, walk-in, or referral.</DialogDescription>
+        </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto py-6 px-4 space-y-6">
+        <div ref={bodyRef} className="space-y-7">
           {errors.general && (
-            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+            <div className="flex items-start gap-2 rounded-[10px] bg-ds-bad-soft p-3 text-sm text-ds-bad">
+              <WarningCircleIcon className="mt-0.5 h-4 w-4 shrink-0" />
               {errors.general}
             </div>
           )}
@@ -1248,33 +1169,37 @@ export function AddLeadSheet({
           {industryId === "it_agency" ? renderItAgencyForm() : renderDefaultForm()}
         </div>
 
-        <SheetFooter className="shrink-0 border-t pt-4">
-          <div className="flex w-full gap-4">
-            <Button
-              variant="outline"
-              onClick={handleClose}
-              disabled={isSubmitting}
-              className="flex-1"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={isSubmitting}
-              className="flex-1"
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Creating...
-                </>
-              ) : (
-                "Create Lead"
-              )}
-            </Button>
-          </div>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        <DialogFooter>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={addAnother}
+            onClick={() => setAddAnother((v) => !v)}
+            disabled={isSubmitting}
+            className="mr-auto flex items-center gap-2 rounded-lg px-1 py-1 text-[13px] font-normal text-ds-muted"
+          >
+            <span className={`relative inline-block h-4 w-7 rounded-full transition-colors ${addAnother ? "bg-ds-accent" : "bg-[#d9dce0]"}`}>
+              <span className={`absolute top-0.5 size-3 rounded-full bg-white transition-all ${addAnother ? "left-[14px]" : "left-0.5"}`} />
+            </span>
+            Add another
+          </button>
+          <Button variant="outline" onClick={handleClose} disabled={isSubmitting}>
+            Cancel
+          </Button>
+          <Button onClick={handleSubmit} disabled={isSubmitting}>
+            {isSubmitting ? (
+              <>
+                <CircleNotchIcon className="size-4 animate-spin" />
+                Adding…
+              </>
+            ) : (
+              <>
+                Add lead <DialogKeyHint>⌘↵</DialogKeyHint>
+              </>
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

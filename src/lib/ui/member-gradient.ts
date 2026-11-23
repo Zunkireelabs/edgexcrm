@@ -23,3 +23,8 @@ export function getInitials(label: string): string {
   if (parts.length === 1) return parts[0][0].toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
+
+/** Soft pastel tint of the member's colour (about 18% over white), for flat avatars. */
+export function memberTint(seed: string): string {
+  return `color-mix(in srgb, hsl(${memberHue(seed)} 70% 62%) 18%, white)`;
+}

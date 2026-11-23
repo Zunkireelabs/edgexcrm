@@ -1,0 +1,69 @@
+import { encodeFilterTree } from "@/lib/filters/serialize";
+import type { FilterTree } from "@/lib/filters/types";
+
+/**
+ * Deep links from Pulse into the EXISTING leads list (and its existing bulk-reassign flow) — Pulse adds no write path.
+ *
+ * The leads table reads the shared filter tree from `?f=` (advanced filters, on in every deploy), so a link can open
+ * the list already filtered to exactly one person's leads: field `assignees` (a registry key, never a column), op
+ * `is_any_of`. No change to the shared leads page or table is needed.
+ */
+export function assigneeFilterTree(userIds: string[]): FilterTree {
+  return {
+    conjunction: "and",
+    conditions: [{ id: "pulse:assignees", field: "assignees", op: "is_any_of", value: userIds }],
+  };
+}
+
+/** `/leads` opened on one person's leads (optionally inside one list tab). */
+export function leadsOfPersonHref(userId: string, listSlug?: string | null): string {
+  const p = new URLSearchParams();
+  if (listSlug) p.set("list", listSlug);
+  p.set("f", encodeFilterTree(assigneeFilterTree([userId])));
+  return `/leads?${p.toString()}`;
+}
+
+/** `/leads` filtered to held leads with no touch or move for 3+ days — the person drawer's "Untouched" tile (any window). */
+export function untouchedHeldHref(): string {
+  const tree: FilterTree = {
+    conjunction: "and",
+    conditions: [{ id: "pulse:untouched-held", field: "untouched_held", op: "is_true" }],
+  };
+  return `/leads?${new URLSearchParams({ f: encodeFilterTree(tree) }).toString()}`;
+}
+
+/** One person's held leads with no touch or move for 3+ days — exactly the "N leads untouched" a person row counts. */
+export function untouchedHeldOfPersonHref(userId: string): string {
+  const tree: FilterTree = {
+    conjunction: "and",
+    conditions: [
+      { id: "pulse:assignees", field: "assignees", op: "is_any_of", value: [userId] },
+      { id: "pulse:untouched-held", field: "untouched_held", op: "is_true" },
+    ],
+  };
+  return `/leads?${new URLSearchParams({ f: encodeFilterTree(tree) }).toString()}`;
+}
+
+/**
+ * `/leads` on the intake list(s), filtered to NEW leads nobody has touched for 48h+ — the intake alarm's set.
+ * `listIds` are the intake lists the count was read from (any number, never a hard-coded slug), carried as a `stage`
+ * condition exactly like Home's unassigned link, so the link opens what was counted. `heldOnly` adds "someone holds it"
+ * (Home counts only leads held for 48h+ on this row; the unassigned ones are on "Assign N new leads", fresh hand-overs are not yet late).
+ */
+export function untouchedLeadsHref(listIds: string[], opts: { heldOnly?: boolean } = {}): string {
+  const tree: FilterTree = {
+    conjunction: "and",
+    conditions: [
+      { id: "pulse:untouched", field: "untouched_new", op: "is_true" },
+      ...(listIds.length ? [{ id: "pulse:untouched-lists", field: "stage", op: "is_any_of" as const, value: [...new Set(listIds)] }] : []),
+      ...(opts.heldOnly
+        ? [
+            { id: "pulse:untouched-held-by", field: "assignees", op: "is_not_empty" as const },
+            // Held for 48h+ (the same cutoff Home's count uses): a lead handed over seconds ago is not yet "held untouched".
+            { id: "pulse:held-48h", field: "held_48h", op: "is_true" as const },
+          ]
+        : []),
+    ],
+  };
+  return `/leads?${new URLSearchParams({ f: encodeFilterTree(tree) }).toString()}`;
+}

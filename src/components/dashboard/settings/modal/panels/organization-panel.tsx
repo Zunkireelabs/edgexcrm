@@ -12,13 +12,15 @@ import { StudyLevelsManager } from "@/components/dashboard/settings/study-levels
 import { ProgramsManager } from "@/components/dashboard/settings/programs-manager";
 import { IntakeMonthsManager } from "@/components/dashboard/settings/intake-months-manager";
 import { IntakeYearsManager } from "@/components/dashboard/settings/intake-years-manager";
+import { OfficeHoursCard } from "@/industries/education-consultancy/features/processes/ui/office-hours-card";
 import { useSettingsModal } from "@/contexts/settings-modal-context";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import type { TenantEntity } from "@/types/database";
 
 export function OrganizationPanel() {
-  const { bootstrapData, bootstrapLoading, industryId } = useSettingsModal();
+  const { bootstrapData, bootstrapLoading, industryId, role } = useSettingsModal();
+  const showOfficeHours = industryId === "education_consultancy" && (role === "owner" || role === "admin");
   const [entities, setEntities] = useState<TenantEntity[]>([]);
   const [entitiesLoading, setEntitiesLoading] = useState(true);
 
@@ -45,6 +47,7 @@ export function OrganizationPanel() {
         </div>
       ) : (
         <>
+          {showOfficeHours && <OfficeHoursCard />}
           {industry && (
             <IndustryEntitiesManager industry={industry} initialEntities={entities} />
           )}

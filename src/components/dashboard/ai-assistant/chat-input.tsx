@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Send } from "lucide-react";
+import { PaperPlaneTiltIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 
 interface ChatInputProps {
@@ -10,6 +10,8 @@ interface ChatInputProps {
   placeholder?: string;
   /** Shown just above the input while `disabled` is true, so the user knows why they can't type. */
   disabledHint?: string;
+  /** A question to put in the box (Home's "Ask Orca" chips). Typed in, not sent. A new `nonce` puts it in again. */
+  prefill?: { text: string; nonce: number } | null;
 }
 
 export function ChatInput({
@@ -17,9 +19,22 @@ export function ChatInput({
   disabled = false,
   placeholder = "Ask anything...",
   disabledHint,
+  prefill,
 }: ChatInputProps) {
   const [message, setMessage] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // A prefill older than this input (a new chat remounts it) is stale: only apply ones made while it is mounted. Applied during
+  // render (the "adjust state when a prop changes" pattern), once per nonce, so there is no effect that sets state.
+  const [mountedAt] = useState(() => Date.now());
+  const [appliedNonce, setAppliedNonce] = useState<number | null>(null);
+  if (prefill && prefill.nonce >= mountedAt && prefill.nonce !== appliedNonce) {
+    setAppliedNonce(prefill.nonce);
+    setMessage(prefill.text);
+  }
+  useEffect(() => {
+    if (appliedNonce !== null) textareaRef.current?.focus();
+  }, [appliedNonce]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -71,7 +86,7 @@ export function ChatInput({
           disabled={disabled || !message.trim()}
           className="absolute bottom-2.5 right-2.5 h-9 w-9 rounded-full shrink-0"
         >
-          <Send className="h-4 w-4" />
+          <PaperPlaneTiltIcon className="h-4 w-4" />
         </Button>
       </div>
     </div>

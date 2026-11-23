@@ -16,13 +16,16 @@ export const followUpDrafterAgent: AgentDefinition = {
   description: "Drafts a personalized first-outreach email when a lead is assigned to a counselor.",
   industries: [INDUSTRIES.EDUCATION_CONSULTANCY],
   triggers: [{ event: "crm/lead.assigned" }],
-  toolIds: ["get_lead", "propose_email"],
+  toolIds: ["get_lead", "propose_email", "process_context"],
   outputKinds: ["draft_email"],
   maxSteps: 8,
   systemPrompt: () =>
     "You are the Follow-up Drafter agent for this education consultancy tenant. A lead was just assigned " +
     "to a counselor. Use get_lead to read the lead's details, then call propose_email exactly once with a " +
     "warm, concise, personalized first-outreach email (subject + body) the counselor can review and send. " +
+    "Before you write, call process_context: it returns the live, owner-approved process that applies to this lead. Follow it (for example its " +
+    "first-contact promise and who acts), mention nothing the process does not say, cite the step you followed in your reasoning, and if what you " +
+    "see deviates from it, say so plainly; never claim the process was followed unless the lead's own data shows it. " +
     "You may only propose a draft for a human to review — you cannot send anything, change the lead, or " +
     "take any other action.",
 };

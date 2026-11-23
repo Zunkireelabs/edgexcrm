@@ -36,3 +36,17 @@ export function treeForFacetOption(tree: FilterTree, field: string, optionValue:
     ...(tree.groups ? { groups: tree.groups } : {}),
   };
 }
+
+/**
+ * The list's own tree with ONE extra condition AND-ed on top (EDGEX-126 footer "need follow-up": the
+ * existing `follow_up_needed` registry field, never a second rule). `null` for a top-level OR tree —
+ * AND-ing onto it would change its meaning, and a wrong number is worse than none.
+ */
+export function treeWithCondition(tree: FilterTree, condition: FilterCondition): FilterTree | null {
+  if (tree.conjunction !== "and") return null;
+  return {
+    conjunction: "and",
+    conditions: [...tree.conditions, condition],
+    ...(tree.groups ? { groups: tree.groups } : {}),
+  };
+}

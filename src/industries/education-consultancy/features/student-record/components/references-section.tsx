@@ -2,6 +2,7 @@
 
 import { Input } from "@/components/ui/input";
 import { RepeatableList } from "./repeatable-list";
+import { FieldLabel, useSetPlaceholder } from "./form-primitives";
 
 export interface ReferenceEntry {
   id: string;
@@ -26,6 +27,7 @@ export function ReferencesSection({
   value: ReferenceEntry[];
   onChange: (next: ReferenceEntry[]) => void;
 }) {
+  const setPh = useSetPlaceholder();
   return (
     <RepeatableList
       items={value}
@@ -37,27 +39,27 @@ export function ReferencesSection({
       renderSummary={(item) => (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-2 text-sm">
           <div>
-            <p className="text-xs text-muted-foreground">Name of Referee</p>
+            <FieldLabel className="text-xs text-muted-foreground">Name of Referee</FieldLabel>
             <p className="font-medium">{item.refereeName || "—"}</p>
           </div>
           <div>
-            <p className="text-xs text-muted-foreground">Position</p>
+            <FieldLabel className="text-xs text-muted-foreground">Position</FieldLabel>
             <p className="font-medium">{item.position || "—"}</p>
           </div>
           <div>
-            <p className="text-xs text-muted-foreground">Organization</p>
+            <FieldLabel className="text-xs text-muted-foreground">Organization</FieldLabel>
             <p className="font-medium">{item.organization || "—"}</p>
           </div>
           <div>
-            <p className="text-xs text-muted-foreground">Email</p>
+            <FieldLabel className="text-xs text-muted-foreground">Email</FieldLabel>
             <p className="font-medium">{item.email || "—"}</p>
           </div>
           <div>
-            <p className="text-xs text-muted-foreground">Relationship with Applicant</p>
+            <FieldLabel className="text-xs text-muted-foreground">Relationship with Applicant</FieldLabel>
             <p className="font-medium">{item.relationship || "—"}</p>
           </div>
           <div>
-            <p className="text-xs text-muted-foreground">Address</p>
+            <FieldLabel className="text-xs text-muted-foreground">Address</FieldLabel>
             <p className="font-medium">{item.address || "—"}</p>
           </div>
         </div>
@@ -65,28 +67,28 @@ export function ReferencesSection({
       renderItem={(item, update) => (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-3">
           <div>
-            <p className="text-xs text-muted-foreground mb-1">Name of Referee</p>
-            <Input value={item.refereeName} onChange={(e) => update({ refereeName: e.target.value })} className="h-9 text-sm" />
+            <FieldLabel className="text-xs text-muted-foreground mb-1">Name of Referee</FieldLabel>
+            <Input placeholder={setPh("Name of Referee")} value={item.refereeName} onChange={(e) => update({ refereeName: e.target.value })} className="h-9 text-sm" />
           </div>
           <div>
-            <p className="text-xs text-muted-foreground mb-1">Position</p>
-            <Input value={item.position} onChange={(e) => update({ position: e.target.value })} className="h-9 text-sm" />
+            <FieldLabel className="text-xs text-muted-foreground mb-1">Position</FieldLabel>
+            <Input placeholder={setPh("Position")} value={item.position} onChange={(e) => update({ position: e.target.value })} className="h-9 text-sm" />
           </div>
           <div>
-            <p className="text-xs text-muted-foreground mb-1">Organization</p>
-            <Input value={item.organization} onChange={(e) => update({ organization: e.target.value })} className="h-9 text-sm" />
+            <FieldLabel className="text-xs text-muted-foreground mb-1">Organization</FieldLabel>
+            <Input placeholder={setPh("Organization")} value={item.organization} onChange={(e) => update({ organization: e.target.value })} className="h-9 text-sm" />
           </div>
           <div>
-            <p className="text-xs text-muted-foreground mb-1">Email</p>
-            <Input type="email" value={item.email} onChange={(e) => update({ email: e.target.value })} className="h-9 text-sm" />
+            <FieldLabel className="text-xs text-muted-foreground mb-1">Email</FieldLabel>
+            <Input placeholder={setPh("Email")} type="email" value={item.email} onChange={(e) => update({ email: e.target.value })} className="h-9 text-sm" />
           </div>
           <div>
-            <p className="text-xs text-muted-foreground mb-1">Relationship with Applicant</p>
-            <Input value={item.relationship} onChange={(e) => update({ relationship: e.target.value })} className="h-9 text-sm" />
+            <FieldLabel className="text-xs text-muted-foreground mb-1">Relationship with Applicant</FieldLabel>
+            <Input placeholder={setPh("Relationship with Applicant")} value={item.relationship} onChange={(e) => update({ relationship: e.target.value })} className="h-9 text-sm" />
           </div>
           <div>
-            <p className="text-xs text-muted-foreground mb-1">Address</p>
-            <Input value={item.address} onChange={(e) => update({ address: e.target.value })} className="h-9 text-sm" />
+            <FieldLabel className="text-xs text-muted-foreground mb-1">Address</FieldLabel>
+            <Input placeholder={setPh("Address")} value={item.address} onChange={(e) => update({ address: e.target.value })} className="h-9 text-sm" />
           </div>
         </div>
       )}

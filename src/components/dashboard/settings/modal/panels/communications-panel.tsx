@@ -5,6 +5,7 @@ import { PanelContent, PanelSection } from "../panel-shell";
 import { EmailSenderCard } from "@/components/dashboard/settings/email-sender-card";
 import { EmailBlastSettingsCard } from "@/components/dashboard/settings/email-blast-settings-card";
 import { ChannelsCard } from "@/components/dashboard/settings/channels-card";
+import { WebsiteChatCard } from "@/components/dashboard/settings/website-chat-card";
 import { EmailRulesManager } from "@/components/dashboard/settings/email-rules-manager";
 import { InboxConnector } from "@/industries/_shared/features/email/components/inbox-connector";
 import { BccAddressPanel } from "@/industries/_shared/features/email/components/bcc-address-panel";
@@ -30,6 +31,11 @@ export function CommunicationsPanel() {
       <PanelSection>
         <ChannelsCard />
       </PanelSection>
+      {isSettingsAdmin && (
+        <PanelSection className="empty:hidden">
+          <WebsiteChatCard />
+        </PanelSection>
+      )}
       <PanelSection>
         <EmailRulesManager tenantId={tenant.id} />
       </PanelSection>

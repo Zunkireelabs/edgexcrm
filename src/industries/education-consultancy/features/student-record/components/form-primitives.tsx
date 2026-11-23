@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { CaretDownIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { PhoneInput } from "@/components/ui/phone-input";
@@ -18,12 +18,36 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 const CollapsibleGroupsContext = createContext(false);
 
 /**
+ * Edit profile (EDGEX-155) layout: sentence-case labels ("Date of birth"), "Set …" placeholders and two-column grids inside the
+ * 600px section panel. Off everywhere else, so the classic pop-up and the summary card render exactly as before.
+ */
+export const EditProfileLayoutContext = createContext(false);
+
+/** "Date of Birth" → "Date of birth"; words that are already all caps (GPA, IELTS, SEE, +2) are kept. */
+export function sentenceCase(label: string): string {
+  const words = label.split(" ");
+  return words.map((w, i) => (/^[A-Z0-9+/&-]{2,}$/.test(w) ? w : i === 0 ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w.toLowerCase())).join(" ");
+}
+
+/**
  * Wrap a region to make every SectionGroup inside it collapsible (open by default) —
  * including groups added to that region later, with nothing to remember per section.
  * Outside a <CollapsibleGroups>, a SectionGroup is a plain heading (e.g. in the dialog).
  */
 export function CollapsibleGroups({ children }: { children: React.ReactNode }) {
   return <CollapsibleGroupsContext.Provider value={true}>{children}</CollapsibleGroupsContext.Provider>;
+}
+
+/** A small field label that follows Edit profile's sentence case; everywhere else it is a plain `<p>`. */
+export function FieldLabel({ className, children }: { className?: string; children: string }) {
+  const compact = useContext(EditProfileLayoutContext);
+  return <p className={className}>{compact ? sentenceCase(children) : children}</p>;
+}
+
+/** "Set <label>" placeholder inside Edit profile; `undefined` elsewhere (those inputs keep whatever they had). */
+export function useSetPlaceholder(): (label: string) => string | undefined {
+  const compact = useContext(EditProfileLayoutContext);
+  return (label) => (compact ? `Set ${sentenceCase(label).toLowerCase()}` : undefined);
 }
 
 export function SectionGroup({ title, children }: { title: string; children: React.ReactNode }) {
@@ -42,7 +66,7 @@ export function SectionGroup({ title, children }: { title: string; children: Rea
             className="flex w-full items-center justify-between gap-2 text-left"
           >
             {title}
-            <ChevronDown
+            <CaretDownIcon
               aria-hidden="true"
               className={cn(
                 "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
@@ -82,7 +106,9 @@ export function CardSection({
   );
 }
 
-export function FieldGrid({ children, columns = 3 }: { children: React.ReactNode; columns?: 2 | 3 }) {
+export function FieldGrid({ children, columns: requested = 3 }: { children: React.ReactNode; columns?: 2 | 3 }) {
+  const compact = useContext(EditProfileLayoutContext);
+  const columns = compact ? 2 : requested;
   const cols = columns === 2 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3";
   return <div className={`grid ${cols} gap-x-6 gap-y-4`}>{children}</div>;
 }
@@ -114,6 +140,7 @@ export function EditableField({
   readOnlyNote,
   disabled,
   invalid,
+  needed,
 }: {
   field: FieldDef;
   isEditing: boolean;
@@ -125,13 +152,18 @@ export function EditableField({
   disabled?: boolean;
   /** Marks the field red — it is still required before the lead can move to Applications. */
   invalid?: boolean;
+  /** Edit profile: the consent form still needs this value ("· needed for consent" after the label). */
+  needed?: boolean;
 }) {
+  const compact = useContext(EditProfileLayoutContext);
+  const label = compact ? sentenceCase(field.label) : field.label;
   const redBorder = invalid ? "border-red-500 focus-visible:ring-red-500" : "";
   return (
     <div className={field.span === 2 ? "col-span-full" : undefined} data-invalid={invalid ? "true" : undefined}>
       <p className={invalid ? "text-xs font-medium text-red-600 mb-1" : "text-xs text-muted-foreground mb-1"}>
-        {field.label}
+        {label}
         {invalid ? " — required" : ""}
+        {needed && !invalid && <span className="font-normal text-[#b25e09]"> · needed for consent</span>}
       </p>
       {isEditing ? (
         field.type === "select" ? (
@@ -157,13 +189,13 @@ export function EditableField({
           </div>
         ) : (
           <>
-            <Label htmlFor={field.key} className="sr-only">{field.label}</Label>
+            <Label htmlFor={field.key} className="sr-only">{label}</Label>
             <Input
               id={field.key}
               type={field.type}
               value={value}
               onChange={(e) => onChange(e.target.value)}
-              placeholder={field.placeholder ?? `Enter ${field.label.toLowerCase()}`}
+              placeholder={compact ? `Set ${label.toLowerCase()}` : field.placeholder ?? `Enter ${field.label.toLowerCase()}`}
               className={`h-9 text-sm ${redBorder}`}
               readOnly={!!readOnlyNote}
               disabled={!!readOnlyNote || !!disabled}

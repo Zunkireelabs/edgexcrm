@@ -1,8 +1,8 @@
 "use client";
 
 import { SECTION_TITLE_CLASS } from "@/components/dashboard/lead/section-title";
-import { useState, useEffect, useCallback } from "react";
-import { Plus, Loader2, MoreHorizontal, Check, X } from "lucide-react";
+import { useState } from "react";
+import { PlusIcon, CircleNotchIcon, DotsThreeIcon, CheckIcon, XIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -27,22 +27,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { failureMessage } from "@/lib/permission-denied";
-import { AddEnrollmentToLeadSheet } from "./add-enrollment-to-lead-sheet";
-
-interface Enrollment {
-  id: string;
-  class_id: string;
-  fee_paid: boolean;
-  fee_amount: number | null;
-  enrollment_type: "demo" | "actual";
-  status: "active" | "inactive" | "completed";
-  created_at: string;
-  classes?: {
-    id: string;
-    name: string;
-    default_fee: number | null;
-  } | null;
-}
+import { useLeadEnrollments, type Enrollment, type EnrollmentsApi } from "../hooks/use-lead-enrollments";
 
 const STATUS_STYLES: Record<Enrollment["status"], string> = {
   active: "bg-green-50 text-green-700 border-green-200",
@@ -53,40 +38,17 @@ const STATUS_STYLES: Record<Enrollment["status"], string> = {
 interface ClassesCardProps {
   leadId: string;
   canManage: boolean;
+  /** Lead page: the shared enrollments state (also read by the right rail). Omit and the card owns its own. */
+  store?: EnrollmentsApi;
 }
 
-export function ClassesCard({ leadId, canManage }: ClassesCardProps) {
-  const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState(false);
-  const [addOpen, setAddOpen] = useState(false);
+export function ClassesCard({ leadId, canManage, store }: ClassesCardProps) {
+  const own = useLeadEnrollments(leadId, { enabled: !store });
+  const { enrollments, loading, loadError, fetchEnrollments, openAdd } = store ?? own;
   const [markPaidTarget, setMarkPaidTarget] = useState<Enrollment | null>(null);
   const [feeAmountInput, setFeeAmountInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
-
-  const fetchEnrollments = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/v1/leads/${leadId}/classes`);
-      if (!res.ok) throw new Error(`Failed to fetch classes (${res.status})`);
-      const { data } = await res.json();
-      setEnrollments(data ?? []);
-      setLoadError(false);
-    } catch {
-      // A failed fetch must never look identical to a genuine empty list —
-      // this exact confusion (404 rendering as "Not enrolled in any class
-      // yet.") was a real prod bug that hid a collaborator-visibility
-      // permissions gap for weeks. Surface it distinctly instead.
-      setEnrollments([]);
-      setLoadError(true);
-      toast.error("Couldn't load this student's classes — try refreshing the page.");
-    }
-  }, [leadId]);
-
-  useEffect(() => {
-    setLoading(true);
-    fetchEnrollments().finally(() => setLoading(false));
-  }, [fetchEnrollments]);
 
   async function handleToggleFeePaid(enrollment: Enrollment) {
     if (!enrollment.fee_paid) {
@@ -193,10 +155,10 @@ export function ClassesCard({ leadId, canManage }: ClassesCardProps) {
                 size="sm"
                 variant="ghost"
                 className="h-6 w-6 p-0"
-                onClick={() => setAddOpen(true)}
+                onClick={openAdd}
                 title="Add to Class"
               >
-                <Plus className="h-3.5 w-3.5" />
+                <PlusIcon className="h-3.5 w-3.5" />
               </Button>
             )}
           </div>
@@ -205,7 +167,7 @@ export function ClassesCard({ leadId, canManage }: ClassesCardProps) {
         <CardContent className="pb-4">
           {loading ? (
             <div className="flex justify-center py-3">
-              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              <CircleNotchIcon className="h-4 w-4 animate-spin text-muted-foreground" />
             </div>
           ) : loadError ? (
             <p className="text-xs text-destructive text-center py-2">Couldn&apos;t load classes — try refreshing.</p>
@@ -227,7 +189,7 @@ export function ClassesCard({ leadId, canManage }: ClassesCardProps) {
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0 -mt-0.5" disabled={isUpdating}>
-                              {isUpdating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <MoreHorizontal className="h-3.5 w-3.5" />}
+                              {isUpdating ? <CircleNotchIcon className="h-3.5 w-3.5 animate-spin" /> : <DotsThreeIcon className="h-3.5 w-3.5" />}
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
@@ -244,7 +206,7 @@ export function ClassesCard({ leadId, canManage }: ClassesCardProps) {
                                       s === "active" ? "bg-green-600" : s === "completed" ? "bg-blue-600" : "bg-muted-foreground"
                                     }`} />
                                     <span className="capitalize">{s}</span>
-                                    {s === enrollment.status && <Check className="h-3 w-3 ml-auto" />}
+                                    {s === enrollment.status && <CheckIcon className="h-3 w-3 ml-auto" />}
                                   </DropdownMenuItem>
                                 ))}
                               </DropdownMenuSubContent>
@@ -275,12 +237,12 @@ export function ClassesCard({ leadId, canManage }: ClassesCardProps) {
                       </Badge>
                       {enrollment.fee_paid ? (
                         <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-green-50 text-green-700 border-green-200">
-                          <Check className="h-2.5 w-2.5 mr-0.5" />
+                          <CheckIcon className="h-2.5 w-2.5 mr-0.5" />
                           Paid
                         </Badge>
                       ) : (
                         <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-muted-foreground">
-                          <X className="h-2.5 w-2.5 mr-0.5" />
+                          <XIcon className="h-2.5 w-2.5 mr-0.5" />
                           Unpaid
                         </Badge>
                       )}
@@ -301,15 +263,7 @@ export function ClassesCard({ leadId, canManage }: ClassesCardProps) {
         </CardContent>
       </Card>
 
-      <AddEnrollmentToLeadSheet
-        open={addOpen}
-        onOpenChange={setAddOpen}
-        leadId={leadId}
-        onSuccess={() => {
-          setAddOpen(false);
-          fetchEnrollments();
-        }}
-      />
+      {!store && own.dialogs}
 
       <Dialog open={!!markPaidTarget} onOpenChange={(open) => !open && setMarkPaidTarget(null)}>
         <DialogContent className="sm:max-w-sm">
@@ -333,7 +287,7 @@ export function ClassesCard({ leadId, canManage }: ClassesCardProps) {
               Cancel
             </Button>
             <Button onClick={handleConfirmMarkPaid} disabled={submitting}>
-              {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {submitting && <CircleNotchIcon className="h-4 w-4 mr-2 animate-spin" />}
               Mark paid
             </Button>
           </DialogFooter>

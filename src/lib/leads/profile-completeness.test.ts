@@ -38,7 +38,7 @@ const CONSENT_TEMPLATE = {
 describe("checkLeadProfileCompleteness — basic info = consent fields, no documents", () => {
   it("is complete with no active template once name/email/phone/study info are filled — and NO document", async () => {
     const db = fakeDb({ leads: { data: COMPLETE_LEAD }, consent_templates: { data: null } });
-    expect(await checkLeadProfileCompleteness(db, "tenant-1", "lead-1")).toEqual({ complete: true, missing: [] });
+    expect(await checkLeadProfileCompleteness(db, "tenant-1", "lead-1")).toMatchObject({ complete: true, missing: [] });
   });
 
   it("never asks for a document, even when the lead has none (the Subhan Ali case)", async () => {
@@ -69,6 +69,9 @@ describe("checkLeadProfileCompleteness — basic info = consent fields, no docum
     expect(result.missing).toEqual(
       expect.arrayContaining(["Nationality", "Passport Number", "Address", "Guardian Name", "Guardian Relationship"]),
     );
+    // 5 always-required + the 5 template fields (street_address and full_address are one "Address"); 5 of 10 filled.
+    expect(result.total).toBe(10);
+    expect(result.filled).toBe(10 - result.missing.length);
   });
 
   it("is complete when the consent-template fields are filled", async () => {
@@ -85,7 +88,7 @@ describe("checkLeadProfileCompleteness — basic info = consent fields, no docum
       },
       consent_templates: { data: CONSENT_TEMPLATE },
     });
-    expect(await checkLeadProfileCompleteness(db, "tenant-1", "lead-1")).toEqual({ complete: true, missing: [] });
+    expect(await checkLeadProfileCompleteness(db, "tenant-1", "lead-1")).toEqual({ complete: true, missing: [], total: 10, filled: 10 });
   });
 
   it("a lead whose consent is already SIGNED is not re-checked against template fields (a later template edit can't lock them out)", async () => {
@@ -94,7 +97,7 @@ describe("checkLeadProfileCompleteness — basic info = consent fields, no docum
       consent_templates: { data: CONSENT_TEMPLATE },
       lead_consents: { data: { id: "consent-1" } },
     });
-    expect(await checkLeadProfileCompleteness(db, "tenant-1", "lead-1")).toEqual({ complete: true, missing: [] });
+    expect(await checkLeadProfileCompleteness(db, "tenant-1", "lead-1")).toMatchObject({ complete: true, missing: [] });
   });
 
   it("a signed consent does not excuse the always-required fields (name / email / phone / study info)", async () => {
@@ -122,7 +125,7 @@ describe("checkLeadProfileCompleteness — basic info = consent fields, no docum
     const db = fakeDb({ leads: { data: { ...COMPLETE_LEAD, phone: null } }, consent_templates: { data: null } });
     expect((await checkLeadProfileCompleteness(db, "tenant-1", "lead-1")).missing).toEqual(["Phone"]);
     const fixed = await checkLeadProfileCompleteness(db, "tenant-1", "lead-1", { phone: "+977-9865331614" });
-    expect(fixed).toEqual({ complete: true, missing: [] });
+    expect(fixed).toMatchObject({ complete: true, missing: [] });
   });
 
   it("a pending value that clears a field makes it missing; unrelated pending keys are ignored", async () => {

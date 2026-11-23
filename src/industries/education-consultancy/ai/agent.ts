@@ -39,5 +39,6 @@ export const aiConfig: AiConfig = {
     "get_document_extracted_data",
     "find_missing_documents",
     "get_document_download_url",
+    "process_context",
   ],
 };

@@ -21,11 +21,14 @@ import {
 } from "@/lib/api/response";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { createRequestLogger } from "@/lib/logger";
+import { recordHumanAssignment } from "@/industries/education-consultancy/features/home/server/assignment/outcome-record";
 import { createNotificationsExcept, NotificationTypes } from "@/lib/notifications";
 import { ASSIGN_CHAIN_POSITIONS, assignableTargetSlugs } from "@/industries/education-consultancy/lead-assignment-chain";
 import { sendBulkAssignedEmail } from "@/lib/email/send-lead-assigned";
 import { hasProspectQualification, canBypassProspectQualification } from "@/lib/leads/prospect-qualification";
-import { holderChange } from "@/lib/leads/stage-move-audit";
+import { BULK_VIA, holderChange, listIdsChange } from "@/lib/leads/stage-move-audit";
+import { parseAddTags, unionTags } from "@/lib/leads/tags";
+import { clearTagsCacheForTenant } from "@/lib/leads/tags-cache";
 import { checkApplicationsReadiness, applicationsGateMessage, applicationsGateApplies } from "@/lib/leads/applications-readiness";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -65,11 +68,27 @@ export async function PATCH(request: NextRequest) {
     graduate?: boolean;
     /** Explicit landing stage within list_id's pipeline (e.g. Archive restore). Falls back to auto-pick when omitted. */
     stage_id?: string;
+    /** EDGEX-127: tags to ADD (union into each lead's existing tags). Sent alone, never with other fields. */
+    add_tags?: string[];
   };
   try {
     body = await request.json();
   } catch {
     return apiValidationError({ body: ["Invalid JSON body"] });
+  }
+
+  // EDGEX-127: validate + normalise add_tags up front (before any DB work).
+  let addTags: string[] | undefined;
+  if (body.add_tags !== undefined) {
+    const parsed = parseAddTags(body.add_tags);
+    if (!parsed.ok) return apiValidationError({ add_tags: [parsed.error] });
+    if (
+      body.assigned_to !== undefined || body.branch_id !== undefined || body.list_id !== undefined ||
+      body.stage_id !== undefined || body.archive_reason !== undefined || body.graduate !== undefined
+    ) {
+      return apiValidationError({ add_tags: ["add_tags cannot be combined with other fields"] });
+    }
+    addTags = parsed.tags;
   }
 
   // Validate IDs
@@ -234,7 +253,7 @@ export async function PATCH(request: NextRequest) {
   // Verify all leads exist and belong to tenant (exclude converted leads from bulk operations)
   const { data: existingLeads, error: fetchError } = await supabase
     .from("leads")
-    .select("id, assigned_to, branch_id, list_id, status")
+    .select("id, assigned_to, branch_id, list_id, status, tags")
     .eq("tenant_id", auth.tenantId)
     .is("deleted_at", null)
     .is("converted_at", null)
@@ -281,6 +300,57 @@ export async function PATCH(request: NextRequest) {
 
   if (idsToUpdate.length === 0) {
     return apiValidationError({ ids: ["No valid leads found to update"] });
+  }
+
+  // EDGEX-127 bulk Add tag. Runs AFTER the same tenant + role + branch narrowing above (idsToUpdate), so a
+  // branch manager can never tag a lead outside their branch and a foreign-tenant id is "not found". Each
+  // lead's tags differ, so this is a per-lead union write, not the single bulk payload below. It touches only
+  // `tags` + `updated_at`: tagging is not "activity" and must not reshuffle the Last-activity sort.
+  if (addTags) {
+    const tagsById = new Map((existingLeads ?? []).map((l) => [l.id, ((l as { tags?: string[] | null }).tags ?? []) as string[]]));
+    const writes = idsToUpdate.map((id) => ({ id, old: tagsById.get(id) ?? [], next: unionTags(tagsById.get(id), addTags!) }));
+    const changed = writes.filter((w) => w.next.length !== w.old.length);
+    const failedIds: string[] = [];
+    await Promise.all(
+      changed.map(async (w) => {
+        const { error: tagError } = await supabase
+          .from("leads")
+          .update({ tags: w.next, updated_at: new Date().toISOString() })
+          .eq("tenant_id", auth.tenantId)
+          .eq("id", w.id);
+        if (tagError) {
+          log.error({ err: tagError, leadId: w.id }, "Failed to add tags to lead");
+          failedIds.push(w.id);
+        }
+      }),
+    );
+    clearTagsCacheForTenant(auth.tenantId);
+    const failedSet = new Set(failedIds);
+    Promise.all(
+      changed
+        .filter((w) => !failedSet.has(w.id))
+        .map((w) =>
+          createAuditLog({
+            tenantId: auth.tenantId,
+            userId: auth.userId,
+            action: "lead.updated",
+            entityType: "lead",
+            entityId: w.id,
+            changes: { tags: { old: w.old, new: w.next } },
+            ipAddress: ip,
+            userAgent,
+            requestId,
+          }),
+        ),
+    );
+    log.info({ count: idsToUpdate.length, changed: changed.length, failed: failedIds.length, tags: addTags }, "Bulk added tags");
+    return apiSuccess({
+      updated: idsToUpdate.length - failedIds.length,
+      ids: idsToUpdate.filter((id) => !failedSet.has(id)),
+      failed: failedIds.length,
+      add_tags: addTags,
+      notFound: notFoundIds,
+    });
   }
 
   // Prospect-qualification gate (bulk backstop): reject the move if any target lead's
@@ -514,6 +584,15 @@ export async function PATCH(request: NextRequest) {
     }
   }
 
+  // Smart assignment (shadow mode): remember whether a human agreed with its pick for each lead that really changed hands.
+  if (body.assigned_to) {
+    for (const id of idsToUpdate) {
+      if ((existingMap.get(id)?.assigned_to as string | null | undefined) !== body.assigned_to) {
+        void recordHumanAssignment({ tenantId: auth.tenantId, leadId: id, assignedTo: body.assigned_to, actorId: auth.userId });
+      }
+    }
+  }
+
   // Previous assignees also retain lifecycle visibility after a bulk handoff.
   // Each lead's prior assignee differs, so group by prev-user and add per group.
   // Mirrors single-lead PATCH behavior (leads/[id]/route.ts).
@@ -604,6 +683,8 @@ export async function PATCH(request: NextRequest) {
           // Who holds the lead after this move (the new assignee if this request sets one, else the current one) —
           // lets System Activity show it even when the assignee didn't change.
           changes.holder = holderChange(body.assigned_to !== undefined ? body.assigned_to : prev?.assigned_to);
+          changes.list_ids = listIdsChange(oldListId, newListId);
+          changes.via = { old: null, new: BULK_VIA };
           if (body.archive_reason) {
             changes.archive_reason = { old: null, new: body.archive_reason };
           }

@@ -1,8 +1,7 @@
 "use client";
 
-import { useId, useState } from "react";
-import { ChevronDown } from "lucide-react";
-import { Checkbox } from "@/components/ui/checkbox";
+import { useId } from "react";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Label } from "@/components/ui/label";
 import { canonicalizeDestinations } from "@/lib/leads/destination-normalize";
 
@@ -17,7 +16,7 @@ export function DestinationsMultiSelect({
   onChange,
   disabled,
   options,
-  label = "Interested Destination",
+  label = "Interested destination",
   optional = true,
 }: {
   selected: string[];
@@ -37,60 +36,29 @@ export function DestinationsMultiSelect({
   // second time through this picker.
   //
   // It ALSO re-spells every value the catalog knows in the CATALOG's spelling (case/whitespace-insensitive): a lead
-  // saved with "uk" now shows UK ticked, ticking/unticking UK works, and saving writes "UK" back — previously "uk"
-  // matched no checkbox, nothing showed ticked, and UK could not be ticked at all (client report, Nov 2026).
+  // saved with "uk" shows UK ticked, and saving writes "UK" back (stage #682, client report Nov 2026).
   const cleanSelected = canonicalizeDestinations(selected, options);
-  // Selected values the catalog has no entry for (a destination since removed from Settings, or free text from a
-  // form) get their own checkbox, so they can always be unticked — before, they showed in the button text but had no
-  // checkbox, so they could never be removed.
+  // Selected values the catalog has no entry for (a destination since removed from Settings, or free text from a form)
+  // still get an option, so they can always be unticked.
   const extraSelected = cleanSelected.filter((v) => !options.includes(v));
 
-  // Toggle membership lives here, not in each caller — this is the one place
-  // that logic should exist now that rendering is already centralized. Operates
-  // on cleanSelected (not the raw prop) so toggling also silently repairs a
-  // dirty selection the moment the user interacts with it.
-  function toggle(dest: string) {
-    onChange(cleanSelected.includes(dest) ? cleanSelected.filter((d) => d !== dest) : [...cleanSelected, dest]);
-  }
-  const [open, setOpen] = useState(false);
-  // Unique per mounted instance — prevents duplicate DOM ids (and the
-  // mislabeled-checkbox bug that causes) when two of these are open at once
-  // (e.g. a lead's Study Interest panel left in edit mode behind its Qualify dialog).
   const instanceId = useId();
   return (
     <div className="space-y-1.5">
-      <Label className="text-xs text-gray-600">
-        {label}
-        {optional && <span className="ml-1 text-gray-400">(optional)</span>}
+      <Label htmlFor={`${instanceId}-trigger`} className="text-xs text-gray-600">
+        {optional ? `${label} (optional)` : label}
       </Label>
-      <button
-        type="button"
+      {/* EDGEX-145: one shared searchable multi-select (was a checkbox grid). Same values, same onChange. */}
+      <SearchableSelect
+        multiple
+        id={`${instanceId}-trigger`}
+        options={[...options, ...extraSelected].map((dest) => ({ value: dest, label: dest }))}
+        value={cleanSelected}
+        onValueChange={(next) => onChange(canonicalizeDestinations(next, options))}
+        placeholder="Select destinations"
+        searchPlaceholder="Search destinations…"
         disabled={disabled}
-        onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between px-3 py-2 border border-input rounded-md text-sm bg-background hover:bg-accent transition-colors"
-      >
-        <span className={cleanSelected.length === 0 ? "text-muted-foreground" : ""}>
-          {cleanSelected.length === 0 ? "Select destinations" : cleanSelected.join(", ")}
-        </span>
-        <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
-      </button>
-      {open && (
-        <div className="border border-input rounded-md p-2 grid grid-cols-2 gap-1.5 bg-background shadow-sm">
-          {[...options, ...extraSelected].map((dest) => (
-            <div key={dest} className="flex items-center gap-2">
-              <Checkbox
-                id={`${instanceId}-${dest}`}
-                checked={cleanSelected.includes(dest)}
-                disabled={disabled}
-                onCheckedChange={() => toggle(dest)}
-              />
-              <label htmlFor={`${instanceId}-${dest}`} className="text-xs cursor-pointer select-none">
-                {dest}
-              </label>
-            </div>
-          ))}
-        </div>
-      )}
+      />
     </div>
   );
 }

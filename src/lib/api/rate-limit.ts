@@ -19,6 +19,19 @@ export const FORM_SUBMIT_LIMIT: RateLimitConfig = {
   windowMs: 600_000, // 10 minutes
 };
 
+// Website chat session endpoint (public). A real visitor asks once per chat session and the widget remembers the answer,
+// so these are generous: a college or fair on one Wi-Fi shares one address. Keyed "chat_session_ip:<ip>" and
+// "chat_session_inbox:<inbox id>" (the second is a ceiling for a whole tenant, so a spread-out flood still stops).
+export const CHAT_SESSION_IP_LIMIT: RateLimitConfig = {
+  maxRequests: 60,
+  windowMs: 600_000, // 10 minutes
+};
+
+export const CHAT_SESSION_INBOX_LIMIT: RateLimitConfig = {
+  maxRequests: 1000,
+  windowMs: 600_000, // 10 minutes
+};
+
 export const INTEGRATION_LIMIT: RateLimitConfig = {
   maxRequests: 120,
   windowMs: 60_000, // 1 minute
