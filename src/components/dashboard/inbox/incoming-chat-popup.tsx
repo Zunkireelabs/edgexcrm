@@ -6,18 +6,21 @@ import { toast } from "sonner";
 import { ChatTextIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
+import { mergeById, useQuietPoll } from "@/lib/inbox/quiet-refresh";
 
 // "New website chat": a card in the bottom-right corner of ANY EdgeX page when a visitor writes in the website chat and
 // nobody has accepted it yet. Accept makes it yours (the first person wins); View just opens it. Everyone who can open
 // the Inbox sees it. Mounted once, in the app shell, only for people whose position allows the Inbox.
 //
 // How it stays correct:
-//   - the server list (/api/v1/inbox/pending-claims) is the source of truth: loaded on mount, every 30 s, when the tab
+//   - the server list (/api/v1/inbox/pending-claims) is the source of truth: loaded on mount, every 15 s, when the tab
 //     becomes visible again, and right after anything happens on the live feed;
 //   - the live feed (Supabase realtime on `messages`, the same one the Inbox uses) only says "something changed, look
 //     again": a visitor message, or the grey "accepted" note that makes a card disappear for everyone else.
 
-const POLL_MS = 30_000;
+const POLL_MS = 15_000;
+// A card someone else accepted stays this long as "taken care of", so a click can never land on a card that vanished.
+const LEAVE_MS = 2_000;
 const MAX_VISIBLE = 3;
 const MUTE_KEY = "edgex:chat-sound-muted";
 const OURS = /^\(\d+\) New chat · EdgeX$/;
@@ -78,24 +81,46 @@ export function IncomingChatPopup({ tenantId }: { tenantId: string }) {
   const seen = useRef<Set<string> | null>(null);
   const origTitle = useRef<string | null>(null);
 
+  const pendingRef = useRef<PendingChat[]>([]);
+  const dismissedRef = useRef<Set<string>>(new Set());
+  const acceptingRef = useRef<string | null>(null);
+  const [leaving, setLeaving] = useState<PendingChat[]>([]);
+  const leaveTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(() => {
+    dismissedRef.current = dismissed;
+  }, [dismissed]);
+  useEffect(() => {
+    const timers = leaveTimers.current;
+    return () => timers.forEach(clearTimeout);
+  }, []);
+
+  // Throws when the server can't be reached, so the poller backs off quietly (the screen just keeps what it has).
   const refresh = useCallback(async () => {
-    try {
-      const res = await fetch("/api/v1/inbox/pending-claims");
-      if (!res.ok) return;
-      const json = (await res.json()) as { data?: PendingChat[] };
-      const rows = json.data ?? [];
-      setPending(rows);
-      if (seen.current === null) {
-        seen.current = new Set(rows.map((r) => r.id));
-      } else {
-        const fresh = rows.filter((r) => !seen.current!.has(r.id));
-        fresh.forEach((r) => seen.current!.add(r.id));
-        if (fresh.length > 0 && !mutedRef.current) playDing();
-      }
-    } catch {
-      // offline or a hiccup: keep what we have, the next check tries again
+    const res = await fetch("/api/v1/inbox/pending-claims");
+    if (!res.ok) throw new Error("pending-claims failed");
+    const json = (await res.json()) as { data?: PendingChat[] };
+    const rows = json.data ?? [];
+    // Cards that were showing and are now gone (somebody accepted, or it closed): keep them a moment, marked as handled.
+    const gone = pendingRef.current.filter(
+      (p) => !rows.some((r) => r.id === p.id) && !dismissedRef.current.has(p.id) && p.id !== acceptingRef.current,
+    );
+    if (gone.length > 0) {
+      setLeaving((l) => [...l, ...gone.filter((g) => !l.some((x) => x.id === g.id))]);
+      gone.forEach((g) => {
+        leaveTimers.current.push(setTimeout(() => setLeaving((l) => l.filter((x) => x.id !== g.id)), LEAVE_MS));
+      });
+    }
+    pendingRef.current = rows;
+    setPending((prev) => mergeById(prev, rows));
+    if (seen.current === null) {
+      seen.current = new Set(rows.map((r) => r.id));
+    } else {
+      const fresh = rows.filter((r) => !seen.current!.has(r.id));
+      fresh.forEach((r) => seen.current!.add(r.id));
+      if (fresh.length > 0 && !mutedRef.current) playDing();
     }
   }, []);
+  const trigger = useQuietPoll(refresh, POLL_MS);
 
   // The person's choice to mute the chime (per browser).
   useEffect(() => {
@@ -118,26 +143,16 @@ export function IncomingChatPopup({ tenantId }: { tenantId: string }) {
     }
   };
 
-  // Load now, every 30 s, and when the tab comes back into view.
+  // Load now; then the quiet poll keeps it fresh (every 15 s, only while the tab is visible, and when it comes back).
   useEffect(() => {
-    void refresh();
-    const timer = setInterval(() => void refresh(), POLL_MS);
-    const onVisible = () => {
-      if (document.visibilityState === "visible") void refresh();
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    window.addEventListener("focus", onVisible);
-    return () => {
-      clearInterval(timer);
-      document.removeEventListener("visibilitychange", onVisible);
-      window.removeEventListener("focus", onVisible);
-    };
-  }, [refresh]);
+    void trigger();
+  }, [trigger]);
 
   // Live feed: any new message for this team means "look again" (a visitor wrote, or someone accepted / handed over).
   useEffect(() => {
     const supabase = createClient();
     let timer: ReturnType<typeof setTimeout> | null = null;
+    let later: ReturnType<typeof setTimeout> | null = null;
     const channel = supabase
       .channel(`incoming-chat-popup-${tenantId}`)
       .on(
@@ -156,15 +171,19 @@ export function IncomingChatPopup({ tenantId }: { tenantId: string }) {
             });
           }
           if (timer) clearTimeout(timer);
-          timer = setTimeout(() => void refresh(), 250);
+          if (later) clearTimeout(later);
+          timer = setTimeout(() => void trigger(), 250);
+          // Again a moment later: the message can arrive a hair before the chat's preview / owner is saved.
+          later = setTimeout(() => void trigger(), 1500);
         },
       )
       .subscribe();
     return () => {
       if (timer) clearTimeout(timer);
+      if (later) clearTimeout(later);
       supabase.removeChannel(channel);
     };
-  }, [tenantId, refresh]);
+  }, [tenantId, trigger]);
 
   const cards = pending.filter((c) => !dismissed.has(c.id));
 
@@ -182,6 +201,7 @@ export function IncomingChatPopup({ tenantId }: { tenantId: string }) {
   const accept = async (chat: PendingChat) => {
     if (busyId) return;
     setBusyId(chat.id);
+    acceptingRef.current = chat.id;
     try {
       const res = await fetch(`/api/v1/inbox/conversations/${chat.id}/claim`, { method: "POST" });
       if (res.ok) {
@@ -194,7 +214,8 @@ export function IncomingChatPopup({ tenantId }: { tenantId: string }) {
       }
     } finally {
       setBusyId(null);
-      await refresh();
+      await refresh().catch(() => {});
+      acceptingRef.current = null;
     }
   };
 
@@ -203,7 +224,8 @@ export function IncomingChatPopup({ tenantId }: { tenantId: string }) {
     router.push(`/inbox?conversation=${chat.id}`);
   };
 
-  if (cards.length === 0) return null;
+  const handled = leaving.filter((l) => !pending.some((p) => p.id === l.id));
+  if (cards.length === 0 && handled.length === 0) return null;
 
   const visible = cards.slice(0, MAX_VISIBLE);
   const extra = cards.length - visible.length;
@@ -239,6 +261,12 @@ export function IncomingChatPopup({ tenantId }: { tenantId: string }) {
           </div>
         );
       })}
+      {handled.map((chat) => (
+        <div key={`gone-${chat.id}`} role="status" className="rounded-xl border bg-white/90 p-3 shadow-lg text-sm text-muted-foreground opacity-70 transition-opacity duration-500" data-chat-handled>
+          <p className="font-semibold truncate text-foreground">{chat.contact_display_name || chat.contact_phone || "A visitor"}</p>
+          <p>✓ This chat was taken care of</p>
+        </div>
+      ))}
       {extra > 0 && (
         <button
           type="button"
