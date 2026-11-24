@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from "vitest";
-import { mergeById } from "./quiet-refresh";
+import { mergeById, mergeUnion } from "./quiet-refresh";
 
 describe("mergeById", () => {
   const a = { id: "a", text: "one" };
@@ -28,5 +28,32 @@ describe("mergeById", () => {
     const empty: typeof a[] = [];
     expect(mergeById(empty, [])).toBe(empty);
     expect(mergeById([], [a])).toEqual([a]);
+  });
+});
+
+describe("mergeUnion (messages: the server list is only a window)", () => {
+  const m = (id: string, t: string, text = id) => ({ id, created_at: t, text });
+  const m1 = m("m1", "2026-11-24T10:00:00Z");
+  const m2 = m("m2", "2026-11-24T10:01:00Z");
+
+  it("returns the very same list when nothing changed", () => {
+    const prev = [m1, m2];
+    expect(mergeUnion(prev, [{ ...m1 }, { ...m2 }])).toBe(prev);
+  });
+  it("never removes a message the server window no longer lists", () => {
+    const prev = [m1, m2];
+    const out = mergeUnion(prev, [{ ...m1 }]);
+    expect(out).toBe(prev);
+  });
+  it("adds new messages and keeps the chat in time order", () => {
+    const m3 = m("m3", "2026-11-24T10:02:00Z");
+    const early = m("m0", "2026-11-24T09:59:00Z");
+    expect(mergeUnion([m1, m3], [m2]).map((r) => r.id)).toEqual(["m1", "m2", "m3"]);
+    expect(mergeUnion([m1], [early]).map((r) => r.id)).toEqual(["m0", "m1"]);
+  });
+  it("updates a message that changed and keeps the untouched ones as they were", () => {
+    const out = mergeUnion([m1, m2], [{ ...m1 }, { ...m2, text: "edited" }]);
+    expect(out[0]).toBe(m1);
+    expect(out[1].text).toBe("edited");
   });
 });

@@ -27,6 +27,39 @@ export function mergeById<T extends { id?: unknown }>(prev: T[], next: T[]): T[]
 }
 
 /**
+ * Messages version of the merge. The messages endpoint returns only the OLDEST 50 of a chat, so in a long chat the
+ * server list is a window, not the whole chat: replacing the screen with it would drop newer messages that arrived
+ * live. So this ADDS to what is on screen (new ids appended, changed rows updated, nothing removed), keeps the chat in
+ * time order, and returns `prev` itself when nothing changed.
+ */
+export function mergeUnion<T extends { id?: unknown; created_at?: unknown }>(prev: T[], incoming: T[]): T[] {
+  const byId = new Map<unknown, T>();
+  const order: unknown[] = [];
+  for (const r of prev) {
+    byId.set(r.id, r);
+    order.push(r.id);
+  }
+  for (const r of incoming) {
+    const cur = byId.get(r.id);
+    if (!cur) {
+      byId.set(r.id, r);
+      order.push(r.id);
+    } else if (JSON.stringify(cur) !== JSON.stringify(r)) {
+      byId.set(r.id, r);
+    }
+  }
+  const when = (r: T) => {
+    const t = Date.parse(String(r.created_at ?? ""));
+    return Number.isNaN(t) ? 0 : t;
+  };
+  const rows = order
+    .map((id, i) => ({ r: byId.get(id)!, i }))
+    .sort((x, y) => when(x.r) - when(y.r) || x.i - y.i)
+    .map((o) => o.r);
+  return rows.length === prev.length && rows.every((r, i) => r === prev[i]) ? prev : rows;
+}
+
+/**
  * Runs `task` every `intervalMs` while the tab is visible, plus whenever the tab comes back. `trigger()` runs it now
  * (used after a live event); if a run is already going, exactly one more run follows it. A task that throws is retried
  * later with a growing pause (up to 60 s) and no noise.

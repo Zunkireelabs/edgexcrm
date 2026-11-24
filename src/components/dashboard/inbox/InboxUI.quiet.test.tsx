@@ -9,7 +9,7 @@ import "@testing-library/jest-dom/vitest";
 
 const h = vi.hoisted(() => ({
   toast: { success: vi.fn(), error: vi.fn() },
-  handlers: [] as Array<() => void>,
+  handlers: [] as Array<(p?: { new: Record<string, unknown> }) => void>,
 }));
 vi.mock("sonner", () => ({ toast: h.toast }));
 vi.mock("next/navigation", () => ({
@@ -20,7 +20,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/supabase/client", () => ({
   createClient: () => {
     const ch = {
-      on: (_t: string, _f: unknown, cb: () => void) => {
+      on: (_t: string, _f: unknown, cb: (p?: { new: Record<string, unknown> }) => void) => {
         h.handlers.push(cb);
         return ch;
       },
@@ -263,6 +263,27 @@ describe("quiet refresh in the Inbox", () => {
     expect(msgGets).toBe(before + 1);
     await tick(1_500);
     expect(msgGets).toBe(before + 2);
+  });
+
+  it("long chats: the server only lists the first 50, so a message that arrived live must stay on screen", async () => {
+    show();
+    await settle();
+    // The server keeps listing only the first window (just m1), like a chat with more than 50 messages.
+    const newer = { ...customer("m51", "Message number 51"), conversation_id: "conv-1", created_at: "2026-11-24T11:00:00Z" };
+    gate = new Promise<void>(() => {}); // no network answer at all: it must come straight from the live event
+    act(() => h.handlers[0]({ new: newer }));
+    expect(screen.getByText("Message number 51")).toBeInTheDocument();
+    gate = null;
+    await tick(12_100); // the quiet refresh runs against a server that does not list m51
+    expect(screen.getByText("Message number 51")).toBeInTheDocument(); // still there
+    expect(screen.getByText("Hi, I want to study in the UK")).toBeInTheDocument();
+  });
+
+  it("a live message for a different chat is not put on this screen", async () => {
+    show();
+    await settle();
+    act(() => h.handlers[0]({ new: { ...customer("x1", "Someone else's chat"), conversation_id: "conv-2" } }));
+    expect(screen.queryByText("Someone else's chat")).toBeNull();
   });
 
   it("the live connection is made once, with INSERT and UPDATE listeners", async () => {

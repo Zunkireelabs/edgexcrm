@@ -8,7 +8,7 @@ import { MessageThread } from "./MessageThread";
 import { ContactPanel } from "./ContactPanel";
 import { HandoverDialog, type HandoverMember } from "./HandoverDialog";
 import { ownerOf, requiresClaim } from "@/lib/inbox/claim-rules";
-import { mergeById, useQuietPoll } from "@/lib/inbox/quiet-refresh";
+import { mergeById, mergeUnion, useQuietPoll } from "@/lib/inbox/quiet-refresh";
 import { toast } from "sonner";
 import { ChatTextIcon } from "@/components/icons";
 
@@ -111,7 +111,7 @@ export function InboxUI({
     if (!res.ok) throw new Error("messages refresh failed");
     const json = await res.json() as { data: MessageRow[] };
     if (selectedIdRef.current !== convId) return; // the person moved to another chat meanwhile
-    setMessages((prev) => mergeById(prev, json.data ?? []));
+    setMessages((prev) => mergeUnion(prev, json.data ?? []));
   }, []);
 
   useEffect(() => {
@@ -160,7 +160,16 @@ export function InboxUI({
   useEffect(() => {
     const supabase = createClient();
     let later: ReturnType<typeof setTimeout> | null = null;
-    const onEvent = () => {
+    // A message for the open chat goes on screen straight from the event (this is what keeps long chats current: the
+    // server only lists a chat's first 50 messages), then the quiet sync confirms it.
+    const showNow = (payload: { new: Record<string, unknown> }) => {
+      const row = payload.new as MessageRow;
+      if (row?.conversation_id && row.conversation_id === selectedIdRef.current) {
+        setMessages((prev) => mergeUnion(prev, [row]));
+      }
+    };
+    const onEvent = (payload?: { new: Record<string, unknown> }) => {
+      if (payload) showNow(payload);
       void quietSyncRef.current();
       if (later) clearTimeout(later);
       later = setTimeout(() => void quietSyncRef.current(), 1500);
