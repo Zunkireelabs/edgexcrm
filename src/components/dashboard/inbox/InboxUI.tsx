@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { ConversationList } from "./ConversationList";
@@ -8,6 +8,7 @@ import { MessageThread } from "./MessageThread";
 import { ContactPanel } from "./ContactPanel";
 import { HandoverDialog, type HandoverMember } from "./HandoverDialog";
 import { ownerOf, requiresClaim } from "@/lib/inbox/claim-rules";
+import { mergeById, mergeUnion, useQuietPoll } from "@/lib/inbox/quiet-refresh";
 import { toast } from "sonner";
 import { ChatTextIcon } from "@/components/icons";
 
@@ -100,12 +101,23 @@ export function InboxUI({
     }
   }, []);
 
+  // Background refresh of the open chat: merges by id, never shows "Loading…", never replaces the list when nothing changed.
+  const selectedIdRef = useRef(selectedId);
   useEffect(() => {
-    if (selectedId) {
-      fetchMessages(selectedId);
-    } else {
-      setMessages([]);
-    }
+    selectedIdRef.current = selectedId;
+  }, [selectedId]);
+  const refreshOpenChat = useCallback(async (convId: string) => {
+    const res = await fetch(`/api/v1/inbox/conversations/${convId}/messages`);
+    if (!res.ok) throw new Error("messages refresh failed");
+    const json = await res.json() as { data: MessageRow[] };
+    if (selectedIdRef.current !== convId) return; // the person moved to another chat meanwhile
+    setMessages((prev) => mergeUnion(prev, json.data ?? []));
+  }, []);
+
+  useEffect(() => {
+    // Always start a newly opened chat from an empty thread, so the quiet refresh can never mix two chats.
+    setMessages([]);
+    if (selectedId) fetchMessages(selectedId);
   }, [selectedId, fetchMessages]);
 
   // Reload conversation list when filters change
@@ -118,65 +130,70 @@ export function InboxUI({
     const res = await fetch(`/api/v1/inbox/conversations?${qs}`);
     if (res.ok) {
       const json = await res.json() as { data: ConversationRow[] };
-      setConversations(json.data ?? []);
+      setConversations((prev) => mergeById(prev, json.data ?? []));
     }
+    return res.ok;
   }, [filterStatus, filterAssignee, filterChannel]);
 
   useEffect(() => {
     reloadConversations();
   }, [reloadConversations]);
 
-  // Live realtime: subscribe to messages table filtered by tenant_id
+  // Safety net under the live feed: every 12 s while the tab is visible, quietly bring the list and the open chat up to date.
+  const quietSync = useQuietPoll(
+    async () => {
+      const listOk = await reloadConversations();
+      const open = selectedIdRef.current;
+      if (open) await refreshOpenChat(open);
+      if (!listOk) throw new Error("conversations refresh failed");
+    },
+    12_000,
+  );
+  const quietSyncRef = useRef(quietSync);
+  useEffect(() => {
+    quietSyncRef.current = quietSync;
+  }, [quietSync]);
+
+  // Live realtime: any change to a message for this team means "look again". Same quiet path as the 12 s backup, so the
+  // two can never disagree. A second look 1.5 s later covers the moment between the message arriving and the chat's
+  // preview / owner being updated. The channel is made once per tenant (not once per opened chat), so no events fall in a gap.
   useEffect(() => {
     const supabase = createClient();
+    let later: ReturnType<typeof setTimeout> | null = null;
+    // A message for the open chat goes on screen straight from the event (this is what keeps long chats current: the
+    // server only lists a chat's first 50 messages), then the quiet sync confirms it.
+    const showNow = (payload: { new: Record<string, unknown> }) => {
+      const row = payload.new as MessageRow;
+      if (row?.conversation_id && row.conversation_id === selectedIdRef.current) {
+        setMessages((prev) => mergeUnion(prev, [row]));
+      }
+    };
+    const onEvent = (payload?: { new: Record<string, unknown> }) => {
+      if (payload) showNow(payload);
+      void quietSyncRef.current();
+      if (later) clearTimeout(later);
+      later = setTimeout(() => void quietSyncRef.current(), 1500);
+    };
 
     const channel = supabase
       .channel(`inbox-messages-${tenantId}`)
       .on(
         "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "messages",
-          filter: `tenant_id=eq.${tenantId}`,
-        },
-        (payload) => {
-          const newMsg = payload.new as MessageRow;
-          // If the new message belongs to the open conversation, append it
-          if (selectedId && newMsg.conversation_id === selectedId) {
-            setMessages((prev) => {
-              // Avoid duplicates
-              if (prev.some((m) => m.id === newMsg.id)) return prev;
-              return [...prev, newMsg];
-            });
-          }
-          // Refresh conversation list to update last_message_preview + unread_count
-          reloadConversations();
-        }
+        { event: "INSERT", schema: "public", table: "messages", filter: `tenant_id=eq.${tenantId}` },
+        onEvent,
       )
       .on(
         "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "messages",
-          filter: `tenant_id=eq.${tenantId}`,
-        },
-        (payload) => {
-          const updated = payload.new as MessageRow;
-          if (selectedId && updated.conversation_id === selectedId) {
-            setMessages((prev) =>
-              prev.map((m) => (m.id === updated.id ? updated : m))
-            );
-          }
-        }
+        { event: "UPDATE", schema: "public", table: "messages", filter: `tenant_id=eq.${tenantId}` },
+        onEvent,
       )
       .subscribe();
 
     return () => {
+      if (later) clearTimeout(later);
       supabase.removeChannel(channel);
     };
-  }, [tenantId, selectedId, reloadConversations]);
+  }, [tenantId]);
 
   const handleSend = async (content: string, approveDraftId?: string, files?: File[]) => {
     if (!selectedId) return;
@@ -193,7 +210,7 @@ export function InboxUI({
         const res = await fetch(`/api/v1/inbox/conversations/${selectedId}/messages`, { method: "POST", body: form });
         if (!res.ok) ok = false;
       }
-      if (ok) reloadConversations();
+      if (ok) void quietSync();
       return;
     }
 
@@ -205,8 +222,8 @@ export function InboxUI({
       body: JSON.stringify(body),
     });
     if (res.ok) {
-      // Realtime will add the message; just refresh the list
-      reloadConversations();
+      // Show it right away (the live feed would also add it, but must not be the only way)
+      void quietSync();
     }
   };
 
@@ -222,7 +239,7 @@ export function InboxUI({
     if (res.ok) toast.success("You're handling this chat");
     else toast.error(await apiMessage(res, "Couldn't accept this chat"));
     await reloadConversations();
-    await fetchMessages(selectedId);
+    await refreshOpenChat(selectedId).catch(() => {});
   };
 
   const moveChat = async (toUserId: string, success: string): Promise<boolean> => {
@@ -235,7 +252,7 @@ export function InboxUI({
     if (res.ok) toast.success(success);
     else toast.error(await apiMessage(res, "Couldn't move this chat"));
     await reloadConversations();
-    await fetchMessages(selectedId);
+    await refreshOpenChat(selectedId).catch(() => {});
     return res.ok;
   };
 
@@ -254,7 +271,7 @@ export function InboxUI({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ draft_message_id: draftId }),
     });
-    if (selectedId) fetchMessages(selectedId);
+    await refreshOpenChat(selectedId).catch(() => {});
     reloadConversations();
   };
 
