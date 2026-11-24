@@ -9,7 +9,8 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { logger } from "@/lib/logger";
 import { normalizeEmail, normalizePhone } from "@/lib/leads/dedup";
-import { NotificationTypes, getTenantAdminRecipients, upsertThreadNotification } from "@/lib/notifications";
+import { NotificationTypes, upsertThreadNotification } from "@/lib/notifications";
+import { resolveInboundRecipients } from "@/lib/inbox/inbound-recipients";
 import { decryptToken } from "./crypto";
 import { resolveAndStoreAttachments } from "./media";
 import type { InboundMediaDescriptor } from "./adapters/types";
@@ -330,40 +331,25 @@ async function processOneEvent(
 
   // 4. Fire bell notification (non-fatal)
   try {
-    const recipientIds = new Set<string>();
-
-    if (convAssigneeType === "human" && convAssignedToUserId) {
-      recipientIds.add(convAssignedToUserId);
-    }
-
-    if (convLeadId) {
-      const { data: leadRow } = await supabase
-        .from("leads")
-        .select("assigned_to")
-        .eq("id", convLeadId)
-        .eq("tenant_id", p.tenant_id)
-        .maybeSingle();
-      if ((leadRow as { assigned_to?: string | null } | null)?.assigned_to) {
-        recipientIds.add((leadRow as { assigned_to: string }).assigned_to);
-      }
-    }
-
-    if (recipientIds.size === 0) {
-      const admins = await getTenantAdminRecipients(supabase, p.tenant_id);
-      admins.forEach((id) => recipientIds.add(id));
-    }
+    const { userIds: recipientIds, title: notificationTitle } = await resolveInboundRecipients(supabase, {
+      tenantId: p.tenant_id,
+      provider: p.provider,
+      assigneeType: convAssigneeType,
+      assignedToUserId: convAssignedToUserId,
+      leadId: convLeadId,
+    });
 
     const preview = p.content_text?.slice(0, 200) ?? "";
     const senderLabel = p.contact_display_name || p.contact_phone || "Unknown";
     const link = `/inbox?conversation=${conversationId}`;
 
     await Promise.all(
-      [...recipientIds].map((userId) =>
+      recipientIds.map((userId) =>
         upsertThreadNotification({
           tenantId: p.tenant_id,
           userId,
           type: NotificationTypes.INBOX_MESSAGE_RECEIVED,
-          title: "New message",
+          title: notificationTitle,
           message: `${senderLabel}: ${preview}`,
           link,
         })

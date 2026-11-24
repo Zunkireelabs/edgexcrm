@@ -5,6 +5,7 @@ import { ChatTextIcon, PhoneIcon, UserIcon } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { providerLabel } from "@/lib/inbox/provider-label";
+import { ownerOf, requiresClaim } from "@/lib/inbox/claim-rules";
 
 type ConversationRow = Record<string, unknown>;
 
@@ -28,6 +29,8 @@ interface ConversationListProps {
   onFilterAssignee: (v: "all" | "mine" | "unassigned") => void;
   onFilterChannel: (v: string | "all") => void;
   currentUserId: string;
+  /** user id -> name, to say who is handling a website chat. Optional. */
+  ownerNames?: Record<string, string>;
 }
 
 function formatRelative(ts: string | null | undefined): string {
@@ -56,7 +59,8 @@ export function ConversationList({
   onFilterStatus,
   onFilterAssignee,
   onFilterChannel,
-  currentUserId: _currentUserId,
+  currentUserId,
+  ownerNames,
 }: ConversationListProps) {
   const filtered = useMemo(() => {
     return conversations.filter((c) => {
@@ -161,6 +165,15 @@ export function ConversationList({
             const unread = (conv.unread_count as number | null) ?? 0;
             const provider = conv.provider as string;
             const isLinked = !!conv.lead_id;
+            // Website chats must be accepted: show whether this one is waiting, mine, or someone else's.
+            const claimOwner = requiresClaim(provider)
+              ? ownerOf({ assignee_type: conv.assignee_type as string | null, assigned_to_user_id: conv.assigned_to_user_id as string | null })
+              : undefined;
+            const claimChip =
+              claimOwner === undefined ? null
+              : claimOwner === null ? { text: "Waiting to accept", cls: "bg-amber-100 text-amber-800" }
+              : claimOwner === currentUserId ? { text: "You're handling", cls: "bg-green-100 text-green-800" }
+              : { text: `${ownerNames?.[claimOwner] ?? "A teammate"} handling`, cls: "bg-muted text-muted-foreground" };
 
             return (
               <button
@@ -195,6 +208,11 @@ export function ConversationList({
                     <span className="text-xs text-muted-foreground/70 bg-muted px-1 rounded">
                       {providerLabel(provider)}
                     </span>
+                    {claimChip && (
+                      <span className={cn("text-xs px-1.5 rounded-full font-medium", claimChip.cls)} data-claim-chip>
+                        {claimChip.text}
+                      </span>
+                    )}
                     {isLinked && (
                       <span title="Linked to lead">
                         <PhoneIcon className="w-3 h-3 text-green-600" />

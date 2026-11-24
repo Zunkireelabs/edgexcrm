@@ -48,7 +48,7 @@ export async function loadDraftContext(auth: AuthContext, leadId: string, tz: st
   const providerOf = new Map(convs.map((c) => [c.id, c.provider]));
   let messages: DraftContext["messages"] = [];
   if (convs.length > 0) {
-    const { data } = await db.from("messages").select("direction, content_text, created_at, conversation_id").in("conversation_id", convs.map((c) => c.id)).neq("status", "draft").order("created_at", { ascending: false }).limit(3);
+    const { data } = await db.from("messages").select("direction, content_text, created_at, conversation_id").in("conversation_id", convs.map((c) => c.id)).neq("status", "draft").neq("author_type", "system").order("created_at", { ascending: false }).limit(3);
     messages = ((data ?? []) as unknown as Array<{ direction: "inbound" | "outbound"; content_text: string | null; created_at: string; conversation_id: string }>)
       .filter((m) => m.content_text)
       .map((m) => ({ direction: m.direction, text: clip(m.content_text), at: m.created_at, channel: providerOf.get(m.conversation_id) ?? "message" }));

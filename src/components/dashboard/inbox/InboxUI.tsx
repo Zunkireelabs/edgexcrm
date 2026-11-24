@@ -1,11 +1,14 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { ConversationList } from "./ConversationList";
 import { MessageThread } from "./MessageThread";
 import { ContactPanel } from "./ContactPanel";
+import { HandoverDialog, type HandoverMember } from "./HandoverDialog";
+import { ownerOf, requiresClaim } from "@/lib/inbox/claim-rules";
+import { toast } from "sonner";
 import { ChatTextIcon } from "@/components/icons";
 
 interface Channel {
@@ -44,6 +47,9 @@ export function InboxUI({
   const [filterStatus, setFilterStatus] = useState<"open" | "closed" | "all">("open");
   const [filterAssignee, setFilterAssignee] = useState<"all" | "mine" | "unassigned">("all");
   const [filterChannel, setFilterChannel] = useState<string | "all">("all");
+  // Website chats: who can be handed a chat (and a name for whoever is handling one), plus the hand-over window.
+  const [members, setMembers] = useState<HandoverMember[]>([]);
+  const [handoverOpen, setHandoverOpen] = useState(false);
 
   // Deep-link from a notification (/inbox?conversation=<id>): select the conversation.
   // Reacts to param changes even when already mounted on /inbox (router.push only swaps
@@ -57,6 +63,28 @@ export function InboxUI({
   }, [conversationParam, router, pathname]);
 
   const selectedConv = conversations.find((c) => c.id === selectedId) ?? null;
+
+  // The people who can open the Inbox. Used for the hand-over picker and to name whoever is handling a chat.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/v1/inbox/handover-targets")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => { if (!cancelled && json?.data) setMembers(json.data as HandoverMember[]); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+  const ownerNames = useMemo(() => Object.fromEntries(members.map((m) => [m.user_id, m.name])), [members]);
+  const selectedOwnerId = (selectedConv?.assigned_to_user_id as string | null) ?? null;
+  // On a website chat only the person handling it (or an admin) may change it. Everyone else reads.
+  const canManageSelected =
+    !selectedConv || !requiresClaim(selectedConv.provider as string | null)
+      ? true
+      : userRole === "owner" ||
+        userRole === "admin" ||
+        ownerOf({
+          assignee_type: selectedConv.assignee_type as string | null,
+          assigned_to_user_id: selectedConv.assigned_to_user_id as string | null,
+        }) === userId;
 
   // Fetch messages for selected conversation
   const fetchMessages = useCallback(async (convId: string) => {
@@ -182,6 +210,43 @@ export function InboxUI({
     }
   };
 
+  const apiMessage = async (res: Response, fallback: string): Promise<string> => {
+    const json = await res.json().catch(() => null) as { error?: { message?: string } } | null;
+    return json?.error?.message ?? fallback;
+  };
+
+  // "Accept this chat": the first person wins. If someone was faster, say who.
+  const handleAccept = async () => {
+    if (!selectedId) return;
+    const res = await fetch(`/api/v1/inbox/conversations/${selectedId}/claim`, { method: "POST" });
+    if (res.ok) toast.success("You're handling this chat");
+    else toast.error(await apiMessage(res, "Couldn't accept this chat"));
+    await reloadConversations();
+    await fetchMessages(selectedId);
+  };
+
+  const moveChat = async (toUserId: string, success: string): Promise<boolean> => {
+    if (!selectedId) return false;
+    const res = await fetch(`/api/v1/inbox/conversations/${selectedId}/handover`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ to_user_id: toUserId }),
+    });
+    if (res.ok) toast.success(success);
+    else toast.error(await apiMessage(res, "Couldn't move this chat"));
+    await reloadConversations();
+    await fetchMessages(selectedId);
+    return res.ok;
+  };
+
+  // An owner/admin takes a chat over without waiting for a hand-over.
+  const handleTakeOver = async () => { await moveChat(userId, "You took over this chat"); };
+
+  const handleHandover = async (toUserId: string) => {
+    const name = ownerNames[toUserId] ?? "your teammate";
+    if (await moveChat(toUserId, `Chat handed to ${name}`)) setHandoverOpen(false);
+  };
+
   const handleApproveDraft = async (draftId: string) => {
     if (!selectedId) return;
     await fetch(`/api/v1/inbox/conversations/${selectedId}/draft`, {
@@ -209,6 +274,7 @@ export function InboxUI({
           onFilterAssignee={setFilterAssignee}
           onFilterChannel={setFilterChannel}
           currentUserId={userId}
+          ownerNames={ownerNames}
         />
       </div>
 
@@ -223,6 +289,10 @@ export function InboxUI({
             userRole={userRole}
             onSend={handleSend}
             onApproveDraft={handleApproveDraft}
+            ownerName={selectedOwnerId ? ownerNames[selectedOwnerId] ?? null : null}
+            onAccept={handleAccept}
+            onTakeOver={handleTakeOver}
+            onHandover={() => setHandoverOpen(true)}
           />
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground gap-2">
@@ -239,8 +309,23 @@ export function InboxUI({
           tenantId={tenantId}
           userRole={userRole}
           onConversationUpdate={reloadConversations}
+          ownerName={selectedOwnerId ? ownerNames[selectedOwnerId] ?? null : null}
+          canManage={canManageSelected}
         />
       </div>
+
+      <HandoverDialog
+        open={handoverOpen}
+        onOpenChange={setHandoverOpen}
+        members={members}
+        currentUserId={userId}
+        contactName={
+          ((selectedConv?.contact_display_name as string | null) ||
+            (selectedConv?.contact_phone as string | null) ||
+            "this visitor")
+        }
+        onConfirm={handleHandover}
+      />
     </div>
   );
 }
