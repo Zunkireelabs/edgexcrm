@@ -164,14 +164,30 @@ export function MessageThread({
   onTakeOver,
   onHandover,
 }: MessageThreadProps) {
-  const [draft, setDraft] = useState("");
+  const conversationId = conversation.id as string;
+  // What the person has typed / attached belongs to the chat it was typed in. A background refresh never touches it,
+  // and switching chats can't send it to the wrong one.
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [filesByChat, setFilesByChat] = useState<Record<string, File[]>>({});
+  const draft = drafts[conversationId] ?? "";
+  const pendingFiles = filesByChat[conversationId] ?? [];
+  const setDraft = (v: string) => setDrafts((p) => ({ ...p, [conversationId]: v }));
+  const setPendingFiles = (u: File[] | ((prev: File[]) => File[])) =>
+    setFilesByChat((p) => {
+      const cur = p[conversationId] ?? [];
+      return { ...p, [conversationId]: typeof u === "function" ? u(cur) : u };
+    });
   const [sending, setSending] = useState(false);
-  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [claiming, setClaiming] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const conversationId = conversation.id as string;
+  // Scrolling: follow new messages only while the person is already at the bottom; otherwise offer a chip.
+  const nearBottom = useRef(true);
+  const lastCount = useRef(0);
+  const lastChat = useRef(conversationId);
+  const [unseen, setUnseen] = useState(0);
 
   const displayName = (conversation.contact_display_name as string | null)
     ?? (conversation.contact_phone as string | null)
@@ -199,9 +215,32 @@ export function MessageThread({
     }
   };
 
+  const scrollToBottom = (smooth: boolean) => {
+    bottomRef.current?.scrollIntoView?.({ behavior: smooth ? "smooth" : "auto" });
+    nearBottom.current = true;
+    setUnseen(0);
+  };
+
+  const onScroll = () => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    nearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    if (nearBottom.current) setUnseen(0);
+  };
+
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    const before = lastCount.current;
+    const switched = lastChat.current !== conversationId;
+    lastCount.current = messages.length;
+    lastChat.current = conversationId;
+    if (switched || before === 0) {
+      scrollToBottom(false); // a chat just opened: start at the latest message
+    } else if (nearBottom.current) {
+      scrollToBottom(true);
+    } else if (messages.length > before) {
+      setUnseen((n) => n + (messages.length - before));
+    }
+  }, [messages, conversationId]);
 
   const handleSend = async () => {
     const content = draft.trim();
@@ -210,6 +249,7 @@ export function MessageThread({
     setDraft("");
     const files = pendingFiles;
     setPendingFiles([]);
+    nearBottom.current = true; // the person's own message should always be in view
     try {
       await onSend(content, undefined, files.length > 0 ? files : undefined);
     } finally {
@@ -258,8 +298,9 @@ export function MessageThread({
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-2">
-        {loading ? (
+      <div className="relative flex-1 min-h-0">
+      <div ref={scrollerRef} onScroll={onScroll} className="h-full overflow-y-auto px-4 py-3 flex flex-col gap-2">
+        {loading && messages.length === 0 ? (
           <div className="flex items-center justify-center py-8 text-muted-foreground text-sm">
             Loading…
           </div>
@@ -356,6 +397,17 @@ export function MessageThread({
         )}
         <div ref={bottomRef} />
       </div>
+      {unseen > 0 && (
+        <button
+          type="button"
+          onClick={() => scrollToBottom(true)}
+          className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-primary text-primary-foreground text-xs font-medium px-3 py-1.5 shadow-lg"
+          data-new-messages
+        >
+          New messages ↓
+        </button>
+      )}
+      </div>
 
       {/* Composer. On a website chat nobody has accepted (or someone else has), it is replaced by what to do next. */}
       {mode === "waiting" ? (
@@ -379,6 +431,14 @@ export function MessageThread({
               </Button>
             )}
           </div>
+          {(draft.trim() || pendingFiles.length > 0) && (
+            <div className="mt-2 rounded-lg border bg-white px-3 py-2" data-unsent-draft>
+              <p className="text-xs text-muted-foreground mb-1">
+                Your unsent message is kept here so you can copy it{pendingFiles.length > 0 ? ` (${pendingFiles.length} attached file${pendingFiles.length > 1 ? "s" : ""} will need attaching again)` : ""}:
+              </p>
+              {draft.trim() && <p className="text-sm whitespace-pre-wrap break-words select-text">{draft}</p>}
+            </div>
+          )}
         </div>
       ) : (
       <div className="px-4 py-3 border-t shrink-0">
