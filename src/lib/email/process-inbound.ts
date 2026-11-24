@@ -486,6 +486,62 @@ async function processOneEvent(evt: EventRow): Promise<void> {
       to: connectedAccount.email,
       from: forwardFrom,
     });
+  } else {
+    // A thread with no Gmail account may have been started from the company address (the lead page's
+    // "From: company" option, or an Outreach step). Its replies used to go straight to the tenant's
+    // Reply-To mailbox; now they land here first, so hand that mailbox a copy.
+    await forwardCompanyThreadReply(db, thread.id, p.resend_email_id, fromName, fromEmail);
+  }
+}
+
+/**
+ * Copies a lead's reply to the tenant's configured Reply-To mailbox (e.g. hello@admizz.com) — but only
+ * for threads the company sender started (an outbound message sent via Resend is on the thread). Any
+ * other no-account thread (BCC dropbox, orphan inbound mail) is left alone.
+ *
+ * Sent from the platform address, so it is NOT replyable the way a rep's forward is (that relay needs a
+ * connected Gmail to answer from); the team answers from the lead's page or the lead's own address.
+ * Never forwards into one of our own inbound domains (would loop). Non-fatal: the reply is already
+ * safely stored, so a failure here is only logged.
+ */
+async function forwardCompanyThreadReply(
+  db: ScopedClient,
+  threadId: string,
+  resendEmailId: string,
+  leadName: string | null,
+  leadEmail: string,
+): Promise<void> {
+  try {
+    const { data: prior } = await db
+      .from("emails")
+      .select("id")
+      .eq("thread_id", threadId)
+      .eq("direction", "outbound")
+      .eq("provider", "resend")
+      .limit(1)
+      .maybeSingle<{ id: string }>();
+    if (!prior) return;
+
+    const { data: settings } = await db
+      .from("tenant_email_settings")
+      .select("reply_to")
+      .maybeSingle<{ reply_to: string | null }>();
+    const to = settings?.reply_to?.trim() ?? "";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return;
+
+    let ownDomains: string[] = [];
+    try {
+      ownDomains = getInboundDomains();
+    } catch {
+      ownDomains = [];
+    }
+    if (ownDomains.includes(to.split("@")[1].toLowerCase())) return;
+
+    const label = sanitizeDisplayName(leadName) ?? (leadEmail.includes("@") ? leadEmail.split("@")[0] : null);
+    const from = label ? `"${label}" <${PLATFORM_EMAIL_ADDRESS}>` : PLATFORM_EMAIL_ADDRESS;
+    await forwardReceivingEmail({ emailId: resendEmailId, to, from });
+  } catch (err) {
+    logger.warn({ err, threadId }, "Failed to forward company-thread reply to the team mailbox (non-fatal)");
   }
 }
 

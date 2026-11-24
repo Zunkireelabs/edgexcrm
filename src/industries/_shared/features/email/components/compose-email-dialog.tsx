@@ -21,6 +21,8 @@ import {
 import { toast } from "sonner";
 import { TipTapEditor } from "./tiptap-editor";
 import { useConnectedInboxes } from "../hooks/use-connected-inboxes";
+import { useCompanySender } from "../hooks/use-company-sender";
+import { COMPANY_SENDER_ID } from "@/lib/email/company-sender-id";
 import type { EmailThread, Email } from "../hooks/use-email-threads";
 
 interface ComposeEmailDialogProps {
@@ -53,6 +55,18 @@ function buildReferencesChain(rfc_references: string[], rfc_message_id: string |
   return chain;
 }
 
+/**
+ * Which "From" a reply must use: the thread's own Gmail account, or — for a thread that was
+ * started from the company address (no Gmail account, with an outbound message sent via
+ * Resend) — the company sender. Anything else (e.g. a personal BCC-dropbox thread) has no
+ * valid sender here and returns "", which keeps Send disabled exactly as before.
+ */
+export function replyFromAccountId(thread: EmailThread): string {
+  if (thread.connected_email_account_id) return thread.connected_email_account_id;
+  const startedFromCompany = thread.emails.some((e) => e.direction === "outbound" && e.provider === "resend");
+  return startedFromCompany ? COMPANY_SENDER_ID : "";
+}
+
 export function ComposeEmailDialog({
   open,
   onOpenChange,
@@ -64,7 +78,18 @@ export function ComposeEmailDialog({
   replyContext,
   onSent,
 }: ComposeEmailDialogProps) {
-  const { inboxes } = useConnectedInboxes();
+  const { inboxes, loading: inboxesLoading } = useConnectedInboxes();
+  const { companySender, loading: companyLoading } = useCompanySender();
+
+  // Everything the user may send FROM: their own connected Gmail accounts first, then the
+  // company address (when the tenant has a verified one) — so someone with no Gmail connected
+  // can still send, and someone with Gmail keeps it as the default.
+  const senders = [
+    ...inboxes.map((i) => ({ id: i.id, email: i.email, display_name: i.display_name })),
+    ...(companySender
+      ? [{ id: COMPANY_SENDER_ID, email: companySender.email, display_name: companySender.display_name }]
+      : []),
+  ];
 
   const [fromAccountId, setFromAccountId] = useState("");
   const [to, setTo] = useState(defaultTo ?? "");
@@ -81,7 +106,7 @@ export function ComposeEmailDialog({
   useEffect(() => {
     if (open) {
       if (replyContext) {
-        setFromAccountId(replyContext.thread.connected_email_account_id);
+        setFromAccountId(replyFromAccountId(replyContext.thread));
         setTo(replyContext.lastMessage.from_email);
         setSubject(buildReplySubject(replyContext.lastMessage.subject));
         setBodyHtml("");
@@ -93,16 +118,21 @@ export function ComposeEmailDialog({
     }
   }, [open, defaultTo, defaultSubject, replyContext]);
 
-  // Pre-select first inbox when inboxes load (fresh compose only)
+  // Pre-select the first sender (fresh compose only) — but only once BOTH lists have loaded. The two
+  // requests race; choosing early would lock in the company address for someone whose Gmail simply
+  // hadn't arrived yet, instead of defaulting to their own inbox.
+  const firstSenderId = senders[0]?.id ?? "";
+  const sendersLoaded = !inboxesLoading && !companyLoading;
   useEffect(() => {
-    if (!isReply && inboxes.length > 0 && !fromAccountId) {
-      setFromAccountId(inboxes[0].id);
+    if (!isReply && sendersLoaded && firstSenderId && !fromAccountId) {
+      setFromAccountId(firstSenderId);
     }
-  }, [inboxes, fromAccountId, isReply]);
+  }, [sendersLoaded, firstSenderId, fromAccountId, isReply]);
 
-  const hasInbox = inboxes.length > 0;
+  // The chosen sender must actually be available (a company reply needs the company address to still exist).
+  const hasSender = senders.some((s) => s.id === fromAccountId);
   const canSend =
-    hasInbox &&
+    hasSender &&
     fromAccountId &&
     to.trim() !== "" &&
     subject.trim() !== "" &&
@@ -161,11 +191,13 @@ export function ComposeEmailDialog({
       const { thread_id, email_id } = json.data;
 
       // Build optimistic email in the Email shape (for use-email-threads)
-      const selectedInbox = inboxes.find((i) => i.id === fromAccountId);
+      const selectedInbox = senders.find((i) => i.id === fromAccountId);
       const now = new Date().toISOString();
       const optimisticEmail: Email = {
         id: email_id,
         direction: "outbound",
+        // 'resend' marks a company-sender message so an immediate Reply on it picks the company sender
+        ...(fromAccountId === COMPANY_SENDER_ID ? { provider: "resend" } : {}),
         from_email: selectedInbox?.email ?? "",
         from_name: selectedInbox?.display_name ?? null,
         to_emails: parseEmails(to),
@@ -201,9 +233,7 @@ export function ComposeEmailDialog({
   };
 
   // Locked "From" display for reply mode
-  const lockedInbox = isReply
-    ? inboxes.find((i) => i.id === replyContext.thread.connected_email_account_id)
-    : null;
+  const lockedInbox = isReply ? senders.find((i) => i.id === replyFromAccountId(replyContext.thread)) : null;
   const lockedFromLabel = lockedInbox
     ? (lockedInbox.display_name ? `${lockedInbox.display_name} <${lockedInbox.email}>` : lockedInbox.email)
     : "Loading…";
@@ -231,18 +261,24 @@ export function ComposeEmailDialog({
                   )}
                 </SelectContent>
               </Select>
+            ) : !inboxesLoading && !companyLoading && senders.length === 0 ? (
+              // Nothing to send from: say so (and how to fix it) instead of a dead, greyed-out box
+              <p className="text-sm text-muted-foreground rounded-md border border-dashed px-3 py-2">
+                No sending address yet. Connect your Gmail in Settings → Communications, or ask an admin to
+                verify the company email address there.
+              </p>
             ) : (
               // Fresh compose: full picker
               <Select
-                value={fromAccountId || (inboxes[0]?.id ?? "")}
+                value={fromAccountId || firstSenderId}
                 onValueChange={setFromAccountId}
-                disabled={inboxes.length <= 1}
+                disabled={senders.length <= 1}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select inbox…" />
                 </SelectTrigger>
                 <SelectContent>
-                  {inboxes.map((inbox) => (
+                  {senders.map((inbox) => (
                     <SelectItem key={inbox.id} value={inbox.id}>
                       {inbox.display_name ? `${inbox.display_name} <${inbox.email}>` : inbox.email}
                     </SelectItem>
