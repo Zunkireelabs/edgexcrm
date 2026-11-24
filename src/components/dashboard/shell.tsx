@@ -18,6 +18,7 @@ import { useSettingsModal } from "@/contexts/settings-modal-context";
 import { useGlobalSearch } from "@/contexts/global-search-context";
 import { AIAssistantPanel } from "./ai-assistant-panel";
 import { NotificationsDropdown } from "./notifications-dropdown";
+import { IncomingChatPopup } from "./inbox/incoming-chat-popup";
 import { BranchSwitcher } from "./branch-switcher";
 import { RunningTimerChip } from "./running-timer-chip";
 import { useBadgeCounts } from "@/hooks/use-badge-counts";
@@ -1045,6 +1046,10 @@ export function DashboardShell({
           <AIAssistantPanel userFirstName={userName.split(" ")[0]} />
         </div>
       )}
+
+      {/* "New website chat" pop-up, on every page. Only for people whose position lets them open the Inbox
+          (the same rule that shows the Inbox link above), so nobody else is ever offered a chat. */}
+      {navAllowed("/inbox") && <IncomingChatPopup tenantId={tenant.id} />}
     </div>
   );
 }

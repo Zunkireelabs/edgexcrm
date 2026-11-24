@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { providerLabel } from "@/lib/inbox/provider-label";
+import { ownerOf, requiresClaim } from "@/lib/inbox/claim-rules";
 
 type ConversationRow = Record<string, unknown>;
 type MessageRow = Record<string, unknown>;
@@ -40,6 +41,11 @@ interface MessageThreadProps {
   userRole: string;
   onSend: (content: string, approveDraftId?: string, files?: File[]) => Promise<void>;
   onApproveDraft: (draftId: string) => Promise<void>;
+  /** Website chats only (they must be accepted before anyone can reply). Other channels never use these. */
+  ownerName?: string | null;
+  onAccept?: () => Promise<void>;
+  onTakeOver?: () => Promise<void>;
+  onHandover?: () => void;
 }
 
 function formatSize(bytes?: number): string {
@@ -149,14 +155,19 @@ export function MessageThread({
   conversation,
   messages,
   loading,
-  currentUserId: _currentUserId,
-  userRole: _userRole,
+  currentUserId,
+  userRole,
   onSend,
   onApproveDraft,
+  ownerName,
+  onAccept,
+  onTakeOver,
+  onHandover,
 }: MessageThreadProps) {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [claiming, setClaiming] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -165,6 +176,28 @@ export function MessageThread({
   const displayName = (conversation.contact_display_name as string | null)
     ?? (conversation.contact_phone as string | null)
     ?? "Unknown";
+
+  // Website chats must be accepted: "open" = a channel that doesn't need it (unchanged), "waiting" = nobody has it,
+  // "mine" = I accepted it, "locked" = someone else did (I can read, not reply).
+  const needsClaim = requiresClaim(conversation.provider as string | null);
+  const owner = ownerOf({
+    assignee_type: conversation.assignee_type as string | null,
+    assigned_to_user_id: conversation.assigned_to_user_id as string | null,
+  });
+  const mode: "open" | "waiting" | "mine" | "locked" = !needsClaim ? "open" : !owner ? "waiting" : owner === currentUserId ? "mine" : "locked";
+  const canReplyHere = mode === "open" || mode === "mine";
+  const isAdmin = userRole === "owner" || userRole === "admin";
+  const ownerLabel = ownerName || "A teammate";
+
+  const run = async (action?: () => Promise<void>) => {
+    if (!action || claiming) return;
+    setClaiming(true);
+    try {
+      await action();
+    } finally {
+      setClaiming(false);
+    }
+  };
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -210,6 +243,18 @@ export function MessageThread({
             {conversation.provider !== "chatwoot" && <> · {conversation.external_contact_id as string}</>}
           </p>
         </div>
+        {mode === "waiting" && (
+          <span className="text-xs font-medium rounded-full px-2 py-0.5 bg-amber-100 text-amber-800">Waiting to accept</span>
+        )}
+        {mode === "mine" && (
+          <>
+            <span className="text-xs font-medium rounded-full px-2 py-0.5 bg-green-100 text-green-800">You&apos;re handling</span>
+            <Button type="button" variant="outline" size="sm" onClick={onHandover}>Hand over</Button>
+          </>
+        )}
+        {mode === "locked" && (
+          <span className="text-xs font-medium rounded-full px-2 py-0.5 bg-muted text-muted-foreground">{ownerLabel} handling</span>
+        )}
       </div>
 
       {/* Messages */}
@@ -234,6 +279,17 @@ export function MessageThread({
             const isDraft = status === "draft";
             const isOutbound = direction === "outbound";
             const isAi = authorType === "ai_agent";
+
+            // A grey team-only line ("Manish accepted this chat"). Never shown to the visitor.
+            if (authorType === "system") {
+              return (
+                <div key={id} className="self-center flex items-center gap-2 text-xs text-muted-foreground my-1 text-center" data-system-note>
+                  <span className="h-px w-6 bg-border" />
+                  <span>{content}</span>
+                  <span className="h-px w-6 bg-border" />
+                </div>
+              );
+            }
 
             return (
               <div
@@ -283,7 +339,7 @@ export function MessageThread({
                 <div className="flex items-center gap-1.5 px-1">
                   <span className="text-xs text-muted-foreground">{formatTime(ts)}</span>
                   {isOutbound && !isDraft && statusIcon(status)}
-                  {isDraft && (
+                  {isDraft && canReplyHere && (
                     <button
                       onClick={() => onApproveDraft(id)}
                       className="flex items-center gap-1 text-xs text-amber-700 hover:text-amber-900 font-medium"
@@ -301,7 +357,30 @@ export function MessageThread({
         <div ref={bottomRef} />
       </div>
 
-      {/* Composer */}
+      {/* Composer. On a website chat nobody has accepted (or someone else has), it is replaced by what to do next. */}
+      {mode === "waiting" ? (
+        <div className="px-4 py-3 border-t shrink-0">
+          <div className="rounded-lg bg-amber-50 text-amber-900 px-3 py-2.5 flex items-center justify-between gap-3 flex-wrap">
+            <span className="text-sm font-medium">Nobody is handling this chat yet.</span>
+            <Button type="button" size="sm" disabled={claiming} onClick={() => run(onAccept)}>
+              ✓ Accept this chat
+            </Button>
+          </div>
+        </div>
+      ) : mode === "locked" ? (
+        <div className="px-4 py-3 border-t shrink-0">
+          <div className="rounded-lg bg-amber-50 text-amber-900 px-3 py-2.5 flex items-center justify-between gap-3 flex-wrap">
+            <span className="text-sm">
+              🔒 <span className="font-medium">{ownerLabel} is handling this chat.</span> Ask them to hand it over to reply.
+            </span>
+            {isAdmin && (
+              <Button type="button" size="sm" variant="outline" disabled={claiming} onClick={() => run(onTakeOver)}>
+                Take over
+              </Button>
+            )}
+          </div>
+        </div>
+      ) : (
       <div className="px-4 py-3 border-t shrink-0">
         {pendingFiles.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-2">
@@ -351,6 +430,7 @@ export function MessageThread({
           </Button>
         </div>
       </div>
+      )}
     </div>
   );
 }

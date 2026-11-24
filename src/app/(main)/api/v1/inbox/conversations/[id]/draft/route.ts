@@ -14,6 +14,7 @@ import {
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { sendMessage } from "@/lib/inbox/send-message";
 import { canAccessConversationLead } from "@/lib/inbox/scope";
+import { replyLock } from "@/lib/inbox/claim";
 
 export async function POST(
   request: NextRequest,
@@ -28,7 +29,7 @@ export async function POST(
   // Verify conversation access
   const { data: conv } = await supabase
     .from("conversations")
-    .select("id, tenant_id, lead_id")
+    .select("id, tenant_id, lead_id, provider, assignee_type, assigned_to_user_id")
     .eq("id", id)
     .eq("tenant_id", auth.tenantId)
     .maybeSingle();
@@ -39,9 +40,18 @@ export async function POST(
   const canAccess = await canAccessConversationLead(
     { user: userClient, service: supabase },
     auth,
-    (conv as { lead_id: string | null }).lead_id
+    (conv as { lead_id: string | null }).lead_id,
+    (conv as { provider: string | null }).provider
   );
   if (!canAccess) return apiForbidden();
+
+  // Website chats: only the person who accepted the chat may send (approve) a reply.
+  const locked = await replyLock(
+    supabase,
+    conv as { provider: string | null; assignee_type: string | null; assigned_to_user_id: string | null },
+    auth.userId
+  );
+  if (locked) return locked;
 
   const body = await request.json().catch(() => ({})) as { draft_message_id?: string };
   if (!body.draft_message_id) {
