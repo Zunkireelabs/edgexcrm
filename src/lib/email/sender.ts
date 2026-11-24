@@ -16,6 +16,43 @@ function isValidEmail(addr: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr);
 }
 
+export type VerifiedCompanySender = {
+  /** `Name <address>` — the RFC 5322 From header value. */
+  from: string;
+  /** The bare verified address, e.g. hello@mail.admizz.com. */
+  address: string;
+  /** Display name (already sanitized). */
+  name: string;
+  /** The tenant's configured Reply-To (the team mailbox), when valid. */
+  replyTo: string | null;
+};
+
+/**
+ * The tenant's own VERIFIED company sender, or null. Unlike resolveTenantSender
+ * this never falls back to the shared platform address: it answers "may a person
+ * pick the company address as their From?", and the answer is yes only for a
+ * custom address on a verified domain. Never throws (null on any error), so a
+ * settings hiccup just hides the option instead of breaking the compose dialog.
+ */
+export async function resolveVerifiedCompanySender(tenantId: string): Promise<VerifiedCompanySender | null> {
+  try {
+    const supabase = await createServiceClient();
+    const { data } = await supabase
+      .from("tenant_email_settings")
+      .select("from_name, from_address, reply_to, domain_verified")
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+
+    if (!data?.domain_verified || !data.from_address || !isValidEmail(data.from_address)) return null;
+
+    const name = sanitizeName(data.from_name || "EdgeX") || "EdgeX";
+    const replyTo = data.reply_to && isValidEmail(data.reply_to) ? data.reply_to : null;
+    return { from: `${name} <${data.from_address}>`, address: data.from_address, name, replyTo };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Resolve the outbound sender identity for a tenant's AUTOMATION emails.
  * Falls back to the global EdgeX sender on any miss/error — never throws.

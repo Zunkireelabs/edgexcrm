@@ -8,6 +8,12 @@ import { buildBulkEmailHeaders } from "./headers";
 import { getDailyCapStatus } from "./cap";
 import { acquireResendRateLimitSlot } from "./rate-limit";
 import { getEmailTransportMode, sendStubEmail } from "./transport";
+import {
+  provisionBulkReplyCapture,
+  finalizeBulkReplyCapture,
+  parseFromHeader,
+  type SentReplyRecord,
+} from "./reply-capture";
 import { mapWithConcurrency } from "@/lib/sms/concurrency";
 import { logger } from "@/lib/logger";
 
@@ -180,6 +186,30 @@ export async function sendQueuedEmailBatch(
   // Step 4: sender resolution — already live, do not reimplement.
   const sender = await resolveTenantSender(tenantId);
 
+  // Reply capture (see reply-capture.ts): when inbound is enabled, point each message's
+  // Reply-To at a per-message EdgeX address so the lead's reply lands on the lead and can
+  // stop the sequence. Returns an EMPTY map — and runs no queries — when inbound is off, so
+  // the send below is unchanged. Never throws; any failure falls back to sender.replyTo.
+  const replyCapture = await provisionBulkReplyCapture(
+    db,
+    withinCap.map((m) => ({ id: m.id, lead_id: m.lead_id, subject: m.subject })),
+    sender.orgName
+  );
+  const sentReplyRecords = new Map<string, SentReplyRecord>();
+  const senderParts = parseFromHeader(sender.from);
+  const noteSent = (msg: QueuedEmailRow, providerMessageId: string | null) => {
+    const provisioned = replyCapture.get(msg.id);
+    if (!provisioned) return;
+    sentReplyRecords.set(msg.id, {
+      provisioned,
+      bodyHtml: msg.body_html,
+      toEmail: msg.to_email,
+      fromAddress: senderParts.address,
+      fromName: senderParts.name,
+      providerMessageId,
+    });
+  };
+
   // F3 (docs/BLAST-FINDINGS-2026-09-06.md) — fail-closed transport seam.
   // Defaults to "stub" everywhere except real production; RESEND_API_KEY is
   // only required, and only ever touched, when transportMode === "resend".
@@ -248,6 +278,7 @@ export async function sendQueuedEmailBatch(
       if (transportMode === "stub") {
         const { data } = sendStubEmail({ to: guarded.to, from: sender.from, subject: guarded.subject, html: bodyWithFooter });
         sent += 1;
+        noteSent(msg, data.id);
         await db
           .from("email_messages")
           .update({ status: "sent", provider_message_id: data.id, sent_at: new Date().toISOString() })
@@ -255,12 +286,14 @@ export async function sendQueuedEmailBatch(
         return;
       }
 
+      // Per-message EdgeX reply address when capture is on, else the tenant's configured Reply-To.
+      const replyTo = replyCapture.get(msg.id)?.replyTo ?? sender.replyTo;
       let rateLimitRetries = 0;
       for (;;) {
         await acquireResendRateLimitSlot();
         const { data, error: sendError } = await resend!.emails.send({
           from: sender.from,
-          ...(sender.replyTo ? { replyTo: sender.replyTo } : {}),
+          ...(replyTo ? { replyTo } : {}),
           to: guarded.to,
           subject: guarded.subject,
           html: bodyWithFooter,
@@ -286,6 +319,7 @@ export async function sendQueuedEmailBatch(
         }
 
         sent += 1;
+        noteSent(msg, data?.id ?? null);
         await db
           .from("email_messages")
           .update({ status: "sent", provider_message_id: data?.id ?? null, sent_at: new Date().toISOString() })
@@ -299,7 +333,12 @@ export async function sendQueuedEmailBatch(
         .update({ status: "failed", error_code: "exception", error_message: message })
         .eq("id", msg.id);
     }
-  });
+  }).finally(() =>
+    // Messages that went out: record them on their thread. Messages that did not (including when
+    // the env guard aborts the whole batch above): remove the provisional thread + token so nothing
+    // is left behind as an empty thread. Never throws; returns at once when reply capture is off.
+    finalizeBulkReplyCapture(db, replyCapture, sentReplyRecords)
+  );
 
   const failed = failedSoFar + (withinCap.length - sent);
 

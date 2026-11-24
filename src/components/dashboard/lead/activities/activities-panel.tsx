@@ -43,6 +43,7 @@ import { ChecklistCard } from "../management-panel";
 import { TaskList, type TaskListRef } from "@/components/dashboard/tasks/task-list";
 import { type EmailThread, type Email } from "@/industries/_shared/features/email/hooks/use-email-threads";
 import { useConnectedInboxes } from "@/industries/_shared/features/email/hooks/use-connected-inboxes";
+import { useCompanySender } from "@/industries/_shared/features/email/hooks/use-company-sender";
 import { getFeatureAccess } from "@/industries/_loader";
 import { changedFieldLabels } from "./describe-audit-event";
 import { describeSubmission, humanizeIntakeValue } from "./lead-activity-labels";
@@ -232,6 +233,11 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
 
   // Connected inboxes for EmailThreadCard (needed to identify own emails for participant display)
   const { inboxes: ownConnectedInboxes } = useConnectedInboxes();
+  // The company address counts as "ours" when labelling who sent a message in a thread.
+  const { companySender } = useCompanySender();
+  const ownSenderAddresses = companySender
+    ? [...ownConnectedInboxes, { id: "company", email: companySender.email }]
+    : ownConnectedInboxes;
 
   // Fetch logged activities
   const fetchActivities = useCallback(async () => {
@@ -359,7 +365,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
       const matchingInbox = ownConnectedInboxes.find((i) => i.email === optimisticEmail.from_email);
       const newThread: EmailThread = {
         id: result.thread_id,
-        connected_email_account_id: matchingInbox?.id ?? "",
+        connected_email_account_id: matchingInbox?.id ?? null,
         gmail_thread_id: "",
         lead_id: leadId,
         contact_id: null,
@@ -683,7 +689,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
                       thread={thread}
                       currentUserId={currentUserId}
                       teamMemberEmails={teamMemberEmails}
-                      ownConnectedInboxes={ownConnectedInboxes}
+                      ownConnectedInboxes={ownSenderAddresses}
                       onReply={handleReply}
                       onThreadRead={handleThreadRead}
                       leadId={leadId}
