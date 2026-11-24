@@ -6,7 +6,8 @@ import { NextRequest } from "next/server";
 import { authenticateRequest } from "@/lib/api/auth";
 import { apiUnauthorized, apiSuccess } from "@/lib/api/response";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { isInboxScopeRestricted, resolveInboxLeadScope, visibleLeadIdsAmong } from "@/lib/inbox/scope";
+import { isInboxScopeRestricted, resolveInboxLeadScope, restrictedConversationFilter, visibleLeadIdsAmong } from "@/lib/inbox/scope";
+import { canSeeNav } from "@/lib/api/permissions";
 
 export async function GET(request: NextRequest) {
   const auth = await authenticateRequest();
@@ -28,7 +29,7 @@ export async function GET(request: NextRequest) {
   // avoids). Everyone else (owner/admin, or a leadScope:"all" position) is
   // unrestricted, same as before.
   const scope = resolveInboxLeadScope(auth);
-  let visibleLeadIds: string[] | null = null;
+  let restrictedFilter: string | null | undefined; // undefined = unrestricted viewer
 
   if (isInboxScopeRestricted(scope)) {
     let candidateQuery = supabase
@@ -47,13 +48,15 @@ export async function GET(request: NextRequest) {
     );
 
     const userClient = await createClient();
-    visibleLeadIds = await visibleLeadIdsAmong(
+    const visibleLeadIds = await visibleLeadIdsAmong(
       { user: userClient, service: supabase },
       auth.tenantId,
       scope,
       candidateLeadIds
     );
-    if (visibleLeadIds.length === 0) return apiSuccess([]);
+    // Leads they can see, plus every website chat when they can open the Inbox (those are readable by all Inbox users).
+    restrictedFilter = restrictedConversationFilter(visibleLeadIds, canSeeNav(auth.permissions, "/inbox"));
+    if (restrictedFilter === null) return apiSuccess([]);
   }
 
   let query = supabase
@@ -74,8 +77,8 @@ export async function GET(request: NextRequest) {
   } else if (assignee === "unassigned") {
     query = query.eq("assignee_type", "unassigned");
   }
-  if (visibleLeadIds !== null) {
-    query = query.in("lead_id", visibleLeadIds);
+  if (restrictedFilter) {
+    query = query.or(restrictedFilter);
   }
 
   const { data, error } = await query;

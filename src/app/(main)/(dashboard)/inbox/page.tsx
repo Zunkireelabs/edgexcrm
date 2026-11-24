@@ -2,7 +2,8 @@ import { redirect } from "next/navigation";
 import { getCurrentUserTenant } from "@/lib/supabase/queries";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { InboxUI } from "@/components/dashboard/inbox/InboxUI";
-import { isInboxScopeRestricted, resolveInboxLeadScope, visibleLeadIdsAmong } from "@/lib/inbox/scope";
+import { isInboxScopeRestricted, resolveInboxLeadScope, restrictedConversationFilter, visibleLeadIdsAmong } from "@/lib/inbox/scope";
+import { canSeeNav } from "@/lib/api/permissions";
 
 export default async function InboxPage() {
   const tenantData = await getCurrentUserTenant();
@@ -19,7 +20,7 @@ export default async function InboxPage() {
       .eq("status", "active")
       .order("created_at", { ascending: true });
 
-  const buildConversationsQuery = (leadIds: string[] | null) => {
+  const buildConversationsQuery = (restrictedFilter: string | null) => {
     let q = supabase
       .from("conversations")
       .select("*, inbox_channels(id, provider, display_name)")
@@ -27,7 +28,7 @@ export default async function InboxPage() {
       .eq("status", "open")
       .order("last_message_at", { ascending: false, nullsFirst: false })
       .limit(50);
-    if (leadIds !== null) q = q.in("lead_id", leadIds);
+    if (restrictedFilter !== null) q = q.or(restrictedFilter);
     return q;
   };
 
@@ -63,10 +64,11 @@ export default async function InboxPage() {
       candidateLeadIds
     );
 
+    // Leads they can see, plus every website chat when they can open the Inbox (readable by all Inbox users).
+    const filter = restrictedConversationFilter(visibleLeadIds, canSeeNav(tenantData.permissions, "/inbox"));
+
     channelsResult = await buildChannelsQuery();
-    conversationsResult = visibleLeadIds.length === 0
-      ? { data: [] }
-      : await buildConversationsQuery(visibleLeadIds);
+    conversationsResult = filter === null ? { data: [] } : await buildConversationsQuery(filter);
   } else {
     // Parallel fetch: channels + first page of conversations
     [channelsResult, conversationsResult] = await Promise.all([

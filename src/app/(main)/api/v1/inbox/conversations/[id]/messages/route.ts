@@ -14,6 +14,7 @@ import {
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { sendMessage, type OutboundAttachmentInput } from "@/lib/inbox/send-message";
 import { canAccessConversationLead, type InboxScopeClients } from "@/lib/inbox/scope";
+import { replyLock } from "@/lib/inbox/claim";
 
 function mediaTypeFor(mimeType: string): OutboundAttachmentInput["type"] {
   if (mimeType.startsWith("image/")) return "image";
@@ -26,20 +27,25 @@ async function checkConversationAccess(
   clients: InboxScopeClients,
   auth: AuthContext,
   conversationId: string
-): Promise<{ ok: true; conv: { id: string; tenant_id: string } } | { ok: false; response: ReturnType<typeof apiForbidden> }> {
+): Promise<{ ok: true; conv: { id: string; tenant_id: string; provider: string | null; assignee_type: string | null; assigned_to_user_id: string | null } } | { ok: false; response: ReturnType<typeof apiForbidden> }> {
   const { data: conv } = await clients.service
     .from("conversations")
-    .select("id, tenant_id, lead_id")
+    .select("id, tenant_id, lead_id, provider, assignee_type, assigned_to_user_id")
     .eq("id", conversationId)
     .eq("tenant_id", auth.tenantId)
     .maybeSingle();
 
   if (!conv) return { ok: false, response: apiNotFound("Conversation") as ReturnType<typeof apiForbidden> };
 
-  const canAccess = await canAccessConversationLead(clients, auth, (conv as { lead_id: string | null }).lead_id);
+  const canAccess = await canAccessConversationLead(
+    clients,
+    auth,
+    (conv as { lead_id: string | null }).lead_id,
+    (conv as { provider: string | null }).provider
+  );
   if (!canAccess) return { ok: false, response: apiForbidden() };
 
-  return { ok: true, conv: conv as { id: string; tenant_id: string } };
+  return { ok: true, conv: conv as { id: string; tenant_id: string; provider: string | null; assignee_type: string | null; assigned_to_user_id: string | null } };
 }
 
 export async function GET(
@@ -98,6 +104,10 @@ export async function POST(
 
   const access = await checkConversationAccess({ user: userClient, service: supabase }, auth, id);
   if (!access.ok) return access.response;
+
+  // Website chats: only the person who accepted the chat may reply (other channels are unchanged).
+  const locked = await replyLock(supabase, access.conv, auth.userId);
+  if (locked) return locked;
 
   const contentType = request.headers.get("content-type") ?? "";
   let content: string | undefined;

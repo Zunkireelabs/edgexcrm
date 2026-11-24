@@ -2,16 +2,18 @@
 // PATCH /api/v1/inbox/conversations/[id]  (status, assignee, stage_tag)
 
 import { NextRequest } from "next/server";
-import { authenticateRequest } from "@/lib/api/auth";
+import { authenticateRequest, requireAdmin } from "@/lib/api/auth";
 import {
   apiUnauthorized,
   apiForbidden,
   apiNotFound,
   apiSuccess,
+  apiError,
 } from "@/lib/api/response";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { createNotification, NotificationTypes } from "@/lib/notifications";
-import { canAccessConversationLead } from "@/lib/inbox/scope";
+import { canAccessConversationLead, canSeeLinkedLead } from "@/lib/inbox/scope";
+import { chatChangeLock, requiresClaim } from "@/lib/inbox/claim";
 
 export async function GET(
   _request: NextRequest,
@@ -37,9 +39,15 @@ export async function GET(
   const canAccess = await canAccessConversationLead(
     { user: userClient, service: supabase },
     auth,
-    conv.lead_id as string | null
+    conv.lead_id as string | null,
+    conv.provider as string | null
   );
   if (!canAccess) return apiForbidden();
+
+  // Website chats are readable by every Inbox user, but the lead a chat is linked to is still its owner's business:
+  // someone who can't see that lead gets the chat without the lead's name, email or phone.
+  const canSeeLead = await canSeeLinkedLead({ user: userClient, service: supabase }, auth, conv.lead_id as string | null);
+  if (!canSeeLead) return apiSuccess({ ...conv, leads: null });
 
   return apiSuccess(data);
 }
@@ -58,7 +66,7 @@ export async function PATCH(
   // editing must match viewing (same check as the GET handler above).
   const { data: conv } = await supabase
     .from("conversations")
-    .select("id, lead_id, assigned_to_user_id")
+    .select("id, lead_id, assigned_to_user_id, assignee_type, provider")
     .eq("id", id)
     .eq("tenant_id", auth.tenantId)
     .maybeSingle();
@@ -69,9 +77,19 @@ export async function PATCH(
   const canAccess = await canAccessConversationLead(
     { user: userClient, service: supabase },
     auth,
-    (conv as { lead_id: string | null }).lead_id
+    (conv as { lead_id: string | null }).lead_id,
+    (conv as { provider: string | null }).provider
   );
   if (!canAccess) return apiForbidden();
+
+  // Website chats: only the person handling it (or an admin) may change it. Everyone else reads.
+  const locked = await chatChangeLock(
+    supabase,
+    conv as { provider: string | null; assignee_type: string | null; assigned_to_user_id: string | null },
+    auth.userId,
+    requireAdmin(auth)
+  );
+  if (locked) return locked;
 
   const body = await request.json().catch(() => ({})) as Record<string, unknown>;
 
@@ -79,6 +97,15 @@ export async function PATCH(
   const patch: Record<string, unknown> = {};
   for (const key of allowed) {
     if (key in body) patch[key] = body[key];
+  }
+
+  // Website chats change owner only through Accept / Hand over / Take over (they leave a note and notify
+  // the new owner). Letting this route move the owner too would let anyone bypass the "one owner" rule.
+  if (
+    requiresClaim((conv as { provider?: string | null }).provider) &&
+    ("assigned_to_user_id" in patch || "assignee_type" in patch)
+  ) {
+    return apiError("USE_CLAIM", "Use Accept or Hand over to change who handles a website chat.", 409);
   }
 
   if (Object.keys(patch).length === 0) {

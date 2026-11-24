@@ -11,6 +11,7 @@ import {
   ArrowsClockwiseIcon,
   UserCircleIcon,
 } from "@/components/icons";
+import { requiresClaim } from "@/lib/inbox/claim-rules";
 import { buildLeadFromConversation, conversationContactEmail, type ConversationForLead } from "@/lib/inbox/lead-from-conversation";
 import { providerLabel } from "@/lib/inbox/provider-label";
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,10 @@ interface ContactPanelProps {
   tenantId: string;
   userRole: string;
   onConversationUpdate: () => void;
+  /** Name of whoever handles a website chat (the owner). */
+  ownerName?: string | null;
+  /** False on a website chat the viewer doesn't handle: they can read it, not change it (no lead conversion). Default true. */
+  canManage?: boolean;
 }
 
 function initials(label: string): string {
@@ -57,7 +62,7 @@ function initials(label: string): string {
   return base.substring(0, 2).toUpperCase();
 }
 
-export function ContactPanel({ conversation, tenantId, userRole, onConversationUpdate }: ContactPanelProps) {
+export function ContactPanel({ conversation, tenantId, userRole, onConversationUpdate, ownerName, canManage = true }: ContactPanelProps) {
   const [lead, setLead] = useState<LeadData | null>(null);
   const [loadingLead, setLoadingLead] = useState(false);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
@@ -240,16 +245,29 @@ export function ContactPanel({ conversation, tenantId, userRole, onConversationU
           </div>
         ) : (
           <div className="flex flex-col gap-2">
-            <p className="text-xs text-muted-foreground">Not linked to a lead</p>
-            <Button
-              size="sm"
-              variant="outline"
-              className="w-full text-xs h-7 gap-1"
-              onClick={handleConvertToLead}
-            >
-              <UserPlusIcon className="w-3 h-3" />
-              Convert to lead
-            </Button>
+            {leadId ? (
+              // Linked to a lead this viewer can't open (it belongs to someone else): say so, never offer to create a duplicate.
+              <p className="text-xs text-muted-foreground" data-linked-hidden>Linked to a lead owned by someone else</p>
+            ) : (
+              <>
+                <p className="text-xs text-muted-foreground">Not linked to a lead</p>
+                {canManage ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full text-xs h-7 gap-1"
+                    onClick={handleConvertToLead}
+                  >
+                    <UserPlusIcon className="w-3 h-3" />
+                    Convert to lead
+                  </Button>
+                ) : (
+                  <p className="text-xs text-muted-foreground" data-accept-first>
+                    Only the person handling this chat can turn it into a lead.
+                  </p>
+                )}
+              </>
+            )}
           </div>
         )}
       </div>
@@ -262,8 +280,21 @@ export function ContactPanel({ conversation, tenantId, userRole, onConversationU
 
         {/* Assigned to */}
         <div className="mb-3">
-          <p className="text-xs text-muted-foreground mb-1.5">Assigned to</p>
-          {isAdmin ? (
+          <p className="text-xs text-muted-foreground mb-1.5">
+            {requiresClaim(conversation.provider as string | null) ? "Handled by" : "Assigned to"}
+          </p>
+          {requiresClaim(conversation.provider as string | null) ? (
+            // A website chat changes hands only through Accept / Hand over / Take over (they leave a note and notify
+            // the new owner), so this is a read-only line, not a free picker.
+            <div className="flex items-center gap-2 text-sm" data-handled-by>
+              <UserCircleIcon className="h-4 w-4 text-muted-foreground" />
+              {assigneeId ? (
+                <span className="font-medium truncate">{ownerName || "A teammate"}</span>
+              ) : (
+                <span className="text-muted-foreground">Waiting to be accepted</span>
+              )}
+            </div>
+          ) : isAdmin ? (
             <Select
               value={assigneeId || "unassigned"}
               onValueChange={handleAssign}
