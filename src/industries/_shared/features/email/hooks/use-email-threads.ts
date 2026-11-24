@@ -5,6 +5,8 @@ import { useState, useEffect, useCallback } from "react";
 export interface Email {
   id: string;
   direction: "outbound" | "inbound";
+  /** 'gmail' | 'edgex_native' | 'resend' — 'resend' marks a message sent from the company address. */
+  provider?: string;
   from_email: string;
   from_name: string | null;
   to_emails: string[];
@@ -23,7 +25,8 @@ export interface Email {
 
 export interface EmailThread {
   id: string;
-  connected_email_account_id: string;
+  /** Null for threads that don't belong to a connected Gmail (company-sender and inbound-only threads). */
+  connected_email_account_id: string | null;
   gmail_thread_id: string;
   lead_id: string | null;
   contact_id: string | null;
