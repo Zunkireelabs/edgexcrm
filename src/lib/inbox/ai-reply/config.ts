@@ -17,6 +17,17 @@ export const SEARCH_TIMEOUT_MS = 30_000;
 /** What the visitor is told when the AI hands the chat to the team. One constant so the team can change the wording later. */
 export const HANDOFF_MESSAGE = "Thanks, I've passed your question to our counsellors. One of them will reply here soon.";
 
+/**
+ * What a visitor to the Admizz website chat is told while AI replies are OFF, so they are not left in silence. Sent once per
+ * chat (see holding.ts). One constant so the team can change the wording later.
+ */
+export const HOLDING_MESSAGE =
+  "Thanks for reaching out. Your chat has been passed to our team, and an Admizz associate will connect with you as soon as possible. " +
+  "Please keep this chat window open while you wait. If we aren't able to connect shortly, we'll follow up by phone call, WhatsApp or email.";
+
+/** Where the once-per-chat marker lives: conversations.meta.holding_sent_at (no new column). */
+export const HOLDING_META_KEY = "holding_sent_at";
+
 export type NeedsHumanReason = "out_of_knowledge" | "asked_for_person";
 
 /** What is stored on the conversation (conversations.meta.needs_human) when the AI hands over. */

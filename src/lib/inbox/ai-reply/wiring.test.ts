@@ -45,3 +45,18 @@ describe("the real database side", () => {
     expect(deps).toMatch(/author: \{ type: "ai_agent"/);
   });
 });
+
+describe("process-inbound starts the holding message", () => {
+  const src = read("../process-inbound.ts");
+  it("only for website chats with no human owner, and only when the AI branch did not take the message", () => {
+    expect(src).toMatch(/\} else if \(p\.provider === "chatwoot" && convAssigneeType !== "human"\) \{[\s\S]*?scheduleHoldingMessage\(\{ tenantId: p\.tenant_id, conversationId \}, realHoldingDeps\)/);
+    expect(src.indexOf("if (isDuplicate) return;")).toBeLessThan(src.indexOf("scheduleHoldingMessage({"));
+  });
+  it("does not go through Inngest, and scopes every query to the tenant", () => {
+    expect(read("holding.ts")).not.toMatch(/from "@\/lib\/inngest/);
+    const deps = read("holding-deps.ts");
+    const queries = deps.match(/\.from\("[a-z_]+"\)/g) ?? [];
+    expect(queries.length).toBe(4); // claim: read + update, release: read + update
+    expect((deps.match(/\.eq\("tenant_id", tenantId\)/g) ?? []).length).toBe(queries.length);
+  });
+});
