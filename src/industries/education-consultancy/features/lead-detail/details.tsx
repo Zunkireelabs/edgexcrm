@@ -196,7 +196,7 @@ export function DetailsList(p: DetailsProps) {
         >
           <div>
             <DetailRow
-              icon={<UserIcon />} label="Counsellor" editable={p.canPickCounsellor} onActivate={() => setEditing("counsellor")} active={editing === "counsellor"}
+              icon={<UserIcon />} label="Assignee" editable={p.canPickCounsellor} onActivate={() => setEditing("counsellor")} active={editing === "counsellor"}
               lock={p.canPickCounsellor ? undefined : "Only managers can reassign"} empty={!counsellorName}
             >
               {counsellorName ? <><Avatar initials={initialsOf(assigned ? p.memberNames[assigned] ?? counsellorName : "")} /><span className="truncate">{counsellorName}</span></> : "Unassigned"}

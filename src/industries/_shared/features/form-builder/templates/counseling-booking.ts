@@ -8,7 +8,7 @@ export const counselingBookingTemplate: TemplateDefinition = {
   isMultiStep: false,
   branding: {
     title: "Book a Counseling Session",
-    subtitle: "Our expert counselors are ready to guide you",
+    subtitle: "Our expert team is ready to guide you",
     button_text: "Book Session",
     thank_you_title: "Session Booked!",
     thank_you_message: "Your counseling session has been booked. We'll confirm your appointment shortly.",

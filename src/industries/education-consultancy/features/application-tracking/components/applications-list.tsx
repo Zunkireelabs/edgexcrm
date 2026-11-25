@@ -531,7 +531,7 @@ export function ApplicationsList(p: ApplicationsListProps) {
     return [
       {
         items: [
-          { value: UNASSIGN, label: "No counsellor (use the student's)", leading: <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-ds-hover text-ds-faint"><UserIcon className="size-3" /></span> },
+          { value: UNASSIGN, label: "No assignee (use the student's)", leading: <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-ds-hover text-ds-faint"><UserIcon className="size-3" /></span> },
           ...people.map((m) => {
             const name = m.name || m.email.split("@")[0];
             const col = colorFor(name);

@@ -75,7 +75,7 @@ describe("GET /api/v1/applications/board-page", () => {
     const orTree = { conjunction: "or", conditions: [{ id: "c", field: "counsellor", op: "is_any_of", value: [ME] }, { id: "d", field: "intake", op: "is", value: "x" }] };
     const r = await call(`f=${encodeFilterTree(orTree as never)}&stage=${S1}`);
     expect(r.status).toBe(200);
-    expect(r.body.data.filterError).toBe("Counsellor can't be combined with OR yet");
+    expect(r.body.data.filterError).toBe("Assignee can't be combined with OR yet");
     expect(r.body.data.total).toBe(column(S1).length);
     const garbage = await call(`f=%%%not-base64&stage=${S1}`);
     expect(garbage.status).toBe(200);

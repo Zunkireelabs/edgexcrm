@@ -68,7 +68,7 @@ describe("CONSENT_FIELD_HINTS", () => {
     for (const label of Object.keys(CONSENT_FIELD_HINTS)) expect(labels).toContain(label);
   });
   it("covers the guardian and counselor items staff don't recognise on sight", () => {
-    for (const label of ["Guardian Relationship", "Guardian Name", "Assigned Counselor"]) {
+    for (const label of ["Guardian Relationship", "Guardian Name", "Assignee"]) {
       expect(CONSENT_FIELD_HINTS[label]).toBeTruthy();
     }
   });
