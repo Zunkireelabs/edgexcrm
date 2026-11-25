@@ -2,8 +2,8 @@
 // Pure functions (no network, no database). Stored on the channel row at inbox_channels.meta.website_chat_ai, a
 // separate key from the widget settings (meta.website_chat) so the two never touch each other.
 
-/** The Inngest event that asks for an AI reply to a visitor's message. */
-export const AI_REPLY_EVENT = "inbox/ai-reply.requested";
+/** How long a chat must be quiet before the AI answers, so a burst such as "Study in the UK" / "Ok" / "Fast" gets ONE answer. */
+export const AI_REPLY_DEBOUNCE_MS = 5_000;
 
 /** The only industry that gets AI replies (the Admizz website chat). */
 export const AI_REPLY_INDUSTRY = "education_consultancy";

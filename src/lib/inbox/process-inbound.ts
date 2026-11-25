@@ -11,8 +11,8 @@ import { logger } from "@/lib/logger";
 import { normalizeEmail, normalizePhone } from "@/lib/leads/dedup";
 import { NotificationTypes, upsertThreadNotification } from "@/lib/notifications";
 import { resolveInboundRecipients } from "@/lib/inbox/inbound-recipients";
-import { inngest } from "@/lib/inngest/client";
-import { AI_REPLY_EVENT, aiReplyServerEnabled, readAiReplyConfig } from "@/lib/inbox/ai-reply/config";
+import { aiReplyServerEnabled, readAiReplyConfig } from "@/lib/inbox/ai-reply/config";
+import { scheduleAiReply } from "@/lib/inbox/ai-reply/scheduler";
 import { decryptToken } from "./crypto";
 import { resolveAndStoreAttachments } from "./media";
 import type { InboundMediaDescriptor } from "./adapters/types";
@@ -367,14 +367,11 @@ async function processOneEvent(
     logger.warn({ err: notifyErr, conversation_id: conversationId }, "Failed to create inbox notification (non-fatal)");
   }
 
-  // 5. Website chat with AI replies on and nobody handling it: ask for an AI reply. The job re-checks every rule; this
-  // only avoids queuing work that can't possibly run. Never breaks inbound processing.
+  // 5. Website chat with AI replies on and nobody handling it: schedule an AI reply. It runs in this server process after a short
+  // quiet period (src/lib/inbox/ai-reply/scheduler.ts), NOT through Inngest, so it keeps working when Inngest is over its
+  // limit. The run re-checks every rule; this only avoids scheduling work that can't possibly run. Never throws.
   if (p.provider === "chatwoot" && convAiAutonomy === "autonomous" && convAssigneeType !== "human" && aiReplyServerEnabled()) {
-    try {
-      await inngest.send({ name: AI_REPLY_EVENT, data: { tenantId: p.tenant_id, conversationId, messageId } });
-    } catch (sendErr) {
-      logger.warn({ err: sendErr, conversation_id: conversationId }, "Failed to queue AI reply (non-fatal)");
-    }
+    scheduleAiReply({ tenantId: p.tenant_id, conversationId });
   }
 }
 
