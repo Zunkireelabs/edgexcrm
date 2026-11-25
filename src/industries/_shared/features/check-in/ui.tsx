@@ -1164,7 +1164,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="__none__">
-                              {industryId === "travel_agency" ? "No team member" : "No counselor"}
+                              {industryId === "travel_agency" ? "No team member" : "No assignee"}
                             </SelectItem>
                             {counselorMembers.map((m) => (
                               <SelectItem key={m.user_id} value={m.user_id}>

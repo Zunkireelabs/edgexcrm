@@ -187,14 +187,14 @@ describe("ConsentCard — incomplete student profile gate", () => {
         ...INCOMPLETE.data,
         readiness: {
           ready: false,
-          missing: ["Assigned Counselor"],
-          groups: [{ section: "Assignment", fields: ["Assigned Counselor"] }],
+          missing: ["Assignee"],
+          groups: [{ section: "Assignment", fields: ["Assignee"] }],
         },
       },
     });
     renderCard(true, false, () => {});
     await openCard();
-    expect(screen.getByText("Assign a counselor to this lead.")).toBeInTheDocument();
+    expect(screen.getByText("Assign someone to this lead.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Open Student Details/ })).not.toBeInTheDocument();
   });
 

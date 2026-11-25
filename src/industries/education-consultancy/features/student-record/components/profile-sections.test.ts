@@ -10,10 +10,10 @@ describe("Edit profile sections", () => {
   it("maps a missing-for-consent label to its section (case-insensitive) and ignores unknown ones", () => {
     expect(sectionOfMissingLabel("Father's Name")).toBe("basic");
     expect(sectionOfMissingLabel("passport number")).toBe("passport");
-    expect(sectionOfMissingLabel("Assigned Counselor")).toBeNull();
+    expect(sectionOfMissingLabel("Assignee")).toBeNull();
   });
   it("counts the gaps per section", () => {
-    expect(missingBySection(["Date of Birth", "Father's Name", "Passport Number", "Address", "Assigned Counselor"])).toEqual({ basic: 2, passport: 1, address: 1 });
+    expect(missingBySection(["Date of Birth", "Father's Name", "Passport Number", "Address", "Assignee"])).toEqual({ basic: 2, passport: 1, address: 1 });
   });
   it("opens at the first section WITH a gap, in list order (not the order the server listed them)", () => {
     expect(firstGapSection(["Passport Number", "Father's Name", "Address"])).toBe("address");
@@ -21,6 +21,6 @@ describe("Edit profile sections", () => {
   });
   it("has no first gap when nothing is missing", () => {
     expect(firstGapSection([])).toBeNull();
-    expect(firstGapSection(["Assigned Counselor"])).toBeNull();
+    expect(firstGapSection(["Assignee"])).toBeNull();
   });
 });

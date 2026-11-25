@@ -489,7 +489,7 @@ export function ConsentCard({
             )}
             {!completeness.feeDone && (
               <p className="text-[11px] text-muted-foreground">
-                Enter the fee (a counsellor&apos;s report is enough) before moving to Applications.
+                Enter the fee (an assignee&apos;s report is enough) before moving to Applications.
               </p>
             )}
           </div>

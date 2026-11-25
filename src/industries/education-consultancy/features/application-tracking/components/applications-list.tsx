@@ -223,7 +223,7 @@ function cellFor(key: ListColumnKey, app: Application, c: CellCtx): ReactNode {
     }
     case "counsellor": {
       const who = resolveCounsellor(app, c.assigneeNames);
-      if (!who) return <span className="text-ds-faint">Set counsellor</span>;
+      if (!who) return <span className="text-ds-faint">Set assignee</span>;
       const col = colorFor(who.name);
       return (
         <div className="flex min-w-0 items-center gap-2">
@@ -281,7 +281,7 @@ function footerFor(key: ListColumnKey | "student", s: ListSummary | null): React
     case "time_in_stage":
       return s.medianDaysInStage === null ? null : <>{v(`${s.medianDaysInStage}d`)} median</>;
     case "counsellor":
-      return <>{v(s.counsellors)} {plural(s.counsellors, "counsellor", "counsellors")}</>;
+      return <>{v(s.counsellors)} {plural(s.counsellors, "assignee", "assignees")}</>;
     case "deadline":
       return <>{v(s.dueSoon)} due in 14d</>;
     default:
@@ -422,7 +422,7 @@ function PhoneRow({ app, href, c }: { app: Application; href: string; c: CellCtx
               <span className="truncate">{who.name}</span>
             </>
           ) : (
-            <span className="text-[rgba(0,0,0,.42)]">Set counsellor</span>
+            <span className="text-[rgba(0,0,0,.42)]">Set assignee</span>
           )}
         </span>
       </span>
@@ -918,12 +918,12 @@ export function ApplicationsList(p: ApplicationsListProps) {
             onOpenChange={(o) => setBulkPick(o ? "assign" : null)}
             trigger={
               <button type="button" data-bulk="assign" disabled={busy} className={BULK_BTN}>
-                Assign counsellor
+                Assign assignee
               </button>
             }
             side="top"
             width={280}
-            placeholder="Assign counsellor…"
+            placeholder="Assign assignee…"
             groups={counsellorGroups}
             onPick={(v) => void bulk({ assigned_to: v === UNASSIGN ? null : v }, "updated")}
             testId="bulk-assign-picker"

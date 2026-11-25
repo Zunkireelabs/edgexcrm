@@ -920,7 +920,7 @@ export async function applyLeadPatch(
         const wouldPromote = sort === null || staging || sort < prospectsList.sort_order;
         const qualifies = hasProspectQualification({ ...(existingLead as Record<string, unknown>), ...updatePayload });
         if (wouldPromote && !qualifies && !bypassQual) {
-          return { kind: "validation", errors: { academic: ["Add the student's highest qualification (%/GPA) before assigning a counselor."] } };
+          return { kind: "validation", errors: { academic: ["Add the student's highest qualification (%/GPA) before assigning an assignee."] } };
         }
       }
     }
