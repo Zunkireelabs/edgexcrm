@@ -18,6 +18,8 @@ export interface ChatState {
     assigned_to_user_id: string | null;
   };
   lastAuthorType: string | null;
+  /** The newest message that is not a team-only note: lets the run notice that the visitor wrote again while the AI was thinking. */
+  lastMessageId: string | null;
   /** The newest messages, oldest first. */
   lines: ChatLine[];
 }
@@ -26,6 +28,8 @@ export interface AiReplyDeps {
   /** null when the server settings are missing (feature off). */
   env: { url: string; key: string } | null;
   loadState(tenantId: string, conversationId: string): Promise<ChatState | null>;
+  /** The id of the newest non-system message right now (compared with the one the answer was built from). */
+  latestMessageId(tenantId: string, conversationId: string): Promise<string | null>;
   /** Asked again just before sending: a counsellor may have clicked Accept while the AI was thinking. */
   stillUnowned(tenantId: string, conversationId: string): Promise<boolean>;
   ask(input: AskInput): Promise<SearchAnswer>;
@@ -36,7 +40,7 @@ export interface AiReplyDeps {
 export type AiReplyResult =
   | { done: "answered" }
   | { done: "handed_over"; reason: NeedsHumanReason }
-  | { done: "skipped"; reason: SkipReason | "no_question" | "search_failed" | "taken_while_thinking" | "empty_answer" | "send_failed" };
+  | { done: "skipped"; reason: SkipReason | "no_question" | "search_failed" | "taken_while_thinking" | "newer_message" | "empty_answer" | "send_failed" };
 
 export async function runAiReply(ev: { tenantId: string; conversationId: string }, deps: AiReplyDeps): Promise<AiReplyResult> {
   const state = await deps.loadState(ev.tenantId, ev.conversationId);
@@ -70,6 +74,10 @@ export async function runAiReply(ev: { tenantId: string; conversationId: string 
     logger.warn({ conversationId: ev.conversationId, err: err instanceof Error ? err.message : String(err) }, "AI reply: the Admizz AI did not answer");
     return { done: "skipped", reason: "search_failed" };
   }
+
+  // The visitor wrote again while the AI was thinking: this answer covers only the older words, so drop it. The caller runs
+  // again (after the quiet period) and answers everything at once.
+  if ((await deps.latestMessageId(ev.tenantId, ev.conversationId)) !== state.lastMessageId) return { done: "skipped", reason: "newer_message" };
 
   if (!(await deps.stillUnowned(ev.tenantId, ev.conversationId))) return { done: "skipped", reason: "taken_while_thinking" };
 

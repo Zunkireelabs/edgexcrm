@@ -5,7 +5,6 @@ import { applicantDocumentIngest } from "@/lib/inngest/functions/applicant-docum
 import { heartbeat } from "@/lib/inngest/functions/heartbeat";
 import { remindersScan } from "@/lib/inngest/functions/reminders";
 import { inboxProcess } from "@/lib/inngest/functions/inbox-process";
-import { inboxAiReply } from "@/lib/inngest/functions/inbox-ai-reply";
 import { emailPoll } from "@/lib/inngest/functions/email-poll";
 import { emailInboundProcess } from "@/lib/inngest/functions/email-inbound-process";
 import { displayIdBackfillSweep } from "@/lib/inngest/functions/display-id-backfill-sweep";
@@ -30,7 +29,6 @@ export const { GET, POST, PUT } = serve({
     heartbeat,
     remindersScan,
     inboxProcess,
-    inboxAiReply,
     emailPoll,
     emailInboundProcess,
     displayIdBackfillSweep,
