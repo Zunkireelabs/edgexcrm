@@ -12,6 +12,7 @@ import {
   UserCircleIcon,
 } from "@/components/icons";
 import { requiresClaim } from "@/lib/inbox/claim-rules";
+import { cn } from "@/lib/utils";
 import { buildLeadFromConversation, conversationContactEmail, type ConversationForLead } from "@/lib/inbox/lead-from-conversation";
 import { providerLabel } from "@/lib/inbox/provider-label";
 import { Button } from "@/components/ui/button";
@@ -68,6 +69,7 @@ export function ContactPanel({ conversation, tenantId, userRole, onConversationU
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
   const [assigning, setAssigning] = useState(false);
+  const [togglingAi, setTogglingAi] = useState(false);
 
   const isAdmin = userRole === "owner" || userRole === "admin";
   const leadId = conversation?.lead_id as string | null;
@@ -114,6 +116,25 @@ export function ContactPanel({ conversation, tenantId, userRole, onConversationU
       toast.error("Failed to update assignment");
     } finally {
       setAssigning(false);
+    }
+  };
+  // Turn the AI on or off for this one chat (the owner or an admin; the server enforces the same rule).
+  const handleToggleAi = async (on: boolean) => {
+    if (!convId) return;
+    setTogglingAi(true);
+    try {
+      const res = await fetch(`/api/v1/inbox/conversations/${convId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ai_autonomy: on ? "autonomous" : "off" }),
+      });
+      if (!res.ok) throw new Error("failed");
+      toast.success(on ? "AI replies turned on for this chat" : "AI replies turned off for this chat");
+      onConversationUpdate();
+    } catch {
+      toast.error("Could not change AI replies");
+    } finally {
+      setTogglingAi(false);
     }
   };
   const displayName = (conversation?.contact_display_name as string | null)
@@ -349,10 +370,33 @@ export function ContactPanel({ conversation, tenantId, userRole, onConversationU
               {conversation.status as string}
             </Badge>
           </div>
-          <div className="flex justify-between">
+          <div className="flex justify-between items-center">
             <span className="text-muted-foreground">AI mode</span>
-            <span className="text-foreground">{conversation.ai_autonomy as string}</span>
+            {requiresClaim(conversation.provider as string | null) && canManage && (conversation.ai_autonomy === "autonomous" || conversation.ai_autonomy === "off") ? (
+              <button
+                type="button"
+                role="switch"
+                aria-checked={conversation.ai_autonomy === "autonomous"}
+                aria-label="AI replies for this chat"
+                disabled={togglingAi}
+                data-ai-switch
+                onClick={() => void handleToggleAi(conversation.ai_autonomy !== "autonomous")}
+                className={cn(
+                  "text-xs px-2 py-0.5 rounded-full font-medium border",
+                  conversation.ai_autonomy === "autonomous" ? "bg-blue-100 text-blue-800 border-blue-200" : "bg-muted text-muted-foreground"
+                )}
+              >
+                {conversation.ai_autonomy === "autonomous" ? "AI replying" : "AI off"}
+              </button>
+            ) : (
+              <span className="text-foreground">{conversation.ai_autonomy as string}</span>
+            )}
           </div>
+          {(conversation.meta as { needs_human?: unknown } | null)?.needs_human ? (
+            <div className="rounded-md bg-red-50 text-red-800 px-2 py-1" data-needs-human>
+              The AI could not answer this. A person needs to reply.
+            </div>
+          ) : null}
           {(conversation.stage_tag as string | null) && (
             <div className="flex justify-between">
               <span className="text-muted-foreground">Stage</span>
