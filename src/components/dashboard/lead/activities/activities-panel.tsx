@@ -128,6 +128,8 @@ export interface ActivitiesPanelRef {
   openTasks: (focus?: boolean) => void;
   /** Switch to the Documents sub-tab (only exists for tenants with the documents feature). */
   openDocuments: () => void;
+  /** Open the Compose email dialog (a fresh email, not a reply). */
+  openCompose: () => void;
 }
 
 /**
@@ -175,6 +177,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
       }
     },
     openDocuments: () => setActiveTab("documents"),
+    openCompose: () => { setReplyContext(null); setComposeOpen(true); },
     openTasks: (focus = false) => {
       setActiveTab("tasks");
       if (focus) {

@@ -55,6 +55,7 @@ export interface LeftColumnProps {
   /** May copy / send / sign consent (the Applications manage rule). */
   canManageConsent: boolean;
   onNote: () => void;
+  onEmail: () => void;
   onTask: () => void;
   onEditProfile: (missing?: string[]) => void;
   onDelete: () => void;
@@ -224,9 +225,9 @@ export function LeftColumn(p: LeftColumnProps) {
         </div>
         <div className="mt-3 flex gap-1.5">
           {lead.email ? (
-            <a href={`mailto:${lead.email}`} className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-[8px] bg-white px-2 text-[14px] font-medium text-[#101112] shadow-[inset_0_0_0_1px_#e8e9eb] outline-none hover:bg-[#f6f7f9] focus-visible:ring-2 focus-visible:ring-[#266df0]/50 max-[430px]:w-7 max-[430px]:justify-center max-[430px]:px-0" aria-label="Email" title="Email (E)">
+            <button type="button" onClick={p.onEmail} className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-[8px] bg-white px-2 text-[14px] font-medium text-[#101112] shadow-[inset_0_0_0_1px_#e8e9eb] outline-none hover:bg-[#f6f7f9] focus-visible:ring-2 focus-visible:ring-[#266df0]/50 max-[430px]:w-7 max-[430px]:justify-center max-[430px]:px-0" aria-label="Email" title="Email (E)">
               <EnvelopeSimpleIcon className="size-[14px]" /><span className="max-[430px]:hidden">Email</span>
-            </a>
+            </button>
           ) : (
             <button type="button" disabled title="No email address" aria-label="Email" className="inline-flex h-7 items-center gap-1.5 rounded-[8px] bg-white px-2 text-[14px] font-medium opacity-40 shadow-[inset_0_0_0_1px_#e8e9eb] max-[430px]:w-7 max-[430px]:justify-center max-[430px]:px-0">
               <EnvelopeSimpleIcon className="size-[14px]" /><span className="max-[430px]:hidden">Email</span>

@@ -8,7 +8,7 @@ import {
   SquaresFourIcon, UserCheckIcon,
 } from "@/components/icons";
 import { LogActivityModal } from "@/components/dashboard/lead/activities/log-activity-modal";
-import { ActivitiesPanel } from "@/components/dashboard/lead/activities/activities-panel";
+import { ActivitiesPanel, type ActivitiesPanelRef } from "@/components/dashboard/lead/activities/activities-panel";
 import { NotesTab, type NotesTabRef } from "@/components/dashboard/lead/notes-tab";
 import { useEmailThreads } from "@/industries/_shared/features/email/hooks/use-email-threads";
 import { getFeatureAccess } from "@/industries/_loader";
@@ -42,6 +42,8 @@ export interface MiddleColumnHandle {
   goNote: () => void;
   goTask: () => void;
   openTab: (t: TabId) => void;
+  /** Opens the Emails tab and the Compose email window (left-column Email button). */
+  goCompose: () => void;
   /** Opens the Tasks tab with the composer prefilled (Log call → "Also set a follow-up task"). */
   followUpTask: (f: { title: string; due: string }) => void;
 }
@@ -181,15 +183,24 @@ export const MiddleColumn = forwardRef<MiddleColumnHandle, MiddleColumnProps>(fu
   const notesRef = useRef<NotesTabRef>(null);
   const taskInputRef = useRef<HTMLInputElement | null>(null);
   const pendingFocus = useRef<"note" | "task" | null>(null);
+  const emailsPanelRef = useRef<ActivitiesPanelRef>(null);
+  const pendingCompose = useRef(false);
   useEffect(() => {
     if (activeTab === "notes" && pendingFocus.current === "note") { pendingFocus.current = null; setTimeout(() => notesRef.current?.focusComposer(), 50); }
     if (activeTab === "tasks" && pendingFocus.current === "task") { pendingFocus.current = null; setTimeout(() => taskInputRef.current?.focus(), 50); }
   }, [activeTab, composingNote]);
+  useEffect(() => {
+    if (activeTab === "emails" && pendingCompose.current) { pendingCompose.current = false; setTimeout(() => emailsPanelRef.current?.openCompose(), 50); }
+  }, [activeTab]);
+  const goCompose = useCallback(() => {
+    if (activeTab === "emails") { setTimeout(() => emailsPanelRef.current?.openCompose(), 0); return; }
+    pendingCompose.current = true; selectTab("emails");
+  }, [activeTab, selectTab]);
   const goNote = useCallback(() => { setComposingNote(true); pendingFocus.current = "note"; if (activeTab === "notes") { pendingFocus.current = null; setTimeout(() => notesRef.current?.focusComposer(), 60); } else selectTab("notes"); }, [activeTab, selectTab]);
   const goTask = useCallback(() => { pendingFocus.current = "task"; if (activeTab === "tasks") { pendingFocus.current = null; setTimeout(() => taskInputRef.current?.focus(), 0); } else selectTab("tasks"); }, [activeTab, selectTab]);
   const [taskPrefill, setTaskPrefill] = useState<{ title: string; due: string; n: number } | null>(null);
   const followUpTask = useCallback((f: { title: string; due: string }) => { setTaskPrefill((prev) => ({ ...f, n: (prev?.n ?? 0) + 1 })); selectTab("tasks"); }, [selectTab]);
-  useImperativeHandle(ref, () => ({ goNote, goTask, followUpTask, openTab: (t) => { if (available.includes(t)) selectTab(t); } }), [goNote, goTask, followUpTask, available, selectTab]);
+  useImperativeHandle(ref, () => ({ goNote, goTask, goCompose, followUpTask, openTab: (t) => { if (available.includes(t)) selectTab(t); } }), [goNote, goTask, goCompose, followUpTask, available, selectTab]);
 
   const [logOpen, setLogOpen] = useState(false);
   const [logType, setLogType] = useState<ActivityType>("call");
@@ -259,7 +270,7 @@ export const MiddleColumn = forwardRef<MiddleColumnHandle, MiddleColumnProps>(fu
           <div className="px-4 pb-4 pt-1">
             <h3 className="m-0 mt-3 mb-2 px-1 text-[14px] font-medium leading-5 text-black/[.63]">Emails</h3>
             <ActivitiesPanel
-              forcedTab="emails" leadId={lead.id} notes={p.notes} systemActivities={p.audits} teamMemberEmails={p.teamMemberEmails} teamMemberNames={p.teamMemberNames}
+              ref={emailsPanelRef} forcedTab="emails" leadId={lead.id} notes={p.notes} systemActivities={p.audits} teamMemberEmails={p.teamMemberEmails} teamMemberNames={p.teamMemberNames}
               isAdmin={p.isAdmin} canEdit={p.canEdit} canManageNotes={p.canManageNotes} onNotesChange={p.onNotesChange}
               checklists={p.checklists} onChecklistsChange={p.onChecklistsChange} currentUserId={currentUserId} industryId="education_consultancy"
               leadEmail={lead.email} leadFirstName={lead.first_name} leadLastName={lead.last_name}
