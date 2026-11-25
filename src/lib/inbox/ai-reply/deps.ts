@@ -32,7 +32,7 @@ export function realAiReplyDeps(): AiReplyDeps {
         db.from("tenants").select("ai_enabled, industry_id").eq("id", tenantId).maybeSingle(),
         db
           .from("messages")
-          .select("author_type, content_text")
+          .select("id, author_type, content_text")
           .eq("conversation_id", conversationId)
           .eq("tenant_id", tenantId)
           .order("created_at", { ascending: false })
@@ -40,7 +40,7 @@ export function realAiReplyDeps(): AiReplyDeps {
       ]);
       if (!tenant) return null;
 
-      const newestFirst = (recent ?? []) as { author_type: string; content_text: string | null }[];
+      const newestFirst = (recent ?? []) as { id: string; author_type: string; content_text: string | null }[];
       // The newest message that is not a system note decides "who spoke last".
       const lastReal = newestFirst.find((m) => m.author_type !== "system");
       return {
@@ -48,8 +48,22 @@ export function realAiReplyDeps(): AiReplyDeps {
         tenant: tenant as ChatState["tenant"],
         conversation: { provider: c.provider, status: c.status, ai_autonomy: c.ai_autonomy, assignee_type: c.assignee_type, assigned_to_user_id: c.assigned_to_user_id },
         lastAuthorType: lastReal?.author_type ?? null,
+        lastMessageId: lastReal?.id ?? null,
         lines: [...newestFirst].reverse(),
       };
+    },
+
+    async latestMessageId(tenantId, conversationId) {
+      const db = await createServiceClient();
+      const { data } = await db
+        .from("messages")
+        .select("id, author_type")
+        .eq("conversation_id", conversationId)
+        .eq("tenant_id", tenantId)
+        .order("created_at", { ascending: false })
+        .limit(5);
+      const newest = ((data ?? []) as { id: string; author_type: string }[]).find((m) => m.author_type !== "system");
+      return newest?.id ?? null;
     },
 
     async stillUnowned(tenantId, conversationId) {

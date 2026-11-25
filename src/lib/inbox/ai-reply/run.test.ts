@@ -7,6 +7,7 @@ const state = (over: Partial<ChatState> = {}): ChatState => ({
   tenant: { ai_enabled: true, industry_id: "education_consultancy" },
   conversation: { provider: "chatwoot", status: "open", ai_autonomy: "autonomous", assignee_type: "unassigned", assigned_to_user_id: null },
   lastAuthorType: "customer",
+  lastMessageId: "m1",
   lines: [{ author_type: "customer", content_text: "Study in the UK" }],
   ...over,
 });
@@ -15,6 +16,7 @@ function deps(over: Partial<AiReplyDeps> = {}, st: ChatState | null = state()): 
   const d = {
     env: { url: "https://api.example.com", key: "k" },
     loadState: vi.fn().mockResolvedValue(st),
+    latestMessageId: vi.fn().mockResolvedValue("m1"),
     stillUnowned: vi.fn().mockResolvedValue(true),
     ask: vi.fn().mockResolvedValue({ answer: "The UK has great universities.", needsHuman: false, reason: null }),
     sendAi: vi.fn().mockResolvedValue({ status: "sent" }),
@@ -71,6 +73,13 @@ describe("runAiReply", () => {
     const d = deps({ stillUnowned: vi.fn().mockResolvedValue(false) });
     expect(await runAiReply(ev, d)).toEqual({ done: "skipped", reason: "taken_while_thinking" });
     expect(d.sendAi).not.toHaveBeenCalled();
+  });
+
+  it("drops the answer when the visitor wrote again while the AI was thinking (the burst is answered in one go next time)", async () => {
+    const d = deps({ latestMessageId: vi.fn().mockResolvedValue("m2") });
+    expect(await runAiReply(ev, d)).toEqual({ done: "skipped", reason: "newer_message" });
+    expect(d.sendAi).not.toHaveBeenCalled();
+    expect(d.markHandoff).not.toHaveBeenCalled();
   });
 
   it("an empty answer sends nothing", async () => {

@@ -9,15 +9,17 @@ const read = (rel: string) => readFileSync(resolve(__dirname, rel), "utf8");
 describe("process-inbound starts AI replies", () => {
   const src = read("../process-inbound.ts");
 
-  it("queues the AI reply event only for website chats that have AI on and no human owner, after the message is saved", () => {
-    expect(src).toContain("AI_REPLY_EVENT");
+  it("schedules the reply only for website chats that have AI on and no human owner, after the message is saved", () => {
     expect(src).toMatch(/p\.provider === "chatwoot" && convAiAutonomy === "autonomous" && convAssigneeType !== "human" && aiReplyServerEnabled\(\)/);
-    // after the duplicate check, so a redelivered webhook never queues a second reply
-    expect(src.indexOf("if (isDuplicate) return;")).toBeLessThan(src.indexOf("inngest.send("));
+    expect(src).toContain("scheduleAiReply({ tenantId: p.tenant_id, conversationId })");
+    // after the duplicate check, so a redelivered webhook never schedules a second reply
+    expect(src.indexOf("if (isDuplicate) return;")).toBeLessThan(src.indexOf("scheduleAiReply({"));
   });
 
-  it("a failed queue never breaks inbound processing", () => {
-    expect(src).toMatch(/try \{\s*await inngest\.send\([\s\S]*?\} catch \(sendErr\)/);
+  it("does NOT go through Inngest: the Hobby plan limit once stopped every Inngest run and silently turned AI replies off", () => {
+    expect(src).not.toMatch(/from "@\/lib\/inngest|inngest\.send/);
+    expect(read("scheduler.ts")).not.toMatch(/from "@\/lib\/inngest/);
+    expect(read("../../../app/api/inngest/route.ts")).not.toContain("inboxAiReply");
   });
 
   it("a new website chat starts with AI on only when its channel has AI replies on", () => {
@@ -27,26 +29,13 @@ describe("process-inbound starts AI replies", () => {
   });
 });
 
-describe("the AI reply job", () => {
-  const job = read("../../inngest/functions/inbox-ai-reply.ts");
-  const route = read("../../../app/api/inngest/route.ts");
-
-  it("waits a few seconds per chat so a burst of messages gets one answer", () => {
-    expect(job).toMatch(/debounce: \{ key: "event\.data\.conversationId", period: "5s"/);
-  });
-  it("runs on the AI reply event and is registered with Inngest", () => {
-    expect(job).toContain("triggers: [{ event: AI_REPLY_EVENT }]");
-    expect(route).toContain("inboxAiReply");
-  });
-});
-
 describe("the real database side", () => {
   const deps = read("deps.ts");
   it("scopes every query to the tenant (the tenants table by its own id)", () => {
     const queries = deps.match(/\.from\("[a-z_]+"\)/g) ?? [];
     const scoped = (deps.match(/\.eq\("tenant_id", tenantId\)/g) ?? []).length;
     const tenantsById = (deps.match(/\.from\("tenants"\)[\s\S]*?\.eq\("id", tenantId\)/g) ?? []).length;
-    expect(queries.length).toBe(7);
+    expect(queries.length).toBe(8);
     expect(scoped + tenantsById).toBe(queries.length);
   });
   it("only flags a chat as needing a human while nobody owns it", () => {

@@ -1,5 +1,7 @@
 # Brief: AI replies in the EdgeX website chat
 
+> **Changed 2026-11-25 (after the first stage test):** the AI reply no longer runs as an Inngest function. The Inngest Hobby plan hit its monthly limit (52,026 / 50,000), so Inngest stopped starting any new run and the first version never answered. The reply is now scheduled **in the EdgeX server process** (`src/lib/inbox/ai-reply/scheduler.ts`, 5 s quiet period, one run per chat at a time). Where the text below says Inngest / `inbox/ai-reply.requested`, read "the in-process scheduler". This is a deliberate exception to the repo's "background work is Inngest" convention and needs a lead's approval in the PR.
+
 **Written:** 2026-11-25 (Opus, planner). **For:** the Sonnet executor sessions.
 
 **Two parts, two repos.** Build them in order:
