@@ -56,6 +56,18 @@ describe("decideHoldingMessage", () => {
   });
 });
 
+describe("when the AI is on but fails (its service hit a limit)", () => {
+  const on = state({ channelMeta: { website_chat_ai: { enabled: true, siteId: "admizz-edu" } }, conversation: { ...state().conversation, ai_autonomy: "autonomous" } });
+  it("sends the holding message even though the AI is on, but every other rule still applies", async () => {
+    expect(decideHoldingMessage(true, on)).toEqual({ send: false, reason: "ai_is_on" });
+    expect(decideHoldingMessage(true, on, true)).toEqual({ send: true });
+    expect(decideHoldingMessage(true, { ...on, conversation: { ...on.conversation, assignee_type: "human", assigned_to_user_id: "u1" } }, true)).toEqual({ send: false, reason: "human_owns_chat" });
+    expect(decideHoldingMessage(true, { ...on, tenant: { ai_enabled: true, industry_id: "it_agency" } }, true)).toEqual({ send: false, reason: "wrong_industry" });
+    const d = deps({ serverEnabled: true }, on);
+    expect(await runHoldingMessage(ev, d, { aiFailed: true })).toEqual({ done: "sent" });
+  });
+});
+
 describe("runHoldingMessage", () => {
   it("records first, then sends the fixed text as an AI-authored 'holding' message", async () => {
     const d = deps();

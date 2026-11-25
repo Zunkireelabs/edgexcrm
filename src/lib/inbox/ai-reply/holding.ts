@@ -26,7 +26,11 @@ function aiWillAnswer(serverEnabled: boolean, state: ChatState): boolean {
   return serverEnabled && state.tenant.ai_enabled && cfg.enabled && !!cfg.siteId;
 }
 
-export function decideHoldingMessage(serverEnabled: boolean, state: ChatState): HoldingDecision {
+/**
+ * `aiFailed`: the AI was on but could not answer this time (its service hit a limit or was down). The visitor still deserves the
+ * "our team has your chat" message, so the "AI is on" rule is waived; every other rule still applies.
+ */
+export function decideHoldingMessage(serverEnabled: boolean, state: ChatState, aiFailed = false): HoldingDecision {
   const skip = (reason: HoldingSkipReason): HoldingDecision => ({ send: false, reason });
   if (state.tenant.industry_id !== AI_REPLY_INDUSTRY) return skip("wrong_industry");
   if (!requiresClaim(state.conversation.provider)) return skip("not_website_chat");
@@ -34,7 +38,7 @@ export function decideHoldingMessage(serverEnabled: boolean, state: ChatState): 
   if (ownerOf(state.conversation)) return skip("human_owns_chat");
   if (state.lastAuthorType !== "customer") return skip("visitor_not_last");
   // AI on (even if it later hands the chat over): the AI flow owns the conversation, so no holding message.
-  if (aiWillAnswer(serverEnabled, state)) return skip("ai_is_on");
+  if (!aiFailed && aiWillAnswer(serverEnabled, state)) return skip("ai_is_on");
   return { send: true };
 }
 
@@ -51,11 +55,11 @@ export interface HoldingDeps {
 
 export type HoldingResult = { done: "sent" } | { done: "skipped"; reason: HoldingSkipReason };
 
-export async function runHoldingMessage(ev: { tenantId: string; conversationId: string }, deps: HoldingDeps): Promise<HoldingResult> {
+export async function runHoldingMessage(ev: { tenantId: string; conversationId: string }, deps: HoldingDeps, opts: { aiFailed?: boolean } = {}): Promise<HoldingResult> {
   const state = await deps.loadState(ev.tenantId, ev.conversationId);
   if (!state) return { done: "skipped", reason: "not_open" };
 
-  const decision = decideHoldingMessage(deps.serverEnabled, state);
+  const decision = decideHoldingMessage(deps.serverEnabled, state, opts.aiFailed === true);
   if (!decision.send) return { done: "skipped", reason: decision.reason };
 
   // Record first (atomic), send second: two quick visitor messages can never both send it.
@@ -87,12 +91,12 @@ const inFlight = new Set<string>();
 const MAX_REMEMBERED = 5_000;
 
 /** Ask for the holding message for this chat. Returns at once, never throws. */
-export function scheduleHoldingMessage(ev: { tenantId: string; conversationId: string }, deps: () => HoldingDeps): void {
+export function scheduleHoldingMessage(ev: { tenantId: string; conversationId: string }, deps: () => HoldingDeps, opts: { aiFailed?: boolean } = {}): void {
   if (handled.has(ev.conversationId) || inFlight.has(ev.conversationId)) return;
   inFlight.add(ev.conversationId);
   void (async () => {
     try {
-      const result = await runHoldingMessage(ev, deps());
+      const result = await runHoldingMessage(ev, deps(), opts);
       if (result.done === "sent" || (result.done === "skipped" && result.reason === "already_sent")) {
         if (handled.size >= MAX_REMEMBERED) handled.clear();
         handled.add(ev.conversationId);

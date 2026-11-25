@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 vi.mock("./deps", () => ({ realAiReplyDeps: () => ({}) }));
+vi.mock("./holding-deps", () => ({ realHoldingDeps: () => ({}) }));
 vi.mock("@/lib/logger", () => ({ logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 
 import { createAiReplyScheduler } from "./scheduler";
@@ -90,5 +91,30 @@ describe("AI reply scheduler", () => {
     s.schedule(ev());
     await vi.advanceTimersByTimeAsync(1000);
     expect(run).toHaveBeenCalledTimes(2);
+  });
+
+  it("tells the holding-message path when the AI was on but could not answer, and only then", async () => {
+    for (const reason of ["search_failed", "empty_answer", "send_failed"] as const) {
+      const onAiFailed = vi.fn();
+      const s = createAiReplyScheduler({ run: vi.fn().mockResolvedValue({ done: "skipped", reason }), debounceMs: 10, onAiFailed });
+      s.schedule(ev());
+      await vi.advanceTimersByTimeAsync(10);
+      expect(onAiFailed).toHaveBeenCalledWith(ev());
+    }
+    for (const result of [answered, { done: "skipped", reason: "human_owns_chat" }, { done: "skipped", reason: "taken_while_thinking" }, { done: "handed_over", reason: "out_of_knowledge" }] as AiReplyResult[]) {
+      const onAiFailed = vi.fn();
+      const s = createAiReplyScheduler({ run: vi.fn().mockResolvedValue(result), debounceMs: 10, onAiFailed });
+      s.schedule(ev());
+      await vi.advanceTimersByTimeAsync(10);
+      expect(onAiFailed).not.toHaveBeenCalled();
+    }
+  });
+
+  it("a run that throws also falls back to the holding message", async () => {
+    const onAiFailed = vi.fn();
+    const s = createAiReplyScheduler({ run: vi.fn().mockRejectedValue(new Error("429")), debounceMs: 10, onAiFailed });
+    s.schedule(ev());
+    await vi.advanceTimersByTimeAsync(10);
+    expect(onAiFailed).toHaveBeenCalledWith(ev());
   });
 });
