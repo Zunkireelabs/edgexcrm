@@ -72,6 +72,26 @@ beforeEach(() => {
   authMock.mockReset().mockResolvedValue(AUTH("manish"));
 });
 
+describe("Accept and the AI", () => {
+  it("accepting turns AI replies off for that chat", async () => {
+    conv = { ...conv!, ai_autonomy: "autonomous", meta: {} };
+    expect((await call()).status).toBe(200);
+    expect(conv).toMatchObject({ assignee_type: "human", assigned_to_user_id: "manish", ai_autonomy: "off" });
+  });
+
+  it("accepting clears the 'Needs a human' flag and keeps the rest of the chat's meta", async () => {
+    conv = { ...conv!, ai_autonomy: "off", meta: { contact_email: "a@b.com", needs_human: { at: "2026-11-25T10:00:00Z", reason: "asked_for_person" } } };
+    expect((await call()).status).toBe(200);
+    expect(conv!.meta).toEqual({ contact_email: "a@b.com" });
+  });
+
+  it("leaves meta alone when there is no flag", async () => {
+    conv = { ...conv!, meta: { contact_email: "a@b.com" } };
+    await call();
+    expect(conv!.meta).toEqual({ contact_email: "a@b.com" });
+  });
+});
+
 describe("POST /inbox/conversations/[id]/claim", () => {
   it("401s without a session", async () => {
     authMock.mockResolvedValue(null);

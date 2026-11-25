@@ -11,6 +11,8 @@ import { logger } from "@/lib/logger";
 import { normalizeEmail, normalizePhone } from "@/lib/leads/dedup";
 import { NotificationTypes, upsertThreadNotification } from "@/lib/notifications";
 import { resolveInboundRecipients } from "@/lib/inbox/inbound-recipients";
+import { inngest } from "@/lib/inngest/client";
+import { AI_REPLY_EVENT, aiReplyServerEnabled, readAiReplyConfig } from "@/lib/inbox/ai-reply/config";
 import { decryptToken } from "./crypto";
 import { resolveAndStoreAttachments } from "./media";
 import type { InboundMediaDescriptor } from "./adapters/types";
@@ -145,7 +147,7 @@ async function processOneEvent(
   // 1. find-or-create conversation
   const { data: existingConv } = await supabase
     .from("conversations")
-    .select("id, lead_id, unread_count, assigned_to_user_id, assignee_type")
+    .select("id, lead_id, unread_count, assigned_to_user_id, assignee_type, ai_autonomy")
     .eq("channel_id", p.channel_id)
     .eq("external_contact_id", p.external_contact_id)
     .maybeSingle();
@@ -155,9 +157,11 @@ async function processOneEvent(
   let convLeadId: string | null = null;
   let convAssigneeType = "unassigned";
   let convAssignedToUserId: string | null = null;
+  let convAiAutonomy = "off";
 
   if (existingConv) {
-    const c = existingConv as { id: string; lead_id: string | null; unread_count: number; assigned_to_user_id: string | null; assignee_type: string };
+    const c = existingConv as { id: string; lead_id: string | null; unread_count: number; assigned_to_user_id: string | null; assignee_type: string; ai_autonomy: string };
+    convAiAutonomy = c.ai_autonomy;
     conversationId = c.id;
     currentUnread = c.unread_count;
     convLeadId = c.lead_id;
@@ -188,6 +192,7 @@ async function processOneEvent(
   } else {
     // Create new conversation; attempt phone-based lead linkage (Decision D)
     const resolvedLeadId = await resolveLeadForContact(supabase, p.tenant_id, p.contact_phone, p.contact_email ?? null);
+    const newAiAutonomy = await initialAiAutonomy(supabase, p.provider, p.channel_id, p.tenant_id);
 
     const { data: newConv, error: createErr } = await supabase
       .from("conversations")
@@ -205,6 +210,7 @@ async function processOneEvent(
         last_message_at: p.provider_timestamp ?? new Date().toISOString(),
         last_message_preview: p.content_text?.slice(0, 200) ?? null,
         last_message_direction: "inbound",
+        ai_autonomy: newAiAutonomy,
       })
       .select("id")
       .single();
@@ -213,7 +219,7 @@ async function processOneEvent(
       // May be a race — try to fetch again
       const { data: raceConv } = await supabase
         .from("conversations")
-        .select("id, lead_id, unread_count, assigned_to_user_id, assignee_type")
+        .select("id, lead_id, unread_count, assigned_to_user_id, assignee_type, ai_autonomy")
         .eq("channel_id", p.channel_id)
         .eq("external_contact_id", p.external_contact_id)
         .maybeSingle();
@@ -221,7 +227,8 @@ async function processOneEvent(
       if (!raceConv) {
         throw new Error(`Failed to create conversation: ${createErr?.message}`);
       }
-      const r = raceConv as { id: string; lead_id: string | null; unread_count: number; assigned_to_user_id: string | null; assignee_type: string };
+      const r = raceConv as { id: string; lead_id: string | null; unread_count: number; assigned_to_user_id: string | null; assignee_type: string; ai_autonomy: string };
+      convAiAutonomy = r.ai_autonomy;
       conversationId = r.id;
       currentUnread = r.unread_count;
       convLeadId = r.lead_id;
@@ -231,6 +238,7 @@ async function processOneEvent(
       conversationId = (newConv as { id: string }).id;
       currentUnread = 0;
       convLeadId = resolvedLeadId;
+      convAiAutonomy = newAiAutonomy;
       // New conversations always start unassigned
     }
   }
@@ -358,6 +366,31 @@ async function processOneEvent(
   } catch (notifyErr) {
     logger.warn({ err: notifyErr, conversation_id: conversationId }, "Failed to create inbox notification (non-fatal)");
   }
+
+  // 5. Website chat with AI replies on and nobody handling it: ask for an AI reply. The job re-checks every rule; this
+  // only avoids queuing work that can't possibly run. Never breaks inbound processing.
+  if (p.provider === "chatwoot" && convAiAutonomy === "autonomous" && convAssigneeType !== "human" && aiReplyServerEnabled()) {
+    try {
+      await inngest.send({ name: AI_REPLY_EVENT, data: { tenantId: p.tenant_id, conversationId, messageId } });
+    } catch (sendErr) {
+      logger.warn({ err: sendErr, conversation_id: conversationId }, "Failed to queue AI reply (non-fatal)");
+    }
+  }
+}
+
+/**
+ * A brand-new website chat starts with AI on ("autonomous") when its channel has AI replies switched on and the server is set
+ * up for it; everything else starts off, as before. A lookup that fails means "off".
+ */
+async function initialAiAutonomy(
+  supabase: Awaited<ReturnType<typeof createServiceClient>>,
+  provider: string,
+  channelId: string,
+  tenantId: string
+): Promise<"autonomous" | "off"> {
+  if (provider !== "chatwoot" || !aiReplyServerEnabled()) return "off";
+  const { data } = await supabase.from("inbox_channels").select("meta").eq("id", channelId).eq("tenant_id", tenantId).maybeSingle();
+  return readAiReplyConfig((data as { meta?: unknown } | null)?.meta).enabled ? "autonomous" : "off";
 }
 
 // Builds a Postgres POSIX regex (the `~` operator) that matches a phone value whose

@@ -9,6 +9,7 @@ import {
   apiNotFound,
   apiSuccess,
   apiError,
+  apiValidationError,
 } from "@/lib/api/response";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { createNotification, NotificationTypes } from "@/lib/notifications";
@@ -66,7 +67,7 @@ export async function PATCH(
   // editing must match viewing (same check as the GET handler above).
   const { data: conv } = await supabase
     .from("conversations")
-    .select("id, lead_id, assigned_to_user_id, assignee_type, provider")
+    .select("id, lead_id, assigned_to_user_id, assignee_type, provider, meta")
     .eq("id", id)
     .eq("tenant_id", auth.tenantId)
     .maybeSingle();
@@ -106,6 +107,19 @@ export async function PATCH(
     ("assigned_to_user_id" in patch || "assignee_type" in patch)
   ) {
     return apiError("USE_CLAIM", "Use Accept or Hand over to change who handles a website chat.", 409);
+  }
+
+  if ("ai_autonomy" in patch) {
+    if (patch.ai_autonomy !== "off" && patch.ai_autonomy !== "suggest" && patch.ai_autonomy !== "autonomous") {
+      return apiValidationError({ ai_autonomy: ["Must be off, suggest or autonomous"] });
+    }
+    // Switching AI back on means a person has looked at the chat: drop the "Needs a human" flag.
+    const meta = (conv as { meta?: Record<string, unknown> | null }).meta;
+    if (patch.ai_autonomy === "autonomous" && meta && "needs_human" in meta) {
+      const { needs_human: _flag, ...rest } = meta;
+      void _flag;
+      patch.meta = rest;
+    }
   }
 
   if (Object.keys(patch).length === 0) {
