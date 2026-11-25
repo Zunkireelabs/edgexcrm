@@ -10,6 +10,14 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { displayNameFor, ownerOf, requiresClaim, writeSystemNote } from "@/lib/inbox/claim";
 import { OWNERLESS_FILTER } from "@/lib/inbox/claim-rules";
 
+/** `{ meta }` without the needs_human flag, or nothing when there is no flag (so the update leaves meta alone). */
+function withoutNeedsHuman(meta: Record<string, unknown> | null): { meta?: Record<string, unknown> } {
+  if (!meta || !("needs_human" in meta)) return {};
+  const { needs_human: _flag, ...rest } = meta;
+  void _flag;
+  return { meta: rest };
+}
+
 export async function POST(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -26,13 +34,13 @@ export async function POST(
 
   const { data: conv } = await supabase
     .from("conversations")
-    .select("id, provider, channel_id, assignee_type, assigned_to_user_id")
+    .select("id, provider, channel_id, assignee_type, assigned_to_user_id, meta")
     .eq("id", id)
     .eq("tenant_id", auth.tenantId)
     .maybeSingle();
   if (!conv) return apiNotFound("Conversation");
 
-  const row = conv as { id: string; provider: string; channel_id: string; assignee_type: string; assigned_to_user_id: string | null };
+  const row = conv as { id: string; provider: string; channel_id: string; assignee_type: string; assigned_to_user_id: string | null; meta: Record<string, unknown> | null };
 
   // Only channels that need accepting (website chat). Everything else keeps working as before.
   if (!requiresClaim(row.provider)) {
@@ -53,7 +61,8 @@ export async function POST(
   // (unassigned, or "human" with a deleted user), so two people clicking at once cannot both succeed.
   const { data: won } = await supabase
     .from("conversations")
-    .update({ assignee_type: "human", assigned_to_user_id: auth.userId })
+    // Accepting also ends AI replies for this chat and clears the "Needs a human" flag (docs/WEBSITE-CHAT-AI-REPLY-BRIEF.md).
+    .update({ assignee_type: "human", assigned_to_user_id: auth.userId, ai_autonomy: "off", ...withoutNeedsHuman(row.meta) })
     .eq("id", id)
     .eq("tenant_id", auth.tenantId)
     .or(OWNERLESS_FILTER)

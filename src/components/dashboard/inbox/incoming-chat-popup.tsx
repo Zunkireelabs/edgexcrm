@@ -7,6 +7,7 @@ import { ChatTextIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import { mergeById, useQuietPoll } from "@/lib/inbox/quiet-refresh";
+import { cn } from "@/lib/utils";
 
 // "New website chat": a card in the bottom-right corner of ANY EdgeX page when a visitor writes in the website chat and
 // nobody has accepted it yet. Accept makes it yours (the first person wins); View just opens it. Everyone who can open
@@ -31,6 +32,10 @@ interface PendingChat {
   contact_phone: string | null;
   last_message_preview: string | null;
   last_message_at: string | null;
+  /** The Admizz AI is answering this chat (nobody has accepted it yet). */
+  ai_replying?: boolean;
+  /** The AI handed this chat over: a person is needed. */
+  needs_human?: boolean;
 }
 
 /** A short, soft two-note chime. Never throws: browsers only allow sound after the person has clicked on the page once. */
@@ -241,8 +246,11 @@ export function IncomingChatPopup({ tenantId }: { tenantId: string }) {
         return (
           <div key={chat.id} role="alert" className="rounded-xl border bg-white p-3 shadow-lg flex flex-col gap-1.5" data-chat-card>
             <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              <span className="flex items-center gap-1.5">
-                <ChatTextIcon className="h-3.5 w-3.5" /> New website chat
+              <span className={cn("flex items-center gap-1.5", chat.needs_human && "text-red-600")} data-chat-kind={chat.needs_human ? "needs-human" : chat.ai_replying ? "ai-replying" : "new"}>
+                <ChatTextIcon className="h-3.5 w-3.5" /> {chat.needs_human ? "Needs a human" : "New website chat"}
+                {!chat.needs_human && chat.ai_replying && (
+                  <span className="rounded-full bg-blue-100 px-1.5 py-px text-[10px] font-medium normal-case tracking-normal text-blue-800">AI is replying</span>
+                )}
               </span>
               <span className="font-normal normal-case">{ago(chat.last_message_at)}</span>
             </div>

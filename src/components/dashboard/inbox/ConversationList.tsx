@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { providerLabel } from "@/lib/inbox/provider-label";
 import { ownerOf, requiresClaim } from "@/lib/inbox/claim-rules";
+import { readNeedsHuman } from "@/lib/inbox/ai-reply/config";
 
 type ConversationRow = Record<string, unknown>;
 
@@ -169,8 +170,12 @@ export function ConversationList({
             const claimOwner = requiresClaim(provider)
               ? ownerOf({ assignee_type: conv.assignee_type as string | null, assigned_to_user_id: conv.assigned_to_user_id as string | null })
               : undefined;
+            const needsHuman = readNeedsHuman(conv.meta) !== null;
+            const aiReplying = (conv.ai_autonomy as string | null) === "autonomous";
             const claimChip =
               claimOwner === undefined ? null
+              : claimOwner === null && needsHuman ? { text: "Needs a human", cls: "bg-red-100 text-red-800" }
+              : claimOwner === null && aiReplying ? { text: "AI replying", cls: "bg-blue-100 text-blue-800" }
               : claimOwner === null ? { text: "Waiting to accept", cls: "bg-amber-100 text-amber-800" }
               : claimOwner === currentUserId ? { text: "You're handling", cls: "bg-green-100 text-green-800" }
               : { text: `${ownerNames?.[claimOwner] ?? "A teammate"} handling`, cls: "bg-muted text-muted-foreground" };

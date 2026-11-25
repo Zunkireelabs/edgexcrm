@@ -45,3 +45,17 @@ describe("ConversationList chips on website chats", () => {
     expect(chips(show([row({ provider: "whatsapp" }), row({ id: "w2", provider: "whatsapp", assignee_type: "human", assigned_to_user_id: "me" })]).container)).toEqual([]);
   });
 });
+
+describe("ConversationList chips for AI-handled website chats", () => {
+  it("shows 'AI replying' while the AI is answering and nobody has accepted", () => {
+    expect(chips(show([row({ ai_autonomy: "autonomous" })]).container)).toEqual(["AI replying"]);
+  });
+  it("shows 'Needs a human' (above 'AI replying') once the AI handed the chat over", () => {
+    const meta = { needs_human: { at: "2026-11-25T10:00:00Z", reason: "out_of_knowledge" } };
+    expect(chips(show([row({ ai_autonomy: "off", meta })]).container)).toEqual(["Needs a human"]);
+    expect(chips(show([row({ ai_autonomy: "autonomous", meta })]).container)).toEqual(["Needs a human"]);
+  });
+  it("once a person owns the chat the AI chips are gone", () => {
+    expect(chips(show([row({ ai_autonomy: "autonomous", assignee_type: "human", assigned_to_user_id: "me" })]).container)).toEqual(["You're handling"]);
+  });
+});

@@ -343,7 +343,7 @@ export function MessageThread({
                 {isAi && (
                   <div className="flex items-center gap-1 text-xs text-muted-foreground mb-0.5">
                     <RobotIcon className="w-3 h-3" />
-                    <span>AI suggested</span>
+                    <span data-ai-label>{isDraft ? "AI suggested" : "AI"}</span>
                   </div>
                 )}
                 {attachments.length > 0 && (
