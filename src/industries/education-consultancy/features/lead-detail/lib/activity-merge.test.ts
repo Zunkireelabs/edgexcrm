@@ -31,6 +31,26 @@ describe("mergeFeed", () => {
     expect(feed.find((f) => f.kind === "created")?.actor_name).toBe("Gita Karki");
   });
 
+  it("the creation entry says how the lead came in and where from (form name, source, channel, campaign)", () => {
+    const feed = mergeFeed({
+      ...base, intakeChannel: "Paid", intakeCampaign: "UK Intake",
+      audits: [audit({ id: "a1", action: "lead.submission", user_id: null as unknown as string, created_at: at(10, 19, 9),
+        changes: { is_first: { old: null, new: true }, form_name: { old: null, new: "UK Intake" }, created_via: { old: null, new: "public_form" } } })],
+    });
+    expect(feed.find((f) => f.kind === "created")).toMatchObject({
+      verb: "created the lead", object: "via the UK Intake form · Source: Website form · Channel: Paid · Campaign: UK Intake",
+    });
+  });
+
+  it("a lead added by hand says so", () => {
+    const feed = mergeFeed({
+      ...base,
+      audits: [audit({ id: "a1", action: "lead.submission", created_at: at(10, 19, 9),
+        changes: { is_first: { old: null, new: true }, created_via: { old: null, new: "manual" } } })],
+    });
+    expect(feed.find((f) => f.kind === "created")?.object).toBe("manually · Source: Website form");
+  });
+
   it("merges notes, calls, meetings, emails, stage moves, assignments and check-ins newest first", () => {
     const feed = mergeFeed({
       ...base,
