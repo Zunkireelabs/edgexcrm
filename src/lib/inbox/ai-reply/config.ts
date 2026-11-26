@@ -22,8 +22,9 @@ export const HANDOFF_MESSAGE = "Thanks, I've passed your question to our counsel
  * chat (see holding.ts). One constant so the team can change the wording later.
  */
 export const HOLDING_MESSAGE =
-  "Thanks for reaching out. Your chat has been passed to our team, and an Admizz associate will connect with you as soon as possible. " +
-  "Please keep this chat window open while you wait. If we aren't able to connect shortly, we'll follow up by phone call, WhatsApp or email.";
+  "Your chat has been transferred to live support, and an Admizz associate will connect with you as soon as possible. " +
+  "We're currently experiencing high volume, so please keep this chat window open in the background while you wait. " +
+  "If we aren't able to connect shortly, we'll follow up by Phone Call, Whatsapp or email. Thanks for your patience!";
 
 /** Where the once-per-chat marker lives: conversations.meta.holding_sent_at (no new column). */
 export const HOLDING_META_KEY = "holding_sent_at";

@@ -30,8 +30,10 @@ describe("the holding message text", () => {
   it("names Admizz, never Flywire, and promises a follow-up channel", () => {
     expect(HOLDING_MESSAGE).toContain("Admizz");
     expect(HOLDING_MESSAGE).not.toMatch(/flywire/i);
-    expect(HOLDING_MESSAGE).not.toMatch(/high volume/i);
-    expect(HOLDING_MESSAGE).toMatch(/phone call, WhatsApp or email/);
+    expect(HOLDING_MESSAGE).toContain("transferred to live support");
+    expect(HOLDING_MESSAGE).toContain("high volume");
+    expect(HOLDING_MESSAGE).toContain("Phone Call, Whatsapp or email");
+    expect(HOLDING_MESSAGE).toContain("Thanks for your patience!");
   });
 });
 
