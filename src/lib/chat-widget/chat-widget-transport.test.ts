@@ -180,19 +180,27 @@ describe("receiving replies", () => {
     expect(texts().filter((t) => t === "Which course?")).toHaveLength(1);
   });
 
-  it("checks every five seconds, signing the request", async () => {
+  it("checks every two seconds for 30 seconds after sending, then every five, signing the request", async () => {
     await chat();
     calls.length = 0;
-    await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(2000);
     expect(calls).toHaveLength(1);
     expect(calls[0].method).toBe("GET");
     expect(calls[0].url).toContain(`/conversations/5/messages?identifier_hash=hash-1`);
+    await vi.advanceTimersByTimeAsync(30000); // past the quick-check window
+    calls.length = 0;
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(calls).toHaveLength(1);
   });
 
-  it("does not check while the page is hidden", async () => {
+  it("keeps checking in the background for 2 minutes after sending, then pauses while the page is hidden", async () => {
     await chat();
-    calls.length = 0;
     vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    calls.length = 0;
+    await vi.advanceTimersByTimeAsync(20000);
+    expect(calls.length).toBeGreaterThan(0); // still looking for the first reply
+    await vi.advanceTimersByTimeAsync(120000); // the 2 minutes are over
+    calls.length = 0;
     await vi.advanceTimersByTimeAsync(15000);
     expect(calls).toHaveLength(0);
   });
@@ -354,15 +362,12 @@ describe("guidance for the visitor", () => {
     expect(hint()).toBe("Write a message…");
   });
 
-  it("when a text is set, says it once after the first message really arrives, and the box goes back to its normal hint", async () => {
+  it("ignores a site-set afterSend: no extra line after the first message", async () => {
     openAndShareDetails({ ...CONFIG, guide: { afterSend: "Got it! Custom line." } });
     typeAndSend("Hello there");
     await flush();
-    expect(count("Got it! Custom line.")).toBe(1);
+    expect(text()).not.toContain("Got it!");
     expect(hint()).toBe("Write a message…");
-    typeAndSend("One more thing");
-    await flush();
-    expect(count("Got it! Custom line.")).toBe(1);
   });
 
   it("never says 'got it' when the message did not go through", async () => {
@@ -380,7 +385,7 @@ describe("guidance for the visitor", () => {
     await flush();
     expect(text()).not.toContain("What would you like to know?");
     expect(calls.find((c) => c.url.endsWith("/messages"))!.body).toMatchObject({ content: "Study in the UK" });
-    expect(count("Got it! Custom line.")).toBe(1);
+    expect(count("Got it! Custom line.")).toBe(0);
   });
 
   it("the wording and the topics can be changed or switched off", async () => {
