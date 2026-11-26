@@ -1,7 +1,7 @@
 import { describeAuditEvent } from "@/components/dashboard/lead/activities/describe-audit-event";
 import type { LeadActivity } from "@/lib/supabase/queries";
 import type { FeedAppDoc, FeedAppNote } from "./application-feed";
-import { ensureCreationEvent, isCreationAudit } from "../../record-preview/lib/creation-event";
+import { creationHow, ensureCreationEvent, isCreationAudit } from "../../record-preview/lib/creation-event";
 import type { PreviewActivity } from "../../record-preview/use-preview-data";
 
 /**
@@ -58,6 +58,9 @@ export interface FeedInputs {
   appDocs?: readonly FeedAppDoc[];
   leadCreatedAt: string;
   sourceLabel: string | null;
+  /** Shown on the "created the lead" entry with the source: how the lead came in (Paid, Organic…) and which campaign. */
+  intakeChannel?: string | null;
+  intakeCampaign?: string | null;
   /** Display name for a user id (real name, else null). The renderer swaps the current user for "You". */
   nameOf: (id: string | null | undefined, fallback?: string | null) => string | null;
 }
@@ -147,7 +150,11 @@ export function mergeFeed(i: FeedInputs): FeedItem[] {
     });
   }
 
-  return ensureCreationEvent(items, { createdAt: i.leadCreatedAt, sourceLabel: i.sourceLabel })
+  const creationAudit = i.audits
+    .filter((a) => isCreationAudit(describeAuditEvent(a, (id) => i.nameOf(id)).kind, a.changes))
+    .sort((a, b) => a.created_at.localeCompare(b.created_at))[0];
+  const detail = { how: creationAudit ? creationHow(creationAudit.changes) : null, source: i.sourceLabel, channel: i.intakeChannel, campaign: i.intakeCampaign };
+  return ensureCreationEvent(items, { createdAt: i.leadCreatedAt, sourceLabel: i.sourceLabel, detail })
     .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime() || (a.id < b.id ? 1 : -1));
 }
 

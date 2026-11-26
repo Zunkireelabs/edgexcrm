@@ -1,5 +1,6 @@
 "use client";
 
+import { humanizeIntakeValue } from "@/components/dashboard/lead/activities/lead-activity-labels";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
@@ -158,8 +159,9 @@ export const MiddleColumn = forwardRef<MiddleColumnHandle, MiddleColumnProps>(fu
   const sourceLabel = data?.source_name ?? (lead.intake_source ? lead.intake_source.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase()) : null);
   const feed = useMemo(() => (logged === null ? null : mergeFeed({
     notes: p.notes, logged, audits: p.audits, leadCreatedAt: lead.created_at, sourceLabel, nameOf,
+    intakeChannel: humanizeIntakeValue(lead.intake_medium), intakeCampaign: lead.intake_campaign,
     emails: threads.flatMap((t) => t.emails), appNotes: appFeed.notes, appDocs: appFeed.docs,
-  })), [logged, p.notes, p.audits, appFeed, lead.created_at, sourceLabel, nameOf, threads]);
+  })), [logged, p.notes, p.audits, appFeed, lead.created_at, lead.intake_medium, lead.intake_campaign, sourceLabel, nameOf, threads]);
 
   const merged = useMemo(() => (tasks === null ? null : mergeTasks(tasks, p.checklists)), [tasks, p.checklists]);
 
