@@ -2,6 +2,7 @@ import { ensureListPipeline } from "@/lib/leads/ensure-list-pipeline";
 import { createServiceClient } from "@/lib/supabase/server";
 import { validate, isPhoneForCountry } from "@/lib/api/validation";
 import { normalizePhoneForStorage } from "@/lib/phone-utils";
+import { suggestEmailDuplicates } from "@/lib/leads/email-duplicate";
 import { requireAdmin, requireLeadAccess, resolvePositionSlug, type AuthContext } from "@/lib/api/auth";
 import { getLeadMembership, syncOriginMembership } from "@/lib/leads/branch-membership";
 import { assignmentBranchTarget, branchMoveOnAssignment } from "@/lib/leads/branch-resolution";
@@ -1130,6 +1131,16 @@ export async function applyLeadPatch(
   const previousValues: Record<string, unknown> = {};
   for (const field of Object.keys(changes)) {
     previousValues[field] = changes[field].old;
+  }
+
+  // The email was changed to something another lead already has: leave a duplicate suggestion for the admins. Best-effort and
+  // never blocks the save (the same email can be legitimate); creation paths already run this check, edits did not.
+  if (changes.email && typeof changes.email.new === "string" && changes.email.new.trim()) {
+    await suggestEmailDuplicates(
+      supabase,
+      { tenantId: auth.tenantId, leadId, email: changes.email.new },
+      (err) => log.error({ err }, "Email duplicate check failed"),
+    );
   }
 
   // Replace UUID list_id diff with human-readable list names for the activity timeline

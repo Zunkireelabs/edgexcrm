@@ -355,7 +355,7 @@ export async function touchLastActivity(
 // onConflict DO NOTHING so a previously dismissed pair never resurfaces.
 export async function recordDuplicateSuggestions(
   supabase: SupabaseServiceClient,
-  params: { tenantId: string; leadId: string; suggestedLeadIds: string[]; reason: "phone" | "name" }
+  params: { tenantId: string; leadId: string; suggestedLeadIds: string[]; reason: "phone" | "name" | "email" }
 ): Promise<void> {
   const rows = params.suggestedLeadIds
     .filter((sid) => sid !== params.leadId)
