@@ -12,6 +12,8 @@
 import { logger } from "@/lib/logger";
 import { AI_REPLY_DEBOUNCE_MS } from "./config";
 import { realAiReplyDeps } from "./deps";
+import { scheduleHoldingMessage } from "./holding";
+import { realHoldingDeps } from "./holding-deps";
 import { runAiReply, type AiReplyResult } from "./run";
 
 export interface AiReplyRequest {
@@ -22,7 +24,12 @@ export interface AiReplyRequest {
 export interface SchedulerOptions {
   run: (ev: AiReplyRequest) => Promise<AiReplyResult>;
   debounceMs?: number;
+  /** The AI was on but could not answer (its service hit a limit or was down): the visitor still gets the "our team has your chat" message. */
+  onAiFailed?: (ev: AiReplyRequest) => void;
 }
+
+/** Results where the AI should have answered but did not. A deliberate skip (counsellor took over, AI off) is not one of them. */
+const AI_FAILED_REASONS = new Set(["search_failed", "empty_answer", "send_failed"]);
 
 export function createAiReplyScheduler(opts: SchedulerOptions) {
   const delay = opts.debounceMs ?? AI_REPLY_DEBOUNCE_MS;
@@ -42,7 +49,9 @@ export function createAiReplyScheduler(opts: SchedulerOptions) {
       const result = await opts.run(ev);
       // The visitor wrote again while the AI was thinking: that answer was dropped, so answer the whole burst now.
       rerun = result.done === "skipped" && result.reason === "newer_message";
+      if (result.done === "skipped" && AI_FAILED_REASONS.has(result.reason)) opts.onAiFailed?.(ev);
     } catch (err) {
+      opts.onAiFailed?.(ev);
       // Never the visitor's words: ids and the error only.
       logger.warn({ conversationId: key, err: err instanceof Error ? err.message : String(err) }, "AI reply failed (the chat waits for a person)");
     } finally {
@@ -69,7 +78,10 @@ export function createAiReplyScheduler(opts: SchedulerOptions) {
   return { schedule, pending: () => timers.size, running: () => running.size };
 }
 
-const shared = createAiReplyScheduler({ run: (ev) => runAiReply(ev, realAiReplyDeps()) });
+const shared = createAiReplyScheduler({
+  run: (ev) => runAiReply(ev, realAiReplyDeps()),
+  onAiFailed: (ev) => scheduleHoldingMessage(ev, realHoldingDeps, { aiFailed: true }),
+});
 
 /** Ask for an AI reply to this chat. Returns at once; the reply is sent after the quiet period. Never throws. */
 export function scheduleAiReply(ev: AiReplyRequest): void {

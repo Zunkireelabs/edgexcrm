@@ -33,7 +33,7 @@ export interface AiReplyDeps {
   /** Asked again just before sending: a counsellor may have clicked Accept while the AI was thinking. */
   stillUnowned(tenantId: string, conversationId: string): Promise<boolean>;
   ask(input: AskInput): Promise<SearchAnswer>;
-  sendAi(args: { tenantId: string; conversationId: string; text: string; kind: "answer" | "handoff"; reason: NeedsHumanReason | null; siteId: string }): Promise<{ status: string }>;
+  sendAi(args: { tenantId: string; conversationId: string; text: string; kind: "answer" | "handoff" | "holding"; reason: NeedsHumanReason | null; siteId: string }): Promise<{ status: string }>;
   markHandoff(args: { tenantId: string; conversationId: string; reason: NeedsHumanReason }): Promise<void>;
 }
 
