@@ -117,7 +117,7 @@ export interface ApplicationsTab {
 }
 
 const CROSS = new Set<string>(CROSS_TABLE_KEYS);
-const CROSS_LABEL: Record<string, string> = { counsellor: "Counsellor", student: "Student", search: "Search" };
+const CROSS_LABEL: Record<string, string> = { counsellor: "Assignee", student: "Student", search: "Search" };
 
 function listOf(c: FilterCondition): string[] {
   const v = c.value;
@@ -191,7 +191,7 @@ export function planApplicationsQuery(tree: FilterTree, tab: ApplicationsTab = {
   const restTree: FilterGroup = { conjunction: tree.conjunction, conditions: rootRest, groups };
 
   const counsellors = crossConds.filter((c) => c.field === "counsellor");
-  if (counsellors.length > 1) return { ok: false, error: "Only one Counsellor filter can be applied at a time" };
+  if (counsellors.length > 1) return { ok: false, error: "Only one Assignee filter can be applied at a time" };
   const searches = crossConds.filter((c) => c.field === "search");
   if (searches.length > 1) return { ok: false, error: "Only one search can be applied at a time" };
 

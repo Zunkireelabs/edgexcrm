@@ -318,7 +318,7 @@ export function RecordPreview(props: RecordPreviewProps) {
               />
 
               <HighlightCard
-                label="Counsellor" icon={<UserIcon />} editable={canAssign} onClick={() => props.onAssign(lead)}
+                label="Assignee" icon={<UserIcon />} editable={canAssign} onClick={() => props.onAssign(lead)}
                 lockedTitle={canAssign ? undefined : "Only managers can reassign"}
                 valueTitle={assigneeName ?? "Unassigned"}
                 tone={assigneeName ? "ink" : "empty"}

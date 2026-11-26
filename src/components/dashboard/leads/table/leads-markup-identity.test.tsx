@@ -76,7 +76,7 @@ describe("Leads v2 grid markup is unchanged by the Applications List (EDGEX-141 
         emptyState={<div>empty</div>}
       />,
     );
-    expect(sha(container.innerHTML)).toMatchInlineSnapshot(`"c40b4db7432c9b5b"`);
+    expect(sha(container.innerHTML)).toMatchInlineSnapshot(`"196fd30d3dcad539"`);
   });
 
   it("grid: loading skeleton and empty state", () => {

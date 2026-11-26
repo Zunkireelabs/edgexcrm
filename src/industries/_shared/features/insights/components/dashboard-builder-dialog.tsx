@@ -140,7 +140,7 @@ export function DashboardBuilderDialog({
               id="dash-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Counsellor Overview"
+              placeholder="e.g. Assignee Overview"
               required
             />
           </div>

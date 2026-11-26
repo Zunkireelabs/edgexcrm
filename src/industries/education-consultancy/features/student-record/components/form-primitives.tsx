@@ -3,6 +3,7 @@
 import { createContext, useContext, useState } from "react";
 import { CaretDownIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { Label } from "@/components/ui/label";
@@ -132,6 +133,9 @@ export interface FieldDef {
   options?: readonly { value: string; label: string }[];
 }
 
+/** Reserved dropdown value for the "+ Add new option…" row (never stored). */
+const ADD_OPTION_VALUE = "__add_option__";
+
 export function EditableField({
   field,
   isEditing,
@@ -141,6 +145,9 @@ export function EditableField({
   disabled,
   invalid,
   needed,
+  onAddOption,
+  onBlur,
+  warning,
 }: {
   field: FieldDef;
   isEditing: boolean;
@@ -154,8 +161,32 @@ export function EditableField({
   invalid?: boolean;
   /** Edit profile: the consent form still needs this value ("· needed for consent" after the label). */
   needed?: boolean;
+  /**
+   * A dropdown only: adds a "+ Add new option…" row. Saves the new option and resolves with its stored value (it is then picked),
+   * or null when it could not be saved. Leave undefined and the dropdown is exactly as before.
+   */
+  onAddOption?: (label: string) => Promise<string | null>;
+  /** A text box only: called when the person leaves the box. */
+  onBlur?: () => void;
+  /** A heads-up shown under the box while editing (amber). It never blocks anything. */
+  warning?: string | null;
 }) {
   const compact = useContext(EditProfileLayoutContext);
+  const [adding, setAdding] = useState(false);
+  const [newLabel, setNewLabel] = useState("");
+  const [savingNew, setSavingNew] = useState(false);
+  const submitNew = async () => {
+    const label = newLabel.trim();
+    if (!onAddOption || !label || savingNew) return;
+    setSavingNew(true);
+    const picked = await onAddOption(label);
+    setSavingNew(false);
+    if (picked) {
+      onChange(picked);
+      setAdding(false);
+      setNewLabel("");
+    }
+  };
   const label = compact ? sentenceCase(field.label) : field.label;
   const redBorder = invalid ? "border-red-500 focus-visible:ring-red-500" : "";
   return (
@@ -167,7 +198,15 @@ export function EditableField({
       </p>
       {isEditing ? (
         field.type === "select" ? (
-          <Select value={value || "__none__"} onValueChange={(v) => onChange(v === "__none__" ? "" : v)} disabled={disabled}>
+          <>
+          <Select
+            value={value || "__none__"}
+            onValueChange={(v) => {
+              if (v === ADD_OPTION_VALUE) { setAdding(true); return; }
+              onChange(v === "__none__" ? "" : v);
+            }}
+            disabled={disabled}
+          >
             <SelectTrigger className={`h-9 text-sm w-full ${redBorder}`}>
               <SelectValue placeholder="Select" />
             </SelectTrigger>
@@ -180,8 +219,28 @@ export function EditableField({
               {value && !field.options?.some((opt) => opt.value === value) && (
                 <SelectItem value={value}>{value}</SelectItem>
               )}
+              {onAddOption && <SelectItem value={ADD_OPTION_VALUE}>+ Add new option…</SelectItem>}
             </SelectContent>
           </Select>
+          {onAddOption && adding && (
+            <div className="mt-2 flex items-center gap-2">
+              <Input
+                value={newLabel}
+                onChange={(e) => setNewLabel(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); void submitNew(); }
+                }}
+                placeholder="New option name"
+                maxLength={60}
+                autoFocus
+                className="h-9 text-sm"
+                aria-label={`New ${field.label.toLowerCase()} option`}
+              />
+              <Button type="button" size="sm" disabled={!newLabel.trim() || savingNew} onClick={() => void submitNew()}>Add</Button>
+              <Button type="button" size="sm" variant="ghost" disabled={savingNew} onClick={() => { setAdding(false); setNewLabel(""); }}>Cancel</Button>
+            </div>
+          )}
+          </>
         ) : field.type === "tel" ? (
           // Same country-code dropdown + number box the forms use; stored as "+977-98…".
           <div className={invalid ? "rounded-md ring-1 ring-red-500" : undefined}>
@@ -195,12 +254,14 @@ export function EditableField({
               type={field.type}
               value={value}
               onChange={(e) => onChange(e.target.value)}
+              onBlur={onBlur}
               placeholder={compact ? `Set ${label.toLowerCase()}` : field.placeholder ?? `Enter ${field.label.toLowerCase()}`}
               className={`h-9 text-sm ${redBorder}`}
               readOnly={!!readOnlyNote}
               disabled={!!readOnlyNote || !!disabled}
             />
             {readOnlyNote && <p className="mt-1 text-xs text-muted-foreground">{readOnlyNote}</p>}
+            {warning && <p role="status" className="mt-1 text-xs font-medium text-[#b25e09]">{warning}</p>}
           </>
         )
       ) : (

@@ -122,9 +122,9 @@ describe("computeConsentReadiness", () => {
   });
 
   it("requires an assigned counselor only when the template uses it, filed under Assignment", () => {
-    expect(computeConsentReadiness("Counselor: {{assign_name}}", complete).missing).toEqual(["Assigned Counselor"]);
+    expect(computeConsentReadiness("Counselor: {{assign_name}}", complete).missing).toEqual(["Assignee"]);
     expect(computeConsentReadiness("Counselor: {{counselor_name}}", complete).groups).toEqual([
-      { section: "Assignment", fields: ["Assigned Counselor"] },
+      { section: "Assignment", fields: ["Assignee"] },
     ]);
     expect(computeConsentReadiness("Counselor: {{assign_name}}", { ...complete, assigned_to: "user-1" }).ready).toBe(true);
     expect(computeConsentReadiness("No counselor here", complete).ready).toBe(true);
@@ -208,7 +208,7 @@ describe("consentRequirementGroups — what staff must fill, from the template a
       { section: GUARDIAN_SECTION_TITLE, fields: ["Guardian Name", "Guardian Relationship"] },
       { section: "Passport & Citizenship", fields: ["Passport Number"] },
       { section: "Study Interest", fields: ["Field of Study", "Degree Level"] },
-      { section: "Assignment", fields: ["Assigned Counselor"] },
+      { section: "Assignment", fields: ["Assignee"] },
     ]);
   });
 

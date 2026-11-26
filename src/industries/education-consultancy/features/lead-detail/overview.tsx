@@ -115,7 +115,7 @@ export function Overview(p: OverviewProps) {
         />
 
         <HighlightCard
-          className="max-[430px]:order-4 max-[430px]:col-span-2" label="Counsellor" icon={<UserIcon />} valueTitle={assigneeName ?? "Unassigned"} tone={assigneeName ? "ink" : "empty"}
+          className="max-[430px]:order-4 max-[430px]:col-span-2" label="Assignee" icon={<UserIcon />} valueTitle={assigneeName ?? "Unassigned"} tone={assigneeName ? "ink" : "empty"}
           value={assigneeName ? <><Avatar initials={initialsOf(assigneeReal ?? assigneeName)} /><ValueText>{assigneeName}</ValueText></> : <ValueText>Unassigned</ValueText>}
           sub={data?.branch_name ?? ""}
         />

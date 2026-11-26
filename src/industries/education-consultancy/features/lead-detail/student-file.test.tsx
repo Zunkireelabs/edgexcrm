@@ -27,6 +27,7 @@ import { useLeadCheckIns } from "@/industries/_shared/features/check-in/lead-che
 import { ConsentCard } from "../application-tracking/components/consent-card";
 import { ApplicationsCard } from "../application-tracking/components/applications-card";
 import { RightRail } from "./right-rail";
+import { FeePopover } from "./fee-popover";
 import type { LeadFile } from "./lead-file";
 
 let consentBody: Record<string, unknown>;
@@ -88,6 +89,8 @@ function Rail({ admin = true, canManage = true, fee, locked = false, signedState
         lead={{ id: "lead-1" } as Lead} file={file} applicationsActive consentActive classesActive documentsActive checkInActive consentSigned={signedState}
         isAdmin={admin} canManageConsent={canManage} canManageApplications canEnroll canUpload teamMemberNames={{}} openTab={() => {}} onEditProfile={onEditProfile} onCheckIn={() => {}}
       />
+      {/* The fee popover now lives on the stage card, not the rail (the rail is information only). */}
+      <div data-testid="stage-fee"><FeePopover fee={file.fee}><button type="button">Record</button></FeePopover></div>
       {withTab && (
         <>
           <ConsentCard
@@ -110,7 +113,7 @@ const consentRow = () => screen.getByTestId("consent-row");
 describe("fee popover — by role", () => {
   it("ADMIN: segmented Paid / Unpaid / Waiver + Amount (Rs) + Note → Save; no 'Received' date (EDGEX-157)", async () => {
     render(<Rail admin />);
-    fireEvent.click(await within(await screen.findByTestId("fee-row")).findByRole("button", { name: "Record" }));
+    fireEvent.click(await within(await screen.findByTestId("stage-fee")).findByRole("button", { name: "Record" }));
     const radios = await screen.findAllByRole("radio");
     expect(radios.map((r) => r.textContent)).toEqual(["Paid", "Unpaid", "Waiver"]);
     expect(screen.queryByText(/You report the fee/)).toBeNull();
@@ -128,7 +131,7 @@ describe("fee popover — by role", () => {
 
   it("STAFF: the 'You report the fee…' line + Amount + Note → Report fee (no segmented control); saves as 'claimed'", async () => {
     render(<Rail admin={false} />);
-    fireEvent.click(within(await screen.findByTestId("fee-row")).getByRole("button", { name: "Record" }));
+    fireEvent.click(within(await screen.findByTestId("stage-fee")).getByRole("button", { name: "Record" }));
     expect(await screen.findByText("You report the fee; an admin confirms it. Reported counts for the Applications check.")).toBeInTheDocument();
     expect(screen.queryAllByRole("radio")).toHaveLength(0);
     const report = screen.getByRole("button", { name: "Report fee" });
@@ -143,15 +146,12 @@ describe("fee popover — by role", () => {
     expect(screen.queryByTestId("fee-confirm-reject")).toBeNull();
   });
 
-  it("REPORTED state: the admin sees Confirm / Reject in the rail and Confirm saves 'paid'", async () => {
+  it("REPORTED state: the rail only shows it, with no Confirm / Reject (those live in the Consent tab card)", async () => {
     render(<Rail admin fee={{ status: "claimed", amount: 5000 }} />);
-    const box = await screen.findByTestId("fee-confirm-reject");
+    await screen.findByTestId("fee-row");
     expect(feeRow()).toHaveTextContent("Rs 5,000 reported");
-    expect(within(box).getByRole("button", { name: "Reject" })).toBeInTheDocument();
-    fireEvent.click(within(box).getByRole("button", { name: "Confirm" }));
-    await waitFor(() => expect(calls("PATCH", "/api/v1/leads/lead-1")).toHaveLength(1));
-    expect(body(calls("PATCH", "/api/v1/leads/lead-1")[0])).toMatchObject({ pre_app_fee_status: "paid", pre_app_fee_amount: 5000 });
-    expect(toastSuccess).toHaveBeenCalledWith("Fee confirmed");
+    expect(screen.queryByTestId("fee-confirm-reject")).toBeNull();
+    expect(within(feeRow()).queryByRole("button")).toBeNull();
   });
 
   it("REPORTED state: staff (not admin) see the report but no Confirm / Reject", async () => {
@@ -162,51 +162,50 @@ describe("fee popover — by role", () => {
   });
 });
 
-describe("consent row — one set of handlers", () => {
-  it("ready: 'Copy link' creates the link WITHOUT emailing it (deliver: none), copies it and toasts 'Consent link copied'", async () => {
+describe("consent row — information only", () => {
+  it("never shows a button: not sent, copy link, view, complete, resend all live in the Consent tab", async () => {
     render(<Rail />);
-    fireEvent.click(await within(await screen.findByTestId("consent-row")).findByRole("button", { name: "Copy link" }));
-    await waitFor(() => expect(calls("POST", "/consent")).toHaveLength(1));
-    expect(body(calls("POST", "/consent")[0])).toMatchObject({ action: "send", deliver: "none" });
-    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith("Consent link copied"));
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith("https://sign.test/abc");
+    await waitFor(() => expect(consentRow()).toHaveTextContent("Not sent"));
+    expect(within(consentRow()).queryByRole("button")).toBeNull();
+    expect(within(feeRow()).queryByRole("button")).toBeNull();
+    expect(calls("POST", "/consent")).toHaveLength(0);
   });
 
-  it("profile incomplete: 'n fields missing' + Complete opens Edit profile; only an admin gets 'Send anyway'", async () => {
+  it("profile incomplete: 'n fields missing' and the one-line note, no Complete / Send anyway buttons", async () => {
     consentBody = consent({ readiness: { ready: false, missing: ["Father's name", "Address"], groups: [{ section: "Family", fields: ["Father's name", "Address"] }] } });
-    const onEditProfile = vi.fn();
-    render(<Rail admin onEditProfile={onEditProfile} />);
+    render(<Rail admin />);
     await waitFor(() => expect(consentRow()).toHaveTextContent("2 fields missing"));
     expect(screen.getByTestId("consent-missing")).toHaveTextContent("Missing for consent: Father's name, Address");
-    fireEvent.click(within(consentRow()).getByRole("button", { name: "Complete" }));
-    expect(onEditProfile).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole("button", { name: "Admins: Send anyway" })).toBeInTheDocument();
-    cleanup();
-    render(<Rail admin={false} />);
-    await waitFor(() => expect(consentRow()).toHaveTextContent("2 fields missing"));
+    expect(screen.queryByRole("button", { name: "Complete" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Admins: Send anyway" })).toBeNull();
   });
 
-  it("awaiting: 'Awaiting signature · Copy' and the ··· menu lists the other ways", async () => {
+  it("awaiting and expired show the state only", async () => {
     consentBody = consent({ status: "sent", link: "https://sign.test/abc" });
     render(<Rail />);
     await waitFor(() => expect(consentRow()).toHaveTextContent("Awaiting signature"));
-    expect(within(consentRow()).getByRole("button", { name: "Copy" })).toBeInTheDocument();
-    fireEvent.pointerDown(within(consentRow()).getByRole("button", { name: "More ways to get consent signed" }), { button: 0, ctrlKey: false });
-    const items = (await screen.findAllByRole("menuitem")).map((i) => i.textContent);
-    expect(items).toEqual(["Email it to the student", "Sign in person (on this device)", "Upload a signed copy", "Resend link"]);
-  });
-
-  it("expired and signed", async () => {
+    expect(within(consentRow()).queryByRole("button")).toBeNull();
+    cleanup();
     consentBody = consent({ status: "expired" });
     render(<Rail />);
     await waitFor(() => expect(consentRow()).toHaveTextContent("Link expired"));
-    expect(within(consentRow()).getByRole("button", { name: "Resend" })).toBeInTheDocument();
-    cleanup();
+    expect(within(consentRow()).queryByRole("button")).toBeNull();
+  });
+
+  it("signed: 'Signed <date>' with a done tick and no View link; the fee shows a tick once paid or waived", async () => {
     consentBody = signed;
-    render(<Rail signedState />);
+    render(<Rail signedState fee={{ status: "waiver" }} />);
     await waitFor(() => expect(consentRow()).toHaveTextContent("Signed Nov 10"));
-    expect(within(consentRow()).getByRole("button", { name: "View" })).toBeInTheDocument();
+    expect(within(consentRow()).getByLabelText("Done")).toBeInTheDocument();
+    expect(within(consentRow()).queryByRole("button")).toBeNull();
+    expect(feeRow()).toHaveTextContent("Waiver");
+    expect(within(feeRow()).getByLabelText("Done")).toBeInTheDocument();
+  });
+
+  it("a fee that is not paid / waived gets no tick", async () => {
+    render(<Rail fee={{ status: "unpaid" }} />);
+    await screen.findByTestId("fee-row");
+    expect(within(feeRow()).queryByLabelText("Done")).toBeNull();
   });
 });
 
@@ -216,7 +215,7 @@ describe("rail and tab share ONE state", () => {
     render(<Rail admin={false} signedState withTab />);
     // collapsed Consent tab header shows the signed-but-fee-pending badge
     await screen.findByText("Fee pending");
-    fireEvent.click(within(screen.getByTestId("fee-row")).getByRole("button", { name: "Record" }));
+    fireEvent.click(within(screen.getByTestId("stage-fee")).getByRole("button", { name: "Record" }));
     fireEvent.change(await screen.findByLabelText("Amount received (Rs)"), { target: { value: "5000" } });
     fireEvent.click(screen.getByRole("button", { name: "Report fee" }));
     await waitFor(() => expect(screen.getByText("Fee reported")).toBeInTheDocument());
@@ -224,59 +223,37 @@ describe("rail and tab share ONE state", () => {
     expect(calls("PATCH", "/api/v1/leads/lead-1")).toHaveLength(1); // one save, both views follow
   });
 
-  it("applications: ONE fetch feeds both; the rail's '+' opens the one dialog; saving there refreshes the tab too", async () => {
+  it("applications: ONE fetch feeds both; the rail lists the university name only (no status, no '+')", async () => {
+    applicationsBody = [{ id: "a1", university_name: "University of Melbourne", program_name: "Nursing", application_stages: { name: "Preparing" } }];
     render(<Rail withTab />);
     const rail = await screen.findByTestId("rail-applications");
-    await waitFor(() => expect(within(rail).getByText("No applications yet")).toBeInTheDocument());
-    expect(screen.getByText("No applications yet.")).toBeInTheDocument(); // the tab's card
-    expect(calls("GET", "/leads/lead-1/applications")).toHaveLength(1);
-
-    applicationsBody = [{ id: "a1", university_name: "University of Melbourne", program_name: "Nursing", application_stages: { name: "Preparing" } }];
-    fireEvent.click(within(rail).getByRole("button", { name: "Add application" }));
-    expect(await screen.findByText("ADD APPLICATION FORM")).toBeInTheDocument();
-    expect(screen.getAllByText("ADD APPLICATION FORM")).toHaveLength(1); // hosted once
-    fireEvent.click(screen.getByText("SAVE APPLICATION"));
-
     await waitFor(() => expect(within(rail).getByText(/University of Melbourne · Nursing/)).toBeInTheDocument());
-    expect(screen.getByText("University of Melbourne", { selector: "p" })).toBeInTheDocument(); // the tab's card shows it too
+    expect(within(rail).queryByText("Preparing")).toBeNull(); // status lives in the lead page
+    expect(within(rail).queryByRole("button", { name: /Add application/ })).toBeNull();
     expect(within(rail).getByText("1")).toBeInTheDocument(); // count chip
+    expect(screen.getByText("University of Melbourne", { selector: "p" })).toBeInTheDocument(); // the tab's card shows it too
+    expect(calls("GET", "/leads/lead-1/applications")).toHaveLength(1);
   });
 });
 
-describe("Applications '+' unlocks after consent (active template)", () => {
-  it("locked: aria-disabled, tooltip 'Unlocks after consent', the empty row says so; a click explains instead of opening the form", async () => {
+describe("Applications section while consent is pending", () => {
+  it("locked: the empty row says 'Unlocks after consent' and the rail has no add button (the tab's Add is the one that explains)", async () => {
     render(<Rail locked />);
     const rail = await screen.findByTestId("rail-applications");
-    const plus = within(rail).getByRole("button", { name: "Add application (unlocks after consent)" });
-    expect(plus).toHaveAttribute("aria-disabled", "true");
-    expect(plus).toHaveAttribute("title", "Unlocks after consent");
     expect(within(rail).getByText("Unlocks after consent")).toBeInTheDocument();
-    fireEvent.click(plus);
-    expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
-    expect(screen.getByText("Complete the consent form first")).toBeInTheDocument();
-    expect(screen.queryByText("ADD APPLICATION FORM")).toBeNull();
+    expect(within(rail).queryByRole("button", { name: /Add application/ })).toBeNull();
     expect(calls("GET", "/profile-completeness")).toHaveLength(0);
-  });
-
-  it("unlocked: the '+' is live and opens the form", async () => {
-    render(<Rail />);
-    const rail = await screen.findByTestId("rail-applications");
-    const plus = within(rail).getByRole("button", { name: "Add application" });
-    expect(plus).not.toHaveAttribute("aria-disabled");
-    fireEvent.click(plus);
-    expect(await screen.findByText("ADD APPLICATION FORM")).toBeInTheDocument();
   });
 });
 
-describe("Documents '+' opens the upload dialog with the tenant's own limit", () => {
-  it("the drop-zone hint comes from the documents response (25 MB here, 10 MB for another tenant)", async () => {
-    const { unmount } = render(<Rail />);
-    fireEvent.click(await within(await screen.findByTestId("rail-documents")).findByRole("button", { name: "Upload documents" }));
-    expect(await screen.findByText("PDF, Word, JPG, PNG, WEBP · up to 25 MB each")).toBeInTheDocument();
-    unmount();
-    maxFileBytes = 10 * 1024 * 1024;
+describe("Documents, Classes and Check-ins on the rail are information only", () => {
+  it("no upload / add / check-in buttons, and each empty row is plain text; only the section titles are buttons", async () => {
     render(<Rail />);
-    fireEvent.click(await within(await screen.findByTestId("rail-documents")).findByRole("button", { name: "Upload documents" }));
-    expect(await screen.findByText(/up to 10 MB each/)).toBeInTheDocument();
+    for (const id of ["rail-documents", "rail-classes", "rail-checkins", "rail-applications"]) {
+      const sec = await screen.findByTestId(id);
+      const buttons = within(sec).queryAllByRole("button");
+      expect(buttons).toHaveLength(1); // the title that opens the tab
+      expect(buttons[0].getAttribute("title")).toMatch(/^Open the .* tab$/);
+    }
   });
 });

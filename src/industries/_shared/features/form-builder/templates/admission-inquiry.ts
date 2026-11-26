@@ -11,7 +11,7 @@ export const admissionInquiryTemplate: TemplateDefinition = {
     subtitle: "Tell us about your study goals and we'll guide you",
     button_text: "Submit Inquiry",
     thank_you_title: "Inquiry Received!",
-    thank_you_message: "Our counselors will contact you within 24 hours.",
+    thank_you_message: "Our team will contact you within 24 hours.",
   },
   steps: [
     {

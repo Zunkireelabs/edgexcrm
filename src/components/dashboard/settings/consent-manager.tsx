@@ -222,7 +222,7 @@ export function ConsentManager() {
                 ))}
               </ul>
               <p className="text-blue-800">
-                Staff fill these in Student Details (Edit); the counselor is the one assigned to the lead. Consent can&apos;t be
+                Staff fill these in Student Details (Edit); the assignee is the person assigned to the lead. Consent can&apos;t be
                 sent while any is missing. For a student with no guardian, choose &quot;None / Not applicable&quot;.
               </p>
             </div>

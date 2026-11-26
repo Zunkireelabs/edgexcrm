@@ -48,8 +48,8 @@ export function WebsiteChatAiReply({ initial }: { initial?: AiReplyInitial }) {
         <div>
           <h3 className="text-sm font-medium">AI replies</h3>
           <p className="text-xs text-muted-foreground">
-            The Admizz AI answers visitors right away. When a counsellor clicks Accept, the AI stops. If it can&apos;t answer, or the visitor asks
-            for a person, it tells them a counsellor will reply and marks the chat &ldquo;Needs a human&rdquo;.
+            The Admizz AI answers visitors right away. When an assignee clicks Accept, the AI stops. If it can&apos;t answer, or the visitor asks
+            for a person, it tells them someone will reply and marks the chat &ldquo;Needs a human&rdquo;.
           </p>
         </div>
         <Switch checked={enabled} onCheckedChange={setEnabled} aria-label="AI replies" />

@@ -101,13 +101,13 @@ async function resolveCounselor(
 function counselorRefusal(lookup: CounselorLookup, overrideRequested: boolean, industryId: string | null) {
   if (!lookup.used || lookup.name || overrideRequested || industryId !== "education_consultancy") return null;
   if (lookup.failed) {
-    return apiError("COUNSELOR_LOOKUP_FAILED", "Couldn't look up the assigned counselor right now. Please try again in a moment.", 503);
+    return apiError("COUNSELOR_LOOKUP_FAILED", "Couldn't look up the assignee right now. Please try again in a moment.", 503);
   }
   return apiError(
     "PROFILE_INCOMPLETE_FOR_CONSENT",
-    consentProfileIncompleteMessage(["Assigned Counselor"]),
+    consentProfileIncompleteMessage(["Assignee"]),
     422,
-    { missing: ["Assigned Counselor"] },
+    { missing: ["Assignee"] },
   );
 }
 
