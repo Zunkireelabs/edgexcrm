@@ -53,7 +53,8 @@
       // Hint inside the message box while waiting for the first question.
       composerHint: "Type your question here…",
       // After the first message was really delivered (never shown when sending failed).
-      afterSend: "Got it! The team will reply here as soon as possible. You can keep browsing; your chat stays open.",
+      // Off ("") on purpose: EdgeX itself sends the one holding message when nobody can answer yet, so a second line here would double up.
+      afterSend: "",
     },
     // The short contact form that gives the team a way to reach the visitor (it becomes a lead).
     // when: "before" = ask first, and hold the visitor's message until the form is sent;
