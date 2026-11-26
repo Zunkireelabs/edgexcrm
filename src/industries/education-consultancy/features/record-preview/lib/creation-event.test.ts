@@ -82,6 +82,11 @@ describe("ensureCreationEvent detail line", () => {
     const out = ensureCreationEvent([], { ...OPTS, detail: { source: "Facebook form", channel: "Paid" } });
     expect(out[0]).toMatchObject({ source: "Facebook form", object: "· Channel: Paid" });
   });
+  it("a form submission with no person already shows the source as its actor: no second 'Source:'", () => {
+    const audit = ev({ id: "l-2", kind: "created", actor_id: null, source: "Facebook form", verb: "Lead created" });
+    const out = ensureCreationEvent([audit], { ...OPTS, detail });
+    expect(out.find((e) => e.kind === "created")?.object).toBe("via the UK form · Channel: Paid · Campaign: UK Intake");
+  });
   it("no detail: nothing extra (as before)", () => {
     expect(ensureCreationEvent([], OPTS)[0].object).toBeNull();
   });

@@ -68,7 +68,8 @@ export function ensureCreationEvent(
     object: null,
     snippet: null,
   };
-  // A made-up entry already names the source as its actor, so the detail line leaves it out there.
-  const synthetic = keep.id === "created-synthetic";
-  return [...others, { ...keep, verb: CREATION_VERB, object: creationDetailText(opts.detail, !synthetic) }];
+  // When the entry already names the source as its actor (a made-up one, or a form submission with no person), the detail
+  // line leaves "Source:" out so it is not said twice.
+  const sourceIsActor = keep.id === "created-synthetic" || !!keep.source;
+  return [...others, { ...keep, verb: CREATION_VERB, object: creationDetailText(opts.detail, !sourceIsActor) }];
 }
