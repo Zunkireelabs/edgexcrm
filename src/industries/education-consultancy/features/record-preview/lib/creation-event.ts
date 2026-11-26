@@ -16,9 +16,43 @@ export function isCreationAudit(
   return kind === "submission" && changes?.is_first?.new === true;
 }
 
+/** What the creation entry says beyond "created the lead": how it was made and where it came from. */
+export interface CreationDetail {
+  how?: string | null;
+  source?: string | null;
+  channel?: string | null;
+  campaign?: string | null;
+}
+
+/** How a lead was created, from its creation audit row's changes: "manually", "via the <form> form", "via the API"… */
+export function creationHow(changes: Record<string, { old: unknown; new: unknown }> | null | undefined): string | null {
+  const via = changes?.created_via?.new;
+  const form = changes?.form_name?.new;
+  if (via === "manual") return "manually";
+  if (typeof form === "string" && form.trim()) return `via the ${form.trim()} form`;
+  if (via === "public_form") return "via a form";
+  if (via === "public_api") return "via the API";
+  if (via === "integration") return "via an integration";
+  return null;
+}
+
+/** "via the X form · Source: Facebook · Channel: Paid · Campaign: UK" (each part only when known). null when nothing is known. */
+export function creationDetailText(d: CreationDetail | undefined, includeSource: boolean): string | null {
+  if (!d) return null;
+  const clean = (v: string | null | undefined) => (v && v.trim() ? v.trim() : null);
+  const rest = [
+    includeSource && clean(d.source) ? `Source: ${clean(d.source)}` : null,
+    clean(d.channel) ? `Channel: ${clean(d.channel)}` : null,
+    clean(d.campaign) ? `Campaign: ${clean(d.campaign)}` : null,
+  ].filter(Boolean).join(" · ");
+  const how = clean(d.how);
+  if (!how && !rest) return null;
+  return (how ?? "") + (rest ? (how ? " · " : "· ") + rest : "");
+}
+
 export function ensureCreationEvent(
   feed: PreviewActivity[],
-  opts: { createdAt: string; sourceLabel: string | null },
+  opts: { createdAt: string; sourceLabel: string | null; detail?: CreationDetail },
 ): PreviewActivity[] {
   const real = feed.filter((e) => e.kind === "created");
   const others = feed.filter((e) => e.kind !== "created");
@@ -34,5 +68,7 @@ export function ensureCreationEvent(
     object: null,
     snippet: null,
   };
-  return [...others, { ...keep, verb: CREATION_VERB, object: null }];
+  // A made-up entry already names the source as its actor, so the detail line leaves it out there.
+  const synthetic = keep.id === "created-synthetic";
+  return [...others, { ...keep, verb: CREATION_VERB, object: creationDetailText(opts.detail, !synthetic) }];
 }
