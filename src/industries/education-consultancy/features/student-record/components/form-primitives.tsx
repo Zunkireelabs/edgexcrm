@@ -146,6 +146,8 @@ export function EditableField({
   invalid,
   needed,
   onAddOption,
+  onBlur,
+  warning,
 }: {
   field: FieldDef;
   isEditing: boolean;
@@ -164,6 +166,10 @@ export function EditableField({
    * or null when it could not be saved. Leave undefined and the dropdown is exactly as before.
    */
   onAddOption?: (label: string) => Promise<string | null>;
+  /** A text box only: called when the person leaves the box. */
+  onBlur?: () => void;
+  /** A heads-up shown under the box while editing (amber). It never blocks anything. */
+  warning?: string | null;
 }) {
   const compact = useContext(EditProfileLayoutContext);
   const [adding, setAdding] = useState(false);
@@ -248,12 +254,14 @@ export function EditableField({
               type={field.type}
               value={value}
               onChange={(e) => onChange(e.target.value)}
+              onBlur={onBlur}
               placeholder={compact ? `Set ${label.toLowerCase()}` : field.placeholder ?? `Enter ${field.label.toLowerCase()}`}
               className={`h-9 text-sm ${redBorder}`}
               readOnly={!!readOnlyNote}
               disabled={!!readOnlyNote || !!disabled}
             />
             {readOnlyNote && <p className="mt-1 text-xs text-muted-foreground">{readOnlyNote}</p>}
+            {warning && <p role="status" className="mt-1 text-xs font-medium text-[#b25e09]">{warning}</p>}
           </>
         )
       ) : (

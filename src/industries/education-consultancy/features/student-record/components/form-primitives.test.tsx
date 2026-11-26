@@ -138,3 +138,27 @@ describe("EditableField dropdown: + Add new option", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 });
+
+describe("EditableField text box: onBlur and warning", () => {
+  const field = { key: "email", label: "Email", type: "email" } as const;
+
+  it("calls onBlur when the person leaves the box", () => {
+    const onBlur = vi.fn();
+    render(<EditableField field={field} isEditing value="a@b.com" onChange={() => {}} onBlur={onBlur} />);
+    fireEvent.blur(screen.getByRole("textbox"));
+    expect(onBlur).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows a warning under the box while editing, and nothing without one", () => {
+    const { rerender } = render(<EditableField field={field} isEditing value="a@b.com" onChange={() => {}} />);
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    rerender(<EditableField field={field} isEditing value="a@b.com" onChange={() => {}} warning="Another lead already has this email." />);
+    expect(screen.getByRole("status")).toHaveTextContent("Another lead already has this email.");
+  });
+
+  it("without onBlur or warning it renders exactly as before", () => {
+    render(<EditableField field={field} isEditing value="a@b.com" onChange={() => {}} />);
+    expect(screen.getByRole("textbox")).toHaveValue("a@b.com");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+});

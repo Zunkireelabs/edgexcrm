@@ -49,6 +49,7 @@ import { GUARDIAN_RELATIONSHIP_OPTIONS, normalizeGuardianRelationship, guardianN
 import { SectionGroup, CardSection, FieldGrid, EditableField, EditProfileLayoutContext, sentenceCase } from "./form-primitives";
 import { useStudentRecordLists } from "./use-student-record-lists";
 import { useLeadSourceOptions } from "./use-lead-source-options";
+import { useEmailDuplicateWarning } from "./use-email-duplicate-warning";
 import { SOURCE_FIELD_KIND } from "@/lib/leads/source-options";
 import { notifyStudentRecordChanged } from "./student-record-events";
 import { buildListsPayload, storedListsToState, type StoredLists } from "./student-record-lists";
@@ -455,6 +456,10 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
   const [leadSource, setLeadSource] = useState<LeadSourceValues>(() => leadSourceFromLead(lead, submissionHistory));
   const [leadSourceDraft, setLeadSourceDraft] = useState<LeadSourceValues>(leadSource);
   const { lists: sourceLists, addOption: addSourceOption } = useLeadSourceOptions(isAdmin);
+  const emailWarn = useEmailDuplicateWarning(lead.id);
+  const clearEmailWarning = emailWarn.clear;
+  // A warning belongs to one editing session: start fresh when editing starts, and drop it when it ends (save or cancel).
+  useEffect(() => { clearEmailWarning(); }, [isEditing, clearEmailWarning]);
 
   // Work Experience, References and Test Scores are rows in their own tables: they are loaded from the server when the pop-up opens and
   // saved with PUT /api/v1/leads/[id]/student-record. What is shown is derived from the loaded rows plus the user's own edits (null =
@@ -752,7 +757,9 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
           field={field}
           isEditing={isEditing}
           value={shownCore2[field.key]}
-          onChange={(v) => handleCoreChange(field.key, v)}
+          onChange={(v) => { handleCoreChange(field.key, v); if (field.key === "email") emailWarn.clear(); }}
+          onBlur={field.key === "email" ? () => void emailWarn.check(shownCore2.email, coreIdentity.email) : undefined}
+          warning={field.key === "email" && isEditing ? emailWarn.message : undefined}
           invalid={redKeys.has(field.key)}
           needed={needed(field.label)}
           disabled={restrictContactFields && (field.key === "email" || field.key === "phone")}
