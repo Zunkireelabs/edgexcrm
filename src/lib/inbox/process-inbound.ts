@@ -13,6 +13,8 @@ import { NotificationTypes, upsertThreadNotification } from "@/lib/notifications
 import { resolveInboundRecipients } from "@/lib/inbox/inbound-recipients";
 import { aiReplyServerEnabled, readAiReplyConfig } from "@/lib/inbox/ai-reply/config";
 import { scheduleAiReply } from "@/lib/inbox/ai-reply/scheduler";
+import { scheduleHoldingMessage } from "@/lib/inbox/ai-reply/holding";
+import { realHoldingDeps } from "@/lib/inbox/ai-reply/holding-deps";
 import { decryptToken } from "./crypto";
 import { resolveAndStoreAttachments } from "./media";
 import type { InboundMediaDescriptor } from "./adapters/types";
@@ -372,6 +374,10 @@ async function processOneEvent(
   // limit. The run re-checks every rule; this only avoids scheduling work that can't possibly run. Never throws.
   if (p.provider === "chatwoot" && convAiAutonomy === "autonomous" && convAssigneeType !== "human" && aiReplyServerEnabled()) {
     scheduleAiReply({ tenantId: p.tenant_id, conversationId });
+  } else if (p.provider === "chatwoot" && convAssigneeType !== "human") {
+    // AI replies are off for this chat: the visitor gets ONE automatic "our team has your chat" message instead of silence.
+    // The run re-checks every rule (Admizz education only, nobody owns the chat, not already sent). Never throws.
+    scheduleHoldingMessage({ tenantId: p.tenant_id, conversationId }, realHoldingDeps);
   }
 }
 
