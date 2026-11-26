@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ensureCreationEvent, isCreationAudit } from "./creation-event";
+import { creationDetailText, creationHow, ensureCreationEvent, isCreationAudit } from "./creation-event";
 import type { PreviewActivity } from "../use-preview-data";
 
 const ev = (o: Partial<PreviewActivity>): PreviewActivity => ({
@@ -41,5 +41,53 @@ describe("isCreationAudit", () => {
     expect(isCreationAudit("submission", { is_first: { old: null, new: true } })).toBe(true);
     expect(isCreationAudit("submission", { is_first: { old: null, new: false } })).toBe(false);
     expect(isCreationAudit("stage", {})).toBe(false);
+  });
+});
+
+describe("creationHow", () => {
+  const ch = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, { old: null, new: v }]));
+  it("says how the lead came in, from the audit changes", () => {
+    expect(creationHow(ch({ created_via: "manual" }))).toBe("manually");
+    expect(creationHow(ch({ created_via: "public_form", form_name: "UK Intake" }))).toBe("via the UK Intake form");
+    expect(creationHow(ch({ created_via: "public_form" }))).toBe("via a form");
+    expect(creationHow(ch({ created_via: "public_api" }))).toBe("via the API");
+    expect(creationHow(ch({ created_via: "integration" }))).toBe("via an integration");
+  });
+  it("null when nothing is known", () => {
+    expect(creationHow(null)).toBeNull();
+    expect(creationHow({})).toBeNull();
+  });
+});
+
+describe("creationDetailText", () => {
+  it("joins how, source, channel and campaign; only what is known", () => {
+    expect(creationDetailText({ how: "via the UK form", source: "Facebook", channel: "Paid", campaign: "UK Intake" }, true))
+      .toBe("via the UK form · Source: Facebook · Channel: Paid · Campaign: UK Intake");
+    expect(creationDetailText({ how: "manually" }, true)).toBe("manually");
+    expect(creationDetailText({ source: "Facebook" }, true)).toBe("· Source: Facebook");
+    expect(creationDetailText({ source: "Facebook" }, false)).toBeNull();
+    expect(creationDetailText({ how: " ", source: "", channel: null }, true)).toBeNull();
+    expect(creationDetailText(undefined, true)).toBeNull();
+  });
+});
+
+describe("ensureCreationEvent detail line", () => {
+  const detail = { how: "via the UK form", source: "Facebook", channel: "Paid", campaign: "UK Intake" };
+  it("a real creation row gets how + source + channel + campaign", () => {
+    const audit = ev({ id: "l-1", kind: "created", actor_id: "u1", actor_name: "Binod", verb: "Lead created" });
+    const out = ensureCreationEvent([audit], { ...OPTS, detail });
+    expect(out.find((e) => e.kind === "created")?.object).toBe("via the UK form · Source: Facebook · Channel: Paid · Campaign: UK Intake");
+  });
+  it("a made-up creation row names the source as its actor, so the detail leaves the source out", () => {
+    const out = ensureCreationEvent([], { ...OPTS, detail: { source: "Facebook form", channel: "Paid" } });
+    expect(out[0]).toMatchObject({ source: "Facebook form", object: "· Channel: Paid" });
+  });
+  it("a form submission with no person already shows the source as its actor: no second 'Source:'", () => {
+    const audit = ev({ id: "l-2", kind: "created", actor_id: null, source: "Facebook form", verb: "Lead created" });
+    const out = ensureCreationEvent([audit], { ...OPTS, detail });
+    expect(out.find((e) => e.kind === "created")?.object).toBe("via the UK form · Channel: Paid · Campaign: UK Intake");
+  });
+  it("no detail: nothing extra (as before)", () => {
+    expect(ensureCreationEvent([], OPTS)[0].object).toBeNull();
   });
 });

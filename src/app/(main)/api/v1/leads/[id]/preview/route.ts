@@ -10,7 +10,7 @@ import { checkApplicationsReadiness, applicationsGateApplies } from "@/lib/leads
 import { apiSuccess, apiUnauthorized, apiForbidden, apiNotFound, apiError } from "@/lib/api/response";
 import { humanizeIntakeValue } from "@/components/dashboard/lead/activities/lead-activity-labels";
 import { flattenReadiness } from "@/industries/education-consultancy/features/record-preview/lib/readiness";
-import { ensureCreationEvent, isCreationAudit } from "@/industries/education-consultancy/features/record-preview/lib/creation-event";
+import { creationHow, ensureCreationEvent, isCreationAudit } from "@/industries/education-consultancy/features/record-preview/lib/creation-event";
 import { pickIntake } from "@/industries/education-consultancy/features/record-preview/lib/study-plan";
 import type { PreviewActivity } from "@/industries/education-consultancy/features/record-preview/use-preview-data";
 import { describeAuditEvent } from "@/components/dashboard/lead/activities/describe-audit-event";
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
   const db = await scopedClient(auth);
   const { data: lead } = await db
     .from("leads")
-    .select("id, assigned_to, branch_id, form_config_id, intake_source, city, created_at, pre_app_fee_status, intake_term, custom_fields")
+    .select("id, assigned_to, branch_id, form_config_id, intake_source, intake_medium, intake_campaign, city, created_at, pre_app_fee_status, intake_term, custom_fields")
     .eq("id", id)
     .is("deleted_at", null)
     .maybeSingle();
@@ -148,7 +148,19 @@ export async function GET(request: NextRequest, context: RouteContext) {
       }];
     }),
   ];
-  const feed = ensureCreationEvent(feedCandidates, { createdAt: leadRow.created_at as string, sourceLabel })
+  const creationRow = [...auditRows, ...firstAuditRows]
+    .filter((r) => isCreationAudit(describeAuditEvent(r, (uid) => nameOf(uid)).kind, r.changes))
+    .sort((x, y) => String(x.created_at).localeCompare(String(y.created_at)))[0];
+  const feed = ensureCreationEvent(feedCandidates, {
+    createdAt: leadRow.created_at as string,
+    sourceLabel,
+    detail: {
+      how: creationRow ? creationHow(creationRow.changes) : null,
+      source: sourceLabel,
+      channel: leadRow.intake_medium ? humanizeIntakeValue(leadRow.intake_medium as string) : null,
+      campaign: (leadRow.intake_campaign as string | null) ?? null,
+    },
+  })
     .sort((x, y) => y.at.localeCompare(x.at)).slice(0, feedLimit);
 
   const cf = (leadRow.custom_fields ?? {}) as Record<string, unknown>;
