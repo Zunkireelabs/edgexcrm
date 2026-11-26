@@ -3,7 +3,7 @@
 // separate key from the widget settings (meta.website_chat) so the two never touch each other.
 
 /** How long a chat must be quiet before the AI answers, so a burst such as "Study in the UK" / "Ok" / "Fast" gets ONE answer. */
-export const AI_REPLY_DEBOUNCE_MS = 5_000;
+export const AI_REPLY_DEBOUNCE_MS = 3_000;
 
 /** The only industry that gets AI replies (the Admizz website chat). */
 export const AI_REPLY_INDUSTRY = "education_consultancy";
@@ -11,8 +11,11 @@ export const AI_REPLY_INDUSTRY = "education_consultancy";
 /** zunkiree-search rejects a question longer than this. */
 export const MAX_QUESTION_CHARS = 500;
 
-/** How long to wait for the Admizz AI before giving up and leaving the chat for a person. */
-export const SEARCH_TIMEOUT_MS = 30_000;
+/**
+ * How long to wait for the Admizz AI before giving up and leaving the chat for a person (the visitor then gets the holding
+ * message). Quiet period + this = the longest a visitor waits for SOME reply: keep the two together under 10 seconds.
+ */
+export const SEARCH_TIMEOUT_MS = 6_000;
 
 /** What the visitor is told when the AI hands the chat to the team. One constant so the team can change the wording later. */
 export const HANDOFF_MESSAGE = "Thanks, I've passed your question to our counsellors. One of them will reply here soon.";
@@ -22,8 +25,9 @@ export const HANDOFF_MESSAGE = "Thanks, I've passed your question to our counsel
  * chat (see holding.ts). One constant so the team can change the wording later.
  */
 export const HOLDING_MESSAGE =
-  "Thanks for reaching out. Your chat has been passed to our team, and an Admizz associate will connect with you as soon as possible. " +
-  "Please keep this chat window open while you wait. If we aren't able to connect shortly, we'll follow up by phone call, WhatsApp or email.";
+  "Your chat has been transferred to live support, and an Admizz associate will connect with you as soon as possible. " +
+  "We're currently experiencing high volume, so please keep this chat window open in the background while you wait. " +
+  "If we aren't able to connect shortly, we'll follow up by Phone Call, Whatsapp or email. Thanks for your patience!";
 
 /** Where the once-per-chat marker lives: conversations.meta.holding_sent_at (no new column). */
 export const HOLDING_META_KEY = "holding_sent_at";

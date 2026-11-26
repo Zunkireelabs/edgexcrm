@@ -348,13 +348,21 @@ describe("guidance for the visitor", () => {
     expect(calls.find((c) => c.url.endsWith("/messages"))!.body).toMatchObject({ content: "Study in the UK" });
   });
 
-  it("after the first message really arrives, says so once, and the box goes back to its normal hint", async () => {
+  it("by default says nothing extra after the first message (EdgeX sends the one holding message itself)", async () => {
     await chat({ name: "Sneha", phone: "9800000000" });
-    expect(count("Got it! The team will reply here as soon as possible.")).toBe(1);
+    expect(text()).not.toContain("Got it!");
+    expect(hint()).toBe("Write a message…");
+  });
+
+  it("when a text is set, says it once after the first message really arrives, and the box goes back to its normal hint", async () => {
+    openAndShareDetails({ ...CONFIG, guide: { afterSend: "Got it! Custom line." } });
+    typeAndSend("Hello there");
+    await flush();
+    expect(count("Got it! Custom line.")).toBe(1);
     expect(hint()).toBe("Write a message…");
     typeAndSend("One more thing");
     await flush();
-    expect(count("Got it! The team will reply here as soon as possible.")).toBe(1);
+    expect(count("Got it! Custom line.")).toBe(1);
   });
 
   it("never says 'got it' when the message did not go through", async () => {
@@ -365,14 +373,14 @@ describe("guidance for the visitor", () => {
   });
 
   it("a visitor who asked first (typed or tapped before sharing details) is not asked again what they want", async () => {
-    load().init(WITH_TOPICS);
+    load().init({ ...WITH_TOPICS, guide: { afterSend: "Got it! Custom line." } });
     click(q(".launcher"));
     click(root().querySelectorAll(".chip")[0]); // "Study in the UK" from the home screen, held until the form is sent
     fillForm({ name: "Sneha", phone: "9800000000" });
     await flush();
     expect(text()).not.toContain("What would you like to know?");
     expect(calls.find((c) => c.url.endsWith("/messages"))!.body).toMatchObject({ content: "Study in the UK" });
-    expect(count("Got it! The team will reply here as soon as possible.")).toBe(1);
+    expect(count("Got it! Custom line.")).toBe(1);
   });
 
   it("the wording and the topics can be changed or switched off", async () => {

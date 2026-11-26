@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { decideHoldingMessage, runHoldingMessage, scheduleHoldingMessage, type HoldingDeps } from "./holding";
-import { HOLDING_MESSAGE } from "./config";
+import { AI_REPLY_DEBOUNCE_MS, HOLDING_MESSAGE, SEARCH_TIMEOUT_MS } from "./config";
 import type { ChatState } from "./run";
 
 const AI_OFF_META = { website_chat_ai: { enabled: false, siteId: "" } };
@@ -30,8 +30,16 @@ describe("the holding message text", () => {
   it("names Admizz, never Flywire, and promises a follow-up channel", () => {
     expect(HOLDING_MESSAGE).toContain("Admizz");
     expect(HOLDING_MESSAGE).not.toMatch(/flywire/i);
-    expect(HOLDING_MESSAGE).not.toMatch(/high volume/i);
-    expect(HOLDING_MESSAGE).toMatch(/phone call, WhatsApp or email/);
+    expect(HOLDING_MESSAGE).toContain("transferred to live support");
+    expect(HOLDING_MESSAGE).toContain("high volume");
+    expect(HOLDING_MESSAGE).toContain("Phone Call, Whatsapp or email");
+    expect(HOLDING_MESSAGE).toContain("Thanks for your patience!");
+  });
+});
+
+describe("how fast a visitor gets some reply", () => {
+  it("waiting for the AI plus its time limit stays within 10 seconds", () => {
+    expect(AI_REPLY_DEBOUNCE_MS + SEARCH_TIMEOUT_MS).toBeLessThanOrEqual(10_000);
   });
 });
 
