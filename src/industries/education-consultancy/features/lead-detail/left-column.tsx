@@ -55,6 +55,7 @@ export interface LeftColumnProps {
   /** May copy / send / sign consent (the Applications manage rule). */
   canManageConsent: boolean;
   onNote: () => void;
+  onEmail: () => void;
   onTask: () => void;
   onEditProfile: (missing?: string[]) => void;
   onDelete: () => void;
@@ -193,6 +194,13 @@ export function LeftColumn(p: LeftColumnProps) {
   }
 
   const noPhone = "No phone number";
+  // Shared by the two blocks below: Assignee + Collaborators (their own block) and the rest of the Details.
+  const detailsProps = {
+    lead, currentUserId: p.userId, memberNames: p.memberNames, branchName: data?.branch_name ?? null, sourceName, intake: data?.intake ?? null,
+    canEdit: canFields, canPickCounsellor, isAdmin: p.isAdmin, isBranchManager: p.leadScope === "team",
+    counsellorOptions: p.stageScopedAssignees ?? p.assignableMembers, roster: p.roster,
+    onAssign: (id: string | null) => void p.actions.changeAssignment(id), onPatch: p.actions.patchLead, hideStudy: isOther,
+  };
   return (
     // Phone (≤430): the column dissolves (`contents`) so identity, stage card, tabs and then the Details can be ordered as one page.
     <div className="max-[430px]:contents">
@@ -224,9 +232,9 @@ export function LeftColumn(p: LeftColumnProps) {
         </div>
         <div className="mt-3 flex gap-1.5">
           {lead.email ? (
-            <a href={`mailto:${lead.email}`} className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-[8px] bg-white px-2 text-[14px] font-medium text-[#101112] shadow-[inset_0_0_0_1px_#e8e9eb] outline-none hover:bg-[#f6f7f9] focus-visible:ring-2 focus-visible:ring-[#266df0]/50 max-[430px]:w-7 max-[430px]:justify-center max-[430px]:px-0" aria-label="Email" title="Email (E)">
+            <button type="button" onClick={p.onEmail} className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-[8px] bg-white px-2 text-[14px] font-medium text-[#101112] shadow-[inset_0_0_0_1px_#e8e9eb] outline-none hover:bg-[#f6f7f9] focus-visible:ring-2 focus-visible:ring-[#266df0]/50 max-[430px]:w-7 max-[430px]:justify-center max-[430px]:px-0" aria-label="Email" title="Email (E)">
               <EnvelopeSimpleIcon className="size-[14px]" /><span className="max-[430px]:hidden">Email</span>
-            </a>
+            </button>
           ) : (
             <button type="button" disabled title="No email address" aria-label="Email" className="inline-flex h-7 items-center gap-1.5 rounded-[8px] bg-white px-2 text-[14px] font-medium opacity-40 shadow-[inset_0_0_0_1px_#e8e9eb] max-[430px]:w-7 max-[430px]:justify-center max-[430px]:px-0">
               <EnvelopeSimpleIcon className="size-[14px]" /><span className="max-[430px]:hidden">Email</span>
@@ -261,18 +269,19 @@ export function LeftColumn(p: LeftColumnProps) {
         archived={archived} onRestore={() => void p.actions.restore()}
       />
 
+      {/* Assignee and Collaborators: the two that matter most get their own block, above Details. At phone width it follows the tab
+          panel (order 4, ahead of Details in the page) so the tabs still sit right under the stage card. */}
+      <div className="mt-2.5 border-b border-[#eeeff1] pb-1.5 max-[430px]:order-4">
+        <DetailsList {...detailsProps} part="owners" />
+      </div>
+
       {/* Details: at phone width they follow the tab panel (order 4) so the tabs sit right under the stage card. */}
       <div className="max-[430px]:order-4 max-[430px]:pb-2">
       <div className="mt-2.5 flex h-9 items-center px-4">
         <h2 className="m-0 text-[14px] font-medium leading-5 text-[#101112]">Details</h2>
         <button type="button" onClick={() => p.onEditProfile()} className="ml-auto rounded-[4px] text-[13px] text-[#6b6f76] outline-none hover:text-[#101112] focus-visible:ring-2 focus-visible:ring-[#266df0]/50">Edit profile</button>
       </div>
-      <DetailsList
-        lead={lead} currentUserId={p.userId} memberNames={p.memberNames} branchName={data?.branch_name ?? null} sourceName={sourceName} intake={data?.intake ?? null}
-        canEdit={canFields} canPickCounsellor={canPickCounsellor} isAdmin={p.isAdmin} isBranchManager={p.leadScope === "team"}
-        counsellorOptions={p.stageScopedAssignees ?? p.assignableMembers} roster={p.roster}
-        onAssign={(id) => void p.actions.changeAssignment(id)} onPatch={p.actions.patchLead} hideStudy={isOther}
-      />
+      <DetailsList {...detailsProps} part="rest" />
       <button type="button" onClick={() => setAllValues(true)} className="mx-4 mt-1 flex items-center gap-1 rounded-[4px] text-[12px] font-medium leading-4 text-black/50 outline-none hover:text-[#101112] focus-visible:ring-2 focus-visible:ring-[#266df0]/50">
         <EyeIcon className="size-3" aria-hidden />View all values
       </button>

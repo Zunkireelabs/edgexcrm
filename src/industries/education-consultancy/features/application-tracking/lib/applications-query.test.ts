@@ -166,7 +166,7 @@ describe("planApplicationsQuery", () => {
   });
   it("rejects counsellor / student / search inside an OR group with a friendly message", () => {
     const rootOr: FilterTree = { conjunction: "or", conditions: [cond("counsellor", "is", A), cond("intake", "is", "x")] };
-    expect(planApplicationsQuery(rootOr)).toEqual({ ok: false, error: "Counsellor can't be combined with OR yet" });
+    expect(planApplicationsQuery(rootOr)).toEqual({ ok: false, error: "Assignee can't be combined with OR yet" });
     const groupOr: FilterTree = { conjunction: "and", conditions: [], groups: [{ conjunction: "or", conditions: [cond("student", "contains", "x"), cond("intake", "is", "y")] }] };
     expect(planApplicationsQuery(groupOr)).toEqual({ ok: false, error: "Student can't be combined with OR yet" });
   });
@@ -306,7 +306,7 @@ describe("runApplicationsQuery on a fixture set", () => {
     const { client } = fakeSupabase(FIXTURE);
     const t: FilterTree = { conjunction: "or", conditions: [cond("counsellor", "is", A), cond("intake", "is", "x")] };
     const res = await runApplicationsQuery({ supabase: client as never, tenantId: "t", scope, tree: t, ctx, mode: "rows" });
-    expect(res).toEqual({ ok: false, error: "Counsellor can't be combined with OR yet" });
+    expect(res).toEqual({ ok: false, error: "Assignee can't be combined with OR yet" });
   });
 });
 

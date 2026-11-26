@@ -63,6 +63,8 @@ vi.mock("@/lib/notifications", () => ({
 vi.mock("@/lib/email/send-lead-assigned", () => ({
   sendLeadAssignedEmail: sendLeadAssignedEmailMock,
 }));
+const suggestEmailDuplicatesMock = vi.hoisted(() => vi.fn(async () => 0));
+vi.mock("@/lib/leads/email-duplicate", () => ({ suggestEmailDuplicates: suggestEmailDuplicatesMock }));
 vi.mock("@/lib/email/email-forward", () => ({
   processEmailForwardRules: processEmailForwardRulesMock,
 }));
@@ -324,6 +326,7 @@ beforeEach(() => {
   sendLeadAssignedEmailMock.mockClear();
   processEmailForwardRulesMock.mockClear();
   onLeadsEnteredStageMock.mockClear();
+  suggestEmailDuplicatesMock.mockClear();
 });
 
 describe("applyLeadPatch — governance branches", () => {
@@ -1403,5 +1406,45 @@ describe("applyLeadPatch — destinations are saved in the tenant's catalog spel
     expect(outcome.kind).toBe("ok");
     if (outcome.kind !== "ok") return;
     expect(outcome.lead.destinations).toEqual(["uk"]);
+  });
+});
+
+describe("applyLeadPatch — editing the email checks for a duplicate", () => {
+  const EMAIL_DB = {
+    leads: { id: "lead-1", pipeline_id: "pipe-1", assigned_to: "user-1", branch_id: null, list_id: null, email: "old@example.com" },
+  };
+  const owner = () => fixtureAuth({ role: "owner", permissions: { baseTier: "owner", leadScope: "all" } as ResolvedPermissions });
+
+  it("a changed email asks for a duplicate check with the new email, for this company and lead, and the edit still succeeds", async () => {
+    await setFakeDb(EMAIL_DB);
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(owner(), "lead-1", { email: "new@example.com" }, OPTS);
+    expect(outcome.kind).toBe("ok");
+    expect(suggestEmailDuplicatesMock).toHaveBeenCalledTimes(1);
+    expect(suggestEmailDuplicatesMock).toHaveBeenCalledWith(expect.anything(), { tenantId: "tenant-1", leadId: "lead-1", email: "new@example.com" }, expect.any(Function));
+  });
+
+  it("an email saved unchanged does not run the check", async () => {
+    await setFakeDb(EMAIL_DB);
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(owner(), "lead-1", { email: "old@example.com" }, OPTS);
+    expect(outcome.kind).toBe("ok");
+    expect(suggestEmailDuplicatesMock).not.toHaveBeenCalled();
+  });
+
+  it("an edit that does not touch the email does not run the check", async () => {
+    await setFakeDb(EMAIL_DB);
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(owner(), "lead-1", { city: "Kathmandu" }, OPTS);
+    expect(outcome.kind).toBe("ok");
+    expect(suggestEmailDuplicatesMock).not.toHaveBeenCalled();
+  });
+
+  it("clearing the email does not run the check", async () => {
+    await setFakeDb(EMAIL_DB);
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(owner(), "lead-1", { email: null }, OPTS);
+    expect(outcome.kind).toBe("ok");
+    expect(suggestEmailDuplicatesMock).not.toHaveBeenCalled();
   });
 });

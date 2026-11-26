@@ -95,7 +95,7 @@ describe("ApplicationsList", () => {
     expect(screen.getByTestId("footer-university")).toHaveTextContent("30 universities");
     expect(screen.getByTestId("footer-stage")).toHaveTextContent("1 stage");
     expect(screen.getByTestId("footer-time_in_stage")).toHaveTextContent("72d median");
-    expect(screen.getByTestId("footer-counsellor")).toHaveTextContent("2 counsellors");
+    expect(screen.getByTestId("footer-counsellor")).toHaveTextContent("2 assignees");
     expect(screen.getByTestId("footer-deadline")).toHaveTextContent("3 due in 14d");
     // Rows per page offers 25 / 50 / 100 only
     const select = screen.getByRole("combobox");
@@ -117,7 +117,7 @@ describe("ApplicationsList", () => {
     expect(r2).toHaveTextContent("Binod Rai");
     expect(within(r2).getByTestId("age-pill")).toHaveAttribute("data-tone", "amber");
     expect(within(r2).getByTestId("deadline")).toHaveAttribute("data-tone", "soon");
-    expect(r3).toHaveTextContent("Set counsellor");
+    expect(r3).toHaveTextContent("Set assignee");
     expect(within(r3).getByTestId("age-pill")).toHaveAttribute("data-tone", "neutral"); // finished stage
     expect(r3).toHaveTextContent("Enrolled");
     expect(within(r3).getByTestId("deadline")).toHaveTextContent("—");
@@ -155,13 +155,13 @@ describe("ApplicationsList", () => {
     expect(toastMock.success).toHaveBeenCalledWith("Moved to Applied");
   });
 
-  it("the header checkbox selects the current page only; the bulk bar reads 'N selected · Move stage · Assign counsellor · Clear'", async () => {
+  it("the header checkbox selects the current page only; the bulk bar reads 'N selected · Move stage · Assign assignee · Clear'", async () => {
     render(<ApplicationsList {...props()} />);
     await waitFor(() => expect(rowsShown()).toHaveLength(25));
     fireEvent.click(screen.getByLabelText("Select all on this page"));
     const bar = await screen.findByTestId("list-bulk-bar");
     expect(bar).toHaveTextContent("25 selected");
-    expect(within(bar).getAllByRole("button").map((b) => b.textContent)).toEqual(["Move stage", "Assign counsellor", "Clear"]);
+    expect(within(bar).getAllByRole("button").map((b) => b.textContent)).toEqual(["Move stage", "Assign assignee", "Clear"]);
     expect(within(bar).queryByText(/delete/i)).toBeNull();
     expect(rowsShown().every((r) => r.getAttribute("data-state") === "selected")).toBe(true);
     fireEvent.click(within(bar).getByText("Clear"));
@@ -192,16 +192,16 @@ describe("ApplicationsList", () => {
     expect(rowsShown().find((r) => r.getAttribute("data-app-id") === "a2")).toHaveAttribute("data-state", "selected");
   });
 
-  it("bulk Assign counsellor: members + 'No counsellor (use the student's)', which sends assigned_to null", async () => {
+  it("bulk Assign assignee: members + 'No assignee (use the student's)', which sends assigned_to null", async () => {
     const fetchImpl = vi.fn(async () => ({ ok: true }) as Response);
     render(<ApplicationsList {...props({ fetchImpl: fetchImpl as unknown as typeof fetch })} />);
     await waitFor(() => expect(rowsShown()).toHaveLength(25));
     fireEvent.click(screen.getByLabelText("Select Student 4"));
-    fireEvent.click(within(screen.getByTestId("list-bulk-bar")).getByText("Assign counsellor"));
+    fireEvent.click(within(screen.getByTestId("list-bulk-bar")).getByText("Assign assignee"));
     const picker = await screen.findByTestId("bulk-assign-picker");
     // the option label (the leading avatar holds initials)
-    expect(within(picker).getAllByRole("option").map((o) => o.querySelector(".truncate")?.textContent)).toEqual(["No counsellor (use the student's)", "Asha Tamang", "Binod Rai"]);
-    fireEvent.click(within(picker).getByText("No counsellor (use the student's)"));
+    expect(within(picker).getAllByRole("option").map((o) => o.querySelector(".truncate")?.textContent)).toEqual(["No assignee (use the student's)", "Asha Tamang", "Binod Rai"]);
+    fireEvent.click(within(picker).getByText("No assignee (use the student's)"));
     await waitFor(() => expect(fetchImpl).toHaveBeenCalledWith("/api/v1/applications/a4", expect.objectContaining({ body: JSON.stringify({ assigned_to: null }) })));
     await waitFor(() => expect(toastMock.success).toHaveBeenCalledWith("1 application updated"));
   });
@@ -292,7 +292,7 @@ describe("ApplicationsList phone (below md)", () => {
     expect(within(r0).getByTestId("age-pill")).toHaveAttribute("data-tone", "amber");
     expect(within(r0).getByTestId("deadline")).toHaveAttribute("data-tone", "soon");
     expect(within(r0).getByTestId("deadline")).toHaveTextContent("Deadline in 9d");
-    expect(r1).toHaveTextContent("Set counsellor");
+    expect(r1).toHaveTextContent("Set assignee");
     expect(within(r1).getByTestId("age-pill")).toHaveAttribute("data-tone", "red");
     expect(within(r1).getByTestId("deadline")).toHaveAttribute("data-tone", "past");
     expect(within(r1).getByTestId("deadline")).toHaveTextContent("Deadline passed");

@@ -629,7 +629,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
       setAcademicsOpen(true);
       setAcademicsError(true);
       toast.error(
-        "Enter the student's highest qualification (%/GPA) before assigning a counselor."
+        "Enter the student's highest qualification (%/GPA) before assigning an assignee."
       );
       return;
     }
@@ -1160,11 +1160,11 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                         <Label className="text-xs">{industryId === "travel_agency" ? "Assign Team Member" : "Assigned To"}</Label>
                         <Select value={assignedTo || "__none__"} onValueChange={(v) => setAssignedTo(v === "__none__" ? "" : v)}>
                           <SelectTrigger className="h-9">
-                            <SelectValue placeholder={industryId === "travel_agency" ? "Select team member (optional)" : "Select counselor (optional)"} />
+                            <SelectValue placeholder={industryId === "travel_agency" ? "Select team member (optional)" : "Select assignee (optional)"} />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="__none__">
-                              {industryId === "travel_agency" ? "No team member" : "No counselor"}
+                              {industryId === "travel_agency" ? "No team member" : "No assignee"}
                             </SelectItem>
                             {counselorMembers.map((m) => (
                               <SelectItem key={m.user_id} value={m.user_id}>
@@ -1608,7 +1608,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                     : [];
                   const placeholder = targetStage === "qualified"
                     ? "Assign lead executive (optional)"
-                    : "Assign counselor (optional)";
+                    : "Assign assignee (optional)";
                   return (
                     <div>
                       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Assign to</p>

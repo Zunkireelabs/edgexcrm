@@ -492,7 +492,7 @@ export function WebsiteChatCard() {
             <span className="font-medium text-foreground">Visitors can send files:</span> off for now. EdgeX cannot show attachments yet, so they would be lost.
           </p>
           <p>
-            <span className="font-medium text-foreground">Who replies:</span> visitors see the counselor&apos;s name. A counselor with no name on their profile shows as the team name.
+            <span className="font-medium text-foreground">Who replies:</span> visitors see the assignee&apos;s name. An assignee with no name on their profile shows as the team name.
           </p>
         </div>
           </>

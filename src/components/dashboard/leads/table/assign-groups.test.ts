@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest";
 import { assignGroup, pluralGroup, roleLabel } from "./assign-groups";
 
 describe("assign groups", () => {
-  it("merges base-role counselor and a Counsellor position holder under one 'Counsellors' heading", () => {
+  it("merges base-role counselor and a Counsellor position holder under one 'Assignees' heading", () => {
     const members = [
       { position: undefined, role: "counselor" },
       { position: "Counsellor", role: "viewer" },
     ];
     const groups = new Set(members.map((m) => assignGroup(m.position, m.role)));
-    expect([...groups]).toEqual(["Counsellors"]);
+    expect([...groups]).toEqual(["Assignees"]);
   });
 
   it("pluralises headings and leaves Other alone", () => {
