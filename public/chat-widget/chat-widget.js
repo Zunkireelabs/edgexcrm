@@ -52,9 +52,7 @@
       topics: true,
       // Hint inside the message box while waiting for the first question.
       composerHint: "Type your question here…",
-      // After the first message was really delivered (never shown when sending failed).
-      // Off ("") on purpose: EdgeX itself sends the one holding message when nobody can answer yet, so a second line here would double up.
-      afterSend: "",
+      // There is no "after send" line any more: EdgeX sends the one holding message itself, so a site-set guide.afterSend is ignored.
     },
     // The short contact form that gives the team a way to reach the visitor (it becomes a lead).
     // when: "before" = ask first, and hold the visitor's message until the form is sent;
@@ -246,6 +244,8 @@
     var opening = null;
     var timer = null;
     var delay = POLL_MS;
+    var fastUntil = 0; // right after the visitor sends, check every 2s so the first reply shows quickly
+    var activeUntil = 0; // for 2 minutes after sending, keep checking even if the page is in the background
 
     function load() {
       try {
@@ -341,7 +341,10 @@
       return ready()
         .then(function () { return request("POST", messagesPath(), { content: text, identifier_hash: saved.hash }); })
         .then(function () {
-          schedule(POLL_MS);
+          fastUntil = Date.now() + 30000;
+          activeUntil = Date.now() + 120000;
+          if (timer) { window.clearTimeout(timer); timer = null; }
+          schedule(2000);
           if (hooks.sent) hooks.sent();
         })
         .catch(function (err) {
@@ -358,7 +361,7 @@
     function poll() {
       timer = null;
       if (!saved) return;
-      if (document.visibilityState === "hidden") return schedule(delay);
+      if (document.visibilityState === "hidden" && Date.now() > activeUntil) return schedule(delay);
       request("GET", messagesPath() + "?identifier_hash=" + encodeURIComponent(saved.hash))
         .then(function (list) {
           delay = POLL_MS;
@@ -372,7 +375,10 @@
           store();
         })
         .catch(function () { delay = Math.min(delay * 2, POLL_MAX_MS); })
-        .then(function () { schedule(delay); });
+        .then(function () {
+          var now = Date.now();
+          schedule(delay > POLL_MS ? delay : now < fastUntil ? 2000 : document.visibilityState === "hidden" ? 15000 : delay);
+        });
     }
     function schedule(ms) {
       if (timer || !saved) return;
@@ -649,8 +655,7 @@
     var hooks = {
       /** The visitor's message really reached the team (the real transport calls this after the server accepted it). */
       sent: function () {
-        if (!cfg.guide.afterSend || state.messages.some(function (x) { return x.guide === "afterSend"; })) return;
-        pushMessage({ from: "agent", kind: "text", guide: "afterSend", text: cfg.guide.afterSend });
+        // Deliberately silent. Some sites still pass guide.afterSend; showing it would double up with EdgeX's holding message.
       },
       /** A plain line from the team's side that does not count as an answer (no quick replies, no details form). */
       notice: function (text) {
