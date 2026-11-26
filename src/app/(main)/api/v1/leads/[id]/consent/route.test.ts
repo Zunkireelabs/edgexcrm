@@ -469,7 +469,7 @@ describe("consent — counselor name ({{assign_name}} / {{counselor_name}})", ()
 
     expect(res.status).toBe(422);
     expect(body.error.code).toBe("PROFILE_INCOMPLETE_FOR_CONSENT");
-    expect(body.error.message).toContain("Assigned Counselor");
+    expect(body.error.message).toContain("Assignee");
     expect(writes).not.toHaveBeenCalled(); // the previous unsigned link is untouched
   });
 
@@ -487,7 +487,7 @@ describe("consent — counselor name ({{assign_name}} / {{counselor_name}})", ()
     expect(writes).not.toHaveBeenCalled();
   });
 
-  it("an assignee with no usable name or email is the 'Assigned Counselor' 422", async () => {
+  it("an assignee with no usable name or email is the 'Assignee' 422", async () => {
     getUserByIdMock.mockResolvedValue({ data: { user: { email: null, user_metadata: {} } } });
     const { db, writes } = fakeDb([], { templateBody: TEMPLATE });
     scopedClientMock.mockResolvedValue(db);

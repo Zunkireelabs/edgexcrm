@@ -17,7 +17,7 @@ const ALIASES: Record<string, string> = {
 const LABELS: Record<string, string> = {
   telecaller: "TeleCaller",
   executive: "Executive",
-  counsellor: "Counsellor",
+  counsellor: "Assignee",
   "app-executive": "App Executive",
   "branch-manager": "Branch Manager",
 };

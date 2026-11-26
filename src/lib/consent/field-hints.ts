@@ -12,5 +12,5 @@ export const CONSENT_FIELD_HINTS: Record<string, string> = {
     `In Student Details → ${GUARDIAN_SECTION_TITLE}, choose the relationship. Father or Mother fills the name in from their name; for anyone else, type it. Or choose None / Not applicable.`,
   "Guardian Phone": `Type it in ${GUARDIAN_SECTION_TITLE}, or choose None / Not applicable as the guardian relationship.`,
   "Guardian Email": `Type it in ${GUARDIAN_SECTION_TITLE}, or choose None / Not applicable as the guardian relationship.`,
-  "Assigned Counselor": "Assign a counselor to this lead (it isn't set in Student Details). Their name prints on the consent.",
+  "Assignee": "Assign someone to this lead (it isn't set in Student Details). Their name prints on the consent.",
 };

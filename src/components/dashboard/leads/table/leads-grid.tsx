@@ -431,7 +431,7 @@ export function LeadsGrid(props: LeadsGridProps) {
               } else if (col.key === "assigned" && counsellors !== null) {
                 summary = (
                   <>
-                    <span className="font-medium text-ds-ink tabular-nums">{counsellors.toLocaleString()}</span> {counsellors === 1 ? "counsellor" : "counsellors"}
+                    <span className="font-medium text-ds-ink tabular-nums">{counsellors.toLocaleString()}</span> {counsellors === 1 ? "assignee" : "assignees"}
                   </>
                 );
               }

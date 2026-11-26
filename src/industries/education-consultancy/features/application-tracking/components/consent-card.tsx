@@ -46,8 +46,8 @@ function MissingGroupText({ group }: { group: MissingGroupView }) {
 function missingFixHint(groups: MissingGroupView[], preposition: "in" | "from" = "in"): string {
   const hasAssignment = groups.some((g) => g.section === "Assignment");
   const hasProfile = groups.some((g) => g.section !== "Assignment");
-  if (hasAssignment && hasProfile) return `Add them ${preposition} Student Details (Edit), and assign a counselor to this lead.`;
-  if (hasAssignment) return "Assign a counselor to this lead.";
+  if (hasAssignment && hasProfile) return `Add them ${preposition} Student Details (Edit), and assign an assignee to this lead.`;
+  if (hasAssignment) return "Assign someone to this lead.";
   return `Add them ${preposition} Student Details (Edit).`;
 }
 
@@ -489,7 +489,7 @@ export function ConsentCard({
             )}
             {!completeness.feeDone && (
               <p className="text-[11px] text-muted-foreground">
-                Enter the fee (a counsellor&apos;s report is enough) before moving to Applications.
+                Enter the fee (an assignee&apos;s report is enough) before moving to Applications.
               </p>
             )}
           </div>

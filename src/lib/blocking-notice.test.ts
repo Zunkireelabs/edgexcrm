@@ -64,15 +64,15 @@ describe("consent-blocked pop-up", () => {
   it("explains the guardian and counselor items in plain words, and leaves obvious ones bare", () => {
     const result = classifyApiError({
       code: "PROFILE_INCOMPLETE_FOR_CONSENT",
-      message: consentProfileIncompleteMessage(["Passport Number", "Guardian Relationship", "Assigned Counselor"]),
+      message: consentProfileIncompleteMessage(["Passport Number", "Guardian Relationship", "Assignee"]),
     });
     expect(result.kind).toBe("blocking");
     if (result.kind !== "blocking") return;
     const items = result.notice.items ?? [];
-    expect(items.map((i) => i.label)).toEqual(["Passport Number", "Guardian Relationship", "Assigned Counselor"]);
+    expect(items.map((i) => i.label)).toEqual(["Passport Number", "Guardian Relationship", "Assignee"]);
     expect(items[0].hint).toBeUndefined();
     expect(items[1].hint).toContain("None / Not applicable");
-    expect(items[2].hint).toContain("Assign a counselor");
+    expect(items[2].hint).toContain("Assign someone");
   });
 });
 

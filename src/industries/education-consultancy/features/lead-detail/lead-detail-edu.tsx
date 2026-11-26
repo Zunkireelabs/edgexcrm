@@ -237,6 +237,7 @@ export function LeadDetailEdu(props: LeadDetailEduProps) {
   }, [nav, navCtx, router]);
 
   const goNote = useCallback(() => { middleRef.current?.goNote(); }, []);
+  const goCompose = useCallback(() => { middleRef.current?.goCompose(); }, []);
   const goTask = useCallback(() => { middleRef.current?.goTask(); }, []);
 
   useEffect(() => {
@@ -254,11 +255,11 @@ export function LeadDetailEdu(props: LeadDetailEduProps) {
       else if (k === "k") { e.preventDefault(); void goLead("prev"); }
       else if (k === "n") { e.preventDefault(); goNote(); }
       else if (k === "t") { e.preventDefault(); goTask(); }
-      else if (k === "e" && lead.email) { e.preventDefault(); window.location.href = `mailto:${lead.email}`; }
+      else if (k === "e" && lead.email) { e.preventDefault(); goCompose(); }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [goLead, goNote, goTask, lead.email]);
+  }, [goLead, goNote, goTask, goCompose, lead.email]);
 
   const deleteLead = async () => {
     setDeleting(true);
@@ -341,7 +342,7 @@ export function LeadDetailEdu(props: LeadDetailEduProps) {
             isAdmin={isAdmin} leadScope={leadScope} canEdit={canEdit} isEditor={isEditor} canAssign={canAssign} canMoveWithoutChain={canMoveWithoutChain}
             revertTargetUserId={revertTargetUserId} consentEnabled={consentEnabled} consentSigned={consentSignedState}
             assignableMembers={assignableMembers} stageScopedAssignees={stageScopedAssignees} roster={roster}
-            file={file} canManageConsent={canManageApplications ?? isAdmin} onNote={goNote} onTask={goTask} onEditProfile={openStudentDetails} onDelete={() => setDeleteOpen(true)} onMerge={() => void mergeDuplicates()} mainRef={mainRef}
+            file={file} canManageConsent={canManageApplications ?? isAdmin} onNote={goNote} onTask={goTask} onEmail={goCompose} onEditProfile={openStudentDetails} onDelete={() => setDeleteOpen(true)} onMerge={() => void mergeDuplicates()} mainRef={mainRef}
           />
         </aside>
 

@@ -40,7 +40,7 @@ describe("rollups", () => {
   const { groups, team } = rollups(people);
 
   it("splits 'counselor' and 'counsellor' into ONE group, in display order", () => {
-    expect(groups.map((g) => [g.key, g.label, g.people])).toEqual([["telecaller", "TeleCallers", 1], ["counsellor", "Counsellors", 2]]);
+    expect(groups.map((g) => [g.key, g.label, g.people])).toEqual([["telecaller", "TeleCallers", 1], ["counsellor", "Assignees", 2]]);
   });
   it("subtotals are the sums of their people (current and usual)", () => {
     expect(groups[1].current.calls).toBe(15);

@@ -139,7 +139,7 @@ function CardBody({ application, assigneeNames, finished = false, showAge = true
             <span className="inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-[#f6f7f9] text-[#9a9ea5]">
               <UserIcon className="h-[11px] w-[11px]" />
             </span>
-            <span className="text-[rgba(0,0,0,.42)]">Set counsellor</span>
+            <span className="text-[rgba(0,0,0,.42)]">Set assignee</span>
           </>
         )}
       </div>

@@ -30,7 +30,7 @@ export function applicationFields(ctx: CompileCtx): FieldRegistry {
   const fields: FieldDef[] = [
     {
       key: "counsellor",
-      label: "Counsellor",
+      label: "Assignee",
       type: "uuid",
       source: { kind: "virtual", compile: noop },
       group: "Basic",

@@ -47,7 +47,7 @@ export const LIST_COLUMNS: Record<ListColumnKey, ListColumnDef> = {
   program: { key: "program", label: "Program", width: 180, filterFieldKey: "program" },
   stage: { key: "stage", label: "Stage", width: 190, filterFieldKey: "stage" },
   time_in_stage: { key: "time_in_stage", label: "Time in stage", width: 160, sortField: "stage", filterFieldKey: "time_in_stage" },
-  counsellor: { key: "counsellor", label: "Counsellor", width: 160, filterFieldKey: "counsellor" },
+  counsellor: { key: "counsellor", label: "Assignee", width: 160, filterFieldKey: "counsellor" },
   intake: { key: "intake", label: "Intake", width: 110, filterFieldKey: "intake" },
   deadline: { key: "deadline", label: "Deadline", width: 130, sortField: "deadline", filterFieldKey: "deadline" },
   docs: { key: "docs", label: "Docs", width: 90 },

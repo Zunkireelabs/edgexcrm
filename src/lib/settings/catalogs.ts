@@ -31,7 +31,7 @@ export const WIDGET_CATALOG: WidgetCatalogItem[] = [
   { key: "stats", label: "Stats cards" },
   { key: "leads-by-stage", label: "Leads by stage" },
   { key: "leads-by-source", label: "Leads by source" },
-  { key: "leads-by-counselor", label: "Leads by counselor" },
+  { key: "leads-by-counselor", label: "Leads by assignee" },
   { key: "utm", label: "UTM attribution" },
 ];
 

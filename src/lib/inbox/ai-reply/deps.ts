@@ -128,7 +128,7 @@ export function realAiReplyDeps(): AiReplyDeps {
               userId,
               type: NotificationTypes.INBOX_MESSAGE_RECEIVED,
               title: "Needs a human",
-              message: reason === "asked_for_person" ? `${who} asked for a counsellor` : `${who} asked something the AI could not answer`,
+              message: reason === "asked_for_person" ? `${who} asked for a person` : `${who} asked something the AI could not answer`,
               link: `/inbox?conversation=${conversationId}`,
             })
           )
