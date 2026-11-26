@@ -38,8 +38,8 @@ describe("the holding message text", () => {
 });
 
 describe("how fast a visitor gets some reply", () => {
-  it("waiting for the AI plus its time limit stays within 10 seconds", () => {
-    expect(AI_REPLY_DEBOUNCE_MS + SEARCH_TIMEOUT_MS).toBeLessThanOrEqual(10_000);
+  it("waiting for the AI plus its time limit stays within 6 seconds (the rest of the 10 goes to Chatwoot and sending)", () => {
+    expect(AI_REPLY_DEBOUNCE_MS + SEARCH_TIMEOUT_MS).toBeLessThanOrEqual(6_000);
   });
 });
 
