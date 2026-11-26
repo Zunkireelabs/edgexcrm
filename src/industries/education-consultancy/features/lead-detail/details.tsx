@@ -40,6 +40,11 @@ interface DetailsProps {
   onPatch: (fields: Record<string, unknown>, label?: string) => Promise<boolean>;
   /** Hides the study rows for Other-tagged contacts. */
   hideStudy: boolean;
+  /**
+   * Which rows to draw. "owners" = just Assignee and Collaborators (their own block above Details); "rest" = everything else;
+   * "all" (the default) = both, as before.
+   */
+  part?: "all" | "owners" | "rest";
 }
 
 const ROW = "group/row flex min-h-8 items-center gap-2 rounded-[8px] px-1.5";
@@ -96,16 +101,17 @@ export function InlineText({ value, placeholder, onSave, onDone, type = "text" }
 }
 
 /** Collaborators for one lead: read for everyone (the server returns them), add / remove for owner/admin and branch managers; anyone may remove themselves. */
-function useCollaborators(leadId: string, canManage: boolean, currentUserId: string) {
+function useCollaborators(leadId: string, canManage: boolean, currentUserId: string, enabled = true) {
   const [list, setList] = useState<Collaborator[]>([]);
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
     fetch(`/api/v1/leads/${leadId}/collaborators`)
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => { if (!cancelled && j) setList((j.data?.collaborators ?? []) as Collaborator[]); })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [leadId]);
+  }, [leadId, enabled]);
 
   const add = useCallback(async (p: Person) => {
     if (!canManage) return;
@@ -147,7 +153,10 @@ export function DetailsList(p: DetailsProps) {
   const [editing, setEditing] = useState<string | null>(null);
   const [tagOptions, setTagOptions] = useState<string[]>([]);
   const cc = collaboratorControls(p.isAdmin, p.isBranchManager);
-  const collab = useCollaborators(lead.id, cc.canAdd, p.currentUserId);
+  const part = p.part ?? "all";
+  const showOwners = part !== "rest";
+  const showRest = part !== "owners";
+  const collab = useCollaborators(lead.id, cc.canAdd, p.currentUserId, showOwners);
 
   const assigned = lead.assigned_to;
   const counsellorName = assigned ? (assigned === p.currentUserId ? "You" : p.memberNames[assigned] ?? "Unknown") : null;
@@ -187,7 +196,8 @@ export function DetailsList(p: DetailsProps) {
   ];
 
   return (
-    <div className="px-2.5" role="list" aria-label="Details">
+    <div className="px-2.5" role="list" aria-label={part === "owners" ? "Assignee and collaborators" : "Details"}>
+      {showOwners && (<>
       <div role="listitem">
         <Picker
           open={editing === "counsellor"} onOpenChange={(o) => setEditing(o ? "counsellor" : null)} options={counsellorOpts} selected={assigned ? [assigned] : []} placeholder="Assign to…"
@@ -228,7 +238,9 @@ export function DetailsList(p: DetailsProps) {
           </div>
         </Picker>
       </div>
+      </>)}
 
+      {showRest && (<>
       <div role="listitem"><DetailRow icon={<BuildingIcon />} label="Branch" empty={!p.branchName}>{p.branchName ?? "No branch"}</DetailRow></div>
       <div role="listitem"><DetailRow icon={<LinkIcon />} label="Source" empty={!p.sourceName}>{p.sourceName ?? "No source"}</DetailRow></div>
 
@@ -305,6 +317,7 @@ export function DetailsList(p: DetailsProps) {
           </button>
         </DetailRow>
       </div>
+      </>)}
     </div>
   );
 }
