@@ -48,6 +48,8 @@ import { ReferencesSection, type ReferenceEntry } from "./references-section";
 import { GUARDIAN_RELATIONSHIP_OPTIONS, normalizeGuardianRelationship, guardianNameAfterRelationshipChange, resolveGuardian } from "@/lib/consent/guardian";
 import { SectionGroup, CardSection, FieldGrid, EditableField, EditProfileLayoutContext, sentenceCase } from "./form-primitives";
 import { useStudentRecordLists } from "./use-student-record-lists";
+import { useLeadSourceOptions } from "./use-lead-source-options";
+import { SOURCE_FIELD_KIND } from "@/lib/leads/source-options";
 import { notifyStudentRecordChanged } from "./student-record-events";
 import { buildListsPayload, storedListsToState, type StoredLists } from "./student-record-lists";
 import { AttachDocumentButton } from "./attach-document-button";
@@ -82,9 +84,10 @@ export const CORE_IDENTITY_FIELDS = [
 // Owner/admin-only on the server (applyLeadPatch rejects these fields for anyone else), so
 // this whole section is only shown — and only ever sent — for admins.
 export const LEAD_SOURCE_FIELDS = [
-  { key: "source", label: "Source Category", type: "text", placeholder: "e.g. Social Media, Referral" },
-  { key: "medium", label: "Source Channel", type: "text", placeholder: "e.g. Facebook, Google" },
-  { key: "account", label: "Source Page / Account", type: "text", placeholder: "e.g. admizz.edu.np" },
+  // The first three are dropdowns (options come from src/lib/leads/source-options.ts + what an admin adds); Campaign stays free text.
+  { key: "source", label: "Source Category", type: "select" },
+  { key: "medium", label: "Source Channel", type: "select" },
+  { key: "account", label: "Source Page / Account", type: "select" },
   { key: "campaign", label: "Campaign", type: "text", placeholder: "e.g. spring-2025" },
 ] as const;
 
@@ -451,6 +454,7 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
   const [qualificationsDraft, setQualificationsDraft] = useState<Qualifications>(qualifications);
   const [leadSource, setLeadSource] = useState<LeadSourceValues>(() => leadSourceFromLead(lead, submissionHistory));
   const [leadSourceDraft, setLeadSourceDraft] = useState<LeadSourceValues>(leadSource);
+  const { lists: sourceLists, addOption: addSourceOption } = useLeadSourceOptions(isAdmin);
 
   // Work Experience, References and Test Scores are rows in their own tables: they are loaded from the server when the pop-up opens and
   // saved with PUT /api/v1/leads/[id]/student-record. What is shown is derived from the loaded rows plus the user's own edits (null =
@@ -838,15 +842,20 @@ export function PersonalDetailsDialog({ lead, open, onOpenChange, submissionHist
   const passportBlock = <IdentityDocumentFields isEditing={isEditing} values={shownValues} onChange={handleChange} neededLabels={sections ? neededLabels : undefined} />;
   const sourceBlock = (
     <FieldGrid>
-      {LEAD_SOURCE_FIELDS.map((field) => (
-        <EditableField
-          key={field.key}
-          field={field}
-          isEditing={isEditing}
-          value={(isEditing ? leadSourceDraft : leadSource)[field.key]}
-          onChange={(v) => handleSourceChange(field.key, v)}
-        />
-      ))}
+      {LEAD_SOURCE_FIELDS.map((field) => {
+        // Category / Channel / Page-account are dropdowns; Campaign has no kind and stays a text box.
+        const kind = (SOURCE_FIELD_KIND as Record<string, (typeof SOURCE_FIELD_KIND)[keyof typeof SOURCE_FIELD_KIND]>)[field.key];
+        return (
+          <EditableField
+            key={field.key}
+            field={kind ? { ...field, options: sourceLists[kind] } : field}
+            isEditing={isEditing}
+            value={(isEditing ? leadSourceDraft : leadSource)[field.key]}
+            onChange={(v) => handleSourceChange(field.key, v)}
+            onAddOption={kind && isAdmin ? (label) => addSourceOption(kind, label) : undefined}
+          />
+        );
+      })}
     </FieldGrid>
   );
   const academicBlock = (

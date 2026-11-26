@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
-import { describe, it, expect, afterEach } from "vitest";
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { describe, it, expect, afterEach, beforeAll, vi } from "vitest";
+import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
-import { CollapsibleGroups, SectionGroup } from "./form-primitives";
+import { CollapsibleGroups, EditableField, SectionGroup } from "./form-primitives";
 
 afterEach(cleanup);
 
@@ -59,5 +59,82 @@ describe("SectionGroup", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Some Future Section" }));
     expect(screen.queryByText("Future body")).not.toBeInTheDocument();
+  });
+});
+
+describe("EditableField as a dropdown", () => {
+  const field = { key: "medium", label: "Source Channel", type: "select", options: [{ value: "check_in", label: "Check-in" }] } as const;
+
+  it("read-only shows the option's readable name, and an unlisted older value as it was typed", () => {
+    const { rerender } = render(<EditableField field={field} isEditing={false} value="check_in" onChange={() => {}} />);
+    expect(screen.getByText("Check-in")).toBeInTheDocument();
+    rerender(<EditableField field={field} isEditing={false} value="Facebook" onChange={() => {}} />);
+    expect(screen.getByText("Facebook")).toBeInTheDocument();
+  });
+
+  it("read-only with nothing stored shows a dash", () => {
+    render(<EditableField field={field} isEditing={false} value="" onChange={() => {}} />);
+    expect(screen.getByText("—")).toBeInTheDocument();
+  });
+
+  it("without onAddOption there is no add row or box", () => {
+    render(<EditableField field={field} isEditing value="check_in" onChange={() => {}} />);
+    expect(screen.queryByPlaceholderText("New option name")).not.toBeInTheDocument();
+  });
+});
+
+describe("EditableField dropdown: + Add new option", () => {
+  const field = { key: "account", label: "Source Page / Account", type: "select", options: [{ value: "tiktok", label: "TikTok" }] } as const;
+
+  // Radix Select needs a few browser APIs jsdom does not have.
+  beforeAll(() => {
+    const proto = Element.prototype as unknown as Record<string, unknown>;
+    proto.hasPointerCapture ??= () => false;
+    proto.setPointerCapture ??= () => {};
+    proto.releasePointerCapture ??= () => {};
+    proto.scrollIntoView ??= () => {};
+  });
+
+  const openAndChooseAdd = async () => {
+    const trigger = screen.getByRole("combobox");
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "Enter" });
+    fireEvent.click(await screen.findByRole("option", { name: "+ Add new option…" }));
+  };
+
+  it("choosing the add row opens a name box; Add saves it and picks the new option", async () => {
+    const onAddOption = vi.fn(async () => "viber");
+    const onChange = vi.fn();
+    render(<EditableField field={field} isEditing value="" onChange={onChange} onAddOption={onAddOption} />);
+    await openAndChooseAdd();
+    const box = await screen.findByPlaceholderText("New option name");
+    fireEvent.change(box, { target: { value: "  Viber " } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith("viber"));
+    expect(onAddOption).toHaveBeenCalledWith("Viber");
+    expect(screen.queryByPlaceholderText("New option name")).not.toBeInTheDocument();
+  });
+
+  it("a refused add leaves the box open and picks nothing", async () => {
+    const onAddOption = vi.fn(async () => null);
+    const onChange = vi.fn();
+    render(<EditableField field={field} isEditing value="" onChange={onChange} onAddOption={onAddOption} />);
+    await openAndChooseAdd();
+    fireEvent.change(await screen.findByPlaceholderText("New option name"), { target: { value: "Viber" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    await waitFor(() => expect(onAddOption).toHaveBeenCalled());
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByPlaceholderText("New option name")).toBeInTheDocument();
+  });
+
+  it("Cancel closes the box without saving; the add row itself is never stored as the value", async () => {
+    const onAddOption = vi.fn(async () => "x");
+    const onChange = vi.fn();
+    render(<EditableField field={field} isEditing value="" onChange={onChange} onAddOption={onAddOption} />);
+    await openAndChooseAdd();
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+    expect(screen.queryByPlaceholderText("New option name")).not.toBeInTheDocument();
+    expect(onAddOption).not.toHaveBeenCalled();
+    expect(onChange).not.toHaveBeenCalled();
   });
 });
