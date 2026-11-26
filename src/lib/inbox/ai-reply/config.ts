@@ -3,7 +3,7 @@
 // separate key from the widget settings (meta.website_chat) so the two never touch each other.
 
 /** How long a chat must be quiet before the AI answers, so a burst such as "Study in the UK" / "Ok" / "Fast" gets ONE answer. */
-export const AI_REPLY_DEBOUNCE_MS = 3_000;
+export const AI_REPLY_DEBOUNCE_MS = 2_000;
 
 /** The only industry that gets AI replies (the Admizz website chat). */
 export const AI_REPLY_INDUSTRY = "education_consultancy";
@@ -13,9 +13,9 @@ export const MAX_QUESTION_CHARS = 500;
 
 /**
  * How long to wait for the Admizz AI before giving up and leaving the chat for a person (the visitor then gets the holding
- * message). Quiet period + this = the longest a visitor waits for SOME reply: keep the two together under 10 seconds.
+ * message). Quiet period + this = the longest a visitor waits for SOME reply: keep the two together at 6 seconds or less: measured on stage, about 5 more seconds go to Chatwoot and sending, and a visitor should see a reply within 10.
  */
-export const SEARCH_TIMEOUT_MS = 6_000;
+export const SEARCH_TIMEOUT_MS = 4_000;
 
 /** What the visitor is told when the AI hands the chat to the team. One constant so the team can change the wording later. */
 export const HANDOFF_MESSAGE = "Thanks, I've passed your question to our counsellors. One of them will reply here soon.";
