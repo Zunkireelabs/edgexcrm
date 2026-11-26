@@ -9,7 +9,12 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { logger } from "@/lib/logger";
 import { normalizeEmail, normalizePhone } from "@/lib/leads/dedup";
-import { NotificationTypes, getTenantAdminRecipients, upsertThreadNotification } from "@/lib/notifications";
+import { NotificationTypes, upsertThreadNotification } from "@/lib/notifications";
+import { resolveInboundRecipients } from "@/lib/inbox/inbound-recipients";
+import { aiReplyServerEnabled, readAiReplyConfig } from "@/lib/inbox/ai-reply/config";
+import { scheduleAiReply } from "@/lib/inbox/ai-reply/scheduler";
+import { scheduleHoldingMessage } from "@/lib/inbox/ai-reply/holding";
+import { realHoldingDeps } from "@/lib/inbox/ai-reply/holding-deps";
 import { decryptToken } from "./crypto";
 import { resolveAndStoreAttachments } from "./media";
 import type { InboundMediaDescriptor } from "./adapters/types";
@@ -144,7 +149,7 @@ async function processOneEvent(
   // 1. find-or-create conversation
   const { data: existingConv } = await supabase
     .from("conversations")
-    .select("id, lead_id, unread_count, assigned_to_user_id, assignee_type")
+    .select("id, lead_id, unread_count, assigned_to_user_id, assignee_type, ai_autonomy")
     .eq("channel_id", p.channel_id)
     .eq("external_contact_id", p.external_contact_id)
     .maybeSingle();
@@ -154,9 +159,11 @@ async function processOneEvent(
   let convLeadId: string | null = null;
   let convAssigneeType = "unassigned";
   let convAssignedToUserId: string | null = null;
+  let convAiAutonomy = "off";
 
   if (existingConv) {
-    const c = existingConv as { id: string; lead_id: string | null; unread_count: number; assigned_to_user_id: string | null; assignee_type: string };
+    const c = existingConv as { id: string; lead_id: string | null; unread_count: number; assigned_to_user_id: string | null; assignee_type: string; ai_autonomy: string };
+    convAiAutonomy = c.ai_autonomy;
     conversationId = c.id;
     currentUnread = c.unread_count;
     convLeadId = c.lead_id;
@@ -187,6 +194,7 @@ async function processOneEvent(
   } else {
     // Create new conversation; attempt phone-based lead linkage (Decision D)
     const resolvedLeadId = await resolveLeadForContact(supabase, p.tenant_id, p.contact_phone, p.contact_email ?? null);
+    const newAiAutonomy = await initialAiAutonomy(supabase, p.provider, p.channel_id, p.tenant_id);
 
     const { data: newConv, error: createErr } = await supabase
       .from("conversations")
@@ -204,6 +212,7 @@ async function processOneEvent(
         last_message_at: p.provider_timestamp ?? new Date().toISOString(),
         last_message_preview: p.content_text?.slice(0, 200) ?? null,
         last_message_direction: "inbound",
+        ai_autonomy: newAiAutonomy,
       })
       .select("id")
       .single();
@@ -212,7 +221,7 @@ async function processOneEvent(
       // May be a race — try to fetch again
       const { data: raceConv } = await supabase
         .from("conversations")
-        .select("id, lead_id, unread_count, assigned_to_user_id, assignee_type")
+        .select("id, lead_id, unread_count, assigned_to_user_id, assignee_type, ai_autonomy")
         .eq("channel_id", p.channel_id)
         .eq("external_contact_id", p.external_contact_id)
         .maybeSingle();
@@ -220,7 +229,8 @@ async function processOneEvent(
       if (!raceConv) {
         throw new Error(`Failed to create conversation: ${createErr?.message}`);
       }
-      const r = raceConv as { id: string; lead_id: string | null; unread_count: number; assigned_to_user_id: string | null; assignee_type: string };
+      const r = raceConv as { id: string; lead_id: string | null; unread_count: number; assigned_to_user_id: string | null; assignee_type: string; ai_autonomy: string };
+      convAiAutonomy = r.ai_autonomy;
       conversationId = r.id;
       currentUnread = r.unread_count;
       convLeadId = r.lead_id;
@@ -230,6 +240,7 @@ async function processOneEvent(
       conversationId = (newConv as { id: string }).id;
       currentUnread = 0;
       convLeadId = resolvedLeadId;
+      convAiAutonomy = newAiAutonomy;
       // New conversations always start unassigned
     }
   }
@@ -330,40 +341,25 @@ async function processOneEvent(
 
   // 4. Fire bell notification (non-fatal)
   try {
-    const recipientIds = new Set<string>();
-
-    if (convAssigneeType === "human" && convAssignedToUserId) {
-      recipientIds.add(convAssignedToUserId);
-    }
-
-    if (convLeadId) {
-      const { data: leadRow } = await supabase
-        .from("leads")
-        .select("assigned_to")
-        .eq("id", convLeadId)
-        .eq("tenant_id", p.tenant_id)
-        .maybeSingle();
-      if ((leadRow as { assigned_to?: string | null } | null)?.assigned_to) {
-        recipientIds.add((leadRow as { assigned_to: string }).assigned_to);
-      }
-    }
-
-    if (recipientIds.size === 0) {
-      const admins = await getTenantAdminRecipients(supabase, p.tenant_id);
-      admins.forEach((id) => recipientIds.add(id));
-    }
+    const { userIds: recipientIds, title: notificationTitle } = await resolveInboundRecipients(supabase, {
+      tenantId: p.tenant_id,
+      provider: p.provider,
+      assigneeType: convAssigneeType,
+      assignedToUserId: convAssignedToUserId,
+      leadId: convLeadId,
+    });
 
     const preview = p.content_text?.slice(0, 200) ?? "";
     const senderLabel = p.contact_display_name || p.contact_phone || "Unknown";
     const link = `/inbox?conversation=${conversationId}`;
 
     await Promise.all(
-      [...recipientIds].map((userId) =>
+      recipientIds.map((userId) =>
         upsertThreadNotification({
           tenantId: p.tenant_id,
           userId,
           type: NotificationTypes.INBOX_MESSAGE_RECEIVED,
-          title: "New message",
+          title: notificationTitle,
           message: `${senderLabel}: ${preview}`,
           link,
         })
@@ -372,6 +368,32 @@ async function processOneEvent(
   } catch (notifyErr) {
     logger.warn({ err: notifyErr, conversation_id: conversationId }, "Failed to create inbox notification (non-fatal)");
   }
+
+  // 5. Website chat with AI replies on and nobody handling it: schedule an AI reply. It runs in this server process after a short
+  // quiet period (src/lib/inbox/ai-reply/scheduler.ts), NOT through Inngest, so it keeps working when Inngest is over its
+  // limit. The run re-checks every rule; this only avoids scheduling work that can't possibly run. Never throws.
+  if (p.provider === "chatwoot" && convAiAutonomy === "autonomous" && convAssigneeType !== "human" && aiReplyServerEnabled()) {
+    scheduleAiReply({ tenantId: p.tenant_id, conversationId });
+  } else if (p.provider === "chatwoot" && convAssigneeType !== "human") {
+    // AI replies are off for this chat: the visitor gets ONE automatic "our team has your chat" message instead of silence.
+    // The run re-checks every rule (Admizz education only, nobody owns the chat, not already sent). Never throws.
+    scheduleHoldingMessage({ tenantId: p.tenant_id, conversationId }, realHoldingDeps);
+  }
+}
+
+/**
+ * A brand-new website chat starts with AI on ("autonomous") when its channel has AI replies switched on and the server is set
+ * up for it; everything else starts off, as before. A lookup that fails means "off".
+ */
+async function initialAiAutonomy(
+  supabase: Awaited<ReturnType<typeof createServiceClient>>,
+  provider: string,
+  channelId: string,
+  tenantId: string
+): Promise<"autonomous" | "off"> {
+  if (provider !== "chatwoot" || !aiReplyServerEnabled()) return "off";
+  const { data } = await supabase.from("inbox_channels").select("meta").eq("id", channelId).eq("tenant_id", tenantId).maybeSingle();
+  return readAiReplyConfig((data as { meta?: unknown } | null)?.meta).enabled ? "autonomous" : "off";
 }
 
 // Builds a Postgres POSIX regex (the `~` operator) that matches a phone value whose

@@ -40,7 +40,7 @@ export async function GET(
 
   const { data: conv } = await supabase
     .from("conversations")
-    .select("id, lead_id")
+    .select("id, lead_id, provider")
     .eq("id", conversationId)
     .eq("tenant_id", auth.tenantId)
     .maybeSingle();
@@ -50,7 +50,8 @@ export async function GET(
   const canAccess = await canAccessConversationLead(
     { user: userClient, service: supabase },
     auth,
-    (conv as { lead_id: string | null }).lead_id
+    (conv as { lead_id: string | null }).lead_id,
+    (conv as { provider: string | null }).provider
   );
   if (!canAccess) return apiForbidden();
 

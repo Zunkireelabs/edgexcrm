@@ -11,6 +11,8 @@ import {
   ArrowsClockwiseIcon,
   UserCircleIcon,
 } from "@/components/icons";
+import { requiresClaim } from "@/lib/inbox/claim-rules";
+import { cn } from "@/lib/utils";
 import { buildLeadFromConversation, conversationContactEmail, type ConversationForLead } from "@/lib/inbox/lead-from-conversation";
 import { providerLabel } from "@/lib/inbox/provider-label";
 import { Button } from "@/components/ui/button";
@@ -48,6 +50,10 @@ interface ContactPanelProps {
   tenantId: string;
   userRole: string;
   onConversationUpdate: () => void;
+  /** Name of whoever handles a website chat (the owner). */
+  ownerName?: string | null;
+  /** False on a website chat the viewer doesn't handle: they can read it, not change it (no lead conversion). Default true. */
+  canManage?: boolean;
 }
 
 function initials(label: string): string {
@@ -57,12 +63,13 @@ function initials(label: string): string {
   return base.substring(0, 2).toUpperCase();
 }
 
-export function ContactPanel({ conversation, tenantId, userRole, onConversationUpdate }: ContactPanelProps) {
+export function ContactPanel({ conversation, tenantId, userRole, onConversationUpdate, ownerName, canManage = true }: ContactPanelProps) {
   const [lead, setLead] = useState<LeadData | null>(null);
   const [loadingLead, setLoadingLead] = useState(false);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
   const [assigning, setAssigning] = useState(false);
+  const [togglingAi, setTogglingAi] = useState(false);
 
   const isAdmin = userRole === "owner" || userRole === "admin";
   const leadId = conversation?.lead_id as string | null;
@@ -109,6 +116,25 @@ export function ContactPanel({ conversation, tenantId, userRole, onConversationU
       toast.error("Failed to update assignment");
     } finally {
       setAssigning(false);
+    }
+  };
+  // Turn the AI on or off for this one chat (the owner or an admin; the server enforces the same rule).
+  const handleToggleAi = async (on: boolean) => {
+    if (!convId) return;
+    setTogglingAi(true);
+    try {
+      const res = await fetch(`/api/v1/inbox/conversations/${convId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ai_autonomy: on ? "autonomous" : "off" }),
+      });
+      if (!res.ok) throw new Error("failed");
+      toast.success(on ? "AI replies turned on for this chat" : "AI replies turned off for this chat");
+      onConversationUpdate();
+    } catch {
+      toast.error("Could not change AI replies");
+    } finally {
+      setTogglingAi(false);
     }
   };
   const displayName = (conversation?.contact_display_name as string | null)
@@ -240,16 +266,29 @@ export function ContactPanel({ conversation, tenantId, userRole, onConversationU
           </div>
         ) : (
           <div className="flex flex-col gap-2">
-            <p className="text-xs text-muted-foreground">Not linked to a lead</p>
-            <Button
-              size="sm"
-              variant="outline"
-              className="w-full text-xs h-7 gap-1"
-              onClick={handleConvertToLead}
-            >
-              <UserPlusIcon className="w-3 h-3" />
-              Convert to lead
-            </Button>
+            {leadId ? (
+              // Linked to a lead this viewer can't open (it belongs to someone else): say so, never offer to create a duplicate.
+              <p className="text-xs text-muted-foreground" data-linked-hidden>Linked to a lead owned by someone else</p>
+            ) : (
+              <>
+                <p className="text-xs text-muted-foreground">Not linked to a lead</p>
+                {canManage ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full text-xs h-7 gap-1"
+                    onClick={handleConvertToLead}
+                  >
+                    <UserPlusIcon className="w-3 h-3" />
+                    Convert to lead
+                  </Button>
+                ) : (
+                  <p className="text-xs text-muted-foreground" data-accept-first>
+                    Only the person handling this chat can turn it into a lead.
+                  </p>
+                )}
+              </>
+            )}
           </div>
         )}
       </div>
@@ -262,8 +301,21 @@ export function ContactPanel({ conversation, tenantId, userRole, onConversationU
 
         {/* Assigned to */}
         <div className="mb-3">
-          <p className="text-xs text-muted-foreground mb-1.5">Assigned to</p>
-          {isAdmin ? (
+          <p className="text-xs text-muted-foreground mb-1.5">
+            {requiresClaim(conversation.provider as string | null) ? "Handled by" : "Assigned to"}
+          </p>
+          {requiresClaim(conversation.provider as string | null) ? (
+            // A website chat changes hands only through Accept / Hand over / Take over (they leave a note and notify
+            // the new owner), so this is a read-only line, not a free picker.
+            <div className="flex items-center gap-2 text-sm" data-handled-by>
+              <UserCircleIcon className="h-4 w-4 text-muted-foreground" />
+              {assigneeId ? (
+                <span className="font-medium truncate">{ownerName || "A teammate"}</span>
+              ) : (
+                <span className="text-muted-foreground">Waiting to be accepted</span>
+              )}
+            </div>
+          ) : isAdmin ? (
             <Select
               value={assigneeId || "unassigned"}
               onValueChange={handleAssign}
@@ -318,10 +370,33 @@ export function ContactPanel({ conversation, tenantId, userRole, onConversationU
               {conversation.status as string}
             </Badge>
           </div>
-          <div className="flex justify-between">
+          <div className="flex justify-between items-center">
             <span className="text-muted-foreground">AI mode</span>
-            <span className="text-foreground">{conversation.ai_autonomy as string}</span>
+            {requiresClaim(conversation.provider as string | null) && canManage && (conversation.ai_autonomy === "autonomous" || conversation.ai_autonomy === "off") ? (
+              <button
+                type="button"
+                role="switch"
+                aria-checked={conversation.ai_autonomy === "autonomous"}
+                aria-label="AI replies for this chat"
+                disabled={togglingAi}
+                data-ai-switch
+                onClick={() => void handleToggleAi(conversation.ai_autonomy !== "autonomous")}
+                className={cn(
+                  "text-xs px-2 py-0.5 rounded-full font-medium border",
+                  conversation.ai_autonomy === "autonomous" ? "bg-blue-100 text-blue-800 border-blue-200" : "bg-muted text-muted-foreground"
+                )}
+              >
+                {conversation.ai_autonomy === "autonomous" ? "AI replying" : "AI off"}
+              </button>
+            ) : (
+              <span className="text-foreground">{conversation.ai_autonomy as string}</span>
+            )}
           </div>
+          {(conversation.meta as { needs_human?: unknown } | null)?.needs_human ? (
+            <div className="rounded-md bg-red-50 text-red-800 px-2 py-1" data-needs-human>
+              The AI could not answer this. A person needs to reply.
+            </div>
+          ) : null}
           {(conversation.stage_tag as string | null) && (
             <div className="flex justify-between">
               <span className="text-muted-foreground">Stage</span>

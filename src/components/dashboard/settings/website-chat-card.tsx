@@ -15,6 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CopyButton } from "@/components/ui/copy-button";
 import { GlobeIcon } from "@/components/icons";
+import { WebsiteChatAiReply, type AiReplyInitial } from "./website-chat-ai-reply";
 import { toast } from "sonner";
 import {
   BRAND_COLORS,
@@ -37,6 +38,8 @@ interface WebsiteChatState {
   /** Only the branded widget has one: the public id of its inbox. It is how the card tells the two kinds apart. */
   inboxIdentifier?: string;
   logoUrl: string | null;
+  /** The "AI replies" part (Admizz only); absent when it is not available. */
+  aiReply?: AiReplyInitial;
 }
 
 const API_PATH = "/api/v1/inbox/website-chat";
@@ -498,6 +501,8 @@ export function WebsiteChatCard() {
         <Button size="sm" disabled={busy} onClick={() => send("PATCH", draft, "Website chat settings saved")}>
           {busy ? "Saving…" : "Save changes"}
         </Button>
+
+        <WebsiteChatAiReply initial={state.aiReply} />
 
         {state.snippet && (
           <div className="space-y-1.5 border-t pt-4">

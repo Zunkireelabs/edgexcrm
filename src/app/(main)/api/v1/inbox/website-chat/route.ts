@@ -10,12 +10,16 @@ import { apiSuccess, apiValidationError } from "@/lib/api/response";
 import { mergeWebsiteChatSettings, normalizeWebsiteHost } from "@/lib/inbox/website-chat/settings";
 import { connectWebsiteChat, loadWebsiteChat, updateWebsiteChat, WebsiteChatError } from "@/lib/inbox/website-chat/service";
 import { errorResponse, guard } from "@/lib/inbox/website-chat/route-helpers";
+import { loadAiReplyCardState } from "@/lib/inbox/ai-reply/settings-state";
 
 export async function GET() {
   const g = await guard();
   if (!g.ok) return g.response;
   try {
-    return apiSuccess(await loadWebsiteChat(g.db.raw(), g.auth.tenantId));
+    const state = await loadWebsiteChat(g.db.raw(), g.auth.tenantId);
+    // The "AI replies" part of the card rides along, so the card makes no extra request. Only asked for once connected.
+    const aiReply = state.connected ? await loadAiReplyCardState(g.db.raw(), g.auth.tenantId, g.auth.industryId) : undefined;
+    return apiSuccess(aiReply ? { ...state, aiReply } : state);
   } catch (err) {
     return errorResponse(err);
   }
