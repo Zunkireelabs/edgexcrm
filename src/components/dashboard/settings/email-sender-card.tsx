@@ -217,7 +217,7 @@ export function EmailSenderCard() {
             <Input
               id="email-template-logo"
               type="url"
-              placeholder="https://edgex.zunkireelabs.com/email/admizz-logo.jpg"
+              placeholder="https://edgex.zunkireelabs.com/email/admizz-logo.png"
               value={form.template_logo_url}
               onChange={(e) => setForm((f) => ({ ...f, template_logo_url: e.target.value }))}
             />

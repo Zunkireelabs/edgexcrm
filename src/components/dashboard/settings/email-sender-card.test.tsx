@@ -30,7 +30,7 @@ const STORED = {
   no_reply_address: "no-reply@mail.admizz.com",
   template_color: "#0D1282",
   template_accent: "#FDED22",
-  template_logo_url: "https://edgex.zunkireelabs.com/email/admizz-logo.jpg",
+  template_logo_url: "https://edgex.zunkireelabs.com/email/admizz-logo.png",
   updated_at: null,
 };
 const json = (status: number, body: unknown) => ({ ok: status >= 200 && status < 300, status, json: async () => body });
@@ -106,8 +106,8 @@ describe("EmailSenderCard: no-reply address and colours", () => {
     fetchMock.mockResolvedValueOnce(json(200, { data: STORED }));
     render(<EmailSenderCard />);
     const input = await screen.findByLabelText("Logo link (https)");
-    expect(input).toHaveValue("https://edgex.zunkireelabs.com/email/admizz-logo.jpg");
-    expect(screen.getByAltText("Logo preview")).toHaveAttribute("src", "https://edgex.zunkireelabs.com/email/admizz-logo.jpg");
+    expect(input).toHaveValue("https://edgex.zunkireelabs.com/email/admizz-logo.png");
+    expect(screen.getByAltText("Logo preview")).toHaveAttribute("src", "https://edgex.zunkireelabs.com/email/admizz-logo.png");
     fireEvent.change(input, { target: { value: "https://cdn.example.com/new.png" } });
     fetchMock.mockResolvedValueOnce(json(200, { data: STORED }));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));

@@ -103,8 +103,8 @@ describe("resolveNoReplySender", () => {
   });
 
   it("the layout's own logo link wins; otherwise the company logo; otherwise none", async () => {
-    cfg.current.settings = { ...GOOD_SETTINGS, template_logo_url: "https://edgex.zunkireelabs.com/email/admizz-logo.jpg" };
-    expect((await resolveNoReplySender("t1"))?.brand.logoUrl).toBe("https://edgex.zunkireelabs.com/email/admizz-logo.jpg");
+    cfg.current.settings = { ...GOOD_SETTINGS, template_logo_url: "https://edgex.zunkireelabs.com/email/admizz-logo.png" };
+    expect((await resolveNoReplySender("t1"))?.brand.logoUrl).toBe("https://edgex.zunkireelabs.com/email/admizz-logo.png");
     cfg.current.settings = { ...GOOD_SETTINGS, template_logo_url: null };
     expect((await resolveNoReplySender("t1"))?.brand.logoUrl).toBe("https://cdn.example.com/logo.png");
     cfg.current.settings = { ...GOOD_SETTINGS, template_logo_url: "" };
