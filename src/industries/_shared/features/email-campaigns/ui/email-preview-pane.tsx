@@ -11,13 +11,21 @@ import { CaretLeftIcon, CaretRightIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import type { EmailBlastPreviewResponse } from "../lib/types";
 
+/** The part of a blast preview the pane actually draws: the samples and who it is from. (Lets the New email pop-up reuse it.) */
+export type EmailPreviewData = Pick<EmailBlastPreviewResponse, "samples" | "sender">;
+
 interface EmailPreviewPaneProps {
-  preview: EmailBlastPreviewResponse;
+  preview: EmailPreviewData;
   sampleIdx: number;
   onSampleIdxChange: (idx: number) => void;
+  /** Replaces the small print under the preview (the default is written for campaigns). */
+  footnote?: string;
 }
 
-export function EmailPreviewPane({ preview, sampleIdx, onSampleIdxChange }: EmailPreviewPaneProps) {
+const DEFAULT_FOOTNOTE =
+  "Structural preview — Gmail / Outlook / Apple Mail may render some CSS differently. Merge fields are filled from a real sendable recipient.";
+
+export function EmailPreviewPane({ preview, sampleIdx, onSampleIdxChange, footnote }: EmailPreviewPaneProps) {
   const samples = preview.samples;
   // Clamp on read so a freshly-built preview with fewer samples can never
   // leave the switcher pointing past the end (no effect / no reset needed).
@@ -90,8 +98,7 @@ export function EmailPreviewPane({ preview, sampleIdx, onSampleIdxChange }: Emai
       </div>
 
       <p className="shrink-0 border-t px-4 py-2 text-[11px] leading-snug text-muted-foreground">
-        Structural preview — Gmail / Outlook / Apple Mail may render some CSS differently. Merge fields are filled from a
-        real sendable recipient.
+        {footnote ?? DEFAULT_FOOTNOTE}
       </p>
     </div>
   );

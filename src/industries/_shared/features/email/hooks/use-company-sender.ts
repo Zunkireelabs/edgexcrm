@@ -1,10 +1,20 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import type { BrandedBrand } from "@/lib/email/template/branded-message";
+
+/** The tenant's second, no-reply sender with what the pop-up needs to draw the branded frame and the Preview. */
+export interface NoReplySenderInfo {
+  email: string;
+  display_name: string;
+  brand: BrandedBrand;
+}
 
 export interface CompanySender {
   email: string;
   display_name: string;
+  /** Only present when an admin has set the no-reply address up (Settings → Email Sender Identity). */
+  no_reply?: NoReplySenderInfo | null;
 }
 
 /**

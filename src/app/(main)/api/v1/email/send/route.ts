@@ -23,7 +23,7 @@ import { sendMessage } from "@/industries/_shared/features/email/lib/gmail-clien
 import { decryptAccountTokens, persistRefreshedToken } from "@/industries/_shared/features/email/lib/token-crypto";
 import { mintToken, getInboundDomains } from "@/lib/email/inbound/tokens";
 import { resolveReplyToLabel } from "@/lib/email/reply-to-label";
-import { COMPANY_SENDER_ID } from "@/lib/email/company-sender-id";
+import { COMPANY_SENDER_ID, NO_REPLY_SENDER_ID } from "@/lib/email/company-sender-id";
 import { handleCompanySend } from "@/lib/email/company-send";
 import type { ConnectedEmailAccount } from "@/types/database";
 
@@ -93,9 +93,9 @@ export async function POST(request: Request) {
 
   const body = await request.json();
 
-  // "company" selects the tenant's verified company sender instead of a connected Gmail account
+  // "company" (or "no-reply") selects the tenant's verified company sender instead of a connected Gmail account
   // (src/lib/email/company-send.ts). Everything below this branch is the Gmail path, unchanged.
-  const isCompanySend = body.from_account_id === COMPANY_SENDER_ID;
+  const isCompanySend = body.from_account_id === COMPANY_SENDER_ID || body.from_account_id === NO_REPLY_SENDER_ID;
 
   const validation = validate(body, {
     from_account_id: isCompanySend ? [required("from_account_id")] : [required("from_account_id"), isUUID()],

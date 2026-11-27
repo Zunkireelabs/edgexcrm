@@ -9,6 +9,7 @@ import type { AuthContext } from "@/lib/api/auth";
 type Row = Record<string, any>;
 
 const resolveSenderMock = vi.fn();
+const resolveNoReplyMock = vi.fn();
 const scopedClientMock = vi.fn();
 const shouldRestrictMock = vi.fn(() => false);
 const leadVisibleMock = vi.fn(async () => true);
@@ -23,6 +24,7 @@ const emitEventMock = vi.fn(async (args: unknown) => {
 });
 
 vi.mock("./sender", () => ({ resolveVerifiedCompanySender: (...a: unknown[]) => resolveSenderMock(...a) }));
+vi.mock("./no-reply-sender", () => ({ resolveNoReplySender: (...a: unknown[]) => resolveNoReplyMock(...a) }));
 vi.mock("@/lib/supabase/scoped", () => ({ scopedClient: (...a: unknown[]) => scopedClientMock(...a) }));
 vi.mock("@/lib/api/permissions", () => ({ shouldRestrictToSelf: () => shouldRestrictMock() }));
 vi.mock("@/lib/leads/branch-membership", () => ({ shouldLeadBeVisibleToAssignee: () => leadVisibleMock() }));
@@ -50,6 +52,22 @@ const SENDER = {
   address: "hello@mail.admizz.com",
   name: "Admizz Education",
   replyTo: "hello@admizz.com",
+};
+
+const NO_REPLY = {
+  sender: {
+    from: "Admizz Education <no-reply@mail.admizz.com>",
+    address: "no-reply@mail.admizz.com",
+    name: "Admizz Education",
+    replyTo: "hello@admizz.com",
+  },
+  brand: {
+    name: "Admizz Education",
+    logoUrl: "https://cdn.example.com/admizz-logo.png",
+    color: "#0D1282",
+    accent: "#FDED22",
+    helpEmail: "hello@admizz.com",
+  },
 };
 
 interface FakeDbCfg {
@@ -139,6 +157,7 @@ beforeEach(() => {
   process.env.INBOUND_ENV_MARKER = "s";
 
   resolveSenderMock.mockReset().mockResolvedValue(SENDER);
+  resolveNoReplyMock.mockReset().mockResolvedValue(NO_REPLY);
   scopedClientMock.mockReset();
   shouldRestrictMock.mockReset().mockReturnValue(false);
   leadVisibleMock.mockReset().mockResolvedValue(true);
@@ -415,5 +434,117 @@ describe("handleCompanySend — replying on a thread", () => {
     expect(res.status).toBe(200);
     const sent = resendSendMock.mock.calls[0][0];
     expect(sent.headers).toEqual({ References: "<real@lead.mail>" }); // no In-Reply-To, synthetic reference dropped
+  });
+});
+
+describe("handleCompanySend — the no-reply sender (branded layout)", () => {
+  const noReply = (body: Row = {}, cfg: FakeDbCfg = {}) => run({ from_account_id: "no-reply", ...body }, cfg);
+
+  it("refuses with 400 when the tenant has no no-reply address set up, and sends nothing", async () => {
+    resolveNoReplyMock.mockResolvedValue(null);
+    const { res, json } = await noReply();
+    expect(res.status).toBe(400);
+    expect(json.error.code).toBe("NO_REPLY_SENDER_UNAVAILABLE");
+    expect(resendSendMock).not.toHaveBeenCalled();
+  });
+
+  it("sends from the no-reply address, with the tenant Reply-To (the team mailbox)", async () => {
+    const { res } = await noReply();
+    expect(res.status).toBe(200);
+    const sent = resendSendMock.mock.calls[0][0];
+    expect(sent.from).toBe("Admizz Education <no-reply@mail.admizz.com>");
+    expect(sent.replyTo).toBe("hello@admizz.com");
+    expect(sent.to).toEqual(["art@gmail.com"]);
+    expect(sent.subject).toBe("Hello Art"); // merge field filled
+  });
+
+  it("wraps the typed message in the branded layout: logo first, the message (name filled in), then the footer", async () => {
+    await noReply();
+    const html: string = resendSendMock.mock.calls[0][0].html;
+    expect(html.startsWith("<!DOCTYPE html>")).toBe(true);
+    const logo = html.indexOf("https://cdn.example.com/admizz-logo.png");
+    const msg = html.indexOf("<p>Hi Art Dutta</p>");
+    const footer = html.indexOf("Need help? Write to");
+    expect(logo).toBeGreaterThan(-1);
+    expect(msg).toBeGreaterThan(logo);
+    expect(footer).toBeGreaterThan(msg);
+    expect(html).toContain("#0D1282");
+    expect(html).toContain('href="mailto:hello@admizz.com"');
+    expect(html).not.toContain("{{first_name}}"); // merge fields are filled BEFORE the wrap
+  });
+
+  it("records what was TYPED (not the wrapped email) on the thread, from the no-reply address, after the send", async () => {
+    const { log } = await noReply();
+    const email = log.find((c) => c.table === "emails" && c.op === "insert")!;
+    expect(email.payload).toMatchObject({
+      provider: "resend",
+      from_email: "no-reply@mail.admizz.com",
+      from_name: "Admizz Education",
+      body_html: "<p>Hi Art Dutta</p>",
+      connected_email_account_id: null,
+    });
+    expect(String(email.payload!.body_html)).not.toContain("<!DOCTYPE");
+    expect(emitEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "email.sent", payload: expect.objectContaining({ from_account_id: "no-reply" }) }),
+    );
+  });
+
+  it("cannot be used to REPLY to a message: refused before anything is read or sent", async () => {
+    const { res, json } = await noReply({ reply_context: { thread_id: "thread-9" } });
+    expect(res.status).toBe(422);
+    expect(JSON.stringify(json)).toContain("can't be used to reply");
+    expect(resendSendMock).not.toHaveBeenCalled();
+    expect(scopedClientMock).not.toHaveBeenCalled();
+  });
+
+  it("the plain company sender is unchanged: no layout, and the no-reply resolver is never consulted", async () => {
+    const { res } = await run({});
+    expect(res.status).toBe(200);
+    expect(resendSendMock.mock.calls[0][0].html).toBe("<p>Hi Art Dutta</p>");
+    expect(resendSendMock.mock.calls[0][0].from).toBe("Admizz Education <hello@mail.admizz.com>");
+    expect(resolveNoReplyMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps every safety net: a suppressed address is never emailed", async () => {
+    loadSuppressedMock.mockResolvedValue(new Set(["art@gmail.com"]));
+    const { res, json } = await noReply();
+    expect(res.status).toBe(422);
+    expect(json.error.code).toBe("RECIPIENT_SUPPRESSED");
+    expect(resendSendMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps the lead rules: an own-scope user cannot send to a lead they cannot see", async () => {
+    shouldRestrictMock.mockReturnValue(true);
+    leadVisibleMock.mockResolvedValue(false);
+    const { res } = await noReply();
+    expect(res.status).toBe(403);
+    expect(resendSendMock).not.toHaveBeenCalled();
+  });
+
+  it("sandbox: the wrapped email goes to the test recipients with the prefixed subject, like any other email", async () => {
+    process.env.EMAIL_OUTBOUND_SANDBOX = "true";
+    process.env.EMAIL_TEST_RECIPIENTS = "qa@zunkireelabs.com";
+    const { res } = await noReply();
+    expect(res.status).toBe(200);
+    const sent = resendSendMock.mock.calls[0][0];
+    expect(sent.to).toEqual(["qa@zunkireelabs.com"]);
+    expect(sent.html.startsWith("<!DOCTYPE html>")).toBe(true);
+  });
+
+  it("when the provider rejects the send, nothing is recorded", async () => {
+    resendSendMock.mockResolvedValue({ data: null, error: { name: "validation_error", message: "bad" } });
+    const { res, log } = await noReply();
+    expect(res.status).toBe(503);
+    expect(log.some((c) => c.table === "emails" && c.op === "insert")).toBe(false);
+    expect(emitEventMock).not.toHaveBeenCalled();
+  });
+
+  it("inbound ON: the layout is still applied and Reply-To points back at EdgeX, exactly like the company sender", async () => {
+    process.env.EDGEX_INBOUND_ENABLED = "true";
+    const { res } = await noReply({}, { tenantInboundEnabled: true });
+    expect(res.status).toBe(200);
+    const sent = resendSendMock.mock.calls[0][0];
+    expect(sent.replyTo).toMatch(/^"Admizz Education" <reply\+s[0-9a-f]{42}@edgex\.zunkireelabs\.com>$/);
+    expect(sent.html.startsWith("<!DOCTYPE html>")).toBe(true);
   });
 });

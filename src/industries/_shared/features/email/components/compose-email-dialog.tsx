@@ -22,7 +22,9 @@ import { toast } from "sonner";
 import { TipTapEditor } from "./tiptap-editor";
 import { useConnectedInboxes } from "../hooks/use-connected-inboxes";
 import { useCompanySender } from "../hooks/use-company-sender";
-import { COMPANY_SENDER_ID } from "@/lib/email/company-sender-id";
+import { COMPANY_SENDER_ID, NO_REPLY_SENDER_ID } from "@/lib/email/company-sender-id";
+import { brandedFooterHtml, brandedHeaderHtml, renderBrandedMessage } from "@/lib/email/template/branded-message";
+import { ComposeEmailPreviewDialog } from "./compose-email-preview-dialog";
 import type { EmailThread, Email } from "../hooks/use-email-threads";
 
 interface ComposeEmailDialogProps {
@@ -56,6 +58,17 @@ function buildReferencesChain(rfc_references: string[], rfc_message_id: string |
 }
 
 /**
+ * Fills {{first_name}} / {{last_name}} the same way the server does when the email is sent, so the Preview matches. A name
+ * that is not known here (undefined) leaves the tag as typed; a known-but-empty one (null) becomes "", like the server.
+ */
+export function fillLeadTokens(text: string, first?: string | null, last?: string | null): string {
+  let out = text;
+  if (first !== undefined) out = out.replace(/\{\{\s*first_name\s*\}\}/g, first ?? "");
+  if (last !== undefined) out = out.replace(/\{\{\s*last_name\s*\}\}/g, last ?? "");
+  return out;
+}
+
+/**
  * Which "From" a reply must use: the thread's own Gmail account, or — for a thread that was
  * started from the company address (no Gmail account, with an outbound message sent via
  * Resend) — the company sender. Anything else (e.g. a personal BCC-dropbox thread) has no
@@ -74,6 +87,8 @@ export function ComposeEmailDialog({
   defaultSubject,
   leadId,
   contactId,
+  leadFirstName,
+  leadLastName,
   currentUserId = "",
   replyContext,
   onSent,
@@ -84,11 +99,15 @@ export function ComposeEmailDialog({
   // Everything the user may send FROM: their own connected Gmail accounts first, then the
   // company address (when the tenant has a verified one) — so someone with no Gmail connected
   // can still send, and someone with Gmail keeps it as the default.
+  // The no-reply address (when an admin set it up) comes last, so it is never the default, and only for a NEW email: a reply
+  // always goes from the company address.
+  const noReply = companySender?.no_reply ?? null;
   const senders = [
     ...inboxes.map((i) => ({ id: i.id, email: i.email, display_name: i.display_name })),
     ...(companySender
       ? [{ id: COMPANY_SENDER_ID, email: companySender.email, display_name: companySender.display_name }]
       : []),
+    ...(noReply && !replyContext ? [{ id: NO_REPLY_SENDER_ID, email: noReply.email, display_name: noReply.display_name }] : []),
   ];
 
   const [fromAccountId, setFromAccountId] = useState("");
@@ -99,6 +118,7 @@ export function ComposeEmailDialog({
   const [subject, setSubject] = useState(defaultSubject ?? "");
   const [bodyHtml, setBodyHtml] = useState("");
   const [sending, setSending] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const isReply = !!replyContext;
 
@@ -114,6 +134,8 @@ export function ComposeEmailDialog({
         setTo(defaultTo ?? "");
         setSubject(defaultSubject ?? "");
         setBodyHtml("");
+        // The no-reply choice is never sticky: a new email starts from the usual default again.
+        setFromAccountId((cur) => (cur === NO_REPLY_SENDER_ID ? "" : cur));
       }
     }
   }, [open, defaultTo, defaultSubject, replyContext]);
@@ -131,6 +153,8 @@ export function ComposeEmailDialog({
 
   // The chosen sender must actually be available (a company reply needs the company address to still exist).
   const hasSender = senders.some((s) => s.id === fromAccountId);
+  // The branded layout applies only while the no-reply address is the chosen sender of a new email.
+  const isNoReply = !isReply && fromAccountId === NO_REPLY_SENDER_ID && !!noReply;
   const canSend =
     hasSender &&
     fromAccountId &&
@@ -197,7 +221,7 @@ export function ComposeEmailDialog({
         id: email_id,
         direction: "outbound",
         // 'resend' marks a company-sender message so an immediate Reply on it picks the company sender
-        ...(fromAccountId === COMPANY_SENDER_ID ? { provider: "resend" } : {}),
+        ...(fromAccountId === COMPANY_SENDER_ID || fromAccountId === NO_REPLY_SENDER_ID ? { provider: "resend" } : {}),
         from_email: selectedInbox?.email ?? "",
         from_name: selectedInbox?.display_name ?? null,
         to_emails: parseEmails(to),
@@ -222,6 +246,16 @@ export function ComposeEmailDialog({
       setSending(false);
     }
   };
+
+  // The finished email for the Preview, built only while it is open: the very same function the server uses when it sends.
+  const previewHtml =
+    previewOpen && isNoReply && noReply
+      ? renderBrandedMessage({
+          bodyHtml: fillLeadTokens(bodyHtml, leadFirstName, leadLastName),
+          brand: noReply.brand,
+          title: fillLeadTokens(subject, leadFirstName, leadLastName),
+        })
+      : "";
 
   const resetForm = () => {
     setTo(defaultTo ?? "");
@@ -348,8 +382,40 @@ export function ComposeEmailDialog({
           {/* Body */}
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Message</Label>
-            <TipTapEditor value={bodyHtml} onChange={setBodyHtml} minHeight={200} />
+            {/* With the no-reply address the message sits inside the company layout: a fixed logo + colour bar above it and a
+                fixed footer below it, drawn from the same pieces the sent email is built from. The editor keeps the same place
+                in the tree either way, so switching sender never resets what was typed. */}
+            <div
+              data-testid={isNoReply ? "no-reply-frame" : undefined}
+              className={isNoReply ? "overflow-hidden rounded-md border bg-white" : undefined}
+            >
+              {isNoReply && noReply && (
+                <div
+                  data-testid="template-header"
+                  aria-hidden
+                  className="pointer-events-none select-none"
+                  dangerouslySetInnerHTML={{ __html: brandedHeaderHtml(noReply.brand) }}
+                />
+              )}
+              <div className={isNoReply ? "border-y border-dashed border-blue-400/70" : undefined}>
+                <TipTapEditor value={bodyHtml} onChange={setBodyHtml} minHeight={200} />
+              </div>
+              {isNoReply && noReply && (
+                <div
+                  data-testid="template-footer"
+                  aria-hidden
+                  className="pointer-events-none select-none"
+                  dangerouslySetInnerHTML={{ __html: brandedFooterHtml(noReply.brand) }}
+                />
+              )}
+            </div>
           </div>
+
+          {isNoReply && (
+            <p className="text-xs text-muted-foreground">
+              Sent with the company layout: the logo and footer are added for you. Use Preview to see the finished email.
+            </p>
+          )}
 
           {!isReply && (
             <p className="text-xs text-muted-foreground">
@@ -360,6 +426,11 @@ export function ComposeEmailDialog({
         </div>
 
         <div className="flex justify-end gap-2 pt-2 border-t">
+          {isNoReply && (
+            <Button variant="outline" onClick={() => setPreviewOpen(true)}>
+              Preview
+            </Button>
+          )}
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
@@ -369,6 +440,17 @@ export function ComposeEmailDialog({
           </Button>
         </div>
       </DialogContent>
+
+      {isNoReply && noReply && (
+        <ComposeEmailPreviewDialog
+          open={previewOpen}
+          onOpenChange={setPreviewOpen}
+          subject={fillLeadTokens(subject, leadFirstName, leadLastName)}
+          from={`${noReply.display_name} <${noReply.email}>`}
+          replyTo={noReply.brand.helpEmail}
+          html={previewHtml}
+        />
+      )}
     </Dialog>
   );
 }

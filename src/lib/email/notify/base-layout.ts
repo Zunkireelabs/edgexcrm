@@ -17,7 +17,7 @@ export function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
-const DEFAULT_COLOR = "#0A6CFF"; // EdgeX blue
+export const DEFAULT_COLOR = "#0A6CFF"; // EdgeX blue
 /** Only a plain hex colour may reach a style attribute — anything else falls back to the default. */
 function safeColor(color: string | null | undefined): string {
   return color && /^#[0-9a-fA-F]{3,8}$/.test(color) ? color : DEFAULT_COLOR;
@@ -40,7 +40,7 @@ function safeUrl(url: string): string | null {
   }
 }
 /** A logo must be https (mail clients block or warn on http images). */
-function safeLogoUrl(url: string | null | undefined): string | null {
+export function safeLogoUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   const u = safeUrl(url);
   return u && u.startsWith("https://") ? u : null;
@@ -92,7 +92,7 @@ export interface RenderedEmail {
   text: string;
 }
 
-const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
+export const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
 
 export function renderEmailLayout(input: EmailLayoutInput): RenderedEmail {
   const color = safeColor(input.primaryColor);
