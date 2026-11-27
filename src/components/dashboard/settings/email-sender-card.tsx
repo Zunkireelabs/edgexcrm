@@ -171,6 +171,11 @@ export function EmailSenderCard() {
             A second sender for information emails. It must be on the same domain as the From address. Emails sent from it
             use the company layout (logo, colour bar and footer), and the pop-up has a Preview button.
           </p>
+          {form.no_reply_address.trim() && !settings.domain_verified && (
+            <p role="status" className="text-xs font-medium text-amber-600">
+              Not active yet: it appears in the New email pop-up once the company address is verified.
+            </p>
+          )}
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">

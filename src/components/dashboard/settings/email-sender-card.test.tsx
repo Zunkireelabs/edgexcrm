@@ -80,4 +80,23 @@ describe("EmailSenderCard: no-reply address and colours", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(toastError).toHaveBeenCalledWith("Must be on the same domain as the From address (@mail.admizz.com)"));
   });
+
+  it("says the no-reply address is not active yet while the company address is not verified", async () => {
+    fetchMock.mockResolvedValueOnce(json(200, { data: { ...STORED, domain_verified: false } }));
+    render(<EmailSenderCard />);
+    await screen.findByLabelText("No-reply address (optional)");
+    expect(screen.getByRole("status")).toHaveTextContent("Not active yet");
+  });
+
+  it("does not say that when the company address is verified, or when there is no no-reply address", async () => {
+    fetchMock.mockResolvedValueOnce(json(200, { data: STORED }));
+    const { unmount } = render(<EmailSenderCard />);
+    await screen.findByLabelText("No-reply address (optional)");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    unmount();
+    fetchMock.mockResolvedValueOnce(json(200, { data: { ...STORED, domain_verified: false, no_reply_address: null } }));
+    render(<EmailSenderCard />);
+    await screen.findByLabelText("No-reply address (optional)");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
 });
