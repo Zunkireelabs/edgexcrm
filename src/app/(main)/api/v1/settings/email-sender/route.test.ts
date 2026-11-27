@@ -148,9 +148,9 @@ describe("PUT: the template colours", () => {
 
 describe("PUT: the layout logo link", () => {
   it("saves a public https link to a PNG or JPG", async () => {
-    const res = await put({ ...BASE, template_logo_url: " https://edgex.zunkireelabs.com/email/admizz-logo.jpg " });
+    const res = await put({ ...BASE, template_logo_url: " https://edgex.zunkireelabs.com/email/admizz-logo.png " });
     expect(res.status).toBe(200);
-    expect(state.upserts[0]).toMatchObject({ template_logo_url: "https://edgex.zunkireelabs.com/email/admizz-logo.jpg" });
+    expect(state.upserts[0]).toMatchObject({ template_logo_url: "https://edgex.zunkireelabs.com/email/admizz-logo.png" });
   });
 
   it.each(["http://example.com/a.png", "ftp://example.com/a.png", "javascript:alert(1)", "not a link", "//example.com/a.png", "data:image/png;base64,AAAA"])(

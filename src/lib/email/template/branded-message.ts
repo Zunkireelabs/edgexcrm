@@ -61,7 +61,7 @@ export function brandedHeaderRows(brand: BrandedBrand): string {
   const name = escapeHtml(brand.name);
   const logo = safeLogoUrl(brand.logoUrl);
   const mark = logo
-    ? `<img src="${escapeHtml(logo)}" alt="${name}" height="44" style="display:block;border:0;outline:none;text-decoration:none;height:44px;width:auto;max-width:240px">`
+    ? `<img src="${escapeHtml(logo)}" alt="${name}" height="56" style="display:block;border:0;outline:none;text-decoration:none;height:56px;width:auto;max-width:260px">`
     : `<span style="font-family:${FONT};font-size:22px;line-height:28px;font-weight:700;color:${color}">${name}</span>`;
   const bar = accent
     ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse"><tr><td width="72" height="5" bgcolor="${accent}" style="background:${accent};height:5px;line-height:5px;font-size:0">&nbsp;</td><td height="5" bgcolor="${color}" style="background:${color};height:5px;line-height:5px;font-size:0">&nbsp;</td></tr></table>`
