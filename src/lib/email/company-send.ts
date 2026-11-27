@@ -15,6 +15,9 @@ import { logger } from "@/lib/logger";
 import { scopedClient, type ScopedClient } from "@/lib/supabase/scoped";
 import { getResendClient } from "./index";
 import { resolveVerifiedCompanySender, type VerifiedCompanySender } from "./sender";
+import { resolveNoReplySender } from "./no-reply-sender";
+import { renderBrandedMessage, type BrandedBrand } from "./template/branded-message";
+import { NO_REPLY_SENDER_ID } from "./company-sender-id";
 import { mintToken, getInboundDomains } from "./inbound/tokens";
 import { sanitizeDisplayName } from "./reply-to-label";
 import { syntheticMessageId, isSyntheticMessageId } from "./synthetic-message-id";
@@ -24,7 +27,10 @@ import { acquireResendRateLimitSlot } from "./outbound/rate-limit";
 import { getEmailTransportMode, sendStubEmail } from "./outbound/transport";
 import { isReplyCaptureEnabled } from "./outbound/reply-capture";
 
-// POST /api/v1/email/send with from_account_id === "company" lands here.
+// POST /api/v1/email/send with from_account_id === "company" (or "no-reply") lands here.
+//
+// "no-reply" is the tenant's second address on the same verified domain: same path, same safety nets, but the message is wrapped in
+// the branded layout (logo, colour bar, footer) when it is SENT. What is stored on the thread is the message as typed.
 //
 // A person writing a ONE-OFF email from the lead page, sent from the tenant's
 // verified company address (e.g. hello@mail.admizz.com) instead of their own
@@ -107,14 +113,36 @@ export async function handleCompanySend(auth: AuthContext, body: Body): Promise<
     return apiValidationError({ to: [`At most ${MAX_RECIPIENTS} recipients per email from the company address`] });
   }
 
-  // ── 2. The company sender must exist and be verified ───────────────────────
-  const sender: VerifiedCompanySender | null = await resolveVerifiedCompanySender(auth.tenantId);
-  if (!sender) {
-    return apiError(
-      "COMPANY_SENDER_UNAVAILABLE",
-      "The company email address isn't set up or verified yet. Ask an admin to verify it in Settings → Communications.",
-      400,
-    );
+  // ── 2. The company sender (or the no-reply one) must exist and be verified ─
+  const isNoReply = body.from_account_id === NO_REPLY_SENDER_ID;
+  // The no-reply address is for one-way information emails. It never answers a message: a reply goes from the company address.
+  if (isNoReply && body.reply_context) {
+    return apiValidationError({ from_account_id: ["The no-reply address can't be used to reply. Reply from the company address."] });
+  }
+
+  let sender: VerifiedCompanySender;
+  let brand: BrandedBrand | null = null;
+  if (isNoReply) {
+    const noReply = await resolveNoReplySender(auth.tenantId);
+    if (!noReply) {
+      return apiError(
+        "NO_REPLY_SENDER_UNAVAILABLE",
+        "The no-reply address isn't set up yet. Ask an admin to add it in Settings → Communications.",
+        400,
+      );
+    }
+    sender = noReply.sender;
+    brand = noReply.brand;
+  } else {
+    const company = await resolveVerifiedCompanySender(auth.tenantId);
+    if (!company) {
+      return apiError(
+        "COMPANY_SENDER_UNAVAILABLE",
+        "The company email address isn't set up or verified yet. Ask an admin to verify it in Settings → Communications.",
+        400,
+      );
+    }
+    sender = company;
   }
 
   const db = await scopedClient(auth);
@@ -236,6 +264,10 @@ export async function handleCompanySend(auth: AuthContext, body: Body): Promise<
     return apiServiceUnavailable("Email sending isn't configured safely on this environment.");
   }
 
+  // What actually goes out: the message as typed, or (no-reply) the same message inside the branded layout. The stored copy stays
+  // the typed message.
+  const htmlToSend = brand ? renderBrandedMessage({ bodyHtml, brand, title: sendSubject }) : bodyHtml;
+
   const transportMode = getEmailTransportMode();
   const resend = transportMode === "resend" ? getResendClient() : null;
   if (transportMode === "resend" && !resend) {
@@ -304,7 +336,7 @@ export async function handleCompanySend(auth: AuthContext, body: Body): Promise<
   let providerMessageId: string;
   try {
     if (transportMode === "stub") {
-      providerMessageId = sendStubEmail({ to: sendTo, from: sender.from, subject: sendSubject, html: bodyHtml }).data.id;
+      providerMessageId = sendStubEmail({ to: sendTo, from: sender.from, subject: sendSubject, html: htmlToSend }).data.id;
     } else {
       await acquireResendRateLimitSlot();
       const headers: Record<string, string> = {};
@@ -318,7 +350,7 @@ export async function handleCompanySend(auth: AuthContext, body: Body): Promise<
         ...(sendBcc.length > 0 ? { bcc: sendBcc } : {}),
         ...(replyTo ? { replyTo } : {}),
         subject: sendSubject,
-        html: bodyHtml,
+        html: htmlToSend,
         ...(Object.keys(headers).length > 0 ? { headers } : {}),
       });
       if (sendError || !data?.id) throw new Error(sendError?.message ?? "Resend returned no message id");
@@ -411,7 +443,7 @@ export async function handleCompanySend(auth: AuthContext, body: Body): Promise<
       lead_id: effectiveLeadId,
       contact_id: effectiveContactId,
       subject,
-      from_account_id: "company",
+      from_account_id: isNoReply ? NO_REPLY_SENDER_ID : "company",
       sender_user_id: auth.userId,
       to_emails: toList,
     },

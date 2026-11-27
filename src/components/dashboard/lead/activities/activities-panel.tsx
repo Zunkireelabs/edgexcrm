@@ -239,7 +239,11 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
   // The company address counts as "ours" when labelling who sent a message in a thread.
   const { companySender } = useCompanySender();
   const ownSenderAddresses = companySender
-    ? [...ownConnectedInboxes, { id: "company", email: companySender.email }]
+    ? [
+        ...ownConnectedInboxes,
+        { id: "company", email: companySender.email },
+        ...(companySender.no_reply ? [{ id: "no-reply", email: companySender.no_reply.email }] : []),
+      ]
     : ownConnectedInboxes;
 
   // Fetch logged activities

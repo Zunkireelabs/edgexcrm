@@ -14,6 +14,10 @@ import { createRequestLogger } from "@/lib/logger";
 function isValidEmail(addr: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr);
 }
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
+const domainOf = (addr: string) => addr.slice(addr.lastIndexOf("@") + 1).toLowerCase();
+
+const SELECT = "from_name, from_address, reply_to, domain_verified, no_reply_address, template_color, template_accent, updated_at";
 
 // GET /api/v1/settings/email-sender — return tenant's email sender config
 export async function GET() {
@@ -23,7 +27,7 @@ export async function GET() {
   const db = await scopedClient(auth);
   const { data } = await db
     .from("tenant_email_settings")
-    .select("from_name, from_address, reply_to, domain_verified, updated_at");
+    .select(SELECT);
 
   return apiSuccess(
     data?.[0] ?? {
@@ -31,6 +35,9 @@ export async function GET() {
       from_address: null,
       reply_to: null,
       domain_verified: false,
+      no_reply_address: null,
+      template_color: null,
+      template_accent: null,
       updated_at: null,
     }
   );
@@ -67,6 +74,28 @@ export async function PUT(request: NextRequest) {
   if (replyTo && !isValidEmail(replyTo)) {
     errors.reply_to = ["Must be a valid email address"];
   }
+
+  // The no-reply address and the template colours are optional and only touched when the request carries them, so a client that
+  // only knows the original three fields can never wipe them. An empty string clears one.
+  const optional = (v: unknown): string | null | undefined => (v === undefined ? undefined : typeof v === "string" ? v.trim() || null : null);
+  const noReplyAddress = optional(body.no_reply_address);
+  const templateColor = optional(body.template_color);
+  const templateAccent = optional(body.template_accent);
+
+  if (noReplyAddress) {
+    if (!isValidEmail(noReplyAddress)) {
+      errors.no_reply_address = ["Must be a valid email address"];
+    } else if (!fromAddress || !isValidEmail(fromAddress)) {
+      errors.no_reply_address = ["Set the From address first: the no-reply address must be on the same domain"];
+    } else if (domainOf(noReplyAddress) !== domainOf(fromAddress)) {
+      errors.no_reply_address = [`Must be on the same domain as the From address (@${domainOf(fromAddress)})`];
+    } else if (noReplyAddress.toLowerCase() === fromAddress.toLowerCase()) {
+      errors.no_reply_address = ["Must be a different address from the From address"];
+    }
+  }
+  if (templateColor && !HEX_COLOR.test(templateColor)) errors.template_color = ["Use a colour like #0D1282"];
+  if (templateAccent && !HEX_COLOR.test(templateAccent)) errors.template_accent = ["Use a colour like #FDED22"];
+
   if (Object.keys(errors).length > 0) {
     return apiValidationError(errors);
   }
@@ -81,12 +110,15 @@ export async function PUT(request: NextRequest) {
         from_name: fromName || null,
         from_address: fromAddress || null,
         reply_to: replyTo || null,
+        ...(noReplyAddress !== undefined ? { no_reply_address: noReplyAddress } : {}),
+        ...(templateColor !== undefined ? { template_color: templateColor ? templateColor.toUpperCase() : null } : {}),
+        ...(templateAccent !== undefined ? { template_accent: templateAccent ? templateAccent.toUpperCase() : null } : {}),
         updated_at: new Date().toISOString(),
         updated_by: auth.userId,
       },
       { onConflict: "tenant_id" }
     )
-    .select("from_name, from_address, reply_to, domain_verified, updated_at")
+    .select(SELECT)
     .single();
 
   if (error) {
