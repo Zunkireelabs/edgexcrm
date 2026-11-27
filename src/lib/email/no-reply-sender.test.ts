@@ -34,6 +34,7 @@ const GOOD_SETTINGS = {
   no_reply_address: "no-reply@mail.admizz.com",
   template_color: "#0D1282",
   template_accent: "#FDED22",
+  template_logo_url: null,
 };
 const GOOD_TENANT = { name: "Admizz Education Pvt", logo_url: "https://cdn.example.com/logo.png", primary_color: "#2272B4" };
 
@@ -99,6 +100,16 @@ describe("resolveNoReplySender", () => {
     expect((await resolveNoReplySender("t1"))?.sender.name).toBe("EdgeX");
     cfg.current.settings = { ...GOOD_SETTINGS, from_name: "Ad<miz>z\r\nBcc: x@y.z" };
     expect((await resolveNoReplySender("t1"))?.sender.from).toBe("AdmizzBcc: x@y.z <no-reply@mail.admizz.com>");
+  });
+
+  it("the layout's own logo link wins; otherwise the company logo; otherwise none", async () => {
+    cfg.current.settings = { ...GOOD_SETTINGS, template_logo_url: "https://edgex.zunkireelabs.com/email/admizz-logo.jpg" };
+    expect((await resolveNoReplySender("t1"))?.brand.logoUrl).toBe("https://edgex.zunkireelabs.com/email/admizz-logo.jpg");
+    cfg.current.settings = { ...GOOD_SETTINGS, template_logo_url: null };
+    expect((await resolveNoReplySender("t1"))?.brand.logoUrl).toBe("https://cdn.example.com/logo.png");
+    cfg.current.settings = { ...GOOD_SETTINGS, template_logo_url: "" };
+    cfg.current.tenant = { ...GOOD_TENANT, logo_url: null };
+    expect((await resolveNoReplySender("t1"))?.brand.logoUrl).toBeNull();
   });
 
   it("no help address when the team Reply-To is not set or invalid; the logo may be missing", async () => {

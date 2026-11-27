@@ -28,6 +28,7 @@ interface SettingsRow {
   no_reply_address: string | null;
   template_color: string | null;
   template_accent: string | null;
+  template_logo_url: string | null;
 }
 interface TenantRow {
   name: string | null;
@@ -46,7 +47,7 @@ export async function resolveNoReplySender(tenantId: string): Promise<NoReplySen
     const [settingsRes, tenantRes] = await Promise.all([
       supabase
         .from("tenant_email_settings")
-        .select("from_name, from_address, reply_to, domain_verified, no_reply_address, template_color, template_accent")
+        .select("from_name, from_address, reply_to, domain_verified, no_reply_address, template_color, template_accent, template_logo_url")
         .eq("tenant_id", tenantId)
         .maybeSingle(),
       supabase.from("tenants").select("name, logo_url, primary_color").eq("id", tenantId).maybeSingle(),
@@ -64,7 +65,8 @@ export async function resolveNoReplySender(tenantId: string): Promise<NoReplySen
       sender: { from: `${name} <${s.no_reply_address}>`, address: s.no_reply_address, name, replyTo },
       brand: {
         name,
-        logoUrl: t?.logo_url ?? null,
+        // The layout's own logo link wins; the company logo is the fallback (the layout then falls back to the name).
+        logoUrl: s.template_logo_url || t?.logo_url || null,
         color: s.template_color ?? t?.primary_color ?? null,
         accent: s.template_accent ?? null,
         helpEmail: replyTo,
