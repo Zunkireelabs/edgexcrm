@@ -718,3 +718,80 @@ describe("processInboundEmailEvents — verb='fwd' dispatch (REPLYABLE-FORWARD-B
     expect(serviceTables.events[0].status).toBe("completed");
   });
 });
+
+// A reply to an email the COMPANY address sent (lead-page "From: company", or an Outreach step) lands in
+// EdgeX on a thread with no Gmail account. The team used to receive these directly in the tenant's Reply-To
+// mailbox, so a copy is forwarded there — but only for threads the company sender actually started.
+describe("processInboundEmailEvents — company-thread reply: copy to the team mailbox", () => {
+  const replyEvent = () =>
+    makeEvent({
+      resend_email_id: "resend-1",
+      tenant_id: "tenant-a",
+      inbound_address_id: "addr-1",
+      kind: "thread",
+      verb: "reply",
+      thread_id: "thread-1",
+      user_id: null,
+      envelope: { to: BASE_RECEIVING.to, cc: [], bcc: [], from: BASE_RECEIVING.from, subject: BASE_RECEIVING.subject },
+    });
+
+  function seed(opts: { companyStarted: boolean; replyTo: string | null }) {
+    scopedTables.email_threads = [
+      { id: "thread-1", tenant_id: "tenant-a", connected_email_account_id: null, gmail_thread_id: null, lead_id: "lead-1", contact_id: null, message_count: 1 },
+    ];
+    scopedTables.leads = [{ id: "lead-1", tenant_id: "tenant-a", assigned_to: "user-2" }];
+    scopedTables.tenant_email_settings = [
+      { tenant_id: "tenant-a", from_address: "hello@mail.admizz.com", reply_to: opts.replyTo },
+    ];
+    scopedTables.emails = opts.companyStarted
+      ? [{ id: "e-out", thread_id: "thread-1", direction: "outbound", provider: "resend" }]
+      : [{ id: "e-out", thread_id: "thread-1", direction: "outbound", provider: "gmail" }];
+    serviceTables.events = [replyEvent()];
+  }
+
+  it("forwards a copy to the tenant Reply-To mailbox, labelled with the lead's name, from the platform address", async () => {
+    seed({ companyStarted: true, replyTo: "hello@admizz.com" });
+    const result = await processInboundEmailEvents();
+
+    expect(result).toEqual({ processed: 1, skipped: 0, errors: 0 });
+    expect(forwardReceivingEmailMock).toHaveBeenCalledTimes(1);
+    expect(forwardReceivingEmailMock).toHaveBeenCalledWith({
+      emailId: "resend-1",
+      to: "hello@admizz.com",
+      from: expect.stringMatching(/^"Hardik B" <noreply@[^>]+>$/),
+    });
+    // the reply is also stored, stops the sequence and notifies the lead's assignee — as for any reply
+    expect(scopedTables.emails.filter((e) => e.direction === "inbound")).toHaveLength(1);
+    expect(stopEnrollmentsOnReplyMock).toHaveBeenCalledTimes(1);
+    expect(upsertThreadNotificationMock.mock.calls.map((c) => c[0].userId)).toEqual(["user-2"]);
+    expect(serviceTables.events[0].status).toBe("completed");
+  });
+
+  it("does NOT forward for a no-account thread the company never wrote on (e.g. a personal BCC thread)", async () => {
+    seed({ companyStarted: false, replyTo: "hello@admizz.com" });
+    await processInboundEmailEvents();
+    expect(forwardReceivingEmailMock).not.toHaveBeenCalled();
+    expect(serviceTables.events[0].status).toBe("completed");
+  });
+
+  it("does not forward when the tenant has no Reply-To mailbox configured", async () => {
+    seed({ companyStarted: true, replyTo: null });
+    await processInboundEmailEvents();
+    expect(forwardReceivingEmailMock).not.toHaveBeenCalled();
+  });
+
+  it("never forwards into one of our own inbound domains (would loop)", async () => {
+    seed({ companyStarted: true, replyTo: "team@inbound.edgex.zunkireelabs.com" });
+    await processInboundEmailEvents();
+    expect(forwardReceivingEmailMock).not.toHaveBeenCalled();
+  });
+
+  it("a failing forward is non-fatal: the reply is stored and the event still completes", async () => {
+    seed({ companyStarted: true, replyTo: "hello@admizz.com" });
+    forwardReceivingEmailMock.mockRejectedValue(new Error("resend down"));
+    const result = await processInboundEmailEvents();
+    expect(result).toEqual({ processed: 1, skipped: 0, errors: 0 });
+    expect(scopedTables.emails.filter((e) => e.direction === "inbound")).toHaveLength(1);
+    expect(serviceTables.events[0].status).toBe("completed");
+  });
+});

@@ -23,6 +23,8 @@ import { sendMessage } from "@/industries/_shared/features/email/lib/gmail-clien
 import { decryptAccountTokens, persistRefreshedToken } from "@/industries/_shared/features/email/lib/token-crypto";
 import { mintToken, getInboundDomains } from "@/lib/email/inbound/tokens";
 import { resolveReplyToLabel } from "@/lib/email/reply-to-label";
+import { COMPANY_SENDER_ID } from "@/lib/email/company-sender-id";
+import { handleCompanySend } from "@/lib/email/company-send";
 import type { ConnectedEmailAccount } from "@/types/database";
 
 function isStringArray(val: unknown): val is string[] {
@@ -91,12 +93,18 @@ export async function POST(request: Request) {
 
   const body = await request.json();
 
+  // "company" selects the tenant's verified company sender instead of a connected Gmail account
+  // (src/lib/email/company-send.ts). Everything below this branch is the Gmail path, unchanged.
+  const isCompanySend = body.from_account_id === COMPANY_SENDER_ID;
+
   const validation = validate(body, {
-    from_account_id: [required("from_account_id"), isUUID()],
+    from_account_id: isCompanySend ? [required("from_account_id")] : [required("from_account_id"), isUUID()],
     subject: [required("subject"), maxLength(500)],
     body_html: [required("body_html"), maxLength(200000)],
   });
   if (!validation.valid) return apiValidationError(validation.errors);
+
+  if (isCompanySend) return handleCompanySend(auth, body);
 
   if (!isStringArray(body.to) || body.to.length === 0) {
     return apiValidationError({ to: ["to must be a non-empty array of email addresses"] });
