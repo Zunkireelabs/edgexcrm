@@ -17,7 +17,7 @@ function isValidEmail(addr: string): boolean {
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 const domainOf = (addr: string) => addr.slice(addr.lastIndexOf("@") + 1).toLowerCase();
 
-const SELECT = "from_name, from_address, reply_to, domain_verified, no_reply_address, template_color, template_accent, updated_at";
+const SELECT = "from_name, from_address, reply_to, domain_verified, no_reply_address, template_color, template_accent, template_logo_url, updated_at";
 
 // GET /api/v1/settings/email-sender — return tenant's email sender config
 export async function GET() {
@@ -38,6 +38,7 @@ export async function GET() {
       no_reply_address: null,
       template_color: null,
       template_accent: null,
+      template_logo_url: null,
       updated_at: null,
     }
   );
@@ -81,6 +82,7 @@ export async function PUT(request: NextRequest) {
   const noReplyAddress = optional(body.no_reply_address);
   const templateColor = optional(body.template_color);
   const templateAccent = optional(body.template_accent);
+  const templateLogoUrl = optional(body.template_logo_url);
 
   if (noReplyAddress) {
     if (!isValidEmail(noReplyAddress)) {
@@ -95,6 +97,21 @@ export async function PUT(request: NextRequest) {
   }
   if (templateColor && !HEX_COLOR.test(templateColor)) errors.template_color = ["Use a colour like #0D1282"];
   if (templateAccent && !HEX_COLOR.test(templateAccent)) errors.template_accent = ["Use a colour like #FDED22"];
+
+  if (templateLogoUrl) {
+    // The email can only show an image from a public https link. .webp is refused because Outlook does not display it.
+    let parsed: URL | null = null;
+    try {
+      parsed = new URL(templateLogoUrl);
+    } catch {
+      parsed = null;
+    }
+    if (!parsed || parsed.protocol !== "https:" || templateLogoUrl.length > 500) {
+      errors.template_logo_url = ["Use a public https link to a PNG or JPG image"];
+    } else if (/\.webp$/i.test(parsed.pathname)) {
+      errors.template_logo_url = ["Use a PNG or JPG: Outlook does not show .webp images"];
+    }
+  }
 
   if (Object.keys(errors).length > 0) {
     return apiValidationError(errors);
@@ -113,6 +130,7 @@ export async function PUT(request: NextRequest) {
         ...(noReplyAddress !== undefined ? { no_reply_address: noReplyAddress } : {}),
         ...(templateColor !== undefined ? { template_color: templateColor ? templateColor.toUpperCase() : null } : {}),
         ...(templateAccent !== undefined ? { template_accent: templateAccent ? templateAccent.toUpperCase() : null } : {}),
+        ...(templateLogoUrl !== undefined ? { template_logo_url: templateLogoUrl } : {}),
         updated_at: new Date().toISOString(),
         updated_by: auth.userId,
       },

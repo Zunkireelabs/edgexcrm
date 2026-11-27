@@ -16,6 +16,7 @@ interface EmailSenderSettings {
   no_reply_address: string | null;
   template_color: string | null;
   template_accent: string | null;
+  template_logo_url: string | null;
   updated_at: string | null;
 }
 
@@ -42,6 +43,7 @@ export function EmailSenderCard() {
     no_reply_address: null,
     template_color: null,
     template_accent: null,
+    template_logo_url: null,
     updated_at: null,
   });
   const [form, setForm] = useState({
@@ -51,6 +53,7 @@ export function EmailSenderCard() {
     no_reply_address: "",
     template_color: "",
     template_accent: "",
+    template_logo_url: "",
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -68,6 +71,7 @@ export function EmailSenderCard() {
           no_reply_address: d.no_reply_address ?? "",
           template_color: d.template_color ?? "",
           template_accent: d.template_accent ?? "",
+          template_logo_url: d.template_logo_url ?? "",
         });
       })
       .catch(() => toast.error("Failed to load email sender settings"))
@@ -87,6 +91,7 @@ export function EmailSenderCard() {
           no_reply_address: form.no_reply_address || null,
           template_color: form.template_color || null,
           template_accent: form.template_accent || null,
+          template_logo_url: form.template_logo_url || null,
         }),
       });
       const json = await res.json();
@@ -206,7 +211,26 @@ export function EmailSenderCard() {
             <p className="text-xs text-muted-foreground">A short tab in the colour bar and the footer link. Optional.</p>
           </div>
         </div>
-        <p className="text-xs text-muted-foreground">The logo in the layout is the company logo.</p>
+        <div className="space-y-1.5">
+          <Label htmlFor="email-template-logo">Logo link (https)</Label>
+          <div className="flex items-center gap-2">
+            <Input
+              id="email-template-logo"
+              type="url"
+              placeholder="https://edgex.zunkireelabs.com/email/admizz-logo.jpg"
+              value={form.template_logo_url}
+              onChange={(e) => setForm((f) => ({ ...f, template_logo_url: e.target.value }))}
+            />
+            {/^https:\/\//i.test(form.template_logo_url.trim()) && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={form.template_logo_url.trim()} alt="Logo preview" className="h-9 w-9 shrink-0 rounded-md border object-contain" />
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Shown at the top of the layout. Use a PNG or JPG: Outlook does not show .webp. Empty uses the company logo, then the
+            company name.
+          </p>
+        </div>
       </div>
 
       <Button onClick={handleSave} disabled={saving} size="sm">

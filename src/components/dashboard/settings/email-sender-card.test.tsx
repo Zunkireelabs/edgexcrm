@@ -30,6 +30,7 @@ const STORED = {
   no_reply_address: "no-reply@mail.admizz.com",
   template_color: "#0D1282",
   template_accent: "#FDED22",
+  template_logo_url: "https://edgex.zunkireelabs.com/email/admizz-logo.jpg",
   updated_at: null,
 };
 const json = (status: number, body: unknown) => ({ ok: status >= 200 && status < 300, status, json: async () => body });
@@ -44,14 +45,14 @@ describe("EmailSenderCard: no-reply address and colours", () => {
   });
 
   it("is empty for a company that has not set them up", async () => {
-    fetchMock.mockResolvedValueOnce(json(200, { data: { ...STORED, no_reply_address: null, template_color: null, template_accent: null } }));
+    fetchMock.mockResolvedValueOnce(json(200, { data: { ...STORED, no_reply_address: null, template_color: null, template_accent: null, template_logo_url: null } }));
     render(<EmailSenderCard />);
     expect(await screen.findByLabelText("No-reply address (optional)")).toHaveValue("");
     expect(screen.getByLabelText("Layout colour")).toHaveValue("");
   });
 
-  it("Save sends all six fields, empty ones as null", async () => {
-    fetchMock.mockResolvedValueOnce(json(200, { data: { ...STORED, no_reply_address: null, template_color: null, template_accent: null } }));
+  it("Save sends all seven fields, empty ones as null", async () => {
+    fetchMock.mockResolvedValueOnce(json(200, { data: { ...STORED, no_reply_address: null, template_color: null, template_accent: null, template_logo_url: null } }));
     render(<EmailSenderCard />);
     fireEvent.change(await screen.findByLabelText("No-reply address (optional)"), { target: { value: "no-reply@mail.admizz.com" } });
     fireEvent.change(screen.getByLabelText("Layout colour"), { target: { value: "#0D1282" } });
@@ -67,6 +68,7 @@ describe("EmailSenderCard: no-reply address and colours", () => {
       no_reply_address: "no-reply@mail.admizz.com",
       template_color: "#0D1282",
       template_accent: null,
+      template_logo_url: null,
     });
   });
 
@@ -98,5 +100,27 @@ describe("EmailSenderCard: no-reply address and colours", () => {
     render(<EmailSenderCard />);
     await screen.findByLabelText("No-reply address (optional)");
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("shows the stored logo link with a small preview, and sends a changed link on Save", async () => {
+    fetchMock.mockResolvedValueOnce(json(200, { data: STORED }));
+    render(<EmailSenderCard />);
+    const input = await screen.findByLabelText("Logo link (https)");
+    expect(input).toHaveValue("https://edgex.zunkireelabs.com/email/admizz-logo.jpg");
+    expect(screen.getByAltText("Logo preview")).toHaveAttribute("src", "https://edgex.zunkireelabs.com/email/admizz-logo.jpg");
+    fireEvent.change(input, { target: { value: "https://cdn.example.com/new.png" } });
+    fetchMock.mockResolvedValueOnce(json(200, { data: STORED }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalled());
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).template_logo_url).toBe("https://cdn.example.com/new.png");
+  });
+
+  it("shows no preview for an empty or non-https link", async () => {
+    fetchMock.mockResolvedValueOnce(json(200, { data: { ...STORED, template_logo_url: null } }));
+    render(<EmailSenderCard />);
+    const input = await screen.findByLabelText("Logo link (https)");
+    expect(screen.queryByAltText("Logo preview")).toBeNull();
+    fireEvent.change(input, { target: { value: "http://insecure.example.com/a.png" } });
+    expect(screen.queryByAltText("Logo preview")).toBeNull();
   });
 });

@@ -55,7 +55,7 @@ describe("GET /api/v1/settings/email-sender", () => {
 
   it("returns empty defaults for the new fields when nothing is stored yet", async () => {
     const data = (await (await get()).json()).data;
-    expect(data).toMatchObject({ from_address: null, no_reply_address: null, template_color: null, template_accent: null });
+    expect(data).toMatchObject({ from_address: null, no_reply_address: null, template_color: null, template_accent: null, template_logo_url: null });
   });
 });
 
@@ -146,6 +146,43 @@ describe("PUT: the template colours", () => {
   });
 });
 
+describe("PUT: the layout logo link", () => {
+  it("saves a public https link to a PNG or JPG", async () => {
+    const res = await put({ ...BASE, template_logo_url: " https://edgex.zunkireelabs.com/email/admizz-logo.jpg " });
+    expect(res.status).toBe(200);
+    expect(state.upserts[0]).toMatchObject({ template_logo_url: "https://edgex.zunkireelabs.com/email/admizz-logo.jpg" });
+  });
+
+  it.each(["http://example.com/a.png", "ftp://example.com/a.png", "javascript:alert(1)", "not a link", "//example.com/a.png", "data:image/png;base64,AAAA"])(
+    "rejects %s",
+    async (bad) => {
+      const res = await put({ ...BASE, template_logo_url: bad });
+      expect(res.status).toBe(422);
+      expect((await res.json()).error.details.template_logo_url).toBeDefined();
+      expect(state.upserts).toEqual([]);
+    },
+  );
+
+  it("rejects a .webp link (Outlook does not show it), also with a query string or capitals", async () => {
+    for (const bad of ["https://example.com/logo.webp", "https://example.com/Logo.WEBP?v=2"]) {
+      const res = await put({ ...BASE, template_logo_url: bad });
+      expect(res.status).toBe(422);
+      expect((await res.json()).error.details.template_logo_url[0]).toMatch(/webp/i);
+    }
+    expect(state.upserts).toEqual([]);
+  });
+
+  it("rejects a link longer than 500 characters", async () => {
+    const res = await put({ ...BASE, template_logo_url: "https://example.com/" + "a".repeat(500) + ".png" });
+    expect(res.status).toBe(422);
+  });
+
+  it("an empty value clears it", async () => {
+    await put({ ...BASE, template_logo_url: "" });
+    expect(state.upserts[0]).toMatchObject({ template_logo_url: null });
+  });
+});
+
 describe("PUT: an older client that only knows the original three fields cannot wipe the new ones", () => {
   it("leaves no_reply_address / template_color / template_accent OUT of the write when the request does not carry them", async () => {
     const res = await put(BASE);
@@ -155,6 +192,7 @@ describe("PUT: an older client that only knows the original three fields cannot 
     expect(payload).not.toHaveProperty("no_reply_address");
     expect(payload).not.toHaveProperty("template_color");
     expect(payload).not.toHaveProperty("template_accent");
+    expect(payload).not.toHaveProperty("template_logo_url");
   });
 
   it("a failed write is a 503, not a silent success", async () => {
